@@ -49,7 +49,21 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
     setExportStatus('idle');
 
     try {
-      // Prepare the data structure for Google Sheets
+      // Helper function to format measurements
+      const formatMeasurements = (measurements: any): string => {
+        if (!measurements) return '';
+        const parts = [];
+        if (measurements.pitToPit) parts.push(`Pit-to-Pit: ${measurements.pitToPit}"`);
+        if (measurements.length) parts.push(`Length: ${measurements.length}"`);
+        if (measurements.sleeve) parts.push(`Sleeve: ${measurements.sleeve}"`);
+        if (measurements.shoulder) parts.push(`Shoulder: ${measurements.shoulder}"`);
+        if (measurements.waist) parts.push(`Waist: ${measurements.waist}"`);
+        if (measurements.inseam) parts.push(`Inseam: ${measurements.inseam}"`);
+        if (measurements.rise) parts.push(`Rise: ${measurements.rise}"`);
+        return parts.join(' | ');
+      };
+
+      // Prepare the data structure for Google Sheets with all new fields
       // Note: Images are shown as filenames since blob URLs don't work outside browser
       const sheetData = products.map((product, idx) => ({
         Title: product.seoTitle || '',
@@ -58,6 +72,13 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
         Description: product.generatedDescription || '',
         Price: product.price || '',
         Size: product.size || '',
+        Brand: product.brand || '',
+        Condition: product.condition || '',
+        Flaws: product.flaws || '',
+        Material: product.material || '',
+        Measurements: formatMeasurements(product.measurements),
+        Era: product.era || '',
+        Care: product.care || '',
         Tags: product.tags?.join(', ') || '',
         'Image 1 Filename': product.imageUrls[0] ? `Product_${idx + 1}_Image_1.jpg` : '',
         'Image 2 Filename': product.imageUrls[1] ? `Product_${idx + 1}_Image_2.jpg` : '',
@@ -78,8 +99,8 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
         return;
       }
       
-      // Prepare data for Google Sheets API format
-      const headers = ['Title', 'Handle', 'Category', 'Description', 'Price', 'Size', 'Tags', 'Image 1 Filename', 'Image 2 Filename', 'Image 3 Filename', 'Image 4 Filename', 'Photo Count', 'Status', 'Note'];
+      // Prepare data for Google Sheets API format with all new fields
+      const headers = ['Title', 'Handle', 'Category', 'Description', 'Price', 'Size', 'Brand', 'Condition', 'Flaws', 'Material', 'Measurements', 'Era', 'Care', 'Tags', 'Image 1 Filename', 'Image 2 Filename', 'Image 3 Filename', 'Image 4 Filename', 'Photo Count', 'Status', 'Note'];
       const values = [
         headers,
         ...sheetData.map(row => [
@@ -89,6 +110,13 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
           row.Description,
           row.Price,
           row.Size,
+          row.Brand,
+          row.Condition,
+          row.Flaws,
+          row.Material,
+          row.Measurements,
+          row.Era,
+          row.Care,
           row.Tags,
           row['Image 1 Filename'],
           row['Image 2 Filename'],
@@ -125,7 +153,21 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
   };
 
   const handleDownloadCSV = () => {
-    // Create CSV content for Shopify
+    // Helper function to format measurements
+    const formatMeasurements = (measurements: any): string => {
+      if (!measurements) return '';
+      const parts = [];
+      if (measurements.pitToPit) parts.push(`Pit-to-Pit: ${measurements.pitToPit}"`);
+      if (measurements.length) parts.push(`Length: ${measurements.length}"`);
+      if (measurements.sleeve) parts.push(`Sleeve: ${measurements.sleeve}"`);
+      if (measurements.shoulder) parts.push(`Shoulder: ${measurements.shoulder}"`);
+      if (measurements.waist) parts.push(`Waist: ${measurements.waist}"`);
+      if (measurements.inseam) parts.push(`Inseam: ${measurements.inseam}"`);
+      if (measurements.rise) parts.push(`Rise: ${measurements.rise}"`);
+      return parts.join(' | ');
+    };
+
+    // Create CSV content for Shopify with all new fields
     const headers = [
       'Title',
       'Handle',
@@ -133,6 +175,13 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
       'Description',
       'Price',
       'Size',
+      'Brand',
+      'Condition',
+      'Flaws',
+      'Material',
+      'Measurements',
+      'Era',
+      'Care',
       'Tags',
       'Image 1 Filename',
       'Image 2 Filename',
@@ -149,6 +198,13 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
       product.generatedDescription || '',
       product.price || '',
       product.size || '',
+      product.brand || '',
+      product.condition || '',
+      product.flaws || '',
+      product.material || '',
+      formatMeasurements(product.measurements),
+      product.era || '',
+      product.care || '',
       product.tags?.join(', ') || '',
       product.imageUrls[0] ? `Product_${idx + 1}_Image_1.jpg` : '', // Image filenames
       product.imageUrls[1] ? `Product_${idx + 1}_Image_2.jpg` : '',
@@ -175,11 +231,25 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
 
   const handleDownloadExcelWithImages = async () => {
     try {
+      // Helper function to format measurements
+      const formatMeasurements = (measurements: any): string => {
+        if (!measurements) return '';
+        const parts = [];
+        if (measurements.pitToPit) parts.push(`Pit-to-Pit: ${measurements.pitToPit}"`);
+        if (measurements.length) parts.push(`Length: ${measurements.length}"`);
+        if (measurements.sleeve) parts.push(`Sleeve: ${measurements.sleeve}"`);
+        if (measurements.shoulder) parts.push(`Shoulder: ${measurements.shoulder}"`);
+        if (measurements.waist) parts.push(`Waist: ${measurements.waist}"`);
+        if (measurements.inseam) parts.push(`Inseam: ${measurements.inseam}"`);
+        if (measurements.rise) parts.push(`Rise: ${measurements.rise}"`);
+        return parts.join(' | ');
+      };
+
       // Create a new workbook
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Products');
 
-      // Define columns
+      // Define columns with all new fields
       worksheet.columns = [
         { header: 'Image', key: 'image', width: 30 },
         { header: 'Title', key: 'title', width: 40 },
@@ -188,6 +258,13 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
         { header: 'Description', key: 'description', width: 50 },
         { header: 'Price', key: 'price', width: 15 },
         { header: 'Size', key: 'size', width: 15 },
+        { header: 'Brand', key: 'brand', width: 20 },
+        { header: 'Condition', key: 'condition', width: 15 },
+        { header: 'Flaws', key: 'flaws', width: 30 },
+        { header: 'Material', key: 'material', width: 20 },
+        { header: 'Measurements', key: 'measurements', width: 50 },
+        { header: 'Era', key: 'era', width: 20 },
+        { header: 'Care', key: 'care', width: 30 },
         { header: 'Tags', key: 'tags', width: 30 },
         { header: 'Image 2', key: 'image2', width: 30 },
         { header: 'Image 3', key: 'image3', width: 30 },
@@ -209,7 +286,7 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
         const product = products[i];
         const rowIndex = i + 2; // +2 because row 1 is header, array is 0-indexed
 
-        // Add text data
+        // Add text data with all new fields
         const row = worksheet.addRow({
           title: product.seoTitle || '',
           handle: (product.seoTitle || '').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
@@ -217,6 +294,13 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
           description: product.generatedDescription || '',
           price: product.price || '',
           size: product.size || '',
+          brand: product.brand || '',
+          condition: product.condition || '',
+          flaws: product.flaws || '',
+          material: product.material || '',
+          measurements: formatMeasurements(product.measurements),
+          era: product.era || '',
+          care: product.care || '',
           tags: product.tags?.join(', ') || '',
         });
 
@@ -236,11 +320,12 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
         };
 
         // Add images (up to 4 images per product)
+        // Updated column indexes to account for new fields
         const imageColumns = [
-          { col: 0, url: product.imageUrls[0] },  // Column A (Image)
-          { col: 8, url: product.imageUrls[1] },  // Column I (Image 2)
-          { col: 9, url: product.imageUrls[2] },  // Column J (Image 3)
-          { col: 10, url: product.imageUrls[3] }, // Column K (Image 4)
+          { col: 0, url: product.imageUrls[0] },   // Column A (Image)
+          { col: 15, url: product.imageUrls[1] },  // Column P (Image 2)
+          { col: 16, url: product.imageUrls[2] },  // Column Q (Image 3)
+          { col: 17, url: product.imageUrls[3] },  // Column R (Image 4)
         ];
 
         for (const { col, url } of imageColumns) {
