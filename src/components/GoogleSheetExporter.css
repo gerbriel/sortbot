@@ -1,0 +1,213 @@
+.google-sheet-exporter {
+  width: 100%;
+}
+
+.export-summary {
+  margin-bottom: 2rem;
+}
+
+.export-summary h3 {
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+.summary-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+}
+
+.stat-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.stat-number {
+  font-size: 2rem;
+  font-weight: bold;
+}
+
+.stat-label {
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+.google-sheets-input-section {
+  background: #f9fafb;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.google-sheets-input-section h3 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  color: #667eea;
+}
+
+.sheet-url-input-group {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.sheet-url-input {
+  flex: 1;
+  padding: 0.75rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-family: monospace;
+  transition: border-color 0.2s;
+}
+
+.sheet-url-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.sheet-url-input::placeholder {
+  color: #9ca3af;
+  font-family: monospace;
+}
+
+.sheet-url-saved {
+  background: #d1fae5;
+  border: 2px solid #34d399;
+  color: #065f46;
+  padding: 0.75rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+.sheet-url-saved a {
+  color: #059669;
+  text-decoration: none;
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+.sheet-url-saved a:hover {
+  text-decoration: underline;
+}
+
+.sheet-url-help {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 1rem;
+  font-size: 0.9rem;
+}
+
+.sheet-url-help p {
+  margin: 0 0 0.5rem 0;
+  font-weight: 600;
+  color: #374151;
+}
+
+.sheet-url-help ol {
+  margin: 0;
+  padding-left: 1.5rem;
+  color: #6b7280;
+}
+
+.sheet-url-help li {
+  margin-bottom: 0.25rem;
+}
+
+.export-preview {
+  margin-bottom: 2rem;
+}
+
+.export-preview h3 {
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+.table-container {
+  overflow-x: auto;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e5e5e5;
+}
+
+.preview-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.preview-table th {
+  background: #f9f9f9;
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 2px solid #e5e5e5;
+  color: #333;
+}
+
+.preview-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.description-cell {
+  max-width: 300px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preview-note {
+  padding: 1rem;
+  text-align: center;
+  color: #666;
+  font-style: italic;
+}
+
+.export-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+
+.export-instructions {
+  background: #f0f4ff;
+  padding: 1.5rem;
+  border-radius: 8px;
+  border-left: 4px solid #667eea;
+}
+
+.export-instructions h3 {
+  margin-bottom: 1rem;
+  color: #667eea;
+}
+
+.export-instructions ol {
+  margin-left: 1.5rem;
+}
+
+.export-instructions li {
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+@media (max-width: 768px) {
+  .export-actions {
+    flex-direction: column;
+  }
+  
+  .export-actions button {
+    width: 100%;
+  }
+}

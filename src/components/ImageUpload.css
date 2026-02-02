@@ -1,0 +1,198 @@
+.image-upload-container {
+  width: 100%;
+}
+
+/* Upload Mode Toggle */
+.upload-mode-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  justify-content: center;
+}
+
+.mode-btn {
+  padding: 0.75rem 1.5rem;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  color: #666;
+}
+
+.mode-btn:hover {
+  border-color: #667eea;
+  color: #667eea;
+  transform: translateY(-2px);
+}
+
+.mode-btn.active {
+  border-color: #667eea;
+  background: #667eea;
+  color: white;
+}
+
+/* File Upload Section */
+.dropzone {
+  border: 3px dashed #ccc;
+  border-radius: 12px;
+  padding: 3rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #fafafa;
+}
+
+.dropzone:hover {
+  border-color: #667eea;
+  background: #f0f4ff;
+}
+
+.dropzone.active {
+  border-color: #667eea;
+  background: #e8edff;
+  transform: scale(1.02);
+}
+
+.dropzone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.upload-icon {
+  width: 64px;
+  height: 64px;
+  color: #667eea;
+}
+
+.dropzone p {
+  font-size: 1.2rem;
+  color: #333;
+  margin: 0;
+}
+
+.dropzone-subtext {
+  font-size: 1rem !important;
+  color: #666 !important;
+}
+
+.dropzone-hint {
+  font-size: 0.9rem !important;
+  color: #999 !important;
+}
+
+/* Google Drive Section */
+.drive-upload-section {
+  border: 2px solid #ddd;
+  border-radius: 12px;
+  padding: 2rem;
+  background: #fafafa;
+}
+
+.drive-instructions {
+  margin-bottom: 1.5rem;
+}
+
+.drive-instructions h3 {
+  margin: 0 0 1rem 0;
+  color: #333;
+  font-size: 1.3rem;
+}
+
+.drive-instructions ol {
+  text-align: left;
+  color: #666;
+  line-height: 1.8;
+  margin: 0;
+  padding-left: 1.5rem;
+}
+
+.drive-instructions li {
+  margin-bottom: 0.5rem;
+}
+
+.drive-input-group {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.drive-url-input {
+  flex: 1;
+  padding: 0.875rem 1rem;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.2s;
+}
+
+.drive-url-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.drive-url-input:disabled {
+  background: #f0f0f0;
+  cursor: not-allowed;
+}
+
+.drive-load-btn {
+  padding: 0.875rem 1.5rem;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.drive-load-btn:hover:not(:disabled) {
+  background: #5568d3;
+  transform: translateY(-2px);
+}
+
+.drive-load-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.drive-example {
+  text-align: left;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.drive-example details {
+  cursor: pointer;
+}
+
+.drive-example summary {
+  padding: 0.5rem;
+  background: #f0f0f0;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.drive-example summary:hover {
+  background: #e8e8e8;
+}
+
+.drive-example code {
+  display: block;
+  padding: 0.75rem;
+  background: #2d2d2d;
+  color: #f8f8f2;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+}
+
