@@ -19,6 +19,22 @@ export interface ClothingItem {
   tags?: string[];
   seoTitle?: string;
   size?: string; // Size field (XS, S, M, L, XL, etc.)
+  // New fields for better descriptions
+  brand?: string;
+  condition?: 'NWT' | 'Excellent' | 'Good' | 'Fair';
+  flaws?: string;
+  material?: string;
+  measurements?: {
+    pitToPit?: string;
+    length?: string;
+    waist?: string;
+    inseam?: string;
+    rise?: string;
+    shoulder?: string;
+    sleeve?: string;
+  };
+  era?: string;
+  care?: string;
 }
 
 function App() {
