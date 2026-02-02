@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ClothingItem } from '../App';
+import ExcelJS from 'exceljs';
 import './GoogleSheetExporter.css';
 
 interface GoogleSheetExporterProps {
@@ -172,6 +173,129 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
     window.URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcelWithImages = async () => {
+    try {
+      // Create a new workbook
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Products');
+
+      // Define columns
+      worksheet.columns = [
+        { header: 'Image', key: 'image', width: 30 },
+        { header: 'Title', key: 'title', width: 40 },
+        { header: 'Handle', key: 'handle', width: 30 },
+        { header: 'Category', key: 'category', width: 20 },
+        { header: 'Description', key: 'description', width: 50 },
+        { header: 'Price', key: 'price', width: 15 },
+        { header: 'Size', key: 'size', width: 15 },
+        { header: 'Tags', key: 'tags', width: 30 },
+        { header: 'Image 2', key: 'image2', width: 30 },
+        { header: 'Image 3', key: 'image3', width: 30 },
+        { header: 'Image 4', key: 'image4', width: 30 },
+      ];
+
+      // Style the header row
+      worksheet.getRow(1).font = { bold: true, size: 12 };
+      worksheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4472C4' }
+      };
+      worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+      // Add data for each product
+      for (let i = 0; i < products.length; i++) {
+        const product = products[i];
+        const rowIndex = i + 2; // +2 because row 1 is header, array is 0-indexed
+
+        // Add text data
+        const row = worksheet.addRow({
+          title: product.seoTitle || '',
+          handle: (product.seoTitle || '').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+          category: product.category || '',
+          description: product.generatedDescription || '',
+          price: product.price || '',
+          size: product.size || '',
+          tags: product.tags?.join(', ') || '',
+        });
+
+        // Set row height to accommodate images
+        row.height = 120;
+
+        // Helper function to convert blob URL to base64
+        const blobToBase64 = async (blobUrl: string): Promise<string> => {
+          const response = await fetch(blobUrl);
+          const blob = await response.blob();
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        };
+
+        // Add images (up to 4 images per product)
+        const imageColumns = [
+          { col: 0, url: product.imageUrls[0] },  // Column A (Image)
+          { col: 8, url: product.imageUrls[1] },  // Column I (Image 2)
+          { col: 9, url: product.imageUrls[2] },  // Column J (Image 3)
+          { col: 10, url: product.imageUrls[3] }, // Column K (Image 4)
+        ];
+
+        for (const { col, url } of imageColumns) {
+          if (url) {
+            try {
+              // Convert blob URL to base64
+              const base64Data = await blobToBase64(url);
+              
+              // Extract the base64 data (remove data:image/...;base64, prefix)
+              const base64String = base64Data.split(',')[1];
+              
+              // Determine image extension from the data URL
+              const mimeMatch = base64Data.match(/data:image\/(\w+);base64,/);
+              const extension = mimeMatch ? mimeMatch[1] : 'jpeg';
+
+              // Add image to workbook
+              const imageId = workbook.addImage({
+                base64: base64String,
+                extension: extension as 'jpeg' | 'png' | 'gif',
+              });
+
+              // Embed image in cell
+              worksheet.addImage(imageId, {
+                tl: { col, row: rowIndex - 1 }, // top-left corner
+                ext: { width: 200, height: 110 }, // image dimensions
+                editAs: 'oneCell'
+              });
+            } catch (err) {
+              console.warn(`Failed to add image for product ${i + 1}:`, err);
+            }
+          }
+        }
+      }
+
+      // Generate Excel file
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
+      
+      // Download file
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `shopify-products-with-images-${Date.now()}.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+
+      alert(`✅ Excel file created with ${products.length} products and embedded images!`);
+    } catch (error) {
+      console.error('Error creating Excel file:', error);
+      alert('❌ Error creating Excel file. Please try again.');
+    }
+  };
+
   return (
     <div className="google-sheet-exporter">
       <div className="export-summary">
@@ -294,6 +418,14 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
           onClick={handleDownloadCSV}
         >
           💾 Download Shopify CSV
+        </button>
+
+        <button 
+          className="button button-primary"
+          onClick={handleDownloadExcelWithImages}
+          title="Download Excel file with embedded product images"
+        >
+          🖼️ Download Excel with Images
         </button>
       </div>
 
