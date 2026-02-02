@@ -325,6 +325,70 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     setInterimTranscript('');
   };
 
+  // Banned phrases to filter from AI descriptions
+  const BANNED_PHRASES = [
+    'perfect for any occasion',
+    'timeless piece',
+    'elevate your wardrobe',
+    'must-have',
+    'wardrobe staple',
+    'unparalleled',
+    'investment piece',
+    'holy grail',
+    'game changer',
+  ];
+
+  // Filter function to remove banned phrases
+  const removeBannedPhrases = (text: string): string => {
+    let filtered = text;
+    BANNED_PHRASES.forEach(phrase => {
+      const regex = new RegExp(phrase, 'gi');
+      filtered = filtered.replace(regex, '');
+    });
+    // Clean up double spaces and extra punctuation
+    return filtered.replace(/\s+/g, ' ').replace(/\.\s*\./g, '.').trim();
+  };
+
+  // Format measurements for description
+  const formatMeasurements = (measurements: any): string => {
+    if (!measurements) return '';
+    
+    const lines = [];
+    if (measurements.pitToPit) lines.push(`• Pit to pit: ${measurements.pitToPit}"`);
+    if (measurements.length) lines.push(`• Length: ${measurements.length}"`);
+    if (measurements.sleeve) lines.push(`• Sleeve: ${measurements.sleeve}"`);
+    if (measurements.shoulder) lines.push(`• Shoulder: ${measurements.shoulder}"`);
+    if (measurements.waist) lines.push(`• Waist: ${measurements.waist}"`);
+    if (measurements.inseam) lines.push(`• Inseam: ${measurements.inseam}"`);
+    if (measurements.rise) lines.push(`• Rise: ${measurements.rise}"`);
+    
+    if (lines.length === 0) return '';
+    
+    return `\n\nMeasurements:\n${lines.join('\n')}`;
+  };
+
+  // Format condition and flaws for description
+  const formatCondition = (condition?: string, flaws?: string): string => {
+    if (!condition) return '';
+    
+    const conditionMap: Record<string, string> = {
+      'NWT': 'Brand new with tags',
+      'Excellent': 'Excellent condition',
+      'Good': 'Good condition',
+      'Fair': 'Fair condition with wear'
+    };
+    
+    let text = conditionMap[condition] || condition;
+    
+    if (flaws && flaws.trim()) {
+      text += ` - ${flaws}`;
+    } else if (condition !== 'NWT') {
+      text += ', no major flaws noted';
+    }
+    
+    return `\n\nCondition: ${text}.`;
+  };
+
   const handleGenerateProductInfo = async () => {
     if (!currentItem.voiceDescription) {
       alert('Please add a voice description first');
@@ -333,21 +397,20 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
     setIsGenerating(true);
     
-    // Simulate AI generation (in production, call OpenAI API with gpt-4 or similar)
+    // Simulate AI generation (in production, call OpenAI API)
     await new Promise(resolve => setTimeout(resolve, 2000));
     
     const updated = [...processedItems];
-    const voiceDesc = currentItem.voiceDescription!; // Already checked above
+    const voiceDesc = currentItem.voiceDescription!;
     const category = currentItem.category || 'clothing';
+    const lowerDesc = voiceDesc.toLowerCase();
     
     // Extract price from voice description if mentioned
-    // Patterns: "$50", "50 dollars", "fifty dollars", "priced at 50", etc.
     const pricePatterns = [
-      /\$(\d+(?:\.\d{2})?)/i,                    // $50 or $50.00
-      /(\d+(?:\.\d{2})?)\s*dollars?/i,           // 50 dollars
-      /price[d]?\s*(?:at|is)?\s*\$?(\d+(?:\.\d{2})?)/i, // priced at 50
-      /asking\s*\$?(\d+(?:\.\d{2})?)/i,          // asking 50
-      /worth\s*\$?(\d+(?:\.\d{2})?)/i            // worth 50
+      /\$(\d+(?:\.\d{2})?)/i,
+      /(\d+(?:\.\d{2})?)\s*dollars?/i,
+      /price[d]?\s*(?:at|is)?\s*\$?(\d+(?:\.\d{2})?)/i,
+      /asking\s*\$?(\d+(?:\.\d{2})?)/i,
     ];
     
     let extractedPrice: number | undefined = undefined;
@@ -355,18 +418,16 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       const match = voiceDesc.match(pattern);
       if (match) {
         extractedPrice = parseFloat(match[1]);
-        console.log(`💰 Extracted price from voice: $${extractedPrice}`);
         break;
       }
     }
     
-    // Use manual price if set, otherwise use extracted price, otherwise calculate smart price
-    let finalPrice = currentItem.price; // Keep manual input if it exists
+    // Use manual price > extracted price > smart calculation
+    let finalPrice = currentItem.price;
     
     if (!finalPrice && extractedPrice) {
       finalPrice = extractedPrice;
     } else if (!finalPrice) {
-      // Calculate smart pricing based on category and description
       let basePrice = 25;
       if (category === 'Outerwear') basePrice = 60;
       else if (category === 'Sweatshirts') basePrice = 45;
@@ -374,29 +435,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       else if (category === 'Activewear') basePrice = 35;
       else if (category === 'Hats' || category === 'Accessories') basePrice = 20;
       
-      const lowerDesc = voiceDesc.toLowerCase();
-      
-      // Adjust for brand mentions
-      const premiumBrands = ['supreme', 'gucci', 'prada', 'louis vuitton', 'chanel', 'balenciaga'];
-      const midTierBrands = ['nike', 'adidas', 'tommy', 'calvin', 'ralph lauren', 'champion'];
-      
-      if (premiumBrands.some(b => lowerDesc.includes(b))) basePrice *= 3;
-      else if (midTierBrands.some(b => lowerDesc.includes(b))) basePrice *= 1.5;
-      
-      // Adjust for condition mentions
-      if (lowerDesc.includes('new') || lowerDesc.includes('unworn') || lowerDesc.includes('tags')) {
-        basePrice *= 1.2;
-      } else if (lowerDesc.includes('vintage')) {
-        basePrice *= 1.3;
-      }
-      
       finalPrice = Math.round(basePrice);
     }
     
-    // Enhanced feature extraction with more comprehensive detection
-    const lowerDesc = voiceDesc.toLowerCase();
-    
-    // Expanded color detection
+    // Detect colors - ALL of them
     const colorPatterns = {
       black: /black/i,
       white: /white|cream|ivory|off-white/i,
@@ -415,69 +457,44 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       .filter(([_, pattern]) => pattern.test(lowerDesc))
       .map(([color]) => color);
     
-    // Expanded material detection
+    // Detect materials
     const materialPatterns = {
       cotton: /cotton|100% cotton/i,
       polyester: /polyester|poly/i,
-      leather: /leather|genuine leather|faux leather/i,
+      leather: /leather/i,
       denim: /denim|jean/i,
       silk: /silk/i,
-      wool: /wool|cashmere|merino/i,
+      wool: /wool|cashmere/i,
       fleece: /fleece/i,
       nylon: /nylon/i,
-      spandex: /spandex|elastane|stretch/i,
       linen: /linen/i,
-      suede: /suede/i,
-      canvas: /canvas/i,
     };
     
     const detectedMaterials = Object.entries(materialPatterns)
       .filter(([_, pattern]) => pattern.test(lowerDesc))
       .map(([material]) => material);
     
-    // NO AUTOMATIC BRAND DETECTION
-    // User must manually enter brand in tags or it won't be included
-    const detectedBrands: string[] = [];
-    
-    // Condition and style detection
-    const isVintage = /vintage|retro|throwback|90s|80s|old school/i.test(lowerDesc);
-    const isNew = /new|unworn|nwt|new with tags|mint|brand new/i.test(lowerDesc);
-    const isLimited = /limited|exclusive|rare|special edition/i.test(lowerDesc);
-    const isOversized = /oversized|baggy|loose|relaxed/i.test(lowerDesc);
-    const isSlim = /slim|fitted|tight|skinny/i.test(lowerDesc);
-    const hasGraphic = /graphic|print|logo|design|pattern/i.test(lowerDesc);
-    const hasPockets = /pocket|pockets/i.test(lowerDesc);
-    const hasZipper = /zipper|zip|zippered/i.test(lowerDesc);
-    const hasHood = /hood|hoodie|hooded/i.test(lowerDesc);
-    
-    // Enhanced size detection with variations
-    // Check manual size field first (highest priority)
+    // Detect size
     let detectedSize = currentItem.size || null;
-    
     if (!detectedSize) {
-      // Try to detect from speech
       const sizePatterns = [
-        // Letter sizes with variations
         /\b(extra[\s-]?large|x[\s-]?large|xl)\b/i,
-        /\b(double[\s-]?extra[\s-]?large|double[\s-]?xl|xx[\s-]?large|xxl)\b/i,
-        /\b(triple[\s-]?extra[\s-]?large|triple[\s-]?xl|xxx[\s-]?large|xxxl)\b/i,
+        /\b(xx[\s-]?large|xxl)\b/i,
+        /\b(xxx[\s-]?large|xxxl)\b/i,
         /\b(extra[\s-]?small|x[\s-]?small|xs)\b/i,
         /\b(small|sm)\b/i,
         /\b(medium|med|md|m)\b/i,
         /\b(large|lg|l)\b/i,
-        // Numeric sizes
-        /\b([0-9]{1,2})\b/i,
       ];
       
       for (const pattern of sizePatterns) {
         const match = lowerDesc.match(pattern);
         if (match) {
           let size = match[1].toUpperCase();
-          // Normalize variations
-          if (/extra[\s-]?large|x[\s-]?large/i.test(size)) size = 'XL';
-          else if (/double.*xl|xx.*large/i.test(size)) size = 'XXL';
-          else if (/triple.*xl|xxx.*large/i.test(size)) size = 'XXXL';
-          else if (/extra[\s-]?small|x[\s-]?small/i.test(size)) size = 'XS';
+          if (/x[\s-]?large|xl/i.test(size)) size = 'XL';
+          else if (/xxl/i.test(size)) size = 'XXL';
+          else if (/xxxl/i.test(size)) size = 'XXXL';
+          else if (/x[\s-]?small|xs/i.test(size)) size = 'XS';
           else if (/small|sm/i.test(size)) size = 'S';
           else if (/medium|med|md/i.test(size)) size = 'M';
           else if (/large|lg/i.test(size) && !/x/i.test(size)) size = 'L';
@@ -488,216 +505,120 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       }
     }
     
-    // Generate natural, flowing product description
+    // NATURAL DESCRIPTION GENERATION with new fields
     let generatedDesc = '';
     
-    // Opening sentence - make it compelling with ALL colors mentioned
+    // Opening - use actual data from new fields
+    const brand = currentItem.brand || '';
+    const era = currentItem.era || '';
+    
+    // Start with era/brand if provided
+    if (era) {
+      generatedDesc = `${era.charAt(0).toUpperCase() + era.slice(1)} `;
+    }
+    if (brand && brand.toLowerCase() !== 'unknown') {
+      generatedDesc += `${brand} `;
+    }
+    
+    // Add colors naturally
     const colorDesc = detectedColors.length === 1 
       ? detectedColors[0]
       : detectedColors.length === 2
       ? `${detectedColors[0]} and ${detectedColors[1]}`
-      : detectedColors.slice(0, -1).join(', ') + ', and ' + detectedColors[detectedColors.length - 1];
+      : detectedColors.length > 2
+      ? detectedColors.slice(0, -1).join(', ') + ', and ' + detectedColors[detectedColors.length - 1]
+      : '';
     
-    const openingPrefix = isNew ? 'brand new' : isVintage ? 'vintage' : 'quality';
-    const colorPhrase = colorDesc ? `${colorDesc} ` : '';
-    
-    generatedDesc = `Discover this ${openingPrefix} ${colorPhrase}${category.toLowerCase()} piece. `;
-    
-    // Add the original voice description naturally integrated
-    generatedDesc += voiceDesc.charAt(0).toUpperCase() + voiceDesc.slice(1);
-    if (!voiceDesc.endsWith('.')) generatedDesc += '.';
-    generatedDesc += ' ';
-    
-    // Add material and construction details
-    if (detectedMaterials.length > 0) {
-      if (detectedMaterials.length === 1) {
-        generatedDesc += `Crafted from premium ${detectedMaterials[0]} `;
-      } else {
-        generatedDesc += `Made with a blend of ${detectedMaterials.slice(0, -1).join(', ')} and ${detectedMaterials[detectedMaterials.length - 1]} `;
-      }
-      generatedDesc += 'for exceptional comfort and durability. ';
+    if (colorDesc) {
+      generatedDesc += `${colorDesc} `;
     }
     
-    // Add specific features if detected
-    const features = [];
-    if (hasHood) features.push('hood');
-    if (hasPockets) features.push('functional pockets');
-    if (hasZipper) features.push('quality zipper');
-    if (hasGraphic) features.push('eye-catching graphics');
+    // Add category
+    const categoryName = category === 'Tees' ? 'tee' : category.toLowerCase().slice(0, -1);
+    generatedDesc += `${categoryName}. `;
     
-    if (features.length > 0) {
-      generatedDesc += `Features ${features.join(', ')}. `;
+    // Add voice description
+    if (!generatedDesc.toLowerCase().includes(voiceDesc.toLowerCase().substring(0, 20))) {
+      generatedDesc += voiceDesc.charAt(0).toUpperCase() + voiceDesc.slice(1);
+      if (!voiceDesc.endsWith('.')) generatedDesc += '.';
+      generatedDesc += ' ';
     }
     
-    // Add fit and style context
-    if (isOversized) {
-      generatedDesc += 'The oversized fit offers a relaxed, contemporary silhouette perfect for streetwear styling. ';
-    } else if (isSlim) {
-      generatedDesc += 'Designed with a modern slim fit that flatters your frame while maintaining comfort. ';
-    }
-    
-    // Add size if detected
+    // Add size and fit
     if (detectedSize) {
-      generatedDesc += `Available in size ${detectedSize}. `;
+      const sizePhrase = detectedSize.length <= 3 
+        ? `Tagged ${detectedSize}, fits true to size.`
+        : `Size ${detectedSize}.`;
+      generatedDesc += `\n\n${sizePhrase}`;
     }
     
-    // Add category-specific styling suggestions
-    const stylingTips: Record<string, string[]> = {
-      'Tees': [
-        'Layer under jackets or wear solo for effortless everyday style.',
-        'Pairs perfectly with jeans, shorts, or joggers for a casual look.',
-        'A versatile staple that transitions easily from day to night.',
-      ],
-      'Sweatshirts': [
-        'Perfect for layering or wearing on its own during cooler days.',
-        'Ideal for casual outings, lounging, or elevated streetwear looks.',
-        'Effortlessly combines comfort with contemporary style.',
-      ],
-      'Outerwear': [
-        'Layer over hoodies and tees for the ultimate street-ready ensemble.',
-        'Essential for transitional weather and cooler seasons.',
-        'Elevates any outfit with functional style and protection.',
-      ],
-      'Bottoms': [
-        'Style with sneakers and a tee for an everyday casual look.',
-        'Versatile enough for both relaxed weekends and active days.',
-        'A wardrobe essential that pairs with virtually anything.',
-      ],
-      'Femme': [
-        'Elevate your look with this feminine and fashion-forward piece.',
-        'Perfect for creating versatile, trend-conscious outfits.',
-        'Adds a sophisticated touch to any ensemble.',
-      ],
-      'Activewear': [
-        'Engineered for performance, styled for everyday wear.',
-        'From gym sessions to casual outings, this piece delivers.',
-        'Combines athletic functionality with street-ready aesthetics.',
-      ],
-      'Hats': [
-        'Complete your look with this statement accessory.',
-        'Adds personality and finish to any outfit.',
-        'A versatile piece that elevates casual and streetwear styles.',
-      ],
-      'Accessories': [
-        'The perfect finishing touch to complete your ensemble.',
-        'Add dimension and personal style to any outfit.',
-        'Small details make the biggest impact.',
-      ],
-      'Mystery Boxes': [
-        'Curated selection of quality pieces for the fashion-forward.',
-        'Perfect for discovering new styles and expanding your wardrobe.',
-        'Each box offers unique pieces handpicked for value and style.',
-      ],
-    };
+    // Add condition and flaws (TRANSPARENCY)
+    generatedDesc += formatCondition(currentItem.condition, currentItem.flaws);
     
-    const categoryTips = stylingTips[category] || [
-      'A stylish addition to any fashion-forward wardrobe.',
-      'Versatile piece that complements various looks and occasions.',
-      'Quality construction meets contemporary style.',
-    ];
+    // Add measurements (TRUST BUILDER)
+    generatedDesc += formatMeasurements(currentItem.measurements);
     
-    generatedDesc += categoryTips[Math.floor(Math.random() * categoryTips.length)] + ' ';
-    
-    // Add condition-specific closing
-    if (isNew) {
-      generatedDesc += 'Brand new condition ensures you\'re getting the best quality. ';
-    } else if (isVintage) {
-      generatedDesc += 'Vintage authenticity brings character and timeless appeal. ';
-    }
-    
-    // Add color context naturally
-    if (detectedColors.length > 0) {
-      const colorDesc = detectedColors.length === 1 
-        ? `The ${detectedColors[0]} colorway` 
-        : `The ${detectedColors.join(' and ')} color combination`;
-      generatedDesc += `${colorDesc} offers versatility and easy styling with your existing wardrobe. `;
-    }
-    
-    // Closing statement
-    if (isLimited) {
-      generatedDesc += 'Limited availability makes this a must-have for collectors and enthusiasts.';
+    // Add material info
+    const material = currentItem.material || '';
+    if (material && material.toLowerCase() !== 'unknown') {
+      generatedDesc += `\n\nMaterial: ${material}`;
+    } else if (detectedMaterials.length > 0) {
+      generatedDesc += `\n\nMaterial feels like ${detectedMaterials.join(' and ')}.`;
     } else {
-      generatedDesc += 'Don\'t miss out on this quality piece.';
+      generatedDesc += `\n\nMaterial unknown - check photos for fabric details.`;
     }
     
-    // Generate comprehensive, natural tags (ONLY add brands mentioned in speech)
+    // Add care instructions if provided
+    const care = currentItem.care || '';
+    if (care && care.toLowerCase() !== 'unknown') {
+      generatedDesc += ` ${care.charAt(0).toUpperCase() + care.slice(1)}.`;
+    }
+    
+    // Closing - helpful and honest
+    generatedDesc += '\n\nCompare measurements to your favorites for best fit!';
+    
+    // Filter banned phrases
+    generatedDesc = removeBannedPhrases(generatedDesc);
+    
+    // Generate tags - comprehensive but not spammy
     const generatedTags = [
-      // Core tags
       category.toLowerCase(),
       ...detectedColors,
       ...detectedMaterials,
-      
-      // Brand tags - ONLY if mentioned in speech
-      ...detectedBrands,
-      
-      // Size tag
       ...(detectedSize ? [detectedSize.toLowerCase()] : []),
-      
-      // Style tags
-      ...(isVintage ? ['vintage', 'retro', 'throwback'] : []),
-      ...(isNew ? ['new', 'unworn', 'nwt'] : []),
-      ...(isLimited ? ['limited edition', 'exclusive', 'rare'] : []),
-      ...(isOversized ? ['oversized', 'relaxed fit'] : []),
-      ...(isSlim ? ['slim fit', 'fitted'] : []),
-      ...(hasGraphic ? ['graphic', 'printed'] : []),
-      
-      // Category-specific tags
-      ...(category === 'Tees' ? ['t-shirt', 'casual', 'everyday'] : []),
-      ...(category === 'Sweatshirts' ? ['hoodie', 'pullover', 'cozy'] : []),
-      ...(category === 'Outerwear' ? ['jacket', 'layering', 'weather-ready'] : []),
-      ...(category === 'Bottoms' ? ['pants', 'trousers', 'denim'] : []),
-      ...(category === 'Activewear' ? ['athletic', 'performance', 'gym'] : []),
-      
-      // General fashion tags
-      'streetwear',
-      'fashion',
-      'style',
-      'wardrobe essential',
+      ...(brand && brand.toLowerCase() !== 'unknown' ? [brand.toLowerCase()] : []),
+      ...(era ? [era.toLowerCase()] : []),
+      ...(currentItem.condition === 'NWT' ? ['new with tags', 'nwt'] : []),
     ];
     
-    // Merge manual tags with generated tags, remove duplicates
     const manualTags = currentItem.tags || [];
     const finalTags = [...new Set([...manualTags, ...generatedTags])].filter(t => t && t.trim() !== '');
     
-    // Generate natural SEO-optimized title (only if not manually set)
+    // Generate SEO title (only if not manually set)
     let finalSeoTitle = currentItem.seoTitle;
     
     if (!finalSeoTitle || finalSeoTitle.trim() === '') {
       const titleComponents = [];
       
-      // Add condition prefix for impact
-      if (isVintage) titleComponents.push('Vintage');
-      if (isNew) titleComponents.push('New');
-      if (isLimited) titleComponents.push('Rare');
+      if (era) titleComponents.push(era.charAt(0).toUpperCase() + era.slice(1));
+      if (brand && brand.toLowerCase() !== 'unknown') titleComponents.push(brand);
       
-      // Add ALL detected colors (not just first one)
       if (detectedColors.length > 0) {
         const colorStr = detectedColors.length === 1 
           ? detectedColors[0].charAt(0).toUpperCase() + detectedColors[0].slice(1)
-          : detectedColors.map(c => c.charAt(0).toUpperCase() + c.slice(1)).join(' and ');
+          : detectedColors.map(c => c.charAt(0).toUpperCase() + c.slice(1)).join(' & ');
         titleComponents.push(colorStr);
       }
       
-      // Add category
-      const categoryName = category === 'Tees' ? 'T-Shirt' : category.slice(0, -1);
-      titleComponents.push(categoryName);
+      titleComponents.push(categoryName.charAt(0).toUpperCase() + categoryName.slice(1));
       
-      // Add key descriptor from voice description
-      const descriptorMatch = voiceDesc.match(/\b(Lakers|athletic|logo|graphic|print|stripe|solid|crew|v-neck|hoodie|pullover|zip|button)\b/i);
-      if (descriptorMatch) {
-        titleComponents.push(descriptorMatch[0].charAt(0).toUpperCase() + descriptorMatch[0].slice(1));
-      }
-      
-      // Add size if detected
       if (detectedSize && ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'].includes(detectedSize)) {
         titleComponents.push(`(${detectedSize})`);
       }
       
-      // Join with spaces - NO HARD CHARACTER LIMIT
-      // Let it be as long as needed to include all relevant info
       finalSeoTitle = titleComponents.join(' ');
       
-      // Only trim if extremely long (>100 chars), and trim at word boundary
+      // Smart trim at word boundary if too long
       if (finalSeoTitle.length > 100) {
         const words = finalSeoTitle.split(' ');
         let trimmed = '';
@@ -709,7 +630,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       }
     }
     
-    // Apply generated info to all items in the current group
+    // Apply to all items in group
     currentGroup.forEach(groupItem => {
       const itemIndex = updated.findIndex(item => item.id === groupItem.id);
       if (itemIndex !== -1) {
@@ -719,7 +640,15 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           seoTitle: finalSeoTitle,
           generatedDescription: generatedDesc,
           tags: finalTags,
-          size: detectedSize || updated[itemIndex].size // Apply detected size if not manually set
+          size: detectedSize || updated[itemIndex].size,
+          // Preserve manually entered fields
+          brand: updated[itemIndex].brand,
+          condition: updated[itemIndex].condition,
+          flaws: updated[itemIndex].flaws,
+          material: updated[itemIndex].material,
+          measurements: updated[itemIndex].measurements,
+          era: updated[itemIndex].era,
+          care: updated[itemIndex].care,
         };
       }
     });
@@ -1180,6 +1109,300 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 >
                   🔄 Regen
                 </button>
+              </div>
+            </div>
+
+            <div className="info-item">
+              <label>Brand:</label>
+              <input 
+                type="text" 
+                value={currentItem.brand || ''} 
+                onChange={(e) => {
+                  const updated = [...processedItems];
+                  currentGroup.forEach(groupItem => {
+                    const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                    if (itemIndex !== -1) {
+                      updated[itemIndex].brand = e.target.value;
+                    }
+                  });
+                  setProcessedItems(updated);
+                }}
+                placeholder="e.g., Nike, Levi's, or 'unbranded'"
+                className="info-input"
+              />
+            </div>
+
+            <div className="info-item">
+              <label>Condition:</label>
+              <select 
+                value={currentItem.condition || ''} 
+                onChange={(e) => {
+                  const updated = [...processedItems];
+                  currentGroup.forEach(groupItem => {
+                    const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                    if (itemIndex !== -1) {
+                      updated[itemIndex].condition = e.target.value as any;
+                    }
+                  });
+                  setProcessedItems(updated);
+                }}
+                className="info-input"
+              >
+                <option value="">Select condition...</option>
+                <option value="NWT">NWT (New With Tags)</option>
+                <option value="Excellent">Excellent</option>
+                <option value="Good">Good</option>
+                <option value="Fair">Fair</option>
+              </select>
+            </div>
+
+            <div className="info-item">
+              <label>Flaws (if any):</label>
+              <input 
+                type="text" 
+                value={currentItem.flaws || ''} 
+                onChange={(e) => {
+                  const updated = [...processedItems];
+                  currentGroup.forEach(groupItem => {
+                    const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                    if (itemIndex !== -1) {
+                      updated[itemIndex].flaws = e.target.value;
+                    }
+                  });
+                  setProcessedItems(updated);
+                }}
+                placeholder="e.g., minor pilling on sleeves, small stain on hem"
+                className="info-input"
+              />
+            </div>
+
+            <div className="info-item">
+              <label>Material:</label>
+              <input 
+                type="text" 
+                value={currentItem.material || ''} 
+                onChange={(e) => {
+                  const updated = [...processedItems];
+                  currentGroup.forEach(groupItem => {
+                    const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                    if (itemIndex !== -1) {
+                      updated[itemIndex].material = e.target.value;
+                    }
+                  });
+                  setProcessedItems(updated);
+                }}
+                placeholder="e.g., 100% Cotton, Polyester blend, or 'unknown'"
+                className="info-input"
+              />
+            </div>
+
+            <div className="info-item">
+              <label>Era/Vibe:</label>
+              <input 
+                type="text" 
+                value={currentItem.era || ''} 
+                onChange={(e) => {
+                  const updated = [...processedItems];
+                  currentGroup.forEach(groupItem => {
+                    const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                    if (itemIndex !== -1) {
+                      updated[itemIndex].era = e.target.value;
+                    }
+                  });
+                  setProcessedItems(updated);
+                }}
+                placeholder="e.g., 90s, Y2K, vintage, workwear, minimalist"
+                className="info-input"
+              />
+            </div>
+
+            <div className="info-item">
+              <label>Care Instructions:</label>
+              <input 
+                type="text" 
+                value={currentItem.care || ''} 
+                onChange={(e) => {
+                  const updated = [...processedItems];
+                  currentGroup.forEach(groupItem => {
+                    const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                    if (itemIndex !== -1) {
+                      updated[itemIndex].care = e.target.value;
+                    }
+                  });
+                  setProcessedItems(updated);
+                }}
+                placeholder="e.g., machine wash cold, dry clean only, or 'unknown'"
+                className="info-input"
+              />
+            </div>
+          </div>
+
+          <div className="form-section">
+            <h3>Measurements (Optional but Recommended)</h3>
+            <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '1rem' }}>
+              Measurements help customers compare to their own clothes and reduce returns.
+            </p>
+            
+            <div className="measurements-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+              <div className="info-item">
+                <label>Pit to Pit ("):</label>
+                <input 
+                  type="text" 
+                  value={currentItem.measurements?.pitToPit || ''} 
+                  onChange={(e) => {
+                    const updated = [...processedItems];
+                    currentGroup.forEach(groupItem => {
+                      const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                      if (itemIndex !== -1) {
+                        updated[itemIndex].measurements = {
+                          ...updated[itemIndex].measurements,
+                          pitToPit: e.target.value
+                        };
+                      }
+                    });
+                    setProcessedItems(updated);
+                  }}
+                  placeholder="e.g., 22"
+                  className="info-input"
+                />
+              </div>
+
+              <div className="info-item">
+                <label>Length ("):</label>
+                <input 
+                  type="text" 
+                  value={currentItem.measurements?.length || ''} 
+                  onChange={(e) => {
+                    const updated = [...processedItems];
+                    currentGroup.forEach(groupItem => {
+                      const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                      if (itemIndex !== -1) {
+                        updated[itemIndex].measurements = {
+                          ...updated[itemIndex].measurements,
+                          length: e.target.value
+                        };
+                      }
+                    });
+                    setProcessedItems(updated);
+                  }}
+                  placeholder="e.g., 28"
+                  className="info-input"
+                />
+              </div>
+
+              <div className="info-item">
+                <label>Sleeve ("):</label>
+                <input 
+                  type="text" 
+                  value={currentItem.measurements?.sleeve || ''} 
+                  onChange={(e) => {
+                    const updated = [...processedItems];
+                    currentGroup.forEach(groupItem => {
+                      const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                      if (itemIndex !== -1) {
+                        updated[itemIndex].measurements = {
+                          ...updated[itemIndex].measurements,
+                          sleeve: e.target.value
+                        };
+                      }
+                    });
+                    setProcessedItems(updated);
+                  }}
+                  placeholder="e.g., 24"
+                  className="info-input"
+                />
+              </div>
+
+              <div className="info-item">
+                <label>Shoulder ("):</label>
+                <input 
+                  type="text" 
+                  value={currentItem.measurements?.shoulder || ''} 
+                  onChange={(e) => {
+                    const updated = [...processedItems];
+                    currentGroup.forEach(groupItem => {
+                      const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                      if (itemIndex !== -1) {
+                        updated[itemIndex].measurements = {
+                          ...updated[itemIndex].measurements,
+                          shoulder: e.target.value
+                        };
+                      }
+                    });
+                    setProcessedItems(updated);
+                  }}
+                  placeholder="e.g., 18"
+                  className="info-input"
+                />
+              </div>
+
+              <div className="info-item">
+                <label>Waist ("):</label>
+                <input 
+                  type="text" 
+                  value={currentItem.measurements?.waist || ''} 
+                  onChange={(e) => {
+                    const updated = [...processedItems];
+                    currentGroup.forEach(groupItem => {
+                      const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                      if (itemIndex !== -1) {
+                        updated[itemIndex].measurements = {
+                          ...updated[itemIndex].measurements,
+                          waist: e.target.value
+                        };
+                      }
+                    });
+                    setProcessedItems(updated);
+                  }}
+                  placeholder="e.g., 32"
+                  className="info-input"
+                />
+              </div>
+
+              <div className="info-item">
+                <label>Inseam ("):</label>
+                <input 
+                  type="text" 
+                  value={currentItem.measurements?.inseam || ''} 
+                  onChange={(e) => {
+                    const updated = [...processedItems];
+                    currentGroup.forEach(groupItem => {
+                      const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                      if (itemIndex !== -1) {
+                        updated[itemIndex].measurements = {
+                          ...updated[itemIndex].measurements,
+                          inseam: e.target.value
+                        };
+                      }
+                    });
+                    setProcessedItems(updated);
+                  }}
+                  placeholder="e.g., 30"
+                  className="info-input"
+                />
+              </div>
+
+              <div className="info-item">
+                <label>Rise ("):</label>
+                <input 
+                  type="text" 
+                  value={currentItem.measurements?.rise || ''} 
+                  onChange={(e) => {
+                    const updated = [...processedItems];
+                    currentGroup.forEach(groupItem => {
+                      const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                      if (itemIndex !== -1) {
+                        updated[itemIndex].measurements = {
+                          ...updated[itemIndex].measurements,
+                          rise: e.target.value
+                        };
+                      }
+                    });
+                    setProcessedItems(updated);
+                  }}
+                  placeholder="e.g., 11"
+                  className="info-input"
+                />
               </div>
             </div>
           </div>
