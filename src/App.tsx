@@ -1,4 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from './lib/supabase';
+import type { User } from '@supabase/supabase-js';
+import Auth from './components/Auth';
 import ImageUpload from './components/ImageUpload';
 import ImageSorter from './components/ImageSorter';
 import ImageGrouper from './components/ImageGrouper';
@@ -60,11 +63,54 @@ export interface ClothingItem {
 }
 
 function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const [uploadedImages, setUploadedImages] = useState<ClothingItem[]>([]);
   const [sortedImages, setSortedImages] = useState<ClothingItem[]>([]);
   const [groupedImages, setGroupedImages] = useState<ClothingItem[]>([]);
   const [processedItems, setProcessedItems] = useState<ClothingItem[]>([]);
   const [groupingVersion, setGroupingVersion] = useState(0); // Track grouping changes
+
+  // Check authentication status on mount
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    // Reset all data
+    setUploadedImages([]);
+    setSortedImages([]);
+    setGroupedImages([]);
+    setProcessedItems([]);
+  };
+
+  if (loading) {
+    return (
+      <div className="loading-screen">
+        <div className="spinner"></div>
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Auth onAuthenticated={() => {}} />;
+  }
 
   const handleImagesUploaded = (items: ClothingItem[]) => {
     setUploadedImages(items);
@@ -102,8 +148,18 @@ function App() {
   return (
     <div className="app-container">
       <header className="app-header">
-        <h1>AI Clothing Sorting & Export</h1>
-        <p>Upload, sort, describe, and export to Shopify</p>
+        <div className="header-content">
+          <div>
+            <h1>🛍️ Sortbot - AI Clothing Sorting & Export</h1>
+            <p className="header-subtitle">Upload, sort, describe, and export to Shopify</p>
+          </div>
+          <div className="header-actions">
+            <span className="user-email">{user.email}</span>
+            <button onClick={handleSignOut} className="button button-secondary">
+              Sign Out
+            </button>
+          </div>
+        </div>
       </header>
 
       <main className="app-main">

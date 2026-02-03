@@ -45,7 +45,10 @@ jobs:
         run: npm run build
         env:
           # Environment variables for build (using GitHub Secrets)
-          # Optional: Add VITE_OPENAI_API_KEY in GitHub repo secrets for AI features
+          # Add these in GitHub repo settings > Secrets and variables > Actions
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # Optional: Add VITE_OPENAI_API_KEY for AI features
           VITE_OPENAI_API_KEY: ${{ secrets.VITE_OPENAI_API_KEY }}
       
       - name: Setup Pages
