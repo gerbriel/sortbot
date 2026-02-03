@@ -35,6 +35,26 @@
   border-left: 4px solid #667eea;
 }
 
+.grouper-instructions .instructions-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: color 0.2s;
+  width: 100%;
+  text-align: left;
+}
+
+.grouper-instructions .instructions-toggle:hover {
+  color: #667eea;
+}
+
 .grouper-instructions p {
   margin: 0 0 0.5rem 0;
   color: #333;
@@ -42,7 +62,7 @@
 }
 
 .grouper-instructions ul {
-  margin: 0.5rem 0 0 0;
+  margin: 1rem 0 0 0;
   padding-left: 1.5rem;
   color: #555;
 }
@@ -99,12 +119,14 @@
 }
 
 .category-badge {
-  background: #10b981;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: white;
-  padding: 0.4rem 0.8rem;
+  padding: 0.45rem 0.9rem;
   border-radius: 20px;
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
 }
 
 .group-images {
@@ -408,4 +430,86 @@
   .new-group-zone {
     padding: 2rem 1rem;
   }
+}
+
+/* Category Assignment Visual Indicators */
+.category-indicator {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  z-index: 10;
+  animation: categoryAssigned 0.3s ease-out;
+}
+
+.category-indicator-small {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  font-weight: bold;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.5);
+  z-index: 5;
+  animation: categoryAssigned 0.3s ease-out;
+}
+
+.category-check {
+  font-weight: bold;
+  font-size: 1rem;
+}
+
+.category-label {
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.product-group-card.has-category {
+  border-color: #10b981;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+  background: linear-gradient(to bottom, rgba(16, 185, 129, 0.05) 0%, white 100%);
+}
+
+.single-item-card.has-category {
+  border-color: #10b981;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
+}
+
+@keyframes categoryAssigned {
+  0% {
+    transform: scale(0) rotate(-180deg);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2) rotate(10deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* Make product group cards have relative position for absolute indicators */
+.product-group-card {
+  position: relative;
+}
+
+.single-item-card {
+  position: relative;
 }

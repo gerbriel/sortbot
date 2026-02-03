@@ -9,24 +9,12 @@ interface ImageGrouperProps {
   userId?: string;
 }
 
-// Categories for drag-and-drop categorization
-const CATEGORIES = [
-  'sweatshirts',
-  'outerwear',
-  'tees',
-  'bottoms',
-  'femme',
-  'hats',
-  'mystery boxes'
-];
-
 const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId }) => {
   const [groupedItems, setGroupedItems] = useState<ClothingItem[]>([]);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [draggedItem, setDraggedItem] = useState<ClothingItem | null>(null);
   const [draggedFromGroup, setDraggedFromGroup] = useState<string | null>(null);
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
-  const [dragOverCategory, setDragOverCategory] = useState<string | null>(null);
   const [groupCounter, setGroupCounter] = useState(1);
   const [uploadedImages, setUploadedImages] = useState<Set<string>>(new Set());
 
@@ -170,9 +158,14 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
 
 
   // Drag and Drop Handlers for Images
-  const handleDragStart = (item: ClothingItem, fromGroup: string) => {
+  const handleDragStart = (e: React.DragEvent, item: ClothingItem, fromGroup: string) => {
     setDraggedItem(item);
     setDraggedFromGroup(fromGroup);
+    // Set data for cross-component dragging (Step 2 -> Step 3)
+    e.dataTransfer.setData('application/json', JSON.stringify({
+      item,
+      productGroup: item.productGroup || item.id
+    }));
   };
 
   const handleDragOver = (e: React.DragEvent, targetGroup: string) => {
@@ -203,66 +196,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
   };
 
   const handleDragEnd = () => {
-    setDraggedItem(null);
-    setDraggedFromGroup(null);
-    setDragOverGroup(null);
-  };
-
-  // Drag and Drop for Category Assignment
-  const handleCategoryDragOver = (e: React.DragEvent, category: string) => {
-    e.preventDefault();
-    setDragOverCategory(category);
-  };
-
-  const handleCategoryDrop = (e: React.DragEvent, category: string) => {
-    e.preventDefault();
-    
-    if (!draggedItem) {
-      setDragOverCategory(null);
-      return;
-    }
-
-    // Assign category to all images in the group
-    const groupId = draggedItem.productGroup || draggedItem.id;
-    const updated = groupedItems.map(item =>
-      (item.productGroup || item.id) === groupId
-        ? { ...item, category }
-        : item
-    );
-
-    setGroupedItems(updated);
-    onGrouped(updated);
-    setDraggedItem(null);
-    setDraggedFromGroup(null);
-    setDragOverCategory(null);
-  };
-
-  const handleCategoryDragEnd = () => {
-    setDragOverCategory(null);
-  };
-
-  // Create new group for drag-and-drop
-  const createNewGroup = () => {
-    const newGroupId = `group-${groupCounter}`;
-    setGroupCounter(groupCounter + 1);
-    return newGroupId;
-  };
-
-  // Handle drop on "New Group" area
-  const handleDropOnNewGroup = (e: React.DragEvent) => {
-    e.preventDefault();
-    
-    if (!draggedItem) return;
-
-    const newGroupId = createNewGroup();
-    const updated = groupedItems.map(item =>
-      item.id === draggedItem.id
-        ? { ...item, productGroup: newGroupId }
-        : item
-    );
-
-    setGroupedItems(updated);
-    onGrouped(updated);
     setDraggedItem(null);
     setDraggedFromGroup(null);
     setDragOverGroup(null);
@@ -300,119 +233,67 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
           <span>📦 {multiItemGroups.length} Product Groups</span>
           <span>📄 {singleItems.length} Single Items</span>
           <span>🖼️ {groupedItems.length} Total Images</span>
+          {selectedItems.size > 0 && (
+            <span style={{ background: '#10b981' }}>✓ {selectedItems.size} Selected</span>
+          )}
         </div>
       </div>
 
-      <div className="grouper-instructions">
-        <p>💡 <strong>Drag & Drop Instructions:</strong></p>
-        <ul>
-          <li>🖱️ Drag images between groups to reorganize</li>
-          <li>➕ Drag an image to "Create New Group" to start a new product</li>
-          <li>🏷️ Drag groups onto category buttons to categorize</li>
-          <li>🗑️ Click the × button to delete unwanted images</li>
-        </ul>
+      {/* Grouping Controls */}
+      <div className="grouper-actions">
+        <button 
+          className="button button-primary" 
+          onClick={createGroupFromSelected}
+          disabled={selectedItems.size < 2}
+        >
+          🔗 Group Selected ({selectedItems.size})
+        </button>
+        <button 
+          className="button button-secondary" 
+          onClick={ungroupSelected}
+          disabled={selectedItems.size === 0}
+        >
+          ✂️ Ungroup Selected
+        </button>
+        <button 
+          className="button button-secondary" 
+          onClick={() => setSelectedItems(new Set())}
+          disabled={selectedItems.size === 0}
+        >
+          ❌ Clear Selection
+        </button>
       </div>
 
-      {/* Category Zones */}
-      <div className="category-zones">
-        <h3>🏷️ Drag Groups Here to Categorize</h3>
-        <div className="category-grid">
-          {CATEGORIES.map(category => (
-            <div
-              key={category}
-              className={`category-zone ${dragOverCategory === category ? 'drag-over' : ''}`}
-              onDragOver={(e) => handleCategoryDragOver(e, category)}
-              onDrop={(e) => handleCategoryDrop(e, category)}
-              onDragLeave={handleCategoryDragEnd}
-            >
-              <span className="category-icon">
-                {category === 'Tops' && '👕'}
-                {category === 'Bottoms' && '👖'}
-                {category === 'Dresses' && '👗'}
-                {category === 'Outerwear' && '🧥'}
-                {category === 'Shoes' && '👟'}
-                {category === 'Accessories' && '🎩'}
-                {category === 'Bags' && '👜'}
-                {category === 'Jewelry' && '💍'}
-                {category === 'Other' && '📦'}
-              </span>
-              <span className="category-name">{category}</span>
-              <span className="category-count">
-                ({groupedItems.filter(i => i.category === category).length})
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Multi-image groups */}
-      {multiItemGroups.length > 0 && (
-        <div className="groups-section">
-          <h3>📦 Product Groups ({multiItemGroups.length})</h3>
-          <div className="groups-grid">
-            {multiItemGroups.map(([groupId, items]) => (
-              <div
-                key={groupId}
-                className={`product-group-card ${dragOverGroup === groupId ? 'drag-over' : ''}`}
-                onDragOver={(e) => handleDragOver(e, groupId)}
-                onDrop={(e) => handleDrop(e, groupId)}
-                onDragLeave={handleDragEnd}
-              >
-                <div className="group-header">
-                  <span className="group-badge">
-                    {items.length} images
-                  </span>
-                  {items[0].category && (
-                    <span className="category-badge">{items[0].category}</span>
-                  )}
-                </div>
-                <div className="group-images">
-                  {items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="group-image-item"
-                      draggable
-                      onDragStart={() => handleDragStart(item, groupId)}
-                      onDragEnd={handleDragEnd}
-                    >
-                      <img src={item.preview} alt="Product" />
-                      <button
-                        className="delete-image-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteImage(item);
-                        }}
-                        title="Delete image"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Single items */}
       {singleItems.length > 0 && (
         <div className="singles-section">
-          <h3>📄 Individual Items ({singleItems.length})</h3>
+          <h3>� Individual Items ({singleItems.length})</h3>
           <div className="items-grid">
             {singleItems.map((item) => {
               const itemGroupId = item.productGroup || item.id;
               return (
                 <div
                   key={item.id}
-                  className={`single-item-card ${dragOverGroup === itemGroupId ? 'drag-over' : ''}`}
+                  className={`single-item-card ${dragOverGroup === itemGroupId ? 'drag-over' : ''} ${item.category ? 'has-category' : ''}`}
                   draggable
-                  onDragStart={() => handleDragStart(item, itemGroupId)}
+                  onDragStart={(e) => handleDragStart(e, item, itemGroupId)}
                   onDragEnd={handleDragEnd}
                   onDragOver={(e) => handleDragOver(e, itemGroupId)}
                   onDrop={(e) => handleDrop(e, itemGroupId)}
+                  onClick={(e) => {
+                    if (!(e.target as HTMLElement).closest('.delete-image-btn')) {
+                      toggleItemSelection(item.id);
+                    }
+                  }}
                 >
+                  {item.category && (
+                    <div className="category-indicator-small">
+                      <span className="category-check">✓</span>
+                    </div>
+                  )}
                   <img src={item.preview} alt="Product" />
+                  {selectedItems.has(item.id) && (
+                    <div className="selection-indicator">✓</div>
+                  )}
                   <button
                     className="delete-image-btn"
                     onClick={(e) => {
@@ -435,21 +316,72 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
         </div>
       )}
 
-      {/* New Group Drop Zone */}
-      <div
-        className={`new-group-zone ${dragOverGroup === 'new' ? 'drag-over' : ''}`}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOverGroup('new');
-        }}
-        onDrop={handleDropOnNewGroup}
-        onDragLeave={() => setDragOverGroup(null)}
-      >
-        <div className="new-group-content">
-          <span className="new-group-icon">➕</span>
-          <span>Drag an image here to create a new product group</span>
+      {/* Product Groups */}
+      {multiItemGroups.length > 0 && (
+        <div className="groups-section">
+          <h3>📦 Product Groups ({multiItemGroups.length})</h3>
+          <div className="groups-grid">
+            {multiItemGroups.map(([groupId, items]) => (
+              <div
+                key={groupId}
+                className={`product-group-card ${dragOverGroup === groupId ? 'drag-over' : ''} ${items[0].category ? 'has-category' : ''}`}
+                draggable
+                onDragStart={(e) => handleDragStart(e, items[0], groupId)}
+                onDragEnd={handleDragEnd}
+                onDragOver={(e) => handleDragOver(e, groupId)}
+                onDrop={(e) => handleDrop(e, groupId)}
+                onDragLeave={handleDragEnd}
+              >
+                {items[0].category && (
+                  <div className="category-indicator">
+                    <span className="category-check">✓</span>
+                    <span className="category-label">{items[0].category}</span>
+                  </div>
+                )}
+                <div className="group-header">
+                  <span className="group-badge">
+                    {items.length} images
+                  </span>
+                  {items[0].category && (
+                    <span className="category-badge">{items[0].category}</span>
+                  )}
+                </div>
+                <div className="group-images">
+                  {items.map((item) => (
+                    <div
+                      key={item.id}
+                      className={`group-image-item ${selectedItems.has(item.id) ? 'selected' : ''}`}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, item, groupId)}
+                      onDragEnd={handleDragEnd}
+                      onClick={(e) => {
+                        if (!(e.target as HTMLElement).closest('.delete-image-btn')) {
+                          toggleItemSelection(item.id);
+                        }
+                      }}
+                    >
+                      <img src={item.preview} alt="Product" />
+                      {selectedItems.has(item.id) && (
+                        <div className="selection-indicator">✓</div>
+                      )}
+                      <button
+                        className="delete-image-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteImage(item);
+                        }}
+                        title="Delete image"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
