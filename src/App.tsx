@@ -7,6 +7,8 @@ import ImageSorter from './components/ImageSorter';
 import ImageGrouper from './components/ImageGrouper';
 import ProductDescriptionGenerator from './components/ProductDescriptionGenerator';
 import GoogleSheetExporter from './components/GoogleSheetExporter';
+import { SavedProducts } from './components/SavedProducts';
+import { saveBatchToDatabase } from './lib/productService';
 import './App.css';
 
 export interface ClothingItem {
@@ -70,6 +72,9 @@ function App() {
   const [groupedImages, setGroupedImages] = useState<ClothingItem[]>([]);
   const [processedItems, setProcessedItems] = useState<ClothingItem[]>([]);
   const [groupingVersion, setGroupingVersion] = useState(0); // Track grouping changes
+  const [showSavedProducts, setShowSavedProducts] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Check authentication status on mount
   useEffect(() => {
@@ -97,6 +102,59 @@ function App() {
     setSortedImages([]);
     setGroupedImages([]);
     setProcessedItems([]);
+  };
+
+  const handleSaveBatch = async () => {
+    if (!user || processedItems.length === 0) {
+      alert('No products to save!');
+      return;
+    }
+
+    setSaving(true);
+    setSaveMessage(null);
+
+    try {
+      const result = await saveBatchToDatabase(processedItems, user.id);
+      
+      if (result.success > 0) {
+        setSaveMessage({
+          type: 'success',
+          text: `✅ Saved ${result.success} product(s)${result.failed > 0 ? `, ${result.failed} failed` : ''}!`,
+        });
+        
+        // Clear the batch after successful save
+        setTimeout(() => {
+          setProcessedItems([]);
+          setGroupedImages([]);
+          setSortedImages([]);
+          setUploadedImages([]);
+          setSaveMessage(null);
+        }, 3000);
+      } else {
+        setSaveMessage({
+          type: 'error',
+          text: '❌ Failed to save products. Please try again.',
+        });
+      }
+    } catch (error) {
+      console.error('Save error:', error);
+      setSaveMessage({
+        type: 'error',
+        text: '❌ An error occurred while saving.',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClearBatch = () => {
+    if (confirm('Are you sure you want to clear this batch? Unsaved products will be lost.')) {
+      setProcessedItems([]);
+      setGroupedImages([]);
+      setSortedImages([]);
+      setUploadedImages([]);
+      setSaveMessage(null);
+    }
   };
 
   if (loading) {
@@ -154,6 +212,13 @@ function App() {
             <p className="header-subtitle">Upload, sort, describe, and export to Shopify</p>
           </div>
           <div className="header-actions">
+            <button 
+              onClick={() => setShowSavedProducts(true)} 
+              className="button button-secondary"
+              style={{ marginRight: '12px' }}
+            >
+              📦 Saved Products
+            </button>
             <span className="user-email">{user.email}</span>
             <button onClick={handleSignOut} className="button button-secondary">
               Sign Out
@@ -163,6 +228,13 @@ function App() {
       </header>
 
       <main className="app-main">
+        {/* Save Message */}
+        {saveMessage && (
+          <div className={`save-message ${saveMessage.type}`}>
+            {saveMessage.text}
+          </div>
+        )}
+
         {/* Step 1: Upload Images */}
         <section className="step-section">
           <h2>Step 1: Upload Images</h2>
@@ -217,14 +289,44 @@ function App() {
           </section>
         )}
 
-        {/* Step 5: Export to Google Sheets/Shopify */}
+        {/* Step 5: Save & Export */}
         {processedItems.length > 0 && (
           <section className="step-section">
-            <h2>Step 5: Export to Google Sheets</h2>
-            <GoogleSheetExporter items={processedItems} />
+            <h2>Step 5: Save & Export</h2>
+            
+            <div className="batch-actions">
+              <button 
+                onClick={handleSaveBatch} 
+                className="button button-primary"
+                disabled={saving}
+              >
+                {saving ? '💾 Saving...' : '💾 Save Batch to Database'}
+              </button>
+              
+              <button 
+                onClick={handleClearBatch} 
+                className="button button-secondary"
+                disabled={saving}
+              >
+                🗑️ Clear Batch
+              </button>
+            </div>
+
+            <div className="export-section">
+              <h3>Export Options</h3>
+              <GoogleSheetExporter items={processedItems} />
+            </div>
           </section>
         )}
       </main>
+
+      {/* Saved Products Modal */}
+      {showSavedProducts && user && (
+        <SavedProducts 
+          userId={user.id} 
+          onClose={() => setShowSavedProducts(false)} 
+        />
+      )}
     </div>
   );
 }

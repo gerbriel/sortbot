@@ -137,6 +137,43 @@
   flex-shrink: 0;
 }
 
+/* Voice Result Section */
+.voice-result {
+  margin-top: var(--space-5);
+}
+
+.voice-result label {
+  display: block;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin-bottom: var(--space-3);
+  font-size: 0.9375rem;
+}
+
+.description-textarea {
+  width: 100%;
+  min-height: 150px;
+  padding: var(--space-4);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-md);
+  font-size: 0.9375rem;
+  font-family: inherit;
+  line-height: 1.6;
+  resize: vertical;
+  transition: all 0.2s ease;
+  background: white;
+}
+
+.description-textarea:focus {
+  outline: none;
+  border-color: var(--shopify-blue);
+  box-shadow: 0 0 0 1px var(--shopify-blue);
+}
+
+.description-textarea::placeholder {
+  color: var(--gray-400);
+}
+
 /* Voice Description Display */
 .voice-description {
   padding: var(--space-4);
@@ -211,6 +248,37 @@
   background: var(--gray-100);
   color: var(--gray-400);
   cursor: not-allowed;
+}
+
+/* Info Item Styles (Manual Product Info Section) */
+.info-item {
+  margin-bottom: var(--space-4);
+}
+
+.info-item label {
+  display: block;
+  font-weight: 500;
+  color: var(--gray-700);
+  margin-bottom: var(--space-2);
+  font-size: 0.9375rem;
+}
+
+.info-input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-md);
+  font-size: 0.9375rem;
+  font-family: inherit;
+  transition: all 0.2s ease;
+  background: white;
+  box-sizing: border-box;
+}
+
+.info-input:focus {
+  outline: none;
+  border-color: var(--shopify-blue);
+  box-shadow: 0 0 0 1px var(--shopify-blue);
 }
 
 /* Input with Regenerate Button */

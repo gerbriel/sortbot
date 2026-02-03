@@ -198,7 +198,67 @@
 }
 
 .button-danger:hover:not(:disabled) {
-  background: #b82505;
+  background: var(--shopify-red-dark);
+}
+
+/* Batch Actions */
+.batch-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.batch-actions .button {
+  flex: 1;
+  min-width: 200px;
+  justify-content: center;
+}
+
+.export-section {
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--gray-200);
+}
+
+.export-section h3 {
+  color: var(--gray-700);
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: var(--space-4);
+}
+
+/* Save Message */
+.save-message {
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  text-align: center;
+  margin-bottom: var(--space-4);
+  animation: slideDown 0.3s ease;
+}
+
+.save-message.success {
+  background: #d1f7c4;
+  color: #1f7a1f;
+  border: 1px solid #70c770;
+}
+
+.save-message.error {
+  background: #fef3f2;
+  color: #d82c0d;
+  border: 1px solid #f5b5a8;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Loading Spinner */
