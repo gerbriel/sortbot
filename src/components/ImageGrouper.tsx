@@ -64,31 +64,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped }) => {
     onGrouped(updated);
   };
 
-  const autoGroupSimilar = () => {
-    // Simple auto-grouping by category (in production, use image similarity AI)
-    const categoryGroups: Record<string, string[]> = {};
-    
-    groupedItems.forEach(item => {
-      if (!item.category) return;
-      if (!categoryGroups[item.category]) {
-        categoryGroups[item.category] = [];
-      }
-      categoryGroups[item.category].push(item.id);
-    });
-
-    const updated = groupedItems.map(item => {
-      if (!item.category) return item;
-      const groupItems = categoryGroups[item.category];
-      if (groupItems.length > 1) {
-        const groupIndex = groupItems.indexOf(item.id);
-        return { ...item, productGroup: `auto-${item.category}-${Math.floor(groupIndex / 3)}` };
-      }
-      return item;
-    });
-
-    setGroupedItems(updated);
-  };
-
   const getGroups = () => {
     const groups: Record<string, ClothingItem[]> = {};
     groupedItems.forEach(item => {
@@ -133,12 +108,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped }) => {
           disabled={selectedItems.size === 0}
         >
           ✂️ Ungroup Selected
-        </button>
-        <button 
-          className="button" 
-          onClick={autoGroupSimilar}
-        >
-          🤖 Auto-Group Similar
         </button>
         <button 
           className="button" 

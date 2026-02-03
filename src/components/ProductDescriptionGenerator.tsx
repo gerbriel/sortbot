@@ -505,19 +505,94 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       }
     }
     
-    // NATURAL DESCRIPTION GENERATION with new fields
+    // EXTRACT FIELDS FROM VOICE (only if not manually filled)
+    // Brand extraction
+    let extractedBrand = '';
+    const brandPatterns = [
+      /\b(nike|adidas|supreme|champion|carhartt|patagonia|north face|levi'?s?|gap|old navy|h&m|zara|uniqlo|polo|ralph lauren|tommy hilfiger|calvin klein|gucci|prada|louis vuitton|burberry|versace|balenciaga|off-white|stussy|thrasher|vans|converse|new balance|puma|reebok|under armour|lululemon|gymshark|dickies|wrangler|lee|diesel|true religion|hollister|abercrombie|american eagle|j\.?\s?crew|banana republic|ann taylor)\b/i
+    ];
+    
+    for (const pattern of brandPatterns) {
+      const match = voiceDesc.match(pattern);
+      if (match) {
+        extractedBrand = match[1].split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+        break;
+      }
+    }
+    
+    // Era extraction
+    let extractedEra = '';
+    const eraPatterns = [
+      /\b(vintage|retro|90s|80s|70s|60s|y2k|modern|contemporary|classic)\b/i
+    ];
+    
+    for (const pattern of eraPatterns) {
+      const match = voiceDesc.match(pattern);
+      if (match) {
+        extractedEra = match[1].toLowerCase();
+        break;
+      }
+    }
+    
+    // Condition extraction (only if not manually set)
+    let extractedCondition = currentItem.condition || '';
+    if (!extractedCondition) {
+      if (/new with tags|nwt|brand new/i.test(voiceDesc)) {
+        extractedCondition = 'NWT';
+      } else if (/like new|mint|pristine|perfect/i.test(voiceDesc)) {
+        extractedCondition = 'Like New';
+      } else if (/excellent|great condition/i.test(voiceDesc)) {
+        extractedCondition = 'Excellent';
+      } else if (/good condition|gently used/i.test(voiceDesc)) {
+        extractedCondition = 'Good';
+      } else if (/fair|worn|used/i.test(voiceDesc)) {
+        extractedCondition = 'Fair';
+      }
+    }
+    
+    // Flaws extraction (only if not manually filled)
+    let extractedFlaws = currentItem.flaws || '';
+    if (!extractedFlaws) {
+      const flawPatterns = [
+        /flaw[s]?[:\s]+([^.]+)/i,
+        /stain[s]?[:\s]+([^.]+)/i,
+        /hole[s]?[:\s]+([^.]+)/i,
+        /tear[s]?[:\s]+([^.]+)/i,
+        /damage[d]?[:\s]+([^.]+)/i,
+        /wear[:\s]+([^.]+)/i,
+      ];
+      
+      for (const pattern of flawPatterns) {
+        const match = voiceDesc.match(pattern);
+        if (match) {
+          extractedFlaws = match[1].trim();
+          break;
+        }
+      }
+    }
+    
+    // Material extraction (only if not manually filled)
+    let extractedMaterial = currentItem.material || '';
+    if (!extractedMaterial && detectedMaterials.length > 0) {
+      extractedMaterial = detectedMaterials.join(', ');
+    }
+    
+    // Use manual entry if provided, otherwise use extracted value
+    const finalBrand = currentItem.brand || extractedBrand;
+    const finalEra = currentItem.era || extractedEra;
+    const finalCondition = extractedCondition;
+    const finalFlaws = extractedFlaws;
+    const finalMaterial = extractedMaterial;
+    
+    // NATURAL DESCRIPTION GENERATION with hybrid fields
     let generatedDesc = '';
     
-    // Opening - use actual data from new fields
-    const brand = currentItem.brand || '';
-    const era = currentItem.era || '';
-    
-    // Start with era/brand if provided
-    if (era) {
-      generatedDesc = `${era.charAt(0).toUpperCase() + era.slice(1)} `;
+    // Start with era/brand if available
+    if (finalEra) {
+      generatedDesc = `${finalEra.charAt(0).toUpperCase() + finalEra.slice(1)} `;
     }
-    if (brand && brand.toLowerCase() !== 'unknown') {
-      generatedDesc += `${brand} `;
+    if (finalBrand && finalBrand.toLowerCase() !== 'unknown') {
+      generatedDesc += `${finalBrand} `;
     }
     
     // Add colors naturally
@@ -552,18 +627,15 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       generatedDesc += `\n\n${sizePhrase}`;
     }
     
-    // Add condition and flaws (TRANSPARENCY)
-    generatedDesc += formatCondition(currentItem.condition, currentItem.flaws);
+    // Add condition and flaws (TRANSPARENCY) - use extracted or manual
+    generatedDesc += formatCondition(finalCondition || currentItem.condition, finalFlaws || currentItem.flaws);
     
     // Add measurements (TRUST BUILDER)
     generatedDesc += formatMeasurements(currentItem.measurements);
     
-    // Add material info
-    const material = currentItem.material || '';
-    if (material && material.toLowerCase() !== 'unknown') {
-      generatedDesc += `\n\nMaterial: ${material}`;
-    } else if (detectedMaterials.length > 0) {
-      generatedDesc += `\n\nMaterial feels like ${detectedMaterials.join(' and ')}.`;
+    // Add material info - use extracted or manual
+    if (finalMaterial && finalMaterial.toLowerCase() !== 'unknown') {
+      generatedDesc += `\n\nMaterial: ${finalMaterial}`;
     } else {
       generatedDesc += `\n\nMaterial unknown - check photos for fabric details.`;
     }
@@ -586,9 +658,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       ...detectedColors,
       ...detectedMaterials,
       ...(detectedSize ? [detectedSize.toLowerCase()] : []),
-      ...(brand && brand.toLowerCase() !== 'unknown' ? [brand.toLowerCase()] : []),
-      ...(era ? [era.toLowerCase()] : []),
-      ...(currentItem.condition === 'NWT' ? ['new with tags', 'nwt'] : []),
+      ...(finalBrand && finalBrand.toLowerCase() !== 'unknown' ? [finalBrand.toLowerCase()] : []),
+      ...(finalEra ? [finalEra.toLowerCase()] : []),
+      ...(finalCondition === 'NWT' ? ['new with tags', 'nwt'] : []),
     ];
     
     const manualTags = currentItem.tags || [];
@@ -600,8 +672,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     if (!finalSeoTitle || finalSeoTitle.trim() === '') {
       const titleComponents = [];
       
-      if (era) titleComponents.push(era.charAt(0).toUpperCase() + era.slice(1));
-      if (brand && brand.toLowerCase() !== 'unknown') titleComponents.push(brand);
+      if (finalEra) titleComponents.push(finalEra.charAt(0).toUpperCase() + finalEra.slice(1));
+      if (finalBrand && finalBrand.toLowerCase() !== 'unknown') titleComponents.push(finalBrand);
       
       if (detectedColors.length > 0) {
         const colorStr = detectedColors.length === 1 
@@ -641,13 +713,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           generatedDescription: generatedDesc,
           tags: finalTags,
           size: detectedSize || updated[itemIndex].size,
-          // Preserve manually entered fields
-          brand: updated[itemIndex].brand,
-          condition: updated[itemIndex].condition,
-          flaws: updated[itemIndex].flaws,
-          material: updated[itemIndex].material,
+          // Use manual entry if provided, otherwise use extracted (hybrid approach)
+          brand: updated[itemIndex].brand || extractedBrand,
+          condition: updated[itemIndex].condition || (extractedCondition as any),
+          flaws: updated[itemIndex].flaws || extractedFlaws,
+          material: updated[itemIndex].material || extractedMaterial,
           measurements: updated[itemIndex].measurements,
-          era: updated[itemIndex].era,
+          era: updated[itemIndex].era || extractedEra,
           care: updated[itemIndex].care,
         };
       }
