@@ -5,6 +5,7 @@ import Auth from './components/Auth';
 import ImageUpload from './components/ImageUpload';
 import ImageSorter from './components/ImageSorter';
 import ImageGrouper from './components/ImageGrouper';
+import CategoryZones from './components/CategoryZones';
 import ProductDescriptionGenerator from './components/ProductDescriptionGenerator';
 import GoogleSheetExporter from './components/GoogleSheetExporter';
 import { SavedProducts } from './components/SavedProducts';
@@ -76,6 +77,7 @@ function App() {
   const [showSavedProducts, setShowSavedProducts] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showStep2Info, setShowStep2Info] = useState(false);
 
   // Check authentication status on mount
   useEffect(() => {
@@ -182,6 +184,8 @@ function App() {
 
   const handleImagesSorted = (items: ClothingItem[]) => {
     setSortedImages(items);
+    // Also update groupedImages so Step 2 shows the categories
+    setGroupedImages(items);
   };
 
   const handleImagesGrouped = (items: ClothingItem[]) => {
@@ -248,9 +252,50 @@ function App() {
         {/* Step 2: Group Images */}
         {uploadedImages.length > 0 && (
           <section className="step-section">
-            <h2>Step 2: Group Product Images</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <h2>Step 2: Group Product Images</h2>
+              <button 
+                onClick={() => setShowStep2Info(!showStep2Info)}
+                style={{
+                  background: '#667eea',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '24px',
+                  height: '24px',
+                  cursor: 'pointer',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 0
+                }}
+                title="How to use"
+              >
+                i
+              </button>
+            </div>
+            {showStep2Info && (
+              <div style={{
+                background: '#f0f4ff',
+                padding: '1rem',
+                borderRadius: '8px',
+                marginTop: '0.5rem',
+                marginBottom: '1rem',
+                borderLeft: '4px solid #667eea',
+                fontSize: '14px'
+              }}>
+                <ul style={{ margin: 0, paddingLeft: '1.5rem' }}>
+                  <li>👆 <strong>Click images</strong> to select them (green checkmark appears)</li>
+                  <li>🔗 <strong>Click "Group Selected"</strong> to create a product from 2+ images</li>
+                  <li>🖱️ <strong>Drag images</strong> between groups to reorganize</li>
+                  <li>🗑️ <strong>Click × button</strong> to delete unwanted images</li>
+                </ul>
+              </div>
+            )}
             <p className="step-description">
-              Drag & drop images to group, categorize, or delete. All images are auto-uploaded to your database.
+              Click to select images, group them, and organize your products. All images are auto-uploaded to your database.
             </p>
             <ImageGrouper 
               items={uploadedImages} 
@@ -260,22 +305,16 @@ function App() {
           </section>
         )}
 
-        {/* Step 3: Categorize Products */}
+        {/* Step 3: Drag & Drop Categorization */}
         {groupedImages.length > 0 && (
           <section className="step-section">
-            <h2>Step 3: Categorize Products</h2>
+            <h2>Step 3: Drag Groups to Categories</h2>
             <p className="step-description">
-              Assign categories to your products (or product groups). This makes batch categorization easier.
-              {sortedImages.length > 0 && (
-                <span style={{ color: '#667eea', fontWeight: 'bold', marginLeft: '1rem' }}>
-                  ✓ Categories saved
-                </span>
-              )}
+              Drag your product groups onto category buttons to categorize them.
             </p>
-            <ImageSorter 
-              key={`sorter-${groupingVersion}`}
-              images={groupedImages} 
-              onSorted={handleImagesSorted}
+            <CategoryZones 
+              items={groupedImages} 
+              onCategorized={handleImagesSorted}
             />
           </section>
         )}
