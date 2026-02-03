@@ -577,12 +577,22 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       extractedMaterial = detectedMaterials.join(', ');
     }
     
+    // Color extraction (only if not manually filled) - for Shopify Option2
+    let extractedColor = currentItem.color || '';
+    if (!extractedColor && detectedColors.length > 0) {
+      // Use first detected color or combine if multiple
+      extractedColor = detectedColors.length === 1 
+        ? detectedColors[0].charAt(0).toUpperCase() + detectedColors[0].slice(1)
+        : detectedColors.slice(0, 2).map(c => c.charAt(0).toUpperCase() + c.slice(1)).join('/');
+    }
+    
     // Use manual entry if provided, otherwise use extracted value
     const finalBrand = currentItem.brand || extractedBrand;
     const finalEra = currentItem.era || extractedEra;
     const finalCondition = extractedCondition;
     const finalFlaws = extractedFlaws;
     const finalMaterial = extractedMaterial;
+    const finalColor = extractedColor;
     
     // NATURAL DESCRIPTION GENERATION with hybrid fields
     let generatedDesc = '';
@@ -715,6 +725,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           size: detectedSize || updated[itemIndex].size,
           // Use manual entry if provided, otherwise use extracted (hybrid approach)
           brand: updated[itemIndex].brand || extractedBrand,
+          color: updated[itemIndex].color || extractedColor,
           condition: updated[itemIndex].condition || (extractedCondition as any),
           flaws: updated[itemIndex].flaws || extractedFlaws,
           material: updated[itemIndex].material || extractedMaterial,

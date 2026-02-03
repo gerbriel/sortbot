@@ -88,7 +88,7 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
       const tags = product.tags?.join(', ') || '';
       const condition = product.condition === 'New' || product.condition === 'NWT' ? 'New' : 'Used';
       
-      // First row with all main product info + first image
+      //First row with all main product info + first image
       rows.push([
         product.seoTitle || `Product ${idx + 1}`,
         handle,
@@ -113,7 +113,7 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
         'g',
         'TRUE',
         'manual',
-        product.imageUrls?.[0] || '',
+        '[UPLOAD IMAGE 1 TO SHOPIFY FIRST, THEN ADD URL HERE]', // Placeholder
         '1',
         `${product.seoTitle || 'Product'} - Image 1`,
         product.seoTitle || '',
@@ -122,19 +122,18 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
       ]);
       
       // Additional rows for remaining images (if any)
-      if (product.imageUrls) {
-        for (let i = 1; i < product.imageUrls.length && i < 4; i++) {
-          rows.push([
-            '', // Empty title for variant rows
-            handle,
-            '', '', '', '', '', '', '', '', '', '', '', '', '',
-            '', '', '', '', '', '', '', '',
-            product.imageUrls[i],
-            String(i + 1),
-            `${product.seoTitle || 'Product'} - Image ${i + 1}`,
-            '', '', ''
-          ]);
-        }
+      const imageCount = product.imageUrls?.length || 0;
+      for (let i = 1; i < imageCount && i < 4; i++) {
+        rows.push([
+          '', // Empty title for variant rows
+          handle,
+          '', '', '', '', '', '', '', '', '', '', '', '', '',
+          '', '', '', '', '', '', '', '',
+          `[UPLOAD IMAGE ${i + 1} TO SHOPIFY FIRST, THEN ADD URL HERE]`, // Placeholder
+          String(i + 1),
+          `${product.seoTitle || 'Product'} - Image ${i + 1}`,
+          '', '', ''
+        ]);
       }
     });
 
