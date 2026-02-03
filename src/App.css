@@ -1,143 +1,302 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  min-height: 100vh;
-}
-
+/* Shopify-Inspired App Layout */
 .app-container {
+  min-height: 100vh;
+  background-color: var(--gray-100);
+}
+
+/* Header - Shopify Admin Style */
+.app-header {
+  background: white;
+  border-bottom: 1px solid var(--gray-200);
+  padding: var(--space-4) var(--space-6);
+  box-shadow: var(--shadow-sm);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.app-header-content {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 2rem;
-}
-
-.app-header {
-  text-align: center;
-  color: white;
-  margin-bottom: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
 }
 
 .app-header h1 {
-  font-size: 2.5rem;
-  margin-bottom: 0.5rem;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.app-header h1::before {
+  content: '🛍️';
+  font-size: 1.75rem;
 }
 
 .app-header p {
-  font-size: 1.2rem;
-  opacity: 0.9;
+  font-size: 0.875rem;
+  color: var(--gray-500);
+  margin: 0;
+  display: none;
 }
 
+/* Main Content Area */
 .app-main {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: var(--space-6);
 }
 
+/* Card/Section - Shopify Style */
 .step-section {
   background: white;
-  border-radius: 12px;
-  padding: 2rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--gray-200);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s ease;
+}
+
+.step-section:hover {
+  box-shadow: var(--shadow-md);
 }
 
 .step-section h2 {
-  color: #667eea;
-  margin-bottom: 1.5rem;
-  font-size: 1.5rem;
-  border-bottom: 2px solid #f0f0f0;
-  padding-bottom: 0.5rem;
+  color: var(--gray-700);
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--gray-200);
 }
 
 .step-description {
-  color: #666;
-  font-size: 1rem;
-  margin-bottom: 1rem;
+  color: var(--gray-500);
+  font-size: 0.9375rem;
+  margin-bottom: var(--space-5);
   line-height: 1.6;
 }
 
+/* Status Badge */
 .status-text {
-  margin-top: 1rem;
-  color: #10b981;
-  font-weight: 600;
-  font-size: 1.1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--shopify-green-light);
+  color: var(--shopify-green);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-top: var(--space-4);
 }
 
+.status-text::before {
+  content: '✓';
+  font-weight: bold;
+}
+
+/* Buttons - Shopify Polaris Style */
 .button {
-  background: #667eea;
+  background: var(--shopify-green);
   color: white;
   border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 600;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-md);
+  font-size: 0.9375rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
-.button:hover {
-  background: #5568d3;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+.button:hover:not(:disabled) {
+  background: var(--shopify-green-dark);
+  box-shadow: var(--shadow-md);
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .button:disabled {
-  background: #ccc;
+  background: var(--gray-300);
+  color: var(--gray-500);
   cursor: not-allowed;
-  transform: none;
+  opacity: 0.6;
 }
 
 .button-secondary {
-  background: #10b981;
+  background: white;
+  color: var(--gray-700);
+  border: 1px solid var(--gray-300);
 }
 
-.button-secondary:hover {
-  background: #059669;
+.button-secondary:hover:not(:disabled) {
+  background: var(--gray-50);
+  border-color: var(--gray-400);
 }
 
-.error-message {
-  background: #fee;
-  color: #c00;
-  padding: 1rem;
-  border-radius: 8px;
-  margin-top: 1rem;
+.button-primary {
+  background: var(--shopify-blue);
 }
 
-.success-message {
-  background: #efe;
-  color: #060;
-  padding: 1rem;
-  border-radius: 8px;
-  margin-top: 1rem;
+.button-primary:hover:not(:disabled) {
+  background: var(--shopify-blue-dark);
 }
 
+.button-danger {
+  background: var(--shopify-red);
+}
+
+.button-danger:hover:not(:disabled) {
+  background: #b82505;
+}
+
+/* Loading Spinner */
 .loading {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  color: #667eea;
-  font-weight: 600;
+  gap: var(--space-2);
 }
 
 .spinner {
-  border: 3px solid #f3f3f3;
-  border-top: 3px solid #667eea;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
   border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  animation: spin 1s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 1024px) {
+  .app-main {
+    padding: var(--space-5);
+  }
+  
+  .step-section {
+    padding: var(--space-5);
+  }
+}
+
+@media (max-width: 768px) {
+  .app-header {
+    padding: var(--space-3) var(--space-4);
+  }
+  
+  .app-header h1 {
+    font-size: 1.25rem;
+  }
+  
+  .app-header h1::before {
+    font-size: 1.5rem;
+  }
+  
+  .app-main {
+    padding: var(--space-4);
+    gap: var(--space-4);
+  }
+  
+  .step-section {
+    padding: var(--space-4);
+    border-radius: var(--radius-md);
+  }
+  
+  .step-section h2 {
+    font-size: 1.125rem;
+    margin-bottom: var(--space-4);
+  }
+  
+  .button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-header {
+    padding: var(--space-3);
+  }
+  
+  .app-header h1 {
+    font-size: 1.125rem;
+  }
+  
+  .app-main {
+    padding: var(--space-3);
+    gap: var(--space-3);
+  }
+  
+  .step-section {
+    padding: var(--space-3);
+  }
+  
+  .step-description {
+    font-size: 0.875rem;
+  }
+}
+
+/* Utility Classes */
+.text-muted {
+  color: var(--gray-500);
+}
+
+.text-success {
+  color: var(--success);
+}
+
+.text-error {
+  color: var(--error);
+}
+
+.text-center {
+  text-align: center;
+}
+
+.mb-0 { margin-bottom: 0; }
+.mb-2 { margin-bottom: var(--space-2); }
+.mb-4 { margin-bottom: var(--space-4); }
+.mb-6 { margin-bottom: var(--space-6); }
+
+.mt-0 { margin-top: 0; }
+.mt-2 { margin-top: var(--space-2); }
+.mt-4 { margin-top: var(--space-4); }
+.mt-6 { margin-top: var(--space-6); }
+
+/* Alert Messages */
+.error-message {
+  background: #ffebe9;
+  color: var(--shopify-red);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid #ffc9c3;
+  margin-top: var(--space-4);
+  font-size: 0.9375rem;
+}
+
+.success-message {
+  background: var(--shopify-green-light);
+  color: var(--shopify-green);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid #c1f0e3;
+  margin-top: var(--space-4);
+  font-size: 0.9375rem;
 }
