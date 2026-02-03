@@ -1,3 +1,4 @@
+/* Image Upload - Shopify Style */
 .image-upload-container {
   width: 100%;
 }
@@ -5,194 +6,290 @@
 /* Upload Mode Toggle */
 .upload-mode-toggle {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
-  justify-content: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+  padding: var(--space-1);
+  background: var(--gray-100);
+  border-radius: var(--radius-lg);
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .mode-btn {
-  padding: 0.75rem 1.5rem;
-  border: 2px solid #ddd;
-  border-radius: 8px;
-  background: white;
+  padding: var(--space-3) var(--space-5);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 0.9375rem;
   font-weight: 500;
   transition: all 0.2s ease;
-  color: #666;
+  color: var(--gray-600);
+  white-space: nowrap;
 }
 
 .mode-btn:hover {
-  border-color: #667eea;
-  color: #667eea;
-  transform: translateY(-2px);
+  color: var(--gray-700);
+  background: var(--gray-200);
 }
 
 .mode-btn.active {
-  border-color: #667eea;
-  background: #667eea;
-  color: white;
+  background: white;
+  color: var(--shopify-green);
+  box-shadow: var(--shadow-sm);
 }
 
 /* File Upload Section */
 .dropzone {
-  border: 3px dashed #ccc;
-  border-radius: 12px;
-  padding: 3rem;
+  border: 2px dashed var(--gray-300);
+  border-radius: var(--radius-lg);
+  padding: var(--space-10);
   text-align: center;
   cursor: pointer;
-  transition: all 0.3s ease;
-  background: #fafafa;
+  transition: all 0.2s ease;
+  background: white;
 }
 
 .dropzone:hover {
-  border-color: #667eea;
-  background: #f0f4ff;
+  border-color: var(--shopify-blue);
+  background: #f7f9fc;
 }
 
 .dropzone.active {
-  border-color: #667eea;
-  background: #e8edff;
-  transform: scale(1.02);
+  border-color: var(--shopify-green);
+  background: var(--shopify-green-light);
+  border-style: solid;
 }
 
 .dropzone-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
+  gap: var(--space-4);
+  max-width: 500px;
+  margin: 0 auto;
 }
 
 .upload-icon {
-  width: 64px;
-  height: 64px;
-  color: #667eea;
+  width: 48px;
+  height: 48px;
+  color: var(--gray-400);
 }
 
 .dropzone p {
-  font-size: 1.2rem;
-  color: #333;
+  font-size: 1rem;
+  color: var(--gray-700);
+  font-weight: 500;
   margin: 0;
 }
 
 .dropzone-subtext {
-  font-size: 1rem !important;
-  color: #666 !important;
+  font-size: 0.9375rem !important;
+  color: var(--gray-500) !important;
+  font-weight: 400 !important;
 }
 
 .dropzone-hint {
-  font-size: 0.9rem !important;
-  color: #999 !important;
+  font-size: 0.875rem !important;
+  color: var(--gray-400) !important;
 }
 
 /* Google Drive Section */
 .drive-upload-section {
-  border: 2px solid #ddd;
-  border-radius: 12px;
-  padding: 2rem;
-  background: #fafafa;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  background: white;
 }
 
 .drive-instructions {
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--space-5);
 }
 
 .drive-instructions h3 {
-  margin: 0 0 1rem 0;
-  color: #333;
-  font-size: 1.3rem;
+  margin: 0 0 var(--space-4) 0;
+  color: var(--gray-700);
+  font-size: 1.125rem;
+  font-weight: 600;
 }
 
 .drive-instructions ol {
   text-align: left;
-  color: #666;
-  line-height: 1.8;
+  color: var(--gray-600);
+  line-height: 1.7;
   margin: 0;
-  padding-left: 1.5rem;
+  padding-left: var(--space-6);
+  font-size: 0.9375rem;
 }
 
 .drive-instructions li {
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--space-3);
 }
 
 .drive-input-group {
   display: flex;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
 }
 
 .drive-url-input {
   flex: 1;
-  padding: 0.875rem 1rem;
-  border: 2px solid #ddd;
-  border-radius: 8px;
-  font-size: 1rem;
-  transition: border-color 0.2s;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-md);
+  font-size: 0.9375rem;
+  transition: all 0.2s ease;
+  font-family: inherit;
 }
 
 .drive-url-input:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: var(--shopify-blue);
+  box-shadow: 0 0 0 1px var(--shopify-blue);
 }
 
 .drive-url-input:disabled {
-  background: #f0f0f0;
+  background: var(--gray-100);
+  color: var(--gray-400);
   cursor: not-allowed;
 }
 
 .drive-load-btn {
-  padding: 0.875rem 1.5rem;
-  background: #667eea;
+  padding: var(--space-3) var(--space-5);
+  background: var(--shopify-green);
   color: white;
   border: none;
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 600;
+  border-radius: var(--radius-md);
+  font-size: 0.9375rem;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   white-space: nowrap;
 }
 
 .drive-load-btn:hover:not(:disabled) {
-  background: #5568d3;
-  transform: translateY(-2px);
+  background: var(--shopify-green-dark);
+  box-shadow: var(--shadow-md);
 }
 
 .drive-load-btn:disabled {
-  background: #ccc;
+  background: var(--gray-300);
+  color: var(--gray-500);
   cursor: not-allowed;
-  transform: none;
+  opacity: 0.6;
 }
 
 .drive-example {
   text-align: left;
-  font-size: 0.9rem;
-  color: #666;
+  font-size: 0.875rem;
+  color: var(--gray-600);
 }
 
 .drive-example details {
   cursor: pointer;
+  margin-top: var(--space-4);
 }
 
 .drive-example summary {
-  padding: 0.5rem;
-  background: #f0f0f0;
-  border-radius: 4px;
-  margin-bottom: 0.5rem;
+  padding: var(--space-3);
+  background: var(--gray-100);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-2);
+  font-weight: 500;
+  color: var(--gray-700);
 }
 
 .drive-example summary:hover {
-  background: #e8e8e8;
+  background: var(--gray-200);
 }
 
 .drive-example code {
   display: block;
-  padding: 0.75rem;
-  background: #2d2d2d;
-  color: #f8f8f2;
-  border-radius: 4px;
+  padding: var(--space-4);
+  background: var(--gray-700);
+  color: #e8f5e9;
+  border-radius: var(--radius-md);
   overflow-x: auto;
-  font-family: 'Courier New', monospace;
-  font-size: 0.85rem;
+  font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
 }
 
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .upload-mode-toggle {
+    width: 100%;
+    flex-direction: column;
+  }
+  
+  .mode-btn {
+    width: 100%;
+    text-align: center;
+  }
+  
+  .dropzone {
+    padding: var(--space-6);
+  }
+  
+  .dropzone-content {
+    gap: var(--space-3);
+  }
+  
+  .upload-icon {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .dropzone p {
+    font-size: 0.9375rem;
+  }
+  
+  .dropzone-subtext {
+    font-size: 0.875rem !important;
+  }
+  
+  .drive-upload-section {
+    padding: var(--space-4);
+  }
+  
+  .drive-input-group {
+    flex-direction: column;
+  }
+  
+  .drive-load-btn {
+    width: 100%;
+  }
+  
+  .drive-instructions ol {
+    padding-left: var(--space-5);
+    font-size: 0.875rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .dropzone {
+    padding: var(--space-4);
+  }
+  
+  .dropzone p {
+    font-size: 0.875rem;
+  }
+  
+  .dropzone-hint {
+    font-size: 0.8125rem !important;
+  }
+  
+  .drive-upload-section {
+    padding: var(--space-3);
+  }
+  
+  .drive-instructions h3 {
+    font-size: 1rem;
+  }
+  
+  .drive-example code {
+    font-size: 0.75rem;
+    padding: var(--space-3);
+  }
+}

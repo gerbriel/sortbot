@@ -9,9 +9,6 @@ interface GoogleSheetExporterProps {
 
 const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
   const [isExporting, setIsExporting] = useState(false);
-  const [exportStatus, setExportStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [sheetUrl, setSheetUrl] = useState('');
-  const [tempSheetUrl, setTempSheetUrl] = useState('');
 
   // Group items by productGroup - each group is ONE product
   const productGroups = items.reduce((groups, item) => {
@@ -33,140 +30,21 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
     };
   });
 
-  const handleExportToGoogleSheets = async () => {
-    if (!sheetUrl || sheetUrl.trim() === '') {
-      alert('Please enter a Google Sheets URL first');
-      return;
-    }
-    
-    // Validate URL format
-    if (!sheetUrl.includes('docs.google.com/spreadsheets')) {
-      alert('Please enter a valid Google Sheets URL');
-      return;
-    }
-    
-    setIsExporting(true);
-    setExportStatus('idle');
-
-    try {
-      // Helper function to format measurements
-      const formatMeasurements = (measurements: any): string => {
-        if (!measurements) return '';
-        const parts = [];
-        if (measurements.pitToPit) parts.push(`Pit-to-Pit: ${measurements.pitToPit}"`);
-        if (measurements.length) parts.push(`Length: ${measurements.length}"`);
-        if (measurements.sleeve) parts.push(`Sleeve: ${measurements.sleeve}"`);
-        if (measurements.shoulder) parts.push(`Shoulder: ${measurements.shoulder}"`);
-        if (measurements.waist) parts.push(`Waist: ${measurements.waist}"`);
-        if (measurements.inseam) parts.push(`Inseam: ${measurements.inseam}"`);
-        if (measurements.rise) parts.push(`Rise: ${measurements.rise}"`);
-        return parts.join(' | ');
-      };
-
-      // Prepare the data structure for Google Sheets with all new fields
-      // Note: Images are shown as filenames since blob URLs don't work outside browser
-      const sheetData = products.map((product, idx) => ({
-        Title: product.seoTitle || '',
-        Handle: (product.seoTitle || '').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
-        Category: product.category || '',
-        Description: product.generatedDescription || '',
-        Price: product.price || '',
-        Size: product.size || '',
-        Brand: product.brand || '',
-        Condition: product.condition || '',
-        Flaws: product.flaws || '',
-        Material: product.material || '',
-        Measurements: formatMeasurements(product.measurements),
-        Era: product.era || '',
-        Care: product.care || '',
-        Tags: product.tags?.join(', ') || '',
-        'Image 1 Filename': product.imageUrls[0] ? `Product_${idx + 1}_Image_1.jpg` : '',
-        'Image 2 Filename': product.imageUrls[1] ? `Product_${idx + 1}_Image_2.jpg` : '',
-        'Image 3 Filename': product.imageUrls[2] ? `Product_${idx + 1}_Image_3.jpg` : '',
-        'Image 4 Filename': product.imageUrls[3] ? `Product_${idx + 1}_Image_4.jpg` : '',
-        'Photo Count': product.imageCount,
-        Status: 'draft',
-        'Note': 'Upload images separately to your hosting and add URLs here'
-      }));
-      
-      // Extract sheet ID from URL for API call
-      const sheetIdMatch = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
-      const sheetId = sheetIdMatch ? sheetIdMatch[1] : null;
-      
-      if (!sheetId) {
-        alert('Could not extract Sheet ID from URL. Please check the URL format.');
-        setExportStatus('error');
-        return;
-      }
-      
-      // Prepare data for Google Sheets API format with all new fields
-      const headers = ['Title', 'Handle', 'Category', 'Description', 'Price', 'Size', 'Brand', 'Condition', 'Flaws', 'Material', 'Measurements', 'Era', 'Care', 'Tags', 'Image 1 Filename', 'Image 2 Filename', 'Image 3 Filename', 'Image 4 Filename', 'Photo Count', 'Status', 'Note'];
-      const values = [
-        headers,
-        ...sheetData.map(row => [
-          row.Title,
-          row.Handle,
-          row.Category,
-          row.Description,
-          row.Price,
-          row.Size,
-          row.Brand,
-          row.Condition,
-          row.Flaws,
-          row.Material,
-          row.Measurements,
-          row.Era,
-          row.Care,
-          row.Tags,
-          row['Image 1 Filename'],
-          row['Image 2 Filename'],
-          row['Image 3 Filename'],
-          row['Image 4 Filename'],
-          row['Photo Count'],
-          row.Status,
-          row.Note
-        ])
-      ];
-      
-      // For now, we'll prepare the data but not actually write to Google Sheets
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // For now, copy data to clipboard for manual paste
-      const tsvData = values.map(row => row.join('\t')).join('\n');
-      
-      try {
-        await navigator.clipboard.writeText(tsvData);
-        alert(`✅ Data prepared and copied to clipboard!\n\nSheet ID: ${sheetId}\n\nTo complete the export:\n1. Open your Google Sheet: ${sheetUrl}\n2. Click on cell A1\n3. Press Cmd+V (Mac) or Ctrl+V (Windows) to paste\n\n⚠️ IMAGE NOTE: Images are shown as filenames (Product_X_Image_Y.jpg). You'll need to:\n- Upload your images to a hosting service (Shopify, Imgur, etc.)\n- Replace the filenames with actual image URLs in the sheet\n\nThe data includes ${products.length} products with all fields (Title, Description, Price, Size, Tags).`);
-      } catch (clipboardError) {
-        console.error('Clipboard error:', clipboardError);
-        alert(`✅ Data prepared for export!\n\nSheet ID: ${sheetId}\n\nData is ready in the console. Use the "Download Shopify CSV" button to get a file you can manually import to your Google Sheet.`);
-      }
-      
-      setExportStatus('success');
-    } catch (error) {
-      console.error('Export error:', error);
-      alert('❌ Error preparing export. Check console for details.');
-      setExportStatus('error');
-    } finally {
-      setIsExporting(false);
-    }
+  // Helper function to format measurements
+  const formatMeasurements = (measurements: any): string => {
+    if (!measurements) return '';
+    const parts = [];
+    if (measurements.pitToPit) parts.push(`Pit-to-Pit: ${measurements.pitToPit}"`);
+    if (measurements.length) parts.push(`Length: ${measurements.length}"`);
+    if (measurements.sleeve) parts.push(`Sleeve: ${measurements.sleeve}"`);
+    if (measurements.shoulder) parts.push(`Shoulder: ${measurements.shoulder}"`);
+    if (measurements.waist) parts.push(`Waist: ${measurements.waist}"`);
+    if (measurements.inseam) parts.push(`Inseam: ${measurements.inseam}"`);
+    if (measurements.rise) parts.push(`Rise: ${measurements.rise}"`);
+    return parts.join(' | ');
   };
 
   const handleDownloadCSV = () => {
-    // Helper function to format measurements
-    const formatMeasurements = (measurements: any): string => {
-      if (!measurements) return '';
-      const parts = [];
-      if (measurements.pitToPit) parts.push(`Pit-to-Pit: ${measurements.pitToPit}"`);
-      if (measurements.length) parts.push(`Length: ${measurements.length}"`);
-      if (measurements.sleeve) parts.push(`Sleeve: ${measurements.sleeve}"`);
-      if (measurements.shoulder) parts.push(`Shoulder: ${measurements.shoulder}"`);
-      if (measurements.waist) parts.push(`Waist: ${measurements.waist}"`);
-      if (measurements.inseam) parts.push(`Inseam: ${measurements.inseam}"`);
-      if (measurements.rise) parts.push(`Rise: ${measurements.rise}"`);
-      return parts.join(' | ');
-    };
-
     // Create CSV content for Shopify with all new fields
     const headers = [
       'Title',
@@ -206,87 +84,87 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
       product.era || '',
       product.care || '',
       product.tags?.join(', ') || '',
-      product.imageUrls[0] ? `Product_${idx + 1}_Image_1.jpg` : '', // Image filenames
+      product.imageUrls[0] ? `Product_${idx + 1}_Image_1.jpg` : '',
       product.imageUrls[1] ? `Product_${idx + 1}_Image_2.jpg` : '',
       product.imageUrls[2] ? `Product_${idx + 1}_Image_3.jpg` : '',
       product.imageUrls[3] ? `Product_${idx + 1}_Image_4.jpg` : '',
       'draft',
-      'Upload images and replace filenames with URLs'
+      'Upload images separately and add URLs'
     ]);
 
+    // Escape CSV values properly
+    const escapeCsvValue = (value: any): string => {
+      const str = String(value || '');
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
     const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+      headers.map(escapeCsvValue).join(','),
+      ...rows.map(row => row.map(escapeCsvValue).join(','))
     ].join('\n');
 
-    // Create download
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `shopify-products-${Date.now()}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
+    // Create and download the file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `shopify-products-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleDownloadExcelWithImages = async () => {
+    setIsExporting(true);
     try {
-      // Helper function to format measurements
-      const formatMeasurements = (measurements: any): string => {
-        if (!measurements) return '';
-        const parts = [];
-        if (measurements.pitToPit) parts.push(`Pit-to-Pit: ${measurements.pitToPit}"`);
-        if (measurements.length) parts.push(`Length: ${measurements.length}"`);
-        if (measurements.sleeve) parts.push(`Sleeve: ${measurements.sleeve}"`);
-        if (measurements.shoulder) parts.push(`Shoulder: ${measurements.shoulder}"`);
-        if (measurements.waist) parts.push(`Waist: ${measurements.waist}"`);
-        if (measurements.inseam) parts.push(`Inseam: ${measurements.inseam}"`);
-        if (measurements.rise) parts.push(`Rise: ${measurements.rise}"`);
-        return parts.join(' | ');
-      };
-
-      // Create a new workbook
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Products');
 
-      // Define columns with all new fields
+      // Define columns with specific widths
       worksheet.columns = [
-        { header: 'Image', key: 'image', width: 30 },
-        { header: 'Title', key: 'title', width: 40 },
-        { header: 'Handle', key: 'handle', width: 30 },
-        { header: 'Category', key: 'category', width: 20 },
-        { header: 'Description', key: 'description', width: 50 },
-        { header: 'Price', key: 'price', width: 15 },
-        { header: 'Size', key: 'size', width: 15 },
-        { header: 'Brand', key: 'brand', width: 20 },
-        { header: 'Condition', key: 'condition', width: 15 },
+        { header: 'Image 1', key: 'image1', width: 20 },
+        { header: 'Title', key: 'title', width: 30 },
+        { header: 'Handle', key: 'handle', width: 25 },
+        { header: 'Category', key: 'category', width: 15 },
+        { header: 'Description', key: 'description', width: 40 },
+        { header: 'Price', key: 'price', width: 10 },
+        { header: 'Size', key: 'size', width: 12 },
+        { header: 'Brand', key: 'brand', width: 15 },
+        { header: 'Condition', key: 'condition', width: 12 },
         { header: 'Flaws', key: 'flaws', width: 30 },
-        { header: 'Material', key: 'material', width: 20 },
-        { header: 'Measurements', key: 'measurements', width: 50 },
-        { header: 'Era', key: 'era', width: 20 },
-        { header: 'Care', key: 'care', width: 30 },
-        { header: 'Tags', key: 'tags', width: 30 },
-        { header: 'Image 2', key: 'image2', width: 30 },
-        { header: 'Image 3', key: 'image3', width: 30 },
-        { header: 'Image 4', key: 'image4', width: 30 },
+        { header: 'Material', key: 'material', width: 15 },
+        { header: 'Measurements', key: 'measurements', width: 35 },
+        { header: 'Era', key: 'era', width: 12 },
+        { header: 'Care', key: 'care', width: 25 },
+        { header: 'Tags', key: 'tags', width: 25 },
+        { header: 'Image 2', key: 'image2', width: 20 },
+        { header: 'Image 3', key: 'image3', width: 20 },
+        { header: 'Image 4', key: 'image4', width: 20 },
+        { header: 'Status', key: 'status', width: 10 }
       ];
 
-      // Style the header row
+      // Style header row
       worksheet.getRow(1).font = { bold: true, size: 12 };
       worksheet.getRow(1).fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FF4472C4' }
+        fgColor: { argb: 'FF008060' } // Shopify green
       };
       worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
       worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
 
-      // Add data for each product
+      // Add products with embedded images
       for (let i = 0; i < products.length; i++) {
         const product = products[i];
-        const rowIndex = i + 2; // +2 because row 1 is header, array is 0-indexed
+        const rowNumber = i + 2; // +2 because Excel is 1-indexed and row 1 is header
 
-        // Add text data with all new fields
+        // Add text data
         const row = worksheet.addRow({
           title: product.seoTitle || '',
           handle: (product.seoTitle || '').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
@@ -302,59 +180,45 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
           era: product.era || '',
           care: product.care || '',
           tags: product.tags?.join(', ') || '',
+          status: 'draft'
         });
 
-        // Set row height to accommodate images
+        // Set row height for images
         row.height = 120;
 
-        // Helper function to convert blob URL to base64
-        const blobToBase64 = async (blobUrl: string): Promise<string> => {
-          const response = await fetch(blobUrl);
-          const blob = await response.blob();
-          return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-          });
-        };
-
-        // Add images (up to 4 images per product)
-        // Updated column indexes to account for new fields
+        // Add images to cells (columns A, P, Q, R for images 1-4)
         const imageColumns = [
-          { col: 0, url: product.imageUrls[0] },   // Column A (Image)
-          { col: 15, url: product.imageUrls[1] },  // Column P (Image 2)
-          { col: 16, url: product.imageUrls[2] },  // Column Q (Image 3)
-          { col: 17, url: product.imageUrls[3] },  // Column R (Image 4)
+          { col: 'A', url: product.imageUrls[0] },
+          { col: 'P', url: product.imageUrls[1] },
+          { col: 'Q', url: product.imageUrls[2] },
+          { col: 'R', url: product.imageUrls[3] }
         ];
 
         for (const { col, url } of imageColumns) {
           if (url) {
             try {
-              // Convert blob URL to base64
-              const base64Data = await blobToBase64(url);
-              
-              // Extract the base64 data (remove data:image/...;base64, prefix)
-              const base64String = base64Data.split(',')[1];
-              
-              // Determine image extension from the data URL
-              const mimeMatch = base64Data.match(/data:image\/(\w+);base64,/);
-              const extension = mimeMatch ? mimeMatch[1] : 'jpeg';
+              // Fetch image and convert to buffer
+              const response = await fetch(url);
+              const blob = await response.blob();
+              const arrayBuffer = await blob.arrayBuffer();
+
+              // Determine image extension
+              const extension = blob.type.split('/')[1] || 'jpeg';
 
               // Add image to workbook
               const imageId = workbook.addImage({
-                base64: base64String,
-                extension: extension as 'jpeg' | 'png' | 'gif',
+                buffer: arrayBuffer as any,
+                extension: extension as any,
               });
 
               // Embed image in cell
               worksheet.addImage(imageId, {
-                tl: { col, row: rowIndex - 1 }, // top-left corner
-                ext: { width: 200, height: 110 }, // image dimensions
+                tl: { col: col.charCodeAt(0) - 65, row: rowNumber - 1 } as any,
+                ext: { width: 150, height: 110 },
                 editAs: 'oneCell'
               });
-            } catch (err) {
-              console.warn(`Failed to add image for product ${i + 1}:`, err);
+            } catch (error) {
+              console.error(`Error adding image to cell ${col}${rowNumber}:`, error);
             }
           }
         }
@@ -365,19 +229,23 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
       const blob = new Blob([buffer], { 
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
       });
-      
-      // Download file
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `shopify-products-with-images-${Date.now()}.xlsx`;
-      a.click();
-      window.URL.revokeObjectURL(url);
 
-      alert(`✅ Excel file created with ${products.length} products and embedded images!`);
+      // Download file
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `shopify-products-with-images-${new Date().toISOString().split('T')[0]}.xlsx`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      alert(`✅ Excel file downloaded successfully!\n\n${products.length} products with embedded images.`);
     } catch (error) {
-      console.error('Error creating Excel file:', error);
+      console.error('Excel export error:', error);
       alert('❌ Error creating Excel file. Please try again.');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -402,50 +270,6 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
             </span>
             <span className="stat-label">Categories</span>
           </div>
-        </div>
-      </div>
-
-      <div className="google-sheets-input-section">
-        <h3>Google Sheets Configuration</h3>
-        <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '1rem' }}>
-          Paste your Google Sheets URL to export data directly to your spreadsheet
-        </p>
-        <div className="sheet-url-input-group">
-          <input
-            type="text"
-            value={tempSheetUrl}
-            onChange={(e) => setTempSheetUrl(e.target.value)}
-            placeholder="https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
-            className="sheet-url-input"
-          />
-          <button
-            className="button button-secondary"
-            onClick={() => {
-              if (tempSheetUrl.includes('docs.google.com/spreadsheets')) {
-                setSheetUrl(tempSheetUrl);
-                alert('✓ Google Sheets URL saved! You can now export.');
-              } else {
-                alert('Please enter a valid Google Sheets URL');
-              }
-            }}
-            disabled={!tempSheetUrl.trim()}
-          >
-            Save URL
-          </button>
-        </div>
-        {sheetUrl && (
-          <div className="sheet-url-saved">
-            ✓ Connected to: <a href={sheetUrl} target="_blank" rel="noopener noreferrer">{sheetUrl.substring(0, 60)}...</a>
-          </div>
-        )}
-        <div className="sheet-url-help">
-          <p><strong>How to get your Google Sheets URL:</strong></p>
-          <ol>
-            <li>Open or create a Google Sheet</li>
-            <li>Copy the URL from your browser's address bar</li>
-            <li>Paste it in the field above</li>
-            <li>Click "Save URL"</li>
-          </ol>
         </div>
       </div>
 
@@ -485,60 +309,48 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
       <div className="export-actions">
         <button 
           className="button button-secondary"
-          onClick={handleExportToGoogleSheets}
-          disabled={isExporting}
-        >
-          {isExporting ? (
-            <span className="loading">
-              <span className="spinner"></span>
-              Exporting to Google Sheets...
-            </span>
-          ) : (
-            '📊 Export to Google Sheets'
-          )}
-        </button>
-
-        <button 
-          className="button"
           onClick={handleDownloadCSV}
         >
-          💾 Download Shopify CSV
+          💾 Download CSV (with image filenames)
         </button>
 
         <button 
           className="button button-primary"
           onClick={handleDownloadExcelWithImages}
+          disabled={isExporting}
           title="Download Excel file with embedded product images"
         >
-          🖼️ Download Excel with Images
+          {isExporting ? (
+            <span className="loading">
+              <span className="spinner"></span>
+              Creating Excel with images...
+            </span>
+          ) : (
+            '🖼️ Download Excel with Embedded Images'
+          )}
         </button>
       </div>
 
-      {exportStatus === 'success' && (
-        <div className="success-message">
-          ✓ Successfully exported to Google Sheets!
-          <br />
-          <a href={sheetUrl} target="_blank" rel="noopener noreferrer">
-            Open Sheet →
-          </a>
-        </div>
-      )}
-
-      {exportStatus === 'error' && (
-        <div className="error-message">
-          ✗ Export failed. Please check your Google Sheets API credentials.
-        </div>
-      )}
-
       <div className="export-instructions">
-        <h3>Next Steps for Shopify Import:</h3>
-        <ol>
-          <li>Download the CSV file or open the Google Sheet</li>
-          <li>Go to your Shopify admin panel</li>
-          <li>Navigate to Products → Import</li>
-          <li>Upload the CSV file</li>
-          <li>Review and confirm the import</li>
-        </ol>
+        <h3>Export Options:</h3>
+        <div style={{ marginTop: '1rem', display: 'grid', gap: '1rem' }}>
+          <div>
+            <strong>📄 CSV Export:</strong>
+            <p style={{ fontSize: '0.9rem', color: '#666', marginTop: '0.5rem' }}>
+              Downloads a CSV file with all product data and image <em>filenames</em>. 
+              Perfect for importing to Shopify or other platforms. You'll need to upload 
+              images separately and match them by filename.
+            </p>
+          </div>
+          <div>
+            <strong>🖼️ Excel Export:</strong>
+            <p style={{ fontSize: '0.9rem', color: '#666', marginTop: '0.5rem' }}>
+              Downloads an Excel file with actual images <em>embedded</em> in cells. 
+              Great for visual product reviews, printing catalogs, or sharing complete 
+              product listings with your team.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
