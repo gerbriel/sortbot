@@ -592,7 +592,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const finalCondition = extractedCondition;
     const finalFlaws = extractedFlaws;
     const finalMaterial = extractedMaterial;
-    const finalColor = extractedColor;
     
     // NATURAL DESCRIPTION GENERATION with hybrid fields
     let generatedDesc = '';
