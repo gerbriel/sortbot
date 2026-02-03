@@ -45,52 +45,98 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
   };
 
   const handleDownloadCSV = () => {
-    // Create CSV content for Shopify with all new fields
+    // Create CSV content for Shopify - EXACT format from template
     const headers = [
       'Title',
-      'Handle',
-      'Category',
+      'URL handle',
       'Description',
-      'Price',
-      'Size',
-      'Brand',
-      'Condition',
-      'Flaws',
-      'Material',
-      'Measurements',
-      'Era',
-      'Care',
+      'Vendor',
+      'Product category',
+      'Type',
       'Tags',
-      'Image 1 Filename',
-      'Image 2 Filename',
-      'Image 3 Filename',
-      'Image 4 Filename',
+      'Published on online store',
       'Status',
-      'Note'
+      'SKU',
+      'Barcode',
+      'Option1 name',
+      'Option1 value',
+      'Option2 name',
+      'Option2 value',
+      'Price',
+      'Compare-at price',
+      'Cost per item',
+      'Charge tax',
+      'Weight value (grams)',
+      'Weight unit for display',
+      'Requires shipping',
+      'Fulfillment service',
+      'Product image URL',
+      'Image position',
+      'Image alt text',
+      'SEO title',
+      'SEO description',
+      'Google Shopping / Condition'
     ];
 
-    const rows = products.map((product, idx) => [
-      product.seoTitle || '',
-      (product.seoTitle || '').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
-      product.category || '',
-      product.generatedDescription || '',
-      product.price || '',
-      product.size || '',
-      product.brand || '',
-      product.condition || '',
-      product.flaws || '',
-      product.material || '',
-      formatMeasurements(product.measurements),
-      product.era || '',
-      product.care || '',
-      product.tags?.join(', ') || '',
-      product.imageUrls[0] ? `Product_${idx + 1}_Image_1.jpg` : '',
-      product.imageUrls[1] ? `Product_${idx + 1}_Image_2.jpg` : '',
-      product.imageUrls[2] ? `Product_${idx + 1}_Image_3.jpg` : '',
-      product.imageUrls[3] ? `Product_${idx + 1}_Image_4.jpg` : '',
-      'draft',
-      'Upload images separately and add URLs'
-    ]);
+    const rows: string[][] = [];
+    
+    products.forEach((product, idx) => {
+      const handle = (product.seoTitle || `product-${idx + 1}`).toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      const vendor = product.brand || 'Your Store';
+      const productCategory = product.category || 'Apparel & Accessories > Clothing';
+      const productType = product.productType || 'Clothing';
+      const tags = product.tags?.join(', ') || '';
+      const condition = product.condition === 'New' || product.condition === 'NWT' ? 'New' : 'Used';
+      
+      // First row with all main product info + first image
+      rows.push([
+        product.seoTitle || `Product ${idx + 1}`,
+        handle,
+        product.generatedDescription || '',
+        vendor,
+        productCategory,
+        productType,
+        tags,
+        product.published === false ? 'FALSE' : 'TRUE',
+        product.status || 'Draft',
+        product.sku || `SKU-${idx + 1}`,
+        product.barcode || '',
+        'Size',
+        product.size || 'One Size',
+        'Color',
+        product.color || 'N/A',
+        String(product.price || '0'),
+        String(product.compareAtPrice || ''),
+        String(product.costPerItem || ''),
+        'TRUE',
+        product.weightValue || '150',
+        'g',
+        'TRUE',
+        'manual',
+        product.imageUrls?.[0] || '',
+        '1',
+        `${product.seoTitle || 'Product'} - Image 1`,
+        product.seoTitle || '',
+        product.seoDescription || product.generatedDescription?.substring(0, 160) || '',
+        condition
+      ]);
+      
+      // Additional rows for remaining images (if any)
+      if (product.imageUrls) {
+        for (let i = 1; i < product.imageUrls.length && i < 4; i++) {
+          rows.push([
+            '', // Empty title for variant rows
+            handle,
+            '', '', '', '', '', '', '', '', '', '', '', '', '',
+            '', '', '', '', '', '', '', '',
+            product.imageUrls[i],
+            String(i + 1),
+            `${product.seoTitle || 'Product'} - Image ${i + 1}`,
+            '', '', ''
+          ]);
+        }
+      }
+    });
 
     // Escape CSV values properly
     const escapeCsvValue = (value: any): string => {

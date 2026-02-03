@@ -14,15 +14,27 @@ export interface ClothingItem {
   productGroup?: string; // For grouping multiple images of same product
   voiceDescription?: string;
   generatedDescription?: string;
-  price?: number;
+  
+  // Shopify Product Fields
+  seoTitle?: string; // Title
+  price?: number; // Price
+  compareAtPrice?: number; // Compare-at price
+  costPerItem?: number; // Cost per item
   tags?: string[];
-  seoTitle?: string;
-  size?: string; // Size field (XS, S, M, L, XL, etc.)
-  // New fields for better descriptions
-  brand?: string;
-  condition?: 'NWT' | 'Excellent' | 'Good' | 'Fair';
+  size?: string; // Option1 value (Size)
+  color?: string; // Option2 value (Color) - can be extracted from voice
+  brand?: string; // Vendor
+  condition?: 'New' | 'Used' | 'NWT' | 'Excellent' | 'Good' | 'Fair';
   flaws?: string;
   material?: string;
+  
+  // Shopify Inventory & Shipping
+  sku?: string;
+  barcode?: string;
+  weightValue?: string; // in grams
+  inventoryQuantity?: number;
+  
+  // Product Details
   measurements?: {
     pitToPit?: string;
     length?: string;
@@ -32,8 +44,19 @@ export interface ClothingItem {
     shoulder?: string;
     sleeve?: string;
   };
-  era?: string;
-  care?: string;
+  era?: string; // vintage, modern, etc.
+  care?: string; // Care instructions
+  
+  // SEO & Marketing
+  seoDescription?: string;
+  productType?: string; // Type (e.g., "Graphic shirt")
+  
+  // Status
+  status?: 'Active' | 'Draft' | 'Archived';
+  published?: boolean;
+  
+  // Image URLs (for Shopify import)
+  imageUrls?: string[];
 }
 
 function App() {
