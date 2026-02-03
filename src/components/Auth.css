@@ -1,0 +1,207 @@
+/* Auth Container */
+.auth-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--shopify-green) 0%, #005E46 100%);
+  padding: var(--space-4);
+}
+
+.auth-card {
+  background: white;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  max-width: 450px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.auth-header {
+  background: var(--gray-50);
+  padding: var(--space-8) var(--space-6);
+  text-align: center;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.auth-header h1 {
+  font-size: 2rem;
+  margin: 0 0 var(--space-2) 0;
+  color: var(--shopify-green);
+}
+
+.auth-header p {
+  margin: 0;
+  color: var(--gray-600);
+  font-size: 0.875rem;
+}
+
+.auth-form {
+  padding: var(--space-6);
+}
+
+.auth-form h2 {
+  margin: 0 0 var(--space-6) 0;
+  font-size: 1.5rem;
+  color: var(--gray-900);
+  text-align: center;
+}
+
+.auth-error {
+  background: #FEE;
+  color: var(--shopify-red);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
+  font-size: 0.875rem;
+  border: 1px solid var(--shopify-red);
+}
+
+.auth-message {
+  background: #E8F5E9;
+  color: var(--shopify-green);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
+  font-size: 0.875rem;
+  border: 1px solid var(--shopify-green);
+}
+
+.form-group {
+  margin-bottom: var(--space-4);
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-weight: 600;
+  color: var(--gray-700);
+  font-size: 0.875rem;
+}
+
+.form-group input {
+  width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--shopify-green);
+  box-shadow: 0 0 0 3px rgba(0, 128, 96, 0.1);
+}
+
+.form-group input:disabled {
+  background: var(--gray-100);
+  cursor: not-allowed;
+}
+
+.form-group small {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--gray-600);
+  font-size: 0.75rem;
+}
+
+.auth-button {
+  width: 100%;
+  padding: var(--space-3);
+  background: var(--shopify-green);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.auth-button:hover:not(:disabled) {
+  background: #006D4E;
+  transform: translateY(-1px);
+}
+
+.auth-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.auth-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-button .loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.auth-toggle {
+  margin-top: var(--space-6);
+  text-align: center;
+  color: var(--gray-600);
+  font-size: 0.875rem;
+}
+
+.auth-toggle button {
+  background: none;
+  border: none;
+  color: var(--shopify-green);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.auth-toggle button:hover:not(:disabled) {
+  color: #006D4E;
+}
+
+.auth-toggle button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-footer {
+  background: var(--gray-50);
+  padding: var(--space-4);
+  text-align: center;
+  border-top: 1px solid var(--gray-200);
+}
+
+.auth-footer p {
+  margin: var(--space-1) 0;
+  color: var(--gray-600);
+  font-size: 0.75rem;
+}
+
+/* Mobile Responsive */
+@media (max-width: 480px) {
+  .auth-container {
+    padding: var(--space-2);
+  }
+
+  .auth-card {
+    max-width: 100%;
+  }
+
+  .auth-header {
+    padding: var(--space-6) var(--space-4);
+  }
+
+  .auth-header h1 {
+    font-size: 1.75rem;
+  }
+
+  .auth-form {
+    padding: var(--space-4);
+  }
+
+  .auth-form h2 {
+    font-size: 1.25rem;
+  }
+}
