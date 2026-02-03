@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import Auth from './components/Auth';
 import ImageUpload from './components/ImageUpload';
 import ImageSorter from './components/ImageSorter';
 import ImageGrouper from './components/ImageGrouper';
@@ -38,19 +37,11 @@ export interface ClothingItem {
 }
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [uploadedImages, setUploadedImages] = useState<ClothingItem[]>([]);
   const [sortedImages, setSortedImages] = useState<ClothingItem[]>([]);
   const [groupedImages, setGroupedImages] = useState<ClothingItem[]>([]);
   const [processedItems, setProcessedItems] = useState<ClothingItem[]>([]);
   const [groupingVersion, setGroupingVersion] = useState(0); // Track grouping changes
-
-  // Check if authentication is disabled (for development)
-  const authDisabled = import.meta.env.VITE_DISABLE_AUTH === 'true';
-
-  if (!isAuthenticated && !authDisabled) {
-    return <Auth onAuthenticated={() => setIsAuthenticated(true)} />;
-  }
 
   const handleImagesUploaded = (items: ClothingItem[]) => {
     setUploadedImages(items);
