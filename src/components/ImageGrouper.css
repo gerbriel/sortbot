@@ -29,15 +29,26 @@
 
 .grouper-instructions {
   background: #f0f4ff;
-  padding: 1rem;
+  padding: 1.5rem;
   border-radius: 8px;
   margin-bottom: 2rem;
   border-left: 4px solid #667eea;
 }
 
 .grouper-instructions p {
-  margin: 0;
+  margin: 0 0 0.5rem 0;
   color: #333;
+  font-weight: 600;
+}
+
+.grouper-instructions ul {
+  margin: 0.5rem 0 0 0;
+  padding-left: 1.5rem;
+  color: #555;
+}
+
+.grouper-instructions li {
+  margin: 0.3rem 0;
 }
 
 .groups-section,
@@ -192,6 +203,185 @@
   border-top: 2px solid #f0f0f0;
 }
 
+/* Category Zones for Drag and Drop */
+.category-zones {
+  margin-bottom: 3rem;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #f0f4ff 0%, #e0e7ff 100%);
+  border-radius: 12px;
+}
+
+.category-zones h3 {
+  margin: 0 0 1rem 0;
+  color: #333;
+  text-align: center;
+  font-size: 1.2rem;
+}
+
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+}
+
+.category-zone {
+  background: white;
+  border: 3px dashed #d1d5db;
+  border-radius: 12px;
+  padding: 1.5rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-height: 120px;
+  justify-content: center;
+}
+
+.category-zone:hover {
+  border-color: #667eea;
+  background: #f9fafb;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+}
+
+.category-zone.drag-over {
+  border-color: #10b981;
+  background: #d1fae5;
+  border-style: solid;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+  transform: scale(1.05);
+}
+
+.category-icon {
+  font-size: 2rem;
+}
+
+.category-name {
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.9rem;
+}
+
+.category-count {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+/* Drag and Drop States */
+.product-group-card.drag-over {
+  border-color: #10b981;
+  background: #d1fae5;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+  transform: scale(1.02);
+}
+
+.single-item-card.drag-over {
+  border-color: #10b981;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+  transform: scale(1.05);
+}
+
+.group-image-item {
+  position: relative;
+  aspect-ratio: 1;
+  cursor: grab;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 3px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.group-image-item:active {
+  cursor: grabbing;
+}
+
+.group-image-item:hover {
+  border-color: #667eea;
+  transform: scale(1.05);
+}
+
+/* Delete Button on Images */
+.delete-image-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 28px;
+  height: 28px;
+  background: rgba(239, 68, 68, 0.95);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+
+.group-image-item:hover .delete-image-btn,
+.single-item-card:hover .delete-image-btn {
+  opacity: 1;
+}
+
+.delete-image-btn:hover {
+  background: #dc2626;
+  transform: scale(1.1);
+}
+
+/* New Group Drop Zone */
+.new-group-zone {
+  margin: 2rem 0;
+  padding: 3rem 2rem;
+  border: 3px dashed #d1d5db;
+  border-radius: 12px;
+  background: #f9fafb;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.new-group-zone:hover {
+  border-color: #667eea;
+  background: #f0f4ff;
+}
+
+.new-group-zone.drag-over {
+  border-color: #10b981;
+  border-style: solid;
+  background: #d1fae5;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+  transform: scale(1.02);
+}
+
+.new-group-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  color: #6b7280;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.new-group-icon {
+  font-size: 3rem;
+  color: #667eea;
+}
+
+/* Single Item Card Draggable */
+.single-item-card {
+  cursor: grab;
+}
+
+.single-item-card:active {
+  cursor: grabbing;
+}
+
 @media (max-width: 768px) {
   .groups-grid {
     grid-template-columns: 1fr;
@@ -209,5 +399,13 @@
     flex-direction: column;
     gap: 0.5rem;
     text-align: center;
+  }
+
+  .category-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .new-group-zone {
+    padding: 2rem 1rem;
   }
 }

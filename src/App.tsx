@@ -19,6 +19,7 @@ export interface ClothingItem {
   productGroup?: string; // For grouping multiple images of same product
   voiceDescription?: string;
   generatedDescription?: string;
+  storagePath?: string; // Supabase Storage path for deletion
   
   // Shopify Product Fields
   seoTitle?: string; // Title
@@ -249,11 +250,12 @@ function App() {
           <section className="step-section">
             <h2>Step 2: Group Product Images</h2>
             <p className="step-description">
-              Group multiple images of the same product together. Each group will become one product listing.
+              Drag & drop images to group, categorize, or delete. All images are auto-uploaded to your database.
             </p>
             <ImageGrouper 
               items={uploadedImages} 
               onGrouped={handleImagesGrouped}
+              userId={user.id}
             />
           </section>
         )}
