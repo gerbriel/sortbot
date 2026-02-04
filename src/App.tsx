@@ -3,10 +3,8 @@ import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import Auth from './components/Auth';
 import ImageUpload from './components/ImageUpload';
-import ImageSorter from './components/ImageSorter';
 import ImageGrouper from './components/ImageGrouper';
 import CategoryZones from './components/CategoryZones';
-import ProductDescriptionGenerator from './components/ProductDescriptionGenerator';
 import GoogleSheetExporter from './components/GoogleSheetExporter';
 import { SavedProducts } from './components/SavedProducts';
 import { saveBatchToDatabase } from './lib/productService';
@@ -73,7 +71,6 @@ function App() {
   const [sortedImages, setSortedImages] = useState<ClothingItem[]>([]);
   const [groupedImages, setGroupedImages] = useState<ClothingItem[]>([]);
   const [processedItems, setProcessedItems] = useState<ClothingItem[]>([]);
-  const [groupingVersion, setGroupingVersion] = useState(0); // Track grouping changes
   const [showSavedProducts, setShowSavedProducts] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -179,7 +176,6 @@ function App() {
     setGroupedImages([]);
     setSortedImages([]);
     setProcessedItems([]);
-    setGroupingVersion(0);
   };
 
   const handleImagesSorted = (items: ClothingItem[]) => {
@@ -190,8 +186,6 @@ function App() {
 
   const handleImagesGrouped = (items: ClothingItem[]) => {
     setGroupedImages(items);
-    // Increment version to trigger re-render of downstream components
-    setGroupingVersion(prev => prev + 1);
     
     // If we already have sorted images, update them with new grouping info
     if (sortedImages.length > 0) {
@@ -204,9 +198,10 @@ function App() {
     }
   };
 
-  const handleItemsProcessed = (items: ClothingItem[]) => {
-    setProcessedItems(items);
-  };
+  // TODO: Re-enable when ProductDescriptionGenerator is implemented
+  // const handleItemsProcessed = (items: ClothingItem[]) => {
+  //   setProcessedItems(items);
+  // };
 
   return (
     <div className="app-container">
@@ -320,6 +315,7 @@ function App() {
         )}
 
         {/* Step 4: Add Descriptions */}
+        {/* TODO: Implement ProductDescriptionGenerator component
         {sortedImages.length > 0 && (
           <section className="step-section">
             <h2>Step 4: Add Voice Descriptions & Generate Product Info</h2>
@@ -329,6 +325,7 @@ function App() {
             />
           </section>
         )}
+        */}
 
         {/* Step 5: Save & Export */}
         {processedItems.length > 0 && (
