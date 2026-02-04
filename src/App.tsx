@@ -5,6 +5,7 @@ import Auth from './components/Auth';
 import ImageUpload from './components/ImageUpload';
 import ImageGrouper from './components/ImageGrouper';
 import CategoryZones from './components/CategoryZones';
+import ProductDescriptionGenerator from './components/ProductDescriptionGenerator';
 import GoogleSheetExporter from './components/GoogleSheetExporter';
 import { SavedProducts } from './components/SavedProducts';
 import { saveBatchToDatabase } from './lib/productService';
@@ -198,10 +199,9 @@ function App() {
     }
   };
 
-  // TODO: Re-enable when ProductDescriptionGenerator is implemented
-  // const handleItemsProcessed = (items: ClothingItem[]) => {
-  //   setProcessedItems(items);
-  // };
+  const handleItemsProcessed = (items: ClothingItem[]) => {
+    setProcessedItems(items);
+  };
 
   return (
     <div className="app-container">
@@ -315,7 +315,6 @@ function App() {
         )}
 
         {/* Step 4: Add Descriptions */}
-        {/* TODO: Implement ProductDescriptionGenerator component
         {sortedImages.length > 0 && (
           <section className="step-section">
             <h2>Step 4: Add Voice Descriptions & Generate Product Info</h2>
@@ -325,7 +324,6 @@ function App() {
             />
           </section>
         )}
-        */}
 
         {/* Step 5: Save & Export */}
         {processedItems.length > 0 && (
