@@ -334,7 +334,7 @@ function App() {
               Click to select images, group them, and organize your products. All images are auto-uploaded to your database.
             </p>
             <ImageGrouper 
-              items={uploadedImages} 
+              items={groupedImages.length > 0 ? groupedImages : uploadedImages} 
               onGrouped={handleImagesGrouped}
               userId={user.id}
             />
