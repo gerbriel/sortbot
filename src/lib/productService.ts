@@ -148,6 +148,10 @@ export const saveBatchToDatabase = async (
   items: ClothingItem[],
   userId: string
 ): Promise<{ success: number; failed: number }> => {
+  console.log('📦 saveBatchToDatabase called');
+  console.log('Items to save:', items.length);
+  console.log('User ID:', userId);
+  
   let success = 0;
   let failed = 0;
 
@@ -161,9 +165,20 @@ export const saveBatchToDatabase = async (
     return groups;
   }, {} as Record<string, ClothingItem[]>);
 
+  console.log('Product groups:', Object.keys(productGroups).length);
+  console.log('Groups:', productGroups);
+
   // Save each product group
-  for (const [_, groupItems] of Object.entries(productGroups)) {
+  for (const [groupId, groupItems] of Object.entries(productGroups)) {
+    console.log(`\n💾 Saving product group: ${groupId} (${groupItems.length} images)`);
     const productData = groupItems[0]; // First item has all the product info
+    
+    console.log('Product data:', {
+      title: productData.seoTitle,
+      category: productData.category,
+      price: productData.price,
+      hasFile: !!productData.file
+    });
     
     const productId = await saveProductToDatabase(
       productData,
@@ -172,12 +187,15 @@ export const saveBatchToDatabase = async (
     );
 
     if (productId) {
+      console.log(`✅ Product saved with ID: ${productId}`);
       success++;
     } else {
+      console.error(`❌ Failed to save product group: ${groupId}`);
       failed++;
     }
   }
 
+  console.log(`\n📊 Final results: ${success} succeeded, ${failed} failed`);
   return { success, failed };
 };
 
