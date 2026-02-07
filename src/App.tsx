@@ -111,11 +111,18 @@ function App() {
       return;
     }
 
+    console.log('🔵 Starting save batch...');
+    console.log('User ID:', user.id);
+    console.log('Processed items count:', processedItems.length);
+    console.log('Processed items:', processedItems);
+
     setSaving(true);
     setSaveMessage(null);
 
     try {
       const result = await saveBatchToDatabase(processedItems, user.id);
+      
+      console.log('💾 Save result:', result);
       
       if (result.success > 0) {
         setSaveMessage({
@@ -138,7 +145,7 @@ function App() {
         });
       }
     } catch (error) {
-      console.error('Save error:', error);
+      console.error('❌ Save error:', error);
       setSaveMessage({
         type: 'error',
         text: '❌ An error occurred while saving.',
