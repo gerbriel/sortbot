@@ -67,6 +67,9 @@ CREATE TABLE public.products (
   -- Original voice description
   voice_description TEXT,
   
+  -- Batch tracking (to group products saved together)
+  batch_id UUID,
+  
   -- Timestamps
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),

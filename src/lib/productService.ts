@@ -50,7 +50,8 @@ export const uploadImageToStorage = async (
 export const saveProductToDatabase = async (
   product: ClothingItem,
   userId: string,
-  groupImages: ClothingItem[]
+  groupImages: ClothingItem[],
+  batchId?: string
 ): Promise<string | null> => {
   try {
     // 1. Insert product
@@ -58,6 +59,7 @@ export const saveProductToDatabase = async (
       .from('products')
       .insert({
         user_id: userId,
+        batch_id: batchId || null,
         title: product.seoTitle || 'Untitled Product',
         url_handle: (product.seoTitle || 'product')
           .toLowerCase()
@@ -147,6 +149,9 @@ export const saveBatchToDatabase = async (
   let success = 0;
   let failed = 0;
 
+  // Generate a unique batch ID for this save operation
+  const batchId = crypto.randomUUID();
+
   // Group items by productGroup
   const productGroups = items.reduce((groups, item) => {
     const groupId = item.productGroup || item.id;
@@ -157,14 +162,15 @@ export const saveBatchToDatabase = async (
     return groups;
   }, {} as Record<string, ClothingItem[]>);
 
-  // Save each product group
+  // Save each product group with the same batch_id
   for (const [_, groupItems] of Object.entries(productGroups)) {
     const productData = groupItems[0]; // First item has all the product info
     
     const productId = await saveProductToDatabase(
       productData,
       userId,
-      groupItems
+      groupItems,
+      batchId
     );
 
     if (productId) {
