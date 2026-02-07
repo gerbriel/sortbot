@@ -47,7 +47,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
     };
 
     initializeItems();
-  }, [items.length]);
+  }, [items]);
 
   // Auto-upload image to Supabase Storage
   const uploadImageImmediately = async (item: ClothingItem, userId: string) => {
