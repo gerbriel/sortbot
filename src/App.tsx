@@ -186,12 +186,18 @@ function App() {
   };
 
   const handleImagesGrouped = async (items: ClothingItem[]) => {
-    setGroupedImages(items);
+    // Preserve existing categories when updating groups
+    const itemsWithCategories = items.map(item => {
+      const existingItem = groupedImages.find(g => g.id === item.id);
+      return existingItem?.category ? { ...item, category: existingItem.category } : item;
+    });
+    
+    setGroupedImages(itemsWithCategories);
     
     // If we already have sorted images, update them with new grouping info
     if (sortedImages.length > 0) {
       // Merge new grouping info into sorted images
-      const updatedSorted = items.map(item => {
+      const updatedSorted = itemsWithCategories.map(item => {
         const existingSorted = sortedImages.find(s => s.id === item.id);
         return existingSorted ? { ...item, category: existingSorted.category } : item;
       });
