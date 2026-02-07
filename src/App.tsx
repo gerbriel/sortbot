@@ -111,18 +111,11 @@ function App() {
       return;
     }
 
-    console.log('🔵 Starting save batch...');
-    console.log('User ID:', user.id);
-    console.log('Processed items count:', processedItems.length);
-    console.log('Processed items:', processedItems);
-
     setSaving(true);
     setSaveMessage(null);
 
     try {
       const result = await saveBatchToDatabase(processedItems, user.id);
-      
-      console.log('💾 Save result:', result);
       
       if (result.success > 0) {
         setSaveMessage({
@@ -145,7 +138,7 @@ function App() {
         });
       }
     } catch (error) {
-      console.error('❌ Save error:', error);
+      console.error('Save error:', error);
       setSaveMessage({
         type: 'error',
         text: '❌ An error occurred while saving.',
@@ -192,7 +185,7 @@ function App() {
     setGroupedImages(items);
   };
 
-  const handleImagesGrouped = (items: ClothingItem[]) => {
+  const handleImagesGrouped = async (items: ClothingItem[]) => {
     setGroupedImages(items);
     
     // If we already have sorted images, update them with new grouping info
@@ -203,6 +196,41 @@ function App() {
         return existingSorted ? { ...item, category: existingSorted.category } : item;
       });
       setSortedImages(updatedSorted);
+    }
+
+    // Auto-save product groups to database
+    if (!user) return;
+
+    // Find items that are in multi-item groups (productGroup is set and matches other items)
+    const groupedItemsMap = items.reduce((acc, item) => {
+      if (item.productGroup) {
+        if (!acc[item.productGroup]) acc[item.productGroup] = [];
+        acc[item.productGroup].push(item);
+      }
+      return acc;
+    }, {} as Record<string, ClothingItem[]>);
+
+    // Filter to only groups with 2+ items
+    const multiItemGroups = Object.values(groupedItemsMap).filter(group => group.length > 1);
+    
+    // Flatten back to array of items in product groups
+    const itemsToSave = multiItemGroups.flat();
+
+    if (itemsToSave.length > 0) {
+      try {
+        const result = await saveBatchToDatabase(itemsToSave, user.id);
+        
+        if (result.success > 0) {
+          // Show brief success message
+          setSaveMessage({
+            type: 'success',
+            text: `✅ Saved ${result.success} product group(s) to database!`,
+          });
+          setTimeout(() => setSaveMessage(null), 2000);
+        }
+      } catch (error) {
+        console.error('Auto-save error:', error);
+      }
     }
   };
 
