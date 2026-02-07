@@ -20,8 +20,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
 
   // Initialize items with individual groups and auto-upload
   useEffect(() => {
-    console.log('🎨 ImageGrouper received items:', items.map(i => ({ id: i.id, category: i.category, productGroup: i.productGroup })));
-    
     const initializeItems = async () => {
       const initialized = await Promise.all(
         items.map(async (item) => {
@@ -42,7 +40,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
           return { ...item, productGroup: item.productGroup || item.id };
         })
       );
-      console.log('🎨 ImageGrouper initialized items:', initialized.map(i => ({ id: i.id, category: i.category, productGroup: i.productGroup })));
       setGroupedItems(initialized);
     };
 
