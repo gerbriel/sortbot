@@ -95,11 +95,9 @@ export const saveProductToDatabase = async (
       .single();
 
     if (productError) {
-      console.error('Product insert error:', productError);
+      console.error('Product save error:', productError);
       return null;
     }
-
-    console.log('✅ Product saved:', productData.id);
 
     // 2. Upload images and save URLs
     for (let i = 0; i < groupImages.length; i++) {
@@ -127,9 +125,7 @@ export const saveProductToDatabase = async (
           });
 
         if (imageError) {
-          console.error('Image record insert error:', imageError);
-        } else {
-          console.log(`✅ Image ${i + 1} saved:`, uploadResult.url);
+          console.error('Image save error:', imageError);
         }
       }
     }
@@ -148,10 +144,6 @@ export const saveBatchToDatabase = async (
   items: ClothingItem[],
   userId: string
 ): Promise<{ success: number; failed: number }> => {
-  console.log('📦 saveBatchToDatabase called');
-  console.log('Items to save:', items.length);
-  console.log('User ID:', userId);
-  
   let success = 0;
   let failed = 0;
 
@@ -165,20 +157,9 @@ export const saveBatchToDatabase = async (
     return groups;
   }, {} as Record<string, ClothingItem[]>);
 
-  console.log('Product groups:', Object.keys(productGroups).length);
-  console.log('Groups:', productGroups);
-
   // Save each product group
-  for (const [groupId, groupItems] of Object.entries(productGroups)) {
-    console.log(`\n💾 Saving product group: ${groupId} (${groupItems.length} images)`);
+  for (const [_, groupItems] of Object.entries(productGroups)) {
     const productData = groupItems[0]; // First item has all the product info
-    
-    console.log('Product data:', {
-      title: productData.seoTitle,
-      category: productData.category,
-      price: productData.price,
-      hasFile: !!productData.file
-    });
     
     const productId = await saveProductToDatabase(
       productData,
@@ -187,15 +168,12 @@ export const saveBatchToDatabase = async (
     );
 
     if (productId) {
-      console.log(`✅ Product saved with ID: ${productId}`);
       success++;
     } else {
-      console.error(`❌ Failed to save product group: ${groupId}`);
       failed++;
     }
   }
 
-  console.log(`\n📊 Final results: ${success} succeeded, ${failed} failed`);
   return { success, failed };
 };
 

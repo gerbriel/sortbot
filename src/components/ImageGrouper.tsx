@@ -61,7 +61,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
         });
 
       if (error) {
-        console.error('Upload error:', error);
+        console.error('Upload failed:', error.message);
         return item;
       }
 
@@ -76,7 +76,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
         storagePath: data.path,
       };
     } catch (error) {
-      console.error('Upload error:', error);
+      console.error('Upload failed:', error);
       return item;
     }
   };
