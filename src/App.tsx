@@ -180,17 +180,24 @@ function App() {
   };
 
   const handleImagesSorted = (items: ClothingItem[]) => {
+    console.log('📋 handleImagesSorted called with items:', items.map(i => ({ id: i.id, category: i.category, productGroup: i.productGroup })));
     setSortedImages(items);
     // Also update groupedImages so Step 2 shows the categories
     setGroupedImages(items);
+    console.log('✅ Updated sortedImages and groupedImages');
   };
 
   const handleImagesGrouped = async (items: ClothingItem[]) => {
+    console.log('🔄 handleImagesGrouped called with items:', items.map(i => ({ id: i.id, category: i.category, productGroup: i.productGroup })));
+    console.log('Current groupedImages:', groupedImages.map(i => ({ id: i.id, category: i.category })));
+    
     // Preserve existing categories when updating groups
     const itemsWithCategories = items.map(item => {
       const existingItem = groupedImages.find(g => g.id === item.id);
       return existingItem?.category ? { ...item, category: existingItem.category } : item;
     });
+    
+    console.log('Items with preserved categories:', itemsWithCategories.map(i => ({ id: i.id, category: i.category })));
     
     setGroupedImages(itemsWithCategories);
     

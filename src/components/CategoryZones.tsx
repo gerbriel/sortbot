@@ -71,6 +71,8 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized }) =
         : item;
     });
 
+    console.log('🏷️ CategoryZones: Categorized items:', updated.filter(i => i.category).map(i => ({ id: i.id, category: i.category, productGroup: i.productGroup })));
+
     onCategorized(updated);
     setDraggedItem(null);
     setDragOverCategory(null);
