@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import type { ClothingItem } from '../App';
-import { FIELD_LIMITS, getCharacterCount, isOverLimit } from '../constants/fieldLimits';
 import './ProductDescriptionGenerator.css';
 
 interface ProductDescriptionGeneratorProps {
