@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
+import { Tag, Settings, Package, ShoppingBag } from 'lucide-react';
 import Auth from './components/Auth';
 import ImageUpload from './components/ImageUpload';
 import ImageGrouper from './components/ImageGrouper';
@@ -8,7 +9,10 @@ import CategoryZones from './components/CategoryZones';
 import ProductDescriptionGenerator from './components/ProductDescriptionGenerator';
 import GoogleSheetExporter from './components/GoogleSheetExporter';
 import { SavedProducts } from './components/SavedProducts';
+import CategoryPresetsManager from './components/CategoryPresetsManager';
+import CategoriesManager from './components/CategoriesManager';
 import { saveBatchToDatabase } from './lib/productService';
+import type { BrandCategory } from './lib/brandCategorySystem';
 import './App.css';
 
 export interface ClothingItem {
@@ -16,10 +20,21 @@ export interface ClothingItem {
   file: File;
   preview: string;
   category?: string;
+  brandCategory?: BrandCategory; // Extended 160+ category system
   productGroup?: string; // For grouping multiple images of same product
   voiceDescription?: string;
   generatedDescription?: string;
   storagePath?: string; // Supabase Storage path for deletion
+  
+  // Category Preset Data (applied when category is assigned)
+  _presetData?: {
+    presetId: string;
+    categoryName: string;
+    displayName: string;
+    description?: string;
+    measurementTemplate: any;
+    requiresShipping: boolean;
+  };
   
   // Shopify Product Fields
   seoTitle?: string; // Title
@@ -30,6 +45,9 @@ export interface ClothingItem {
   size?: string; // Option1 value (Size)
   color?: string; // Option2 value (Color) - can be extracted from voice
   brand?: string; // Vendor
+  modelName?: string; // Specific model (e.g., "501 Original Fit", "Air Force 1")
+  modelNumber?: string; // Model number (e.g., "501", "AF1", "MA-1")
+  subculture?: string[]; // Subculture tags (e.g., "punk-diy", "gorpcore-hiking")
   condition?: 'New' | 'Used' | 'NWT' | 'Excellent' | 'Good' | 'Fair';
   flaws?: string;
   material?: string;
@@ -53,6 +71,41 @@ export interface ClothingItem {
   era?: string; // vintage, modern, etc.
   care?: string; // Care instructions
   
+  // Additional Colors
+  secondaryColor?: string;
+  
+  // Shipping & Packaging (from Category Presets)
+  packageDimensions?: string; // e.g., "8 in - 6 in - 4 in"
+  parcelSize?: 'Small' | 'Medium' | 'Large' | 'Extra Large';
+  shipsFrom?: string; // Shipping address
+  continueSellingOutOfStock?: boolean;
+  requiresShipping?: boolean; // TRUE for physical items
+  
+  // Product Classification (from Category Presets)
+  sizeType?: 'Regular' | 'Big & Tall' | 'Petite' | 'Plus Size' | 'One Size';
+  style?: string; // "Vintage", "Modern", "Streetwear", etc.
+  gender?: 'Men' | 'Women' | 'Unisex' | 'Kids';
+  ageGroup?: string; // "Adult (13+ years old)", "Kids", "Infants", etc.
+  
+  // Policies & Marketplace Info (from Category Presets)
+  policies?: string; // "No Returns; No Exchanges"
+  renewalOptions?: string; // "Automatic", "Manual", etc.
+  whoMadeIt?: string; // "Another Company Or Person", "I made it", etc.
+  whatIsIt?: string; // "A Finished Product", "A supply", etc.
+  listingType?: string; // "Physical Item", "Digital Download"
+  discountedShipping?: string; // "No Discount", "10% Off", etc.
+  
+  // Google Shopping / Advanced Marketing
+  mpn?: string; // Manufacturer Part Number
+  customLabel0?: string; // "Top Seller", "New Arrival", "Clearance"
+  
+  // Optional Advanced Fields (rarely used)
+  taxCode?: string;
+  unitPriceTotalMeasure?: string;
+  unitPriceTotalMeasureUnit?: string;
+  unitPriceBaseMeasure?: string;
+  unitPriceBaseMeasureUnit?: string;
+  
   // SEO & Marketing
   seoDescription?: string;
   productType?: string; // Type (e.g., "Graphic shirt")
@@ -73,6 +126,8 @@ function App() {
   const [groupedImages, setGroupedImages] = useState<ClothingItem[]>([]);
   const [processedItems, setProcessedItems] = useState<ClothingItem[]>([]);
   const [showSavedProducts, setShowSavedProducts] = useState(false);
+  const [showCategoryPresets, setShowCategoryPresets] = useState(false);
+  const [showCategoriesManager, setShowCategoriesManager] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showStep2Info, setShowStep2Info] = useState(false);
@@ -172,11 +227,13 @@ function App() {
   }
 
   const handleImagesUploaded = (items: ClothingItem[]) => {
-    setUploadedImages(items);
-    // Reset downstream states when new images uploaded
-    setGroupedImages([]);
-    setSortedImages([]);
-    setProcessedItems([]);
+    // APPEND new images to existing ones (don't replace)
+    setUploadedImages(prev => [...prev, ...items]);
+    
+    // If there are already grouped images, append to those too
+    if (groupedImages.length > 0) {
+      setGroupedImages(prev => [...prev, ...items]);
+    }
   };
 
   const handleImagesSorted = (items: ClothingItem[]) => {
@@ -249,16 +306,34 @@ function App() {
       <header className="app-header">
         <div className="header-content">
           <div>
-            <h1>🛍️ Sortbot - AI Clothing Sorting & Export</h1>
+            <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <ShoppingBag size={32} /> Sortbot - AI Clothing Sorting & Export
+            </h1>
             <p className="header-subtitle">Upload, sort, describe, and export to Shopify</p>
           </div>
           <div className="header-actions">
             <button 
+              onClick={() => setShowCategoriesManager(true)} 
+              className="button button-secondary"
+              style={{ marginRight: '12px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+              title="Manage your product categories"
+            >
+              <Tag size={18} /> Manage Categories
+            </button>
+            <button 
+              onClick={() => setShowCategoryPresets(true)} 
+              className="button button-secondary"
+              style={{ marginRight: '12px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+              title="Manage category presets for shipping weight, measurements, and default attributes"
+            >
+              <Settings size={18} /> Category Presets
+            </button>
+            <button 
               onClick={() => setShowSavedProducts(true)} 
               className="button button-secondary"
-              style={{ marginRight: '12px' }}
+              style={{ marginRight: '12px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
             >
-              📦 Saved Products
+              <Package size={18} /> Saved Products
             </button>
             <span className="user-email">{user.email}</span>
             <button onClick={handleSignOut} className="button button-secondary">
@@ -279,6 +354,9 @@ function App() {
         {/* Step 1: Upload Images */}
         <section className="step-section">
           <h2>Step 1: Upload Images</h2>
+          <p className="step-description" style={{ fontSize: '14px', color: '#666', marginBottom: '1rem' }}>
+            💡 <strong>Tip:</strong> You can upload multiple batches! New images will be added to your current session.
+          </p>
           <ImageUpload onImagesUploaded={handleImagesUploaded} />
           {uploadedImages.length > 0 && (
             <p className="status-text">✓ {uploadedImages.length} images uploaded</p>
@@ -323,9 +401,11 @@ function App() {
                 fontSize: '14px'
               }}>
                 <ul style={{ margin: 0, paddingLeft: '1.5rem' }}>
-                  <li>👆 <strong>Click images</strong> to select them (green checkmark appears)</li>
-                  <li>🔗 <strong>Click "Group Selected"</strong> to create a product from 2+ images</li>
-                  <li>🖱️ <strong>Drag images</strong> between groups to reorganize</li>
+                  <li>👆 <strong>Click to select/unselect</strong> (click again to deselect)</li>
+                  <li>⌨️ <strong>Shift+Click</strong> to select multiple at once</li>
+                  <li>🔗 <strong>Click "Group Selected"</strong> - works with 1+ images</li>
+                  <li>✂️ <strong>Click "Ungroup Selected"</strong> - removes selected images from groups</li>
+                  <li>🖱️ <strong>Drag photos</strong> between groups or to make them individual</li>
                   <li>🗑️ <strong>Click × button</strong> to delete unwanted images</li>
                 </ul>
               </div>
@@ -396,6 +476,20 @@ function App() {
           </section>
         )}
       </main>
+
+      {/* Categories Manager Modal */}
+      {showCategoriesManager && (
+        <CategoriesManager 
+          onClose={() => setShowCategoriesManager(false)} 
+        />
+      )}
+
+      {/* Category Presets Modal */}
+      {showCategoryPresets && (
+        <CategoryPresetsManager 
+          onClose={() => setShowCategoryPresets(false)} 
+        />
+      )}
 
       {/* Saved Products Modal */}
       {showSavedProducts && user && (

@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import type { ClothingItem } from '../App';
+import { intelligentMatch } from '../lib/brandMatcher';
+import { Target } from 'lucide-react';
 import './ProductDescriptionGenerator.css';
 
 interface ProductDescriptionGeneratorProps {
@@ -350,43 +352,43 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   };
 
   // Format measurements for description
-  const formatMeasurements = (measurements: any): string => {
+  const formatMeasurements = (measurements: any, size?: string): string => {
     if (!measurements) return '';
     
     const lines = [];
-    if (measurements.pitToPit) lines.push(`• Pit to pit: ${measurements.pitToPit}"`);
-    if (measurements.length) lines.push(`• Length: ${measurements.length}"`);
-    if (measurements.sleeve) lines.push(`• Sleeve: ${measurements.sleeve}"`);
-    if (measurements.shoulder) lines.push(`• Shoulder: ${measurements.shoulder}"`);
-    if (measurements.waist) lines.push(`• Waist: ${measurements.waist}"`);
-    if (measurements.inseam) lines.push(`• Inseam: ${measurements.inseam}"`);
-    if (measurements.rise) lines.push(`• Rise: ${measurements.rise}"`);
+    if (size) lines.push(`✠ SIZE - ${size}`);
+    if (measurements.pitToPit) lines.push(`✠ PIT TO PIT - ${measurements.pitToPit}"`);
+    if (measurements.length) lines.push(`✠ LENGTH - ${measurements.length}"`);
+    if (measurements.sleeve) lines.push(`✠ SLEEVE - ${measurements.sleeve}"`);
+    if (measurements.shoulder) lines.push(`✠ SHOULDER - ${measurements.shoulder}"`);
+    if (measurements.waist) lines.push(`✠ WAIST - ${measurements.waist}"`);
+    if (measurements.inseam) lines.push(`✠ INSEAM - ${measurements.inseam}"`);
+    if (measurements.rise) lines.push(`✠ RISE - ${measurements.rise}"`);
     
     if (lines.length === 0) return '';
     
-    return `\n\nMeasurements:\n${lines.join('\n')}`;
+    return lines.join('\n');
   };
 
-  // Format condition and flaws for description
+  // Format condition for description - cleaner vintage style
   const formatCondition = (condition?: string, flaws?: string): string => {
-    if (!condition) return '';
+    if (!condition) return 'Light vintage wear consistent with age.';
     
     const conditionMap: Record<string, string> = {
-      'NWT': 'Brand new with tags',
-      'Excellent': 'Excellent condition',
-      'Good': 'Good condition',
-      'Fair': 'Fair condition with wear'
+      'NWT': 'Brand new with tags. Deadstock condition.',
+      'Like New': 'Excellent vintage condition with minimal signs of wear.',
+      'Excellent': 'Light vintage wear consistent with age.',
+      'Good': 'Good vintage condition with moderate wear throughout.',
+      'Fair': 'Fair condition with noticeable wear and character.'
     };
     
-    let text = conditionMap[condition] || condition;
+    let text = conditionMap[condition] || 'Light vintage wear consistent with age.';
     
     if (flaws && flaws.trim()) {
-      text += ` - ${flaws}`;
-    } else if (condition !== 'NWT') {
-      text += ', no major flaws noted';
+      text += `\n\nFlaws: ${flaws}`;
     }
     
-    return `\n\nCondition: ${text}.`;
+    return text;
   };
 
   const handleGenerateProductInfo = async () => {
@@ -404,6 +406,44 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const voiceDesc = currentItem.voiceDescription!;
     const category = currentItem.category || 'clothing';
     const lowerDesc = voiceDesc.toLowerCase();
+    
+    // INTELLIGENT BRAND/MODEL MATCHING using brand database - DO THIS FIRST
+    const brandMatch = intelligentMatch(voiceDesc);
+    
+    // Extract brand and model info from intelligent matcher
+    const extractedBrand = brandMatch.brand || '';
+    const extractedModelName = brandMatch.modelName || '';
+    const extractedModelNumber = brandMatch.modelNumber || '';
+    const extractedBrandCategory = brandMatch.brandCategory;
+    const extractedSubcultures = brandMatch.subcultures || [];
+    const suggestedPriceRange = brandMatch.priceRange;
+    const collectibilityScore = brandMatch.collectibility;
+    // const matchConfidence = brandMatch.confidence; // Available for future use
+    
+    // Check if brand/material/model were explicitly mentioned in voice description
+    // Only use extracted values if they were actually mentioned
+    const voiceExplicitlyMentionsBrand = extractedBrand && 
+      lowerDesc.includes(extractedBrand.toLowerCase());
+    const voiceExplicitlyMentionsModel = extractedModelName && 
+      lowerDesc.includes(extractedModelName.toLowerCase());
+    const voiceExplicitlyMentionsModelNumber = extractedModelNumber && 
+      lowerDesc.includes(extractedModelNumber.toLowerCase());
+    
+    // Condition extraction (only if not manually set) - DO THIS EARLY for pricing
+    let extractedCondition = currentItem.condition || '';
+    if (!extractedCondition) {
+      if (/new with tags|nwt|brand new/i.test(voiceDesc)) {
+        extractedCondition = 'NWT';
+      } else if (/like new|mint|pristine|perfect/i.test(voiceDesc)) {
+        extractedCondition = 'Like New';
+      } else if (/excellent|great condition/i.test(voiceDesc)) {
+        extractedCondition = 'Excellent';
+      } else if (/good condition|gently used/i.test(voiceDesc)) {
+        extractedCondition = 'Good';
+      } else if (/fair|worn|used/i.test(voiceDesc)) {
+        extractedCondition = 'Fair';
+      }
+    }
     
     // Extract price from voice description if mentioned
     const pricePatterns = [
@@ -428,14 +468,32 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     if (!finalPrice && extractedPrice) {
       finalPrice = extractedPrice;
     } else if (!finalPrice) {
-      let basePrice = 25;
-      if (category === 'Outerwear') basePrice = 60;
-      else if (category === 'Sweatshirts') basePrice = 45;
-      else if (category === 'Bottoms') basePrice = 40;
-      else if (category === 'Activewear') basePrice = 35;
-      else if (category === 'Hats' || category === 'Accessories') basePrice = 20;
-      
-      finalPrice = Math.round(basePrice);
+      // Use intelligent match price range if available
+      if (suggestedPriceRange && suggestedPriceRange.length === 2) {
+        // Use midpoint of price range as base, adjusted for condition
+        const [minPrice, maxPrice] = suggestedPriceRange;
+        const midPrice = (minPrice + maxPrice) / 2;
+        
+        // Adjust based on condition
+        let conditionMultiplier = 1.0;
+        if (extractedCondition === 'NWT') conditionMultiplier = 1.3;
+        else if (extractedCondition === 'Like New') conditionMultiplier = 1.1;
+        else if (extractedCondition === 'Excellent') conditionMultiplier = 1.0;
+        else if (extractedCondition === 'Good') conditionMultiplier = 0.8;
+        else if (extractedCondition === 'Fair') conditionMultiplier = 0.6;
+        
+        finalPrice = Math.round(midPrice * conditionMultiplier);
+      } else {
+        // Fallback to category-based pricing
+        let basePrice = 25;
+        if (category === 'Outerwear') basePrice = 60;
+        else if (category === 'Sweatshirts') basePrice = 45;
+        else if (category === 'Bottoms') basePrice = 40;
+        else if (category === 'Activewear') basePrice = 35;
+        else if (category === 'Hats' || category === 'Accessories') basePrice = 20;
+        
+        finalPrice = Math.round(basePrice);
+      }
     }
     
     // Detect colors - ALL of them
@@ -505,21 +563,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       }
     }
     
-    // EXTRACT FIELDS FROM VOICE (only if not manually filled)
-    // Brand extraction
-    let extractedBrand = '';
-    const brandPatterns = [
-      /\b(nike|adidas|supreme|champion|carhartt|patagonia|north face|levi'?s?|gap|old navy|h&m|zara|uniqlo|polo|ralph lauren|tommy hilfiger|calvin klein|gucci|prada|louis vuitton|burberry|versace|balenciaga|off-white|stussy|thrasher|vans|converse|new balance|puma|reebok|under armour|lululemon|gymshark|dickies|wrangler|lee|diesel|true religion|hollister|abercrombie|american eagle|j\.?\s?crew|banana republic|ann taylor)\b/i
-    ];
-    
-    for (const pattern of brandPatterns) {
-      const match = voiceDesc.match(pattern);
-      if (match) {
-        extractedBrand = match[1].split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-        break;
-      }
-    }
-    
     // Era extraction
     let extractedEra = '';
     const eraPatterns = [
@@ -531,22 +574,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       if (match) {
         extractedEra = match[1].toLowerCase();
         break;
-      }
-    }
-    
-    // Condition extraction (only if not manually set)
-    let extractedCondition = currentItem.condition || '';
-    if (!extractedCondition) {
-      if (/new with tags|nwt|brand new/i.test(voiceDesc)) {
-        extractedCondition = 'NWT';
-      } else if (/like new|mint|pristine|perfect/i.test(voiceDesc)) {
-        extractedCondition = 'Like New';
-      } else if (/excellent|great condition/i.test(voiceDesc)) {
-        extractedCondition = 'Excellent';
-      } else if (/good condition|gently used/i.test(voiceDesc)) {
-        extractedCondition = 'Good';
-      } else if (/fair|worn|used/i.test(voiceDesc)) {
-        extractedCondition = 'Fair';
       }
     }
     
@@ -593,84 +620,109 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const finalFlaws = extractedFlaws;
     const finalMaterial = extractedMaterial;
     
-    // NATURAL DESCRIPTION GENERATION with hybrid fields
+    // NATURAL DESCRIPTION GENERATION - Clean vintage format
     let generatedDesc = '';
     
-    // Start with era/brand if available
-    if (finalEra) {
-      generatedDesc = `${finalEra.charAt(0).toUpperCase() + finalEra.slice(1)} `;
-    }
-    if (finalBrand && finalBrand.toLowerCase() !== 'unknown') {
-      generatedDesc += `${finalBrand} `;
-    }
+    // Only check if material was explicitly mentioned in voice or manual input
+    const voiceHasMaterial = finalMaterial && (
+      voiceDesc.toLowerCase().includes(finalMaterial.toLowerCase()) || 
+      currentItem.material // manually typed
+    );
     
-    // Add colors naturally
-    const colorDesc = detectedColors.length === 1 
-      ? detectedColors[0]
-      : detectedColors.length === 2
-      ? `${detectedColors[0]} and ${detectedColors[1]}`
-      : detectedColors.length > 2
-      ? detectedColors.slice(0, -1).join(', ') + ', and ' + detectedColors[detectedColors.length - 1]
-      : '';
-    
-    if (colorDesc) {
-      generatedDesc += `${colorDesc} `;
+    // Add measurements section at top if available
+    const measurementsSection = formatMeasurements(currentItem.measurements, detectedSize || undefined);
+    if (measurementsSection) {
+      generatedDesc += measurementsSection + '\n\n';
     }
     
-    // Add category
-    const categoryName = category === 'Tees' ? 'tee' : category.toLowerCase().slice(0, -1);
-    generatedDesc += `${categoryName}. `;
+    // Main description paragraph - clean and descriptive
+    // Only use voice description, cleaning it up
+    const cleanedVoice = voiceDesc.charAt(0).toUpperCase() + voiceDesc.slice(1);
+    generatedDesc += cleanedVoice;
+    if (!cleanedVoice.endsWith('.')) generatedDesc += '.';
     
-    // Add voice description
-    if (!generatedDesc.toLowerCase().includes(voiceDesc.toLowerCase().substring(0, 20))) {
-      generatedDesc += voiceDesc.charAt(0).toUpperCase() + voiceDesc.slice(1);
-      if (!voiceDesc.endsWith('.')) generatedDesc += '.';
-      generatedDesc += ' ';
+    // Add construction/material details if EXPLICITLY mentioned
+    if (voiceHasMaterial) {
+      generatedDesc += `\n\n${finalMaterial} construction`;
+      
+      // Add fit style if detected
+      const fitWords = ['boxy', 'oversized', 'slim', 'relaxed', 'fitted', 'cropped', 'longline'];
+      const hasFitMention = fitWords.some(fit => voiceDesc.toLowerCase().includes(fit));
+      if (hasFitMention) {
+        const fitMatch = fitWords.find(fit => voiceDesc.toLowerCase().includes(fit));
+        generatedDesc += ` with a ${fitMatch} fit`;
+      }
+      
+      // Add era styling if mentioned
+      if (finalEra && voiceDesc.toLowerCase().includes(finalEra)) {
+        generatedDesc += ` typical of the ${finalEra} era`;
+      }
+      
+      generatedDesc += '.';
     }
     
-    // Add size and fit
-    if (detectedSize) {
-      const sizePhrase = detectedSize.length <= 3 
-        ? `Tagged ${detectedSize}, fits true to size.`
-        : `Size ${detectedSize}.`;
-      generatedDesc += `\n\n${sizePhrase}`;
+    // Add USA made tag if commonly mentioned
+    if (voiceDesc.toLowerCase().includes('made in usa') || voiceDesc.toLowerCase().includes('made in america')) {
+      generatedDesc += ' Made in USA tag.';
     }
     
-    // Add condition and flaws (TRANSPARENCY) - use extracted or manual
-    generatedDesc += formatCondition(finalCondition || currentItem.condition, finalFlaws || currentItem.flaws);
+    // Add vintage character note
+    if (finalEra && (finalEra.includes('vintage') || finalEra.includes('90s') || finalEra.includes('80s'))) {
+      generatedDesc += ' Soft natural fade throughout that adds character without structural flaws.';
+    }
     
-    // Add measurements (TRUST BUILDER)
-    generatedDesc += formatMeasurements(currentItem.measurements);
+    // Add condition statement
+    generatedDesc += `\n\n${formatCondition(finalCondition || currentItem.condition, finalFlaws || currentItem.flaws)}`;
     
-    // Add material info - use extracted or manual
-    if (finalMaterial && finalMaterial.toLowerCase() !== 'unknown') {
-      generatedDesc += `\n\nMaterial: ${finalMaterial}`;
+    // Standard disclaimer
+    generatedDesc += '\n\nCondition shown in pictures. Minor signs of wear consistent with vintage age may not be individually listed.';
+    
+    // Add collectibility note for highly collectible items (8+)
+    if (collectibilityScore && collectibilityScore >= 8) {
+      generatedDesc += '\n\nHighly collectible piece suited for collection or everyday wear.';
     } else {
-      generatedDesc += `\n\nMaterial unknown - check photos for fabric details.`;
+      generatedDesc += '\n\nHigh-quality piece suited for everyday wear or collection.';
     }
     
-    // Add care instructions if provided
-    const care = currentItem.care || '';
-    if (care && care.toLowerCase() !== 'unknown') {
-      generatedDesc += ` ${care.charAt(0).toUpperCase() + care.slice(1)}.`;
-    }
-    
-    // Closing - helpful and honest
-    generatedDesc += '\n\nCompare measurements to your favorites for best fit!';
+    // Standard closing
+    generatedDesc += '\n\nNext-day shipping.\nAll sales final.';
     
     // Filter banned phrases
     generatedDesc = removeBannedPhrases(generatedDesc);
     
-    // Generate tags - comprehensive but not spammy
-    const generatedTags = [
-      category.toLowerCase(),
-      ...detectedColors,
-      ...detectedMaterials,
-      ...(detectedSize ? [detectedSize.toLowerCase()] : []),
-      ...(finalBrand && finalBrand.toLowerCase() !== 'unknown' ? [finalBrand.toLowerCase()] : []),
-      ...(finalEra ? [finalEra.toLowerCase()] : []),
-      ...(finalCondition === 'NWT' ? ['new with tags', 'nwt'] : []),
-    ];
+    // Generate tags - clean hashtag style (lowercase, no spaces)
+    const generatedTags = [];
+    
+    // Add brand if explicitly mentioned
+    if (finalBrand && finalBrand.toLowerCase() !== 'unknown' && 
+        (voiceDesc.toLowerCase().includes(finalBrand.toLowerCase()) || currentItem.brand)) {
+      generatedTags.push(finalBrand.toLowerCase().replace(/\s+/g, ''));
+    }
+    
+    // Add era/decade tags
+    if (finalEra) {
+      const eraTag = finalEra.toLowerCase().replace(/\s+/g, '');
+      generatedTags.push(eraTag);
+      // Add decade-specific tags
+      if (finalEra.includes('90s')) generatedTags.push('90s');
+      if (finalEra.includes('80s')) generatedTags.push('80s');
+      if (finalEra.includes('vintage')) generatedTags.push('vintage');
+    }
+    
+    // Add category-based tags
+    const categoryTag = category.toLowerCase().replace(/\s+/g, '');
+    generatedTags.push(categoryTag);
+    
+    // Add style descriptors from voice
+    const styleKeywords = ['oversized', 'boxy', 'cropped', 'fitted', 'relaxed', 'heavyweight', 'crewneck', 'vneck', 'hoodie', 'embroidered', 'graphic', 'minimal', 'athletic', 'sportswear', 'workwear', 'vintage'];
+    styleKeywords.forEach(keyword => {
+      if (voiceDesc.toLowerCase().includes(keyword)) {
+        generatedTags.push(keyword.replace(/\s+/g, ''));
+      }
+    });
+    
+    // Add fit descriptor if present
+    if (voiceDesc.toLowerCase().includes('boxy')) generatedTags.push('boxyfit');
     
     const manualTags = currentItem.tags || [];
     const finalTags = [...new Set([...manualTags, ...generatedTags])].filter(t => t && t.trim() !== '');
@@ -681,20 +733,38 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     if (!finalSeoTitle || finalSeoTitle.trim() === '') {
       const titleComponents = [];
       
-      if (finalEra) titleComponents.push(finalEra.charAt(0).toUpperCase() + finalEra.slice(1));
-      if (finalBrand && finalBrand.toLowerCase() !== 'unknown') titleComponents.push(finalBrand);
-      
-      if (detectedColors.length > 0) {
-        const colorStr = detectedColors.length === 1 
-          ? detectedColors[0].charAt(0).toUpperCase() + detectedColors[0].slice(1)
-          : detectedColors.map(c => c.charAt(0).toUpperCase() + c.slice(1)).join(' & ');
-        titleComponents.push(colorStr);
+      // Add size at the beginning if available
+      if (detectedSize && ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'].includes(detectedSize)) {
+        titleComponents.push(detectedSize);
       }
       
-      titleComponents.push(categoryName.charAt(0).toUpperCase() + categoryName.slice(1));
+      // Add era/vintage marker
+      if (finalEra) titleComponents.push(finalEra.charAt(0).toUpperCase() + finalEra.slice(1));
       
-      if (detectedSize && ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'].includes(detectedSize)) {
-        titleComponents.push(`(${detectedSize})`);
+      // Add brand if explicitly mentioned
+      if (finalBrand && finalBrand.toLowerCase() !== 'unknown') titleComponents.push(finalBrand);
+      
+      // Add category
+      const categoryForTitle = category === 'Tees' ? 'Tee' : 
+                               category === 'Sweatshirts' ? 'Sweatshirt' :
+                               category === 'Outerwear' ? 'Jacket' :
+                               category;
+      titleComponents.push(categoryForTitle);
+      
+      // Add key description words from voice
+      const keyWords = voiceDesc.split(' ').slice(0, 3).map(w => 
+        w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+      ).join(' ');
+      if (keyWords && !titleComponents.join(' ').toLowerCase().includes(keyWords.toLowerCase())) {
+        titleComponents.push(keyWords);
+      }
+      
+      // Add colors
+      if (detectedColors.length > 0) {
+        const colorStr = detectedColors.slice(0, 2)
+          .map(c => c.charAt(0).toUpperCase() + c.slice(1))
+          .join('/');
+        titleComponents.push(colorStr);
       }
       
       finalSeoTitle = titleComponents.join(' ');
@@ -722,8 +792,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           generatedDescription: generatedDesc,
           tags: finalTags,
           size: detectedSize || updated[itemIndex].size,
-          // Use manual entry if provided, otherwise use extracted (hybrid approach)
-          brand: updated[itemIndex].brand || extractedBrand,
+          // FIXED: Only use extracted brand/model if explicitly mentioned in voice or manually entered
+          brand: updated[itemIndex].brand || (voiceExplicitlyMentionsBrand ? extractedBrand : undefined),
           color: updated[itemIndex].color || extractedColor,
           condition: updated[itemIndex].condition || (extractedCondition as any),
           flaws: updated[itemIndex].flaws || extractedFlaws,
@@ -731,6 +801,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           measurements: updated[itemIndex].measurements,
           era: updated[itemIndex].era || extractedEra,
           care: updated[itemIndex].care,
+          // NEW: Add intelligent match data only if explicitly mentioned
+          modelName: updated[itemIndex].modelName || (voiceExplicitlyMentionsModel ? extractedModelName : undefined),
+          modelNumber: updated[itemIndex].modelNumber || (voiceExplicitlyMentionsModelNumber ? extractedModelNumber : undefined),
+          brandCategory: extractedBrandCategory || updated[itemIndex].brandCategory,
+          subculture: extractedSubcultures.length > 0 ? extractedSubcultures : updated[itemIndex].subculture,
         };
       }
     });
@@ -1067,6 +1142,53 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 className="description-textarea"
               />
             </div>
+            
+            {/* Display Intelligent Match Results */}
+            {currentItem.modelName && (
+              <div className="match-results" style={{
+                marginTop: '1rem',
+                padding: '1rem',
+                background: '#f0f9ff',
+                border: '2px solid #3b82f6',
+                borderRadius: '8px'
+              }}>
+                <h4 style={{ margin: '0 0 0.5rem 0', color: '#1e40af', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Target size={18} /> Intelligent Match Detected
+                </h4>
+                <div style={{ fontSize: '0.9rem', display: 'grid', gap: '0.5rem' }}>
+                  {currentItem.brand && <div><strong>Brand:</strong> {currentItem.brand}</div>}
+                  {currentItem.modelName && <div><strong>Model:</strong> {currentItem.modelName} {currentItem.modelNumber && `(${currentItem.modelNumber})`}</div>}
+                  {currentItem.brandCategory && <div><strong>Category:</strong> {currentItem.brandCategory}</div>}
+                  {currentItem.subculture && currentItem.subculture.length > 0 && (
+                    <div><strong>Subcultures:</strong> {currentItem.subculture.join(', ')}</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Category Preset Applied Indicator */}
+            {currentItem._presetData && (
+              <div style={{
+                marginBottom: '1.5rem',
+                padding: '1rem',
+                background: '#f0fdf4',
+                border: '2px solid #10b981',
+                borderRadius: '8px'
+              }}>
+                <h4 style={{ margin: '0 0 0.5rem 0', color: '#047857', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  ✓ Category Preset Applied
+                </h4>
+                <div style={{ fontSize: '0.9rem', display: 'grid', gap: '0.5rem' }}>
+                  <div><strong>Category:</strong> {currentItem._presetData.displayName}</div>
+                  {currentItem._presetData.description && (
+                    <div style={{ color: '#666', fontStyle: 'italic' }}>{currentItem._presetData.description}</div>
+                  )}
+                  <div style={{ fontSize: '0.85rem', color: '#059669', marginTop: '0.5rem' }}>
+                    📋 Form fields have been pre-filled with preset defaults. You can edit any field to override.
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="form-section">

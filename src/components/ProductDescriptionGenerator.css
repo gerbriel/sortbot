@@ -152,7 +152,8 @@
 
 .description-textarea {
   width: 100%;
-  min-height: 150px;
+  min-width: 100%;
+  min-height: 200px;
   padding: var(--space-4);
   border: 1px solid var(--gray-300);
   border-radius: var(--radius-md);
@@ -229,7 +230,8 @@
 }
 
 .form-group textarea {
-  min-height: 120px;
+  min-height: 150px;
+  min-width: 100%;
   resize: vertical;
   line-height: 1.6;
 }

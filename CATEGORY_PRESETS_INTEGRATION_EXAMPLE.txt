@@ -1,0 +1,180 @@
+// Example: Integrating Category Presets into ProductDescriptionGenerator
+// Add this to your ProductDescriptionGenerator.tsx
+
+import { getCategoryPresetByName, applyCategoryPreset } from '../lib/categoryPresetsService';
+import type { CategoryPreset } from '../lib/categoryPresets';
+
+// Add state for preset
+const [currentPreset, setCurrentPreset] = useState<CategoryPreset | null>(null);
+
+// Load preset when category changes
+useEffect(() => {
+  const loadPreset = async () => {
+    if (currentItem?.category) {
+      try {
+        const preset = await getCategoryPresetByName(currentItem.category);
+        setCurrentPreset(preset);
+      } catch (error) {
+        console.error('Error loading category preset:', error);
+        setCurrentPreset(null);
+      }
+    }
+  };
+  
+  loadPreset();
+}, [currentItem?.category]);
+
+// In handleGenerateProductInfo function, add after line ~400:
+const handleGenerateProductInfo = async () => {
+  // ... existing code ...
+  
+  // Apply category preset if available
+  if (currentPreset) {
+    console.log('Applying category preset:', currentPreset.display_name);
+    
+    // Apply preset to all items in current group
+    currentGroup.forEach(groupItem => {
+      const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+      if (itemIndex !== -1) {
+        // Apply preset defaults (won't override existing values)
+        const itemWithPreset = applyCategoryPreset(updated[itemIndex], currentPreset);
+        updated[itemIndex] = {
+          ...updated[itemIndex],
+          ...itemWithPreset,
+        };
+      }
+    });
+  }
+  
+  // ... rest of existing code ...
+};
+
+// Add a visual indicator when preset is loaded
+// Add this inside the JSX, near the category display:
+{currentPreset && (
+  <div style={{
+    background: '#dbeafe',
+    border: '1px solid #3b82f6',
+    borderRadius: '6px',
+    padding: '0.75rem',
+    marginBottom: '1rem'
+  }}>
+    <div style={{ fontSize: '0.9rem', color: '#1e40af' }}>
+      <strong>📋 Preset Active:</strong> {currentPreset.display_name}
+    </div>
+    {currentPreset.default_weight_value && (
+      <div style={{ fontSize: '0.8rem', color: '#374151', marginTop: '0.25rem' }}>
+        Auto-filling: Weight ({currentPreset.default_weight_value} {currentPreset.default_weight_unit})
+        {currentPreset.default_tags && currentPreset.default_tags.length > 0 && 
+          `, Tags (${currentPreset.default_tags.join(', ')})`
+        }
+      </div>
+    )}
+  </div>
+)}
+
+// ============================================
+// Example: Apply preset in ImageSorter
+// ============================================
+
+// In ImageSorter.tsx, when category is selected:
+
+import { getCategoryPresetByName, applyCategoryPreset } from '../lib/categoryPresetsService';
+
+const handleCategorySelect = async (item: ClothingItem, category: string) => {
+  // ... existing code to set category ...
+  
+  // Load and apply preset
+  try {
+    const preset = await getCategoryPresetByName(category);
+    
+    if (preset) {
+      // Apply preset to the item
+      const updatedItem = applyCategoryPreset(item, preset);
+      
+      // Update in your state
+      setItems(prevItems => 
+        prevItems.map(i => i.id === item.id ? updatedItem : i)
+      );
+      
+      console.log(`Applied preset "${preset.display_name}" to ${item.file.name}`);
+    }
+  } catch (error) {
+    console.error('Error applying preset:', error);
+  }
+};
+
+// ============================================
+// Example: Display preset info in UI
+// ============================================
+
+// Add this component to show active preset:
+
+interface PresetIndicatorProps {
+  preset: CategoryPreset;
+}
+
+const PresetIndicator: React.FC<PresetIndicatorProps> = ({ preset }) => {
+  return (
+    <div className="preset-indicator">
+      <div className="preset-badge">
+        <span className="preset-icon">📋</span>
+        <span className="preset-name">{preset.display_name}</span>
+      </div>
+      
+      <div className="preset-details">
+        {preset.default_weight_value && (
+          <span className="preset-detail">
+            ⚖️ {preset.default_weight_value} {preset.default_weight_unit}
+          </span>
+        )}
+        
+        {preset.suggested_price_min && preset.suggested_price_max && (
+          <span className="preset-detail">
+            💰 ${preset.suggested_price_min} - ${preset.suggested_price_max}
+          </span>
+        )}
+        
+        {preset.default_tags && preset.default_tags.length > 0 && (
+          <span className="preset-detail">
+            🏷️ {preset.default_tags.length} tags
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// CSS for indicator:
+/*
+.preset-indicator {
+  background: #f0f9ff;
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.preset-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: #1e40af;
+  margin-bottom: 0.5rem;
+}
+
+.preset-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.preset-detail {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+*/
