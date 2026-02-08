@@ -79,6 +79,50 @@ export interface CategoryPreset {
   // Marketing
   custom_label_0?: string;
   
+  // === NEW: Extended Fields (Phase 6) ===
+  
+  // Pricing (Extended)
+  compare_at_price?: number;
+  cost_per_item?: number;
+  
+  // Product Details (Extended)
+  color?: string;
+  secondary_color?: string;
+  model_name?: string;
+  model_number?: string;
+  era?: string;
+  
+  // Inventory & SKU
+  sku_prefix?: string;
+  barcode_prefix?: string;
+  default_inventory_quantity?: number;
+  
+  // Measurements Templates (JSON)
+  default_measurements?: {
+    pitToPit?: string;
+    length?: string;
+    sleeve?: string;
+    shoulder?: string;
+    waist?: string;
+    inseam?: string;
+    rise?: string;
+  };
+  
+  // SEO & Marketing (Extended)
+  seo_description?: string;
+  mpn_prefix?: string;
+  
+  // Status & Publishing
+  default_status?: 'Active' | 'Draft' | 'Archived';
+  default_published?: boolean;
+  
+  // Advanced Fields
+  tax_code?: string;
+  unit_price_total_measure?: string;
+  unit_price_total_measure_unit?: string;
+  unit_price_base_measure?: string;
+  unit_price_base_measure_unit?: string;
+  
   // Timestamps
   created_at: string;
   updated_at: string;

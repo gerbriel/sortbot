@@ -30,50 +30,78 @@ export async function applyPresetToProductGroup(
     
     console.log(`Applying preset for category: ${categoryName}`, preset);
     
-    // Apply preset values to items, but don't override existing manual entries
+    /**
+     * Apply preset values to items with priority hierarchy:
+     * 1. Voice Dictation (highest priority - already set on item)
+     * 2. Category Preset values
+     * 3. Empty (lowest priority)
+     * 
+     * Use pattern: item.field || preset.field || undefined
+     * This ensures voice/manual entry is never overwritten
+     */
     return items.map(item => ({
       ...item,
-      // IMPORTANT: Set the category field
+      
+      // ======= CATEGORY (Always Set) =======
       category: categoryName,
       
-      // Price: use manual entry if exists, otherwise use preset suggestion
-      price: item.price || (preset.suggested_price_min ? preset.suggested_price_min : undefined),
+      // ======= PRICING =======
+      price: item.price || preset.suggested_price_min || undefined,
+      compareAtPrice: item.compareAtPrice || preset.compare_at_price || undefined,
+      costPerItem: item.costPerItem || preset.cost_per_item || undefined,
       
-      // SEO Title: use preset template if no manual entry
+      // ======= BASIC PRODUCT INFO =======
       seoTitle: item.seoTitle || preset.seo_title_template || undefined,
-      
-      // Tags: merge preset keywords with existing tags
-      tags: item.tags || (preset.seo_keywords ? [...preset.seo_keywords] : []),
-      
-      // Material: use preset default if no manual entry
-      material: item.material || preset.default_material || undefined,
-      
-      // Care instructions: use preset if no manual entry
-      care: item.care || preset.default_care_instructions || undefined,
-      
-      // Weight: use preset default if no manual entry
-      weightValue: item.weightValue || preset.default_weight_value || undefined,
-      
-      // Product type: use preset for Shopify
+      brand: item.brand || preset.vendor || undefined,
       productType: item.productType || preset.shopify_product_type || undefined,
       
-      // Vendor/Brand: use preset if specified
-      brand: item.brand || preset.vendor || undefined,
+      // ======= PRODUCT DETAILS =======
+      material: item.material || preset.default_material || undefined,
+      color: item.color || preset.color || undefined,
+      secondaryColor: item.secondaryColor || preset.secondary_color || undefined,
+      modelName: item.modelName || preset.model_name || undefined,
+      modelNumber: item.modelNumber || preset.model_number || undefined,
+      era: item.era || preset.era || undefined,
+      care: item.care || preset.default_care_instructions || undefined,
       
-      // Shipping & Packaging (from presets)
+      // Tags: merge preset keywords with existing tags (special case)
+      tags: item.tags || (preset.seo_keywords ? [...preset.seo_keywords] : []),
+      
+      // ======= MEASUREMENTS =======
+      // If preset has default measurements template, apply them
+      ...(preset.default_measurements && !item.measurements?.pitToPit ? {
+        measurements: {
+          ...item.measurements,
+          pitToPit: item.measurements?.pitToPit || preset.default_measurements.pitToPit || '',
+          length: item.measurements?.length || preset.default_measurements.length || '',
+          sleeve: item.measurements?.sleeve || preset.default_measurements.sleeve || '',
+          shoulder: item.measurements?.shoulder || preset.default_measurements.shoulder || '',
+          waist: item.measurements?.waist || preset.default_measurements.waist || '',
+          inseam: item.measurements?.inseam || preset.default_measurements.inseam || '',
+          rise: item.measurements?.rise || preset.default_measurements.rise || ''
+        }
+      } : {}),
+      
+      // ======= INVENTORY & SKU =======
+      sku: item.sku || (preset.sku_prefix ? `${preset.sku_prefix}${item.id.slice(0, 8)}` : undefined),
+      barcode: item.barcode || preset.barcode_prefix || undefined,
+      inventoryQuantity: item.inventoryQuantity || preset.default_inventory_quantity || undefined,
+      
+      // ======= SHIPPING & PACKAGING =======
+      weightValue: item.weightValue || preset.default_weight_value || undefined,
       packageDimensions: item.packageDimensions || preset.package_dimensions || undefined,
       parcelSize: item.parcelSize || preset.parcel_size || undefined,
       shipsFrom: item.shipsFrom || preset.ships_from || undefined,
       continueSellingOutOfStock: item.continueSellingOutOfStock ?? preset.continue_selling_out_of_stock,
       requiresShipping: item.requiresShipping ?? preset.requires_shipping,
       
-      // Product Classification (from presets)
+      // ======= PRODUCT CLASSIFICATION =======
       sizeType: item.sizeType || preset.size_type || undefined,
       style: item.style || preset.style || undefined,
       gender: item.gender || preset.gender || undefined,
       ageGroup: item.ageGroup || preset.age_group || undefined,
       
-      // Policies & Marketplace Info (from presets)
+      // ======= POLICIES & MARKETPLACE =======
       policies: item.policies || preset.policies || undefined,
       renewalOptions: item.renewalOptions || preset.renewal_options || undefined,
       whoMadeIt: item.whoMadeIt || preset.who_made_it || undefined,
@@ -81,9 +109,23 @@ export async function applyPresetToProductGroup(
       listingType: item.listingType || preset.listing_type || undefined,
       discountedShipping: item.discountedShipping || preset.discounted_shipping || undefined,
       
-      // Google Shopping / Marketing
+      // ======= MARKETING & SEO =======
       customLabel0: item.customLabel0 || preset.custom_label_0 || undefined,
+      seoDescription: item.seoDescription || preset.seo_description || undefined,
+      mpn: item.mpn || preset.mpn_prefix || undefined,
       
+      // ======= STATUS & PUBLISHING =======
+      status: item.status || preset.default_status || undefined,
+      published: item.published ?? preset.default_published,
+      
+      // ======= ADVANCED FIELDS =======
+      taxCode: item.taxCode || preset.tax_code || undefined,
+      unitPriceTotalMeasure: item.unitPriceTotalMeasure || preset.unit_price_total_measure || undefined,
+      unitPriceTotalMeasureUnit: item.unitPriceTotalMeasureUnit || preset.unit_price_total_measure_unit || undefined,
+      unitPriceBaseMeasure: item.unitPriceBaseMeasure || preset.unit_price_base_measure || undefined,
+      unitPriceBaseMeasureUnit: item.unitPriceBaseMeasureUnit || preset.unit_price_base_measure_unit || undefined,
+      
+      // ======= PRESET METADATA =======
       // Store preset data for reference in AI generation
       _presetData: {
         presetId: preset.id,
