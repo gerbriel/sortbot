@@ -225,8 +225,13 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.category_name || !formData.display_name) {
-      alert('Category name and display name are required');
+    if (!formData.display_name) {
+      alert('Display name is required');
+      return;
+    }
+
+    if (!editingPreset && !formData.product_type) {
+      alert('Please select a category');
       return;
     }
 
@@ -247,6 +252,7 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
         const dataToCreate = {
           ...formData,
           category_name: uniqueCategoryName,
+          // product_type already contains the selected category
         } as CategoryPresetInput;
         
         await createCategoryPreset(dataToCreate);
@@ -330,12 +336,13 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
                     />
                   ) : (
                     <select
-                      value={formData.category_name || ''}
+                      value={formData.product_type || ''}
                       onChange={(e) => {
                         const selectedCategory = categories.find(c => c.name === e.target.value);
                         setFormData(prev => ({ 
-                          ...prev, 
-                          category_name: e.target.value,
+                          ...prev,
+                          product_type: e.target.value, // Store selected category here
+                          category_name: e.target.value, // Temporary, will be overwritten on submit
                           display_name: selectedCategory?.display_name || e.target.value
                         }));
                       }}
@@ -352,7 +359,7 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
                   <small>
                     {editingPreset 
                       ? 'Category cannot be changed after creation.'
-                      : 'Select from your available categories. Manage categories in the navbar.'}
+                      : 'Select from your available categories. This helps organize your presets.'}
                   </small>
                 </div>
 
@@ -795,7 +802,7 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
             <div key={preset.id} className="preset-card">
               <div className="preset-header">
                 <h3>{preset.display_name}</h3>
-                <span className="preset-category">{preset.category_name}</span>
+                <span className="preset-category">{preset.product_type || preset.category_name}</span>
               </div>
               
               {preset.description && (

@@ -55,6 +55,7 @@ export interface CategoryPreset {
   
   // Status
   is_active: boolean;
+  is_default?: boolean; // NEW: Marks the default preset for a category
   
   // New CSV-mapped fields (Shipping & Packaging)
   package_dimensions?: string;
@@ -149,6 +150,7 @@ export interface CategoryPresetInput {
   default_tags?: string[];
   typical_condition?: string;
   is_active?: boolean;
+  is_default?: boolean; // NEW: Marks the default preset for a category
   
   // New CSV-mapped fields
   package_dimensions?: string;

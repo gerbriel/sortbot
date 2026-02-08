@@ -1,5 +1,7 @@
 import { supabase } from './supabase';
 import type { Category, CategoryInput } from './categories';
+import { createCategoryPreset } from './categoryPresetsService';
+import type { CategoryPresetInput } from './categoryPresets';
 
 /**
  * Get all active categories for the current user
@@ -81,6 +83,36 @@ export async function createCategory(category: CategoryInput): Promise<Category>
   if (error) {
     console.error('Error creating category:', error);
     throw error;
+  }
+
+  // Auto-create default preset for this category
+  try {
+    const randomSuffix = Math.random().toString(36).substring(2, 8);
+    const defaultPreset: CategoryPresetInput = {
+      category_name: `${normalizedName}_default_${randomSuffix}`,
+      display_name: `${category.display_name} (Default)`,
+      description: `Default preset for ${category.display_name} category`,
+      product_type: normalizedName,
+      default_weight_unit: 'lb',
+      requires_shipping: true,
+      is_active: true,
+      is_default: true, // Mark as default
+      measurement_template: {
+        pitToPit: false,
+        length: false,
+        sleeve: false,
+        shoulder: false,
+        waist: false,
+        inseam: false,
+        rise: false,
+      },
+    };
+
+    await createCategoryPreset(defaultPreset);
+    console.log(`✅ Created default preset for category: ${category.display_name}`);
+  } catch (presetError) {
+    console.error('Error creating default preset:', presetError);
+    // Don't fail category creation if preset creation fails
   }
 
   return data;

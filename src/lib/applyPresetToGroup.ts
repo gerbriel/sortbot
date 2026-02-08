@@ -4,6 +4,7 @@ import { getCategoryPresets } from './categoryPresetsService';
 
 /**
  * Apply category preset data to a product group
+ * Automatically applies the DEFAULT preset for the category
  * Manual entries take precedence over preset values
  */
 export async function applyPresetToProductGroup(
@@ -14,10 +15,25 @@ export async function applyPresetToProductGroup(
     // Get all presets for the user
     const presets = await getCategoryPresets();
     
-    // Find matching preset for this category
-    const preset = presets.find(
-      p => p.category_name.toLowerCase() === categoryName.toLowerCase() && p.is_active
+    // Find the DEFAULT preset for this category (by product_type)
+    // Look for is_default=true first, fallback to any matching preset
+    let preset = presets.find(
+      p => p.product_type?.toLowerCase() === categoryName.toLowerCase() && p.is_default && p.is_active
     );
+    
+    // Fallback: if no default preset, try to find any active preset for this category
+    if (!preset) {
+      preset = presets.find(
+        p => p.product_type?.toLowerCase() === categoryName.toLowerCase() && p.is_active
+      );
+    }
+    
+    // Fallback: check old category_name field (backward compatibility)
+    if (!preset) {
+      preset = presets.find(
+        p => p.category_name.toLowerCase() === categoryName.toLowerCase() && p.is_active
+      );
+    }
     
     if (!preset) {
       console.log(`No active preset found for category: ${categoryName}`);
@@ -28,6 +44,7 @@ export async function applyPresetToProductGroup(
       }));
     }
     
+    console.log(`Applying ${preset.is_default ? 'DEFAULT' : ''} preset "${preset.display_name}" for category: ${categoryName}`);
     console.log(`Applying preset for category: ${categoryName}`, preset);
     
     /**

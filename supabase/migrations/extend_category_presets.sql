@@ -37,7 +37,8 @@ ALTER TABLE public.category_presets
 -- Status & Publishing
 ALTER TABLE public.category_presets 
   ADD COLUMN IF NOT EXISTS default_status TEXT DEFAULT 'Active' CHECK (default_status IN ('Active', 'Draft', 'Archived')),
-  ADD COLUMN IF NOT EXISTS default_published BOOLEAN DEFAULT TRUE;
+  ADD COLUMN IF NOT EXISTS default_published BOOLEAN DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT FALSE;
 
 -- Advanced Fields (rarely used but for completeness)
 ALTER TABLE public.category_presets 
@@ -66,6 +67,7 @@ COMMENT ON COLUMN public.category_presets.seo_description IS 'Default meta descr
 COMMENT ON COLUMN public.category_presets.mpn_prefix IS 'Manufacturer Part Number prefix';
 COMMENT ON COLUMN public.category_presets.default_status IS 'Default product status (Active/Draft/Archived)';
 COMMENT ON COLUMN public.category_presets.default_published IS 'Default published state';
+COMMENT ON COLUMN public.category_presets.is_default IS 'Marks the default preset for a category (one per category)';
 
 -- ============================================================================
 -- SUMMARY
@@ -84,13 +86,14 @@ BEGIN
   RAISE NOTICE '  • Inventory: sku_prefix, barcode_prefix, default_inventory_quantity';
   RAISE NOTICE '  • Measurements: default_measurements (JSONB)';
   RAISE NOTICE '  • SEO: seo_description, mpn_prefix';
-  RAISE NOTICE '  • Status: default_status, default_published';
+  RAISE NOTICE '  • Status: default_status, default_published, is_default';
   RAISE NOTICE '  • Advanced: tax_code, unit pricing fields (5 columns)';
   RAISE NOTICE '';
-  RAISE NOTICE '🎯 Total New Columns: 20';
-  RAISE NOTICE '📋 Total Preset Fields: 49 (29 existing + 20 new)';
+  RAISE NOTICE '🎯 Total New Columns: 21';
+  RAISE NOTICE '📋 Total Preset Fields: 50 (29 existing + 21 new)';
   RAISE NOTICE '';
   RAISE NOTICE '✅ Category presets now support ALL 62 CSV fields!';
+  RAISE NOTICE '✅ Added is_default flag for default presets per category!';
   RAISE NOTICE '';
   RAISE NOTICE '=================================================================';
   RAISE NOTICE '';
