@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
+import { Package, Image, Link2, Scissors, X, ArrowDown, Check } from 'lucide-react';
 import './ImageGrouper.css';
 
 interface ImageGrouperProps {
@@ -17,6 +18,126 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
   const [groupCounter, setGroupCounter] = useState(1);
   const [uploadedImages, setUploadedImages] = useState<Set<string>>(new Set());
+  
+  // Selection box state
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null);
+  const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [activeContainer, setActiveContainer] = useState<'singles' | 'groups' | null>(null);
+  const [selectionThresholdMet, setSelectionThresholdMet] = useState(false);
+  
+  // Refs for selection containers
+  const singlesContainerRef = useRef<HTMLDivElement>(null);
+  const groupsContainerRef = useRef<HTMLDivElement>(null);
+  const currentContainerRef = useRef<HTMLElement | null>(null);
+  
+  const SELECTION_THRESHOLD = 5; // pixels - must move this much to activate selection
+
+  // Global mouse handlers for selection
+  useEffect(() => {
+    if (!isSelecting) return;
+
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (!selectionStart || !currentContainerRef.current) return;
+      
+      const containerRef = currentContainerRef.current;
+      const rect = containerRef.getBoundingClientRect();
+      const currentX = e.clientX - rect.left + containerRef.scrollLeft;
+      const currentY = e.clientY - rect.top + containerRef.scrollTop;
+      
+      // Calculate distance moved
+      const distanceMoved = Math.sqrt(
+        Math.pow(currentX - selectionStart.x, 2) + 
+        Math.pow(currentY - selectionStart.y, 2)
+      );
+      
+      // Only show selection box if moved beyond threshold
+      if (distanceMoved < SELECTION_THRESHOLD) {
+        return; // Don't create selection box yet
+      }
+      
+      // Threshold met - activate selection
+      if (!selectionThresholdMet) {
+        setSelectionThresholdMet(true);
+      }
+      
+      // Calculate selection box - ensure positive dimensions
+      const x = Math.min(selectionStart.x, currentX);
+      const y = Math.min(selectionStart.y, currentY);
+      const width = Math.abs(currentX - selectionStart.x);
+      const height = Math.abs(currentY - selectionStart.y);
+      
+      setSelectionBox({ x, y, width, height });
+    };
+
+    const handleGlobalMouseUp = (e: MouseEvent) => {
+      // Only perform selection if threshold was met
+      if (!selectionBox || !currentContainerRef.current || !selectionThresholdMet) {
+        setIsSelecting(false);
+        setSelectionStart(null);
+        setSelectionBox(null);
+        setActiveContainer(null);
+        setSelectionThresholdMet(false);
+        currentContainerRef.current = null;
+        return;
+      }
+
+      const containerRef = currentContainerRef.current;
+      
+      // Get all item elements and check which ones intersect with selection box
+      const itemElements = containerRef.querySelectorAll('.single-item-card, .product-group-card');
+      const newSelected = new Set(e.shiftKey ? selectedItems : new Set<string>());
+      
+      itemElements.forEach((element) => {
+        const itemRect = element.getBoundingClientRect();
+        const containerRect = containerRef.getBoundingClientRect();
+        
+        const itemX = itemRect.left - containerRect.left + containerRef.scrollLeft;
+        const itemY = itemRect.top - containerRect.top + containerRef.scrollTop;
+        const itemWidth = itemRect.width;
+        const itemHeight = itemRect.height;
+        
+        // Check if selection box intersects with item
+        const intersects = !(
+          selectionBox.x + selectionBox.width < itemX ||
+          selectionBox.x > itemX + itemWidth ||
+          selectionBox.y + selectionBox.height < itemY ||
+          selectionBox.y > itemY + itemHeight
+        );
+        
+        if (intersects) {
+          // Check if it's a single item or a group
+          const itemId = element.getAttribute('data-item-id');
+          const groupId = element.getAttribute('data-group-id');
+          
+          if (itemId) {
+            // Single item - add just this item
+            newSelected.add(itemId);
+          } else if (groupId) {
+            // Product group - add all items in this group
+            const groupItems = groupedItems.filter(item => item.productGroup === groupId);
+            groupItems.forEach(item => newSelected.add(item.id));
+          }
+        }
+      });
+      
+      setSelectedItems(newSelected);
+      setIsSelecting(false);
+      setSelectionStart(null);
+      setSelectionBox(null);
+      setActiveContainer(null);
+      setSelectionThresholdMet(false);
+      currentContainerRef.current = null;
+    };
+
+    document.addEventListener('mousemove', handleGlobalMouseMove);
+    document.addEventListener('mouseup', handleGlobalMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleGlobalMouseMove);
+      document.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, [isSelecting, selectionStart, selectionBox, selectedItems, groupedItems]);
 
   // Initialize items with individual groups and auto-upload
   useEffect(() => {
@@ -50,14 +171,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
   const uploadImageImmediately = async (item: ClothingItem, userId: string) => {
     try {
       const fileExt = item.file.name.split('.').pop();
-      const fileName = `${item.id}_${Date.now()}.${fileExt}`;
+      const randomId = Math.random().toString(36).substring(2, 15);
+      const fileName = `${Date.now()}-${randomId}.${fileExt}`;
       const filePath = `${userId}/temp/${fileName}`;
 
       const { data, error } = await supabase.storage
         .from('product-images')
         .upload(filePath, item.file, {
           cacheControl: '3600',
-          upsert: false,
+          upsert: true, // Allow overwriting if exists
         });
 
       if (error) {
@@ -107,21 +229,68 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
     return groups;
   };
 
-  // Click-to-Select functionality
-  const toggleItemSelection = (itemId: string) => {
+  // Click-to-Select functionality (with Shift+Click for multi-select)
+  const toggleItemSelection = (itemId: string, e?: React.MouseEvent) => {
     const newSelected = new Set(selectedItems);
-    if (newSelected.has(itemId)) {
-      newSelected.delete(itemId);
+    
+    // If shift key is held, keep existing selection and add/remove this item
+    if (e?.shiftKey) {
+      if (newSelected.has(itemId)) {
+        newSelected.delete(itemId);
+      } else {
+        newSelected.add(itemId);
+      }
     } else {
-      newSelected.add(itemId);
+      // Normal click - toggle only this item
+      if (newSelected.has(itemId)) {
+        newSelected.delete(itemId);
+      } else {
+        newSelected.add(itemId);
+      }
     }
+    
     setSelectedItems(newSelected);
   };
 
-  // Create group from selected items
+  // Rectangle selection box handlers
+  const handleMouseDown = (e: React.MouseEvent, containerRef: HTMLElement | null, containerType: 'singles' | 'groups') => {
+    const target = e.target as HTMLElement;
+    
+    // Don't start selection if clicking on interactive elements OR on cards/images
+    if (target.closest('button') || 
+        target.closest('input') || 
+        target.closest('a') ||
+        target.closest('.single-item-card') ||
+        target.closest('.product-group-card') ||
+        target.closest('.group-image-item') ||
+        target.tagName === 'BUTTON' ||
+        target.tagName === 'INPUT' ||
+        target.tagName === 'A' ||
+        target.tagName === 'IMG') {
+      return;
+    }
+
+    if (!containerRef) return;
+    
+    const rect = containerRef.getBoundingClientRect();
+    const startX = e.clientX - rect.left + containerRef.scrollLeft;
+    const startY = e.clientY - rect.top + containerRef.scrollTop;
+    
+    currentContainerRef.current = containerRef;
+    setIsSelecting(true);
+    setSelectionStart({ x: startX, y: startY });
+    setActiveContainer(containerType);
+    
+    // Clear selection if not holding shift
+    if (!e.shiftKey) {
+      setSelectedItems(new Set());
+    }
+  };
+
+  // Create group from selected items (allow single items too)
   const createGroupFromSelected = () => {
-    if (selectedItems.size < 2) {
-      alert('Please select at least 2 items to group together');
+    if (selectedItems.size < 1) {
+      alert('Please select at least 1 item to group');
       return;
     }
 
@@ -170,14 +339,24 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
 
   const handleDragOver = (e: React.DragEvent, targetGroup: string) => {
     e.preventDefault();
+    e.stopPropagation();
     setDragOverGroup(targetGroup);
   };
 
   const handleDrop = (e: React.DragEvent, targetGroup: string) => {
     e.preventDefault();
+    e.stopPropagation();
     
-    if (!draggedItem || draggedFromGroup === targetGroup) {
+    if (!draggedItem) {
       setDragOverGroup(null);
+      return;
+    }
+
+    // Don't do anything if dropping on the same group
+    if (draggedFromGroup === targetGroup) {
+      setDragOverGroup(null);
+      setDraggedItem(null);
+      setDraggedFromGroup(null);
       return;
     }
 
@@ -199,6 +378,14 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
     setDraggedItem(null);
     setDraggedFromGroup(null);
     setDragOverGroup(null);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    // Only clear drag over if we're leaving the container, not just moving between children
+    if (e.currentTarget === e.target) {
+      setDragOverGroup(null);
+    }
   };
 
   // Delete image handler
@@ -223,6 +410,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
 
   const groups = getGroups();
   const groupEntries = Object.entries(groups);
+  
   const multiItemGroups = groupEntries.filter(([_, items]) => items.length > 1);
   const singleItems = groupEntries.filter(([_, items]) => items.length === 1).flatMap(([_, items]) => items);
 
@@ -230,11 +418,19 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
     <div className="image-grouper-container">
       <div className="grouper-header">
         <div className="stats">
-          <span>📦 {multiItemGroups.length} Product Groups</span>
-          <span>📄 {singleItems.length} Single Items</span>
-          <span>🖼️ {groupedItems.length} Total Images</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Package size={20} /> {multiItemGroups.length} Product Groups
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Image size={20} /> {singleItems.length} Single Items
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Image size={20} /> {groupedItems.length} Total Images
+          </span>
           {selectedItems.size > 0 && (
-            <span style={{ background: '#10b981' }}>✓ {selectedItems.size} Selected</span>
+            <span style={{ background: '#10b981', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Check size={16} /> {selectedItems.size} Selected
+            </span>
           )}
         </div>
       </div>
@@ -244,55 +440,140 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
         <button 
           className="button button-primary" 
           onClick={createGroupFromSelected}
-          disabled={selectedItems.size < 2}
+          disabled={selectedItems.size < 1}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
         >
-          🔗 Group Selected ({selectedItems.size})
+          <Link2 size={16} /> Group Selected ({selectedItems.size})
         </button>
         <button 
           className="button button-secondary" 
           onClick={ungroupSelected}
           disabled={selectedItems.size === 0}
+          title="Remove selected images from their groups"
+          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
         >
-          ✂️ Ungroup Selected
+          <Scissors size={16} /> Ungroup Selected
         </button>
         <button 
           className="button button-secondary" 
           onClick={() => setSelectedItems(new Set())}
           disabled={selectedItems.size === 0}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
         >
-          ❌ Clear Selection
+          <X size={16} /> Clear Selection
         </button>
       </div>
 
-      {singleItems.length > 0 && (
-        <div className="singles-section">
-          <h3>� Individual Items ({singleItems.length})</h3>
-          <div className="items-grid">
+      {/* Individual Items Section - Always Visible Drop Zone */}
+      <div 
+        className="singles-section"
+        onMouseDown={(e) => {
+          // Allow selection to start from section wrapper area (margins, padding, etc)
+          const target = e.target as HTMLElement;
+          // Don't interfere with buttons, but handle empty areas
+          if (!target.closest('button') && 
+              !target.closest('.delete-image-btn') &&
+              !target.closest('.drop-zone-placeholder') &&
+              !target.closest('.items-grid')) {
+            handleMouseDown(e, singlesContainerRef.current, 'singles');
+          }
+        }}
+      >
+        <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <Image size={20} /> Individual Items ({singleItems.length})
+        </h3>
+        
+        {/* Drop Zone - Always visible */}
+        <div 
+          className={`drop-zone-placeholder ${dragOverGroup === 'individuals' ? 'drag-over' : ''}`}
+          onDragOver={(e) => handleDragOver(e, 'individuals')}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            if (!draggedItem) return;
+            
+            // Make the item individual by giving it its own productGroup (its ID)
+            const updated = groupedItems.map(item =>
+              item.id === draggedItem.id
+                ? { ...item, productGroup: item.id }
+                : item
+            );
+            
+            setGroupedItems(updated);
+            onGrouped(updated);
+            setDraggedItem(null);
+            setDraggedFromGroup(null);
+            setDragOverGroup(null);
+          }}
+          onDragLeave={handleDragLeave}
+        >
+          <div className="drop-zone-content">
+            <ArrowDown size={24} className="drop-zone-icon" />
+            <p>Drag photos here to make them individual items</p>
+          </div>
+        </div>
+
+        {/* Items Grid */}
+        {singleItems.length > 0 && (
+          <div 
+            ref={singlesContainerRef}
+            className="items-grid selection-container"
+            onMouseDown={(e) => handleMouseDown(e, singlesContainerRef.current, 'singles')}
+          >
+            {/* Selection Box Visualization */}
+            {isSelecting && selectionBox && activeContainer === 'singles' && selectionThresholdMet && (
+              <div
+                className="selection-box"
+                style={{
+                  position: 'absolute',
+                  left: `${selectionBox.x}px`,
+                  top: `${selectionBox.y}px`,
+                  width: `${selectionBox.width}px`,
+                  height: `${selectionBox.height}px`,
+                  pointerEvents: 'none'
+                }}
+              />
+            )}
+            
             {singleItems.map((item) => {
               const itemGroupId = item.productGroup || item.id;
               return (
                 <div
                   key={item.id}
+                  data-item-id={item.id}
                   className={`single-item-card ${dragOverGroup === itemGroupId ? 'drag-over' : ''} ${item.category ? 'has-category' : ''}`}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, item, itemGroupId)}
+                  draggable={!selectionThresholdMet}
+                  onDragStart={(e) => {
+                    // If selection threshold is met, don't allow dragging
+                    if (selectionThresholdMet) {
+                      e.preventDefault();
+                      return;
+                    }
+                    handleDragStart(e, item, itemGroupId);
+                  }}
                   onDragEnd={handleDragEnd}
                   onDragOver={(e) => handleDragOver(e, itemGroupId)}
                   onDrop={(e) => handleDrop(e, itemGroupId)}
+                  onDragLeave={handleDragLeave}
                   onClick={(e) => {
                     if (!(e.target as HTMLElement).closest('.delete-image-btn')) {
-                      toggleItemSelection(item.id);
+                      toggleItemSelection(item.id, e);
                     }
                   }}
                 >
                   {item.category && (
                     <div className="category-indicator-small">
-                      <span className="category-check">✓</span>
+                      <Check size={12} className="category-check" />
                     </div>
                   )}
-                  <img src={item.preview} alt="Product" />
+                  <img 
+                    src={item.preview} 
+                    alt="Product" 
+                    draggable={false}
+                  />
                   {selectedItems.has(item.id) && (
-                    <div className="selection-indicator">✓</div>
+                    <div className="selection-indicator"><Check size={20} /></div>
                   )}
                   <button
                     className="delete-image-btn"
@@ -313,28 +594,58 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
               );
             })}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Product Groups */}
       {multiItemGroups.length > 0 && (
-        <div className="groups-section">
-          <h3>📦 Product Groups ({multiItemGroups.length})</h3>
-          <div className="groups-grid">
+        <div 
+          className="groups-section"
+          onMouseDown={(e) => {
+            // Allow selection to start from section wrapper area (margins, padding, etc)
+            const target = e.target as HTMLElement;
+            // Don't interfere with buttons, but handle empty areas
+            if (!target.closest('button') &&
+                !target.closest('.groups-grid')) {
+              handleMouseDown(e, groupsContainerRef.current, 'groups');
+            }
+          }}
+        >
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Package size={20} /> Product Groups ({multiItemGroups.length})
+          </h3>
+          <div 
+            ref={groupsContainerRef}
+            className="groups-grid selection-container"
+            onMouseDown={(e) => handleMouseDown(e, groupsContainerRef.current, 'groups')}
+          >
+            {/* Selection Box Visualization */}
+            {isSelecting && selectionBox && activeContainer === 'groups' && selectionThresholdMet && (
+              <div
+                className="selection-box"
+                style={{
+                  position: 'absolute',
+                  left: `${selectionBox.x}px`,
+                  top: `${selectionBox.y}px`,
+                  width: `${selectionBox.width}px`,
+                  height: `${selectionBox.height}px`,
+                  pointerEvents: 'none'
+                }}
+              />
+            )}
+            
             {multiItemGroups.map(([groupId, items]) => (
               <div
                 key={groupId}
+                data-group-id={groupId}
                 className={`product-group-card ${dragOverGroup === groupId ? 'drag-over' : ''} ${items[0].category ? 'has-category' : ''}`}
-                draggable
-                onDragStart={(e) => handleDragStart(e, items[0], groupId)}
-                onDragEnd={handleDragEnd}
                 onDragOver={(e) => handleDragOver(e, groupId)}
                 onDrop={(e) => handleDrop(e, groupId)}
-                onDragLeave={handleDragEnd}
+                onDragLeave={handleDragLeave}
               >
                 {items[0].category && (
                   <div className="category-indicator">
-                    <span className="category-check">✓</span>
+                    <Check size={14} className="category-check" />
                     <span className="category-label">{items[0].category}</span>
                   </div>
                 )}
@@ -356,13 +667,17 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
                       onDragEnd={handleDragEnd}
                       onClick={(e) => {
                         if (!(e.target as HTMLElement).closest('.delete-image-btn')) {
-                          toggleItemSelection(item.id);
+                          toggleItemSelection(item.id, e);
                         }
                       }}
                     >
-                      <img src={item.preview} alt="Product" />
+                      <img 
+                        src={item.preview} 
+                        alt="Product" 
+                        draggable={false}
+                      />
                       {selectedItems.has(item.id) && (
-                        <div className="selection-indicator">✓</div>
+                        <div className="selection-indicator"><Check size={20} /></div>
                       )}
                       <button
                         className="delete-image-btn"

@@ -48,11 +48,17 @@
 }
 
 .category-zone.drag-over {
-  border-color: #10b981;
-  background: #d1fae5;
+  border-color: var(--category-color, #10b981);
+  background: rgba(16, 185, 129, 0.1);
   border-style: solid;
   transform: scale(1.05);
   box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+}
+
+.category-zone:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-color: var(--category-color, #667eea);
 }
 
 .category-icon {
