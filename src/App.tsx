@@ -11,9 +11,11 @@ import GoogleSheetExporter from './components/GoogleSheetExporter';
 import { Library } from './components/Library';
 import CategoryPresetsManager from './components/CategoryPresetsManager';
 import CategoriesManager from './components/CategoriesManager';
+import RemoteCursors from './components/RemoteCursors';
 import { saveBatchToDatabase } from './lib/productService';
 import { autoSaveWorkflowBatch, type WorkflowBatch } from './lib/workflowBatchService';
 import type { BrandCategory } from './lib/brandCategorySystem';
+import { useUserPresence } from './hooks/useUserPresence';
 import './App.css';
 
 export interface ClothingItem {
@@ -135,6 +137,23 @@ function App() {
   const [currentBatchId, setCurrentBatchId] = useState<string | null>(null);
   const [currentBatchNumber, setCurrentBatchNumber] = useState<string>(`batch-${Date.now()}`);
 
+  // Helper to determine current workflow step
+  const getCurrentStep = (): number => {
+    if (processedItems.length > 0) return 5; // Step 5: Review/Export
+    if (groupedImages.length > 0) return 4; // Step 4: Generate descriptions
+    if (sortedImages.length > 0) return 3; // Step 3: Categorize
+    if (uploadedImages.length > 0) return 2; // Step 2: Group images
+    return 1; // Step 1: Upload
+  };
+
+  // Real-time presence tracking for collaborative viewing
+  const { otherUsers, broadcastAction } = useUserPresence({
+    currentStep: getCurrentStep(),
+    currentView: showLibrary ? 'library' : showCategoryPresets ? 'presets' : showCategoriesManager ? 'categories' : 'workflow',
+    userId: user?.id || '',
+    enabled: !!user,
+  });
+
   // Check authentication status on mount
   useEffect(() => {
     // Get initial session
@@ -180,6 +199,9 @@ function App() {
           type: 'success',
           text: `✅ Saved ${result.success} product(s)${result.failed > 0 ? `, ${result.failed} failed` : ''}!`,
         });
+        
+        // Broadcast action for real-time collaboration
+        broadcastAction(`Saved ${result.success} products to library`);
         
         // Clear the batch after successful save
         setTimeout(() => {
@@ -246,6 +268,9 @@ function App() {
       sortedImages,
       processedItems,
     });
+
+    // Broadcast action for real-time collaboration
+    broadcastAction(`Uploaded ${items.length} images`);
   };
 
   const handleImagesSorted = (items: ClothingItem[]) => {
@@ -260,6 +285,9 @@ function App() {
       sortedImages: items,
       processedItems,
     });
+
+    // Broadcast action for real-time collaboration
+    broadcastAction(`Categorized ${items.length} items`);
   };
 
   const handleImagesGrouped = async (items: ClothingItem[]) => {
@@ -288,6 +316,10 @@ function App() {
       sortedImages,
       processedItems,
     });
+
+    // Broadcast action for real-time collaboration
+    const groupCount = new Set(items.filter(i => i.productGroup).map(i => i.productGroup)).size;
+    broadcastAction(`Created ${groupCount} product groups`);
 
     // Auto-save product groups to database
     if (!user) return;
@@ -335,6 +367,9 @@ function App() {
       sortedImages,
       processedItems: items,
     });
+
+    // Broadcast action for real-time collaboration
+    broadcastAction(`Generated descriptions for ${items.length} items`);
   };
 
   // Auto-save workflow state to batch
@@ -404,6 +439,9 @@ function App() {
 
   return (
     <div className="app-container">
+      {/* Real-time collaboration: Show cursors and activity of other users */}
+      <RemoteCursors users={otherUsers} />
+      
       <header className="app-header">
         <div className="header-content">
           <div>
