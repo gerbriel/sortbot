@@ -38,13 +38,13 @@ export const SavedProducts: React.FC<SavedProductsProps> = ({ userId, onClose })
 
   const loadProducts = async () => {
     setLoading(true);
-    const data = await fetchUserProducts(userId);
+    const data = await fetchUserProducts();
     setProducts(data as ProductWithImages[]);
     setLoading(false);
   };
 
   const handleDelete = async (productId: string) => {
-    const success = await deleteProduct(productId, userId);
+    const success = await deleteProduct(productId);
     if (success) {
       setProducts(products.filter(p => p.id !== productId));
       setDeleteConfirm(null);
