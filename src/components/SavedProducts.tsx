@@ -218,99 +218,147 @@ export const SavedProducts: React.FC<SavedProductsProps> = ({ userId, onClose })
             ))}
           </div>
             ) : (
-              /* Batch View */
-              <div className="batches-container">
-                {batchEntries.map(([batchId, batchProducts]) => (
-                  <div key={batchId} className="batch-group">
-                    <div className="batch-header">
-                      <h3>
-                        📁 Batch {batchId === 'unbatched' ? 'Uploaded Individually' : `from ${formatDate(batchProducts[0].created_at)}`}
-                      </h3>
-                      <span className="batch-count">{batchProducts.length} product group{batchProducts.length > 1 ? 's' : ''}</span>
-                    </div>
-                    <div className="products-grid">
-                      {batchProducts.map((product) => (
-                        <div key={product.id} className="product-card">
-                          {getMainImage(product) && (
-                            <div className="product-image">
-                              <img src={getMainImage(product)} alt={product.title} />
-                              {product.product_images.length > 1 && (
-                                <div className="image-count">
-                                  +{product.product_images.length - 1}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          
-                          <div className="product-info">
-                            <h3>{product.title}</h3>
-                            
-                            <div className="product-meta">
-                              {product.size && <span className="meta-tag">{product.size}</span>}
-                              {product.color && <span className="meta-tag">{product.color}</span>}
-                              {product.condition && <span className="meta-tag">{product.condition}</span>}
-                            </div>
-
-                            <p className="product-description">
-                              {product.description?.slice(0, 100)}
-                              {product.description?.length > 100 && '...'}
-                            </p>
-
-                            <div className="product-footer">
-                              <div className="product-price">
-                                {product.price ? `$${product.price.toFixed(2)}` : 'No price'}
-                              </div>
-                              <div className="product-status">
-                                <span className={`status-badge ${product.status.toLowerCase()}`}>
-                                  {product.status}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="product-date">
-                              Saved {formatDate(product.created_at)}
-                            </div>
-
-                            <div className="product-actions">
-                              <a
-                                href={getMainImage(product)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="action-button view-button"
-                              >
-                                View Images
-                              </a>
-                              
-                              {deleteConfirm === product.id ? (
-                                <div className="delete-confirm">
-                                  <button
-                                    className="action-button confirm-button"
-                                    onClick={() => handleDelete(product.id)}
-                                  >
-                                    Confirm Delete
-                                  </button>
-                                  <button
-                                    className="action-button cancel-button"
-                                    onClick={() => setDeleteConfirm(null)}
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  className="action-button delete-button"
-                                  onClick={() => setDeleteConfirm(product.id)}
-                                >
-                                  Delete
-                                </button>
-                              )}
-                            </div>
-                          </div>
+              /* Batch View - Table/Line Items */
+              <div className="batches-table-container">
+                {batchEntries.map(([batchId, batchProducts]) => {
+                  const batchTotal = batchProducts.reduce((sum, p) => sum + (p.price || 0), 0);
+                  const batchItemCount = batchProducts.reduce((sum, p) => sum + p.product_images.length, 0);
+                  
+                  return (
+                    <div key={batchId} className="batch-table-section">
+                      <div className="batch-table-header">
+                        <div className="batch-info">
+                          <h3>
+                            📁 Batch {batchId === 'unbatched' ? '(Individual Upload)' : `#${batchId}`}
+                          </h3>
+                          <span className="batch-date">
+                            {formatDate(batchProducts[0].created_at)}
+                          </span>
                         </div>
-                      ))}
+                        <div className="batch-stats">
+                          <span className="stat">
+                            <strong>{batchProducts.length}</strong> product groups
+                          </span>
+                          <span className="stat">
+                            <strong>{batchItemCount}</strong> line items
+                          </span>
+                          <span className="stat">
+                            <strong>${batchTotal.toFixed(2)}</strong> total value
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="batch-table-wrapper">
+                        <table className="batch-line-items-table">
+                          <thead>
+                            <tr>
+                              <th className="col-image">Image</th>
+                              <th className="col-title">Title</th>
+                              <th className="col-size">Size</th>
+                              <th className="col-color">Color</th>
+                              <th className="col-condition">Condition</th>
+                              <th className="col-price">Price</th>
+                              <th className="col-status">Status</th>
+                              <th className="col-images">Images</th>
+                              <th className="col-actions">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {batchProducts.map((product, index) => (
+                              <tr key={product.id} className="line-item-row">
+                                <td className="col-image">
+                                  {getMainImage(product) && (
+                                    <div className="table-product-image">
+                                      <img src={getMainImage(product)} alt={product.title} />
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="col-title">
+                                  <div className="title-cell">
+                                    <span className="row-number">{index + 1}.</span>
+                                    <span className="title-text">{product.title}</span>
+                                  </div>
+                                </td>
+                                <td className="col-size">
+                                  {product.size || '—'}
+                                </td>
+                                <td className="col-color">
+                                  {product.color || '—'}
+                                </td>
+                                <td className="col-condition">
+                                  <span className={`condition-badge ${product.condition?.toLowerCase()}`}>
+                                    {product.condition || '—'}
+                                  </span>
+                                </td>
+                                <td className="col-price">
+                                  {product.price ? `$${product.price.toFixed(2)}` : '—'}
+                                </td>
+                                <td className="col-status">
+                                  <span className={`status-badge ${product.status.toLowerCase()}`}>
+                                    {product.status}
+                                  </span>
+                                </td>
+                                <td className="col-images">
+                                  <span className="image-count-badge">
+                                    {product.product_images.length}
+                                  </span>
+                                </td>
+                                <td className="col-actions">
+                                  <div className="table-actions">
+                                    <a
+                                      href={getMainImage(product)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="table-action-button view-btn"
+                                      title="View Images"
+                                    >
+                                      👁️
+                                    </a>
+                                    {deleteConfirm === product.id ? (
+                                      <>
+                                        <button
+                                          className="table-action-button confirm-btn"
+                                          onClick={() => handleDelete(product.id)}
+                                          title="Confirm Delete"
+                                        >
+                                          ✓
+                                        </button>
+                                        <button
+                                          className="table-action-button cancel-btn"
+                                          onClick={() => setDeleteConfirm(null)}
+                                          title="Cancel"
+                                        >
+                                          ✕
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <button
+                                        className="table-action-button delete-btn"
+                                        onClick={() => setDeleteConfirm(product.id)}
+                                        title="Delete"
+                                      >
+                                        🗑️
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="batch-total-row">
+                              <td colSpan={5}></td>
+                              <td className="total-price">
+                                <strong>${batchTotal.toFixed(2)}</strong>
+                              </td>
+                              <td colSpan={3}></td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>

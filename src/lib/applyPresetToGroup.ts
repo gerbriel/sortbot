@@ -21,7 +21,11 @@ export async function applyPresetToProductGroup(
     
     if (!preset) {
       console.log(`No active preset found for category: ${categoryName}`);
-      return items;
+      // Still apply category even if no preset exists
+      return items.map(item => ({
+        ...item,
+        category: categoryName
+      }));
     }
     
     console.log(`Applying preset for category: ${categoryName}`, preset);
@@ -29,6 +33,9 @@ export async function applyPresetToProductGroup(
     // Apply preset values to items, but don't override existing manual entries
     return items.map(item => ({
       ...item,
+      // IMPORTANT: Set the category field
+      category: categoryName,
+      
       // Price: use manual entry if exists, otherwise use preset suggestion
       price: item.price || (preset.suggested_price_min ? preset.suggested_price_min : undefined),
       
