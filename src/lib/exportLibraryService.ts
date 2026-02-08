@@ -225,9 +225,7 @@ export const markBatchExported = async (
 /**
  * Fetch all export batches (collaborative - all users see all batches)
  */
-export const fetchUserExportBatches = async (
-  userId: string
-): Promise<ExportBatch[]> => {
+export const fetchUserExportBatches = async (): Promise<ExportBatch[]> => {
   try {
     const { data, error } = await supabase
       .from('export_batches')
@@ -366,7 +364,6 @@ export const deleteExportBatch = async (batchId: string): Promise<boolean> => {
  * Search export batches by tags (collaborative - all users see all batches)
  */
 export const searchExportBatchesByTags = async (
-  userId: string,
   tags: string[]
 ): Promise<ExportBatch[]> => {
   try {
@@ -389,11 +386,9 @@ export const searchExportBatchesByTags = async (
 };
 
 /**
- * Get export statistics for a user
+ * Get export statistics (collaborative - all exports)
  */
-export const fetchUserExportStats = async (
-  userId: string
-): Promise<{
+export const fetchUserExportStats = async (): Promise<{
   totalExports: number;
   totalProductsExported: number;
   totalValueExported: number;

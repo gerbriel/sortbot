@@ -282,7 +282,7 @@ export const fetchUserProducts = async () => {
 /**
  * Delete product and its images
  */
-export const deleteProduct = async (productId: string, userId: string): Promise<boolean> => {
+export const deleteProduct = async (productId: string): Promise<boolean> => {
   try {
     // 1. Get all image paths for this product
     const { data: images } = await supabase
@@ -326,7 +326,6 @@ export const deleteProduct = async (productId: string, userId: string): Promise<
  */
 export const updateProduct = async (
   productId: string,
-  userId: string,
   updates: Partial<ClothingItem>
 ): Promise<boolean> => {
   try {
