@@ -166,6 +166,36 @@ export interface CategoryPresetInput {
   listing_type?: string;
   discounted_shipping?: string;
   custom_label_0?: string;
+  
+  // === Phase 6: Comprehensive Fields (for create/update) ===
+  compare_at_price?: number;
+  cost_per_item?: number;
+  color?: string;
+  secondary_color?: string;
+  model_name?: string;
+  model_number?: string;
+  era?: string;
+  sku_prefix?: string;
+  barcode_prefix?: string;
+  default_inventory_quantity?: number;
+  default_measurements?: {
+    pitToPit?: string;
+    length?: string;
+    sleeve?: string;
+    shoulder?: string;
+    waist?: string;
+    inseam?: string;
+    rise?: string;
+  };
+  seo_description?: string;
+  mpn_prefix?: string;
+  default_status?: 'Active' | 'Draft' | 'Archived';
+  default_published?: boolean;
+  tax_code?: string;
+  unit_price_total_measure?: string;
+  unit_price_total_measure_unit?: string;
+  unit_price_base_measure?: string;
+  unit_price_base_measure_unit?: string;
 }
 
 // Default measurement templates for common categories
