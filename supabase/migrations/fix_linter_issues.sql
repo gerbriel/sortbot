@@ -257,8 +257,8 @@ ORDER BY tablename, policyname;
 -- List all indexes with usage stats
 SELECT
   schemaname,
-  tablename,
-  indexname,
+  relname AS tablename,
+  indexrelname AS indexname,
   idx_scan AS times_used,
   CASE 
     WHEN idx_scan = 0 THEN 'ℹ️  Not yet used (new index)'
@@ -267,8 +267,8 @@ SELECT
   END AS status
 FROM pg_stat_user_indexes
 WHERE schemaname = 'public'
-  AND tablename IN ('products', 'product_images', 'category_presets', 'categories')
-ORDER BY tablename, indexname;
+  AND relname IN ('products', 'product_images', 'category_presets', 'categories')
+ORDER BY relname, indexrelname;
 
 -- ============================================================================
 -- SUMMARY
