@@ -36,27 +36,50 @@ export default function LiveWorkspaceSelector({
 
   const fetchActiveUsers = async () => {
     try {
-      // Get all users who have created products or batches
-      const { data: userActivity, error } = await supabase
-        .from('products')
-        .select('user_id, created_at, updated_at')
-        .order('updated_at', { ascending: false });
-
-      if (error) throw error;
-
-      // Group by user_id and get their latest activity
+      console.log('🔍 Fetching active users...');
+      
+      // Get all users who have created products, workflow batches, or images
       const userMap = new Map<string, { lastActive: Date }>();
       
-      userActivity?.forEach(item => {
-        const existing = userMap.get(item.user_id);
-        const itemDate = new Date(item.updated_at || item.created_at);
-        
-        if (!existing || itemDate > existing.lastActive) {
-          userMap.set(item.user_id, { lastActive: itemDate });
-        }
-      });
+      // Check products table
+      const { data: products, error: productsError } = await supabase
+        .from('products')
+        .select('user_id, created_at, updated_at')
+        .order('updated_at', { ascending: false })
+        .limit(100);
 
-      // Get user emails from auth (if possible) or use IDs
+      if (!productsError && products) {
+        products.forEach(item => {
+          const existing = userMap.get(item.user_id);
+          const itemDate = new Date(item.updated_at || item.created_at);
+          
+          if (!existing || itemDate > existing.lastActive) {
+            userMap.set(item.user_id, { lastActive: itemDate });
+          }
+        });
+      }
+
+      // Check workflow_batches table
+      const { data: batches, error: batchesError } = await supabase
+        .from('workflow_batches')
+        .select('user_id, created_at, updated_at')
+        .order('updated_at', { ascending: false })
+        .limit(100);
+
+      if (!batchesError && batches) {
+        batches.forEach(item => {
+          const existing = userMap.get(item.user_id);
+          const itemDate = new Date(item.updated_at || item.created_at);
+          
+          if (!existing || itemDate > existing.lastActive) {
+            userMap.set(item.user_id, { lastActive: itemDate });
+          }
+        });
+      }
+
+      console.log(`📊 Found ${userMap.size} unique users with activity`);
+
+      // Build user list
       const usersList: WorkspaceUser[] = Array.from(userMap.entries()).map(([userId, data]) => {
         const isActive = (Date.now() - data.lastActive.getTime()) < 5 * 60 * 1000; // Active in last 5 minutes
         
@@ -68,6 +91,17 @@ export default function LiveWorkspaceSelector({
         };
       });
 
+      // Always include current user even if no activity yet
+      if (!usersList.find(u => u.id === currentUserId)) {
+        console.log('👤 Adding current user to list');
+        usersList.push({
+          id: currentUserId,
+          email: 'You',
+          isActive: true,
+          lastActive: new Date(),
+        });
+      }
+
       // Sort: current user first, then by last active
       usersList.sort((a, b) => {
         if (a.id === currentUserId) return -1;
@@ -75,6 +109,11 @@ export default function LiveWorkspaceSelector({
         return b.lastActive.getTime() - a.lastActive.getTime();
       });
 
+      console.log(`✅ Active users:`, usersList.map(u => ({ 
+        id: u.id.slice(0, 8), 
+        email: u.email, 
+        isActive: u.isActive 
+      })));
       setUsers(usersList);
     } catch (error) {
       console.error('Error fetching active users:', error);
@@ -160,11 +199,13 @@ export default function LiveWorkspaceSelector({
               </div>
             ))}
 
-            {users.length === 0 && (
+            {users.length === 1 && users[0].id === currentUserId && (
               <div className="workspace-option disabled">
                 <span className="option-icon">ℹ️</span>
                 <div className="option-content">
-                  <div className="option-description">No other users found</div>
+                  <div className="option-description">
+                    No other users have activity yet. When others use the app, they'll appear here!
+                  </div>
                 </div>
               </div>
             )}
