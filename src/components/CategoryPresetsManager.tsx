@@ -235,7 +235,21 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
         await updateCategoryPreset(editingPreset.id, formData);
         alert('Category preset updated successfully');
       } else {
-        await createCategoryPreset(formData as CategoryPresetInput);
+        // For new presets, generate unique internal category_name
+        // Use display_name + random suffix to ensure uniqueness
+        const randomSuffix = Math.random().toString(36).substring(2, 8);
+        const uniqueCategoryName = (formData.display_name || formData.category_name || 'preset')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '_')
+          .replace(/^_+|_+$/g, '')
+          .substring(0, 40) + '_' + randomSuffix;
+        
+        const dataToCreate = {
+          ...formData,
+          category_name: uniqueCategoryName,
+        } as CategoryPresetInput;
+        
+        await createCategoryPreset(dataToCreate);
         alert('Category preset created successfully');
       }
       
