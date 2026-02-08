@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import './LiveWorkspaceSelector.css';
 
 export interface WorkspaceUser {
@@ -9,11 +10,21 @@ export interface WorkspaceUser {
   lastActive: Date;
   currentBatch?: string;
   currentView?: string;
+  currentStep?: number;
 }
 
 interface LiveWorkspaceSelectorProps {
   onWorkspaceChange: (userId: string | null) => void;
   currentUserId: string;
+}
+
+interface PresenceState {
+  userId: string;
+  email: string;
+  currentStep: number;
+  currentView: string;
+  lastAction?: string;
+  timestamp: number;
 }
 
 export default function LiveWorkspaceSelector({ 
@@ -24,101 +35,72 @@ export default function LiveWorkspaceSelector({
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
-  // Fetch all users and their activity status
+  // Subscribe to presence channel for real-time active users
   useEffect(() => {
-    fetchActiveUsers();
+    console.log('🔌 LiveWorkspaceSelector: Subscribing to presence channel');
     
-    // Refresh every 10 seconds to update active status
-    const interval = setInterval(fetchActiveUsers, 10000);
-    
-    return () => clearInterval(interval);
-  }, []);
+    let channel: RealtimeChannel | null = null;
 
-  const fetchActiveUsers = async () => {
-    try {
-      console.log('🔍 Fetching active users...');
-      
-      // Get all users who have created products, workflow batches, or images
-      const userMap = new Map<string, { lastActive: Date }>();
-      
-      // Check products table
-      const { data: products, error: productsError } = await supabase
-        .from('products')
-        .select('user_id, created_at, updated_at')
-        .order('updated_at', { ascending: false })
-        .limit(100);
+    const setupPresence = async () => {
+      // Get current user's email
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-      if (!productsError && products) {
-        products.forEach(item => {
-          const existing = userMap.get(item.user_id);
-          const itemDate = new Date(item.updated_at || item.created_at);
+      // Subscribe to the same presence channel
+      channel = supabase.channel('workspace-presence');
+
+      channel
+        .on('presence', { event: 'sync' }, () => {
+          const state = channel!.presenceState();
+          console.log('👥 Presence sync in selector:', state);
+
+          // Convert presence state to users list
+          const usersList: WorkspaceUser[] = [];
           
-          if (!existing || itemDate > existing.lastActive) {
-            userMap.set(item.user_id, { lastActive: itemDate });
-          }
-        });
+          Object.keys(state).forEach((presenceKey) => {
+            const presences = state[presenceKey] as Array<{ presence_ref: string } & PresenceState>;
+            presences.forEach((presence) => {
+              // Only add if it has userId (valid presence data)
+              if (presence.userId) {
+                usersList.push({
+                  id: presence.userId,
+                  email: presence.email || 'Unknown User',
+                  isActive: true,
+                  lastActive: new Date(presence.timestamp || Date.now()),
+                  currentStep: presence.currentStep,
+                  currentView: presence.currentView,
+                });
+              }
+            });
+          });
+
+          // Sort: current user first, then alphabetically
+          usersList.sort((a, b) => {
+            if (a.id === currentUserId) return -1;
+            if (b.id === currentUserId) return 1;
+            return a.email.localeCompare(b.email);
+          });
+
+          console.log(`✅ Live users from presence:`, usersList.map(u => ({ 
+            email: u.email, 
+            step: u.currentStep,
+            view: u.currentView
+          })));
+
+          setUsers(usersList);
+        })
+        .subscribe();
+    };
+
+    setupPresence();
+
+    return () => {
+      console.log('🔌 LiveWorkspaceSelector: Unsubscribing from presence');
+      if (channel) {
+        supabase.removeChannel(channel);
       }
-
-      // Check workflow_batches table
-      const { data: batches, error: batchesError } = await supabase
-        .from('workflow_batches')
-        .select('user_id, created_at, updated_at')
-        .order('updated_at', { ascending: false })
-        .limit(100);
-
-      if (!batchesError && batches) {
-        batches.forEach(item => {
-          const existing = userMap.get(item.user_id);
-          const itemDate = new Date(item.updated_at || item.created_at);
-          
-          if (!existing || itemDate > existing.lastActive) {
-            userMap.set(item.user_id, { lastActive: itemDate });
-          }
-        });
-      }
-
-      console.log(`📊 Found ${userMap.size} unique users with activity`);
-
-      // Build user list
-      const usersList: WorkspaceUser[] = Array.from(userMap.entries()).map(([userId, data]) => {
-        const isActive = (Date.now() - data.lastActive.getTime()) < 5 * 60 * 1000; // Active in last 5 minutes
-        
-        return {
-          id: userId,
-          email: userId === currentUserId ? 'You' : `User ${userId.slice(0, 8)}`,
-          isActive,
-          lastActive: data.lastActive,
-        };
-      });
-
-      // Always include current user even if no activity yet
-      if (!usersList.find(u => u.id === currentUserId)) {
-        console.log('👤 Adding current user to list');
-        usersList.push({
-          id: currentUserId,
-          email: 'You',
-          isActive: true,
-          lastActive: new Date(),
-        });
-      }
-
-      // Sort: current user first, then by last active
-      usersList.sort((a, b) => {
-        if (a.id === currentUserId) return -1;
-        if (b.id === currentUserId) return 1;
-        return b.lastActive.getTime() - a.lastActive.getTime();
-      });
-
-      console.log(`✅ Active users:`, usersList.map(u => ({ 
-        id: u.id.slice(0, 8), 
-        email: u.email, 
-        isActive: u.isActive 
-      })));
-      setUsers(usersList);
-    } catch (error) {
-      console.error('Error fetching active users:', error);
-    }
-  };
+    };
+  }, [currentUserId]);
 
   const handleSelectUser = (userId: string | null) => {
     setSelectedUserId(userId);
@@ -193,18 +175,18 @@ export default function LiveWorkspaceSelector({
                     {user.id === currentUserId && ' (You)'}
                   </div>
                   <div className="option-description">
-                    Last active: {formatLastActive(user.lastActive)}
+                    {user.currentStep ? `Step ${user.currentStep}` : 'Active'} • {formatLastActive(user.lastActive)}
                   </div>
                 </div>
               </div>
             ))}
 
-            {users.length === 1 && users[0].id === currentUserId && (
+            {users.length === 0 && (
               <div className="workspace-option disabled">
                 <span className="option-icon">ℹ️</span>
                 <div className="option-content">
                   <div className="option-description">
-                    No other users have activity yet. When others use the app, they'll appear here!
+                    No other users are currently online. When others join, they'll appear here in real-time!
                   </div>
                 </div>
               </div>
