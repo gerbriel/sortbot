@@ -117,15 +117,23 @@ See [GOOGLE_DRIVE_INTEGRATION.md](./GOOGLE_DRIVE_INTEGRATION.md) for detailed se
 ### Step 4: Add Descriptions
 - For each item, click "Start Recording" to add a voice description
 - **Real speech recognition** - your browser will request microphone access
-- Speak naturally: "Blue cotton t-shirt, size medium, excellent condition"
+- Speak naturally: "black rolling stones shirt, 80s, rock, excellent condition, $50"
 - Click "Stop Recording" when done
 - System transcribes in real-time with live preview
 - Click "Generate Product Info with AI" to create:
+  - **Natural reconstruction**: Extracts keywords and rebuilds professionally
+    - Input: "black rolling stones shirt. rock at 80's"
+    - Output: "80s Rolling Stones black t-shirts featuring graphic details"
+  - **Deep knowledge expansion**: Adds 300+ contextual snippets
+    - Brand heritage (Supreme NYC roots, Levi's 1873 invention)
+    - Subcultures (punk DIY, grunge thrift aesthetic)
+    - Materials (selvage denim, Gore-Tex membrane)
+    - Era context (90s quality manufacturing, 80s maximalism)
   - SEO-friendly product title
-  - Product description
   - Pricing suggestion
   - Relevant tags
 - Edit any generated content as needed
+- See [VOICE_RECONSTRUCTION_EXAMPLES.md](./VOICE_RECONSTRUCTION_EXAMPLES.md) for before/after examples
 
 ### Step 5: Export
 - **Google Sheets**: Direct export to a new or existing spreadsheet

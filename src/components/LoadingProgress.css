@@ -1,0 +1,308 @@
+/* Loading Progress Overlay */
+.loading-progress-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.loading-progress-container {
+  background: linear-gradient(135deg, #2a2d3a 0%, #1e2028 100%);
+  border-radius: 24px;
+  padding: 48px 64px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  max-width: 600px;
+  width: 90%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.loading-message {
+  text-align: center;
+  font-size: 20px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 40px;
+  letter-spacing: 0.5px;
+}
+
+/* Clothes Rack Container */
+.clothes-rack-container {
+  position: relative;
+  width: 100%;
+  height: 150px;
+  margin-bottom: 32px;
+}
+
+/* Clothing Rack */
+.clothes-rack {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+}
+
+.rack-bar {
+  position: absolute;
+  top: 30px;
+  left: 10%;
+  right: 10%;
+  height: 8px;
+  background: linear-gradient(180deg, #8b8d94 0%, #5a5c63 100%);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.rack-stand-left,
+.rack-stand-right {
+  position: absolute;
+  width: 6px;
+  height: 80px;
+  background: linear-gradient(180deg, #8b8d94 0%, #5a5c63 100%);
+  border-radius: 3px;
+  top: 30px;
+}
+
+.rack-stand-left {
+  left: 10%;
+}
+
+.rack-stand-right {
+  right: 10%;
+}
+
+/* Moving Hanger */
+.moving-hanger {
+  position: absolute;
+  top: 30px;
+  width: 50px;
+  height: 60px;
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s ease;
+  animation: gentleSwing 2s ease-in-out infinite;
+  filter: drop-shadow(0 4px 12px rgba(16, 185, 129, 0.4));
+  z-index: 10;
+}
+
+@keyframes gentleSwing {
+  0%, 100% {
+    transform: translateX(-50%) rotate(-2deg);
+  }
+  50% {
+    transform: translateX(-50%) rotate(2deg);
+  }
+}
+
+.hanger-hook {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 12px;
+  border: 3px solid #10b981;
+  border-bottom: none;
+  border-radius: 12px 12px 0 0;
+}
+
+.hanger-bar {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3px;
+  height: 8px;
+  background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+  border-radius: 2px;
+}
+
+.hanger-left,
+.hanger-right {
+  position: absolute;
+  top: 12px;
+  width: 24px;
+  height: 3px;
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+  border-radius: 2px;
+}
+
+.hanger-left {
+  left: 2px;
+  transform: rotate(-25deg);
+  transform-origin: right center;
+}
+
+.hanger-right {
+  right: 2px;
+  transform: rotate(25deg);
+  transform-origin: left center;
+}
+
+.hanger-clothing {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 38px;
+  height: 35px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border-radius: 6px 6px 4px 4px;
+  animation: clothingPulse 2s ease-in-out infinite;
+}
+
+.hanger-clothing::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+}
+
+@keyframes clothingPulse {
+  0%, 100% {
+    transform: translateX(-50%) scale(1);
+  }
+  50% {
+    transform: translateX(-50%) scale(1.05);
+  }
+}
+
+/* Static Hangers */
+.static-hangers {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+}
+
+.static-hanger {
+  position: absolute;
+  top: 30px;
+  width: 40px;
+  height: 60px;
+  transform: translateX(-50%);
+  transition: opacity 0.5s ease;
+}
+
+.static-hanger .hanger-hook {
+  border-color: #6b7280;
+}
+
+.static-hanger .hanger-bar,
+.static-hanger .hanger-left,
+.static-hanger .hanger-right {
+  background: linear-gradient(90deg, #6b7280 0%, #4b5563 100%);
+}
+
+.static-hanger .hanger-left {
+  width: 20px;
+  left: 4px;
+}
+
+.static-hanger .hanger-right {
+  width: 20px;
+  right: 4px;
+}
+
+.static-hanger .hanger-clothing {
+  width: 32px;
+  height: 30px;
+  background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+  animation: none;
+}
+
+.static-hanger .hanger-clothing.static {
+  opacity: 0.7;
+}
+
+/* Progress Bar */
+.progress-bar-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.progress-bar-bg {
+  flex: 1;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981 0%, #059669 50%, #10b981 100%);
+  background-size: 200% 100%;
+  border-radius: 6px;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: shimmer 2s ease-in-out infinite;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.progress-text {
+  font-size: 18px;
+  font-weight: 700;
+  color: #10b981;
+  min-width: 50px;
+  text-align: right;
+  text-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .loading-progress-container {
+    padding: 32px 24px;
+  }
+  
+  .loading-message {
+    font-size: 18px;
+    margin-bottom: 32px;
+  }
+  
+  .clothes-rack-container {
+    height: 120px;
+  }
+  
+  .moving-hanger {
+    width: 40px;
+    height: 50px;
+  }
+  
+  .static-hanger {
+    width: 35px;
+    height: 50px;
+  }
+}

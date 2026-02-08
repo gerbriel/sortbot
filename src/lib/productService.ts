@@ -55,6 +55,10 @@ export const saveProductToDatabase = async (
 ): Promise<string | null> => {
   try {
     // 1. Insert product
+    // Note: We don't check for existing products here because:
+    // - Products may have duplicate titles/seo_titles (common with "Untitled Product")
+    // - Each product is unique even if metadata is similar
+    // - Image-level duplicate prevention handles the real duplicate issue
     const { data: productData, error: productError } = await supabase
       .from('products')
       .insert({
@@ -101,33 +105,94 @@ export const saveProductToDatabase = async (
       return null;
     }
 
-    // 2. Upload images and save URLs
+    // 2. Move images from temp folder and save URLs
     for (let i = 0; i < groupImages.length; i++) {
       const item = groupImages[i];
       
-      // Upload image to storage
-      const uploadResult = await uploadImageToStorage(
-        item.file,
-        userId,
-        productData.id,
-        i
-      );
+      let imageUrl = '';
+      let storagePath = '';
+      
+      // Check if image was already uploaded to temp folder
+      if (item.storagePath && item.preview) {
+        // Image already uploaded - move from temp to permanent location
+        const fileExt = item.storagePath.split('.').pop();
+        const newFileName = `${i}_${Date.now()}.${fileExt}`;
+        const newPath = `${userId}/${productData.id}/${newFileName}`;
+        
+        try {
+          // Copy from temp to permanent location
+          const { error: copyError } = await supabase.storage
+            .from('product-images')
+            .copy(item.storagePath, newPath);
+          
+          if (copyError) {
+            console.error('Image copy error:', copyError);
+            // Fallback: keep temp image
+            imageUrl = item.preview;
+            storagePath = item.storagePath;
+          } else {
+            // Get new public URL
+            const { data: { publicUrl } } = supabase.storage
+              .from('product-images')
+              .getPublicUrl(newPath);
+            
+            imageUrl = publicUrl;
+            storagePath = newPath;
+            
+            // Delete temp file
+            await supabase.storage
+              .from('product-images')
+              .remove([item.storagePath]);
+          }
+        } catch (error) {
+          console.error('Error moving image:', error);
+          // Fallback: keep temp image
+          imageUrl = item.preview;
+          storagePath = item.storagePath;
+        }
+      } else {
+        // Image not uploaded yet - upload now
+        const uploadResult = await uploadImageToStorage(
+          item.file,
+          userId,
+          productData.id,
+          i
+        );
+        
+        if (uploadResult) {
+          imageUrl = uploadResult.url;
+          storagePath = uploadResult.path;
+        }
+      }
 
-      if (uploadResult) {
-        // Save image record to database
-        const { error: imageError } = await supabase
+      // Save image record to database
+      if (imageUrl && storagePath) {
+        // Check if this image URL already exists for this product to prevent duplicates
+        const { data: existing } = await supabase
           .from('product_images')
-          .insert({
-            product_id: productData.id,
-            user_id: userId,
-            image_url: uploadResult.url,
-            storage_path: uploadResult.path,
-            position: i,
-            alt_text: `${product.seoTitle || 'Product'} - Image ${i + 1}`,
-          });
+          .select('id')
+          .eq('product_id', productData.id)
+          .eq('image_url', imageUrl)
+          .single();
+        
+        // Only insert if it doesn't already exist
+        if (!existing) {
+          const { error: imageError } = await supabase
+            .from('product_images')
+            .insert({
+              product_id: productData.id,
+              user_id: userId,
+              image_url: imageUrl,
+              storage_path: storagePath,
+              position: i,
+              alt_text: `${product.seoTitle || 'Product'} - Image ${i + 1}`,
+            });
 
-        if (imageError) {
-          console.error('Image save error:', imageError);
+          if (imageError) {
+            console.error('Image save error:', imageError);
+          }
+        } else {
+          console.log(`Image already exists for product ${productData.id}, skipping duplicate`);
         }
       }
     }
@@ -163,7 +228,7 @@ export const saveBatchToDatabase = async (
   }, {} as Record<string, ClothingItem[]>);
 
   // Save each product group with the same batch_id
-  for (const [_, groupItems] of Object.entries(productGroups)) {
+  for (const [, groupItems] of Object.entries(productGroups)) {
     const productData = groupItems[0]; // First item has all the product info
     
     const productId = await saveProductToDatabase(
@@ -184,9 +249,9 @@ export const saveBatchToDatabase = async (
 };
 
 /**
- * Fetch user's products from database
+ * Fetch all products from database (collaborative - all users see all products)
  */
-export const fetchUserProducts = async (userId: string) => {
+export const fetchUserProducts = async () => {
   try {
     const { data, error } = await supabase
       .from('products')
@@ -200,7 +265,6 @@ export const fetchUserProducts = async (userId: string) => {
           alt_text
         )
       `)
-      .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -224,8 +288,7 @@ export const deleteProduct = async (productId: string, userId: string): Promise<
     const { data: images } = await supabase
       .from('product_images')
       .select('storage_path')
-      .eq('product_id', productId)
-      .eq('user_id', userId);
+      .eq('product_id', productId);
 
     // 2. Delete images from storage
     if (images && images.length > 0) {
@@ -243,8 +306,7 @@ export const deleteProduct = async (productId: string, userId: string): Promise<
     const { error: deleteError } = await supabase
       .from('products')
       .delete()
-      .eq('id', productId)
-      .eq('user_id', userId);
+      .eq('id', productId);
 
     if (deleteError) {
       console.error('Product delete error:', deleteError);
@@ -283,8 +345,7 @@ export const updateProduct = async (
         tags: updates.tags,
         // ... add other fields as needed
       })
-      .eq('id', productId)
-      .eq('user_id', userId);
+      .eq('id', productId);
 
     if (error) {
       console.error('Product update error:', error);

@@ -236,6 +236,11 @@
   cursor: not-allowed;
 }
 
+.form-group input::placeholder {
+  color: rgba(140, 145, 150, 0.35);
+  font-style: italic;
+}
+
 .form-group small {
   display: block;
   margin-top: 0.25rem;

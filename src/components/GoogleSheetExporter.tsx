@@ -25,7 +25,8 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
     const productData = group[0];
     return {
       ...productData,
-      imageUrls: group.map(item => item.preview), // All images in the group
+      // Use Supabase URLs if available, otherwise fall back to preview (blob URLs)
+      imageUrls: group.map(item => item.imageUrl || item.preview), // All images in the group
       imageCount: group.length
     };
   });

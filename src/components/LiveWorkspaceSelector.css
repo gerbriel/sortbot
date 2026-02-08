@@ -1,0 +1,214 @@
+.live-workspace-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 16px;
+}
+
+.workspace-label {
+  font-weight: 600;
+  color: white;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.workspace-dropdown {
+  position: relative;
+  flex: 1;
+  max-width: 400px;
+}
+
+.workspace-toggle {
+  width: 100%;
+  padding: 10px 16px;
+  background: white;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #2d3748;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.workspace-toggle:hover {
+  background: #f7fafc;
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.dropdown-arrow {
+  margin-left: 8px;
+  color: #718096;
+  font-size: 12px;
+}
+
+.workspace-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  max-height: 400px;
+  overflow-y: auto;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.workspace-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.workspace-option:last-child {
+  border-bottom: none;
+}
+
+.workspace-option:hover {
+  background: #f7fafc;
+}
+
+.workspace-option.selected {
+  background: #edf2f7;
+  border-left: 3px solid #667eea;
+}
+
+.workspace-option.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.workspace-option.disabled:hover {
+  background: white;
+}
+
+.option-icon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.option-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.option-name {
+  font-weight: 600;
+  color: #2d3748;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.option-description {
+  font-size: 12px;
+  color: #718096;
+}
+
+.workspace-divider {
+  padding: 8px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #a0aec0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: #f7fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.live-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  color: white;
+  white-space: nowrap;
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  background: #48bb78;
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .live-workspace-selector {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .workspace-dropdown {
+    max-width: 100%;
+  }
+
+  .workspace-label {
+    text-align: center;
+  }
+
+  .live-indicator {
+    justify-content: center;
+  }
+}
+
+/* Scrollbar styling for menu */
+.workspace-menu::-webkit-scrollbar {
+  width: 8px;
+}
+
+.workspace-menu::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 0 12px 12px 0;
+}
+
+.workspace-menu::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+  border-radius: 4px;
+}
+
+.workspace-menu::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}
