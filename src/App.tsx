@@ -8,10 +8,11 @@ import ImageGrouper from './components/ImageGrouper';
 import CategoryZones from './components/CategoryZones';
 import ProductDescriptionGenerator from './components/ProductDescriptionGenerator';
 import GoogleSheetExporter from './components/GoogleSheetExporter';
-import { SavedProducts } from './components/SavedProducts';
+import { Library } from './components/Library';
 import CategoryPresetsManager from './components/CategoryPresetsManager';
 import CategoriesManager from './components/CategoriesManager';
 import { saveBatchToDatabase } from './lib/productService';
+import { autoSaveWorkflowBatch, type WorkflowBatch } from './lib/workflowBatchService';
 import type { BrandCategory } from './lib/brandCategorySystem';
 import './App.css';
 
@@ -125,12 +126,14 @@ function App() {
   const [sortedImages, setSortedImages] = useState<ClothingItem[]>([]);
   const [groupedImages, setGroupedImages] = useState<ClothingItem[]>([]);
   const [processedItems, setProcessedItems] = useState<ClothingItem[]>([]);
-  const [showSavedProducts, setShowSavedProducts] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
   const [showCategoryPresets, setShowCategoryPresets] = useState(false);
   const [showCategoriesManager, setShowCategoriesManager] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showStep2Info, setShowStep2Info] = useState(false);
+  const [currentBatchId, setCurrentBatchId] = useState<string | null>(null);
+  const [currentBatchNumber, setCurrentBatchNumber] = useState<string>(`batch-${Date.now()}`);
 
   // Check authentication status on mount
   useEffect(() => {
@@ -228,18 +231,35 @@ function App() {
 
   const handleImagesUploaded = (items: ClothingItem[]) => {
     // APPEND new images to existing ones (don't replace)
-    setUploadedImages(prev => [...prev, ...items]);
+    const newImages = [...uploadedImages, ...items];
+    setUploadedImages(newImages);
     
     // If there are already grouped images, append to those too
     if (groupedImages.length > 0) {
       setGroupedImages(prev => [...prev, ...items]);
     }
+    
+    // Auto-save workflow state (Step 1 complete)
+    autoSaveWorkflow({
+      uploadedImages: newImages,
+      groupedImages,
+      sortedImages,
+      processedItems,
+    });
   };
 
   const handleImagesSorted = (items: ClothingItem[]) => {
     setSortedImages(items);
     // Also update groupedImages so Step 2 shows the categories
     setGroupedImages(items);
+    
+    // Auto-save workflow state (Step 3 complete)
+    autoSaveWorkflow({
+      uploadedImages,
+      groupedImages: items,
+      sortedImages: items,
+      processedItems,
+    });
   };
 
   const handleImagesGrouped = async (items: ClothingItem[]) => {
@@ -260,6 +280,14 @@ function App() {
       });
       setSortedImages(updatedSorted);
     }
+    
+    // Auto-save workflow state (Step 2 complete - groups created)
+    autoSaveWorkflow({
+      uploadedImages,
+      groupedImages: itemsWithCategories,
+      sortedImages,
+      processedItems,
+    });
 
     // Auto-save product groups to database
     if (!user) return;
@@ -299,6 +327,79 @@ function App() {
 
   const handleItemsProcessed = (items: ClothingItem[]) => {
     setProcessedItems(items);
+    
+    // Auto-save workflow state
+    autoSaveWorkflow({
+      uploadedImages,
+      groupedImages,
+      sortedImages,
+      processedItems: items,
+    });
+  };
+
+  // Auto-save workflow state to batch
+  const autoSaveWorkflow = async (workflowState: {
+    uploadedImages: ClothingItem[];
+    groupedImages: ClothingItem[];
+    sortedImages: ClothingItem[];
+    processedItems: ClothingItem[];
+  }) => {
+    if (!user) return;
+    
+    try {
+      const batchId = await autoSaveWorkflowBatch(
+        currentBatchId,
+        currentBatchNumber,
+        workflowState
+      );
+      
+      if (batchId && !currentBatchId) {
+        // First time saving - set the batch ID
+        setCurrentBatchId(batchId);
+      }
+    } catch (error) {
+      console.error('Auto-save failed:', error);
+    }
+  };
+
+  // Handle opening a batch from Library
+  const handleOpenBatch = async (batch: WorkflowBatch) => {
+    if (!batch.workflow_state) {
+      alert('This batch has no saved workflow state.');
+      return;
+    }
+
+    // Restore workflow state
+    const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state;
+    
+    if (uploadedImages) {
+      setUploadedImages(uploadedImages);
+    }
+    if (groupedImages) {
+      setGroupedImages(groupedImages);
+    }
+    if (sortedImages) {
+      setSortedImages(sortedImages);
+    }
+    if (processedItems) {
+      setProcessedItems(processedItems);
+    }
+    
+    // Set current batch info
+    setCurrentBatchId(batch.id);
+    setCurrentBatchNumber(batch.batch_number);
+    
+    // Close library
+    setShowLibrary(false);
+    
+    // Show success message
+    setSaveMessage({
+      type: 'success',
+      text: `✅ Opened batch #${batch.batch_number.slice(0, 8)} - Continue from Step ${batch.current_step}`,
+    });
+    
+    // Clear message after 5 seconds
+    setTimeout(() => setSaveMessage(null), 5000);
   };
 
   return (
@@ -329,11 +430,12 @@ function App() {
               <Settings size={18} /> Category Presets
             </button>
             <button 
-              onClick={() => setShowSavedProducts(true)} 
+              onClick={() => setShowLibrary(true)} 
               className="button button-secondary"
               style={{ marginRight: '12px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+              title="View saved workflow batches"
             >
-              <Package size={18} /> Saved Products
+              <Package size={18} /> Library
             </button>
             <span className="user-email">{user.email}</span>
             <button onClick={handleSignOut} className="button button-secondary">
@@ -357,7 +459,7 @@ function App() {
           <p className="step-description" style={{ fontSize: '14px', color: '#666', marginBottom: '1rem' }}>
             💡 <strong>Tip:</strong> You can upload multiple batches! New images will be added to your current session.
           </p>
-          <ImageUpload onImagesUploaded={handleImagesUploaded} />
+          <ImageUpload onImagesUploaded={handleImagesUploaded} userId={user.id} />
           {uploadedImages.length > 0 && (
             <p className="status-text">✓ {uploadedImages.length} images uploaded</p>
           )}
@@ -491,11 +593,12 @@ function App() {
         />
       )}
 
-      {/* Saved Products Modal */}
-      {showSavedProducts && user && (
-        <SavedProducts 
+      {/* Library Modal */}
+      {showLibrary && user && (
+        <Library 
           userId={user.id} 
-          onClose={() => setShowSavedProducts(false)} 
+          onClose={() => setShowLibrary(false)}
+          onOpenBatch={handleOpenBatch}
         />
       )}
     </div>

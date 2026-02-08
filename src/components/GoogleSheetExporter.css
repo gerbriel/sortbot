@@ -75,8 +75,9 @@
 }
 
 .sheet-url-input::placeholder {
-  color: #9ca3af;
+  color: rgba(156, 163, 175, 0.35);
   font-family: monospace;
+  font-style: italic;
 }
 
 .sheet-url-saved {

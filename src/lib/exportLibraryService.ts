@@ -91,9 +91,9 @@ export const createExportBatch = async (
   params: CreateExportBatchParams
 ): Promise<ExportBatch | null> => {
   try {
-    // Get next batch number
+    // Get next batch number (global across all users)
     const { data: batchNumber, error: numberError } = await supabase
-      .rpc('get_next_batch_number', { p_user_id: params.userId });
+      .rpc('get_next_batch_number');
 
     if (numberError) {
       console.error('Error getting batch number:', numberError);
@@ -222,6 +222,8 @@ export const markBatchExported = async (
 
 /**
  * Get all export batches for a user
+/**
+ * Fetch all export batches (collaborative - all users see all batches)
  */
 export const fetchUserExportBatches = async (
   userId: string
@@ -230,7 +232,6 @@ export const fetchUserExportBatches = async (
     const { data, error } = await supabase
       .from('export_batches')
       .select('*')
-      .eq('user_id', userId)
       .order('batch_number', { ascending: false });
 
     if (error) {
@@ -361,7 +362,8 @@ export const deleteExportBatch = async (batchId: string): Promise<boolean> => {
 };
 
 /**
- * Search export batches by tags
+/**
+ * Search export batches by tags (collaborative - all users see all batches)
  */
 export const searchExportBatchesByTags = async (
   userId: string,
@@ -371,7 +373,6 @@ export const searchExportBatchesByTags = async (
     const { data, error } = await supabase
       .from('export_batches')
       .select('*')
-      .eq('user_id', userId)
       .overlaps('tags', tags)
       .order('batch_number', { ascending: false });
 
@@ -402,8 +403,7 @@ export const fetchUserExportStats = async (
   try {
     const { data, error } = await supabase
       .from('export_batches')
-      .select('status, product_count, total_value')
-      .eq('user_id', userId);
+      .select('status, product_count, total_value');
 
     if (error) {
       console.error('Error fetching export stats:', error);

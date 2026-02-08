@@ -3,6 +3,9 @@ import type { ClothingItem } from '../App';
 import { intelligentMatch } from '../lib/brandMatcher';
 import { Target } from 'lucide-react';
 import { ComprehensiveProductForm } from './ComprehensiveProductForm';
+import { getCategoryPresets } from '../lib/categoryPresetsService';
+import type { CategoryPreset } from '../lib/categoryPresets';
+import { applyPresetToProductGroup } from '../lib/applyPresetToGroup';
 import './ProductDescriptionGenerator.css';
 
 interface ProductDescriptionGeneratorProps {
@@ -50,6 +53,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const [interimTranscript, setInterimTranscript] = useState('');
   const [speechSupported, setSpeechSupported] = useState(true);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [availablePresets, setAvailablePresets] = useState<CategoryPreset[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState<string>('');
   const recognitionRef = useRef<any>(null);
   const isRecordingRef = useRef(false);
   const isStartingRef = useRef(false);
@@ -234,6 +239,101 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     };
   }, [currentGroupIndex]);
 
+  // Load available presets on mount
+  useEffect(() => {
+    const loadPresets = async () => {
+      try {
+        const presets = await getCategoryPresets();
+        setAvailablePresets(presets.filter(p => p.is_active));
+      } catch (error) {
+        console.error('Failed to load presets:', error);
+      }
+    };
+    loadPresets();
+  }, []);
+
+  // Auto-apply default preset when current group changes
+  useEffect(() => {
+    const autoApplyDefaultPreset = async () => {
+      if (!currentItem || !currentItem.category) return;
+      
+      // Skip if this group already has preset data applied
+      const hasPresetData = currentGroup.some(item => 
+        item.productType || 
+        item._presetData ||
+        item.requiresShipping !== undefined ||
+        item.policies
+      );
+      
+      if (hasPresetData) {
+        console.log('⏭️  Preset already applied to this group, skipping auto-apply');
+        return;
+      }
+
+      try {
+        console.log(`🔄 Auto-applying default preset for category: ${currentItem.category}`);
+        const updatedGroup = await applyPresetToProductGroup(currentGroup, currentItem.category);
+        
+        // Update processedItems with preset-enriched items
+        const updated = [...processedItems];
+        updatedGroup.forEach((updatedItem) => {
+          const itemIndex = updated.findIndex(item => item.id === updatedItem.id);
+          if (itemIndex !== -1) {
+            updated[itemIndex] = updatedItem;
+          }
+        });
+        
+        setProcessedItems(updated);
+        
+        // Find and set the default preset ID in the dropdown
+        const defaultPreset = availablePresets.find(p => 
+          (p.product_type?.toLowerCase() === currentItem.category?.toLowerCase() || 
+           p.category_name.toLowerCase() === currentItem.category?.toLowerCase()) &&
+          p.is_default && 
+          p.is_active
+        );
+        
+        if (defaultPreset) {
+          setSelectedPresetId(defaultPreset.id);
+          console.log(`✅ Auto-applied default preset: ${defaultPreset.display_name}`);
+        }
+      } catch (error) {
+        console.error('Failed to auto-apply preset:', error);
+      }
+    };
+
+    if (availablePresets.length > 0) {
+      autoApplyDefaultPreset();
+    }
+  }, [currentGroupIndex, availablePresets]); // Run when group changes or presets load
+
+  // Apply manual preset override
+  const handleApplyPreset = async (presetId: string) => {
+    if (!presetId) return;
+    
+    try {
+      const preset = availablePresets.find(p => p.id === presetId);
+      if (!preset) return;
+
+      const updatedGroup = await applyPresetToProductGroup(currentGroup, preset.product_type || preset.category_name);
+      
+      const updated = [...processedItems];
+      updatedGroup.forEach((updatedItem) => {
+        const itemIndex = updated.findIndex(item => item.id === updatedItem.id);
+        if (itemIndex !== -1) {
+          updated[itemIndex] = updatedItem;
+        }
+      });
+      
+      setProcessedItems(updated);
+      setSelectedPresetId(presetId);
+      console.log(`✅ Manually applied preset: ${preset.display_name}`);
+    } catch (error) {
+      console.error('Failed to apply preset:', error);
+      alert('Failed to apply preset. Please try again.');
+    }
+  };
+
   const handleStartRecording = () => {
     if (isTransitioning) {
       return;
@@ -390,6 +490,282 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     }
     
     return text;
+  };
+
+  // EXPAND VOICE DESCRIPTION - Extract keywords and build contextual description
+  // Instead of repeating audio word-for-word, reconstruct naturally with deep knowledge
+  const expandVoiceDescription = (voiceDesc: string, context: {
+    category?: string;
+    brand?: string;
+    era?: string;
+    material?: string;
+    condition?: string;
+    color?: string;
+  }) => {
+    const lower = voiceDesc.toLowerCase();
+    
+    // ============================================================================
+    // EXTRACT KEY INFORMATION FROM VOICE
+    // ============================================================================
+    
+    const keyInfo = {
+      // Brands
+      brand: context.brand || null,
+      
+      // Colors
+      colors: [] as string[],
+      
+      // Materials
+      materials: [] as string[],
+      
+      // Style descriptors
+      styles: [] as string[],
+      
+      // Fit descriptors
+      fits: [] as string[],
+      
+      // Era/vintage markers
+      eras: [] as string[],
+      
+      // Condition markers
+      conditions: [] as string[],
+      
+      // Special features
+      features: [] as string[]
+    };
+    
+    // Extract colors
+    const colorPatterns: Record<string, RegExp> = {
+      'black': /black/i,
+      'white': /white|cream|ivory/i,
+      'red': /red|crimson|burgundy/i,
+      'blue': /blue|navy/i,
+      'green': /green|olive|forest/i,
+      'yellow': /yellow|gold/i,
+      'pink': /pink|rose/i,
+      'purple': /purple|violet/i,
+      'gray': /gray|grey|charcoal/i,
+      'grey': /gray|grey|charcoal/i,
+      'brown': /brown|tan|beige|khaki/i,
+      'orange': /orange|rust/i,
+    };
+    
+    for (const [color, pattern] of Object.entries(colorPatterns)) {
+      if (pattern.test(lower)) {
+        keyInfo.colors.push(color);
+      }
+    }
+    
+    // Extract materials
+    if (/cotton/i.test(lower)) keyInfo.materials.push('cotton');
+    if (/polyester|poly/i.test(lower)) keyInfo.materials.push('polyester');
+    if (/denim/i.test(lower)) keyInfo.materials.push('denim');
+    if (/leather/i.test(lower)) keyInfo.materials.push('leather');
+    if (/wool/i.test(lower)) keyInfo.materials.push('wool');
+    if (/fleece/i.test(lower)) keyInfo.materials.push('fleece');
+    
+    // Extract style descriptors
+    if (/graphic|print|logo/i.test(lower)) keyInfo.styles.push('graphic');
+    if (/embroidered/i.test(lower)) keyInfo.styles.push('embroidered');
+    if (/minimal|simple|clean/i.test(lower)) keyInfo.styles.push('minimal');
+    if (/distressed|faded|worn/i.test(lower)) keyInfo.styles.push('distressed');
+    if (/heavyweight|heavy/i.test(lower)) keyInfo.styles.push('heavyweight');
+    
+    // Extract fit descriptors
+    if (/oversized|boxy|baggy/i.test(lower)) keyInfo.fits.push('oversized');
+    if (/cropped|short/i.test(lower)) keyInfo.fits.push('cropped');
+    if (/slim|fitted/i.test(lower)) keyInfo.fits.push('slim');
+    if (/relaxed/i.test(lower)) keyInfo.fits.push('relaxed');
+    
+    // Extract era
+    if (/vintage|retro/i.test(lower)) keyInfo.eras.push('vintage');
+    if (/90s|nineties/i.test(lower)) keyInfo.eras.push('90s');
+    if (/80s|eighties/i.test(lower)) keyInfo.eras.push('80s');
+    if (/70s|seventies/i.test(lower)) keyInfo.eras.push('70s');
+    if (/y2k|2000s/i.test(lower)) keyInfo.eras.push('y2k');
+    
+    // Extract condition markers
+    if (/excellent|great|pristine/i.test(lower)) keyInfo.conditions.push('excellent');
+    if (/good/i.test(lower)) keyInfo.conditions.push('good');
+    if (/nwt|new with tags/i.test(lower)) keyInfo.conditions.push('nwt');
+    
+    // Extract special features
+    if (/pocket/i.test(lower)) keyInfo.features.push('pockets');
+    if (/zipper|zip/i.test(lower)) keyInfo.features.push('zipper');
+    if (/button/i.test(lower)) keyInfo.features.push('buttons');
+    if (/hood/i.test(lower)) keyInfo.features.push('hood');
+    if (/collar/i.test(lower)) keyInfo.features.push('collar');
+    
+    // ============================================================================
+    // BUILD NATURAL OPENING SENTENCE
+    // ============================================================================
+    
+    let opening = '';
+    
+    // Start with era if present
+    if (keyInfo.eras.length > 0) {
+      opening += keyInfo.eras[0].charAt(0).toUpperCase() + keyInfo.eras[0].slice(1) + ' ';
+    }
+    
+    // Add brand if mentioned
+    if (keyInfo.brand && /supreme|bape|stussy|carhartt|nike|adidas|patagonia/i.test(lower)) {
+      opening += keyInfo.brand + ' ';
+    }
+    
+    // Add color
+    if (keyInfo.colors.length > 0) {
+      opening += keyInfo.colors[0] + ' ';
+    }
+    
+    // Add main item type from category
+    const itemType = context.category?.toLowerCase() || 'piece';
+    opening += itemType;
+    
+    // Add style descriptor
+    if (keyInfo.styles.length > 0) {
+      opening += ' featuring ' + keyInfo.styles[0] + ' details';
+    }
+    
+    opening += '.';
+    
+    // ============================================================================
+    // ADD FIT & CONSTRUCTION DETAILS
+    // ============================================================================
+    
+    const details: string[] = [];
+    
+    // Fit description
+    if (keyInfo.fits.length > 0) {
+      const fitDesc = keyInfo.fits[0] === 'oversized' 
+        ? 'Relaxed oversized silhouette offers versatile styling options'
+        : keyInfo.fits[0] === 'cropped'
+        ? 'Cropped length follows modern proportions'
+        : keyInfo.fits[0] === 'slim'
+        ? 'Tailored slim fit creates contemporary silhouette'
+        : 'Comfortable relaxed fit';
+      details.push(fitDesc);
+    }
+    
+    // Material quality
+    if (keyInfo.materials.length > 0) {
+      const material = keyInfo.materials[0];
+      if (material === 'cotton') {
+        details.push('Quality cotton construction provides breathable comfort');
+      } else if (material === 'denim') {
+        details.push('Durable denim construction ages beautifully with wear');
+      } else if (material === 'leather') {
+        details.push('Genuine leather develops rich patina over time');
+      } else {
+        details.push(`${material.charAt(0).toUpperCase() + material.slice(1)} material offers durability`);
+      }
+    }
+    
+    // Heavyweight emphasis
+    if (keyInfo.styles.includes('heavyweight')) {
+      details.push('Substantial heavyweight fabric resists wear and maintains structure');
+    }
+    
+    // ============================================================================
+    // ADD BRAND-SPECIFIC & CULTURAL CONTEXT
+    // ============================================================================
+    
+    const culturalContext: string[] = [];
+    
+    // Brand heritage (only add if brand explicitly mentioned)
+    if (keyInfo.brand && lower.includes(keyInfo.brand.toLowerCase())) {
+      // Rolling Stones / Band Tees
+      if (/rolling stones|stones tongue|lips logo/i.test(lower)) {
+        culturalContext.push('Iconic Rolling Stones tongue logo remains one of rock\'s most recognizable symbols');
+        culturalContext.push('Original Stones merchandise carries significant collector value');
+      }
+      
+      // Supreme
+      else if (/supreme|box logo|bogo/i.test(lower)) {
+        culturalContext.push('Supreme\'s box logo stands as streetwear\'s most coveted branding');
+        culturalContext.push('NYC skate culture roots maintain Supreme\'s authenticity');
+      }
+      
+      // BAPE
+      else if (/bape|bathing ape|camo|shark/i.test(lower)) {
+        culturalContext.push('A Bathing Ape pioneered Japanese streetwear\'s global influence');
+        culturalContext.push('Signature camo patterns define BAPE\'s unmistakable aesthetic');
+      }
+      
+      // Carhartt
+      else if (/carhartt(?! wip)|detroit/i.test(lower)) {
+        culturalContext.push('Carhartt\'s Detroit workwear heritage spans over 130 years');
+        culturalContext.push('Built for manual labor, adopted by skaters for authentic toughness');
+      }
+      
+      // Patagonia
+      else if (/patagonia/i.test(lower)) {
+        culturalContext.push('Patagonia\'s environmental activism defines responsible outdoor gear');
+        culturalContext.push('Worn Wear philosophy prioritizes repair over replacement');
+      }
+      
+      // Levi's
+      else if (/levi|levis|501|505/i.test(lower)) {
+        culturalContext.push('Levi\'s invented the blue jean in 1873, defining American denim');
+        culturalContext.push('The 501 silhouette remains the definitive jean shape after 150 years');
+      }
+      
+      // Nike
+      else if (/nike|swoosh|jordan/i.test(lower)) {
+        culturalContext.push('Nike\'s swoosh represents athletic innovation and cultural dominance');
+      }
+      
+      // Adidas
+      else if (/adidas|three stripes|trefoil/i.test(lower)) {
+        culturalContext.push('Adidas three stripes bridge German engineering and hip-hop culture');
+      }
+    }
+    
+    // Subculture context (based on style, not just brand)
+    if (keyInfo.styles.includes('distressed') || /faded|worn|cracked/i.test(lower)) {
+      culturalContext.push('Authentic distressing tells the garment\'s story through organic wear patterns');
+    }
+    
+    if (keyInfo.eras.includes('vintage')) {
+      culturalContext.push('Period-correct construction offers quality exceeding modern fast-fashion equivalents');
+    }
+    
+    if (keyInfo.eras.includes('90s')) {
+      culturalContext.push('1990s pieces embody the decade\'s relaxed fits and anti-fashion sensibility');
+    }
+    
+    if (/punk|diy|stud/i.test(lower)) {
+      culturalContext.push('DIY punk aesthetic rejects commercial fashion through hand-altered expression');
+    }
+    
+    if (/skate|thrasher|independent/i.test(lower)) {
+      culturalContext.push('Skateboard graphics represent decades of counterculture and athletic progression');
+    }
+    
+    if (/grunge|nirvana|pearl jam/i.test(lower)) {
+      culturalContext.push('Pacific Northwest grunge embraced thrift-store finds and raw authenticity');
+    }
+    
+    // ============================================================================
+    // ASSEMBLE FINAL DESCRIPTION
+    // ============================================================================
+    
+    let expanded = opening;
+    
+    // Add 1-2 construction/fit details
+    if (details.length > 0) {
+      expanded += ' ' + details.slice(0, 2).join('. ');
+      if (!expanded.endsWith('.')) expanded += '.';
+    }
+    
+    // Add 1-2 cultural context pieces
+    if (culturalContext.length > 0) {
+      const shuffled = culturalContext.sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, Math.min(2, culturalContext.length));
+      expanded += ' ' + selected.join('. ');
+      if (!expanded.endsWith('.')) expanded += '.';
+    }
+    
+    return expanded;
   };
 
   const handleGenerateProductInfo = async () => {
@@ -636,11 +1012,17 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       generatedDesc += measurementsSection + '\n\n';
     }
     
-    // Main description paragraph - clean and descriptive
-    // Only use voice description, cleaning it up
-    const cleanedVoice = voiceDesc.charAt(0).toUpperCase() + voiceDesc.slice(1);
-    generatedDesc += cleanedVoice;
-    if (!cleanedVoice.endsWith('.')) generatedDesc += '.';
+    // ENHANCED DESCRIPTION EXPANSION - Expand voice notes into fuller descriptions
+    const expandedDesc = expandVoiceDescription(voiceDesc, {
+      category,
+      brand: finalBrand,
+      era: finalEra,
+      material: finalMaterial,
+      condition: finalCondition,
+      color: extractedColor
+    });
+    
+    generatedDesc += expandedDesc;
     
     // Add construction/material details if EXPLICITLY mentioned
     if (voiceHasMaterial) {
@@ -694,14 +1076,14 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     // Generate tags - clean hashtag style (lowercase, no spaces)
     const generatedTags = [];
     
-    // Add brand if explicitly mentioned
-    if (finalBrand && finalBrand.toLowerCase() !== 'unknown' && 
+    // Add brand only if explicitly mentioned, not empty, and not "unknown"
+    if (finalBrand && finalBrand.trim() !== '' && finalBrand.toLowerCase() !== 'unknown' && 
         (voiceDesc.toLowerCase().includes(finalBrand.toLowerCase()) || currentItem.brand)) {
       generatedTags.push(finalBrand.toLowerCase().replace(/\s+/g, ''));
     }
     
-    // Add era/decade tags
-    if (finalEra) {
+    // Add era/decade tags only if not empty
+    if (finalEra && finalEra.trim() !== '') {
       const eraTag = finalEra.toLowerCase().replace(/\s+/g, '');
       generatedTags.push(eraTag);
       // Add decade-specific tags
@@ -739,11 +1121,15 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         titleComponents.push(detectedSize);
       }
       
-      // Add era/vintage marker
-      if (finalEra) titleComponents.push(finalEra.charAt(0).toUpperCase() + finalEra.slice(1));
+      // Add era/vintage marker (only if not empty)
+      if (finalEra && finalEra.trim() !== '') {
+        titleComponents.push(finalEra.charAt(0).toUpperCase() + finalEra.slice(1));
+      }
       
-      // Add brand if explicitly mentioned
-      if (finalBrand && finalBrand.toLowerCase() !== 'unknown') titleComponents.push(finalBrand);
+      // Add brand only if explicitly mentioned and not empty/unknown
+      if (finalBrand && finalBrand.trim() !== '' && finalBrand.toLowerCase() !== 'unknown') {
+        titleComponents.push(finalBrand);
+      }
       
       // Add category
       const categoryForTitle = category === 'Tees' ? 'Tee' : 
@@ -760,12 +1146,14 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         titleComponents.push(keyWords);
       }
       
-      // Add colors
+      // Add colors only if detected and not empty
       if (detectedColors.length > 0) {
         const colorStr = detectedColors.slice(0, 2)
           .map(c => c.charAt(0).toUpperCase() + c.slice(1))
           .join('/');
-        titleComponents.push(colorStr);
+        if (colorStr && colorStr.trim() !== '') {
+          titleComponents.push(colorStr);
+        }
       }
       
       finalSeoTitle = titleComponents.join(' ');
@@ -892,12 +1280,14 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     
     const titleParts = [];
     
-    // Add ALL detected colors
+    // Add ALL detected colors only if not empty
     if (detectedColors.length > 0) {
       const colorStr = detectedColors.length === 1 
         ? detectedColors[0].charAt(0).toUpperCase() + detectedColors[0].slice(1)
         : detectedColors.map(c => c.charAt(0).toUpperCase() + c.slice(1)).join(' and ');
-      titleParts.push(colorStr);
+      if (colorStr && colorStr.trim() !== '') {
+        titleParts.push(colorStr);
+      }
     }
     
     // Add category
@@ -909,8 +1299,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       titleParts.push(descriptorMatch[0].charAt(0).toUpperCase() + descriptorMatch[0].slice(1));
     }
     
-    // Add size
-    if (size) titleParts.push(`(${size})`);
+    // Add size only if not empty
+    if (size && size.trim() !== '') {
+      titleParts.push(`(${size})`);
+    }
     
     // NO HARD LIMIT - let it be natural length
     const title = titleParts.join(' ');
@@ -1188,6 +1580,60 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     📋 Form fields have been pre-filled with preset defaults. You can edit any field to override.
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Manual Preset Override Dropdown */}
+            {availablePresets.length > 0 && (
+              <div style={{
+                marginBottom: '1.5rem',
+                padding: '1rem',
+                background: '#f8f9fa',
+                border: '1px solid #dee2e6',
+                borderRadius: '8px'
+              }}>
+                <label style={{ 
+                  display: 'block', 
+                  fontWeight: 600, 
+                  marginBottom: '0.5rem',
+                  color: '#495057'
+                }}>
+                  🎨 Override Preset (Optional):
+                </label>
+                <select
+                  value={selectedPresetId}
+                  onChange={(e) => handleApplyPreset(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    border: '1px solid #ced4da',
+                    borderRadius: '4px',
+                    fontSize: '0.95rem',
+                    background: 'white',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="">
+                    {currentItem._presetData 
+                      ? `Keep Current: ${currentItem._presetData.displayName}` 
+                      : 'Select a preset to apply...'}
+                  </option>
+                  {availablePresets.map(preset => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.display_name}
+                      {preset.is_default && ' (Default)'}
+                      {preset.product_type && ` - ${preset.product_type}`}
+                    </option>
+                  ))}
+                </select>
+                <p style={{ 
+                  fontSize: '0.85rem', 
+                  color: '#6c757d', 
+                  marginTop: '0.5rem',
+                  marginBottom: 0
+                }}>
+                  💡 Select a different preset to override the current one. Voice dictation always takes precedence.
+                </p>
               </div>
             )}
           </div>

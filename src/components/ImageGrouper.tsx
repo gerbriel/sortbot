@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
 import { Package, Image, Link2, Scissors, X, ArrowDown, Check } from 'lucide-react';
+import LoadingProgress from './LoadingProgress';
 import './ImageGrouper.css';
 
 interface ImageGrouperProps {
@@ -18,6 +19,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
   const [groupCounter, setGroupCounter] = useState(1);
   const [uploadedImages, setUploadedImages] = useState<Set<string>>(new Set());
+  
+  // Loading progress state
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadingMessage, setLoadingMessage] = useState('');
   
   // Selection box state
   const [isSelecting, setIsSelecting] = useState(false);
@@ -142,26 +148,69 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
   // Initialize items with individual groups and auto-upload
   useEffect(() => {
     const initializeItems = async () => {
-      const initialized = await Promise.all(
-        items.map(async (item) => {
-          // Check if already uploaded
-          if (uploadedImages.has(item.id)) {
-            return { ...item, productGroup: item.productGroup || item.id };
-          }
+      const newImages = items.filter(item => !uploadedImages.has(item.id));
+      
+      if (newImages.length > 0) {
+        setIsLoading(true);
+        setLoadingProgress(0);
+        setLoadingMessage(`Loading ${newImages.length} image${newImages.length > 1 ? 's' : ''}...`);
+      }
+      
+      const initialized: ClothingItem[] = [];
+      let processedCount = 0;
+      
+      for (const item of items) {
+        // Check if already uploaded (has imageUrls or Supabase preview URL) or already tracked
+        const hasSupabaseUrl = item.imageUrls?.length || (item.preview && item.preview.startsWith('https://'));
+        
+        // If already has permanent Supabase URL, skip upload
+        if (uploadedImages.has(item.id) || hasSupabaseUrl) {
+          initialized.push({ ...item, productGroup: item.productGroup || item.id });
+          continue;
+        }
 
-          // Upload to Supabase Storage immediately
-          if (userId && item.file) {
-            const uploaded = await uploadImageImmediately(item, userId);
-            if (uploaded) {
-              setUploadedImages(prev => new Set(prev).add(item.id));
-              return { ...uploaded, productGroup: uploaded.productGroup || uploaded.id };
-            }
+        // Handle items with blob URLs (expired temporary URLs) - need to re-upload
+        // But we can't re-upload without the original file
+        if (item.preview && item.preview.startsWith('blob:') && !item.file) {
+          console.warn('⚠️ Item has expired blob URL but no file to re-upload:', item.id);
+          // Skip this item - it's broken and can't be recovered
+          continue;
+        }
+
+        // Upload to Supabase Storage immediately (only if has file)
+        if (userId && item.file) {
+          const uploaded = await uploadImageImmediately(item, userId);
+          if (uploaded) {
+            setUploadedImages(prev => new Set(prev).add(item.id));
+            initialized.push({ ...uploaded, productGroup: uploaded.productGroup || uploaded.id });
+          } else {
+            initialized.push({ ...item, productGroup: item.productGroup || item.id });
           }
-          
-          return { ...item, productGroup: item.productGroup || item.id };
-        })
-      );
+        } else {
+          // Item doesn't have file (restored from database) - use as-is
+          initialized.push({ ...item, productGroup: item.productGroup || item.id });
+        }
+        
+        // Update progress
+        processedCount++;
+        const progress = (processedCount / newImages.length) * 100;
+        setLoadingProgress(progress);
+        
+        if (progress < 100) {
+          setLoadingMessage(`Loading image ${processedCount} of ${newImages.length}...`);
+        } else {
+          setLoadingMessage('All images loaded!');
+        }
+      }
+      
       setGroupedItems(initialized);
+      
+      // Small delay to show completion
+      if (newImages.length > 0) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        setIsLoading(false);
+        setLoadingProgress(0);
+      }
     };
 
     initializeItems();
@@ -170,6 +219,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
   // Auto-upload image to Supabase Storage
   const uploadImageImmediately = async (item: ClothingItem, userId: string) => {
     try {
+      // Safety check: if no valid file with name, return item as-is (already uploaded or corrupted)
+      if (!item.file || !item.file.name || typeof item.file.name !== 'string') {
+        return item;
+      }
+      
       const fileExt = item.file.name.split('.').pop();
       const randomId = Math.random().toString(36).substring(2, 15);
       const fileName = `${Date.now()}-${randomId}.${fileExt}`;
@@ -211,7 +265,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
       await supabase.storage
         .from('product-images')
         .remove([storagePath]);
-      console.log('✅ Deleted from storage:', storagePath);
     } catch (error) {
       console.error('Storage delete error:', error);
     }
@@ -331,10 +384,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
     setDraggedItem(item);
     setDraggedFromGroup(fromGroup);
     // Set data for cross-component dragging (Step 2 -> Step 3)
-    e.dataTransfer.setData('application/json', JSON.stringify({
+    const dragData = {
       item,
-      productGroup: item.productGroup || item.id
-    }));
+      productGroup: item.productGroup || item.id,
+      source: 'ImageGrouper'
+    };
+    e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+    e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleDragOver = (e: React.DragEvent, targetGroup: string) => {
@@ -415,7 +471,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
   const singleItems = groupEntries.filter(([_, items]) => items.length === 1).flatMap(([_, items]) => items);
 
   return (
-    <div className="image-grouper-container">
+    <>
+      {isLoading && (
+        <LoadingProgress 
+          progress={loadingProgress} 
+          message={loadingMessage} 
+        />
+      )}
+      
+      <div className="image-grouper-container">
       <div className="grouper-header">
         <div className="stats">
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -697,7 +761,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 };
 

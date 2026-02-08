@@ -92,7 +92,6 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized }) =
     
     // Listen for category updates from CategoriesManager
     const handleCategoriesUpdated = () => {
-      console.log('Categories updated, reloading...');
       loadCategories();
     };
     
@@ -145,6 +144,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized }) =
 
   const handleCategoryDrop = async (e: React.DragEvent, category: string) => {
     e.preventDefault();
+    e.stopPropagation();
     
     let productGroup: string | undefined;
     
@@ -156,6 +156,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized }) =
         productGroup = dragData.productGroup;
       }
     } catch (err) {
+      console.error('❌ Failed to parse drag data:', err);
       // If parsing fails, fall back to draggedItem
     }
     
@@ -164,7 +165,12 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized }) =
       productGroup = draggedItem.productGroup || draggedItem.id;
     }
     
-    if (!productGroup) return;
+    if (!productGroup) {
+      console.error('❌ No product group found!');
+      setDraggedItem(null);
+      setDragOverCategory(null);
+      return;
+    }
 
     // Get all items in this product group
     const groupItems = items.filter(item => {
@@ -187,6 +193,8 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized }) =
     });
 
     onCategorized(updated);
+    
+    // Always clear drag state after drop
     setDraggedItem(null);
     setDragOverCategory(null);
   };

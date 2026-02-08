@@ -155,6 +155,11 @@
   cursor: not-allowed;
 }
 
+.drive-url-input::placeholder {
+  color: rgba(140, 145, 150, 0.35);
+  font-style: italic;
+}
+
 .drive-load-btn {
   padding: var(--space-3) var(--space-5);
   background: var(--shopify-green);

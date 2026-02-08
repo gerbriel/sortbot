@@ -4,8 +4,14 @@ import type { CategoryPreset, CategoryPresetInput } from './categoryPresets';
 
 /**
  * Fetch all category presets for the current user
+ * Includes both user's own presets AND system defaults
  */
 export async function getCategoryPresets(): Promise<CategoryPreset[]> {
+  // Get current user (if logged in)
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  console.log('🔍 Fetching category presets for user:', user?.id || 'not logged in');
+  
   const { data, error } = await supabase
     .from('category_presets')
     .select('*')
@@ -13,9 +19,11 @@ export async function getCategoryPresets(): Promise<CategoryPreset[]> {
     .order('display_name', { ascending: true });
 
   if (error) {
-    console.error('Error fetching category presets:', error);
+    console.error('❌ Error fetching category presets:', error);
     throw error;
   }
+
+  console.log(`✅ Found ${data?.length || 0} shared category presets`);
 
   return data || [];
 }

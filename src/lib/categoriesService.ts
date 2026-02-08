@@ -5,6 +5,7 @@ import type { CategoryPresetInput } from './categoryPresets';
 
 /**
  * Get all active categories for the current user
+ * Includes both user's own categories AND system defaults
  */
 export async function getCategories(): Promise<Category[]> {
   const { data: { user } } = await supabase.auth.getUser();
@@ -13,23 +14,28 @@ export async function getCategories(): Promise<Category[]> {
     throw new Error('User not authenticated');
   }
 
+  console.log('🔍 Fetching categories (collaborative mode)');
+
+  // Fetch all categories (shared across all users)
   const { data, error } = await supabase
     .from('categories')
     .select('*')
-    .eq('user_id', user.id)
     .eq('is_active', true)
     .order('sort_order', { ascending: true });
 
   if (error) {
-    console.error('Error fetching categories:', error);
+    console.error('❌ Error fetching categories:', error);
     throw error;
   }
+
+  console.log(`✅ Found ${data?.length || 0} shared categories`);
 
   return data || [];
 }
 
 /**
  * Get a specific category by name
+ * Includes both user's own categories AND system defaults
  */
 export async function getCategoryByName(name: string): Promise<Category | null> {
   const { data: { user } } = await supabase.auth.getUser();
@@ -38,10 +44,10 @@ export async function getCategoryByName(name: string): Promise<Category | null> 
     throw new Error('User not authenticated');
   }
 
+  // Remove user_id filter to let RLS handle it
   const { data, error } = await supabase
     .from('categories')
     .select('*')
-    .eq('user_id', user.id)
     .eq('name', name)
     .single();
 
@@ -138,7 +144,6 @@ export async function updateCategory(id: string, updates: Partial<CategoryInput>
     .from('categories')
     .update(updateData)
     .eq('id', id)
-    .eq('user_id', user.id)
     .select()
     .single();
 
@@ -163,8 +168,7 @@ export async function deleteCategory(id: string): Promise<void> {
   const { error } = await supabase
     .from('categories')
     .update({ is_active: false })
-    .eq('id', id)
-    .eq('user_id', user.id);
+    .eq('id', id);
 
   if (error) {
     console.error('Error deleting category:', error);
@@ -192,8 +196,7 @@ export async function reorderCategories(categoryIds: string[]): Promise<void> {
     await supabase
       .from('categories')
       .update({ sort_order: update.sort_order })
-      .eq('id', update.id)
-      .eq('user_id', user.id);
+      .eq('id', update.id);
   }
 }
 
@@ -207,11 +210,10 @@ export async function initializeDefaultCategories(): Promise<void> {
     throw new Error('User not authenticated');
   }
 
-  // Check if user already has categories
+  // Check if any categories exist (shared across all users)
   const { data: existing, error: checkError } = await supabase
     .from('categories')
     .select('id')
-    .eq('user_id', user.id)
     .eq('is_active', true)
     .limit(1);
 

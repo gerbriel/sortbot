@@ -75,6 +75,14 @@ body {
   color: var(--gray-600);
 }
 
+/* Global Placeholder Styling - Make placeholders very light and italic */
+input::placeholder,
+textarea::placeholder {
+  color: rgba(140, 145, 150, 0.35);
+  font-style: italic;
+  opacity: 1; /* Firefox fix */
+}
+
 /* Typography */
 h1, h2, h3, h4, h5, h6 {
   color: var(--gray-700);

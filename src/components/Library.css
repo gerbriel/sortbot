@@ -1,0 +1,931 @@
+/* Library Modal - macOS Finder Style */
+.library-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.library-content {
+  background: #f5f5f7; /* macOS window background */
+  border-radius: 12px;
+  max-width: 1200px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+/* Header */
+.library-header {
+  background: linear-gradient(180deg, #fafafa 0%, #f0f0f0 100%);
+  border-bottom: 1px solid #d1d1d6;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-title svg {
+  color: #007aff; /* macOS blue */
+}
+
+.library-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #1d1d1f;
+}
+
+.batch-count {
+  font-size: 14px;
+  color: #86868b;
+  font-weight: 400;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #86868b;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.close-button:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #1d1d1f;
+}
+
+/* Loading & Empty States */
+.loading-state,
+.empty-state {
+  padding: 80px 20px;
+  text-align: center;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.empty-icon {
+  color: #c7c7cc;
+  margin-bottom: 16px;
+}
+
+.empty-state p {
+  color: #86868b;
+  font-size: 16px;
+  margin: 8px 0;
+}
+
+.empty-subtitle {
+  font-size: 14px !important;
+  color: #aeaeb2 !important;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #e5e5ea;
+  border-top-color: #007aff;
+  border-radius: 50%;
+  margin: 0 auto 20px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Batch Grid - macOS Finder Style */
+.batch-grid {
+  padding: 24px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+  overflow-y: auto;
+  flex: 1;
+  /* Prevent grid items from shrinking */
+  grid-auto-rows: minmax(380px, auto);
+}
+
+/* Batch Card - Folder Style */
+.batch-card {
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  position: relative;
+  /* Ensure card maintains size */
+  min-height: 380px;
+  display: flex;
+  flex-direction: column;
+}
+
+.batch-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.batch-card:hover .batch-actions {
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* Thumbnail Grid (2x2) */
+.batch-thumbnails {
+  width: 100%;
+  aspect-ratio: 1;
+  background: #f5f5f7;
+  position: relative;
+  overflow: hidden;
+}
+
+.thumbnail-grid {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  gap: 2px;
+  background: #e5e5ea;
+}
+
+.thumbnail-grid.grid-1 {
+  grid-template-columns: 1fr;
+}
+
+.thumbnail-grid.grid-2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.thumbnail-grid.grid-3,
+.thumbnail-grid.grid-4 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.thumbnail-item {
+  background: white;
+  overflow: hidden;
+  position: relative;
+}
+
+.thumbnail-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.thumbnail-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #c7c7cc;
+  gap: 8px;
+}
+
+.thumbnail-placeholder p {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* Batch Info */
+.batch-info {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.batch-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.folder-icon {
+  color: #007aff;
+  flex-shrink: 0;
+}
+
+.batch-title h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1d1d1f;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Meta Information */
+.batch-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #86868b;
+}
+
+.meta-row svg {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+/* Progress Bar */
+.batch-progress {
+  margin-top: 4px;
+}
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.step-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #007aff;
+}
+
+.progress-percent {
+  font-size: 11px;
+  color: #86868b;
+  font-weight: 600;
+}
+
+.progress-bar {
+  height: 4px;
+  background: #e5e5ea;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #007aff 0%, #0051d5 100%);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* Status Badge */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  align-self: flex-start;
+}
+
+.status-badge.completed {
+  background: #d1f4e0;
+  color: #00a862;
+}
+
+.status-badge svg {
+  flex-shrink: 0;
+}
+
+/* Batch Actions (Hover Overlay) */
+.batch-actions {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 16px;
+  background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.75) 100%);
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.batch-card:hover .batch-actions {
+  opacity: 1;
+}
+
+.action-button {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.action-button.secondary {
+  background: #f5f5f7;
+  color: #1d1d1f;
+  border: 1px solid #d1d1d6;
+}
+
+.action-button.secondary:hover {
+  background: #e8e8ed;
+  border-color: #aeaeb2;
+}
+
+.action-button.primary {
+  background: #007aff;
+  color: white;
+}
+
+.action-button.primary:hover {
+  background: #0051d5;
+  transform: scale(1.02);
+}
+
+.action-button.danger {
+  background: rgba(255, 59, 48, 0.9);
+  color: white;
+}
+
+.action-button.danger:hover {
+  background: #ff3b30;
+  transform: scale(1.02);
+}
+
+.action-button svg {
+  flex-shrink: 0;
+}
+
+/* Completed Badge Overlay */
+.batch-card.completed .batch-thumbnails::after {
+  content: '✓';
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  background: #34c759;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  box-shadow: 0 2px 8px rgba(52, 199, 89, 0.4);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .library-content {
+    max-height: 95vh;
+  }
+
+  .batch-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .library-header {
+    padding: 12px 16px;
+  }
+
+  .batch-card:hover {
+    transform: none;
+  }
+
+  .batch-actions {
+    opacity: 1;
+    pointer-events: all;
+    background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.85) 100%);
+  }
+}
+
+@media (max-width: 480px) {
+  .batch-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .action-button span {
+    display: none;
+  }
+
+  .action-button {
+    padding: 10px;
+  }
+}
+
+/* Smooth scrolling */
+.batch-grid::-webkit-scrollbar {
+  width: 8px;
+}
+
+.batch-grid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.batch-grid::-webkit-scrollbar-thumb {
+  background: #c7c7cc;
+  border-radius: 4px;
+}
+
+.batch-grid::-webkit-scrollbar-thumb:hover {
+  background: #aeaeb2;
+}
+
+/* View Switcher */
+.view-switcher {
+  display: flex;
+  gap: 8px;
+  padding: 16px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #e5e5ea;
+}
+
+.view-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6e6e73;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.view-tab:hover {
+  background: #f5f5f7;
+  color: #1d1d1f;
+}
+
+.view-tab.active {
+  background: #007aff;
+  color: #ffffff;
+}
+
+.view-tab svg {
+  opacity: 0.8;
+}
+
+.view-tab.active svg {
+  opacity: 1;
+}
+
+/* Product Groups Grid */
+.groups-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+  padding: 24px;
+  overflow-y: auto;
+  max-height: calc(90vh - 200px);
+  /* Prevent grid items from shrinking */
+  grid-auto-rows: minmax(320px, auto);
+}
+
+.group-card {
+  background: #ffffff;
+  border-radius: 10px;
+  border: 1px solid #e5e5ea;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  position: relative;
+  /* Ensure card maintains size */
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+}
+
+.group-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  border-color: #d1d1d6;
+}
+
+.group-images {
+  background: #fafafa;
+  aspect-ratio: 1;
+  padding: 12px;
+}
+
+.group-info {
+  padding: 16px;
+}
+
+.group-info h3 {
+  margin: 0 0 12px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1d1d1f;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meta-tag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #f5f5f7;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #6e6e73;
+}
+
+.meta-tag.category {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.meta-tag svg {
+  opacity: 0.7;
+}
+
+.group-actions {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.group-card:hover .group-actions {
+  opacity: 1;
+}
+
+.group-actions .action-button {
+  padding: 6px 10px;
+  font-size: 12px;
+  gap: 4px;
+}
+
+.group-actions .action-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Images Grid */
+.images-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+  padding: 24px;
+  overflow-y: auto;
+  max-height: calc(90vh - 200px);
+  /* Prevent grid items from shrinking */
+  grid-auto-rows: minmax(220px, auto);
+}
+
+.image-card {
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #e5e5ea;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  position: relative;
+  /* Ensure card maintains size */
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+}
+
+.image-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+  border-color: #d1d1d6;
+}
+
+.image-preview {
+  aspect-ratio: 1;
+  background: #fafafa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #c7c7cc;
+}
+
+.image-info {
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.image-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+}
+
+.image-delete {
+  padding: 6px;
+  background: transparent;
+  border: none;
+  color: #ff3b30;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  opacity: 0;
+}
+
+.image-card:hover .image-delete {
+  opacity: 1;
+}
+
+.image-delete:hover {
+  background: #ffebee;
+}
+
+/* Scrollbar styles for new grids */
+.groups-grid::-webkit-scrollbar,
+.images-grid::-webkit-scrollbar {
+  width: 8px;
+}
+
+.groups-grid::-webkit-scrollbar-track,
+.images-grid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.groups-grid::-webkit-scrollbar-thumb,
+.images-grid::-webkit-scrollbar-thumb {
+  background: #c7c7cc;
+  border-radius: 4px;
+}
+
+.groups-grid::-webkit-scrollbar-thumb:hover,
+.images-grid::-webkit-scrollbar-thumb:hover {
+  background: #aeaeb2;
+}
+
+/* Selection and Drag-Drop Styles */
+
+/* Selection Indicator - Matches ImageGrouper style */
+.selection-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #10b981;
+  color: white;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+  animation: selectionAppear 0.2s ease-out;
+  pointer-events: none; /* Don't block clicks */
+}
+
+@keyframes selectionAppear {
+  0% {
+    transform: scale(0) rotate(-180deg);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2) rotate(10deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* Selection Toolbar */
+.selection-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  background: linear-gradient(180deg, #d1fae5 0%, #a7f3d0 100%);
+  border-bottom: 1px solid #10b981;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.selection-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #047857;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.selection-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.selection-actions button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.selection-actions button:first-child {
+  background: white;
+  color: #047857;
+  border: 1px solid #10b981;
+}
+
+.selection-actions button:first-child:hover {
+  background: #f0fdf4;
+}
+
+.selection-actions button:nth-child(2) {
+  background: #10b981;
+  color: white;
+}
+
+.selection-actions button:nth-child(2):hover {
+  background: #059669;
+}
+
+.selection-actions button:last-child {
+  background: #ff3b30;
+  color: white;
+}
+
+.selection-actions button:last-child:hover {
+  background: #e32d20;
+}
+
+/* Selected State - Matches ImageGrouper green style */
+.batch-card.selected,
+.group-card.selected,
+.image-card.selected {
+  outline: 4px solid #10b981;            /* Thicker outline for visibility */
+  outline-offset: -4px;                   /* Keeps outline inside the card boundary */
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.25); /* Stronger glow */
+  /* No transform to prevent layout shift */
+  z-index: 1;                             /* Ensure selected items appear above others */
+  /* Override hover background when selected */
+  background: rgba(16, 185, 129, 0.03) !important;
+}
+
+/* Use box-sizing to prevent border issues */
+.batch-card,
+.group-card,
+.image-card {
+  box-sizing: border-box;
+}
+
+/* Enhanced hover states for better clickability feedback */
+.batch-card:hover,
+.group-card:hover,
+.image-card:hover {
+  /* Subtle background to show entire card is clickable */
+  background: rgba(0, 122, 255, 0.02);
+}
+
+.batch-card:active,
+.group-card:active,
+.image-card:active {
+  /* Feedback on click */
+  background: rgba(0, 122, 255, 0.05);
+}
+
+/* Dragging State */
+.batch-card.dragging,
+.group-card.dragging,
+.image-card.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+  cursor: grabbing;
+}
+
+/* Drag Over State - Green to match workflow */
+.batch-card.drag-over,
+.group-card.drag-over,
+.image-card.drag-over {
+  border: 3px dashed #10b981;
+  background: rgba(16, 185, 129, 0.05);
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+}
+
+/* Cursor changes */
+.batch-card,
+.group-card,
+.image-card {
+  cursor: pointer;
+  user-select: none;
+}
+
+.batch-card[draggable="true"],
+.group-card[draggable="true"],
+.image-card[draggable="true"] {
+  cursor: grab;
+}
+
+.batch-card[draggable="true"]:active,
+.group-card[draggable="true"]:active,
+.image-card[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* Rubber Band Selection Box */
+.selection-box {
+  position: absolute;
+  border: 2px dashed #667eea;
+  background: rgba(102, 126, 234, 0.15);
+  pointer-events: none;
+  z-index: 1000;
+  box-sizing: border-box;
+}
+
+/* Grid containers need position relative for selection box */
+.batch-grid,
+.groups-grid,
+.images-grid {
+  position: relative;
+}
+
