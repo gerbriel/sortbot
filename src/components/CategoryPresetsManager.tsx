@@ -139,14 +139,22 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
   };
 
   const handleDuplicate = async (preset: CategoryPreset) => {
-    const newName = prompt(`Enter a name for the duplicated preset:`, `${preset.display_name} (Copy)`);
+    const newDisplayName = prompt(`Enter a display name for the duplicated preset:`, `${preset.display_name} (Copy)`);
     
-    if (!newName) return;
+    if (!newDisplayName) return;
+
+    // Generate unique category_name from display name + random string
+    const randomSuffix = Math.random().toString(36).substring(2, 8);
+    const newCategoryName = newDisplayName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .substring(0, 40) + '_' + randomSuffix;
 
     // Create new preset data without id, user_id, created_at, updated_at
     const duplicateData: CategoryPresetInput = {
-      category_name: `${preset.category_name}_copy_${Date.now()}`,
-      display_name: newName,
+      category_name: newCategoryName,
+      display_name: newDisplayName,
       description: preset.description,
       default_weight_value: preset.default_weight_value,
       default_weight_unit: preset.default_weight_unit,
@@ -207,7 +215,7 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
     try {
       await createCategoryPreset(duplicateData);
       await loadPresets();
-      alert(`✅ Preset duplicated: "${newName}"`);
+      alert(`✅ Preset duplicated: "${newDisplayName}"`);
     } catch (error) {
       console.error('Error duplicating preset:', error);
       alert('Failed to duplicate preset');
