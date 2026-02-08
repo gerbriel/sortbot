@@ -42,6 +42,11 @@ export function useUserPresence({
     const setupPresence = async () => {
       console.log('🔴 Setting up real-time presence tracking...');
       
+      // Get user email from Supabase auth
+      const { data: { user } } = await supabase.auth.getUser();
+      const userEmail = user?.email || `User ${userId.slice(0, 8)}`;
+      console.log('👤 User email for presence:', userEmail);
+      
       // Create a presence channel
       channel = supabase.channel('workspace-presence', {
         config: {
@@ -94,7 +99,7 @@ export function useUserPresence({
             // Send initial presence
             await channel.track({
               userId,
-              email: 'You',
+              email: userEmail,
               currentStep,
               currentView,
               cursorX: 0,
@@ -112,7 +117,7 @@ export function useUserPresence({
           if (channel && isTracking) {
             channel.track({
               userId,
-              email: 'You',
+              email: userEmail,
               currentStep,
               currentView,
               cursorX: e.clientX,
@@ -131,7 +136,7 @@ export function useUserPresence({
         if (channel && isTracking) {
           channel.track({
             userId,
-            email: 'You',
+            email: userEmail,
             currentStep,
             currentView,
             cursorX: 0, // Don't update cursor in heartbeat
