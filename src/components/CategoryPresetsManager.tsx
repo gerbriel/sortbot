@@ -138,6 +138,82 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
     }
   };
 
+  const handleDuplicate = async (preset: CategoryPreset) => {
+    const newName = prompt(`Enter a name for the duplicated preset:`, `${preset.display_name} (Copy)`);
+    
+    if (!newName) return;
+
+    // Create new preset data without id, user_id, created_at, updated_at
+    const duplicateData: CategoryPresetInput = {
+      category_name: `${preset.category_name}_copy_${Date.now()}`,
+      display_name: newName,
+      description: preset.description,
+      default_weight_value: preset.default_weight_value,
+      default_weight_unit: preset.default_weight_unit,
+      requires_shipping: preset.requires_shipping,
+      product_type: preset.product_type,
+      vendor: preset.vendor,
+      suggested_price_min: preset.suggested_price_min,
+      suggested_price_max: preset.suggested_price_max,
+      default_material: preset.default_material,
+      default_care_instructions: preset.default_care_instructions,
+      measurement_template: preset.measurement_template,
+      seo_title_template: preset.seo_title_template,
+      seo_keywords: preset.seo_keywords,
+      shopify_product_type: preset.shopify_product_type,
+      shopify_collection_id: preset.shopify_collection_id,
+      default_tags: preset.default_tags,
+      typical_condition: preset.typical_condition,
+      is_active: preset.is_active,
+      // New CSV fields
+      package_dimensions: (preset as any).package_dimensions,
+      parcel_size: (preset as any).parcel_size,
+      ships_from: (preset as any).ships_from,
+      continue_selling_out_of_stock: (preset as any).continue_selling_out_of_stock,
+      size_type: (preset as any).size_type,
+      style: (preset as any).style,
+      gender: (preset as any).gender,
+      age_group: (preset as any).age_group,
+      policies: (preset as any).policies,
+      renewal_options: (preset as any).renewal_options,
+      who_made_it: (preset as any).who_made_it,
+      what_is_it: (preset as any).what_is_it,
+      listing_type: (preset as any).listing_type,
+      discounted_shipping: (preset as any).discounted_shipping,
+      custom_label_0: (preset as any).custom_label_0,
+      // Phase 6 comprehensive fields
+      compare_at_price: (preset as any).compare_at_price,
+      cost_per_item: (preset as any).cost_per_item,
+      color: (preset as any).color,
+      secondary_color: (preset as any).secondary_color,
+      model_name: (preset as any).model_name,
+      model_number: (preset as any).model_number,
+      era: (preset as any).era,
+      sku_prefix: (preset as any).sku_prefix,
+      barcode_prefix: (preset as any).barcode_prefix,
+      default_inventory_quantity: (preset as any).default_inventory_quantity,
+      default_measurements: (preset as any).default_measurements,
+      seo_description: (preset as any).seo_description,
+      mpn_prefix: (preset as any).mpn_prefix,
+      default_status: (preset as any).default_status,
+      default_published: (preset as any).default_published,
+      tax_code: (preset as any).tax_code,
+      unit_price_total_measure: (preset as any).unit_price_total_measure,
+      unit_price_total_measure_unit: (preset as any).unit_price_total_measure_unit,
+      unit_price_base_measure: (preset as any).unit_price_base_measure,
+      unit_price_base_measure_unit: (preset as any).unit_price_base_measure_unit,
+    };
+
+    try {
+      await createCategoryPreset(duplicateData);
+      await loadPresets();
+      alert(`✅ Preset duplicated: "${newName}"`);
+    } catch (error) {
+      console.error('Error duplicating preset:', error);
+      alert('Failed to duplicate preset');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -741,6 +817,9 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
               <div className="preset-actions">
                 <button className="button button-secondary" onClick={() => handleEdit(preset)}>
                   Edit
+                </button>
+                <button className="button" onClick={() => handleDuplicate(preset)}>
+                  Duplicate
                 </button>
                 <button 
                   className="button button-danger" 
