@@ -7,11 +7,6 @@ import type { CategoryPreset, CategoryPresetInput } from './categoryPresets';
  * Includes both user's own presets AND system defaults
  */
 export async function getCategoryPresets(): Promise<CategoryPreset[]> {
-  // Get current user (if logged in)
-  const { data: { user } } = await supabase.auth.getUser();
-  
-  console.log('🔍 Fetching category presets for user:', user?.id || 'not logged in');
-  
   const { data, error } = await supabase
     .from('category_presets')
     .select('*')
@@ -19,11 +14,8 @@ export async function getCategoryPresets(): Promise<CategoryPreset[]> {
     .order('display_name', { ascending: true });
 
   if (error) {
-    console.error('❌ Error fetching category presets:', error);
     throw error;
   }
-
-  console.log(`✅ Found ${data?.length || 0} shared category presets`);
 
   return data || [];
 }
@@ -44,7 +36,6 @@ export async function getCategoryPresetByName(categoryName: string): Promise<Cat
       // No rows returned
       return null;
     }
-    console.error('Error fetching category preset:', error);
     throw error;
   }
 
@@ -71,7 +62,6 @@ export async function createCategoryPreset(preset: CategoryPresetInput): Promise
     .single();
 
   if (error) {
-    console.error('Error creating category preset:', error);
     throw error;
   }
 
@@ -93,7 +83,6 @@ export async function updateCategoryPreset(
     .single();
 
   if (error) {
-    console.error('Error updating category preset:', error);
     throw error;
   }
 
@@ -110,7 +99,6 @@ export async function deleteCategoryPreset(id: string): Promise<void> {
     .eq('id', id);
 
   if (error) {
-    console.error('Error deleting category preset:', error);
     throw error;
   }
 }
@@ -125,7 +113,6 @@ export async function permanentlyDeleteCategoryPreset(id: string): Promise<void>
     .eq('id', id);
 
   if (error) {
-    console.error('Error permanently deleting category preset:', error);
     throw error;
   }
 }

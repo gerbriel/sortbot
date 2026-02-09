@@ -36,16 +36,12 @@ export async function applyPresetToProductGroup(
     }
     
     if (!preset) {
-      console.log(`No active preset found for category: ${categoryName}`);
       // Still apply category even if no preset exists
       return items.map(item => ({
         ...item,
         category: categoryName
       }));
     }
-    
-    console.log(`Applying ${preset.is_default ? 'DEFAULT' : ''} preset "${preset.display_name}" for category: ${categoryName}`);
-    console.log(`Applying preset for category: ${categoryName}`, preset);
     
     /**
      * Apply preset values to items with priority hierarchy:

@@ -25,6 +25,8 @@ const USER_COLORS = [
 ];
 
 export default function RemoteCursors({ users }: RemoteCursorsProps) {
+  console.log('🖼️ RemoteCursors rendering with users:', users);
+  
   const getUserColor = (userId: string): string => {
     // Generate consistent color based on user ID
     const hash = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);

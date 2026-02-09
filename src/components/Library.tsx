@@ -9,7 +9,6 @@ import {
   fetchSavedImages 
 } from '../lib/libraryService';
 import { Folder, Calendar, Image, Layers, Tag, ArrowRight, Trash2, X, Grid3x3, Package, Edit2, Copy, Check } from 'lucide-react';
-import LiveWorkspaceSelector from './LiveWorkspaceSelector';
 import type { ClothingItem } from '../App';
 import './Library.css';
 
@@ -48,11 +47,12 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
   const [images, setImages] = useState<ImageRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  
+  // Deletion progress state
+  const [deletingItem, setDeletingItem] = useState<{id: string, type: 'batch' | 'group' | 'image', progress: number} | null>(null);
+  
   const [editingBatch, setEditingBatch] = useState<string | null>(null);
   const [editBatchName, setEditBatchName] = useState<string>('');
-  
-  // Live workspace filter
-  const [workspaceFilter, setWorkspaceFilter] = useState<string | null>(null);
   
   // Selection and drag-drop state
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -81,23 +81,17 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
     } else if (viewMode === 'images') {
       loadImages();
     }
-  }, [userId, viewMode, workspaceFilter]);
+  }, [userId, viewMode]);
   
-  // Clear selection when switching views or workspace (separate effect)
+  // Clear selection when switching views (separate effect)
   useEffect(() => {
     setSelectedItems(new Set());
-  }, [viewMode, workspaceFilter]);
+  }, [viewMode]);
 
   const loadBatches = async () => {
     setLoading(true);
     const data = await fetchWorkflowBatches();
-    
-    // Filter by workspace if specific user selected
-    const filteredData = workspaceFilter 
-      ? data.filter(batch => batch.user_id === workspaceFilter)
-      : data;
-    
-    setBatches(filteredData);
+    setBatches(data);
     setLoading(false);
   };
 
@@ -139,12 +133,8 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       
       // 2. Load saved products from database
       const savedProducts = await fetchSavedProducts();
+      
       savedProducts.forEach((product: any) => {
-        // Filter by workspace if specific user selected
-        if (workspaceFilter && product.user_id !== workspaceFilter) {
-          return; // Skip this product
-        }
-        
         groups.push({
           id: product.id,
           title: product.title || product.seo_title || 'Untitled Product',
@@ -173,7 +163,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       
       setProductGroups(Array.from(groupMap.values()));
     } catch (error) {
-      console.error('Error loading product groups:', error);
+      // Silent error handling
     }
     setLoading(false);
   };
@@ -188,11 +178,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       const savedImages = await fetchSavedImages();
       
       savedImages.forEach((img: any) => {
-        // Filter by workspace if specific user selected
-        if (workspaceFilter && img.user_id !== workspaceFilter) {
-          return; // Skip this image
-        }
-        
         imageList.push({
           id: img.id, // Use database ID, not image URL
           preview: img.image_url,
@@ -210,43 +195,82 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       // Deduplication should only happen at the Product Groups level.
       setImages(imageList);
     } catch (error) {
-      console.error('Error loading images:', error);
+      // Silent error handling
     }
     setLoading(false);
   };
 
   const handleDelete = async (batchId: string) => {
+    // Start deletion animation
+    setDeletingItem({id: batchId, type: 'batch', progress: 0});
+    setDeleteConfirm(null);
+    
+    // Animate progress
+    const animationDuration = 2000; // 2 seconds
+    const steps = 20;
+    const stepDuration = animationDuration / steps;
+    
+    for (let i = 1; i <= steps; i++) {
+      await new Promise(resolve => setTimeout(resolve, stepDuration));
+      const progress = (i / steps) * 100;
+      setDeletingItem({id: batchId, type: 'batch', progress});
+    }
+    
+    // Actually delete
     const success = await deleteWorkflowBatch(batchId);
     if (success) {
       setBatches(batches.filter(b => b.id !== batchId));
-      setDeleteConfirm(null);
-    } else {
-      alert('Failed to delete batch. Please try again.');
     }
+    
+    setDeletingItem(null);
   };
 
   const handleDeleteGroup = async (groupId: string) => {
+    // Start deletion animation
+    setDeletingItem({id: groupId, type: 'group', progress: 0});
+    setDeleteConfirm(null);
+    
+    // Animate progress
+    const animationDuration = 2000; // 2 seconds
+    const steps = 20;
+    const stepDuration = animationDuration / steps;
+    
+    for (let i = 1; i <= steps; i++) {
+      await new Promise(resolve => setTimeout(resolve, stepDuration));
+      setDeletingItem({id: groupId, type: 'group', progress: (i / steps) * 100});
+    }
+    
+    // Actually delete
     const success = await deleteProductGroup(groupId);
     if (success) {
       setProductGroups(productGroups.filter(g => g.id !== groupId));
-      setDeleteConfirm(null);
-      // Show success message
-      alert('Product group deleted successfully!');
-    } else {
-      alert('Failed to delete product group. Please try again.');
     }
+    
+    setDeletingItem(null);
   };
 
   const handleDeleteImage = async (imageId: string, storagePath?: string) => {
+    // Start deletion animation
+    setDeletingItem({id: imageId, type: 'image', progress: 0});
+    setDeleteConfirm(null);
+    
+    // Animate progress
+    const animationDuration = 2000; // 2 seconds
+    const steps = 20;
+    const stepDuration = animationDuration / steps;
+    
+    for (let i = 1; i <= steps; i++) {
+      await new Promise(resolve => setTimeout(resolve, stepDuration));
+      setDeletingItem({id: imageId, type: 'image', progress: (i / steps) * 100});
+    }
+    
+    // Actually delete
     const success = await deleteImage(imageId, storagePath);
     if (success) {
       setImages(images.filter(img => img.id !== imageId));
-      setDeleteConfirm(null);
-      // Show success message
-      alert('Image deleted successfully!');
-    } else {
-      alert('Failed to delete image. Please try again.');
     }
+    
+    setDeletingItem(null);
   };
 
   const handleDuplicateBatch = async (batchId: string) => {
@@ -297,13 +321,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
 
   // Selection handlers
   const handleItemClick = (itemId: string, event: React.MouseEvent) => {
-    console.log('[Library] handleItemClick called', { 
-      itemId, 
-      shiftKey: event.shiftKey,
-      currentSelected: Array.from(selectedItems),
-      viewMode 
-    });
-    
     // Matches ImageGrouper behavior
     const newSelected = new Set(selectedItems);
     
@@ -323,7 +340,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       }
     }
     
-    console.log('[Library] Setting new selection', Array.from(newSelected));
     setSelectedItems(newSelected);
   };
 
@@ -573,28 +589,49 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
   const handleBulkDelete = async () => {
     if (selectedItems.size === 0) return;
 
-    const confirmMsg = `Delete ${selectedItems.size} selected items? This cannot be undone.`;
-    if (!confirm(confirmMsg)) return;
-
+    const itemType = viewMode === 'batches' ? 'batch' : viewMode === 'groups' ? 'group' : 'image';
+    const count = selectedItems.size;
+    
+    // Start deletion animation
+    setDeletingItem({id: 'bulk', type: itemType, progress: 0});
+    
+    // Animate progress while deleting items
+    const totalItems = count;
+    let deletedCount = 0;
+    const items = Array.from(selectedItems);
+    
+    // Delete items one by one with progress updates
     if (viewMode === 'batches') {
-      for (const batchId of selectedItems) {
+      for (const batchId of items) {
         await deleteWorkflowBatch(batchId);
+        deletedCount++;
+        const progress = (deletedCount / totalItems) * 100;
+        setDeletingItem({id: 'bulk', type: itemType, progress});
       }
       setBatches(batches.filter(b => !selectedItems.has(b.id)));
     } else if (viewMode === 'groups') {
-      for (const groupId of selectedItems) {
+      for (const groupId of items) {
         await deleteProductGroup(groupId);
+        deletedCount++;
+        const progress = (deletedCount / totalItems) * 100;
+        setDeletingItem({id: 'bulk', type: itemType, progress});
       }
       setProductGroups(productGroups.filter(g => !selectedItems.has(g.id)));
     } else if (viewMode === 'images') {
-      for (const imageId of selectedItems) {
+      for (const imageId of items) {
         await deleteImage(imageId);
+        deletedCount++;
+        const progress = (deletedCount / totalItems) * 100;
+        setDeletingItem({id: 'bulk', type: itemType, progress});
       }
       setImages(images.filter(img => !selectedItems.has(img.id)));
     }
-
+    
+    // Show completion for a moment
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    setDeletingItem(null);
     clearSelection();
-    alert(`Successfully deleted ${selectedItems.size} items!`);
   };
 
   const formatDate = (dateString: string) => {
@@ -679,11 +716,49 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
           </button>
         </div>
 
-        {/* Live Workspace Selector */}
-        <LiveWorkspaceSelector 
-          onWorkspaceChange={setWorkspaceFilter}
-          currentUserId={userId}
-        />
+        {/* Deletion Progress Overlay */}
+        {deletingItem && (
+          <div className="deletion-overlay">
+            <div className="deletion-animation">
+              <div className="deletion-message">
+                {deletingItem.id === 'bulk' 
+                  ? `Deleting ${deletingItem.type}s... ${Math.round(deletingItem.progress)}%`
+                  : `Deleting ${deletingItem.type}... ${Math.round(deletingItem.progress)}%`
+                }
+              </div>
+              
+              <div className="deletion-track">
+                {/* Clothing Rack */}
+                <div className="rack-bar"></div>
+                <div className="rack-stand-left"></div>
+                <div className="rack-stand-right"></div>
+                
+                {/* Moving Hanger */}
+                <div 
+                  className="hanger-icon" 
+                  style={{left: `calc(10% + ${deletingItem.progress * 0.7}%)`}}
+                  key={`hanger-${deletingItem.progress}`}
+                >
+                  <div className="hanger-hook"></div>
+                  <div className="hanger-bar"></div>
+                  <div className="hanger-left"></div>
+                  <div className="hanger-right"></div>
+                  <div className="hanger-clothing"></div>
+                </div>
+                
+                {/* Trashcan at the end */}
+                <div className="trashcan-icon">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* View Switcher */}
         <div className="view-switcher">
@@ -1128,16 +1203,9 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
           data-item-id={image.id}
           className={`image-card ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''}`}
           onClick={(e) => {
-            console.log('[Library] Image card clicked', {
-              imageId: image.id,
-              target: (e.target as HTMLElement).tagName,
-              className: (e.target as HTMLElement).className
-            });
-            
             // Only prevent selection if directly clicking buttons
             const target = e.target as HTMLElement;
             if (target.tagName === 'BUTTON' || target.closest('button')) {
-              console.log('[Library] Click on button, ignoring');
               return;
             }
             handleItemClick(image.id, e);

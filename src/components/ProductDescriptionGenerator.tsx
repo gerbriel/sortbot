@@ -246,7 +246,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         const presets = await getCategoryPresets();
         setAvailablePresets(presets.filter(p => p.is_active));
       } catch (error) {
-        console.error('Failed to load presets:', error);
+        // Silently fail preset loading
       }
     };
     loadPresets();
@@ -266,12 +266,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       );
       
       if (hasPresetData) {
-        console.log('⏭️  Preset already applied to this group, skipping auto-apply');
         return;
       }
 
       try {
-        console.log(`🔄 Auto-applying default preset for category: ${currentItem.category}`);
         const updatedGroup = await applyPresetToProductGroup(currentGroup, currentItem.category);
         
         // Update processedItems with preset-enriched items
@@ -295,10 +293,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         
         if (defaultPreset) {
           setSelectedPresetId(defaultPreset.id);
-          console.log(`✅ Auto-applied default preset: ${defaultPreset.display_name}`);
         }
       } catch (error) {
-        console.error('Failed to auto-apply preset:', error);
+        // Silently fail auto-apply
       }
     };
 
@@ -327,9 +324,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       
       setProcessedItems(updated);
       setSelectedPresetId(presetId);
-      console.log(`✅ Manually applied preset: ${preset.display_name}`);
     } catch (error) {
-      console.error('Failed to apply preset:', error);
       alert('Failed to apply preset. Please try again.');
     }
   };

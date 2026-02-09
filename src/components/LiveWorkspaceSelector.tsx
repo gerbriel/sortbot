@@ -46,6 +46,8 @@ export default function LiveWorkspaceSelector({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      console.log('🔌 LiveWorkspaceSelector: Setting up for user:', user.id, user.email);
+
       // Subscribe to the same presence channel
       channel = supabase.channel('workspace-presence');
 
@@ -57,21 +59,23 @@ export default function LiveWorkspaceSelector({
           // Convert presence state to users list
           const usersList: WorkspaceUser[] = [];
           
-          Object.keys(state).forEach((presenceKey) => {
-            const presences = state[presenceKey] as Array<{ presence_ref: string } & PresenceState>;
-            presences.forEach((presence) => {
-              // Only add if it has userId (valid presence data)
-              if (presence.userId) {
-                usersList.push({
-                  id: presence.userId,
-                  email: presence.email || 'Unknown User',
-                  isActive: true,
-                  lastActive: new Date(presence.timestamp || Date.now()),
-                  currentStep: presence.currentStep,
-                  currentView: presence.currentView,
-                });
-              }
-            });
+          // The KEY is the userId in Supabase presence
+          Object.entries(state).forEach(([presenceUserId, presences]) => {
+            const presenceArray = presences as Array<{ presence_ref: string } & PresenceState>;
+            const presence = presenceArray[0]; // Get first presence for this user
+            
+            console.log('🔍 Selector processing:', { presenceUserId, presence });
+            
+            if (presence) {
+              usersList.push({
+                id: presenceUserId, // Use the key as userId
+                email: presence.email || `User ${presenceUserId.slice(0, 8)}`,
+                isActive: true,
+                lastActive: new Date(presence.timestamp || Date.now()),
+                currentStep: presence.currentStep,
+                currentView: presence.currentView,
+              });
+            }
           });
 
           // Sort: current user first, then alphabetically
@@ -81,11 +85,8 @@ export default function LiveWorkspaceSelector({
             return a.email.localeCompare(b.email);
           });
 
-          console.log(`✅ Live users from presence:`, usersList.map(u => ({ 
-            email: u.email, 
-            step: u.currentStep,
-            view: u.currentView
-          })));
+          console.log(`✅ Live users from presence:`, usersList);
+          console.log(`📊 Total users found: ${usersList.length}, Current user ID: ${currentUserId}`);
 
           setUsers(usersList);
         })
