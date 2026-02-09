@@ -28,6 +28,7 @@ const LoadingProgress: React.FC<LoadingProgressProps> = ({ progress, message = '
               left: `${progress}%`,
               transform: `translateX(-50%) ${progress > 90 ? 'scale(0.95)' : 'scale(1)'}` 
             }}
+            key={`upload-hanger-${Math.round(progress)}`}
           >
             {/* Hanger hook */}
             <div className="hanger-hook"></div>

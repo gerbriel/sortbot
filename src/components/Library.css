@@ -929,3 +929,205 @@
   position: relative;
 }
 
+
+/* ============================================
+   DELETION PROGRESS ANIMATION (Clothing Rack Style)
+   ============================================ */
+
+.deletion-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.deletion-animation {
+  background: linear-gradient(135deg, #2a2d3a 0%, #1e2028 100%);
+  border-radius: 24px;
+  padding: 48px 64px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  max-width: 600px;
+  width: 90%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.deletion-message {
+  text-align: center;
+  font-size: 20px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 40px;
+  letter-spacing: 0.5px;
+}
+
+/* Deletion Rack Container */
+.deletion-track {
+  position: relative;
+  width: 100%;
+  height: 150px;
+  margin-bottom: 32px;
+}
+
+/* Clothing Rack Structure */
+.rack-bar {
+  position: absolute;
+  top: 30px;
+  left: 10%;
+  right: 10%;
+  height: 8px;
+  background: linear-gradient(180deg, #8b8d94 0%, #5a5c63 100%);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.rack-stand-left,
+.rack-stand-right {
+  position: absolute;
+  width: 6px;
+  height: 80px;
+  background: linear-gradient(180deg, #8b8d94 0%, #5a5c63 100%);
+  border-radius: 3px;
+  top: 30px;
+}
+
+.rack-stand-left {
+  left: 10%;
+}
+
+.rack-stand-right {
+  right: 10%;
+}
+
+/* Moving Hanger (Red/Danger themed for deletion) */
+.hanger-icon {
+  position: absolute;
+  top: 30px;
+  width: 50px;
+  height: 60px;
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: gentleSwing 2s ease-in-out infinite;
+  filter: drop-shadow(0 4px 12px rgba(239, 68, 68, 0.4));
+  z-index: 10;
+  transform: translateX(-50%);
+}
+
+@keyframes gentleSwing {
+  0%, 100% {
+    transform: translateX(-50%) rotate(-2deg);
+  }
+  50% {
+    transform: translateX(-50%) rotate(2deg);
+  }
+}
+
+.hanger-hook {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 12px;
+  border: 3px solid #ef4444;
+  border-bottom: none;
+  border-radius: 12px 12px 0 0;
+}
+
+.hanger-bar {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3px;
+  height: 8px;
+  background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+  border-radius: 2px;
+}
+
+.hanger-left,
+.hanger-right {
+  position: absolute;
+  top: 12px;
+  width: 24px;
+  height: 3px;
+  background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+  border-radius: 2px;
+}
+
+.hanger-left {
+  left: 2px;
+  transform: rotate(-25deg);
+  transform-origin: right center;
+}
+
+.hanger-right {
+  right: 2px;
+  transform: rotate(25deg);
+  transform-origin: left center;
+}
+
+.hanger-clothing {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 38px;
+  height: 35px;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  border-radius: 6px 6px 4px 4px;
+  animation: clothingPulse 2s ease-in-out infinite;
+}
+
+.hanger-clothing::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+}
+
+@keyframes clothingPulse {
+  0%, 100% {
+    transform: translateX(-50%) scale(1);
+  }
+  50% {
+    transform: translateX(-50%) scale(1.05);
+  }
+}
+
+/* Trashcan at the end */
+.trashcan-icon {
+  position: absolute;
+  right: 8%;
+  top: 25px;
+  color: #ef4444;
+  filter: drop-shadow(0 4px 8px rgba(239, 68, 68, 0.3));
+  z-index: 5;
+}
+
+.trashcan-icon svg {
+  width: 48px;
+  height: 48px;
+  stroke: #ef4444;
+  stroke-width: 2;
+}

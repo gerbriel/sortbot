@@ -14,8 +14,6 @@ export async function getCategories(): Promise<Category[]> {
     throw new Error('User not authenticated');
   }
 
-  console.log('🔍 Fetching categories (collaborative mode)');
-
   // Fetch all categories (shared across all users)
   const { data, error } = await supabase
     .from('categories')
@@ -24,11 +22,8 @@ export async function getCategories(): Promise<Category[]> {
     .order('sort_order', { ascending: true });
 
   if (error) {
-    console.error('❌ Error fetching categories:', error);
     throw error;
   }
-
-  console.log(`✅ Found ${data?.length || 0} shared categories`);
 
   return data || [];
 }
@@ -52,7 +47,6 @@ export async function getCategoryByName(name: string): Promise<Category | null> 
     .single();
 
   if (error) {
-    console.error('Error fetching category:', error);
     return null;
   }
 
@@ -87,7 +81,6 @@ export async function createCategory(category: CategoryInput): Promise<Category>
     .single();
 
   if (error) {
-    console.error('Error creating category:', error);
     throw error;
   }
 
@@ -115,9 +108,7 @@ export async function createCategory(category: CategoryInput): Promise<Category>
     };
 
     await createCategoryPreset(defaultPreset);
-    console.log(`✅ Created default preset for category: ${category.display_name}`);
   } catch (presetError) {
-    console.error('Error creating default preset:', presetError);
     // Don't fail category creation if preset creation fails
   }
 
@@ -148,7 +139,6 @@ export async function updateCategory(id: string, updates: Partial<CategoryInput>
     .single();
 
   if (error) {
-    console.error('Error updating category:', error);
     throw error;
   }
 
@@ -171,7 +161,6 @@ export async function deleteCategory(id: string): Promise<void> {
     .eq('id', id);
 
   if (error) {
-    console.error('Error deleting category:', error);
     throw error;
   }
 }
@@ -218,11 +207,10 @@ export async function initializeDefaultCategories(): Promise<void> {
     .limit(1);
 
   if (checkError) {
-    console.error('Error checking existing categories:', checkError);
+    throw checkError;
   }
 
   if (existing && existing.length > 0) {
-    console.log('User already has categories, skipping initialization');
     return; // User already has categories
   }
 
@@ -253,7 +241,6 @@ export async function initializeDefaultCategories(): Promise<void> {
         });
     } catch (err) {
       // Ignore conflicts (category already exists)
-      console.log(`Category ${cat.name} might already exist, skipping...`);
     }
   }
 }

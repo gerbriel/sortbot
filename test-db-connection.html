@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test DB Connection</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <h1>Database Connection Test</h1>
+  <div id="output"></div>
+  
+  <script type="module">
+    const output = document.getElementById('output');
+    
+    // Get env from localStorage (set by main app)
+    const supabaseUrl = localStorage.getItem('supabase_url') || import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = localStorage.getItem('supabase_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY;
+    
+    output.innerHTML += `<p>Testing connection to: ${supabaseUrl}</p>`;
+    
+    const { createClient } = supabase;
+    const client = createClient(supabaseUrl, supabaseKey);
+    
+    // Test 1: Check auth
+    const { data: { user }, error: authError } = await client.auth.getUser();
+    if (authError) {
+      output.innerHTML += `<p style="color: red;">❌ Auth Error: ${authError.message}</p>`;
+    } else if (user) {
+      output.innerHTML += `<p style="color: green;">✅ Authenticated as: ${user.email}</p>`;
+    } else {
+      output.innerHTML += `<p style="color: orange;">⚠️ No user logged in</p>`;
+    }
+    
+    // Test 2: Check products table
+    const { data: products, error: productsError } = await client
+      .from('products')
+      .select('*')
+      .limit(5);
+    
+    if (productsError) {
+      output.innerHTML += `<p style="color: red;">❌ Products Error: ${productsError.message}</p>`;
+      output.innerHTML += `<pre>${JSON.stringify(productsError, null, 2)}</pre>`;
+    } else {
+      output.innerHTML += `<p style="color: green;">✅ Products query succeeded: ${products.length} rows</p>`;
+      output.innerHTML += `<pre>${JSON.stringify(products, null, 2)}</pre>`;
+    }
+    
+    // Test 3: Check workflow_batches table
+    const { data: batches, error: batchesError } = await client
+      .from('workflow_batches')
+      .select('*')
+      .limit(5);
+    
+    if (batchesError) {
+      output.innerHTML += `<p style="color: red;">❌ Batches Error: ${batchesError.message}</p>`;
+      output.innerHTML += `<pre>${JSON.stringify(batchesError, null, 2)}</pre>`;
+    } else {
+      output.innerHTML += `<p style="color: green;">✅ Batches query succeeded: ${batches.length} rows</p>`;
+      output.innerHTML += `<pre>${JSON.stringify(batches, null, 2)}</pre>`;
+    }
+    
+    // Test 4: Check RLS policies
+    const { data: policies, error: policiesError } = await client
+      .rpc('get_policies');
+    
+    if (!policiesError && policies) {
+      output.innerHTML += `<p style="color: green;">✅ Policies loaded</p>`;
+      output.innerHTML += `<pre>${JSON.stringify(policies, null, 2)}</pre>`;
+    }
+  </script>
+</body>
+</html>

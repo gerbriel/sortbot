@@ -201,13 +201,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
         } else {
           setLoadingMessage('All images loaded!');
         }
+        
+        // Small delay to allow animation to be visible
+        await new Promise(resolve => setTimeout(resolve, 50));
       }
       
       setGroupedItems(initialized);
       
-      // Small delay to show completion
+      // Show completion message for 2.5 seconds so users can see it
       if (newImages.length > 0) {
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 2500));
         setIsLoading(false);
         setLoadingProgress(0);
       }

@@ -25,7 +25,6 @@ export const uploadImageToStorage = async (
       });
 
     if (error) {
-      console.error('Storage upload error:', error);
       return null;
     }
 
@@ -39,7 +38,6 @@ export const uploadImageToStorage = async (
       path: data.path,
     };
   } catch (error) {
-    console.error('Error uploading image:', error);
     return null;
   }
 };
@@ -101,7 +99,6 @@ export const saveProductToDatabase = async (
       .single();
 
     if (productError) {
-      console.error('Product save error:', productError);
       return null;
     }
 
@@ -126,7 +123,6 @@ export const saveProductToDatabase = async (
             .copy(item.storagePath, newPath);
           
           if (copyError) {
-            console.error('Image copy error:', copyError);
             // Fallback: keep temp image
             imageUrl = item.preview;
             storagePath = item.storagePath;
@@ -145,7 +141,6 @@ export const saveProductToDatabase = async (
               .remove([item.storagePath]);
           }
         } catch (error) {
-          console.error('Error moving image:', error);
           // Fallback: keep temp image
           imageUrl = item.preview;
           storagePath = item.storagePath;
@@ -173,7 +168,7 @@ export const saveProductToDatabase = async (
           .select('id')
           .eq('product_id', productData.id)
           .eq('image_url', imageUrl)
-          .single();
+          .maybeSingle();
         
         // Only insert if it doesn't already exist
         if (!existing) {
@@ -189,17 +184,14 @@ export const saveProductToDatabase = async (
             });
 
           if (imageError) {
-            console.error('Image save error:', imageError);
+            throw imageError;
           }
-        } else {
-          console.log(`Image already exists for product ${productData.id}, skipping duplicate`);
         }
       }
     }
 
     return productData.id;
   } catch (error) {
-    console.error('Error saving product:', error);
     return null;
   }
 };
@@ -268,13 +260,11 @@ export const fetchUserProducts = async () => {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching products:', error);
       return [];
     }
 
     return data || [];
   } catch (error) {
-    console.error('Error fetching products:', error);
     return [];
   }
 };
@@ -298,7 +288,7 @@ export const deleteProduct = async (productId: string): Promise<boolean> => {
         .remove(paths);
 
       if (storageError) {
-        console.error('Storage delete error:', storageError);
+        // Failed to delete from storage
       }
     }
 
@@ -309,14 +299,11 @@ export const deleteProduct = async (productId: string): Promise<boolean> => {
       .eq('id', productId);
 
     if (deleteError) {
-      console.error('Product delete error:', deleteError);
       return false;
     }
 
-    console.log('✅ Product deleted:', productId);
     return true;
   } catch (error) {
-    console.error('Error deleting product:', error);
     return false;
   }
 };
@@ -347,13 +334,11 @@ export const updateProduct = async (
       .eq('id', productId);
 
     if (error) {
-      console.error('Product update error:', error);
       return false;
     }
 
     return true;
   } catch (error) {
-    console.error('Error updating product:', error);
     return false;
   }
 };

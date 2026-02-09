@@ -64,13 +64,17 @@ export function useUserPresence({
           
           const users = new Map<string, UserPresence>();
           
-          Object.entries(state).forEach(([_key, presences]: [string, any]) => {
+          // The key IS the userId in Supabase presence
+          Object.entries(state).forEach(([presenceUserId, presences]: [string, any]) => {
             const presence = presences[0]; // Get first presence for this user
             
-            if (presence && presence.userId !== userId) {
-              users.set(presence.userId, {
-                userId: presence.userId,
-                email: presence.email || `User ${presence.userId.slice(0, 8)}`,
+            console.log('🔍 Processing presence:', { presenceUserId, presence, currentUserId: userId });
+            
+            // Only add if it's NOT the current user
+            if (presence && presenceUserId !== userId) {
+              users.set(presenceUserId, {
+                userId: presenceUserId, // Use the key as userId
+                email: presence.email || `User ${presenceUserId.slice(0, 8)}`,
                 currentStep: presence.currentStep || 1,
                 currentView: presence.currentView || 'unknown',
                 cursorX: presence.cursorX || 0,
@@ -79,11 +83,14 @@ export function useUserPresence({
                 isActive: true,
                 updatedAt: new Date(presence.updatedAt || Date.now()),
               });
+              console.log('✅ Added user to tracking:', presenceUserId);
+            } else if (presenceUserId === userId) {
+              console.log('⏭️ Skipping current user:', userId);
             }
           });
           
           setOtherUsers(users);
-          console.log(`✅ Tracking ${users.size} other users`);
+          console.log(`✅ Tracking ${users.size} other users`, Array.from(users.keys()));
         })
         .on('presence', { event: 'join' }, ({ key, newPresences }: any) => {
           console.log('👋 User joined:', key, newPresences);
@@ -183,8 +190,15 @@ export function useUserPresence({
     });
   };
 
+  const usersArray = Array.from(otherUsers.values());
+  console.log('📤 useUserPresence returning:', { 
+    otherUsersCount: usersArray.length, 
+    userIds: usersArray.map(u => u.userId),
+    fullUsers: usersArray,
+  });
+
   return {
-    otherUsers: Array.from(otherUsers.values()),
+    otherUsers: usersArray,
     isTracking,
     broadcastAction,
   };

@@ -15,6 +15,7 @@ import type { WorkflowBatch } from './workflowBatchService';
 /**
  * Fetch all saved products (product groups) from database
  * Returns products with their images from the products and product_images tables
+ * NOTE: Products are SHARED across all users (collaborative workspace)
  */
 export const fetchSavedProducts = async () => {
   try {
@@ -48,6 +49,7 @@ export const fetchSavedProducts = async () => {
 /**
  * Fetch all saved images from database
  * Returns all product_images with their parent product info
+ * NOTE: Images are SHARED across all users (collaborative workspace)
  */
 export const fetchSavedImages = async () => {
   try {
