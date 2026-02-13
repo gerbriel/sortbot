@@ -9,7 +9,7 @@ A React-based web application for automatically sorting, categorizing, and expor
 🤖 **AI-Powered Sorting** - Automatic categorization into 10 clothing types
 📦 **Product Grouping** - Combine multiple images of the same product
 🎤 **Voice Descriptions** - Text-to-speech for product descriptions
-📝 **AI Product Generation** - Auto-generate SEO-friendly descriptions, titles, tags, and pricing
+📝 **Smart Product Generation** - Template-based system auto-generates SEO-friendly descriptions, titles, tags, and pricing (no API required!)
 📊 **Google Sheets Export** - Direct export to Google Sheets
 🛍️ **Shopify Ready** - CSV export in Shopify-compatible format
 🔒 **Password Protection** - Built-in authentication for security
@@ -20,7 +20,7 @@ A React-based web application for automatically sorting, categorizing, and expor
 - **Build Tool**: Vite
 - **Styling**: CSS3 with modern features
 - **File Upload**: react-dropzone
-- **AI Integration**: OpenAI API (configurable)
+- **Product Intelligence**: Template-based with 600+ brand database (works offline!)
 - **Google Sheets**: Google Sheets API
 - **Speech Recognition**: Web Speech API / react-speech-recognition
 
@@ -30,7 +30,6 @@ A React-based web application for automatically sorting, categorizing, and expor
 
 - Node.js 18+ and npm
 - Google Cloud Project (for Google Sheets API)
-- OpenAI API key (optional, for AI features)
 - A secure password for app access
 
 ### Installation
@@ -52,16 +51,18 @@ npm install
 VITE_APP_PASSWORD=your_secure_password_here
 VITE_DISABLE_AUTH=false  # Set to true only for local dev
 
-# OpenAI API (for AI-powered descriptions)
-VITE_OPENAI_API_KEY=your_openai_api_key_here
-
 # Google Cloud (for Google Sheets integration)
 VITE_GOOGLE_CLIENT_ID=your_google_client_id
 VITE_GOOGLE_API_KEY=your_google_api_key
 
+# Optional: OpenAI API (NOT required - template system works without it)
+VITE_OPENAI_API_KEY=your_openai_api_key_here
+
 # Optional: Google Vision API (for advanced image recognition)
 VITE_GOOGLE_VISION_API_KEY=your_vision_api_key
 ```
+
+**Note**: The product description generation uses an intelligent template-based system that works **without any AI API keys**. See [TEMPLATE_BASED_AI_SYSTEM.md](TEMPLATE_BASED_AI_SYSTEM.md) for details.
 
 ### Development
 

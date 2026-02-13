@@ -1198,7 +1198,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     setIsGenerating(false);
   };
 
-  // Individual regenerate functions
+  // Individual regenerate functions - Enhanced template-based AI description
   const regenerateDescription = () => {
     if (!currentItem.voiceDescription) {
       alert('Please add a voice description first');
@@ -1208,7 +1208,15 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const voiceDesc = currentItem.voiceDescription;
     const lowerDesc = voiceDesc.toLowerCase();
     
-    // Detect colors and materials
+    // Use intelligent brand matching
+    const brandMatch = intelligentMatch(voiceDesc);
+    const brand = currentItem.brand || brandMatch.brand || '';
+    const era = currentItem.era || '';
+    const condition = currentItem.condition || '';
+    const material = currentItem.material || '';
+    const color = currentItem.color || '';
+    
+    // Detect colors from description
     const colorPatterns = {
       black: /black/i,
       white: /white|cream|ivory|off-white/i,
@@ -1227,17 +1235,69 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       .filter(([_, pattern]) => pattern.test(lowerDesc))
       .map(([color]) => color);
     
-    const isVintage = /vintage|retro|throwback|90s|80s|old school/i.test(lowerDesc);
-    const isNew = /new|unworn|nwt|new with tags|mint|brand new/i.test(lowerDesc);
+    const detectedColor = color || (detectedColors.length > 0 ? detectedColors[0] : '');
     
-    const category = currentItem.category || 'item';
-    const colorDesc = detectedColors.length > 0 ? ` ${detectedColors[0]}` : '';
+    // Detect materials
+    const materialPatterns = {
+      cotton: /cotton|100% cotton/i,
+      polyester: /polyester|poly/i,
+      leather: /leather/i,
+      denim: /denim|jean/i,
+      silk: /silk/i,
+      wool: /wool|cashmere/i,
+      fleece: /fleece/i,
+      nylon: /nylon/i,
+      linen: /linen/i,
+    };
     
-    let desc = `Discover this ${isNew ? 'brand new' : isVintage ? 'vintage' : 'quality'}${colorDesc} ${category.toLowerCase()} piece. `;
-    desc += voiceDesc.charAt(0).toUpperCase() + voiceDesc.slice(1);
-    if (!voiceDesc.endsWith('.')) desc += '.';
-    desc += ' Perfect for any wardrobe. Don\'t miss out on this quality piece.';
+    const detectedMaterials = Object.entries(materialPatterns)
+      .filter(([_, pattern]) => pattern.test(lowerDesc))
+      .map(([mat]) => mat);
     
+    const detectedMaterial = material || (detectedMaterials.length > 0 ? detectedMaterials[0] : '');
+    
+    // Build intelligent description
+    let desc = '';
+    
+    // Start with the main voice description (capitalize first letter)
+    desc = voiceDesc.charAt(0).toUpperCase() + voiceDesc.slice(1);
+    if (!desc.endsWith('.')) desc += '.';
+    
+    // Add key features if available
+    const features = [];
+    if (detectedColor && !lowerDesc.includes(detectedColor.toLowerCase())) {
+      features.push(`${detectedColor.charAt(0).toUpperCase() + detectedColor.slice(1)} colorway`);
+    }
+    if (brand && !lowerDesc.includes(brand.toLowerCase())) {
+      features.push(`${brand} brand`);
+    }
+    if (detectedMaterial && !lowerDesc.includes(detectedMaterial.toLowerCase())) {
+      features.push(`${detectedMaterial} construction`);
+    }
+    
+    if (features.length > 0) {
+      desc += ` Features ${features.join(', ')}.`;
+    }
+    
+    // Add era context if available
+    if (era && (era.includes('vintage') || era.includes('90s') || era.includes('80s') || era.includes('70s'))) {
+      const eraDisplay = era.endsWith('s') ? era : `${era}s`;
+      desc += ` This ${eraDisplay} piece showcases authentic period styling.`;
+    }
+    
+    // Add condition if specified
+    if (condition) {
+      desc += ` Condition: ${condition}.`;
+    }
+    
+    // Add closing statement based on collectibility
+    if (brandMatch.collectibility && brandMatch.collectibility >= 8) {
+      desc += ' Highly collectible piece suited for collection or everyday wear.';
+    } else {
+      desc += ' High-quality piece perfect for any wardrobe.';
+    }
+    
+    // Update all items in the group
     const updated = [...processedItems];
     currentGroup.forEach(groupItem => {
       const itemIndex = updated.findIndex(item => item.id === groupItem.id);
@@ -1663,17 +1723,17 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   Generating...
                 </span>
               ) : (
-                '✨ Generate Product Info with AI'
+                '✨ Generate Product Info'
               )}
             </button>
             <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem' }}>
-              AI will generate or enhance the fields above based on your voice description
+              Intelligently generates product details from your voice description using smart templates and brand database
             </p>
           </div>
 
           {currentItem.generatedDescription && (
             <div className="generated-info">
-              <h3>AI Generated Content (Edit as needed)</h3>
+              <h3>Generated Content (Edit as needed)</h3>
               
               <div className="info-item">
                 <label>Product Description:</label>
@@ -1697,7 +1757,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   className="button button-secondary"
                   onClick={regenerateDescription}
                   style={{ marginTop: '0.5rem', width: '100%' }}
-                  title="Regenerate description from voice"
+                  title="Intelligently regenerate description from voice and product details"
                 >
                   🔄 Regenerate Description
                 </button>
