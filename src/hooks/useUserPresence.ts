@@ -40,12 +40,10 @@ export function useUserPresence({
     let cursorThrottle: number | null = null;
 
     const setupPresence = async () => {
-      console.log('🔴 Setting up real-time presence tracking...');
       
       // Get user email from Supabase auth
       const { data: { user } } = await supabase.auth.getUser();
       const userEmail = user?.email || `User ${userId.slice(0, 8)}`;
-      console.log('👤 User email for presence:', userEmail);
       
       // Create a presence channel
       channel = supabase.channel('workspace-presence', {
@@ -60,7 +58,6 @@ export function useUserPresence({
       channel
         .on('presence', { event: 'sync' }, () => {
           const state = channel.presenceState();
-          console.log('👥 Presence sync:', state);
           
           const users = new Map<string, UserPresence>();
           
@@ -68,7 +65,6 @@ export function useUserPresence({
           Object.entries(state).forEach(([presenceUserId, presences]: [string, any]) => {
             const presence = presences[0]; // Get first presence for this user
             
-            console.log('🔍 Processing presence:', { presenceUserId, presence, currentUserId: userId });
             
             // Only add if it's NOT the current user
             if (presence && presenceUserId !== userId) {
@@ -83,24 +79,18 @@ export function useUserPresence({
                 isActive: true,
                 updatedAt: new Date(presence.updatedAt || Date.now()),
               });
-              console.log('✅ Added user to tracking:', presenceUserId);
             } else if (presenceUserId === userId) {
-              console.log('⏭️ Skipping current user:', userId);
             }
           });
           
           setOtherUsers(users);
-          console.log(`✅ Tracking ${users.size} other users`, Array.from(users.keys()));
         })
         .on('presence', { event: 'join' }, ({ key, newPresences }: any) => {
-          console.log('👋 User joined:', key, newPresences);
         })
         .on('presence', { event: 'leave' }, ({ key, leftPresences }: any) => {
-          console.log('👋 User left:', key, leftPresences);
         })
         .subscribe(async (status: string) => {
           if (status === 'SUBSCRIBED') {
-            console.log('✅ Subscribed to presence channel');
             setIsTracking(true);
             
             // Send initial presence
@@ -165,7 +155,6 @@ export function useUserPresence({
       cleanup.then(fn => fn?.());
       if (heartbeatInterval) clearInterval(heartbeatInterval);
       if (channel) {
-        console.log('🔴 Unsubscribing from presence channel');
         channel.unsubscribe();
       }
       setIsTracking(false);
@@ -174,7 +163,6 @@ export function useUserPresence({
 
   // Broadcast action
   const broadcastAction = async (action: string) => {
-    console.log('📢 Broadcasting action:', action);
     
     const channel = supabase.channel('workspace-actions');
     await channel.send({
@@ -191,7 +179,6 @@ export function useUserPresence({
   };
 
   const usersArray = Array.from(otherUsers.values());
-  console.log('📤 useUserPresence returning:', { 
     otherUsersCount: usersArray.length, 
     userIds: usersArray.map(u => u.userId),
     fullUsers: usersArray,

@@ -148,12 +148,27 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
   // Initialize items with individual groups and auto-upload
   useEffect(() => {
     const initializeItems = async () => {
-      const newImages = items.filter(item => !uploadedImages.has(item.id));
+      // Find truly new images that need uploading (have file but not uploaded yet)
+      const newImages = items.filter(item => {
+        // Skip if already tracked as uploaded
+        if (uploadedImages.has(item.id)) return false;
+        
+        // Skip if has permanent Supabase URL
+        const hasSupabaseUrl = item.imageUrls?.length || (item.preview && item.preview.startsWith('https://'));
+        if (hasSupabaseUrl) return false;
+        
+        // Skip if no file to upload
+        if (!item.file) return false;
+        
+        // This is a new image that needs uploading
+        return true;
+      });
       
+      // Only show loading popup if there are actual new images to upload
       if (newImages.length > 0) {
         setIsLoading(true);
         setLoadingProgress(0);
-        setLoadingMessage(`Loading ${newImages.length} image${newImages.length > 1 ? 's' : ''}...`);
+        setLoadingMessage(`Uploading ${newImages.length} image${newImages.length > 1 ? 's' : ''}...`);
       }
       
       const initialized: ClothingItem[] = [];
@@ -191,26 +206,28 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
           initialized.push({ ...item, productGroup: item.productGroup || item.id });
         }
         
-        // Update progress
-        processedCount++;
-        const progress = (processedCount / newImages.length) * 100;
-        setLoadingProgress(progress);
-        
-        if (progress < 100) {
-          setLoadingMessage(`Loading image ${processedCount} of ${newImages.length}...`);
-        } else {
-          setLoadingMessage('All images loaded!');
+        // Update progress (only for new uploads)
+        if (newImages.length > 0) {
+          processedCount++;
+          const progress = (processedCount / newImages.length) * 100;
+          setLoadingProgress(progress);
+          
+          if (progress < 100) {
+            setLoadingMessage(`Uploading image ${processedCount} of ${newImages.length}...`);
+          } else {
+            setLoadingMessage('Upload complete!');
+          }
+          
+          // Small delay to allow animation to be visible
+          await new Promise(resolve => setTimeout(resolve, 50));
         }
-        
-        // Small delay to allow animation to be visible
-        await new Promise(resolve => setTimeout(resolve, 50));
       }
       
       setGroupedItems(initialized);
       
-      // Show completion message for 2.5 seconds so users can see it
+      // Show completion message briefly, then hide loading popup
       if (newImages.length > 0) {
-        await new Promise(resolve => setTimeout(resolve, 2500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
         setIsLoading(false);
         setLoadingProgress(0);
       }
