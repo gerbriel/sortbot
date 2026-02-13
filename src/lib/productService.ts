@@ -62,37 +62,95 @@ export const saveProductToDatabase = async (
       .insert({
         user_id: userId,
         batch_id: batchId || null,
+        
+        // Core product info
         title: product.seoTitle || 'Untitled Product',
         url_handle: (product.seoTitle || 'product')
           .toLowerCase()
           .replace(/\s+/g, '-')
           .replace(/[^a-z0-9-]/g, ''),
         description: product.generatedDescription || '',
+        
+        // Shopify fields
         vendor: product.brand || '',
         product_category: product.category || '',
         product_type: product.productType || 'Clothing',
         tags: product.tags || [],
         published: product.published || false,
         status: product.status || 'Draft',
+        
+        // Variants/Options
         size: product.size || '',
         color: product.color || '',
+        secondary_color: product.secondaryColor || '',
+        
+        // Pricing
         price: product.price || 0,
         compare_at_price: product.compareAtPrice || null,
         cost_per_item: product.costPerItem || null,
+        
+        // Inventory
         sku: product.sku || '',
         barcode: product.barcode || '',
         inventory_quantity: product.inventoryQuantity || 0,
+        
+        // Shipping
         weight_value: product.weightValue || '150',
         weight_unit: 'g',
-        requires_shipping: true,
+        requires_shipping: product.requiresShipping ?? true,
+        
+        // Product details
         condition: product.condition || 'Good',
         flaws: product.flaws || '',
         material: product.material || '',
         era: product.era || '',
         care_instructions: product.care || '',
         measurements: product.measurements || {},
+        
+        // Product Details (Extended)
+        model_name: product.modelName || '',
+        model_number: product.modelNumber || '',
+        subculture: product.subculture || [],
+        
+        // Shipping & Packaging
+        package_dimensions: product.packageDimensions || '',
+        parcel_size: product.parcelSize || null,
+        ships_from: product.shipsFrom || '',
+        continue_selling_out_of_stock: product.continueSellingOutOfStock ?? false,
+        
+        // Product Classification
+        size_type: product.sizeType || '',
+        style: product.style || '',
+        gender: product.gender || '',
+        age_group: product.ageGroup || '',
+        
+        // Policies & Marketplace
+        policies: product.policies || '',
+        renewal_options: product.renewalOptions || '',
+        who_made_it: product.whoMadeIt || '',
+        what_is_it: product.whatIsIt || '',
+        listing_type: product.listingType || '',
+        discounted_shipping: product.discountedShipping || '',
+        
+        // Marketing
+        mpn: product.mpn || '',
+        custom_label_0: product.customLabel0 || '',
+        
+        // Advanced fields
+        tax_code: product.taxCode || '',
+        unit_price_total_measure: product.unitPriceTotalMeasure || '',
+        unit_price_total_measure_unit: product.unitPriceTotalMeasureUnit || '',
+        unit_price_base_measure: product.unitPriceBaseMeasure || '',
+        unit_price_base_measure_unit: product.unitPriceBaseMeasureUnit || '',
+        
+        // Brand Category
+        brand_category: product.brandCategory || '',
+        
+        // SEO
         seo_title: product.seoTitle || '',
         seo_description: product.seoDescription || '',
+        
+        // Original voice description
         voice_description: product.voiceDescription || '',
       })
       .select()
@@ -109,42 +167,12 @@ export const saveProductToDatabase = async (
       let imageUrl = '';
       let storagePath = '';
       
-      // Check if image was already uploaded to temp folder
+      // Check if image was already uploaded
       if (item.storagePath && item.preview) {
-        // Image already uploaded - move from temp to permanent location
-        const fileExt = item.storagePath.split('.').pop();
-        const newFileName = `${i}_${Date.now()}.${fileExt}`;
-        const newPath = `${userId}/${productData.id}/${newFileName}`;
-        
-        try {
-          // Copy from temp to permanent location
-          const { error: copyError } = await supabase.storage
-            .from('product-images')
-            .copy(item.storagePath, newPath);
-          
-          if (copyError) {
-            // Fallback: keep temp image
-            imageUrl = item.preview;
-            storagePath = item.storagePath;
-          } else {
-            // Get new public URL
-            const { data: { publicUrl } } = supabase.storage
-              .from('product-images')
-              .getPublicUrl(newPath);
-            
-            imageUrl = publicUrl;
-            storagePath = newPath;
-            
-            // Delete temp file
-            await supabase.storage
-              .from('product-images')
-              .remove([item.storagePath]);
-          }
-        } catch (error) {
-          // Fallback: keep temp image
-          imageUrl = item.preview;
-          storagePath = item.storagePath;
-        }
+        // Image already uploaded - reuse existing URL and path
+        // No need to move/copy, just use what's already there
+        imageUrl = item.preview;
+        storagePath = item.storagePath;
       } else {
         // Image not uploaded yet - upload now
         const uploadResult = await uploadImageToStorage(

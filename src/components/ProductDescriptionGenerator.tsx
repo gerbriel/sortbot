@@ -6,6 +6,7 @@ import { ComprehensiveProductForm } from './ComprehensiveProductForm';
 import { getCategoryPresets } from '../lib/categoryPresetsService';
 import type { CategoryPreset } from '../lib/categoryPresets';
 import { applyPresetToProductGroup } from '../lib/applyPresetToGroup';
+import { generateProductDescription } from '../lib/textAIService';
 import './ProductDescriptionGenerator.css';
 
 interface ProductDescriptionGeneratorProps {
@@ -763,449 +764,67 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     return expanded;
   };
 
-  const handleGenerateProductInfo = async () => {
-    if (!currentItem.voiceDescription) {
-      alert('Please add a voice description first');
+  // Individual regenerate functions
+  const regenerateDescription = async () => {
+    if (!currentItem.voiceDescription && !currentItem.file) {
+      alert('Please add a voice description or image first');
       return;
     }
-
+    
     setIsGenerating(true);
     
-    // Simulate AI generation (in production, call OpenAI API)
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    const updated = [...processedItems];
-    const voiceDesc = currentItem.voiceDescription!;
-    const category = currentItem.category || 'clothing';
-    const lowerDesc = voiceDesc.toLowerCase();
-    
-    // INTELLIGENT BRAND/MODEL MATCHING using brand database - DO THIS FIRST
-    const brandMatch = intelligentMatch(voiceDesc);
-    
-    // Extract brand and model info from intelligent matcher
-    const extractedBrand = brandMatch.brand || '';
-    const extractedModelName = brandMatch.modelName || '';
-    const extractedModelNumber = brandMatch.modelNumber || '';
-    const extractedBrandCategory = brandMatch.brandCategory;
-    const extractedSubcultures = brandMatch.subcultures || [];
-    const suggestedPriceRange = brandMatch.priceRange;
-    const collectibilityScore = brandMatch.collectibility;
-    // const matchConfidence = brandMatch.confidence; // Available for future use
-    
-    // Check if brand/material/model were explicitly mentioned in voice description
-    // Only use extracted values if they were actually mentioned
-    const voiceExplicitlyMentionsBrand = extractedBrand && 
-      lowerDesc.includes(extractedBrand.toLowerCase());
-    const voiceExplicitlyMentionsModel = extractedModelName && 
-      lowerDesc.includes(extractedModelName.toLowerCase());
-    const voiceExplicitlyMentionsModelNumber = extractedModelNumber && 
-      lowerDesc.includes(extractedModelNumber.toLowerCase());
-    
-    // Condition extraction (only if not manually set) - DO THIS EARLY for pricing
-    let extractedCondition = currentItem.condition || '';
-    if (!extractedCondition) {
-      if (/new with tags|nwt|brand new/i.test(voiceDesc)) {
-        extractedCondition = 'NWT';
-      } else if (/like new|mint|pristine|perfect/i.test(voiceDesc)) {
-        extractedCondition = 'Like New';
-      } else if (/excellent|great condition/i.test(voiceDesc)) {
-        extractedCondition = 'Excellent';
-      } else if (/good condition|gently used/i.test(voiceDesc)) {
-        extractedCondition = 'Good';
-      } else if (/fair|worn|used/i.test(voiceDesc)) {
-        extractedCondition = 'Fair';
-      }
-    }
-    
-    // Extract price from voice description if mentioned
-    const pricePatterns = [
-      /\$(\d+(?:\.\d{2})?)/i,
-      /(\d+(?:\.\d{2})?)\s*dollars?/i,
-      /price[d]?\s*(?:at|is)?\s*\$?(\d+(?:\.\d{2})?)/i,
-      /asking\s*\$?(\d+(?:\.\d{2})?)/i,
-    ];
-    
-    let extractedPrice: number | undefined = undefined;
-    for (const pattern of pricePatterns) {
-      const match = voiceDesc.match(pattern);
-      if (match) {
-        extractedPrice = parseFloat(match[1]);
-        break;
-      }
-    }
-    
-    // Use manual price > extracted price > smart calculation
-    let finalPrice = currentItem.price;
-    
-    if (!finalPrice && extractedPrice) {
-      finalPrice = extractedPrice;
-    } else if (!finalPrice) {
-      // Use intelligent match price range if available
-      if (suggestedPriceRange && suggestedPriceRange.length === 2) {
-        // Use midpoint of price range as base, adjusted for condition
-        const [minPrice, maxPrice] = suggestedPriceRange;
-        const midPrice = (minPrice + maxPrice) / 2;
+    try {
+      // Check AI provider - force Google Vision if Llama is selected (Hugging Face API deprecated)
+      const savedProvider = localStorage.getItem('ai_provider') as 'google-vision' | 'llama-vision' | null;
+      const aiProvider = savedProvider === 'llama-vision' ? 'google-vision' : (savedProvider || 'google-vision');
+      
+      if (aiProvider === 'google-vision' && currentItem.file) {
+        // Use intelligent template system (Hugging Face is down)
         
-        // Adjust based on condition
-        let conditionMultiplier = 1.0;
-        if (extractedCondition === 'NWT') conditionMultiplier = 1.3;
-        else if (extractedCondition === 'Like New') conditionMultiplier = 1.1;
-        else if (extractedCondition === 'Excellent') conditionMultiplier = 1.0;
-        else if (extractedCondition === 'Good') conditionMultiplier = 0.8;
-        else if (extractedCondition === 'Fair') conditionMultiplier = 0.6;
+        // Build context from everything we know
+        const aiResult = await generateProductDescription({
+          voiceDescription: currentItem.voiceDescription,
+          brand: currentItem.brand,
+          color: currentItem.color,
+          size: currentItem.size,
+          material: currentItem.material,
+          condition: currentItem.condition as any,
+          era: currentItem.era,
+          style: currentItem.style,
+          category: currentItem.productType,
+          measurements: currentItem.measurements,
+          flaws: currentItem.flaws, // NEW: Include flaws in description
+          care: currentItem.care // NEW: Include care instructions
+        });
         
-        finalPrice = Math.round(midPrice * conditionMultiplier);
-      } else {
-        // Fallback to category-based pricing
-        let basePrice = 25;
-        if (category === 'Outerwear') basePrice = 60;
-        else if (category === 'Sweatshirts') basePrice = 45;
-        else if (category === 'Bottoms') basePrice = 40;
-        else if (category === 'Activewear') basePrice = 35;
-        else if (category === 'Hats' || category === 'Accessories') basePrice = 20;
+        // Use generated description
+        const finalDescription = aiResult.description;
         
-        finalPrice = Math.round(basePrice);
+        // Update all fields with generated data
+        const updated = [...processedItems];
+        currentGroup.forEach(groupItem => {
+          const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+          if (itemIndex !== -1) {
+            updated[itemIndex] = {
+              ...updated[itemIndex],
+              generatedDescription: finalDescription,
+            };
+          }
+        });
+        
+        setProcessedItems(updated);
+        setIsGenerating(false);
+        return;
       }
-    }
-    
-    // Detect colors - ALL of them
-    const colorPatterns = {
-      black: /black/i,
-      white: /white|cream|ivory|off-white/i,
-      red: /red|crimson|burgundy|maroon/i,
-      blue: /blue|navy|cobalt|azure/i,
-      green: /green|olive|forest|emerald/i,
-      yellow: /yellow|gold|mustard/i,
-      pink: /pink|rose|blush/i,
-      purple: /purple|violet|lavender/i,
-      gray: /gray|grey|charcoal|slate/i,
-      brown: /brown|tan|beige|khaki|camel/i,
-      orange: /orange|rust|copper/i,
-    };
-    
-    const detectedColors = Object.entries(colorPatterns)
-      .filter(([_, pattern]) => pattern.test(lowerDesc))
-      .map(([color]) => color);
-    
-    // Detect materials
-    const materialPatterns = {
-      cotton: /cotton|100% cotton/i,
-      polyester: /polyester|poly/i,
-      leather: /leather/i,
-      denim: /denim|jean/i,
-      silk: /silk/i,
-      wool: /wool|cashmere/i,
-      fleece: /fleece/i,
-      nylon: /nylon/i,
-      linen: /linen/i,
-    };
-    
-    const detectedMaterials = Object.entries(materialPatterns)
-      .filter(([_, pattern]) => pattern.test(lowerDesc))
-      .map(([material]) => material);
-    
-    // Detect size
-    let detectedSize = currentItem.size || null;
-    if (!detectedSize) {
-      const sizePatterns = [
-        /\b(extra[\s-]?large|x[\s-]?large|xl)\b/i,
-        /\b(xx[\s-]?large|xxl)\b/i,
-        /\b(xxx[\s-]?large|xxxl)\b/i,
-        /\b(extra[\s-]?small|x[\s-]?small|xs)\b/i,
-        /\b(small|sm)\b/i,
-        /\b(medium|med|md|m)\b/i,
-        /\b(large|lg|l)\b/i,
-      ];
-      
-      for (const pattern of sizePatterns) {
-        const match = lowerDesc.match(pattern);
-        if (match) {
-          let size = match[1].toUpperCase();
-          if (/x[\s-]?large|xl/i.test(size)) size = 'XL';
-          else if (/xxl/i.test(size)) size = 'XXL';
-          else if (/xxxl/i.test(size)) size = 'XXXL';
-          else if (/x[\s-]?small|xs/i.test(size)) size = 'XS';
-          else if (/small|sm/i.test(size)) size = 'S';
-          else if (/medium|med|md/i.test(size)) size = 'M';
-          else if (/large|lg/i.test(size) && !/x/i.test(size)) size = 'L';
-          
-          detectedSize = size;
-          break;
-        }
-      }
-    }
-    
-    // Era extraction
-    let extractedEra = '';
-    const eraPatterns = [
-      /\b(vintage|retro|90s|80s|70s|60s|y2k|modern|contemporary|classic)\b/i
-    ];
-    
-    for (const pattern of eraPatterns) {
-      const match = voiceDesc.match(pattern);
-      if (match) {
-        extractedEra = match[1].toLowerCase();
-        break;
-      }
-    }
-    
-    // Flaws extraction (only if not manually filled)
-    let extractedFlaws = currentItem.flaws || '';
-    if (!extractedFlaws) {
-      const flawPatterns = [
-        /flaw[s]?[:\s]+([^.]+)/i,
-        /stain[s]?[:\s]+([^.]+)/i,
-        /hole[s]?[:\s]+([^.]+)/i,
-        /tear[s]?[:\s]+([^.]+)/i,
-        /damage[d]?[:\s]+([^.]+)/i,
-        /wear[:\s]+([^.]+)/i,
-      ];
-      
-      for (const pattern of flawPatterns) {
-        const match = voiceDesc.match(pattern);
-        if (match) {
-          extractedFlaws = match[1].trim();
-          break;
-        }
-      }
-    }
-    
-    // Material extraction (only if not manually filled)
-    let extractedMaterial = currentItem.material || '';
-    if (!extractedMaterial && detectedMaterials.length > 0) {
-      extractedMaterial = detectedMaterials.join(', ');
-    }
-    
-    // Color extraction (only if not manually filled) - for Shopify Option2
-    let extractedColor = currentItem.color || '';
-    if (!extractedColor && detectedColors.length > 0) {
-      // Use first detected color or combine if multiple
-      extractedColor = detectedColors.length === 1 
-        ? detectedColors[0].charAt(0).toUpperCase() + detectedColors[0].slice(1)
-        : detectedColors.slice(0, 2).map(c => c.charAt(0).toUpperCase() + c.slice(1)).join('/');
-    }
-    
-    // Use manual entry if provided, otherwise use extracted value
-    const finalBrand = currentItem.brand || extractedBrand;
-    const finalEra = currentItem.era || extractedEra;
-    const finalCondition = extractedCondition;
-    const finalFlaws = extractedFlaws;
-    const finalMaterial = extractedMaterial;
-    
-    // NATURAL DESCRIPTION GENERATION - Clean vintage format
-    let generatedDesc = '';
-    
-    // Only check if material was explicitly mentioned in voice or manual input
-    const voiceHasMaterial = finalMaterial && (
-      voiceDesc.toLowerCase().includes(finalMaterial.toLowerCase()) || 
-      currentItem.material // manually typed
-    );
-    
-    // Add measurements section at top if available
-    const measurementsSection = formatMeasurements(currentItem.measurements, detectedSize || undefined);
-    if (measurementsSection) {
-      generatedDesc += measurementsSection + '\n\n';
-    }
-    
-    // ENHANCED DESCRIPTION EXPANSION - Expand voice notes into fuller descriptions
-    const expandedDesc = expandVoiceDescription(voiceDesc, {
-      category,
-      brand: finalBrand,
-      era: finalEra,
-      material: finalMaterial,
-      condition: finalCondition,
-      color: extractedColor
-    });
-    
-    generatedDesc += expandedDesc;
-    
-    // Add construction/material details if EXPLICITLY mentioned
-    if (voiceHasMaterial) {
-      generatedDesc += `\n\n${finalMaterial} construction`;
-      
-      // Add fit style if detected
-      const fitWords = ['boxy', 'oversized', 'slim', 'relaxed', 'fitted', 'cropped', 'longline'];
-      const hasFitMention = fitWords.some(fit => voiceDesc.toLowerCase().includes(fit));
-      if (hasFitMention) {
-        const fitMatch = fitWords.find(fit => voiceDesc.toLowerCase().includes(fit));
-        generatedDesc += ` with a ${fitMatch} fit`;
-      }
-      
-      // Add era styling if mentioned
-      if (finalEra && voiceDesc.toLowerCase().includes(finalEra)) {
-        generatedDesc += ` typical of the ${finalEra} era`;
-      }
-      
-      generatedDesc += '.';
-    }
-    
-    // Add USA made tag if commonly mentioned
-    if (voiceDesc.toLowerCase().includes('made in usa') || voiceDesc.toLowerCase().includes('made in america')) {
-      generatedDesc += ' Made in USA tag.';
-    }
-    
-    // Add vintage character note
-    if (finalEra && (finalEra.includes('vintage') || finalEra.includes('90s') || finalEra.includes('80s'))) {
-      generatedDesc += ' Soft natural fade throughout that adds character without structural flaws.';
-    }
-    
-    // Add condition statement
-    generatedDesc += `\n\n${formatCondition(finalCondition || currentItem.condition, finalFlaws || currentItem.flaws)}`;
-    
-    // Standard disclaimer
-    generatedDesc += '\n\nCondition shown in pictures. Minor signs of wear consistent with vintage age may not be individually listed.';
-    
-    // Add collectibility note for highly collectible items (8+)
-    if (collectibilityScore && collectibilityScore >= 8) {
-      generatedDesc += '\n\nHighly collectible piece suited for collection or everyday wear.';
-    } else {
-      generatedDesc += '\n\nHigh-quality piece suited for everyday wear or collection.';
-    }
-    
-    // Standard closing
-    generatedDesc += '\n\nNext-day shipping.\nAll sales final.';
-    
-    // Filter banned phrases
-    generatedDesc = removeBannedPhrases(generatedDesc);
-    
-    // Generate tags - clean hashtag style (lowercase, no spaces)
-    const generatedTags = [];
-    
-    // Add brand only if explicitly mentioned, not empty, and not "unknown"
-    if (finalBrand && finalBrand.trim() !== '' && finalBrand.toLowerCase() !== 'unknown' && 
-        (voiceDesc.toLowerCase().includes(finalBrand.toLowerCase()) || currentItem.brand)) {
-      generatedTags.push(finalBrand.toLowerCase().replace(/\s+/g, ''));
-    }
-    
-    // Add era/decade tags only if not empty
-    if (finalEra && finalEra.trim() !== '') {
-      const eraTag = finalEra.toLowerCase().replace(/\s+/g, '');
-      generatedTags.push(eraTag);
-      // Add decade-specific tags
-      if (finalEra.includes('90s')) generatedTags.push('90s');
-      if (finalEra.includes('80s')) generatedTags.push('80s');
-      if (finalEra.includes('vintage')) generatedTags.push('vintage');
-    }
-    
-    // Add category-based tags
-    const categoryTag = category.toLowerCase().replace(/\s+/g, '');
-    generatedTags.push(categoryTag);
-    
-    // Add style descriptors from voice
-    const styleKeywords = ['oversized', 'boxy', 'cropped', 'fitted', 'relaxed', 'heavyweight', 'crewneck', 'vneck', 'hoodie', 'embroidered', 'graphic', 'minimal', 'athletic', 'sportswear', 'workwear', 'vintage'];
-    styleKeywords.forEach(keyword => {
-      if (voiceDesc.toLowerCase().includes(keyword)) {
-        generatedTags.push(keyword.replace(/\s+/g, ''));
-      }
-    });
-    
-    // Add fit descriptor if present
-    if (voiceDesc.toLowerCase().includes('boxy')) generatedTags.push('boxyfit');
-    
-    const manualTags = currentItem.tags || [];
-    const finalTags = [...new Set([...manualTags, ...generatedTags])].filter(t => t && t.trim() !== '');
-    
-    // Generate SEO title (only if not manually set)
-    let finalSeoTitle = currentItem.seoTitle;
-    
-    if (!finalSeoTitle || finalSeoTitle.trim() === '') {
-      const titleComponents = [];
-      
-      // Add size at the beginning if available
-      if (detectedSize && ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'].includes(detectedSize)) {
-        titleComponents.push(detectedSize);
-      }
-      
-      // Add era/vintage marker (only if not empty)
-      if (finalEra && finalEra.trim() !== '') {
-        titleComponents.push(finalEra.charAt(0).toUpperCase() + finalEra.slice(1));
-      }
-      
-      // Add brand only if explicitly mentioned and not empty/unknown
-      if (finalBrand && finalBrand.trim() !== '' && finalBrand.toLowerCase() !== 'unknown') {
-        titleComponents.push(finalBrand);
-      }
-      
-      // Add category
-      const categoryForTitle = category === 'Tees' ? 'Tee' : 
-                               category === 'Sweatshirts' ? 'Sweatshirt' :
-                               category === 'Outerwear' ? 'Jacket' :
-                               category;
-      titleComponents.push(categoryForTitle);
-      
-      // Add key description words from voice
-      const keyWords = voiceDesc.split(' ').slice(0, 3).map(w => 
-        w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
-      ).join(' ');
-      if (keyWords && !titleComponents.join(' ').toLowerCase().includes(keyWords.toLowerCase())) {
-        titleComponents.push(keyWords);
-      }
-      
-      // Add colors only if detected and not empty
-      if (detectedColors.length > 0) {
-        const colorStr = detectedColors.slice(0, 2)
-          .map(c => c.charAt(0).toUpperCase() + c.slice(1))
-          .join('/');
-        if (colorStr && colorStr.trim() !== '') {
-          titleComponents.push(colorStr);
-        }
-      }
-      
-      finalSeoTitle = titleComponents.join(' ');
-      
-      // Smart trim at word boundary if too long
-      if (finalSeoTitle.length > 100) {
-        const words = finalSeoTitle.split(' ');
-        let trimmed = '';
-        for (const word of words) {
-          if ((trimmed + ' ' + word).length > 100) break;
-          trimmed += (trimmed ? ' ' : '') + word;
-        }
-        finalSeoTitle = trimmed;
-      }
-    }
-    
-    // Apply to all items in group
-    currentGroup.forEach(groupItem => {
-      const itemIndex = updated.findIndex(item => item.id === groupItem.id);
-      if (itemIndex !== -1) {
-        updated[itemIndex] = {
-          ...updated[itemIndex],
-          price: finalPrice,
-          seoTitle: finalSeoTitle,
-          generatedDescription: generatedDesc,
-          tags: finalTags,
-          size: detectedSize || updated[itemIndex].size,
-          // FIXED: Only use extracted brand/model if explicitly mentioned in voice or manually entered
-          brand: updated[itemIndex].brand || (voiceExplicitlyMentionsBrand ? extractedBrand : undefined),
-          color: updated[itemIndex].color || extractedColor,
-          condition: updated[itemIndex].condition || (extractedCondition as any),
-          flaws: updated[itemIndex].flaws || extractedFlaws,
-          material: updated[itemIndex].material || extractedMaterial,
-          measurements: updated[itemIndex].measurements,
-          era: updated[itemIndex].era || extractedEra,
-          care: updated[itemIndex].care,
-          // NEW: Add intelligent match data only if explicitly mentioned
-          modelName: updated[itemIndex].modelName || (voiceExplicitlyMentionsModel ? extractedModelName : undefined),
-          modelNumber: updated[itemIndex].modelNumber || (voiceExplicitlyMentionsModelNumber ? extractedModelNumber : undefined),
-          brandCategory: extractedBrandCategory || updated[itemIndex].brandCategory,
-          subculture: extractedSubcultures.length > 0 ? extractedSubcultures : updated[itemIndex].subculture,
-        };
-      }
-    });
-    
-    setProcessedItems(updated);
-    setIsGenerating(false);
-  };
-
-  // Individual regenerate functions
-  const regenerateDescription = () => {
-    if (!currentItem.voiceDescription) {
-      alert('Please add a voice description first');
+    } catch (error) {
+      console.error('AI generation failed:', error);
+      alert(`AI analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please check that the proxy server is running.`);
+      setIsGenerating(false);
       return;
     }
     
-    const voiceDesc = currentItem.voiceDescription;
+    // Fallback: Use basic generation if Llama 3 not enabled
+    const voiceDesc = currentItem.voiceDescription || '';
     const lowerDesc = voiceDesc.toLowerCase();
     
     // Detect colors and materials
@@ -1246,6 +865,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       }
     });
     setProcessedItems(updated);
+    setIsGenerating(false);
   };
 
   const regenerateSeoTitle = () => {
@@ -1651,28 +1271,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             />
           </div>
 
-          <div className="form-section">
-            <button 
-              className="button" 
-              onClick={handleGenerateProductInfo}
-              disabled={!currentItem.voiceDescription || isGenerating}
-            >
-              {isGenerating ? (
-                <span className="loading">
-                  <span className="spinner"></span>
-                  Generating...
-                </span>
-              ) : (
-                '✨ Generate Product Info with AI'
-              )}
-            </button>
-            <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem' }}>
-              AI will generate or enhance the fields above based on your voice description
-            </p>
-          </div>
-
-          {currentItem.generatedDescription && (
-            <div className="generated-info">
+          <div className="generated-info">
               <h3>AI Generated Content (Edit as needed)</h3>
               
               <div className="info-item">
@@ -1694,18 +1293,29 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   rows={6}
                 />
                 <button
-                  className="button button-secondary"
+                  className="button button-primary"
                   onClick={regenerateDescription}
-                  style={{ marginTop: '0.5rem', width: '100%' }}
-                  title="Regenerate description from voice"
+                  disabled={isGenerating}
+                  style={{ 
+                    marginTop: '0.5rem', 
+                    width: '100%',
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                  }}
+                  title="Generate professional description from your voice + fields"
                 >
-                  🔄 Regenerate Description
+                  {isGenerating ? (
+                    '🧠 Generating...'
+                  ) : (
+                    '✨ Generate AI Description'
+                  )}
                 </button>
+                <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem', marginBottom: 0 }}>
+                  AI will create a professional description from your voice input and fields
+                </p>
               </div>
             </div>
-          )}
+          </div>
         </div>
-      </div>
 
       <div className="navigation-controls">
         <button 

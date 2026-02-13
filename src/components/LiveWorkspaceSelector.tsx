@@ -37,7 +37,6 @@ export default function LiveWorkspaceSelector({
 
   // Subscribe to presence channel for real-time active users
   useEffect(() => {
-    console.log('🔌 LiveWorkspaceSelector: Subscribing to presence channel');
     
     let channel: RealtimeChannel | null = null;
 
@@ -46,7 +45,6 @@ export default function LiveWorkspaceSelector({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      console.log('🔌 LiveWorkspaceSelector: Setting up for user:', user.id, user.email);
 
       // Subscribe to the same presence channel
       channel = supabase.channel('workspace-presence');
@@ -54,7 +52,6 @@ export default function LiveWorkspaceSelector({
       channel
         .on('presence', { event: 'sync' }, () => {
           const state = channel!.presenceState();
-          console.log('👥 Presence sync in selector:', state);
 
           // Convert presence state to users list
           const usersList: WorkspaceUser[] = [];
@@ -64,7 +61,6 @@ export default function LiveWorkspaceSelector({
             const presenceArray = presences as Array<{ presence_ref: string } & PresenceState>;
             const presence = presenceArray[0]; // Get first presence for this user
             
-            console.log('🔍 Selector processing:', { presenceUserId, presence });
             
             if (presence) {
               usersList.push({
@@ -85,8 +81,6 @@ export default function LiveWorkspaceSelector({
             return a.email.localeCompare(b.email);
           });
 
-          console.log(`✅ Live users from presence:`, usersList);
-          console.log(`📊 Total users found: ${usersList.length}, Current user ID: ${currentUserId}`);
 
           setUsers(usersList);
         })
@@ -96,7 +90,6 @@ export default function LiveWorkspaceSelector({
     setupPresence();
 
     return () => {
-      console.log('🔌 LiveWorkspaceSelector: Unsubscribing from presence');
       if (channel) {
         supabase.removeChannel(channel);
       }

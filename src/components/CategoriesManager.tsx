@@ -81,7 +81,6 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ onClose }) => {
       
       // If no categories exist, initialize default ones
       if (!data || data.length === 0) {
-        console.log('No categories found, initializing defaults...');
         await initializeDefaultCategories();
         // Fetch again after initialization
         data = await getCategories();
