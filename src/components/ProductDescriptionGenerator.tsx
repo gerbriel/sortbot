@@ -1281,7 +1281,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     
     // Add era context if available
     if (era && (era.includes('vintage') || era.includes('90s') || era.includes('80s') || era.includes('70s'))) {
-      const eraDisplay = era.includes('s') ? era : `${era}s`;
+      const eraDisplay = era.endsWith('s') ? era : `${era}s`;
       desc += ` This ${eraDisplay} piece showcases authentic period styling.`;
     }
     
