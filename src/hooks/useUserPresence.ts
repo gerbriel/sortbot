@@ -179,10 +179,6 @@ export function useUserPresence({
   };
 
   const usersArray = Array.from(otherUsers.values());
-    otherUsersCount: usersArray.length, 
-    userIds: usersArray.map(u => u.userId),
-    fullUsers: usersArray,
-  });
 
   return {
     otherUsers: usersArray,
