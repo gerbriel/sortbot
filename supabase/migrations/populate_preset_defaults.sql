@@ -17,12 +17,15 @@ SET
   listing_type = 'Physical Item',
   style = 'Vintage',
   age_group = 'Adult (13+ years old)',
-  charge_tax = TRUE,
-  inventory_tracker = 'shopify',
-  discounted_shipping = FALSE,
-  processing_time = '1-2 business days',
   requires_shipping = TRUE
 WHERE id IS NOT NULL; -- Update all presets
+
+-- Update fields that were added in sync_category_presets_with_products.sql
+UPDATE public.category_presets
+SET
+  charge_tax = TRUE,
+  inventory_tracker = 'shopify'
+WHERE id IS NOT NULL AND charge_tax IS NULL;
 
 -- ============================================================================
 -- SET GENDER BASED ON CATEGORY
