@@ -25,6 +25,9 @@ SET
   age_group = 'Adult (13+ years old)',
   size_type = 'Regular',
   
+  -- Shipping & Discounts
+  discounted_shipping = 'No Discount',
+  
   -- Inventory & Status
   default_inventory_quantity = 1,
   default_status = 'Active',
@@ -71,6 +74,7 @@ SET
   shopify_product_type = 'Sweatshirts',
   seo_title_template = '{brand} {model} Sweatshirt - Vintage',
   seo_keywords = ARRAY['vintage sweatshirt', 'retro hoodie', 'vintage pullover'],
+  default_tags = ARRAY['sweatshirt', 'hoodie', 'pullover', 'vintage', 'streetwear'],
   seo_description = 'Vintage sweatshirt in excellent condition. Perfect for casual wear and streetwear enthusiasts.',
   suggested_price_min = 25,
   suggested_price_max = 75,
@@ -87,6 +91,7 @@ SET
   shopify_product_type = 'T-Shirts',
   seo_title_template = '{brand} {model} T-Shirt - Vintage',
   seo_keywords = ARRAY['vintage t-shirt', 'retro tee', 'vintage shirt'],
+  default_tags = ARRAY['t-shirt', 'tee', 'shirt', 'vintage', 'casual'],
   seo_description = 'Vintage t-shirt in excellent condition. Classic style and quality construction.',
   suggested_price_min = 15,
   suggested_price_max = 45,
@@ -104,6 +109,7 @@ SET
   shopify_product_type = 'Outerwear & Coats',
   seo_title_template = '{brand} {model} Jacket - Vintage',
   seo_keywords = ARRAY['vintage jacket', 'retro coat', 'vintage outerwear'],
+  default_tags = ARRAY['jacket', 'coat', 'outerwear', 'vintage', 'layering'],
   seo_description = 'Vintage outerwear in excellent condition. Perfect for layering and cold weather.',
   suggested_price_min = 40,
   suggested_price_max = 150,
@@ -121,6 +127,7 @@ SET
   shopify_product_type = 'Pants',
   seo_title_template = '{brand} {model} Pants - Vintage',
   seo_keywords = ARRAY['vintage pants', 'retro trousers', 'vintage bottoms'],
+  default_tags = ARRAY['pants', 'bottoms', 'trousers', 'vintage', 'classic'],
   seo_description = 'Vintage pants in excellent condition. Classic fit and timeless style.',
   suggested_price_min = 25,
   suggested_price_max = 80,
@@ -137,6 +144,7 @@ SET
   shopify_product_type = 'Shorts',
   seo_title_template = '{brand} {model} Shorts - Vintage',
   seo_keywords = ARRAY['vintage shorts', 'retro shorts'],
+  default_tags = ARRAY['shorts', 'summer', 'vintage', 'casual'],
   seo_description = 'Vintage shorts in excellent condition. Perfect for summer wear.',
   suggested_price_min = 20,
   suggested_price_max = 50,
@@ -153,6 +161,7 @@ SET
   shopify_product_type = 'Dresses',
   seo_title_template = '{brand} {model} Dress - Vintage',
   seo_keywords = ARRAY['vintage dress', 'retro dress', 'vintage gown'],
+  default_tags = ARRAY['dress', 'gown', 'vintage', 'womens', 'elegant'],
   seo_description = 'Vintage dress in excellent condition. Timeless elegance and classic style.',
   suggested_price_min = 30,
   suggested_price_max = 120,
@@ -169,6 +178,7 @@ SET
   shopify_product_type = 'Skirts',
   seo_title_template = '{brand} {model} Skirt - Vintage',
   seo_keywords = ARRAY['vintage skirt', 'retro skirt'],
+  default_tags = ARRAY['skirt', 'vintage', 'womens', 'classic'],
   seo_description = 'Vintage skirt in excellent condition. Perfect for any occasion.',
   suggested_price_min = 20,
   suggested_price_max = 60,
@@ -185,6 +195,7 @@ SET
   shopify_product_type = 'Hats & Caps',
   seo_title_template = '{brand} {model} Hat - Vintage',
   seo_keywords = ARRAY['vintage hat', 'retro cap', 'vintage headwear'],
+  default_tags = ARRAY['hat', 'cap', 'headwear', 'vintage', 'accessories'],
   seo_description = 'Vintage headwear in excellent condition. Classic style and quality.',
   suggested_price_min = 15,
   suggested_price_max = 45,
@@ -202,6 +213,7 @@ SET
   shopify_product_type = 'Womens Clothing',
   seo_title_template = '{brand} {model} - Vintage Womens',
   seo_keywords = ARRAY['vintage womens', 'retro feminine', 'vintage fashion'],
+  default_tags = ARRAY['womens', 'feminine', 'vintage', 'fashion'],
   seo_description = 'Vintage womens clothing in excellent condition. Timeless style.',
   suggested_price_min = 25,
   suggested_price_max = 85,
@@ -218,6 +230,7 @@ SET
   shopify_product_type = 'Mystery Boxes & Collections',
   seo_title_template = 'Vintage Mystery Box - {model}',
   seo_keywords = ARRAY['vintage mystery box', 'clothing bundle', 'vintage collection'],
+  default_tags = ARRAY['mystery box', 'bundle', 'collection', 'vintage', 'reseller'],
   seo_description = 'Curated vintage clothing mystery box. Perfect for resellers and vintage enthusiasts.',
   suggested_price_min = 50,
   suggested_price_max = 200,
@@ -277,6 +290,7 @@ BEGIN
   RAISE NOTICE '   • age_group: "Adult (13+ years old)"';
   RAISE NOTICE '   • size_type: "Regular"';
   RAISE NOTICE '   • typical_condition: "Excellent"';
+  RAISE NOTICE '   • discounted_shipping: "No Discount"';
   RAISE NOTICE '   • default_inventory_quantity: 1';
   RAISE NOTICE '   • default_status: "Active"';
   RAISE NOTICE '   • default_published: TRUE';
@@ -291,16 +305,20 @@ BEGIN
   RAISE NOTICE '   • Weight values by category';
   RAISE NOTICE '   • SEO templates with {brand} {model} placeholders';
   RAISE NOTICE '   • SEO descriptions and keywords arrays';
+  RAISE NOTICE '   • Default tags arrays (default_tags)';
   RAISE NOTICE '   • Shopify product types';
   RAISE NOTICE '   • Care instructions specific to fabric type';
   RAISE NOTICE '';
   RAISE NOTICE '✅ Gender set based on category (Unisex or Womens)';
   RAISE NOTICE '';
   RAISE NOTICE '📦 Complete Field Coverage:';
-  RAISE NOTICE '   Total fields populated: 25+ per preset';
-  RAISE NOTICE '   Including: Pricing, Shipping, SEO, Materials, Care, Status';
+  RAISE NOTICE '   Total fields populated: 28+ per preset';
+  RAISE NOTICE '   Including: Pricing, Shipping, SEO, Materials, Care, Status, Tags, Condition';
   RAISE NOTICE '';
   RAISE NOTICE '🎯 Now refresh your app and ALL preset fields will populate!';
+  RAISE NOTICE '   ✓ Condition will show "Excellent"';
+  RAISE NOTICE '   ✓ Tags will merge default_tags + seo_keywords';
+  RAISE NOTICE '   ✓ Discounted Shipping will show "No Discount"';
   RAISE NOTICE '';
   RAISE NOTICE '=================================================================';
   RAISE NOTICE '';
