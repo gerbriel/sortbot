@@ -88,16 +88,23 @@ function extractFieldsFromVoice(voiceDesc: string): Record<string, any> {
   }
 
   // Extract size (if mentioned)
-  const sizeMatch = lower.match(/\b(small|medium|large|x-?large|xx-?large|xs|s|m|l|xl|xxl|2xl|3xl|4xl|\d+[rw]?)\b/i);
+  // Check for "extra" sizes first to avoid matching just "large" or "small"
+  const sizeMatch = lower.match(/\b(extra[\s-]?small|extra[\s-]?large|x-?small|xx?-?large|xxx?-?large|xs|s|m|l|xl|xxl|xxxl|2xl|3xl|4xl|small|medium|large|\d+[rw]?)\b/i);
   if (sizeMatch) {
-    let size = sizeMatch[1].toUpperCase();
-    if (/x-?large|xl/i.test(size) && !/xx/i.test(size)) size = 'XL';
-    else if (/xx-?large|xxl|2xl/i.test(size)) size = 'XXL';
-    else if (/3xl/i.test(size)) size = '3XL';
-    else if (/4xl/i.test(size)) size = '4XL';
-    else if (/small/i.test(size) && !/x/i.test(size)) size = 'S';
-    else if (/medium/i.test(size)) size = 'M';
-    else if (/large/i.test(size) && !/x/i.test(size)) size = 'L';
+    let size = sizeMatch[1].toUpperCase().replace(/[\s-]/g, ''); // Remove spaces/hyphens
+    
+    // Normalize sizes
+    if (/^EXTRA.?LARGE$/i.test(size) || /^XLARGE$/i.test(size)) size = 'XL';
+    else if (/^XX.?LARGE$/i.test(size) || /^XXLARGE$/i.test(size) || /^2XL$/i.test(size)) size = 'XXL';
+    else if (/^XXX.?LARGE$/i.test(size) || /^XXXLARGE$/i.test(size) || /^3XL$/i.test(size)) size = '3XL';
+    else if (/^4XL$/i.test(size)) size = '4XL';
+    else if (/^EXTRA.?SMALL$/i.test(size) || /^XSMALL$/i.test(size)) size = 'XS';
+    else if (/^SMALL$/i.test(size)) size = 'S';
+    else if (/^MEDIUM$/i.test(size)) size = 'M';
+    else if (/^LARGE$/i.test(size)) size = 'L';
+    else if (/^XL$/i.test(size)) size = 'XL';
+    else if (/^XXL$/i.test(size)) size = 'XXL';
+    
     extracted.size = size;
   }
 

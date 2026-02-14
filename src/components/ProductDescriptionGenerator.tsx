@@ -256,7 +256,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   useEffect(() => {
     const autoApplyDefaultPreset = async () => {
       if (!currentItem || !currentItem.category) {
-        console.log('[Preset] Skipping: No currentItem or category');
         return;
       }
       
