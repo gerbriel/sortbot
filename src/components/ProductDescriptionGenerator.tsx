@@ -255,22 +255,25 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Auto-apply default preset when current group changes
   useEffect(() => {
     const autoApplyDefaultPreset = async () => {
-      if (!currentItem || !currentItem.category) return;
+      if (!currentItem || !currentItem.category) {
+        console.log('[Preset] Skipping: No currentItem or category');
+        return;
+      }
       
       // Skip if this group already has preset data applied
-      const hasPresetData = currentGroup.some(item => 
-        item.productType || 
-        item._presetData ||
-        item.requiresShipping !== undefined ||
-        item.policies
-      );
+      const hasPresetData = currentGroup.some(item => item._presetData);
       
       if (hasPresetData) {
+        console.log('[Preset] Skipping: Group already has preset data');
         return;
       }
 
+      console.log('[Preset] Applying preset for category:', currentItem.category);
+
       try {
         const updatedGroup = await applyPresetToProductGroup(currentGroup, currentItem.category);
+        
+        console.log('[Preset] Updated group:', updatedGroup[0]);
         
         // Update processedItems with preset-enriched items
         const updated = [...processedItems];
@@ -282,6 +285,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         });
         
         setProcessedItems(updated);
+        
+        console.log('[Preset] Applied preset successfully');
         
         // Find and set the default preset ID in the dropdown
         const defaultPreset = availablePresets.find(p => 
