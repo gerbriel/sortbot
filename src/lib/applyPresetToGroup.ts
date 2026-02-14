@@ -14,6 +14,8 @@ export async function applyPresetToProductGroup(
   try {
     // Get all presets for the user
     const presets = await getCategoryPresets();
+    console.log('[applyPreset] Total presets found:', presets.length);
+    console.log('[applyPreset] Looking for category:', categoryName);
     
     // Find the DEFAULT preset for this category (by product_type)
     // Look for is_default=true first, fallback to any matching preset
@@ -36,12 +38,27 @@ export async function applyPresetToProductGroup(
     }
     
     if (!preset) {
+      console.log('[applyPreset] ❌ No preset found for category:', categoryName);
       // Still apply category even if no preset exists
       return items.map(item => ({
         ...item,
         category: categoryName
       }));
     }
+
+    console.log('[applyPreset] ✅ Found preset:', preset.display_name);
+    console.log('[applyPreset] Preset ID:', preset.id);
+    console.log('[applyPreset] Database preset field values:', {
+      policies: preset.policies,
+      ships_from: preset.ships_from,
+      gender: preset.gender,
+      who_made_it: preset.who_made_it,
+      style: preset.style,
+      age_group: preset.age_group,
+      size_type: preset.size_type,
+      what_is_it: preset.what_is_it,
+      listing_type: preset.listing_type
+    });
     
     /**
      * Apply preset values to items with priority hierarchy:
