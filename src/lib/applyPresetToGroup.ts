@@ -76,9 +76,13 @@ export async function applyPresetToProductGroup(
       modelNumber: item.modelNumber || preset.model_number || undefined,
       era: item.era || preset.era || undefined,
       care: item.care || preset.default_care_instructions || undefined,
+      condition: item.condition || preset.typical_condition as any || undefined,
       
-      // Tags: merge preset keywords with existing tags (special case)
-      tags: item.tags || (preset.seo_keywords ? [...preset.seo_keywords] : []),
+      // Tags: merge preset default_tags and seo_keywords with existing tags
+      tags: item.tags || [
+        ...(preset.default_tags || []),
+        ...(preset.seo_keywords || [])
+      ].filter((tag, index, self) => self.indexOf(tag) === index), // Remove duplicates
       
       // ======= MEASUREMENTS =======
       // If preset has default measurements template, apply them
