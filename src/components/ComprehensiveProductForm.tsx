@@ -7,7 +7,6 @@ interface ComprehensiveProductFormProps {
   currentGroup: ClothingItem[];
   processedItems: ClothingItem[];
   setProcessedItems: (items: ClothingItem[]) => void;
-  regenerateSize: () => void;
 }
 
 export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> = ({
@@ -15,7 +14,6 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
   currentGroup,
   processedItems,
   setProcessedItems,
-  regenerateSize,
 }) => {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['basic']));
 
@@ -198,24 +196,13 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
           <div className="section-content">
             <div className="info-item">
               <label>Size:</label>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input
-                  type="text"
-                  value={currentItem.size || ''}
-                  onChange={(e) => updateGroupField('size', e.target.value)}
-                  placeholder="e.g., M, L, XL, 32, 10"
-                  className="info-input"
-                  style={{ flex: 1 }}
-                />
-                <button
-                  className="button button-secondary"
-                  onClick={regenerateSize}
-                  style={{ minWidth: '100px' }}
-                  title="Detect size from voice description"
-                >
-                  🔄 Regen
-                </button>
-              </div>
+              <input
+                type="text"
+                value={currentItem.size || ''}
+                onChange={(e) => updateGroupField('size', e.target.value)}
+                placeholder="e.g., M, L, XL, 32, 10"
+                className="info-input"
+              />
             </div>
 
             <div className="info-item">

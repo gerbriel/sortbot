@@ -706,6 +706,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   };
   */
 
+  // regenerateSize function - currently unused but kept for future reference
+  /*
   const regenerateSize = () => {
     if (!currentItem.voiceDescription) {
       alert('Please add a voice description first');
@@ -756,6 +758,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       alert('No size detected in voice description');
     }
   };
+  */
 
   const handleNext = () => {
     if (currentGroupIndex < groupArray.length - 1) {
@@ -999,7 +1002,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               currentGroup={currentGroup}
               processedItems={processedItems}
               setProcessedItems={setProcessedItems}
-              regenerateSize={regenerateSize}
             />
           </div>
 
@@ -1022,7 +1024,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     setProcessedItems(updated);
                   }}
                   className="info-textarea"
-                  rows={6}
+                  rows={12}
+                  style={{ width: '100%', minHeight: '300px' }}
                 />
                 <button
                   className="button button-primary"
