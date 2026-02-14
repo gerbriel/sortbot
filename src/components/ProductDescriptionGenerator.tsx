@@ -369,7 +369,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     }
   };
 
-  const handleStopRecording = () => {
+  const handleStopRecording = async () => {
     if (isTransitioning) {
       return;
     }
@@ -403,6 +403,70 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       }
     }
     setInterimTranscript('');
+
+    // AUTO-EXTRACT FIELDS FROM VOICE DESCRIPTION WHEN RECORDING STOPS
+    // This fills in fields automatically based on what user said
+    if (currentItem?.voiceDescription) {
+      try {
+        setIsGenerating(true);
+        
+        // Use AI to extract fields from voice description
+        const aiResult = await generateProductDescription({
+          voiceDescription: currentItem.voiceDescription,
+          brand: currentItem.brand, // Pass existing context
+          color: currentItem.color,
+          size: currentItem.size,
+          material: currentItem.material,
+          condition: currentItem.condition as any,
+          era: currentItem.era,
+          style: currentItem.style,
+          category: currentItem.productType,
+          measurements: currentItem.measurements,
+          flaws: currentItem.flaws,
+          care: currentItem.care
+        });
+
+        // Extract fields from AI result (only fields with supporting info)
+        const extractedFields = aiResult.extractedFields || {};
+        
+        // Update all items in current group with extracted fields
+        // Voice-extracted fields override category preset defaults
+        const updated = [...processedItems];
+        currentGroup.forEach(groupItem => {
+          const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+          if (itemIndex !== -1) {
+            updated[itemIndex] = {
+              ...updated[itemIndex],
+              // Only update fields if extracted (don't overwrite with undefined)
+              ...(extractedFields.brand && { brand: extractedFields.brand }),
+              ...(extractedFields.modelName && { modelName: extractedFields.modelName }),
+              ...(extractedFields.color && { color: extractedFields.color }),
+              ...(extractedFields.secondaryColor && { secondaryColor: extractedFields.secondaryColor }),
+              ...(extractedFields.size && { size: extractedFields.size }),
+              ...(extractedFields.material && { material: extractedFields.material }),
+              ...(extractedFields.condition && { condition: extractedFields.condition as 'New' | 'Used' | 'NWT' | 'Excellent' | 'Good' | 'Fair' }),
+              ...(extractedFields.era && { era: extractedFields.era }),
+              ...(extractedFields.style && { style: extractedFields.style }),
+              ...(extractedFields.gender && { gender: extractedFields.gender as 'Men' | 'Women' | 'Unisex' | 'Kids' }),
+              ...(extractedFields.measurements && { measurements: extractedFields.measurements }),
+              ...(extractedFields.price && { price: parseFloat(extractedFields.price) || undefined }),
+              ...(extractedFields.flaws && { flaws: extractedFields.flaws }),
+              ...(extractedFields.care && { care: extractedFields.care }),
+              ...(extractedFields.tags && extractedFields.tags.length > 0 && { 
+                tags: [...new Set([...(updated[itemIndex].tags || []), ...extractedFields.tags])]
+              }),
+            };
+          }
+        });
+        
+        setProcessedItems(updated);
+        
+      } catch (error) {
+        console.error('Error extracting fields from voice:', error);
+      } finally {
+        setIsGenerating(false);
+      }
+    }
   };
 
   const handleClearTranscript = () => {
