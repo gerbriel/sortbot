@@ -7,6 +7,7 @@ interface ProductContext {
   voiceDescription?: string;
   brand?: string;
   color?: string;
+  secondaryColor?: string;
   size?: string;
   material?: string;
   condition?: string;
@@ -14,39 +15,86 @@ interface ProductContext {
   style?: string;
   category?: string;
   measurements?: Record<string, string>;
-  flaws?: string; // NEW: For flaws/imperfections section
-  care?: string; // NEW: For care instructions
+  flaws?: string;
+  care?: string;
+  modelName?: string;
+  gender?: string;
+  price?: number;
+  tags?: string[];
 }
 
 export interface AIGeneratedContent {
   description: string;
   suggestedTitle?: string;
   suggestedTags?: string[];
-  extractedFields?: { // NEW: Fields extracted from voice
+  extractedFields?: { // Fields extracted from voice description
     brand?: string;
+    modelName?: string;
     color?: string;
+    secondaryColor?: string;
     size?: string;
     material?: string;
     condition?: string;
     era?: string;
+    style?: string;
+    gender?: string;
+    measurements?: Record<string, string>;
+    price?: string;
     flaws?: string;
     care?: string;
+    tags?: string[];
   };
 }
 
 /**
  * Extract fields from voice description (only if explicitly mentioned)
  */
-function extractFieldsFromVoice(voiceDesc: string): Record<string, string> {
-  const extracted: Record<string, string> = {};
+function extractFieldsFromVoice(voiceDesc: string): Record<string, any> {
+  const extracted: Record<string, any> = {};
   const lower = voiceDesc.toLowerCase();
 
+  // Extract brand (common brands)
+  const brandPatterns = [
+    /\b(nike|adidas|supreme|carhartt|levi\'?s?|levis|jordan|yeezy|gucci|prada|louis vuitton|lv|champion|north face|patagonia|polo|ralph lauren|tommy hilfiger|gap|old navy|h&m|zara|uniqlo|bape|off-white|balenciaga|versace|fendi|dior|chanel)\b/i
+  ];
+  for (const pattern of brandPatterns) {
+    const brandMatch = voiceDesc.match(pattern);
+    if (brandMatch) {
+      let brand = brandMatch[1];
+      // Normalize common variations
+      if (/levi/i.test(brand)) brand = "Levi's";
+      else if (/north face/i.test(brand)) brand = "The North Face";
+      else if (/ralph lauren/i.test(brand)) brand = "Ralph Lauren";
+      else if (/tommy hilfiger/i.test(brand)) brand = "Tommy Hilfiger";
+      else if (/louis vuitton|lv/i.test(brand)) brand = "Louis Vuitton";
+      else brand = brand.charAt(0).toUpperCase() + brand.slice(1);
+      extracted.brand = brand;
+      break;
+    }
+  }
+
+  // Extract model name/number (common models)
+  const modelPatterns = [
+    /\b(air force 1|af1|jordan 1|j1|yeezy 350|yeezy 700|501|511|air max|dunk|box logo|hoodie|windbreaker)\b/i,
+    /model:?\s*([a-z0-9\s-]+)/i,
+    /style:?\s*([a-z0-9\s-]+)/i
+  ];
+  for (const pattern of modelPatterns) {
+    const modelMatch = voiceDesc.match(pattern);
+    if (modelMatch) {
+      extracted.modelName = modelMatch[1].trim();
+      break;
+    }
+  }
+
   // Extract size (if mentioned)
-  const sizeMatch = lower.match(/\b(small|medium|large|x-?large|xx-?large|xs|s|m|l|xl|xxl)\b/i);
+  const sizeMatch = lower.match(/\b(small|medium|large|x-?large|xx-?large|xs|s|m|l|xl|xxl|2xl|3xl|4xl|\d+[rw]?)\b/i);
   if (sizeMatch) {
     let size = sizeMatch[1].toUpperCase();
     if (/x-?large|xl/i.test(size) && !/xx/i.test(size)) size = 'XL';
-    else if (/xx-?large|xxl/i.test(size)) size = 'XXL';
+    else if (/xx-?large|xxl|2xl/i.test(size)) size = 'XXL';
+    else if (/3xl/i.test(size)) size = '3XL';
+    else if (/4xl/i.test(size)) size = '4XL';
     else if (/small/i.test(size) && !/x/i.test(size)) size = 'S';
     else if (/medium/i.test(size)) size = 'M';
     else if (/large/i.test(size) && !/x/i.test(size)) size = 'L';
@@ -55,7 +103,7 @@ function extractFieldsFromVoice(voiceDesc: string): Record<string, string> {
 
   // Extract colors (if mentioned)
   const colorPatterns = [
-    /\b(black|white|red|blue|green|yellow|pink|purple|gray|grey|brown|orange|navy|maroon|burgundy|cream|beige|tan|olive|khaki)\b/gi
+    /\b(black|white|red|blue|green|yellow|pink|purple|gray|grey|brown|orange|navy|maroon|burgundy|cream|beige|tan|olive|khaki|teal|turquoise|mint|lavender|crimson|magenta|charcoal|silver|gold)\b/gi
   ];
   const colors: string[] = [];
   colorPatterns.forEach(pattern => {
@@ -68,11 +116,14 @@ function extractFieldsFromVoice(voiceDesc: string): Record<string, string> {
     }
   });
   if (colors.length > 0) {
-    extracted.color = colors.slice(0, 2).join('/'); // Max 2 colors
+    extracted.color = colors[0]; // Primary color
+    if (colors.length > 1) {
+      extracted.secondaryColor = colors[1]; // Secondary color
+    }
   }
 
   // Extract materials (if mentioned)
-  const materialMatch = lower.match(/\b(cotton|polyester|denim|leather|wool|silk|fleece|nylon|linen|cashmere)\b/i);
+  const materialMatch = lower.match(/\b(cotton|polyester|denim|leather|wool|silk|fleece|nylon|linen|cashmere|suede|canvas|corduroy|velvet|satin|rayon|spandex|lycra)\b/i);
   if (materialMatch) {
     extracted.material = materialMatch[1].charAt(0).toUpperCase() + materialMatch[1].slice(1);
   }
@@ -86,14 +137,58 @@ function extractFieldsFromVoice(voiceDesc: string): Record<string, string> {
     extracted.condition = 'Excellent';
   } else if (/good condition|gently used/i.test(voiceDesc)) {
     extracted.condition = 'Good';
-  } else if (/fair|worn/i.test(voiceDesc)) {
+  } else if (/fair|worn|used/i.test(voiceDesc)) {
     extracted.condition = 'Fair';
   }
 
   // Extract era (if mentioned)
-  const eraMatch = voiceDesc.match(/\b(vintage|retro|90s|80s|70s|60s|y2k|modern|contemporary)\b/i);
+  const eraMatch = voiceDesc.match(/\b(vintage|retro|90s|80s|70s|60s|50s|y2k|2000s|modern|contemporary|classic)\b/i);
   if (eraMatch) {
     extracted.era = eraMatch[1].charAt(0).toUpperCase() + eraMatch[1].slice(1);
+  }
+
+  // Extract style (if mentioned)
+  const styleMatch = voiceDesc.match(/\b(streetwear|preppy|grunge|punk|goth|minimalist|boho|vintage|athletic|casual|formal|business)\b/i);
+  if (styleMatch) {
+    extracted.style = styleMatch[1].charAt(0).toUpperCase() + styleMatch[1].slice(1);
+  }
+
+  // Extract gender (if mentioned)
+  if (/\b(men\'?s?|male|masculine)\b/i.test(voiceDesc)) {
+    extracted.gender = 'Men';
+  } else if (/\b(women\'?s?|female|feminine|ladies)\b/i.test(voiceDesc)) {
+    extracted.gender = 'Women';
+  } else if (/\b(unisex|gender neutral)\b/i.test(voiceDesc)) {
+    extracted.gender = 'Unisex';
+  } else if (/\b(kids?|children|youth)\b/i.test(voiceDesc)) {
+    extracted.gender = 'Kids';
+  }
+
+  // Extract measurements (if mentioned)
+  const measurements: any = {};
+  const pitMatch = voiceDesc.match(/pit\s*(?:to|2)\s*pit:?\s*(\d+(?:\.\d+)?)\s*(?:in|inch|")?/i);
+  if (pitMatch) measurements.pitToPit = pitMatch[1];
+  
+  const lengthMatch = voiceDesc.match(/length:?\s*(\d+(?:\.\d+)?)\s*(?:in|inch|")?/i);
+  if (lengthMatch) measurements.length = lengthMatch[1];
+  
+  const waistMatch = voiceDesc.match(/waist:?\s*(\d+(?:\.\d+)?)\s*(?:in|inch|")?/i);
+  if (waistMatch) measurements.waist = waistMatch[1];
+  
+  const shoulderMatch = voiceDesc.match(/shoulder:?\s*(\d+(?:\.\d+)?)\s*(?:in|inch|")?/i);
+  if (shoulderMatch) measurements.shoulder = shoulderMatch[1];
+  
+  const sleeveMatch = voiceDesc.match(/sleeve:?\s*(\d+(?:\.\d+)?)\s*(?:in|inch|")?/i);
+  if (sleeveMatch) measurements.sleeve = sleeveMatch[1];
+  
+  if (Object.keys(measurements).length > 0) {
+    extracted.measurements = measurements;
+  }
+
+  // Extract price (if mentioned)
+  const priceMatch = voiceDesc.match(/\$\s*(\d+(?:\.\d{2})?)|(\d+)\s*dollars?/i);
+  if (priceMatch) {
+    extracted.price = priceMatch[1] || priceMatch[2];
   }
 
   // Extract flaws (if mentioned)
@@ -102,7 +197,8 @@ function extractFieldsFromVoice(voiceDesc: string): Record<string, string> {
     /stains?:\s*([^.]+)/i,
     /holes?:\s*([^.]+)/i,
     /damage:\s*([^.]+)/i,
-    /has\s+(?:a\s+)?(small|minor|slight)\s+(stain|hole|tear|mark|fade)/i
+    /has\s+(?:a\s+)?(small|minor|slight)\s+(stain|hole|tear|mark|fade|scratch|scuff)/i,
+    /(?:small|minor|slight|tiny)\s+(stain|hole|tear|mark|fade|scratch|scuff|wear|fading|pilling)/i
   ];
   for (const pattern of flawPatterns) {
     const match = voiceDesc.match(pattern);
@@ -113,11 +209,26 @@ function extractFieldsFromVoice(voiceDesc: string): Record<string, string> {
   }
 
   // Extract care instructions (if mentioned)
-  if (/machine wash|hand wash|dry clean|wash cold|wash warm/i.test(voiceDesc)) {
-    const careMatch = voiceDesc.match(/(?:care:?\s*)?([^.]*(?:machine wash|hand wash|dry clean|wash cold|wash warm)[^.]*)/i);
+  if (/machine wash|hand wash|dry clean|wash cold|wash warm|tumble dry|hang dry|do not bleach/i.test(voiceDesc)) {
+    const careMatch = voiceDesc.match(/(?:care:?\s*)?([^.]*(?:machine wash|hand wash|dry clean|wash cold|wash warm|tumble dry|hang dry|do not bleach)[^.]*)/i);
     if (careMatch) {
       extracted.care = careMatch[1].trim();
     }
+  }
+
+  // Extract tags/keywords
+  const tags: string[] = [];
+  if (/graphic/i.test(voiceDesc)) tags.push('graphic');
+  if (/print/i.test(voiceDesc)) tags.push('print');
+  if (/embroidered/i.test(voiceDesc)) tags.push('embroidered');
+  if (/oversized/i.test(voiceDesc)) tags.push('oversized');
+  if (/fitted/i.test(voiceDesc)) tags.push('fitted');
+  if (/cropped/i.test(voiceDesc)) tags.push('cropped');
+  if (/distressed/i.test(voiceDesc)) tags.push('distressed');
+  if (/faded/i.test(voiceDesc)) tags.push('faded');
+  if (/rare|grail|hard to find/i.test(voiceDesc)) tags.push('rare');
+  if (tags.length > 0) {
+    extracted.tags = tags;
   }
 
   return extracted;
@@ -143,12 +254,19 @@ export const generateProductDescription = async (
     // Only use extracted if field is empty
     brand: context.brand || extracted.brand,
     color: context.color || extracted.color,
+    secondaryColor: context.secondaryColor || extracted.secondaryColor,
     size: context.size || extracted.size,
     material: context.material || extracted.material,
     condition: context.condition || extracted.condition,
     era: context.era || extracted.era,
+    style: context.style || extracted.style,
     flaws: context.flaws || extracted.flaws,
     care: context.care || extracted.care,
+    modelName: context.modelName || extracted.modelName,
+    gender: context.gender || extracted.gender,
+    price: context.price || extracted.price,
+    tags: context.tags || extracted.tags,
+    measurements: context.measurements || extracted.measurements,
   };
   
   const result = createFallbackDescription(mergedContext);
