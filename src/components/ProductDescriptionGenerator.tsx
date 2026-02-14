@@ -260,20 +260,44 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         return;
       }
       
-      // Skip if this group already has preset data applied
+      // Check if preset data exists AND if key fields are actually filled
+      // If _presetData exists but fields are empty, we need to re-apply
       const hasPresetData = currentGroup.some(item => item._presetData);
+      const hasPresetFields = currentGroup.some(item => 
+        item.policies || 
+        item.shipsFrom || 
+        item.gender || 
+        item.whoMadeIt
+      );
       
-      if (hasPresetData) {
-        console.log('[Preset] Skipping: Group already has preset data');
+      if (hasPresetData && hasPresetFields) {
+        console.log('[Preset] Skipping: Group already has preset data and fields are filled');
+        console.log('[Preset] Sample item fields:', {
+          policies: currentItem.policies,
+          shipsFrom: currentItem.shipsFrom,
+          gender: currentItem.gender,
+          whoMadeIt: currentItem.whoMadeIt,
+          style: currentItem.style,
+          ageGroup: currentItem.ageGroup
+        });
         return;
       }
 
       console.log('[Preset] Applying preset for category:', currentItem.category);
+      console.log('[Preset] Has preset data marker:', hasPresetData, 'Has actual fields:', hasPresetFields);
 
       try {
         const updatedGroup = await applyPresetToProductGroup(currentGroup, currentItem.category);
         
-        console.log('[Preset] Updated group:', updatedGroup[0]);
+        console.log('[Preset] Updated group sample fields:', {
+          policies: updatedGroup[0].policies,
+          shipsFrom: updatedGroup[0].shipsFrom,
+          gender: updatedGroup[0].gender,
+          whoMadeIt: updatedGroup[0].whoMadeIt,
+          style: updatedGroup[0].style,
+          ageGroup: updatedGroup[0].ageGroup,
+          _presetData: updatedGroup[0]._presetData
+        });
         
         // Update processedItems with preset-enriched items
         const updated = [...processedItems];
