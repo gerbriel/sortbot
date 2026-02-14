@@ -182,31 +182,6 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-function generateMockLlamaAnalysis(): LlamaVisionAnalysis {
-  const mockTypes = [
-    'Vintage Band T-Shirt',
-    'Levi\'s 501 Jeans',
-    'Nike Windbreaker',
-    'Champion Hoodie',
-    'Carhartt Work Jacket'
-  ];
-  
-  const mockColors = ['Black', 'Blue', 'Gray', 'White', 'Red'];
-  const mockMaterials = ['Cotton', 'Denim', 'Polyester', 'Cotton Blend'];
-  
-  return {
-    productType: mockTypes[Math.floor(Math.random() * mockTypes.length)],
-    brand: ['Nike', 'Levi\'s', 'Champion', undefined][Math.floor(Math.random() * 4)],
-    color: mockColors[Math.floor(Math.random() * mockColors.length)],
-    material: mockMaterials[Math.floor(Math.random() * mockMaterials.length)],
-    condition: 'Good - Normal vintage wear',
-    era: '1990s',
-    style: 'Vintage',
-    description: 'Classic vintage piece with authentic retro styling. Shows normal wear consistent with age.',
-    confidence: 0.75
-  };
-}
-
 function generateMockDescription(productType: string, color: string, brand?: string): string {
   const brandText = brand ? `${brand} ` : '';
   return `Classic ${brandText}${color.toLowerCase()} ${productType.toLowerCase()}. Authentic vintage styling with timeless appeal. Perfect for collectors and fashion enthusiasts.`;

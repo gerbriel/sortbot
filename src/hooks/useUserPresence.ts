@@ -85,9 +85,9 @@ export function useUserPresence({
           
           setOtherUsers(users);
         })
-        .on('presence', { event: 'join' }, ({ key, newPresences }: any) => {
+        .on('presence', { event: 'join' }, () => {
         })
-        .on('presence', { event: 'leave' }, ({ key, leftPresences }: any) => {
+        .on('presence', { event: 'leave' }, () => {
         })
         .subscribe(async (status: string) => {
           if (status === 'SUBSCRIBED') {
