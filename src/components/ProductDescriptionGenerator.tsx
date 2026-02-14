@@ -599,6 +599,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     setIsGenerating(false);
   };
 
+  // Regenerate functions - currently unused but kept for future reference
+  /*
   const regenerateSeoTitle = () => {
     const category = currentItem.category || 'Item';
     const voiceDesc = currentItem.voiceDescription || '';
@@ -702,6 +704,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     });
     setProcessedItems(updated);
   };
+  */
 
   const regenerateSize = () => {
     if (!currentItem.voiceDescription) {
@@ -996,8 +999,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               currentGroup={currentGroup}
               processedItems={processedItems}
               setProcessedItems={setProcessedItems}
-              regenerateSeoTitle={regenerateSeoTitle}
-              regenerateTags={regenerateTags}
               regenerateSize={regenerateSize}
             />
           </div>

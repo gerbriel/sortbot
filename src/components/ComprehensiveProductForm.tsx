@@ -7,8 +7,6 @@ interface ComprehensiveProductFormProps {
   currentGroup: ClothingItem[];
   processedItems: ClothingItem[];
   setProcessedItems: (items: ClothingItem[]) => void;
-  regenerateSeoTitle: () => void;
-  regenerateTags: () => void;
   regenerateSize: () => void;
 }
 
@@ -17,8 +15,6 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
   currentGroup,
   processedItems,
   setProcessedItems,
-  regenerateSeoTitle,
-  regenerateTags,
   regenerateSize,
 }) => {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['basic']));
@@ -118,46 +114,24 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
 
             <div className="info-item">
               <label>SEO Title:</label>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input
-                  type="text"
-                  value={currentItem.seoTitle || ''}
-                  onChange={(e) => updateGroupField('seoTitle', e.target.value)}
-                  placeholder="e.g., Vintage Black Rolling Stones Tee"
-                  className="info-input"
-                  style={{ flex: 1 }}
-                />
-                <button
-                  className="button button-secondary"
-                  onClick={regenerateSeoTitle}
-                  style={{ minWidth: '100px' }}
-                  title="Regenerate SEO title from voice description"
-                >
-                  🔄 Regen
-                </button>
-              </div>
+              <input
+                type="text"
+                value={currentItem.seoTitle || ''}
+                onChange={(e) => updateGroupField('seoTitle', e.target.value)}
+                placeholder="e.g., Vintage Black Rolling Stones Tee"
+                className="info-input"
+              />
             </div>
 
             <div className="info-item">
               <label>Tags (comma-separated): <PresetBadge show={isFromPreset('tags')} /></label>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input
-                  type="text"
-                  value={currentItem.tags?.join(', ') || ''}
-                  onChange={(e) => updateGroupField('tags', e.target.value ? e.target.value.split(',').map(t => t.trim()).filter(t => t) : [])}
-                  placeholder="e.g., vintage, tees, rock, black"
-                  className="info-input"
-                  style={{ flex: 1 }}
-                />
-                <button
-                  className="button button-secondary"
-                  onClick={regenerateTags}
-                  style={{ minWidth: '100px' }}
-                  title="Regenerate tags from voice description"
-                >
-                  🔄 Regen
-                </button>
-              </div>
+              <input
+                type="text"
+                value={currentItem.tags?.join(', ') || ''}
+                onChange={(e) => updateGroupField('tags', e.target.value ? e.target.value.split(',').map(t => t.trim()).filter(t => t) : [])}
+                placeholder="e.g., vintage, tees, rock, black"
+                className="info-input"
+              />
             </div>
 
             <div className="info-item">
