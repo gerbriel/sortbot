@@ -124,6 +124,16 @@ export interface CategoryPreset {
   unit_price_base_measure?: string;
   unit_price_base_measure_unit?: string;
   
+  // === NEW: Synced with Products Table (Phase 7) ===
+  
+  // Subculture & Brand Category
+  subculture?: string[]; // Array of subculture tags
+  brand_category?: string; // Extended brand category (160+ options)
+  
+  // Inventory Tracking
+  inventory_tracker?: 'shopify' | 'manual' | 'none';
+  charge_tax?: boolean; // Whether to charge tax
+  
   // Timestamps
   created_at: string;
   updated_at: string;
@@ -198,6 +208,12 @@ export interface CategoryPresetInput {
   unit_price_total_measure_unit?: string;
   unit_price_base_measure?: string;
   unit_price_base_measure_unit?: string;
+  
+  // === Phase 7: Synced with Products Table ===
+  subculture?: string[]; // Array of subculture tags
+  brand_category?: string; // Extended brand category
+  inventory_tracker?: 'shopify' | 'manual' | 'none';
+  charge_tax?: boolean; // Whether to charge tax
 }
 
 // Default measurement templates for common categories
