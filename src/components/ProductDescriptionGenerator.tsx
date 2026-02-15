@@ -831,16 +831,22 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const handleNext = () => {
     if (currentGroupIndex < groupArray.length - 1) {
       setCurrentGroupIndex(currentGroupIndex + 1);
-      // Scroll to top of Step 4 content
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Scroll to top of Step 4 section
+      const container = document.querySelector('.product-description-container');
+      if (container) {
+        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     }
   };
 
   const handlePrevious = () => {
     if (currentGroupIndex > 0) {
       setCurrentGroupIndex(currentGroupIndex - 1);
-      // Scroll to top of Step 4 content
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Scroll to top of Step 4 section
+      const container = document.querySelector('.product-description-container');
+      if (container) {
+        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     }
   };
 
