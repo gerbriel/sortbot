@@ -831,12 +831,16 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const handleNext = () => {
     if (currentGroupIndex < groupArray.length - 1) {
       setCurrentGroupIndex(currentGroupIndex + 1);
+      // Scroll to top of Step 4 content
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
   const handlePrevious = () => {
     if (currentGroupIndex > 0) {
       setCurrentGroupIndex(currentGroupIndex - 1);
+      // Scroll to top of Step 4 content
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
