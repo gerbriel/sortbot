@@ -78,7 +78,6 @@ SET
   seo_description = 'Vintage sweatshirt in excellent condition. Perfect for casual wear and streetwear enthusiasts.',
   suggested_price_min = 25,
   suggested_price_max = 75,
-  default_material = 'Cotton Blend',
   parcel_size = 'Medium',
   default_weight_value = '1.2',
   default_weight_unit = 'lb',
@@ -95,7 +94,6 @@ SET
   seo_description = 'Vintage t-shirt in excellent condition. Classic style and quality construction.',
   suggested_price_min = 15,
   suggested_price_max = 45,
-  default_material = '100% Cotton',
   parcel_size = 'Small',
   default_weight_value = '0.5',
   default_weight_unit = 'lb',
@@ -113,7 +111,6 @@ SET
   seo_description = 'Vintage outerwear in excellent condition. Perfect for layering and cold weather.',
   suggested_price_min = 40,
   suggested_price_max = 150,
-  default_material = 'Nylon',
   parcel_size = 'Large',
   default_weight_value = '1.5',
   default_weight_unit = 'lb',
@@ -131,7 +128,6 @@ SET
   seo_description = 'Vintage pants in excellent condition. Classic fit and timeless style.',
   suggested_price_min = 25,
   suggested_price_max = 80,
-  default_material = 'Cotton',
   parcel_size = 'Medium',
   default_weight_value = '1.0',
   default_weight_unit = 'lb',
@@ -148,7 +144,6 @@ SET
   seo_description = 'Vintage shorts in excellent condition. Perfect for summer wear.',
   suggested_price_min = 20,
   suggested_price_max = 50,
-  default_material = 'Cotton',
   parcel_size = 'Small',
   default_weight_value = '0.6',
   default_weight_unit = 'lb',
@@ -165,7 +160,6 @@ SET
   seo_description = 'Vintage dress in excellent condition. Timeless elegance and classic style.',
   suggested_price_min = 30,
   suggested_price_max = 120,
-  default_material = 'Polyester Blend',
   parcel_size = 'Medium',
   default_weight_value = '0.8',
   default_weight_unit = 'lb',
@@ -182,7 +176,6 @@ SET
   seo_description = 'Vintage skirt in excellent condition. Perfect for any occasion.',
   suggested_price_min = 20,
   suggested_price_max = 60,
-  default_material = 'Cotton Blend',
   parcel_size = 'Small',
   default_weight_value = '0.5',
   default_weight_unit = 'lb',
@@ -199,7 +192,6 @@ SET
   seo_description = 'Vintage headwear in excellent condition. Classic style and quality.',
   suggested_price_min = 15,
   suggested_price_max = 45,
-  default_material = 'Cotton',
   parcel_size = 'Small',
   default_weight_value = '0.3',
   default_weight_unit = 'lb',
@@ -217,7 +209,6 @@ SET
   seo_description = 'Vintage womens clothing in excellent condition. Timeless style.',
   suggested_price_min = 25,
   suggested_price_max = 85,
-  default_material = 'Cotton Blend',
   parcel_size = 'Medium',
   default_weight_value = '0.8',
   default_weight_unit = 'lb',
@@ -300,7 +291,6 @@ BEGIN
   RAISE NOTICE '';
   RAISE NOTICE '✅ Category-Specific Fields Set:';
   RAISE NOTICE '   • Pricing ranges (suggested_price_min/max)';
-  RAISE NOTICE '   • Materials (default_material)';
   RAISE NOTICE '   • Package dimensions and parcel_size';
   RAISE NOTICE '   • Weight values by category';
   RAISE NOTICE '   • SEO templates with {brand} {model} placeholders';
@@ -312,8 +302,9 @@ BEGIN
   RAISE NOTICE '✅ Gender set based on category (Unisex or Womens)';
   RAISE NOTICE '';
   RAISE NOTICE '📦 Complete Field Coverage:';
-  RAISE NOTICE '   Total fields populated: 28+ per preset';
-  RAISE NOTICE '   Including: Pricing, Shipping, SEO, Materials, Care, Status, Tags, Condition';
+  RAISE NOTICE '   Total fields populated: 25+ per preset';
+  RAISE NOTICE '   Including: Pricing, Shipping, SEO, Care, Status, Tags, Condition';
+  RAISE NOTICE '   NOTE: Materials come from voice extraction or manual input';
   RAISE NOTICE '';
   RAISE NOTICE '🎯 Now refresh your app and ALL preset fields will populate!';
   RAISE NOTICE '   ✓ Condition will show "Excellent"';
