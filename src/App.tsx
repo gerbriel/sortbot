@@ -386,17 +386,64 @@ function App() {
     // Restore workflow state
     const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state;
     
-    if (uploadedImages) {
-      setUploadedImages(uploadedImages);
-    }
-    if (groupedImages) {
-      setGroupedImages(groupedImages);
-    }
-    if (sortedImages) {
-      setSortedImages(sortedImages);
-    }
-    if (processedItems) {
-      setProcessedItems(processedItems);
+    // Fetch saved products from database to restore descriptions
+    try {
+      const { data: savedProducts } = await supabase
+        .from('products')
+        .select('*')
+        .eq('batch_id', batch.id);
+      
+      // Create a map of productGroup -> saved product data
+      const savedProductMap = new Map();
+      if (savedProducts) {
+        savedProducts.forEach((product: any) => {
+          // Use the product's ID or match by title/other fields
+          savedProductMap.set(product.id, product);
+        });
+      }
+      
+      // Merge saved data back into processedItems
+      let restoredProcessedItems = processedItems;
+      if (processedItems && savedProducts && savedProducts.length > 0) {
+        restoredProcessedItems = processedItems.map((item: ClothingItem) => {
+          const groupId = item.productGroup || item.id;
+          const savedProduct = savedProductMap.get(groupId);
+          
+          if (savedProduct) {
+            return {
+              ...item,
+              // Restore voice description and AI-generated description
+              voiceDescription: savedProduct.voice_description || item.voiceDescription,
+              generatedDescription: savedProduct.description || item.generatedDescription,
+              // Also restore other fields that might have been edited
+              seoTitle: savedProduct.seo_title || item.seoTitle,
+              seoDescription: savedProduct.seo_description || item.seoDescription,
+              tags: savedProduct.tags || item.tags,
+            };
+          }
+          return item;
+        });
+      }
+      
+      if (uploadedImages) {
+        setUploadedImages(uploadedImages);
+      }
+      if (groupedImages) {
+        setGroupedImages(groupedImages);
+      }
+      if (sortedImages) {
+        setSortedImages(sortedImages);
+      }
+      if (restoredProcessedItems) {
+        setProcessedItems(restoredProcessedItems);
+      }
+    } catch (error) {
+      console.error('Error restoring saved product data:', error);
+      // Fallback to basic workflow state
+      if (uploadedImages) setUploadedImages(uploadedImages);
+      if (groupedImages) setGroupedImages(groupedImages);
+      if (sortedImages) setSortedImages(sortedImages);
+      if (processedItems) setProcessedItems(processedItems);
     }
     
     // Set current batch info
