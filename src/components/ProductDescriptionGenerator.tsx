@@ -252,16 +252,20 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     loadPresets();
   }, []);
 
-  // Auto-apply default preset when current group changes
+  // Auto-apply default preset when current group changes OR when category changes
   useEffect(() => {
     const autoApplyDefaultPreset = async () => {
       if (!currentItem || !currentItem.category) {
         return;
       }
       
-      // Check if preset data exists AND if key fields are actually filled
-      // If _presetData exists but fields are empty, we need to re-apply
+      // Check if the preset is already applied for THIS category
+      // Compare the category stored in _presetData with the current category
       const hasPresetData = currentGroup.some(item => item._presetData);
+      const presetCategory = currentGroup.find(item => item._presetData)?.category;
+      const isSameCategory = presetCategory === currentItem.category;
+      
+      // Check if key fields are actually filled
       const hasPresetFields = currentGroup.some(item => 
         item.policies || 
         item.shipsFrom || 
@@ -269,7 +273,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         item.whoMadeIt
       );
       
-      if (hasPresetData && hasPresetFields) {
+      // Only skip if preset exists, fields are filled, AND it's the same category
+      if (hasPresetData && hasPresetFields && isSameCategory) {
         return;
       }
 
@@ -306,7 +311,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     if (availablePresets.length > 0) {
       autoApplyDefaultPreset();
     }
-  }, [currentGroupIndex, availablePresets]); // Run when group changes or presets load
+  }, [currentGroupIndex, currentItem?.category, availablePresets]); // Watch category changes too!
 
   // Apply manual preset override
   const handleApplyPreset = async (presetId: string) => {
