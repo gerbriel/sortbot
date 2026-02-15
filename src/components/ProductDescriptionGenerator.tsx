@@ -252,6 +252,69 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     loadPresets();
   }, []);
 
+  // Apply presets to ALL groups on initial load (batch processing)
+  useEffect(() => {
+    const applyPresetsToAllGroups = async () => {
+      if (availablePresets.length === 0) return;
+      
+      // Group items by productGroup
+      const productGroups = processedItems.reduce((groups, item) => {
+        const groupId = item.productGroup || item.id;
+        if (!groups[groupId]) {
+          groups[groupId] = [];
+        }
+        groups[groupId].push(item);
+        return groups;
+      }, {} as Record<string, ClothingItem[]>);
+
+      let hasChanges = false;
+      const updatedItems = [...processedItems];
+
+      // Apply presets to each group that has a category but no preset data
+      for (const [groupId, groupItems] of Object.entries(productGroups)) {
+        const firstItem = groupItems[0];
+        
+        // Skip if no category assigned
+        if (!firstItem.category) continue;
+        
+        // Check if preset is already applied for this category
+        const hasPresetData = groupItems.some(item => item._presetData);
+        const presetCategory = groupItems.find(item => item._presetData)?.category;
+        const isSameCategory = presetCategory === firstItem.category;
+        const hasPresetFields = groupItems.some(item => 
+          item.policies || item.shipsFrom || item.gender || item.whoMadeIt
+        );
+        
+        // Skip if preset already applied for this category
+        if (hasPresetData && hasPresetFields && isSameCategory) continue;
+
+        try {
+          // Apply preset to this group
+          const updatedGroup = await applyPresetToProductGroup(groupItems, firstItem.category);
+          
+          // Update items in the array
+          updatedGroup.forEach((updatedItem) => {
+            const itemIndex = updatedItems.findIndex(item => item.id === updatedItem.id);
+            if (itemIndex !== -1) {
+              updatedItems[itemIndex] = updatedItem;
+              hasChanges = true;
+            }
+          });
+        } catch (error) {
+          // Silently fail for this group, continue with others
+          console.warn(`Failed to apply preset to group ${groupId}:`, error);
+        }
+      }
+
+      // Only update state if there were actual changes
+      if (hasChanges) {
+        setProcessedItems(updatedItems);
+      }
+    };
+
+    applyPresetsToAllGroups();
+  }, [availablePresets]); // Run when presets load
+
   // Auto-apply default preset when current group changes OR when category changes
   useEffect(() => {
     const autoApplyDefaultPreset = async () => {
