@@ -65,9 +65,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   // Debug: Log when processedItems changes
   useEffect(() => {
-    console.log('📥 ProductDescriptionGenerator received processedItems update:', {
+    console.log('📥 processedItems update:', {
       totalItems: processedItems.length,
-      itemCategories: processedItems.map(i => ({ id: i.id.slice(0, 10), category: i.category }))
+      categoriesPresent: processedItems.filter(i => i.category).length,
+      firstItemCategory: processedItems[0]?.category
     });
   }, [processedItems]);
 
@@ -81,23 +82,24 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       groups[groupId].push(item);
       return groups;
     }, {} as Record<string, ClothingItem[]>);
-
+    
     const groupArray = Object.values(productGroups);
     const currentGroup = groupArray[currentGroupIndex] || [];
     const currentItem = currentGroup[0];
     
-    console.log('📊 ProductGroups debug:', {
-      totalGroups: groupArray.length,
-      currentGroupIndex,
-      currentGroupSize: currentGroup.length,
-      currentGroupCategories: currentGroup.map(i => i.category),
-      allGroupsCategories: groupArray.map(g => g[0]?.category)
-    });
+    // Only log when changing groups or on initial load
+    if (currentItem) {
+      console.log('📊 Current group:', {
+        index: currentGroupIndex,
+        total: groupArray.length,
+        size: currentGroup.length,
+        category: currentItem.category,
+        hasPresets: !!currentItem._presetData
+      });
+    }
     
     return { groupArray, currentGroup, currentItem };
-  }, [processedItems, currentGroupIndex]);
-
-  // Auto-sync processedItems back to parent for auto-save
+  }, [processedItems, currentGroupIndex]);  // Auto-sync processedItems back to parent for auto-save
   // Skip on initial mount to avoid overwriting loaded descriptions
   useEffect(() => {
     if (!hasMountedRef.current) {
