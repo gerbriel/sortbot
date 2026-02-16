@@ -78,6 +78,14 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const currentGroup = groupArray[currentGroupIndex] || [];
     const currentItem = currentGroup[0];
     
+    console.log('📊 ProductGroups debug:', {
+      totalGroups: groupArray.length,
+      currentGroupIndex,
+      currentGroupSize: currentGroup.length,
+      currentGroupCategories: currentGroup.map(i => i.category),
+      allGroupsCategories: groupArray.map(g => g[0]?.category)
+    });
+    
     return { groupArray, currentGroup, currentItem };
   }, [processedItems, currentGroupIndex]);
 

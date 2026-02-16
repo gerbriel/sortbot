@@ -17,6 +17,19 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
 }) => {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['basic']));
 
+  // Debug: Log preset fields
+  console.log('📋 ComprehensiveProductForm currentItem:', {
+    id: currentItem.id,
+    category: currentItem.category,
+    hasPresetData: !!currentItem._presetData,
+    condition: currentItem.condition,
+    policies: currentItem.policies,
+    shipsFrom: currentItem.shipsFrom,
+    gender: currentItem.gender,
+    tags: currentItem.tags,
+    whoMadeIt: currentItem.whoMadeIt
+  });
+
   const toggleSection = (section: string) => {
     const newExpanded = new Set(expandedSections);
     if (newExpanded.has(section)) {
