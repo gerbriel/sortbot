@@ -390,7 +390,15 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Auto-apply default preset when current group changes OR when category changes
   useEffect(() => {
     const autoApplyDefaultPreset = async () => {
+      console.log('🤖 Auto-apply preset check:', {
+        hasCurrentItem: !!currentItem,
+        currentItemCategory: currentItem?.category,
+        currentGroupSize: currentGroup.length,
+        groupItemCategories: currentGroup.map(i => i.category)
+      });
+      
       if (!currentItem || !currentItem.category) {
+        console.log('⚠️ Skipping auto-apply: No current item or no category');
         return;
       }
       
@@ -408,13 +416,29 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         item.whoMadeIt
       );
       
+      console.log('🔄 Auto-apply preset decision:', {
+        hasPresetData,
+        presetCategory,
+        isSameCategory,
+        hasPresetFields,
+        willSkip: hasPresetData && hasPresetFields && isSameCategory
+      });
+      
       // Only skip if preset exists, fields are filled, AND it's the same category
       if (hasPresetData && hasPresetFields && isSameCategory) {
+        console.log('⏭️ Auto-apply skipped: Preset already applied');
         return;
       }
 
       try {
+        console.log(`✅ Auto-applying preset to group with category: ${currentItem.category}`);
         const updatedGroup = await applyPresetToProductGroup(currentGroup, currentItem.category);
+        
+        console.log('📦 Auto-apply result:', {
+          updatedCount: updatedGroup.length,
+          firstItemCategory: updatedGroup[0]?.category,
+          firstItemPolicies: updatedGroup[0]?.policies?.substring(0, 30)
+        });
         
         // Update processedItems with preset-enriched items
         const updated = [...processedItems];
@@ -425,6 +449,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           }
         });
         
+        console.log('💾 Auto-apply updating state with', updated.length, 'items');
         setProcessedItems(updated);
         
         // Find and set the default preset ID in the dropdown
