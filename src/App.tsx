@@ -339,6 +339,12 @@ function App() {
   };
 
   const handleItemsProcessed = (items: ClothingItem[]) => {
+    console.log('💾 handleItemsProcessed called:', {
+      itemCount: items.length,
+      withVoice: items.filter(i => i.voiceDescription).length,
+      withGenerated: items.filter(i => i.generatedDescription).length
+    });
+    
     setProcessedItems(items);
     
     // Auto-save workflow state
