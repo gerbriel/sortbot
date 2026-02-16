@@ -306,18 +306,34 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         
         // Check if preset is already applied for this category
         const hasPresetData = groupItems.some(item => item._presetData);
-        const presetCategory = groupItems.find(item => item._presetData)?._presetData?.categoryName;
+        const presetCategory = groupItems.find(item => item._presetData)?._presetData?.productType;
         const isSameCategory = presetCategory?.toLowerCase() === firstItem.category?.toLowerCase();
         const hasPresetFields = groupItems.some(item => 
           item.policies || item.shipsFrom || item.gender || item.whoMadeIt
         );
+        
+        console.log(`🔍 Group ${groupId} (${firstItem.category}):`, {
+          hasPresetData,
+          presetCategory,
+          isSameCategory,
+          hasPresetFields,
+          willSkip: hasPresetData && hasPresetFields && isSameCategory
+        });
         
         // Skip if preset already applied for this category
         if (hasPresetData && hasPresetFields && isSameCategory) continue;
 
         try {
           // Apply preset to this group
+          console.log(`✅ Applying preset to group ${groupId} (${firstItem.category})`);
           const updatedGroup = await applyPresetToProductGroup(groupItems, firstItem.category);
+          
+          console.log(`📦 Updated group ${groupId}:`, {
+            itemCount: updatedGroup.length,
+            firstItemPolicies: updatedGroup[0]?.policies,
+            firstItemShipsFrom: updatedGroup[0]?.shipsFrom,
+            firstItemGender: updatedGroup[0]?.gender
+          });
           
           // Update items in the array
           updatedGroup.forEach((updatedItem) => {
@@ -352,7 +368,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       // Check if the preset is already applied for THIS category
       // Compare the category stored in _presetData with the current category
       const hasPresetData = currentGroup.some(item => item._presetData);
-      const presetCategory = currentGroup.find(item => item._presetData)?._presetData?.categoryName;
+      const presetCategory = currentGroup.find(item => item._presetData)?._presetData?.productType;
       const isSameCategory = presetCategory?.toLowerCase() === currentItem.category?.toLowerCase();
       
       // Check if key fields are actually filled

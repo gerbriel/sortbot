@@ -31,6 +31,7 @@ export interface ClothingItem {
   _presetData?: {
     presetId: string;
     categoryName: string;
+    productType?: string; // The product_type field for comparison
     displayName: string;
     description?: string;
     measurementTemplate: any;
