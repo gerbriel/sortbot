@@ -63,6 +63,14 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const hasMountedRef = useRef(false); // Track if component has mounted
   const previousItemsLengthRef = useRef(0); // Track items array length for batch changes
 
+  // Debug: Log when processedItems changes
+  useEffect(() => {
+    console.log('📥 ProductDescriptionGenerator received processedItems update:', {
+      totalItems: processedItems.length,
+      itemCategories: processedItems.map(i => ({ id: i.id.slice(0, 10), category: i.category }))
+    });
+  }, [processedItems]);
+
   // Memoize group calculation to avoid unnecessary recalculations
   const { groupArray, currentGroup, currentItem } = useMemo(() => {
     const productGroups = processedItems.reduce((groups, item) => {
@@ -292,6 +300,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const applyPresetsToAllGroups = async () => {
       if (availablePresets.length === 0) return;
       
+      console.log('🚀 Batch preset application starting...', {
+        totalItems: processedItems.length,
+        firstItemCategory: processedItems[0]?.category,
+        itemCategories: processedItems.map(i => i.category)
+      });
+      
       // Group items by productGroup
       const productGroups = processedItems.reduce((groups, item) => {
         const groupId = item.productGroup || item.id;
@@ -359,7 +373,14 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
       // Only update state if there were actual changes
       if (hasChanges) {
+        console.log('💾 Batch preset application complete - updating state:', {
+          changesFound: hasChanges,
+          totalItems: updatedItems.length,
+          updatedCategories: updatedItems.map(i => i.category)
+        });
         setProcessedItems(updatedItems);
+      } else {
+        console.log('⏭️ No changes needed - skipping state update');
       }
     };
 
