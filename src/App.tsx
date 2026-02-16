@@ -263,6 +263,12 @@ function App() {
     // Also update groupedImages so Step 2 shows the categories
     setGroupedImages(items);
     
+    // Initialize processedItems with categorized items for Step 4
+    // Only do this if processedItems is empty to avoid overwriting voice descriptions
+    if (processedItems.length === 0) {
+      setProcessedItems(items);
+    }
+    
     // Auto-save workflow state (Step 3 complete)
     autoSaveWorkflow({
       uploadedImages,
@@ -659,7 +665,7 @@ function App() {
           <section className="step-section">
             <h2>Step 4: Add Voice Descriptions & Generate Product Info</h2>
             <ProductDescriptionGenerator
-              items={processedItems.length > 0 ? processedItems : sortedImages}
+              items={processedItems}
               onProcessed={handleItemsProcessed}
             />
           </section>
