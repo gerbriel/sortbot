@@ -60,6 +60,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const isStartingRef = useRef(false);
   const lastClickTimeRef = useRef(0);
   const buttonStateTransitionRef = useRef(0);
+  const hasMountedRef = useRef(false); // Track if component has mounted
 
   // Memoize group calculation to avoid unnecessary recalculations
   const { groupArray, currentGroup, currentItem } = useMemo(() => {
@@ -80,7 +81,16 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   }, [processedItems, currentGroupIndex]);
 
   // Auto-sync processedItems back to parent for auto-save
+  // Skip on initial mount to avoid overwriting loaded descriptions
   useEffect(() => {
+    if (!hasMountedRef.current) {
+      // First render - just mark as mounted, don't sync
+      hasMountedRef.current = true;
+      console.log('🎬 Component mounted - skipping initial auto-sync to preserve loaded descriptions');
+      return;
+    }
+    
+    // Subsequent updates - sync to parent
     console.log('🔄 Auto-syncing processedItems to parent:', {
       itemCount: processedItems.length,
       withVoice: processedItems.filter(i => i.voiceDescription).length,
@@ -88,6 +98,17 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     });
     onProcessed(processedItems);
   }, [processedItems, onProcessed]);
+
+  // Update local state when items prop changes (e.g., opening a different batch)
+  useEffect(() => {
+    console.log('📥 Items prop changed - updating local state:', {
+      itemCount: items.length,
+      withVoice: items.filter(i => i.voiceDescription).length,
+      withGenerated: items.filter(i => i.generatedDescription).length
+    });
+    setProcessedItems(items);
+    setCurrentGroupIndex(0); // Reset to first group
+  }, [items]);
 
   useEffect(() => {
     // Check if browser supports Speech Recognition
