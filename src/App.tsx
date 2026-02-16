@@ -367,6 +367,14 @@ function App() {
   }) => {
     if (!user) return;
     
+    console.log('💾 autoSaveWorkflow called:', {
+      currentBatchId,
+      currentBatchNumber,
+      processedItemsCount: workflowState.processedItems.length,
+      withVoice: workflowState.processedItems.filter(i => i.voiceDescription).length,
+      withGenerated: workflowState.processedItems.filter(i => i.generatedDescription).length
+    });
+    
     try {
       const batchId = await autoSaveWorkflowBatch(
         currentBatchId,
@@ -374,12 +382,15 @@ function App() {
         workflowState
       );
       
+      console.log('✅ autoSaveWorkflowBatch returned batchId:', batchId);
+      
       if (batchId && !currentBatchId) {
         // First time saving - set the batch ID
+        console.log('🆕 Setting currentBatchId for first time:', batchId);
         setCurrentBatchId(batchId);
       }
     } catch (error) {
-      console.error('Auto-save failed:', error);
+      console.error('❌ Auto-save failed:', error);
     }
   };
 
