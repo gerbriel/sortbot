@@ -390,6 +390,22 @@ function App() {
     console.log('🔍 Opening batch:', batch.id);
     console.log('📦 ProcessedItems count:', processedItems?.length || 0);
     
+    // Log first few items to see if descriptions are in workflow state
+    if (processedItems && processedItems.length > 0) {
+      console.log('📋 First item from workflow state:', {
+        seoTitle: processedItems[0].seoTitle,
+        hasVoiceDescription: !!processedItems[0].voiceDescription,
+        hasGeneratedDescription: !!processedItems[0].generatedDescription,
+        voiceDescriptionPreview: processedItems[0].voiceDescription?.substring(0, 50) || 'NONE',
+        generatedDescriptionPreview: processedItems[0].generatedDescription?.substring(0, 50) || 'NONE'
+      });
+      
+      // Count how many items have descriptions in workflow state
+      const withVoice = processedItems.filter(i => i.voiceDescription).length;
+      const withGenerated = processedItems.filter(i => i.generatedDescription).length;
+      console.log(`📊 In workflow state: ${withVoice} items with voice, ${withGenerated} items with AI descriptions`);
+    }
+    
     // Fetch saved products from database to restore descriptions
     try {
       const { data: savedProducts } = await supabase
