@@ -386,43 +386,100 @@ function App() {
     // Restore workflow state
     const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state;
     
+    console.log('🔍 Opening batch:', batch.id);
+    console.log('📦 ProcessedItems count:', processedItems?.length || 0);
+    
     // Fetch saved products from database to restore descriptions
     try {
       const { data: savedProducts } = await supabase
         .from('products')
-        .select('*')
-        .eq('batch_id', batch.id);
+        .select(`
+          *,
+          product_images (
+            image_url,
+            position
+          )
+        `)
+        .eq('batch_id', batch.id)
+        .order('created_at', { ascending: true });
       
-      // Create a map of productGroup -> saved product data
-      const savedProductMap = new Map();
-      if (savedProducts) {
-        savedProducts.forEach((product: any) => {
-          // Use the product's ID or match by title/other fields
-          savedProductMap.set(product.id, product);
+      console.log('💾 Saved products from DB:', savedProducts?.length || 0);
+      
+      if (savedProducts && savedProducts.length > 0) {
+        console.log('📋 First saved product sample:', {
+          title: savedProducts[0].title,
+          hasDescription: !!savedProducts[0].description,
+          hasVoiceDescription: !!savedProducts[0].voice_description,
+          descriptionLength: savedProducts[0].description?.length || 0,
+          voiceDescriptionLength: savedProducts[0].voice_description?.length || 0,
+          images: savedProducts[0].product_images?.length || 0
         });
       }
       
       // Merge saved data back into processedItems
       let restoredProcessedItems = processedItems;
       if (processedItems && savedProducts && savedProducts.length > 0) {
-        restoredProcessedItems = processedItems.map((item: ClothingItem) => {
+        // Group processedItems by productGroup
+        const itemGroups = processedItems.reduce((groups: any, item: ClothingItem) => {
           const groupId = item.productGroup || item.id;
-          const savedProduct = savedProductMap.get(groupId);
+          if (!groups[groupId]) groups[groupId] = [];
+          groups[groupId].push(item);
+          return groups;
+        }, {});
+        
+        console.log('👥 Product groups in workflow:', Object.keys(itemGroups).length);
+        
+        let matchedCount = 0;
+        restoredProcessedItems = processedItems.map((item: ClothingItem, index: number) => {
+          // Try to match by seoTitle first (most reliable for our use case)
+          let savedProduct = savedProducts.find((p: any) => 
+            p.seo_title && item.seoTitle && p.seo_title.trim() === item.seoTitle.trim()
+          );
+          
+          // Fallback: match by image URL (preview)
+          if (!savedProduct && item.preview) {
+            savedProduct = savedProducts.find((p: any) => 
+              p.product_images?.some((img: any) => img.image_url === item.preview)
+            );
+          }
+          
+          // Fallback: match by position in batch (if all else fails)
+          if (!savedProduct && index < savedProducts.length) {
+            savedProduct = savedProducts[index];
+          }
           
           if (savedProduct) {
+            matchedCount++;
+            console.log(`✅ Match ${matchedCount}: "${item.seoTitle || 'Untitled'}" ->`, {
+              hasDescription: !!savedProduct.description,
+              hasVoice: !!savedProduct.voice_description,
+              descLength: savedProduct.description?.length || 0,
+              voiceLength: savedProduct.voice_description?.length || 0
+            });
+            
             return {
               ...item,
               // Restore voice description and AI-generated description
-              voiceDescription: savedProduct.voice_description || item.voiceDescription,
-              generatedDescription: savedProduct.description || item.generatedDescription,
+              voiceDescription: savedProduct.voice_description || item.voiceDescription || '',
+              generatedDescription: savedProduct.description || item.generatedDescription || '',
               // Also restore other fields that might have been edited
               seoTitle: savedProduct.seo_title || item.seoTitle,
               seoDescription: savedProduct.seo_description || item.seoDescription,
               tags: savedProduct.tags || item.tags,
             };
           }
+          
+          console.log(`⚠️ No match found for item ${index}: "${item.seoTitle || 'Untitled'}"`);
           return item;
         });
+        
+        console.log(`🎯 Successfully matched ${matchedCount} out of ${processedItems.length} items`);
+        
+        // Log how many items have descriptions after merge
+        const itemsWithDesc = restoredProcessedItems.filter((i: ClothingItem) => i.generatedDescription).length;
+        const itemsWithVoice = restoredProcessedItems.filter((i: ClothingItem) => i.voiceDescription).length;
+        console.log(`📝 Items with AI descriptions: ${itemsWithDesc}`);
+        console.log(`🎤 Items with voice descriptions: ${itemsWithVoice}`);
       }
       
       if (uploadedImages) {
