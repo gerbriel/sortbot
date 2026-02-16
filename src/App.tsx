@@ -177,7 +177,8 @@ function App() {
     setSaveMessage(null);
 
     try {
-      const result = await saveBatchToDatabase(processedItems, user.id);
+      // Pass the currentBatchId so products are linked to the workflow batch
+      const result = await saveBatchToDatabase(processedItems, user.id, currentBatchId);
       
       if (result.success > 0) {
         setSaveMessage({
@@ -321,7 +322,7 @@ function App() {
 
     if (itemsToSave.length > 0) {
       try {
-        const result = await saveBatchToDatabase(itemsToSave, user.id);
+        const result = await saveBatchToDatabase(itemsToSave, user.id, currentBatchId);
         
         if (result.success > 0) {
           // Show brief success message
