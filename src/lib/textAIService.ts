@@ -90,7 +90,7 @@ function extractFieldsFromVoice(voiceDesc: string): Record<string, any> {
   // Extract size (if mentioned)
   // Only match actual clothing sizes, not random numbers or words like "small amount"
   // Match: XS, S, M, L, XL, XXL, XXXL, 2XL, 3XL, 4XL, Extra Large, Medium, etc.
-  // Context-aware: Must be preceded by "size" or standalone clothing size
+  // Context-aware: Must be preceded by "size" or standalone clothing size abbreviations
   const sizeWithContextMatch = lower.match(/\bsize:?\s*(extra[\s-]?small|extra[\s-]?large|x-?small|xx?-?large|xxx?-?large|xs|s|m|l|xl|xxl|xxxl|2xl|3xl|4xl|small|medium|large)\b/i);
   const standaloneSizeMatch = lower.match(/\b(extra[\s-]?small|extra[\s-]?large|x-?small|xx?-?large|xxx?-?large|xs|xl|xxl|xxxl|2xl|3xl|4xl)\b/i);
   
@@ -99,20 +99,23 @@ function extractFieldsFromVoice(voiceDesc: string): Record<string, any> {
   if (sizeMatch) {
     let size = (sizeMatch[1] || sizeMatch[0]).toUpperCase().replace(/[\s-]/g, ''); // Remove spaces/hyphens
     
-    // Normalize sizes
-    if (/^EXTRA.?LARGE$/i.test(size) || /^XLARGE$/i.test(size)) size = 'XL';
-    else if (/^XX.?LARGE$/i.test(size) || /^XXLARGE$/i.test(size) || /^2XL$/i.test(size)) size = 'XXL';
-    else if (/^XXX.?LARGE$/i.test(size) || /^XXXLARGE$/i.test(size) || /^3XL$/i.test(size)) size = '3XL';
-    else if (/^4XL$/i.test(size)) size = '4XL';
-    else if (/^EXTRA.?SMALL$/i.test(size) || /^XSMALL$/i.test(size)) size = 'XS';
-    else if (/^SMALL$/i.test(size)) size = 'S';
-    else if (/^MEDIUM$/i.test(size)) size = 'M';
-    else if (/^LARGE$/i.test(size)) size = 'L';
-    else if (/^XL$/i.test(size)) size = 'XL';
-    else if (/^XXL$/i.test(size)) size = 'XXL';
+    // Reject if it's ONLY digits (e.g., "35" from "$35", "10", "20", etc.)
+    // Allow sizes like "2XL", "3XL", "4XL" which contain digits + letters
+    const isPureNumber = /^\d+$/.test(size);
     
-    // Only set if it's a valid clothing size, not a number
-    if (!/^\d+$/.test(size)) {
+    if (!isPureNumber) {
+      // Normalize sizes
+      if (/^EXTRA.?LARGE$/i.test(size) || /^XLARGE$/i.test(size)) size = 'XL';
+      else if (/^XX.?LARGE$/i.test(size) || /^XXLARGE$/i.test(size) || /^2XL$/i.test(size)) size = 'XXL';
+      else if (/^XXX.?LARGE$/i.test(size) || /^XXXLARGE$/i.test(size) || /^3XL$/i.test(size)) size = '3XL';
+      else if (/^4XL$/i.test(size)) size = '4XL';
+      else if (/^EXTRA.?SMALL$/i.test(size) || /^XSMALL$/i.test(size)) size = 'XS';
+      else if (/^SMALL$/i.test(size)) size = 'S';
+      else if (/^MEDIUM$/i.test(size)) size = 'M';
+      else if (/^LARGE$/i.test(size)) size = 'L';
+      else if (/^XL$/i.test(size)) size = 'XL';
+      else if (/^XXL$/i.test(size)) size = 'XXL';
+      
       extracted.size = size;
     }
   }
