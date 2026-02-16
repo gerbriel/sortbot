@@ -390,20 +390,23 @@ function App() {
     console.log('🔍 Opening batch:', batch.id);
     console.log('📦 ProcessedItems count:', processedItems?.length || 0);
     
-    // Log first few items to see if descriptions are in workflow state
+    // Log ALL items to see if descriptions are in workflow state
     if (processedItems && processedItems.length > 0) {
-      console.log('📋 First item from workflow state:', {
-        seoTitle: processedItems[0].seoTitle,
-        hasVoiceDescription: !!processedItems[0].voiceDescription,
-        hasGeneratedDescription: !!processedItems[0].generatedDescription,
-        voiceDescriptionPreview: processedItems[0].voiceDescription?.substring(0, 50) || 'NONE',
-        generatedDescriptionPreview: processedItems[0].generatedDescription?.substring(0, 50) || 'NONE'
+      console.log('📋 ALL ITEMS FROM WORKFLOW STATE:');
+      processedItems.forEach((item, index) => {
+        console.log(`  Item ${index + 1}:`, {
+          seoTitle: item.seoTitle || 'NO TITLE',
+          hasVoice: !!item.voiceDescription,
+          hasGenerated: !!item.generatedDescription,
+          voicePreview: item.voiceDescription?.substring(0, 30) || 'NONE',
+          generatedPreview: item.generatedDescription?.substring(0, 30) || 'NONE'
+        });
       });
       
       // Count how many items have descriptions in workflow state
       const withVoice = processedItems.filter(i => i.voiceDescription).length;
       const withGenerated = processedItems.filter(i => i.generatedDescription).length;
-      console.log(`📊 In workflow state: ${withVoice} items with voice, ${withGenerated} items with AI descriptions`);
+      console.log(`📊 Summary: ${withVoice}/${processedItems.length} with voice, ${withGenerated}/${processedItems.length} with AI descriptions`);
     }
     
     // Fetch saved products from database to restore descriptions
