@@ -61,6 +61,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const lastClickTimeRef = useRef(0);
   const buttonStateTransitionRef = useRef(0);
   const hasMountedRef = useRef(false); // Track if component has mounted
+  const previousItemsLengthRef = useRef(0); // Track items array length for batch changes
 
   // Memoize group calculation to avoid unnecessary recalculations
   const { groupArray, currentGroup, currentItem } = useMemo(() => {
@@ -100,14 +101,20 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   }, [processedItems, onProcessed]);
 
   // Update local state when items prop changes (e.g., opening a different batch)
+  // Only reset if the array length changed (indicating a different batch was opened)
   useEffect(() => {
-    console.log('📥 Items prop changed - updating local state:', {
-      itemCount: items.length,
-      withVoice: items.filter(i => i.voiceDescription).length,
-      withGenerated: items.filter(i => i.generatedDescription).length
-    });
-    setProcessedItems(items);
-    setCurrentGroupIndex(0); // Reset to first group
+    const itemsChanged = items.length !== previousItemsLengthRef.current;
+    
+    if (itemsChanged) {
+      console.log('📥 Items prop changed (different batch) - updating local state:', {
+        itemCount: items.length,
+        withVoice: items.filter(i => i.voiceDescription).length,
+        withGenerated: items.filter(i => i.generatedDescription).length
+      });
+      setProcessedItems(items);
+      setCurrentGroupIndex(0); // Reset to first group
+      previousItemsLengthRef.current = items.length;
+    }
   }, [items]);
 
   useEffect(() => {
