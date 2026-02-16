@@ -306,8 +306,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         
         // Check if preset is already applied for this category
         const hasPresetData = groupItems.some(item => item._presetData);
-        const presetCategory = groupItems.find(item => item._presetData)?.category;
-        const isSameCategory = presetCategory === firstItem.category;
+        const presetCategory = groupItems.find(item => item._presetData)?._presetData?.categoryName;
+        const isSameCategory = presetCategory?.toLowerCase() === firstItem.category?.toLowerCase();
         const hasPresetFields = groupItems.some(item => 
           item.policies || item.shipsFrom || item.gender || item.whoMadeIt
         );
@@ -352,8 +352,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       // Check if the preset is already applied for THIS category
       // Compare the category stored in _presetData with the current category
       const hasPresetData = currentGroup.some(item => item._presetData);
-      const presetCategory = currentGroup.find(item => item._presetData)?.category;
-      const isSameCategory = presetCategory === currentItem.category;
+      const presetCategory = currentGroup.find(item => item._presetData)?._presetData?.categoryName;
+      const isSameCategory = presetCategory?.toLowerCase() === currentItem.category?.toLowerCase();
       
       // Check if key fields are actually filled
       const hasPresetFields = currentGroup.some(item => 
