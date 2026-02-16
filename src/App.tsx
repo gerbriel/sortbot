@@ -416,12 +416,7 @@ function App() {
           id,
           title,
           description,
-          category,
-          vendor,
-          size,
-          price,
           created_at,
-          batch_id,
           product_images (
             image_url,
             position
@@ -446,12 +441,7 @@ function App() {
             id,
             title,
             description,
-            category,
-            vendor,
-            size,
-            price,
             created_at,
-            batch_id,
             product_images (
               image_url,
               position
