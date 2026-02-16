@@ -229,13 +229,14 @@ export const saveProductToDatabase = async (
  */
 export const saveBatchToDatabase = async (
   items: ClothingItem[],
-  userId: string
+  userId: string,
+  workflowBatchId?: string | null
 ): Promise<{ success: number; failed: number }> => {
   let success = 0;
   let failed = 0;
 
-  // Generate a unique batch ID for this save operation
-  const batchId = crypto.randomUUID();
+  // Use the workflow batch ID if provided, otherwise generate a new one
+  const batchId = workflowBatchId || crypto.randomUUID();
 
   // Group items by productGroup
   const productGroups = items.reduce((groups, item) => {
