@@ -176,37 +176,25 @@ export async function autoSaveWorkflowBatch(
   batchNumber: string,
   workflowState: WorkflowBatch['workflow_state']
 ): Promise<string | null> {
-  console.log('🔧 autoSaveWorkflowBatch called:', {
-    batchId,
-    batchNumber,
-    processedItemsCount: workflowState?.processedItems?.length || 0,
-    withVoice: workflowState?.processedItems?.filter(i => i.voiceDescription).length || 0,
-    withGenerated: workflowState?.processedItems?.filter(i => i.generatedDescription).length || 0
-  });
-  
   try {
     const stats = calculateWorkflowStats(workflowState);
     const currentStep = determineCurrentStep(workflowState);
 
     if (batchId) {
       // Update existing batch
-      console.log('📝 Updating existing batch:', batchId);
       await updateWorkflowBatch(batchId, {
         workflow_state: workflowState,
         current_step: currentStep,
         ...stats,
       });
-      console.log('✅ Batch updated successfully');
       return batchId;
     } else {
       // Create new batch
-      console.log('🆕 Creating new batch:', batchNumber);
       const batch = await createWorkflowBatch(batchNumber, workflowState, stats);
-      console.log('✅ New batch created:', batch?.id);
       return batch?.id || null;
     }
   } catch (error) {
-    console.error('❌ Error auto-saving workflow batch:', error);
+    console.error('Error auto-saving workflow batch:', error);
     return null;
   }
 }

@@ -993,9 +993,9 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
                 <h3 onClick={(e) => {
                   e.stopPropagation();
                   setEditingBatch(batch.id);
-                  setEditBatchName(batch.batch_name || `Batch #${batch.batch_number.slice(0, 8)}`);
+                  setEditBatchName(batch.batch_name || `Batch ${new Date(batch.created_at).toLocaleDateString()}`);
                 }}>
-                  {batch.batch_name || `Batch #${batch.batch_number} (${batch.id.slice(0, 8)})`}
+                  {batch.batch_name || `Batch ${new Date(batch.created_at).toLocaleDateString()}`}
                 </h3>
               )}
               <button
@@ -1003,7 +1003,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
                 onClick={(e) => {
                   e.stopPropagation();
                   setEditingBatch(batch.id);
-                  setEditBatchName(batch.batch_name || `Batch #${batch.batch_number.slice(0, 8)}`);
+                  setEditBatchName(batch.batch_name || `Batch ${new Date(batch.created_at).toLocaleDateString()}`);
                 }}
                 title="Edit batch name"
               >

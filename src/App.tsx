@@ -339,12 +339,6 @@ function App() {
   };
 
   const handleItemsProcessed = (items: ClothingItem[]) => {
-    console.log('💾 handleItemsProcessed called:', {
-      itemCount: items.length,
-      withVoice: items.filter(i => i.voiceDescription).length,
-      withGenerated: items.filter(i => i.generatedDescription).length
-    });
-    
     setProcessedItems(items);
     
     // Auto-save workflow state
@@ -367,14 +361,6 @@ function App() {
   }) => {
     if (!user) return;
     
-    console.log('💾 autoSaveWorkflow called:', {
-      currentBatchId,
-      currentBatchNumber,
-      processedItemsCount: workflowState.processedItems.length,
-      withVoice: workflowState.processedItems.filter(i => i.voiceDescription).length,
-      withGenerated: workflowState.processedItems.filter(i => i.generatedDescription).length
-    });
-    
     try {
       const batchId = await autoSaveWorkflowBatch(
         currentBatchId,
@@ -382,15 +368,12 @@ function App() {
         workflowState
       );
       
-      console.log('✅ autoSaveWorkflowBatch returned batchId:', batchId);
-      
       if (batchId && !currentBatchId) {
         // First time saving - set the batch ID
-        console.log('🆕 Setting currentBatchId for first time:', batchId);
         setCurrentBatchId(batchId);
       }
     } catch (error) {
-      console.error('❌ Auto-save failed:', error);
+      console.error('Auto-save failed:', error);
     }
   };
 
@@ -403,28 +386,6 @@ function App() {
 
     // Restore workflow state
     const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state;
-    
-    console.log('🔍 Opening batch:', batch.id);
-    console.log('📦 ProcessedItems count:', processedItems?.length || 0);
-    
-    // Log ALL items to see if descriptions are in workflow state
-    if (processedItems && processedItems.length > 0) {
-      console.log('📋 ALL ITEMS FROM WORKFLOW STATE:');
-      processedItems.forEach((item, index) => {
-        console.log(`  Item ${index + 1}:`, {
-          seoTitle: item.seoTitle || 'NO TITLE',
-          hasVoice: !!item.voiceDescription,
-          hasGenerated: !!item.generatedDescription,
-          voicePreview: item.voiceDescription?.substring(0, 30) || 'NONE',
-          generatedPreview: item.generatedDescription?.substring(0, 30) || 'NONE'
-        });
-      });
-      
-      // Count how many items have descriptions in workflow state
-      const withVoice = processedItems.filter(i => i.voiceDescription).length;
-      const withGenerated = processedItems.filter(i => i.generatedDescription).length;
-      console.log(`📊 Summary: ${withVoice}/${processedItems.length} with voice, ${withGenerated}/${processedItems.length} with AI descriptions`);
-    }
     
     // Fetch saved products from database to restore descriptions
     try {
@@ -440,14 +401,10 @@ function App() {
         .eq('batch_id', batch.id)
         .order('created_at', { ascending: true });
       
-      console.log('💾 Saved products from DB:', savedProducts?.length || 0);
-      
       // If no products found with this batch_id, try to find orphaned products
       // (products saved around the same time with image URLs matching this batch)
       let potentialOrphans: any[] = [];
       if (!savedProducts || savedProducts.length === 0) {
-        console.log('🔎 No products found with batch_id, searching for orphaned products...');
-        
         // Get the batch creation time
         const batchCreatedAt = new Date(batch.created_at);
         const timeWindow = 24 * 60 * 60 * 1000; // 24 hours
@@ -476,41 +433,14 @@ function App() {
               workflowImageUrls.has(img.image_url)
             );
           });
-          
-          if (potentialOrphans.length > 0) {
-            console.log(`🔧 Found ${potentialOrphans.length} potential orphaned products`);
-            console.log('💡 These products might belong to this batch but have wrong batch_id');
-          }
         }
       }
       
       const productsToUse = savedProducts && savedProducts.length > 0 ? savedProducts : potentialOrphans;
       
-      if (productsToUse && productsToUse.length > 0) {
-        console.log('📋 First saved product sample:', {
-          title: productsToUse[0].title,
-          hasDescription: !!productsToUse[0].description,
-          hasVoiceDescription: !!productsToUse[0].voice_description,
-          descriptionLength: productsToUse[0].description?.length || 0,
-          voiceDescriptionLength: productsToUse[0].voice_description?.length || 0,
-          images: productsToUse[0].product_images?.length || 0
-        });
-      }
-      
       // Merge saved data back into processedItems
       let restoredProcessedItems = processedItems;
       if (processedItems && productsToUse && productsToUse.length > 0) {
-        // Group processedItems by productGroup
-        const itemGroups = processedItems.reduce((groups: any, item: ClothingItem) => {
-          const groupId = item.productGroup || item.id;
-          if (!groups[groupId]) groups[groupId] = [];
-          groups[groupId].push(item);
-          return groups;
-        }, {});
-        
-        console.log('👥 Product groups in workflow:', Object.keys(itemGroups).length);
-        
-        let matchedCount = 0;
         restoredProcessedItems = processedItems.map((item: ClothingItem, index: number) => {
           // Try to match by seoTitle first (most reliable for our use case)
           let savedProduct = productsToUse.find((p: any) => 
@@ -530,14 +460,6 @@ function App() {
           }
           
           if (savedProduct) {
-            matchedCount++;
-            console.log(`✅ Match ${matchedCount}: "${item.seoTitle || 'Untitled'}" ->`, {
-              hasDescription: !!savedProduct.description,
-              hasVoice: !!savedProduct.voice_description,
-              descLength: savedProduct.description?.length || 0,
-              voiceLength: savedProduct.voice_description?.length || 0
-            });
-            
             return {
               ...item,
               // Restore voice description and AI-generated description
@@ -550,17 +472,8 @@ function App() {
             };
           }
           
-          console.log(`⚠️ No match found for item ${index}: "${item.seoTitle || 'Untitled'}"`);
           return item;
         });
-        
-        console.log(`🎯 Successfully matched ${matchedCount} out of ${processedItems.length} items`);
-        
-        // Log how many items have descriptions after merge
-        const itemsWithDesc = restoredProcessedItems.filter((i: ClothingItem) => i.generatedDescription).length;
-        const itemsWithVoice = restoredProcessedItems.filter((i: ClothingItem) => i.voiceDescription).length;
-        console.log(`📝 Items with AI descriptions: ${itemsWithDesc}`);
-        console.log(`🎤 Items with voice descriptions: ${itemsWithVoice}`);
       }
       
       if (uploadedImages) {
@@ -592,9 +505,10 @@ function App() {
     setShowLibrary(false);
     
     // Show success message
+    const batchDisplayName = batch.batch_name || `Batch ${new Date(batch.created_at).toLocaleDateString()}`;
     setSaveMessage({
       type: 'success',
-      text: `✅ Opened batch #${batch.batch_number.slice(0, 8)} - Continue from Step ${batch.current_step}`,
+      text: `✅ Opened "${batchDisplayName}" - Continue from Step ${batch.current_step}`,
     });
     
     // Clear message after 5 seconds

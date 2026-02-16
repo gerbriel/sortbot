@@ -87,16 +87,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     if (!hasMountedRef.current) {
       // First render - just mark as mounted, don't sync
       hasMountedRef.current = true;
-      console.log('🎬 Component mounted - skipping initial auto-sync to preserve loaded descriptions');
       return;
     }
     
     // Subsequent updates - sync to parent
-    console.log('🔄 Auto-syncing processedItems to parent:', {
-      itemCount: processedItems.length,
-      withVoice: processedItems.filter(i => i.voiceDescription).length,
-      withGenerated: processedItems.filter(i => i.generatedDescription).length
-    });
     onProcessed(processedItems);
   }, [processedItems, onProcessed]);
 
@@ -106,11 +100,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const itemsChanged = items.length !== previousItemsLengthRef.current;
     
     if (itemsChanged) {
-      console.log('📥 Items prop changed (different batch) - updating local state:', {
-        itemCount: items.length,
-        withVoice: items.filter(i => i.voiceDescription).length,
-        withGenerated: items.filter(i => i.generatedDescription).length
-      });
       setProcessedItems(items);
       setCurrentGroupIndex(0); // Reset to first group
       previousItemsLengthRef.current = items.length;
