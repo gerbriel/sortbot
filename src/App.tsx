@@ -413,7 +413,15 @@ function App() {
       const { data: savedProducts } = await supabase
         .from('products')
         .select(`
-          *,
+          id,
+          title,
+          description,
+          category,
+          vendor,
+          size,
+          price,
+          created_at,
+          batch_id,
           product_images (
             image_url,
             position
@@ -435,7 +443,15 @@ function App() {
         const { data: recentProducts } = await supabase
           .from('products')
           .select(`
-            *,
+            id,
+            title,
+            description,
+            category,
+            vendor,
+            size,
+            price,
+            created_at,
+            batch_id,
             product_images (
               image_url,
               position
