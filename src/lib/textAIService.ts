@@ -88,10 +88,16 @@ function extractFieldsFromVoice(voiceDesc: string): Record<string, any> {
   }
 
   // Extract size (if mentioned)
-  // Check for "extra" sizes first to avoid matching just "large" or "small"
-  const sizeMatch = lower.match(/\b(extra[\s-]?small|extra[\s-]?large|x-?small|xx?-?large|xxx?-?large|xs|s|m|l|xl|xxl|xxxl|2xl|3xl|4xl|small|medium|large|\d+[rw]?)\b/i);
+  // Only match actual clothing sizes, not random numbers or words like "small amount"
+  // Match: XS, S, M, L, XL, XXL, XXXL, 2XL, 3XL, 4XL, Extra Large, Medium, etc.
+  // Context-aware: Must be preceded by "size" or standalone clothing size
+  const sizeWithContextMatch = lower.match(/\bsize:?\s*(extra[\s-]?small|extra[\s-]?large|x-?small|xx?-?large|xxx?-?large|xs|s|m|l|xl|xxl|xxxl|2xl|3xl|4xl|small|medium|large)\b/i);
+  const standaloneSizeMatch = lower.match(/\b(extra[\s-]?small|extra[\s-]?large|x-?small|xx?-?large|xxx?-?large|xs|xl|xxl|xxxl|2xl|3xl|4xl)\b/i);
+  
+  const sizeMatch = sizeWithContextMatch || standaloneSizeMatch;
+  
   if (sizeMatch) {
-    let size = sizeMatch[1].toUpperCase().replace(/[\s-]/g, ''); // Remove spaces/hyphens
+    let size = (sizeMatch[1] || sizeMatch[0]).toUpperCase().replace(/[\s-]/g, ''); // Remove spaces/hyphens
     
     // Normalize sizes
     if (/^EXTRA.?LARGE$/i.test(size) || /^XLARGE$/i.test(size)) size = 'XL';
@@ -105,7 +111,10 @@ function extractFieldsFromVoice(voiceDesc: string): Record<string, any> {
     else if (/^XL$/i.test(size)) size = 'XL';
     else if (/^XXL$/i.test(size)) size = 'XXL';
     
-    extracted.size = size;
+    // Only set if it's a valid clothing size, not a number
+    if (!/^\d+$/.test(size)) {
+      extracted.size = size;
+    }
   }
 
   // Extract colors (if mentioned)
