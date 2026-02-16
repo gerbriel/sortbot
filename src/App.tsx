@@ -263,9 +263,23 @@ function App() {
     // Also update groupedImages so Step 2 shows the categories
     setGroupedImages(items);
     
-    // Initialize processedItems with categorized items for Step 4
-    // Only do this if processedItems is empty to avoid overwriting voice descriptions
-    if (processedItems.length === 0) {
+    // Sync categories to processedItems (preserve voice descriptions if they exist)
+    if (processedItems.length > 0) {
+      // Update existing processedItems with new categories
+      const updatedProcessed = processedItems.map(procItem => {
+        const sortedItem = items.find(i => i.id === procItem.id);
+        if (sortedItem) {
+          return {
+            ...procItem,
+            category: sortedItem.category, // Update category from Step 3
+            _presetData: sortedItem._presetData, // Update preset metadata
+          };
+        }
+        return procItem;
+      });
+      setProcessedItems(updatedProcessed);
+    } else {
+      // Initialize processedItems with categorized items
       setProcessedItems(items);
     }
     
