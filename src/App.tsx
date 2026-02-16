@@ -743,7 +743,7 @@ function App() {
           <section className="step-section">
             <h2>Step 4: Add Voice Descriptions & Generate Product Info</h2>
             <ProductDescriptionGenerator
-              items={sortedImages}
+              items={processedItems.length > 0 ? processedItems : sortedImages}
               onProcessed={handleItemsProcessed}
             />
           </section>
