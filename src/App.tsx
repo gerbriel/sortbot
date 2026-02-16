@@ -513,7 +513,6 @@ function App() {
           const syncedItems = restoredProcessedItems.map(procItem => {
             const sortedItem = sortedImages.find(i => i.id === procItem.id);
             if (sortedItem && sortedItem.category && !procItem.category) {
-              console.log(`🔄 Syncing category "${sortedItem.category}" to item ${procItem.id.slice(0, 10)}`);
               return {
                 ...procItem,
                 category: sortedItem.category,
@@ -528,7 +527,6 @@ function App() {
         }
       } else if (sortedImages && sortedImages.length > 0) {
         // If no processedItems but we have sortedImages, initialize processedItems
-        console.log('📥 Initializing processedItems from sortedImages on batch open');
         setProcessedItems(sortedImages);
       }
     } catch (error) {
