@@ -507,7 +507,29 @@ function App() {
         setSortedImages(sortedImages);
       }
       if (restoredProcessedItems) {
-        setProcessedItems(restoredProcessedItems);
+        // Sync categories from sortedImages to processedItems when opening batch
+        // This ensures categories are present even if they weren't saved to processedItems
+        if (sortedImages && sortedImages.length > 0) {
+          const syncedItems = restoredProcessedItems.map(procItem => {
+            const sortedItem = sortedImages.find(i => i.id === procItem.id);
+            if (sortedItem && sortedItem.category && !procItem.category) {
+              console.log(`🔄 Syncing category "${sortedItem.category}" to item ${procItem.id.slice(0, 10)}`);
+              return {
+                ...procItem,
+                category: sortedItem.category,
+                _presetData: sortedItem._presetData,
+              };
+            }
+            return procItem;
+          });
+          setProcessedItems(syncedItems);
+        } else {
+          setProcessedItems(restoredProcessedItems);
+        }
+      } else if (sortedImages && sortedImages.length > 0) {
+        // If no processedItems but we have sortedImages, initialize processedItems
+        console.log('📥 Initializing processedItems from sortedImages on batch open');
+        setProcessedItems(sortedImages);
       }
     } catch (error) {
       console.error('Error restoring saved product data:', error);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { ClothingItem } from '../App';
 import './ComprehensiveProductForm.css';
 
@@ -17,18 +17,16 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
 }) => {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['basic']));
 
-  // Debug: Log preset fields
-  console.log('📋 ComprehensiveProductForm currentItem:', {
-    id: currentItem.id,
-    category: currentItem.category,
-    hasPresetData: !!currentItem._presetData,
-    condition: currentItem.condition,
-    policies: currentItem.policies,
-    shipsFrom: currentItem.shipsFrom,
-    gender: currentItem.gender,
-    tags: currentItem.tags,
-    whoMadeIt: currentItem.whoMadeIt
-  });
+  // Log only when item changes (not on every render)
+  useEffect(() => {
+    console.log('📋 Form loaded:', {
+      id: currentItem.id.slice(0, 10),
+      category: currentItem.category,
+      hasPresets: !!currentItem._presetData,
+      condition: currentItem.condition,
+      policies: currentItem.policies?.slice(0, 20)
+    });
+  }, [currentItem.id]); // Only when item ID changes
 
   const toggleSection = (section: string) => {
     const newExpanded = new Set(expandedSections);
