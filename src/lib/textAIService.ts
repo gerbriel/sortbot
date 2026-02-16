@@ -49,7 +49,7 @@ export interface AIGeneratedContent {
 /**
  * Extract fields from voice description (only if explicitly mentioned)
  */
-function extractFieldsFromVoice(voiceDesc: string): Record<string, any> {
+function extractFieldsFromVoice(voiceDesc: string, category?: string): Record<string, any> {
   const extracted: Record<string, any> = {};
   const lower = voiceDesc.toLowerCase();
 
@@ -90,33 +90,48 @@ function extractFieldsFromVoice(voiceDesc: string): Record<string, any> {
   // Extract size (if mentioned)
   // Only match actual clothing sizes, not random numbers or words like "small amount"
   // Match: XS, S, M, L, XL, XXL, XXXL, 2XL, 3XL, 4XL, Extra Large, Medium, etc.
-  // Context-aware: Must be preceded by "size" or standalone clothing size abbreviations
-  const sizeWithContextMatch = lower.match(/\bsize:?\s*(extra[\s-]?small|extra[\s-]?large|x-?small|xx?-?large|xxx?-?large|xs|s|m|l|xl|xxl|xxxl|2xl|3xl|4xl|small|medium|large)\b/i);
-  const standaloneSizeMatch = lower.match(/\b(extra[\s-]?small|extra[\s-]?large|x-?small|xx?-?large|xxx?-?large|xs|xl|xxl|xxxl|2xl|3xl|4xl)\b/i);
+  // For bottoms (pants/shorts): Also allow numeric sizes like "32", "30x34", "28x30"
+  const isBottomsCategory = category && /pants|shorts|jeans|bottoms|trousers/i.test(category);
   
-  const sizeMatch = sizeWithContextMatch || standaloneSizeMatch;
+  // Check for numeric waist sizes (e.g., "32", "30x34") for bottoms
+  if (isBottomsCategory) {
+    const waistSizeMatch = lower.match(/\b(\d{2,3})\s*x?\s*(\d{2,3})?\b/);
+    if (waistSizeMatch) {
+      const waist = waistSizeMatch[1];
+      const length = waistSizeMatch[2];
+      extracted.size = length ? `${waist}x${length}` : waist;
+    }
+  }
   
-  if (sizeMatch) {
-    let size = (sizeMatch[1] || sizeMatch[0]).toUpperCase().replace(/[\s-]/g, ''); // Remove spaces/hyphens
+  // If size not yet extracted, try letter sizes
+  if (!extracted.size) {
+    const sizeWithContextMatch = lower.match(/\bsize:?\s*(extra[\s-]?small|extra[\s-]?large|x-?small|xx?-?large|xxx?-?large|xs|s|m|l|xl|xxl|xxxl|2xl|3xl|4xl|small|medium|large)\b/i);
+    const standaloneSizeMatch = lower.match(/\b(extra[\s-]?small|extra[\s-]?large|x-?small|xx?-?large|xxx?-?large|xs|xl|xxl|xxxl|2xl|3xl|4xl)\b/i);
     
-    // Reject if it's ONLY digits (e.g., "35" from "$35", "10", "20", etc.)
-    // Allow sizes like "2XL", "3XL", "4XL" which contain digits + letters
-    const isPureNumber = /^\d+$/.test(size);
+    const sizeMatch = sizeWithContextMatch || standaloneSizeMatch;
     
-    if (!isPureNumber) {
-      // Normalize sizes
-      if (/^EXTRA.?LARGE$/i.test(size) || /^XLARGE$/i.test(size)) size = 'XL';
-      else if (/^XX.?LARGE$/i.test(size) || /^XXLARGE$/i.test(size) || /^2XL$/i.test(size)) size = 'XXL';
-      else if (/^XXX.?LARGE$/i.test(size) || /^XXXLARGE$/i.test(size) || /^3XL$/i.test(size)) size = '3XL';
-      else if (/^4XL$/i.test(size)) size = '4XL';
-      else if (/^EXTRA.?SMALL$/i.test(size) || /^XSMALL$/i.test(size)) size = 'XS';
-      else if (/^SMALL$/i.test(size)) size = 'S';
-      else if (/^MEDIUM$/i.test(size)) size = 'M';
-      else if (/^LARGE$/i.test(size)) size = 'L';
-      else if (/^XL$/i.test(size)) size = 'XL';
-      else if (/^XXL$/i.test(size)) size = 'XXL';
+    if (sizeMatch) {
+      let size = (sizeMatch[1] || sizeMatch[0]).toUpperCase().replace(/[\s-]/g, ''); // Remove spaces/hyphens
       
-      extracted.size = size;
+      // Reject if it's ONLY digits (e.g., "35" from "$35", "10", "20", etc.)
+      // Allow sizes like "2XL", "3XL", "4XL" which contain digits + letters
+      const isPureNumber = /^\d+$/.test(size);
+      
+      if (!isPureNumber) {
+        // Normalize sizes
+        if (/^EXTRA.?LARGE$/i.test(size) || /^XLARGE$/i.test(size)) size = 'XL';
+        else if (/^XX.?LARGE$/i.test(size) || /^XXLARGE$/i.test(size) || /^2XL$/i.test(size)) size = 'XXL';
+        else if (/^XXX.?LARGE$/i.test(size) || /^XXXLARGE$/i.test(size) || /^3XL$/i.test(size)) size = '3XL';
+        else if (/^4XL$/i.test(size)) size = '4XL';
+        else if (/^EXTRA.?SMALL$/i.test(size) || /^XSMALL$/i.test(size)) size = 'XS';
+        else if (/^SMALL$/i.test(size)) size = 'S';
+        else if (/^MEDIUM$/i.test(size)) size = 'M';
+        else if (/^LARGE$/i.test(size)) size = 'L';
+        else if (/^XL$/i.test(size)) size = 'XL';
+        else if (/^XXL$/i.test(size)) size = 'XXL';
+        
+        extracted.size = size;
+      }
     }
   }
 
@@ -264,7 +279,7 @@ export const generateProductDescription = async (
   
   // Extract fields from voice (if mentioned) to suggest filling
   const extracted = context.voiceDescription 
-    ? extractFieldsFromVoice(context.voiceDescription) 
+    ? extractFieldsFromVoice(context.voiceDescription, context.category) 
     : {};
   
   // Merge extracted with provided context (provided takes precedence)
