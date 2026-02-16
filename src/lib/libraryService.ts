@@ -25,7 +25,12 @@ export const fetchSavedProducts = async () => {
         id,
         title,
         description,
+        vendor,
+        size,
+        price,
         created_at,
+        updated_at,
+        batch_id,
         product_images (
           id,
           image_url,
