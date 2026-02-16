@@ -63,15 +63,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const hasMountedRef = useRef(false); // Track if component has mounted
   const previousItemsLengthRef = useRef(0); // Track items array length for batch changes
 
-  // Debug: Log when processedItems changes
-  useEffect(() => {
-    console.log('📥 processedItems update:', {
-      totalItems: processedItems.length,
-      categoriesPresent: processedItems.filter(i => i.category).length,
-      firstItemCategory: processedItems[0]?.category
-    });
-  }, [processedItems]);
-
   // Memoize group calculation to avoid unnecessary recalculations
   const { groupArray, currentGroup, currentItem } = useMemo(() => {
     const productGroups = processedItems.reduce((groups, item) => {
@@ -86,17 +77,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const groupArray = Object.values(productGroups);
     const currentGroup = groupArray[currentGroupIndex] || [];
     const currentItem = currentGroup[0];
-    
-    // Only log when changing groups or on initial load
-    if (currentItem) {
-      console.log('📊 Current group:', {
-        index: currentGroupIndex,
-        total: groupArray.length,
-        size: currentGroup.length,
-        category: currentItem.category,
-        hasPresets: !!currentItem._presetData
-      });
-    }
     
     return { groupArray, currentGroup, currentItem };
   }, [processedItems, currentGroupIndex]);  // Auto-sync processedItems back to parent for auto-save
@@ -302,12 +282,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const applyPresetsToAllGroups = async () => {
       if (availablePresets.length === 0) return;
       
-      console.log('🚀 Batch preset application starting...', {
-        totalItems: processedItems.length,
-        firstItemCategory: processedItems[0]?.category,
-        itemCategories: processedItems.map(i => i.category)
-      });
-      
       // Group items by productGroup
       const productGroups = processedItems.reduce((groups, item) => {
         const groupId = item.productGroup || item.id;
@@ -322,7 +296,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       const updatedItems = [...processedItems];
 
       // Apply presets to each group that has a category but no preset data
-      for (const [groupId, groupItems] of Object.entries(productGroups)) {
+      for (const [, groupItems] of Object.entries(productGroups)) {
         const firstItem = groupItems[0];
         
         // Skip if no category assigned
@@ -336,28 +310,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           item.policies || item.shipsFrom || item.gender || item.whoMadeIt
         );
         
-        console.log(`🔍 Group ${groupId} (${firstItem.category}):`, {
-          hasPresetData,
-          presetCategory,
-          isSameCategory,
-          hasPresetFields,
-          willSkip: hasPresetData && hasPresetFields && isSameCategory
-        });
-        
         // Skip if preset already applied for this category
         if (hasPresetData && hasPresetFields && isSameCategory) continue;
 
         try {
           // Apply preset to this group
-          console.log(`✅ Applying preset to group ${groupId} (${firstItem.category})`);
           const updatedGroup = await applyPresetToProductGroup(groupItems, firstItem.category);
-          
-          console.log(`📦 Updated group ${groupId}:`, {
-            itemCount: updatedGroup.length,
-            firstItemPolicies: updatedGroup[0]?.policies,
-            firstItemShipsFrom: updatedGroup[0]?.shipsFrom,
-            firstItemGender: updatedGroup[0]?.gender
-          });
           
           // Update items in the array
           updatedGroup.forEach((updatedItem) => {
@@ -369,20 +327,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           });
         } catch (error) {
           // Silently fail for this group, continue with others
-          console.warn(`Failed to apply preset to group ${groupId}:`, error);
         }
       }
 
       // Only update state if there were actual changes
       if (hasChanges) {
-        console.log('💾 Batch preset application complete - updating state:', {
-          changesFound: hasChanges,
-          totalItems: updatedItems.length,
-          updatedCategories: updatedItems.map(i => i.category)
-        });
         setProcessedItems(updatedItems);
-      } else {
-        console.log('⏭️ No changes needed - skipping state update');
       }
     };
 
@@ -392,15 +342,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Auto-apply default preset when current group changes OR when category changes
   useEffect(() => {
     const autoApplyDefaultPreset = async () => {
-      console.log('🤖 Auto-apply preset check:', {
-        hasCurrentItem: !!currentItem,
-        currentItemCategory: currentItem?.category,
-        currentGroupSize: currentGroup.length,
-        groupItemCategories: currentGroup.map(i => i.category)
-      });
-      
       if (!currentItem || !currentItem.category) {
-        console.log('⚠️ Skipping auto-apply: No current item or no category');
         return;
       }
       
@@ -418,29 +360,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         item.whoMadeIt
       );
       
-      console.log('🔄 Auto-apply preset decision:', {
-        hasPresetData,
-        presetCategory,
-        isSameCategory,
-        hasPresetFields,
-        willSkip: hasPresetData && hasPresetFields && isSameCategory
-      });
-      
       // Only skip if preset exists, fields are filled, AND it's the same category
       if (hasPresetData && hasPresetFields && isSameCategory) {
-        console.log('⏭️ Auto-apply skipped: Preset already applied');
         return;
       }
 
       try {
-        console.log(`✅ Auto-applying preset to group with category: ${currentItem.category}`);
         const updatedGroup = await applyPresetToProductGroup(currentGroup, currentItem.category);
-        
-        console.log('📦 Auto-apply result:', {
-          updatedCount: updatedGroup.length,
-          firstItemCategory: updatedGroup[0]?.category,
-          firstItemPolicies: updatedGroup[0]?.policies?.substring(0, 30)
-        });
         
         // Update processedItems with preset-enriched items
         const updated = [...processedItems];
@@ -451,7 +377,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           }
         });
         
-        console.log('💾 Auto-apply updating state with', updated.length, 'items');
         setProcessedItems(updated);
         
         // Find and set the default preset ID in the dropdown
