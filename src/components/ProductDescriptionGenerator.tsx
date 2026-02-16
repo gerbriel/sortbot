@@ -79,6 +79,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     return { groupArray, currentGroup, currentItem };
   }, [processedItems, currentGroupIndex]);
 
+  // Auto-sync processedItems back to parent for auto-save
+  useEffect(() => {
+    onProcessed(processedItems);
+  }, [processedItems]);
+
   useEffect(() => {
     // Check if browser supports Speech Recognition
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
