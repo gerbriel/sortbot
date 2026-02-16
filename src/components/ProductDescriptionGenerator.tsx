@@ -81,8 +81,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   // Auto-sync processedItems back to parent for auto-save
   useEffect(() => {
+    console.log('🔄 Auto-syncing processedItems to parent:', {
+      itemCount: processedItems.length,
+      withVoice: processedItems.filter(i => i.voiceDescription).length,
+      withGenerated: processedItems.filter(i => i.generatedDescription).length
+    });
     onProcessed(processedItems);
-  }, [processedItems]);
+  }, [processedItems, onProcessed]);
 
   useEffect(() => {
     // Check if browser supports Speech Recognition
