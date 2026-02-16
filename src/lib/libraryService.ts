@@ -22,7 +22,16 @@ export const fetchSavedProducts = async () => {
     const { data: products, error } = await supabase
       .from('products')
       .select(`
-        *,
+        id,
+        title,
+        description,
+        category,
+        vendor,
+        size,
+        price,
+        created_at,
+        updated_at,
+        workflow_batch_id,
         product_images (
           id,
           image_url,
