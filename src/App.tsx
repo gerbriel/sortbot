@@ -505,7 +505,8 @@ function App() {
     setShowLibrary(false);
     
     // Show success message
-    const batchDisplayName = batch.batch_name || `Batch ${new Date(batch.created_at).toLocaleDateString()}`;
+    const defaultName = `Batch ${new Date(batch.created_at).toLocaleDateString()} ${new Date(batch.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    const batchDisplayName = batch.batch_name || defaultName;
     setSaveMessage({
       type: 'success',
       text: `✅ Opened "${batchDisplayName}" - Continue from Step ${batch.current_step}`,
