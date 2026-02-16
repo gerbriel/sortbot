@@ -277,7 +277,18 @@ export const fetchUserProducts = async () => {
     const { data, error } = await supabase
       .from('products')
       .select(`
-        *,
+        id,
+        title,
+        description,
+        vendor,
+        size,
+        price,
+        status,
+        condition,
+        color,
+        created_at,
+        updated_at,
+        batch_id,
         product_images (
           id,
           image_url,
