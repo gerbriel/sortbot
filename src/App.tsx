@@ -406,20 +406,64 @@ function App() {
       
       console.log('💾 Saved products from DB:', savedProducts?.length || 0);
       
-      if (savedProducts && savedProducts.length > 0) {
+      // If no products found with this batch_id, try to find orphaned products
+      // (products saved around the same time with image URLs matching this batch)
+      let potentialOrphans: any[] = [];
+      if (!savedProducts || savedProducts.length === 0) {
+        console.log('🔎 No products found with batch_id, searching for orphaned products...');
+        
+        // Get the batch creation time
+        const batchCreatedAt = new Date(batch.created_at);
+        const timeWindow = 24 * 60 * 60 * 1000; // 24 hours
+        const startTime = new Date(batchCreatedAt.getTime() - timeWindow);
+        const endTime = new Date(batchCreatedAt.getTime() + timeWindow);
+        
+        const { data: recentProducts } = await supabase
+          .from('products')
+          .select(`
+            *,
+            product_images (
+              image_url,
+              position
+            )
+          `)
+          .gte('created_at', startTime.toISOString())
+          .lte('created_at', endTime.toISOString())
+          .order('created_at', { ascending: true });
+        
+        if (recentProducts && recentProducts.length > 0) {
+          // Try to match by image URLs from processedItems
+          const workflowImageUrls = new Set(processedItems?.map(item => item.preview) || []);
+          
+          potentialOrphans = recentProducts.filter((product: any) => {
+            return product.product_images?.some((img: any) => 
+              workflowImageUrls.has(img.image_url)
+            );
+          });
+          
+          if (potentialOrphans.length > 0) {
+            console.log(`🔧 Found ${potentialOrphans.length} potential orphaned products`);
+            console.log('💡 These products might belong to this batch but have wrong batch_id');
+          }
+        }
+      }
+      
+      const productsToUse = savedProducts && savedProducts.length > 0 ? savedProducts : potentialOrphans;
+      
+      if (productsToUse && productsToUse.length > 0) {
         console.log('📋 First saved product sample:', {
-          title: savedProducts[0].title,
-          hasDescription: !!savedProducts[0].description,
-          hasVoiceDescription: !!savedProducts[0].voice_description,
-          descriptionLength: savedProducts[0].description?.length || 0,
-          voiceDescriptionLength: savedProducts[0].voice_description?.length || 0,
-          images: savedProducts[0].product_images?.length || 0
+          title: productsToUse[0].title,
+          hasDescription: !!productsToUse[0].description,
+          hasVoiceDescription: !!productsToUse[0].voice_description,
+          descriptionLength: productsToUse[0].description?.length || 0,
+          voiceDescriptionLength: productsToUse[0].voice_description?.length || 0,
+          images: productsToUse[0].product_images?.length || 0
         });
       }
       
       // Merge saved data back into processedItems
       let restoredProcessedItems = processedItems;
-      if (processedItems && savedProducts && savedProducts.length > 0) {
+      if (processedItems && productsToUse && productsToUse.length > 0) {
         // Group processedItems by productGroup
         const itemGroups = processedItems.reduce((groups: any, item: ClothingItem) => {
           const groupId = item.productGroup || item.id;
@@ -433,20 +477,20 @@ function App() {
         let matchedCount = 0;
         restoredProcessedItems = processedItems.map((item: ClothingItem, index: number) => {
           // Try to match by seoTitle first (most reliable for our use case)
-          let savedProduct = savedProducts.find((p: any) => 
+          let savedProduct = productsToUse.find((p: any) => 
             p.seo_title && item.seoTitle && p.seo_title.trim() === item.seoTitle.trim()
           );
           
           // Fallback: match by image URL (preview)
           if (!savedProduct && item.preview) {
-            savedProduct = savedProducts.find((p: any) => 
+            savedProduct = productsToUse.find((p: any) => 
               p.product_images?.some((img: any) => img.image_url === item.preview)
             );
           }
           
           // Fallback: match by position in batch (if all else fails)
-          if (!savedProduct && index < savedProducts.length) {
-            savedProduct = savedProducts[index];
+          if (!savedProduct && index < productsToUse.length) {
+            savedProduct = productsToUse[index];
           }
           
           if (savedProduct) {
