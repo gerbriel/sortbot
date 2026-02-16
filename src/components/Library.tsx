@@ -993,9 +993,10 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
                 <h3 onClick={(e) => {
                   e.stopPropagation();
                   setEditingBatch(batch.id);
-                  setEditBatchName(batch.batch_name || `Batch ${new Date(batch.created_at).toLocaleDateString()}`);
+                  const defaultName = `Batch ${new Date(batch.created_at).toLocaleDateString()} ${new Date(batch.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                  setEditBatchName(batch.batch_name || defaultName);
                 }}>
-                  {batch.batch_name || `Batch ${new Date(batch.created_at).toLocaleDateString()}`}
+                  {batch.batch_name || `Batch ${new Date(batch.created_at).toLocaleDateString()} ${new Date(batch.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
                 </h3>
               )}
               <button
@@ -1003,7 +1004,8 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
                 onClick={(e) => {
                   e.stopPropagation();
                   setEditingBatch(batch.id);
-                  setEditBatchName(batch.batch_name || `Batch ${new Date(batch.created_at).toLocaleDateString()}`);
+                  const defaultName = `Batch ${new Date(batch.created_at).toLocaleDateString()} ${new Date(batch.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                  setEditBatchName(batch.batch_name || defaultName);
                 }}
                 title="Edit batch name"
               >
