@@ -995,7 +995,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
                   setEditingBatch(batch.id);
                   setEditBatchName(batch.batch_name || `Batch #${batch.batch_number.slice(0, 8)}`);
                 }}>
-                  {batch.batch_name || `Batch #${batch.batch_number.slice(0, 8)}`}
+                  {batch.batch_name || `Batch #${batch.batch_number} (${batch.id.slice(0, 8)})`}
                 </h3>
               )}
               <button
