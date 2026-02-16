@@ -35,13 +35,18 @@ export const fetchSavedProducts = async () => {
       .order('created_at', { ascending: false });
     
     if (error) {
-      console.error('Error fetching saved products:', error);
+      console.error('❌ Supabase error fetching saved products:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
       return [];
     }
     
     return products || [];
   } catch (error) {
-    console.error('Error fetching saved products:', error);
+    console.error('❌ Exception fetching saved products:', error);
     return [];
   }
 };
