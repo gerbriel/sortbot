@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { ClothingItem } from '../App';
 import { getCategories } from '../lib/categoriesService';
 import type { Category } from '../lib/categories';
@@ -17,7 +17,8 @@ import {
   Briefcase,
   Heart,
   Star,
-  Zap
+  Zap,
+  GripVertical
 } from 'lucide-react';
 import './CategoryZones.css';
 
@@ -83,23 +84,31 @@ interface CategoryZonesProps {
 const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized }) => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
-  const [draggedItem, setDraggedItem] = useState<ClothingItem | null>(null);
+
+  // ── Category-drop drag state ────────────────────────────────────────────
+  const [catDraggedItem, setCatDraggedItem] = useState<ClothingItem | null>(null);
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null);
+
+  // ── Group reorder drag state ────────────────────────────────────────────
+  const [draggedGroupId, setDraggedGroupId] = useState<string | null>(null);
+  const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
+
+  // ── Photo reorder drag state ────────────────────────────────────────────
+  const [draggedPhotoId, setDraggedPhotoId] = useState<string | null>(null);
+  const [draggedPhotoGroup, setDraggedPhotoGroup] = useState<string | null>(null);
+  const [dragOverPhotoId, setDragOverPhotoId] = useState<string | null>(null);
+
+  // Stable ordered list of group IDs (controls export order)
+  const [groupOrder, setGroupOrder] = useState<string[]>([]);
+  const groupOrderRef = useRef(groupOrder);
+  groupOrderRef.current = groupOrder;
 
   // Load categories from database
   useEffect(() => {
     loadCategories();
-    
-    // Listen for category updates from CategoriesManager
-    const handleCategoriesUpdated = () => {
-      loadCategories();
-    };
-    
+    const handleCategoriesUpdated = () => loadCategories();
     window.addEventListener('categoriesUpdated', handleCategoriesUpdated);
-    
-    return () => {
-      window.removeEventListener('categoriesUpdated', handleCategoriesUpdated);
-    };
+    return () => window.removeEventListener('categoriesUpdated', handleCategoriesUpdated);
   }, []);
 
   const loadCategories = async () => {
@@ -108,7 +117,6 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized }) =
       setCategories(data);
     } catch (error) {
       console.error('Failed to load categories:', error);
-      // Fallback to default categories if database fails
       setCategories([
         { id: '1', user_id: '', name: 'sweatshirts', display_name: 'Sweatshirts', emoji: '🧥', color: '#667eea', sort_order: 1, is_active: true, created_at: '', updated_at: '' },
         { id: '2', user_id: '', name: 'outerwear', display_name: 'Outerwear', emoji: '🧥', color: '#764ba2', sort_order: 2, is_active: true, created_at: '', updated_at: '' },
@@ -123,17 +131,57 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized }) =
     }
   };
 
-  const handleDragStart = (e: React.DragEvent, item: ClothingItem) => {
-    setDraggedItem(item);
-    // Set data for drag operation
-    e.dataTransfer.setData('application/json', JSON.stringify({
-      item,
-      productGroup: item.productGroup || item.id
-    }));
+  // ── Derive ordered groups from items + groupOrder ───────────────────────
+  const groupsMap = (() => {
+    const map: Record<string, ClothingItem[]> = {};
+    items.forEach(item => {
+      const gid = item.productGroup || item.id;
+      if (!map[gid]) map[gid] = [];
+      map[gid].push(item);
+    });
+    return map;
+  })();
+
+  // Sync groupOrder when new groups appear (new items added)
+  useEffect(() => {
+    const currentIds = Object.keys(groupsMap);
+    setGroupOrder(prev => {
+      const existing = prev.filter(id => currentIds.includes(id));
+      const newIds = currentIds.filter(id => !prev.includes(id));
+      return [...existing, ...newIds];
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.length]);
+
+  const orderedGroups: [string, ClothingItem[]][] = groupOrder
+    .filter(id => groupsMap[id])
+    .map(id => [id, groupsMap[id]]);
+
+  // ── Helper: emit updated items preserving group+photo order ────────────
+  const emitReordered = (newGroupOrder: string[], newGroupsMap: Record<string, ClothingItem[]>) => {
+    const reordered: ClothingItem[] = [];
+    newGroupOrder.forEach(gid => {
+      if (newGroupsMap[gid]) reordered.push(...newGroupsMap[gid]);
+    });
+    onCategorized(reordered);
   };
 
-  const handleDragEnd = () => {
-    setDraggedItem(null);
+  // ══════════════════════════════════════════════════════════════════════════
+  // Category-drop handlers (drag group card → drop on category zone)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const handleCatDragStart = (e: React.DragEvent, item: ClothingItem) => {
+    setCatDraggedItem(item);
+    e.dataTransfer.setData('application/json', JSON.stringify({
+      item,
+      productGroup: item.productGroup || item.id,
+      action: 'categorize',
+    }));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleCatDragEnd = () => {
+    setCatDraggedItem(null);
     setDragOverCategory(null);
   };
 
@@ -145,81 +193,153 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized }) =
   const handleCategoryDrop = async (e: React.DragEvent, category: string) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     let productGroup: string | undefined;
-    
-    // Try to get data from dataTransfer (for drags from Step 2)
     try {
       const data = e.dataTransfer.getData('application/json');
       if (data) {
         const dragData = JSON.parse(data);
-        productGroup = dragData.productGroup;
+        if (dragData.action === 'categorize') {
+          productGroup = dragData.productGroup;
+        }
       }
     } catch (err) {
-      console.error('❌ Failed to parse drag data:', err);
-      // If parsing fails, fall back to draggedItem
+      console.error('Failed to parse drag data:', err);
     }
-    
-    // Fall back to local draggedItem state (for drags within Step 3)
-    if (!productGroup && draggedItem) {
-      productGroup = draggedItem.productGroup || draggedItem.id;
+    if (!productGroup && catDraggedItem) {
+      productGroup = catDraggedItem.productGroup || catDraggedItem.id;
     }
-    
-    if (!productGroup) {
-      console.error('❌ No product group found!');
-      setDraggedItem(null);
-      setDragOverCategory(null);
+    if (!productGroup) { setCatDraggedItem(null); setDragOverCategory(null); return; }
+
+    const groupItems = items.filter(item => (item.productGroup || item.id) === productGroup);
+    const itemsWithPreset = await applyPresetToProductGroup(groupItems, category);
+
+    const updatedMap = { ...groupsMap };
+    updatedMap[productGroup] = groupsMap[productGroup].map(item => {
+      const withPreset = itemsWithPreset.find(i => i.id === item.id);
+      return withPreset || { ...item, category };
+    });
+
+    emitReordered(groupOrderRef.current, updatedMap);
+    setCatDraggedItem(null);
+    setDragOverCategory(null);
+  };
+
+  const handleCategoryDragLeave = () => setDragOverCategory(null);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Group reorder handlers (drag the ⠿ handle on a group card)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const handleGroupDragStart = (e: React.DragEvent, groupId: string) => {
+    e.stopPropagation();
+    setDraggedGroupId(groupId);
+    e.dataTransfer.setData('application/json', JSON.stringify({ action: 'reorder-group', groupId }));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleGroupDragOver = (e: React.DragEvent, groupId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (draggedGroupId && draggedGroupId !== groupId) {
+      setDragOverGroupId(groupId);
+    }
+  };
+
+  const handleGroupDrop = (e: React.DragEvent, targetGroupId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    let sourceGroupId: string | null = null;
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('application/json'));
+      if (data.action === 'reorder-group') sourceGroupId = data.groupId;
+    } catch { /* ignore */ }
+
+    sourceGroupId = sourceGroupId || draggedGroupId;
+
+    if (!sourceGroupId || sourceGroupId === targetGroupId) {
+      setDraggedGroupId(null);
+      setDragOverGroupId(null);
       return;
     }
 
-    // Get all items in this product group
-    const groupItems = items.filter(item => {
-      const itemGroup = item.productGroup || item.id;
-      return itemGroup === productGroup;
-    });
+    const newOrder = [...groupOrderRef.current];
+    const fromIdx = newOrder.indexOf(sourceGroupId);
+    const toIdx = newOrder.indexOf(targetGroupId);
+    if (fromIdx === -1 || toIdx === -1) return;
 
-    // Apply category preset to the group
-    const itemsWithPreset = await applyPresetToProductGroup(groupItems, category);
+    newOrder.splice(fromIdx, 1);
+    newOrder.splice(toIdx, 0, sourceGroupId);
 
-    // Update all items in the same product group with the category and preset data
-    const updated = items.map(item => {
-      const itemGroup = item.productGroup || item.id;
-      if (itemGroup === productGroup) {
-        // Find the corresponding item with preset data
-        const itemWithPreset = itemsWithPreset.find(i => i.id === item.id);
-        return itemWithPreset || { ...item, category };
-      }
-      return item;
-    });
-
-    onCategorized(updated);
-    
-    // Always clear drag state after drop
-    setDraggedItem(null);
-    setDragOverCategory(null);
+    setGroupOrder(newOrder);
+    emitReordered(newOrder, groupsMap);
+    setDraggedGroupId(null);
+    setDragOverGroupId(null);
   };
 
-  const handleCategoryDragLeave = () => {
-    setDragOverCategory(null);
+  const handleGroupDragEnd = () => {
+    setDraggedGroupId(null);
+    setDragOverGroupId(null);
   };
 
-  // Group items by productGroup
-  const getGroups = () => {
-    const groups: { [key: string]: ClothingItem[] } = {};
-    items.forEach(item => {
-      const groupId = item.productGroup || item.id;
-      if (!groups[groupId]) {
-        groups[groupId] = [];
-      }
-      groups[groupId].push(item);
-    });
-    return groups;
+  // ══════════════════════════════════════════════════════════════════════════
+  // Photo reorder handlers (drag photos within a group)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const handlePhotoDragStart = (e: React.DragEvent, photoId: string, groupId: string) => {
+    e.stopPropagation();
+    setDraggedPhotoId(photoId);
+    setDraggedPhotoGroup(groupId);
+    e.dataTransfer.setData('application/json', JSON.stringify({ action: 'reorder-photo', photoId, groupId }));
+    e.dataTransfer.effectAllowed = 'move';
   };
 
-  const groups = getGroups();
-  const groupEntries = Object.entries(groups);
-  // Show ALL groups (including single items as their own product groups)
-  const allProductGroups = groupEntries;
+  const handlePhotoDragOver = (e: React.DragEvent, photoId: string, groupId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (draggedPhotoGroup === groupId && draggedPhotoId !== photoId) {
+      setDragOverPhotoId(photoId);
+    }
+  };
+
+  const handlePhotoDrop = (e: React.DragEvent, targetPhotoId: string, groupId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    let srcPhotoId: string | null = null;
+    let srcGroupId: string | null = null;
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('application/json'));
+      if (data.action === 'reorder-photo') { srcPhotoId = data.photoId; srcGroupId = data.groupId; }
+    } catch { /* ignore */ }
+
+    srcPhotoId = srcPhotoId || draggedPhotoId;
+    srcGroupId = srcGroupId || draggedPhotoGroup;
+
+    if (!srcPhotoId || !srcGroupId || srcGroupId !== groupId || srcPhotoId === targetPhotoId) {
+      setDraggedPhotoId(null); setDraggedPhotoGroup(null); setDragOverPhotoId(null);
+      return;
+    }
+
+    const photoList = [...(groupsMap[groupId] || [])];
+    const fromIdx = photoList.findIndex(p => p.id === srcPhotoId);
+    const toIdx = photoList.findIndex(p => p.id === targetPhotoId);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    photoList.splice(fromIdx, 1);
+    photoList.splice(toIdx, 0, groupsMap[groupId][fromIdx]);
+
+    const newMap = { ...groupsMap, [groupId]: photoList };
+    emitReordered(groupOrderRef.current, newMap);
+    setDraggedPhotoId(null); setDraggedPhotoGroup(null); setDragOverPhotoId(null);
+  };
+
+  const handlePhotoDragEnd = () => {
+    setDraggedPhotoId(null);
+    setDraggedPhotoGroup(null);
+    setDragOverPhotoId(null);
+  };
 
   return (
     <div className="category-zones-container">
@@ -234,10 +354,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized }) =
               <div
                 key={category.id}
                 className={`category-zone ${dragOverCategory === category.name ? 'drag-over' : ''}`}
-                style={{ 
-                  borderColor: category.color,
-                  '--category-color': category.color 
-                } as React.CSSProperties}
+                style={{ borderColor: category.color, '--category-color': category.color } as React.CSSProperties}
                 onDragOver={(e) => handleCategoryDragOver(e, category.name)}
                 onDrop={(e) => handleCategoryDrop(e, category.name)}
                 onDragLeave={handleCategoryDragLeave}
@@ -253,21 +370,38 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized }) =
         )}
       </div>
 
-      {/* All Product Groups (including single items) */}
-      {allProductGroups.length > 0 && (
+      {/* All Product Groups */}
+      {orderedGroups.length > 0 && (
         <div className="groups-section">
           <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Package size={20} /> All Product Groups ({allProductGroups.length})
+            <Package size={20} /> All Product Groups ({orderedGroups.length})
           </h3>
+          <p className="reorder-hint">
+            ☰ Drag the <strong>grip handle</strong> on a card to reorder groups · Drag <strong>photos within a card</strong> to reorder images
+          </p>
           <div className="groups-grid">
-            {allProductGroups.map(([groupId, groupItems]) => (
+            {orderedGroups.map(([groupId, groupItems], idx) => (
               <div
                 key={groupId}
-                className={`product-group-card ${groupItems[0].category ? 'has-category' : ''}`}
-                draggable
-                onDragStart={(e) => handleDragStart(e, groupItems[0])}
-                onDragEnd={handleDragEnd}
+                className={`product-group-card ${groupItems[0].category ? 'has-category' : ''} ${dragOverGroupId === groupId ? 'group-drag-over' : ''} ${draggedGroupId === groupId ? 'group-dragging' : ''}`}
+                onDragOver={(e) => handleGroupDragOver(e, groupId)}
+                onDrop={(e) => handleGroupDrop(e, groupId)}
+                onDragLeave={() => setDragOverGroupId(null)}
               >
+                {/* Position badge */}
+                <div className="group-position-badge">#{idx + 1}</div>
+
+                {/* Drag handle for group reordering */}
+                <div
+                  className="group-drag-handle"
+                  draggable
+                  onDragStart={(e) => handleGroupDragStart(e, groupId)}
+                  onDragEnd={handleGroupDragEnd}
+                  title="Drag to reorder group"
+                >
+                  <GripVertical size={18} />
+                </div>
+
                 {groupItems[0].category && (
                   <div className="category-indicator">
                     <span className="category-check">✓</span>
@@ -282,13 +416,26 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized }) =
                     <span className="category-badge">{groupItems[0].category}</span>
                   )}
                 </div>
-                <div className="group-images">
+
+                {/* Photos grid — draggable for reordering within group */}
+                <div
+                  className="group-images"
+                  draggable
+                  onDragStart={(e) => handleCatDragStart(e, groupItems[0])}
+                  onDragEnd={handleCatDragEnd}
+                >
                   {groupItems.map((item) => (
                     <div
                       key={item.id}
-                      className="group-image-item"
+                      className={`group-image-item photo-draggable ${dragOverPhotoId === item.id && draggedPhotoGroup === groupId ? 'photo-drag-over' : ''} ${draggedPhotoId === item.id ? 'photo-dragging' : ''}`}
+                      draggable
+                      onDragStart={(e) => handlePhotoDragStart(e, item.id, groupId)}
+                      onDragOver={(e) => handlePhotoDragOver(e, item.id, groupId)}
+                      onDrop={(e) => handlePhotoDrop(e, item.id, groupId)}
+                      onDragEnd={handlePhotoDragEnd}
+                      title="Drag to reorder photo within group"
                     >
-                      <img src={item.preview} alt="Product" />
+                      <img src={item.preview} alt="Product" draggable={false} />
                     </div>
                   ))}
                 </div>
