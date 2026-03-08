@@ -320,9 +320,19 @@ export const generateProductDescription = async (
 function createFallbackDescription(context: ProductContext): AIGeneratedContent {
   let description = '';
 
-  // PART 1: Main voice description (use EXACTLY as provided)
+  // PART 1: Main voice description (use EXACTLY as provided, minus condition/care)
   if (context.voiceDescription && context.voiceDescription.length > 5) {
     let mainDesc = context.voiceDescription.trim();
+
+    // Strip condition phrases from description
+    mainDesc = mainDesc.replace(/\b(nwt|new with tags|like new|excellent\s*condition|great\s*condition|good\s*condition|gently used|fair\s*condition|worn\s*condition|brand new)\b[,.]?\s*/gi, '');
+
+    // Strip care instruction phrases from description
+    mainDesc = mainDesc.replace(/\b(machine wash\s*(cold|warm|hot)?|hand wash|dry clean( only)?|wash cold|wash warm|tumble dry(\s*(low|high|no heat))?|hang dry|air dry|do not bleach|do not tumble dry|iron\s*(low|medium|high)?|dry flat)[^.]*[.]?\s*/gi, '');
+
+    // Clean up any double spaces or leading/trailing commas left behind
+    mainDesc = mainDesc.replace(/\s{2,}/g, ' ').replace(/^[,.\s]+|[,.\s]+$/g, '').trim();
+
     // Capitalize first letter only
     mainDesc = mainDesc.charAt(0).toUpperCase() + mainDesc.slice(1);
     description += mainDesc;
@@ -370,22 +380,6 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
     }
     
     description += '\n';
-  }
-
-  // PART 3: Condition & Flaws (if provided)
-  if (context.condition || context.flaws) {
-    if (context.condition) {
-      description += `Condition: ${context.condition}\n`;
-    }
-    if (context.flaws) {
-      description += `Flaws: ${context.flaws}\n`;
-    }
-    description += '\n';
-  }
-
-  // PART 4: Care Instructions (if provided)
-  if (context.care) {
-    description += `Care: ${context.care}\n\n`;
   }
 
   // PART 5: Call to action
