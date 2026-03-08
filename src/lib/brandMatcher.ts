@@ -6,6 +6,8 @@
 import { MODEL_DATABASE, type BrandCategory } from './brandCategorySystem';
 import { BRAND_DNA_EXPANSION } from './vintagePatternExpansion';
 import { BRAND_DNA_EXPANSION_2 } from './vintagePatternExpansion2';
+import { BRAND_DNA_EXPANSION_3 } from './vintagePatternExpansion3';
+import { BRAND_DNA_EXPANSION_4 } from './vintagePatternExpansion4';
 
 export interface MatchResult {
   brand?: string;
@@ -23,6 +25,8 @@ export interface MatchResult {
 const ALL_BRANDS = {
   ...BRAND_DNA_EXPANSION,
   ...BRAND_DNA_EXPANSION_2,
+  ...BRAND_DNA_EXPANSION_3,
+  ...BRAND_DNA_EXPANSION_4,
 };
 
 // ============================================================================
