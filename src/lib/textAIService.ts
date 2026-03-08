@@ -47,225 +47,164 @@ export interface AIGeneratedContent {
 }
 
 /**
- * Extract fields from voice description (only if explicitly mentioned)
+ * Extract fields from voice description using "field name <value> period" syntax.
+ *
+ * Supported commands (say the field name, then the value, then "period"):
+ *   "brand gucci period"
+ *   "size extra large period"
+ *   "color black period"
+ *   "material cotton period"
+ *   "condition excellent period"
+ *   "era 1980s period"
+ *   "style streetwear period"
+ *   "gender mens period"
+ *   "model air force one period"
+ *   "price 45 period"
+ *   "flaws small stain on sleeve period"
+ *   "care machine wash cold period"
+ *   "pit to pit 22 period"  (or "chest 22 period")
+ *   "length 28 period"
+ *   "waist 32 period"
+ *   "shoulder 18 period"
+ *   "sleeve 25 period"
+ *   "tags graphic print period"
+ *
+ * Anything NOT in a field command stays in the main description text.
  */
-function extractFieldsFromVoice(voiceDesc: string, category?: string): Record<string, any> {
+function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<string, any> {
   const extracted: Record<string, any> = {};
-  const lower = voiceDesc.toLowerCase();
 
-  // Extract brand (common brands)
-  const brandPatterns = [
-    /\b(nike|adidas|supreme|carhartt|levi\'?s?|levis|jordan|yeezy|gucci|prada|louis vuitton|lv|champion|north face|patagonia|polo|ralph lauren|tommy hilfiger|gap|old navy|h&m|zara|uniqlo|bape|off-white|balenciaga|versace|fendi|dior|chanel)\b/i
-  ];
-  for (const pattern of brandPatterns) {
-    const brandMatch = voiceDesc.match(pattern);
-    if (brandMatch) {
-      let brand = brandMatch[1];
-      // Normalize common variations
-      if (/levi/i.test(brand)) brand = "Levi's";
-      else if (/north face/i.test(brand)) brand = "The North Face";
-      else if (/ralph lauren/i.test(brand)) brand = "Ralph Lauren";
-      else if (/tommy hilfiger/i.test(brand)) brand = "Tommy Hilfiger";
-      else if (/louis vuitton|lv/i.test(brand)) brand = "Louis Vuitton";
-      else brand = brand.charAt(0).toUpperCase() + brand.slice(1);
-      extracted.brand = brand;
-      break;
-    }
-  }
-
-  // Extract model name/number (common models)
-  const modelPatterns = [
-    /\b(air force 1|af1|jordan 1|j1|yeezy 350|yeezy 700|501|511|air max|dunk|box logo|hoodie|windbreaker)\b/i,
-    /model:?\s*([a-z0-9\s-]+)/i,
-    /style:?\s*([a-z0-9\s-]+)/i
-  ];
-  for (const pattern of modelPatterns) {
-    const modelMatch = voiceDesc.match(pattern);
-    if (modelMatch) {
-      extracted.modelName = modelMatch[1].trim();
-      break;
-    }
-  }
-
-  // Extract size (if mentioned)
-  // Only match actual clothing sizes, not random numbers or words like "small amount"
-  // Match: XS, S, M, L, XL, XXL, XXXL, 2XL, 3XL, 4XL, Extra Large, Medium, etc.
-  // For bottoms (pants/shorts): Also allow numeric sizes like "32", "30x34", "28x30"
-  const isBottomsCategory = category && /pants|shorts|jeans|bottoms|trousers/i.test(category);
-  
-  // Check for numeric waist sizes (e.g., "32", "30x34") for bottoms
-  if (isBottomsCategory) {
-    const waistSizeMatch = lower.match(/\b(\d{2,3})\s*x?\s*(\d{2,3})?\b/);
-    if (waistSizeMatch) {
-      const waist = waistSizeMatch[1];
-      const length = waistSizeMatch[2];
-      extracted.size = length ? `${waist}x${length}` : waist;
-    }
-  }
-  
-  // If size not yet extracted, try letter sizes
-  if (!extracted.size) {
-    const sizeWithContextMatch = lower.match(/\bsize:?\s*(extra[\s-]?small|extra[\s-]?large|x-?small|xx?-?large|xxx?-?large|xs|s|m|l|xl|xxl|xxxl|2xl|3xl|4xl|small|medium|large)\b/i);
-    const standaloneSizeMatch = lower.match(/\b(extra[\s-]?small|extra[\s-]?large|x-?small|xx?-?large|xxx?-?large|xs|xl|xxl|xxxl|2xl|3xl|4xl)\b/i);
-    
-    const sizeMatch = sizeWithContextMatch || standaloneSizeMatch;
-    
-    if (sizeMatch) {
-      let size = (sizeMatch[1] || sizeMatch[0]).toUpperCase().replace(/[\s-]/g, ''); // Remove spaces/hyphens
-      
-      // Reject if it's ONLY digits (e.g., "35" from "$35", "10", "20", etc.)
-      // Allow sizes like "2XL", "3XL", "4XL" which contain digits + letters
-      const isPureNumber = /^\d+$/.test(size);
-      
-      if (!isPureNumber) {
-        // Normalize sizes
-        if (/^EXTRA.?LARGE$/i.test(size) || /^XLARGE$/i.test(size)) size = 'XL';
-        else if (/^XX.?LARGE$/i.test(size) || /^XXLARGE$/i.test(size) || /^2XL$/i.test(size)) size = 'XXL';
-        else if (/^XXX.?LARGE$/i.test(size) || /^XXXLARGE$/i.test(size) || /^3XL$/i.test(size)) size = '3XL';
-        else if (/^4XL$/i.test(size)) size = '4XL';
-        else if (/^EXTRA.?SMALL$/i.test(size) || /^XSMALL$/i.test(size)) size = 'XS';
-        else if (/^SMALL$/i.test(size)) size = 'S';
-        else if (/^MEDIUM$/i.test(size)) size = 'M';
-        else if (/^LARGE$/i.test(size)) size = 'L';
-        else if (/^XL$/i.test(size)) size = 'XL';
-        else if (/^XXL$/i.test(size)) size = 'XXL';
-        
-        extracted.size = size;
-      }
-    }
-  }
-
-  // Extract colors (if mentioned)
-  const colorPatterns = [
-    /\b(black|white|red|blue|green|yellow|pink|purple|gray|grey|brown|orange|navy|maroon|burgundy|cream|beige|tan|olive|khaki|teal|turquoise|mint|lavender|crimson|magenta|charcoal|silver|gold)\b/gi
-  ];
-  const colors: string[] = [];
-  colorPatterns.forEach(pattern => {
-    const matches = voiceDesc.match(pattern);
-    if (matches) {
-      matches.forEach(match => {
-        const normalized = match.charAt(0).toUpperCase() + match.slice(1).toLowerCase();
-        if (!colors.includes(normalized)) colors.push(normalized);
-      });
-    }
-  });
-  if (colors.length > 0) {
-    extracted.color = colors[0]; // Primary color
-    if (colors.length > 1) {
-      extracted.secondaryColor = colors[1]; // Secondary color
-    }
-  }
-
-  // Extract materials (if mentioned)
-  const materialMatch = lower.match(/\b(cotton|polyester|denim|leather|wool|silk|fleece|nylon|linen|cashmere|suede|canvas|corduroy|velvet|satin|rayon|spandex|lycra)\b/i);
-  if (materialMatch) {
-    extracted.material = materialMatch[1].charAt(0).toUpperCase() + materialMatch[1].slice(1);
-  }
-
-  // Extract condition (if mentioned)
-  if (/new with tags|nwt|brand new/i.test(voiceDesc)) {
-    extracted.condition = 'NWT';
-  } else if (/like new|mint|pristine/i.test(voiceDesc)) {
-    extracted.condition = 'Like New';
-  } else if (/excellent|great condition/i.test(voiceDesc)) {
-    extracted.condition = 'Excellent';
-  } else if (/good condition|gently used/i.test(voiceDesc)) {
-    extracted.condition = 'Good';
-  } else if (/fair|worn|used/i.test(voiceDesc)) {
-    extracted.condition = 'Fair';
-  }
-
-  // Extract era (if mentioned)
-  const eraMatch = voiceDesc.match(/\b(vintage|retro|90s|80s|70s|60s|50s|y2k|2000s|modern|contemporary|classic)\b/i);
-  if (eraMatch) {
-    extracted.era = eraMatch[1].charAt(0).toUpperCase() + eraMatch[1].slice(1);
-  }
-
-  // Extract style (if mentioned)
-  const styleMatch = voiceDesc.match(/\b(streetwear|preppy|grunge|punk|goth|minimalist|boho|vintage|athletic|casual|formal|business)\b/i);
-  if (styleMatch) {
-    extracted.style = styleMatch[1].charAt(0).toUpperCase() + styleMatch[1].slice(1);
-  }
-
-  // Extract gender (if mentioned)
-  if (/\b(men\'?s?|male|masculine)\b/i.test(voiceDesc)) {
-    extracted.gender = 'Men';
-  } else if (/\b(women\'?s?|female|feminine|ladies)\b/i.test(voiceDesc)) {
-    extracted.gender = 'Women';
-  } else if (/\b(unisex|gender neutral)\b/i.test(voiceDesc)) {
-    extracted.gender = 'Unisex';
-  } else if (/\b(kids?|children|youth)\b/i.test(voiceDesc)) {
-    extracted.gender = 'Kids';
-  }
-
-  // Extract measurements (if mentioned)
-  const measurements: any = {};
-  const pitMatch = voiceDesc.match(/pit\s*(?:to|2)\s*pit:?\s*(\d+(?:\.\d+)?)\s*(?:in|inch|")?/i);
-  if (pitMatch) measurements.pitToPit = pitMatch[1];
-  
-  const lengthMatch = voiceDesc.match(/length:?\s*(\d+(?:\.\d+)?)\s*(?:in|inch|")?/i);
-  if (lengthMatch) measurements.length = lengthMatch[1];
-  
-  const waistMatch = voiceDesc.match(/waist:?\s*(\d+(?:\.\d+)?)\s*(?:in|inch|")?/i);
-  if (waistMatch) measurements.waist = waistMatch[1];
-  
-  const shoulderMatch = voiceDesc.match(/shoulder:?\s*(\d+(?:\.\d+)?)\s*(?:in|inch|")?/i);
-  if (shoulderMatch) measurements.shoulder = shoulderMatch[1];
-  
-  const sleeveMatch = voiceDesc.match(/sleeve:?\s*(\d+(?:\.\d+)?)\s*(?:in|inch|")?/i);
-  if (sleeveMatch) measurements.sleeve = sleeveMatch[1];
-  
-  if (Object.keys(measurements).length > 0) {
-    extracted.measurements = measurements;
-  }
-
-  // Extract price (if mentioned)
-  const priceMatch = voiceDesc.match(/\$\s*(\d+(?:\.\d{2})?)|(\d+)\s*dollars?/i);
-  if (priceMatch) {
-    extracted.price = priceMatch[1] || priceMatch[2];
-  }
-
-  // Extract flaws (if mentioned)
-  const flawPatterns = [
-    /flaws?:\s*([^.]+)/i,
-    /stains?:\s*([^.]+)/i,
-    /holes?:\s*([^.]+)/i,
-    /damage:\s*([^.]+)/i,
-    /has\s+(?:a\s+)?(small|minor|slight)\s+(stain|hole|tear|mark|fade|scratch|scuff)/i,
-    /(?:small|minor|slight|tiny)\s+(stain|hole|tear|mark|fade|scratch|scuff|wear|fading|pilling)/i
-  ];
-  for (const pattern of flawPatterns) {
+  // Helper: grab value between a field trigger and the word "period"
+  // Matches: <trigger word(s)> <captured value> period
+  function extractCommand(pattern: RegExp): string | null {
     const match = voiceDesc.match(pattern);
-    if (match) {
-      extracted.flaws = match[1] || match[0];
-      break;
-    }
+    return match ? match[1].trim() : null;
   }
 
-  // Extract care instructions (if mentioned)
-  if (/machine wash|hand wash|dry clean|wash cold|wash warm|tumble dry|hang dry|do not bleach/i.test(voiceDesc)) {
-    const careMatch = voiceDesc.match(/(?:care:?\s*)?([^.]*(?:machine wash|hand wash|dry clean|wash cold|wash warm|tumble dry|hang dry|do not bleach)[^.]*)/i);
-    if (careMatch) {
-      extracted.care = careMatch[1].trim();
-    }
+  // ── BRAND ────────────────────────────────────────────────────────────────
+  const brand = extractCommand(/\bbrand\s+(.+?)\s+period\b/i);
+  if (brand) extracted.brand = toTitleCase(brand);
+
+  // ── MODEL ─────────────────────────────────────────────────────────────────
+  const model = extractCommand(/\bmodel\s+(.+?)\s+period\b/i);
+  if (model) extracted.modelName = toTitleCase(model);
+
+  // ── SIZE ──────────────────────────────────────────────────────────────────
+  const sizeRaw = extractCommand(/\bsize\s+(.+?)\s+period\b/i);
+  if (sizeRaw) {
+    extracted.size = normalizeSizeValue(sizeRaw);
   }
 
-  // Extract tags/keywords
-  const tags: string[] = [];
-  if (/graphic/i.test(voiceDesc)) tags.push('graphic');
-  if (/print/i.test(voiceDesc)) tags.push('print');
-  if (/embroidered/i.test(voiceDesc)) tags.push('embroidered');
-  if (/oversized/i.test(voiceDesc)) tags.push('oversized');
-  if (/fitted/i.test(voiceDesc)) tags.push('fitted');
-  if (/cropped/i.test(voiceDesc)) tags.push('cropped');
-  if (/distressed/i.test(voiceDesc)) tags.push('distressed');
-  if (/faded/i.test(voiceDesc)) tags.push('faded');
-  if (/rare|grail|hard to find/i.test(voiceDesc)) tags.push('rare');
-  if (tags.length > 0) {
-    extracted.tags = tags;
+  // ── COLOR ─────────────────────────────────────────────────────────────────
+  const color = extractCommand(/\bcolor\s+(.+?)\s+period\b/i);
+  if (color) {
+    // Support "black and white" or "black white" → primary + secondary
+    const parts = color.split(/\s+and\s+|\s*\/\s*|\s+/i).filter(Boolean);
+    extracted.color = toTitleCase(parts[0]);
+    if (parts[1]) extracted.secondaryColor = toTitleCase(parts[1]);
+  }
+
+  // ── MATERIAL ──────────────────────────────────────────────────────────────
+  const material = extractCommand(/\bmaterial\s+(.+?)\s+period\b/i);
+  if (material) extracted.material = toTitleCase(material);
+
+  // ── CONDITION ─────────────────────────────────────────────────────────────
+  const condRaw = extractCommand(/\bcondition\s+(.+?)\s+period\b/i);
+  if (condRaw) {
+    const c = condRaw.toLowerCase();
+    if (/nwt|new with tags/.test(c)) extracted.condition = 'NWT';
+    else if (/like new|mint|pristine/.test(c)) extracted.condition = 'Like New';
+    else if (/excellent|great/.test(c)) extracted.condition = 'Excellent';
+    else if (/good|gently used/.test(c)) extracted.condition = 'Good';
+    else if (/fair|worn|used/.test(c)) extracted.condition = 'Fair';
+    else extracted.condition = toTitleCase(condRaw);
+  }
+
+  // ── ERA ───────────────────────────────────────────────────────────────────
+  const era = extractCommand(/\bera\s+(.+?)\s+period\b/i);
+  if (era) extracted.era = era.toUpperCase().replace(/^(\d{2,4}S?)$/i, s => s.toUpperCase()) || toTitleCase(era);
+
+  // ── STYLE ─────────────────────────────────────────────────────────────────
+  const style = extractCommand(/\bstyle\s+(.+?)\s+period\b/i);
+  if (style) extracted.style = toTitleCase(style);
+
+  // ── GENDER ────────────────────────────────────────────────────────────────
+  const genderRaw = extractCommand(/\bgender\s+(.+?)\s+period\b/i);
+  if (genderRaw) {
+    const g = genderRaw.toLowerCase();
+    if (/men|male|masculine/.test(g)) extracted.gender = 'Men';
+    else if (/women|female|ladies|feminine/.test(g)) extracted.gender = 'Women';
+    else if (/unisex|neutral/.test(g)) extracted.gender = 'Unisex';
+    else if (/kid|child|youth/.test(g)) extracted.gender = 'Kids';
+    else extracted.gender = toTitleCase(genderRaw);
+  }
+
+  // ── PRICE ─────────────────────────────────────────────────────────────────
+  const priceRaw = extractCommand(/\bprice\s+(.+?)\s+period\b/i);
+  if (priceRaw) {
+    const num = priceRaw.replace(/[^0-9.]/g, '');
+    if (num) extracted.price = num;
+  }
+
+  // ── FLAWS ─────────────────────────────────────────────────────────────────
+  const flaws = extractCommand(/\bflaws?\s+(.+?)\s+period\b/i);
+  if (flaws) extracted.flaws = flaws;
+
+  // ── CARE ──────────────────────────────────────────────────────────────────
+  const care = extractCommand(/\bcare\s+(.+?)\s+period\b/i);
+  if (care) extracted.care = care;
+
+  // ── MEASUREMENTS ──────────────────────────────────────────────────────────
+  const measurements: Record<string, string> = {};
+
+  const pitToPit = extractCommand(/\b(?:pit\s*to\s*pit|chest)\s+(.+?)\s+period\b/i);
+  if (pitToPit) measurements['Pit to Pit'] = pitToPit.replace(/[^0-9.]/g, '');
+
+  const length = extractCommand(/\blength\s+(.+?)\s+period\b/i);
+  if (length) measurements['Length'] = length.replace(/[^0-9.]/g, '');
+
+  const waist = extractCommand(/\bwaist\s+(.+?)\s+period\b/i);
+  if (waist) measurements['Waist'] = waist.replace(/[^0-9.]/g, '');
+
+  const shoulder = extractCommand(/\bshoulder\s+(.+?)\s+period\b/i);
+  if (shoulder) measurements['Shoulder'] = shoulder.replace(/[^0-9.]/g, '');
+
+  const sleeve = extractCommand(/\bsleeve\s+(.+?)\s+period\b/i);
+  if (sleeve) measurements['Sleeve'] = sleeve.replace(/[^0-9.]/g, '');
+
+  const inseam = extractCommand(/\binseam\s+(.+?)\s+period\b/i);
+  if (inseam) measurements['Inseam'] = inseam.replace(/[^0-9.]/g, '');
+
+  if (Object.keys(measurements).length > 0) extracted.measurements = measurements;
+
+  // ── TAGS ──────────────────────────────────────────────────────────────────
+  const tagsRaw = extractCommand(/\btags?\s+(.+?)\s+period\b/i);
+  if (tagsRaw) {
+    extracted.tags = tagsRaw.split(/[\s,]+/).filter(Boolean).map((t: string) => t.toLowerCase());
   }
 
   return extracted;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function toTitleCase(str: string): string {
+  return str.trim().replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
+function normalizeSizeValue(raw: string): string {
+  const s = raw.trim().toLowerCase().replace(/[\s-]+/g, '');
+  const map: Record<string, string> = {
+    extrasmall: 'XS', xsmall: 'XS', xs: 'XS',
+    small: 'S', s: 'S',
+    medium: 'M', m: 'M',
+    large: 'L', l: 'L',
+    extralarge: 'XL', xlarge: 'XL', xl: 'XL',
+    xxlarge: 'XXL', '2xlarge': 'XXL', '2xl': 'XXL', xxl: 'XXL',
+    xxxlarge: '3XL', '3xlarge': '3XL', '3xl': '3XL', xxxl: '3XL',
+    '4xlarge': '4XL', '4xl': '4XL', xxxxl: '4XL',
+  };
+  return map[s] || raw.toUpperCase();
 }
 
 /**
@@ -323,6 +262,16 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
   // PART 1: Main voice description (use EXACTLY as provided, minus condition/care)
   if (context.voiceDescription && context.voiceDescription.length > 5) {
     let mainDesc = context.voiceDescription.trim();
+
+    // Strip "field <value> period" voice commands from the display description
+    // These are handled separately via extractFieldsFromVoice; don't show them in the text
+    const fieldPrefixes = [
+      'brand', 'model', 'size', 'color', 'colour', 'secondary color', 'secondary colour',
+      'material', 'fabric', 'condition', 'era', 'style', 'gender', 'price',
+      'flaws?', 'damage', 'care', 'tags?',
+      'pit to pit', 'chest', 'length', 'waist', 'shoulder', 'sleeve', 'inseam'
+    ].join('|');
+    mainDesc = mainDesc.replace(new RegExp(`\\b(?:${fieldPrefixes})\\s+.+?\\s+period\\b`, 'gi'), '');
 
     // Strip condition phrases from description
     mainDesc = mainDesc.replace(/\b(nwt|new with tags|like new|excellent\s*condition|great\s*condition|good\s*condition|gently used|fair\s*condition|worn\s*condition|brand new)\b[,.]?\s*/gi, '');
