@@ -360,11 +360,11 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
           <div className="section-content">
             <div className="measurements-grid">
               <div className="info-item">
-                <label>Pit to Pit ("):</label>
+                <label>Width ("):</label>
                 <input
                   type="text"
-                  value={currentItem.measurements?.pitToPit || ''}
-                  onChange={(e) => updateGroupField('measurements.pitToPit', e.target.value)}
+                  value={currentItem.measurements?.width || ''}
+                  onChange={(e) => updateGroupField('measurements.width', e.target.value)}
                   placeholder="e.g., 22"
                   className="info-input"
                 />

@@ -104,10 +104,10 @@ export async function applyPresetToProductGroup(
       
       // ======= MEASUREMENTS =======
       // If preset has default measurements template, apply them
-      ...(preset.default_measurements && !item.measurements?.pitToPit ? {
+      ...(preset.default_measurements && !item.measurements?.width ? {
         measurements: {
           ...item.measurements,
-          pitToPit: item.measurements?.pitToPit || preset.default_measurements.pitToPit || '',
+          width: item.measurements?.width || preset.default_measurements.width || '',
           length: item.measurements?.length || preset.default_measurements.length || '',
           sleeve: item.measurements?.sleeve || preset.default_measurements.sleeve || '',
           shoulder: item.measurements?.shoulder || preset.default_measurements.shoulder || '',

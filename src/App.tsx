@@ -62,7 +62,7 @@ export interface ClothingItem {
   
   // Product Details
   measurements?: {
-    pitToPit?: string;
+    width?: string;
     length?: string;
     waist?: string;
     inseam?: string;

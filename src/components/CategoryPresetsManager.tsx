@@ -68,7 +68,7 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
       requires_shipping: true,
       is_active: true,
       measurement_template: {
-        pitToPit: false,
+        width: false,
         length: false,
         sleeve: false,
         shoulder: false,

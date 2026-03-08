@@ -97,7 +97,7 @@ export async function createCategory(category: CategoryInput): Promise<Category>
       is_active: true,
       is_default: true, // Mark as default
       measurement_template: {
-        pitToPit: false,
+        width: false,
         length: false,
         sleeve: false,
         shoulder: false,
