@@ -115,7 +115,7 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
       const packageDims = product.packageDimensions || '';
       
       // Measurements - only what's provided
-      const chest = product.measurements?.pitToPit || '';
+      const chest = product.measurements?.width || '';
       const length = product.measurements?.length || '';
       
       // Parcel size - only if provided (will come from presets)

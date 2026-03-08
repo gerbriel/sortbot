@@ -62,7 +62,7 @@ export interface AIGeneratedContent {
  *   "price 45 period"
  *   "flaws small stain on sleeve period"
  *   "care machine wash cold period"
- *   "pit to pit 22 period"  (or "chest 22 period")
+ *   "width 22 period"
  *   "length 28 period"
  *   "waist 32 period"
  *   "shoulder 18 period"
@@ -157,8 +157,8 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
   // ── MEASUREMENTS ──────────────────────────────────────────────────────────
   const measurements: Record<string, string> = {};
 
-  const pitToPit = extractCommand(/\b(?:pit\s*to\s*pit|chest)\s+(.+?)\s+period\b/i);
-  if (pitToPit) measurements['Pit to Pit'] = pitToPit.replace(/[^0-9.]/g, '');
+  const width = extractCommand(/\bwidth\s+(.+?)\s+period\b/i);
+  if (width) measurements['Width'] = width.replace(/[^0-9.]/g, '');
 
   const length = extractCommand(/\blength\s+(.+?)\s+period\b/i);
   if (length) measurements['Length'] = length.replace(/[^0-9.]/g, '');
@@ -269,7 +269,7 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
       'brand', 'model', 'size', 'color', 'colour', 'secondary color', 'secondary colour',
       'material', 'fabric', 'condition', 'era', 'style', 'gender', 'price',
       'flaws?', 'damage', 'care', 'tags?',
-      'pit to pit', 'chest', 'length', 'waist', 'shoulder', 'sleeve', 'inseam'
+      'width', 'length', 'waist', 'shoulder', 'sleeve', 'inseam'
     ].join('|');
     mainDesc = mainDesc.replace(new RegExp(`\\b(?:${fieldPrefixes})\\s+.+?\\s+period\\b`, 'gi'), '');
 
@@ -303,14 +303,13 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
       description += `✠ SIZE- ${context.size}\n`;
     }
     
-    // Add pit to pit and length if available
+    // Add width and length if available
     if (context.measurements) {
-      const pitToPit = context.measurements['Pit to Pit'] || context.measurements['pit to pit'] || 
-                       context.measurements['Chest'] || context.measurements['chest'];
+      const width = context.measurements['Width'] || context.measurements['width'];
       const length = context.measurements['Length'] || context.measurements['length'];
       
-      if (pitToPit) {
-        description += `✠ Pit to pit- ${pitToPit}\n`;
+      if (width) {
+        description += `✠ Width- ${width}\n`;
       }
       if (length) {
         description += `✠ length- ${length}\n`;
@@ -320,8 +319,7 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
       Object.entries(context.measurements).forEach(([key, value]) => {
         const lowerKey = key.toLowerCase();
         if (value && 
-            lowerKey !== 'pit to pit' && 
-            lowerKey !== 'chest' && 
+            lowerKey !== 'width' && 
             lowerKey !== 'length') {
           description += `✠ ${key}- ${value}\n`;
         }

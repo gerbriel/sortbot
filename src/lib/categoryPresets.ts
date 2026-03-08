@@ -1,7 +1,7 @@
 // Category Presets Types and Database Functions
 
 export interface MeasurementTemplate {
-  pitToPit: boolean;
+  width: boolean;
   length: boolean;
   sleeve: boolean;
   shoulder: boolean;
@@ -100,7 +100,7 @@ export interface CategoryPreset {
   
   // Measurements Templates (JSON)
   default_measurements?: {
-    pitToPit?: string;
+    width?: string;
     length?: string;
     sleeve?: string;
     shoulder?: string;
@@ -191,7 +191,7 @@ export interface CategoryPresetInput {
   barcode_prefix?: string;
   default_inventory_quantity?: number;
   default_measurements?: {
-    pitToPit?: string;
+    width?: string;
     length?: string;
     sleeve?: string;
     shoulder?: string;
@@ -219,7 +219,7 @@ export interface CategoryPresetInput {
 // Default measurement templates for common categories
 export const DEFAULT_MEASUREMENT_TEMPLATES: Record<string, MeasurementTemplate> = {
   'Sweatshirts': {
-    pitToPit: true,
+    width: true,
     length: true,
     sleeve: true,
     shoulder: true,
@@ -228,7 +228,7 @@ export const DEFAULT_MEASUREMENT_TEMPLATES: Record<string, MeasurementTemplate> 
     rise: false,
   },
   'Outerwear': {
-    pitToPit: true,
+    width: true,
     length: true,
     sleeve: true,
     shoulder: true,
@@ -237,7 +237,7 @@ export const DEFAULT_MEASUREMENT_TEMPLATES: Record<string, MeasurementTemplate> 
     rise: false,
   },
   'Tees': {
-    pitToPit: true,
+    width: true,
     length: true,
     sleeve: false,
     shoulder: true,
@@ -246,7 +246,7 @@ export const DEFAULT_MEASUREMENT_TEMPLATES: Record<string, MeasurementTemplate> 
     rise: false,
   },
   'Bottoms': {
-    pitToPit: false,
+    width: false,
     length: false,
     sleeve: false,
     shoulder: false,
@@ -255,7 +255,7 @@ export const DEFAULT_MEASUREMENT_TEMPLATES: Record<string, MeasurementTemplate> 
     rise: true,
   },
   'Hats': {
-    pitToPit: false,
+    width: false,
     length: false,
     sleeve: false,
     shoulder: false,
@@ -264,7 +264,7 @@ export const DEFAULT_MEASUREMENT_TEMPLATES: Record<string, MeasurementTemplate> 
     rise: false,
   },
   'Accessories': {
-    pitToPit: false,
+    width: false,
     length: false,
     sleeve: false,
     shoulder: false,
