@@ -340,7 +340,7 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
   }
 
   // PART 7: Standard disclaimers
-  description += '* We note major imperfections—minor signs of age or wear may not be listed, adding to the vintage character.\n\n';
+  description += '* We note major imperfections—minor signs of age or wear may not be listed, adding to the vintage character.\n';
   description += '* High-quality piece, perfect for streetwear.\n';
   description += '* Next-day shipping.\n';
   description += '* All sales final.';
