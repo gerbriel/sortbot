@@ -17,6 +17,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
   const [draggedItem, setDraggedItem] = useState<ClothingItem | null>(null);
   const [draggedFromGroup, setDraggedFromGroup] = useState<string | null>(null);
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
+
+  // Photo reorder drag state (within a group)
+  const [draggedPhotoId, setDraggedPhotoId] = useState<string | null>(null);
+  const [draggedPhotoGroupId, setDraggedPhotoGroupId] = useState<string | null>(null);
+  const [dragOverPhotoId, setDragOverPhotoId] = useState<string | null>(null);
   const [groupCounter, setGroupCounter] = useState(1);
   const [uploadedImages, setUploadedImages] = useState<Set<string>>(new Set());
   
@@ -456,6 +461,64 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
     setDragOverGroup(null);
   };
 
+  // ── Photo reorder handlers (drag photos within a group) ──────────────────
+  const handlePhotoDragStart = (e: React.DragEvent, item: ClothingItem, groupId: string) => {
+    e.stopPropagation();
+    setDraggedPhotoId(item.id);
+    setDraggedPhotoGroupId(groupId);
+    e.dataTransfer.setData('application/json', JSON.stringify({ action: 'reorder-photo', photoId: item.id, groupId }));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handlePhotoDragOver = (e: React.DragEvent, photoId: string, groupId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (draggedPhotoGroupId === groupId && draggedPhotoId !== photoId) {
+      setDragOverPhotoId(photoId);
+    }
+  };
+
+  const handlePhotoDrop = (e: React.DragEvent, targetPhotoId: string, groupId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    let srcPhotoId: string | null = null;
+    let srcGroupId: string | null = null;
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('application/json'));
+      if (data.action === 'reorder-photo') { srcPhotoId = data.photoId; srcGroupId = data.groupId; }
+    } catch { /* ignore */ }
+
+    srcPhotoId = srcPhotoId || draggedPhotoId;
+    srcGroupId = srcGroupId || draggedPhotoGroupId;
+
+    if (!srcPhotoId || !srcGroupId || srcGroupId !== groupId || srcPhotoId === targetPhotoId) {
+      setDraggedPhotoId(null); setDraggedPhotoGroupId(null); setDragOverPhotoId(null);
+      return;
+    }
+
+    const photoList = [...groupedItems.filter(i => (i.productGroup || i.id) === groupId)];
+    const fromIdx = photoList.findIndex(p => p.id === srcPhotoId);
+    const toIdx = photoList.findIndex(p => p.id === targetPhotoId);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const moved = photoList.splice(fromIdx, 1)[0];
+    photoList.splice(toIdx, 0, moved);
+
+    // Rebuild full groupedItems with new photo order for this group
+    const otherItems = groupedItems.filter(i => (i.productGroup || i.id) !== groupId);
+    const updated = [...otherItems, ...photoList];
+    setGroupedItems(updated);
+    onGrouped(updated);
+    setDraggedPhotoId(null); setDraggedPhotoGroupId(null); setDragOverPhotoId(null);
+  };
+
+  const handlePhotoDragEnd = () => {
+    setDraggedPhotoId(null);
+    setDraggedPhotoGroupId(null);
+    setDragOverPhotoId(null);
+  };
+
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     // Only clear drag over if we're leaving the container, not just moving between children
@@ -745,10 +808,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
                   {items.map((item) => (
                     <div
                       key={item.id}
-                      className={`group-image-item ${selectedItems.has(item.id) ? 'selected' : ''}`}
+                      className={`group-image-item ${selectedItems.has(item.id) ? 'selected' : ''} ${dragOverPhotoId === item.id && draggedPhotoGroupId === groupId ? 'photo-drag-over' : ''} ${draggedPhotoId === item.id ? 'photo-dragging' : ''}`}
                       draggable
-                      onDragStart={(e) => handleDragStart(e, item, groupId)}
-                      onDragEnd={handleDragEnd}
+                      onDragStart={(e) => handlePhotoDragStart(e, item, groupId)}
+                      onDragOver={(e) => handlePhotoDragOver(e, item.id, groupId)}
+                      onDrop={(e) => handlePhotoDrop(e, item.id, groupId)}
+                      onDragEnd={handlePhotoDragEnd}
+                      onDragLeave={() => setDragOverPhotoId(null)}
                       onClick={(e) => {
                         if (!(e.target as HTMLElement).closest('.delete-image-btn')) {
                           toggleItemSelection(item.id, e);

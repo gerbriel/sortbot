@@ -153,7 +153,7 @@
   position: relative;
   aspect-ratio: 1;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
   border: 2px solid #e5e7eb;
   transition: transform 0.15s ease, border-color 0.15s ease;
 }
@@ -162,11 +162,13 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 6px;
 }
 
 /* ── Photo drag-to-reorder ────────────────────────────────────────── */
 .photo-draggable {
   cursor: grab;
+  transition: transform 0.12s ease, opacity 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
 }
 
 .photo-draggable:active {
@@ -174,15 +176,17 @@
 }
 
 .photo-dragging {
-  opacity: 0.35;
-  transform: scale(0.93);
-  border-color: #667eea !important;
+  opacity: 0.3;
+  transform: scale(0.88);
+  border: 2px solid #667eea !important;
+  box-shadow: none !important;
 }
 
 .photo-drag-over {
-  border-color: #10b981 !important;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.35);
-  transform: scale(1.07);
+  border: 2px dashed #10b981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.45), inset 0 0 0 2px rgba(16, 185, 129, 0.15);
+  transform: scale(1.1);
+  background: rgba(16, 185, 129, 0.08);
 }
 
 /* ── Group drag-to-reorder ───────────────────────────────────────── */

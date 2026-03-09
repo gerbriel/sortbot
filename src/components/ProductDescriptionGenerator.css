@@ -581,14 +581,37 @@
   object-fit: cover;
   border-radius: var(--radius-sm);
   border: 2px solid var(--gray-300);
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+  cursor: grab;
+}
+
+.group-thumbnail:active {
+  cursor: grabbing;
 }
 
 .group-thumbnail:hover {
   transform: scale(1.05);
   border-color: var(--shopify-green);
   box-shadow: var(--shadow-md);
+}
+
+/* ── Thumbnail drag-to-reorder (Step 4) ──────────────────────────── */
+.thumb-draggable {
+  cursor: grab;
+}
+
+.thumb-dragging {
+  opacity: 0.3;
+  transform: scale(0.88);
+  border-color: #667eea !important;
+  box-shadow: none !important;
+}
+
+.thumb-drag-over {
+  border: 2px dashed #10b981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.45) !important;
+  transform: scale(1.1);
+  background: rgba(16, 185, 129, 0.08);
 }
 
 /* Mobile responsiveness for thumbnails */

@@ -408,7 +408,14 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized }) =
                     <span className="category-label">{groupItems[0].category}</span>
                   </div>
                 )}
-                <div className="group-header">
+                <div
+                  className="group-header"
+                  draggable
+                  onDragStart={(e) => handleCatDragStart(e, groupItems[0])}
+                  onDragEnd={handleCatDragEnd}
+                  title="Drag to a category zone above"
+                  style={{ cursor: 'grab' }}
+                >
                   <span className="group-badge">
                     {groupItems.length} {groupItems.length === 1 ? 'image' : 'images'}
                   </span>
@@ -417,13 +424,8 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized }) =
                   )}
                 </div>
 
-                {/* Photos grid — draggable for reordering within group */}
-                <div
-                  className="group-images"
-                  draggable
-                  onDragStart={(e) => handleCatDragStart(e, groupItems[0])}
-                  onDragEnd={handleCatDragEnd}
-                >
+                {/* Photos grid — individual photos are draggable for reordering within group */}
+                <div className="group-images">
                   {groupItems.map((item) => (
                     <div
                       key={item.id}
@@ -433,6 +435,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized }) =
                       onDragOver={(e) => handlePhotoDragOver(e, item.id, groupId)}
                       onDrop={(e) => handlePhotoDrop(e, item.id, groupId)}
                       onDragEnd={handlePhotoDragEnd}
+                      onDragLeave={() => setDragOverPhotoId(null)}
                       title="Drag to reorder photo within group"
                     >
                       <img src={item.preview} alt="Product" draggable={false} />
