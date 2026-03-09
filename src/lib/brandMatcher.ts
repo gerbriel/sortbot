@@ -67,7 +67,7 @@ export function matchBrand(voiceDescription: string): MatchResult | null {
   
   // Check ALL_BRANDS database for general brand matches
   for (const [brandKey, brandData] of Object.entries(ALL_BRANDS)) {
-    const matchesKeyword = brandData.keywords.some(keyword =>
+    const matchesKeyword = brandData.keywords.some((keyword: string) =>
       lowerDesc.includes(keyword.toLowerCase())
     );
     

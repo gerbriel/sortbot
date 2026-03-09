@@ -3,7 +3,14 @@
 // Obscure, regional, private-label, and lesser-known brands
 // ============================================================================
 
-import type { PatternContext } from './vintagePatternExpansion';
+type PatternContext = {
+  keywords: string[];
+  vibes: string[];
+  categories: string[];
+  eras: string[];
+  subculture: string[];
+  pricePoint: 'budget' | 'mid' | 'premium' | 'luxury';
+};
 
 export const BRAND_DNA_EXPANSION_4: Record<string, PatternContext> = {
 
