@@ -893,8 +893,17 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const moved = groupItems.splice(fromIdx, 1)[0];
     groupItems.splice(toIdx, 0, moved);
 
-    const otherItems = processedItems.filter(i => (i.productGroup || i.id) !== groupId);
-    setProcessedItems([...otherItems, ...groupItems]);
+    // Replace the reordered group's items in-place so that the group's
+    // position in processedItems (and therefore groupArray) never changes.
+    // This keeps currentGroupIndex pointing at the same product group.
+    let groupSlot = 0;
+    const nextItemsFinal = processedItems.map(item => {
+      const itemGroupId = item.productGroup || item.id;
+      if (itemGroupId !== groupId) return item;
+      return groupItems[groupSlot++];
+    });
+
+    setProcessedItems(nextItemsFinal);
     setDraggedThumbId(null); setDragOverThumbId(null);
   };
 
