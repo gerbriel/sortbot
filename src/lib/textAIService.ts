@@ -193,17 +193,48 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
   // Scan for known brand names spoken naturally without the "brand X period" command
   if (!extracted.brand) {
     const KNOWN_BRANDS = [
-      'Nike', 'Adidas', 'Levi', 'Levis', "Levi's", 'Champion', 'Hanes', 'Fruit of the Loom',
-      'Supreme', 'Stussy', 'Carhartt', 'Dickies', 'Patagonia', 'North Face', 'Columbia',
-      'Ralph Lauren', 'Tommy Hilfiger', 'Calvin Klein', 'Polo', 'Gap', 'Old Navy',
-      'American Eagle', 'Hollister', 'Abercrombie', 'Fila', 'Puma', 'Reebok', 'New Balance',
-      'Vans', 'Converse', 'Jordan', 'Yeezy', 'Balenciaga', 'Gucci', 'Louis Vuitton',
-      'Burberry', 'Stone Island', 'Arc\'teryx', 'Arcteryx', 'Under Armour', 'Oakley',
-      'Wrangler', 'Lee', 'Jordache', 'Sergio Valente', 'Sergio', 'Zara', 'H&M',
-      'Nautica', 'Izod', 'Lacoste', 'Fred Perry', 'Kappa', 'Umbro', 'Russell',
-      'Starter', 'Logo Athletic', 'Salem', 'Anvil', 'Fruit', 'Gildan',
-      'Timberland', 'Red Wing', 'Doc Martens', 'Dr Martens', 'Birkenstock',
-      'Sperry', 'Clarks', 'UGG', 'Ugg', 'UGGS',
+      // ── Athletic / Sportswear ──────────────────────────────────────────────
+      'Nike', 'Adidas', 'Puma', 'Reebok', 'Fila', 'Kappa', 'Umbro', 'Russell',
+      'Under Armour', 'Asics', 'New Balance', 'Champion', 'And1', 'Athleta',
+      // ── Denim / Heritage ──────────────────────────────────────────────────
+      'Levi', 'Levis', "Levi's", 'Wrangler', 'Lee', 'Jordache', 'AG Jeans',
+      'Buffalo David Bitton', 'Blank NYC', 'BDG',
+      // ── Streetwear / Hype ─────────────────────────────────────────────────
+      'Supreme', 'Stussy', 'Bape', 'A Bathing Ape', 'Amiri', 'Off White',
+      'Fear of God', 'Essentials', 'Awake NY', 'Black Scale', 'Avirex',
+      'Affliction', 'AllSaints', 'Allsaints',
+      // ── Outdoor / Technical ───────────────────────────────────────────────
+      'Patagonia', 'North Face', 'Columbia', 'Arcteryx', "Arc'teryx",
+      'Barbour', 'Belstaff', 'Bonclar', 'Arcticwear',
+      // ── Luxury / Designer ─────────────────────────────────────────────────
+      'Gucci', 'Louis Vuitton', 'Balenciaga', 'Burberry', 'Prada', 'Alaia',
+      'Alexander McQueen', 'Alexander Wang', 'Armani', 'Armani Exchange',
+      'Armani Jeans', 'Akris', 'Balmain', 'Bally', 'Bottega Veneta',
+      'Brunello Cucinelli', 'Stone Island', 'Aquascutum', 'Ami Paris',
+      // ── Preppy / Classic American ─────────────────────────────────────────
+      'Ralph Lauren', 'Polo', 'Tommy Hilfiger', 'Calvin Klein', 'Brooks Brothers',
+      'Lacoste', 'Fred Perry', 'Nautica', 'Izod', 'Banana Republic',
+      'Ann Taylor', 'Anne Klein', 'Alfred Dunner', 'Bernardo',
+      // ── Mall / Fast Fashion ───────────────────────────────────────────────
+      'Gap', 'Old Navy', 'American Eagle', 'Hollister', 'Abercrombie',
+      'Aeropostale', 'Anthropologie', 'American Apparel', 'Brandy Melville',
+      'Zara', 'H&M', 'ASOS', 'Bershka', 'Bench',
+      // ── Workwear ──────────────────────────────────────────────────────────
+      'Carhartt', 'Dickies', 'Oakley',
+      // ── Footwear / Boots ──────────────────────────────────────────────────
+      'Vans', 'Converse', 'Jordan', 'Yeezy', 'Timberland', 'Red Wing',
+      'Doc Martens', 'Dr Martens', 'Birkenstock', 'Blundstone', 'Sperry',
+      'Clarks', 'UGG', 'Ugg',
+      // ── Specialty / Other ─────────────────────────────────────────────────
+      'Starter', 'Logo Athletic', 'Salem', 'Anvil', 'Gildan', 'Hanes',
+      'Fruit of the Loom', 'APC', 'Acne Studios', 'Allsaints', 'Alpha Industries',
+      'Sergio Valente', 'Burton', 'Billabong', 'Boden', 'Betsy Barclay',
+      'Bill Blass', 'Bear USA', 'Aston Martin', 'Act III', 'All That Jazz',
+      'Amanda Smith', 'A.P.C.', 'APT 9', 'Apt9',
+      'Avisu', 'BLL', 'Boss Hugo Boss', 'Hugo Boss', 'Bamboo and Moon',
+      'Batik Bay', 'Ben Sherman', 'Bermuda Bay', 'Betsybarclay',
+      'Billblass', 'Billy Plains', 'Bleu de Paname', 'Brooks Brothers',
+      'Lee', 'Wrangler', 'Zara', 'H&M',
     ];
     for (const b of KNOWN_BRANDS) {
       if (new RegExp(`\\b${b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(voiceDesc)) {
