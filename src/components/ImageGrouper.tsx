@@ -505,9 +505,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
     const moved = photoList.splice(fromIdx, 1)[0];
     photoList.splice(toIdx, 0, moved);
 
-    // Rebuild full groupedItems with new photo order for this group
-    const otherItems = groupedItems.filter(i => (i.productGroup || i.id) !== groupId);
-    const updated = [...otherItems, ...photoList];
+    // Replace the group's items in-place so the group's position in
+    // groupedItems never changes — preserving group order in steps 2/3.
+    let slot = 0;
+    const updated = groupedItems.map(i => {
+      if ((i.productGroup || i.id) !== groupId) return i;
+      return photoList[slot++];
+    });
     setGroupedItems(updated);
     onGrouped(updated);
     setDraggedPhotoId(null); setDraggedPhotoGroupId(null); setDragOverPhotoId(null);
