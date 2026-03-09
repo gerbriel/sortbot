@@ -1265,6 +1265,179 @@ export const BRAND_DNA_EXPANSION_4: Record<string, PatternContext> = {
     pricePoint: 'budget',
   },
 
+  // ── New additions ──────────────────────────────────────────────────────────
+
+  'cathy-cho': {
+    keywords: ['cathy cho', 'cathy choi', 'cathy cho brand', 'cathy choi brand'],
+    vibes: ['womens contemporary', 'department store label', 'affordable fashion'],
+    categories: ['dresses', 'tops', 'blouses', 'womens'],
+    eras: ['1990s', '2000s', '2010s'],
+    subculture: ['mainstream', 'womens fashion'],
+    pricePoint: 'budget',
+  },
+
+  'celaia': {
+    keywords: ['celaia', 'celaia brand', 'celaia clothing'],
+    vibes: ['private label', 'womens casual', 'department store'],
+    categories: ['tops', 'bottoms', 'womens'],
+    eras: ['2000s', '2010s'],
+    subculture: ['mainstream', 'womens fashion'],
+    pricePoint: 'budget',
+  },
+
+  'charley-mood': {
+    keywords: ['charley mood', 'charley mood brand'],
+    vibes: ['womens boutique', 'casual contemporary', 'private label'],
+    categories: ['tops', 'dresses', 'womens'],
+    eras: ['1990s', '2000s'],
+    subculture: ['mainstream', 'womens fashion'],
+    pricePoint: 'budget',
+  },
+
+  'ciro-citterio': {
+    keywords: ['ciro citterio', 'ciro citterio suit', 'ciro citterio menswear'],
+    vibes: ['british menswear', 'affordable suits', 'high street tailoring'],
+    categories: ['suits', 'blazers', 'shirts', 'mens'],
+    eras: ['1990s', '2000s', '2010s'],
+    subculture: ['mainstream', 'british menswear', 'affordable fashion'],
+    pricePoint: 'budget',
+  },
+
+  'claude-de-saire': {
+    keywords: ['claude de saire', 'claude de saire brand'],
+    vibes: ['french label', 'womens fashion', 'european styling'],
+    categories: ['dresses', 'blouses', 'womens'],
+    eras: ['1980s', '1990s'],
+    subculture: ['classic womens', 'european fashion'],
+    pricePoint: 'mid',
+  },
+
+  'collection-le-suit': {
+    keywords: ['collection', 'collections for le suit', 'le suit collection', 'collezione', 'comint'],
+    vibes: ['department store womens', 'career wear', 'professional womens'],
+    categories: ['suits', 'blazers', 'pants', 'skirts', 'womens'],
+    eras: ['1990s', '2000s'],
+    subculture: ['professional', 'mainstream', 'womens fashion'],
+    pricePoint: 'mid',
+  },
+
+  'cornerstone': {
+    keywords: ['cornerstone', 'cornerstone brand', 'cornerstone clothing', 'cornerstone workwear'],
+    vibes: ['workwear basics', 'private label', 'affordable basics'],
+    categories: ['shirts', 'polos', 'pants', 'workwear'],
+    eras: ['1990s', '2000s', '2010s'],
+    subculture: ['workwear', 'mainstream'],
+    pricePoint: 'budget',
+  },
+
+  'cotton-belt': {
+    keywords: ['cotton belt', 'cotton-belt', 'cotton belt jeans', 'cotton belt brand'],
+    vibes: ['american denim', 'budget jeans', 'vintage americana'],
+    categories: ['jeans', 'pants', 'denim'],
+    eras: ['1980s', '1990s', '2000s'],
+    subculture: ['americana', 'workwear', 'mainstream'],
+    pricePoint: 'budget',
+  },
+
+  'crossings': {
+    keywords: ['crossings', 'crossings brand', 'crossings clothing'],
+    vibes: ['casual americana', 'budget apparel', 'department store'],
+    categories: ['tees', 'shirts', 'casual'],
+    eras: ['1990s', '2000s'],
+    subculture: ['mainstream', 'americana'],
+    pricePoint: 'budget',
+  },
+
+  'dshown': {
+    keywords: ["d'shown", 'dshown', "d'shown brand", 'dshown clothing'],
+    vibes: ['urban casual', 'streetwear adjacent', 'budget brand'],
+    categories: ['tees', 'jeans', 'casual'],
+    eras: ['1990s', '2000s'],
+    subculture: ['urban', 'streetwear', 'mainstream'],
+    pricePoint: 'budget',
+  },
+
+  'darwins': {
+    keywords: ["darwin's", 'darwins', 'darwins brand', 'darwin brand clothing'],
+    vibes: ['casual american', 'budget brand', 'basics'],
+    categories: ['tees', 'shirts', 'casual'],
+    eras: ['1990s', '2000s'],
+    subculture: ['mainstream', 'americana'],
+    pricePoint: 'budget',
+  },
+
+  'david-brooks': {
+    keywords: ['david brooks', 'david brooks brand', 'david brooks clothing'],
+    vibes: ['classic menswear', 'department store', 'affordable tailoring'],
+    categories: ['shirts', 'pants', 'blazers', 'mens'],
+    eras: ['1990s', '2000s'],
+    subculture: ['mainstream', 'classic menswear'],
+    pricePoint: 'budget',
+  },
+
+  'david-taylor': {
+    keywords: ['david taylor', 'david taylor brand', 'david taylor clothing'],
+    vibes: ['womens casual', 'department store label', 'affordable fashion'],
+    categories: ['tops', 'dresses', 'womens'],
+    eras: ['1990s', '2000s'],
+    subculture: ['mainstream', 'womens fashion'],
+    pricePoint: 'budget',
+  },
+
+  'dimensions': {
+    keywords: ['dimensions', 'dimensions brand', 'dimensions clothing'],
+    vibes: ['budget casual', 'big and tall', 'plus size brand'],
+    categories: ['tees', 'shirts', 'pants'],
+    eras: ['1990s', '2000s'],
+    subculture: ['mainstream', 'affordable fashion'],
+    pricePoint: 'budget',
+  },
+
+  'donna-louise': {
+    keywords: ['donna louise', 'donna louise brand', 'donna louise clothing'],
+    vibes: ['womens private label', 'department store', 'budget fashion'],
+    categories: ['dresses', 'tops', 'womens'],
+    eras: ['1990s', '2000s'],
+    subculture: ['mainstream', 'womens fashion'],
+    pricePoint: 'budget',
+  },
+
+  'down-impact': {
+    keywords: ['down impact', 'down impact brand', 'down impact jacket'],
+    vibes: ['budget outerwear', 'puffer jackets', 'winter wear'],
+    categories: ['jackets', 'puffers', 'outerwear'],
+    eras: ['1990s', '2000s'],
+    subculture: ['mainstream', 'outerwear'],
+    pricePoint: 'budget',
+  },
+
+  'dressbarn': {
+    keywords: ['dressbarn', 'dress barn', 'dressbarn clothing', 'dressbarn womens'],
+    vibes: ['budget womens', 'career casual', 'department store'],
+    categories: ['dresses', 'tops', 'pants', 'womens'],
+    eras: ['1990s', '2000s', '2010s'],
+    subculture: ['mainstream', 'womens fashion', 'affordable fashion'],
+    pricePoint: 'budget',
+  },
+
+  'dun-mc': {
+    keywords: ['dun mc', 'dunmc', 'dun mc brand'],
+    vibes: ['hip hop adjacent', 'urban casual', 'budget streetwear'],
+    categories: ['tees', 'hoodies', 'casual'],
+    eras: ['1990s', '2000s'],
+    subculture: ['hip hop', 'urban', 'streetwear'],
+    pricePoint: 'budget',
+  },
+
+  'east-5th': {
+    keywords: ['east 5th', 'east fifth', 'east 5th brand', 'jcpenney east 5th'],
+    vibes: ['jcpenney private label', 'womens casual', 'affordable fashion'],
+    categories: ['tops', 'pants', 'dresses', 'womens'],
+    eras: ['1990s', '2000s', '2010s'],
+    subculture: ['mainstream', 'womens fashion'],
+    pricePoint: 'budget',
+  },
+
 };
 
 export default BRAND_DNA_EXPANSION_4;

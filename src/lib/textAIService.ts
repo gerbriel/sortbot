@@ -196,45 +196,65 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
       // ── Athletic / Sportswear ──────────────────────────────────────────────
       'Nike', 'Adidas', 'Puma', 'Reebok', 'Fila', 'Kappa', 'Umbro', 'Russell',
       'Under Armour', 'Asics', 'New Balance', 'Champion', 'And1', 'Athleta',
+      'Ellesse', 'CCM', 'Campagnolo',
       // ── Denim / Heritage ──────────────────────────────────────────────────
       'Levi', 'Levis', "Levi's", 'Wrangler', 'Lee', 'Jordache', 'AG Jeans',
-      'Buffalo David Bitton', 'Blank NYC', 'BDG',
+      'Buffalo David Bitton', 'Blank NYC', 'BDG', 'Cotton-Belt', 'Denim Tears',
+      'Diesel', 'Dsquared2',
       // ── Streetwear / Hype ─────────────────────────────────────────────────
       'Supreme', 'Stussy', 'Bape', 'A Bathing Ape', 'Amiri', 'Off White',
       'Fear of God', 'Essentials', 'Awake NY', 'Black Scale', 'Avirex',
-      'Affliction', 'AllSaints', 'Allsaints',
+      'Affliction', 'AllSaints', 'Allsaints', 'Dime', 'Daily Paper',
+      'Danielle Guizio', 'Ed Hardy', 'Element', 'Ecko',
       // ── Outdoor / Technical ───────────────────────────────────────────────
       'Patagonia', 'North Face', 'Columbia', 'Arcteryx', "Arc'teryx",
-      'Barbour', 'Belstaff', 'Bonclar', 'Arcticwear',
+      'Barbour', 'Belstaff', 'Bonclar', 'Arcticwear', 'Canada Goose',
+      'Cabelas', 'Eddie Bauer', 'Caterpillar',
       // ── Luxury / Designer ─────────────────────────────────────────────────
       'Gucci', 'Louis Vuitton', 'Balenciaga', 'Burberry', 'Prada', 'Alaia',
       'Alexander McQueen', 'Alexander Wang', 'Armani', 'Armani Exchange',
-      'Armani Jeans', 'Akris', 'Balmain', 'Bally', 'Bottega Veneta',
-      'Brunello Cucinelli', 'Stone Island', 'Aquascutum', 'Ami Paris',
+      'Armani Jeans', 'Emporio Armani', 'Akris', 'Balmain', 'Bally',
+      'Bottega Veneta', 'Brunello Cucinelli', 'Stone Island', 'Aquascutum',
+      'Ami Paris', 'Cartier', 'Casablanca', 'Chanel', 'Chrome Hearts',
+      'Comme des Garcons', 'Coperni', 'Courrèges', 'Dior', 'Dolce & Gabbana',
+      'Emilio Pucci', 'Carolina Herrera',
       // ── Preppy / Classic American ─────────────────────────────────────────
       'Ralph Lauren', 'Polo', 'Tommy Hilfiger', 'Calvin Klein', 'Brooks Brothers',
       'Lacoste', 'Fred Perry', 'Nautica', 'Izod', 'Banana Republic',
       'Ann Taylor', 'Anne Klein', 'Alfred Dunner', 'Bernardo',
+      'Chaps', 'Chaps Ralph Lauren', 'Charles Tyrwhitt', 'Dockers',
       // ── Mall / Fast Fashion ───────────────────────────────────────────────
       'Gap', 'Old Navy', 'American Eagle', 'Hollister', 'Abercrombie',
       'Aeropostale', 'Anthropologie', 'American Apparel', 'Brandy Melville',
-      'Zara', 'H&M', 'ASOS', 'Bershka', 'Bench',
+      'Zara', 'H&M', 'ASOS', 'Bershka', 'Bench', 'COS', 'Cotton On',
+      'Covington', 'Croft & Barrow', 'Desigual', 'Dressbarn',
+      'Christopher Banks', 'Christopher & Banks',
       // ── Workwear ──────────────────────────────────────────────────────────
-      'Carhartt', 'Dickies', 'Oakley',
+      'Carhartt', 'Carhartt WIP', 'Dickies', 'Oakley', 'Duluth', 'Duluth Trading',
+      'Craftsman', 'DC Shoes', 'DC',
       // ── Footwear / Boots ──────────────────────────────────────────────────
       'Vans', 'Converse', 'Jordan', 'Yeezy', 'Timberland', 'Red Wing',
-      'Doc Martens', 'Dr Martens', 'Birkenstock', 'Blundstone', 'Sperry',
-      'Clarks', 'UGG', 'Ugg',
-      // ── Specialty / Other ─────────────────────────────────────────────────
+      'Doc Martens', 'Dr Martens', 'Dr. Martens', 'Birkenstock', 'Blundstone',
+      'Sperry', 'Clarks', 'UGG', 'Ugg', 'Crocs',
+      // ── Accessories / Eyewear ─────────────────────────────────────────────
+      'Coach', 'Cutler and Gross',
+      // ── Specialty / Niche ─────────────────────────────────────────────────
       'Starter', 'Logo Athletic', 'Salem', 'Anvil', 'Gildan', 'Hanes',
-      'Fruit of the Loom', 'APC', 'Acne Studios', 'Allsaints', 'Alpha Industries',
+      'Fruit of the Loom', 'APC', 'Acne Studios', 'Alpha Industries',
       'Sergio Valente', 'Burton', 'Billabong', 'Boden', 'Betsy Barclay',
       'Bill Blass', 'Bear USA', 'Aston Martin', 'Act III', 'All That Jazz',
-      'Amanda Smith', 'A.P.C.', 'APT 9', 'Apt9',
-      'Avisu', 'BLL', 'Boss Hugo Boss', 'Hugo Boss', 'Bamboo and Moon',
-      'Batik Bay', 'Ben Sherman', 'Bermuda Bay', 'Betsybarclay',
-      'Billblass', 'Billy Plains', 'Bleu de Paname', 'Brooks Brothers',
-      'Lee', 'Wrangler', 'Zara', 'H&M',
+      'Amanda Smith', 'A.P.C.', 'APT 9', 'Apt9', 'Avisu', 'BLL',
+      'Boss Hugo Boss', 'Hugo Boss', 'Bamboo and Moon', 'Batik Bay',
+      'Ben Sherman', 'Bermuda Bay', 'Betsybarclay', 'Billblass', 'Billy Plains',
+      'Bleu de Paname', 'Butter Goods', 'C.P. Company', 'CP Company',
+      'Cabelas', 'Cape Cod', 'Caribbean', 'Caribbean Joe', 'Cartoon Network',
+      'Crazy Shirts', 'Casa Donna', 'Chase Authentics', 'Cathy Cho', 'Cathy Choi',
+      'Celaia', 'Charley Mood', 'Chaus', 'Ciro Citterio', 'Claude de Saire',
+      'Collezione', 'Comint', 'Cornerstone', 'Crossings', 'Cotton-Belt',
+      'Cowboys Turtle', 'DDP', 'DKNY', 'DKNY Jeans', 'Darwin', 'David Brooks',
+      'David Taylor', 'DeLong', 'Deadstock', 'Deep Blue', 'Dimensions',
+      'Disney', 'Doen', 'Donna Louise', 'Down Impact', 'Dun MC', 'Dunbrooke',
+      'ELLE', 'East 5th', 'End Clothing', 'Element',
     ];
     for (const b of KNOWN_BRANDS) {
       if (new RegExp(`\\b${b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(voiceDesc)) {
