@@ -1674,6 +1674,98 @@ export const BRAND_DNA_EXPANSION_4: Record<string, PatternContext> = {
     pricePoint: 'premium',
   },
 
+  // ── N–S batch ─────────────────────────────────────────────────────────────
+
+  'no-boundaries': {
+    keywords: ['no boundaries', 'no-boundaries', 'faded glory no boundaries'],
+    vibes: ['teen casual', 'budget basics', 'everyday wear'],
+    categories: ['tops', 'jeans', 'shorts', 'activewear'],
+    eras: ['2000s', '2010s'],
+    subculture: ['mainstream', 'teen fashion'],
+    pricePoint: 'budget',
+  },
+
+  'ocean-current': {
+    keywords: ['ocean current', 'ocean current brand'],
+    vibes: ['surf casual', 'coastal lifestyle', 'beach fashion'],
+    categories: ['tops', 'shorts', 'swimwear'],
+    eras: ['2000s', '2010s'],
+    subculture: ['surf', 'beach'],
+    pricePoint: 'budget',
+  },
+
+  'okay-jeans': {
+    keywords: ['okay jeans', 'okay jeans wear', 'okayjeansware'],
+    vibes: ['vintage denim', 'budget denim', 'workwear casual'],
+    categories: ['jeans', 'pants'],
+    eras: ['1980s', '1990s'],
+    subculture: ['mainstream', 'workwear'],
+    pricePoint: 'budget',
+  },
+
+  'ozark-mountain': {
+    keywords: ['ozark mountain', 'ozark mountain jean', 'ozark mountain jean company'],
+    vibes: ['rugged outdoor', 'american workwear', 'vintage denim'],
+    categories: ['jeans', 'pants', 'outerwear'],
+    eras: ['1970s', '1980s', '1990s'],
+    subculture: ['workwear', 'outdoor'],
+    pricePoint: 'budget',
+  },
+
+  'pitstop': {
+    keywords: ['pitstop', 'pit stop brand', 'pitstop clothing'],
+    vibes: ['motorsport casual', 'racing lifestyle', 'graphic tees'],
+    categories: ['tops', 't-shirts', 'jackets'],
+    eras: ['1990s', '2000s'],
+    subculture: ['motorsport', 'racing'],
+    pricePoint: 'budget',
+  },
+
+  'pull-bear': {
+    keywords: ['pull & bear', 'pull&bear', 'pull and bear'],
+    vibes: ['fast fashion', 'youth casual', 'european street'],
+    categories: ['tops', 'jeans', 'jackets', 'accessories'],
+    eras: ['2000s', '2010s', '2020s'],
+    subculture: ['mainstream', 'european fashion'],
+    pricePoint: 'budget',
+  },
+
+  'puritan': {
+    keywords: ['puritan', 'puritan brand', 'puritan sportswear'],
+    vibes: ['vintage basics', 'classic american', 'budget casual'],
+    categories: ['tops', 'shirts', 'basics'],
+    eras: ['1960s', '1970s', '1980s'],
+    subculture: ['mainstream', 'americana'],
+    pricePoint: 'budget',
+  },
+
+  'rag-bone': {
+    keywords: ['rag & bone', 'rag and bone', 'rag&bone'],
+    vibes: ['new york minimalism', 'luxury casual', 'refined streetwear'],
+    categories: ['tops', 'jeans', 'jackets', 'boots', 'dresses'],
+    eras: ['2000s', '2010s', '2020s'],
+    subculture: ['new york fashion', 'luxury casual'],
+    pricePoint: 'premium',
+  },
+
+  'real-leather': {
+    keywords: ['real leather', 'genuine real leather', 'real leather brand'],
+    vibes: ['leather goods', 'classic outerwear', 'biker style'],
+    categories: ['jackets', 'coats', 'accessories'],
+    eras: ['1970s', '1980s', '1990s', '2000s'],
+    subculture: ['biker', 'rock', 'mainstream'],
+    pricePoint: 'mid',
+  },
+
+  'rk-brand': {
+    keywords: ['rk brand', 'rk clothing'],
+    vibes: ['budget casual', 'basics', 'everyday wear'],
+    categories: ['tops', 'pants', 'basics'],
+    eras: ['1990s', '2000s'],
+    subculture: ['mainstream'],
+    pricePoint: 'budget',
+  },
+
 };
 
 export default BRAND_DNA_EXPANSION_4;
