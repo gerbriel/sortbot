@@ -1,5 +1,30 @@
 // Category Presets Types and Database Functions
 
+// ---------------------------------------------------------------------------
+// Custom field & section types
+// ---------------------------------------------------------------------------
+
+export type CustomFieldType = 'text' | 'number' | 'textarea' | 'select' | 'checkbox';
+
+export interface CustomFieldDefinition {
+  id: string;
+  label: string;
+  key: string;
+  type: CustomFieldType;
+  defaultValue: string;
+  options?: string[]; // for select fields
+  order: number;
+}
+
+export interface CustomSection {
+  id: string;
+  title: string;
+  order: number;
+  fields: CustomFieldDefinition[];
+}
+
+// ---------------------------------------------------------------------------
+
 export interface MeasurementTemplate {
   width: boolean;
   length: boolean;
@@ -137,6 +162,9 @@ export interface CategoryPreset {
   // Timestamps
   created_at: string;
   updated_at: string;
+
+  // === Custom Sections & Fields ===
+  custom_sections?: CustomSection[];
 }
 
 export interface CategoryPresetInput {
@@ -214,6 +242,9 @@ export interface CategoryPresetInput {
   brand_category?: string; // Extended brand category
   inventory_tracker?: 'shopify' | 'manual' | 'none';
   charge_tax?: boolean; // Whether to charge tax
+
+  // === Custom Sections & Fields ===
+  custom_sections?: CustomSection[];
 }
 
 // Default measurement templates for common categories
