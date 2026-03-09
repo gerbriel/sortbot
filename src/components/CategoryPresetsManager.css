@@ -386,3 +386,161 @@
     width: 100%;
   }
 }
+
+/* ── Custom Sections & Fields ───────────────────────────────────────────── */
+
+.custom-sections-wrapper {
+  border: 2px dashed #6366f1;
+  background: #f8f7ff;
+}
+
+.custom-sections-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.custom-sections-header h4 {
+  margin: 0;
+}
+
+.custom-section-block {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.section-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.section-header-row h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #374151;
+}
+
+.section-controls {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.btn-icon {
+  background: none;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.8rem;
+  color: #6b7280;
+  transition: all 0.15s;
+}
+
+.btn-icon:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+  color: #111827;
+}
+
+.btn-icon.btn-danger {
+  color: #ef4444;
+  border-color: #fecaca;
+}
+
+.btn-icon.btn-danger:hover {
+  background: #fef2f2;
+  border-color: #ef4444;
+}
+
+.button-sm {
+  padding: 0.35rem 0.75rem !important;
+  font-size: 0.82rem !important;
+}
+
+/* Custom fields block */
+
+.custom-fields-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.custom-field-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.custom-field-label {
+  font-weight: 600;
+  color: #1f2937;
+  flex: 1;
+}
+
+.custom-field-type {
+  background: #e0e7ff;
+  color: #4338ca;
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.custom-field-default {
+  color: #6b7280;
+  font-size: 0.78rem;
+  font-style: italic;
+}
+
+.custom-field-actions {
+  display: flex;
+  gap: 0.2rem;
+  margin-left: auto;
+}
+
+/* ── Field Modal ─────────────────────────────────────────────────────────── */
+
+.field-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: 1rem;
+}
+
+.field-modal {
+  background: white;
+  border-radius: 12px;
+  padding: 1.75rem;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+}
+
+.field-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+}
+
+.field-modal-header h4 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #111827;
+}
+
