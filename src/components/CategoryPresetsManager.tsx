@@ -35,6 +35,34 @@ const FIELD_TYPES: { value: CustomFieldType; label: string }[] = [
   { value: 'checkbox', label: 'Checkbox' },
 ];
 
+// Fixed IDs for the 9 built-in sections so their custom fields persist in the
+// same customSections array but cannot be renamed/deleted/reordered.
+const BUILTIN_SECTIONS: { id: string; title: string }[] = [
+  { id: '__basic__',           title: 'Basic Information' },
+  { id: '__shipping__',        title: 'Shipping & Physical Attributes' },
+  { id: '__classification__',  title: 'Product Classification' },
+  { id: '__pricing__',         title: 'Pricing Guidance' },
+  { id: '__attributes__',      title: 'Product Attributes' },
+  { id: '__shipping_csv__',    title: 'Shipping & Packaging (CSV Export)' },
+  { id: '__classification_csv__', title: 'Product Classification (CSV Export)' },
+  { id: '__policies__',        title: 'Policies & Marketplace (CSV Export)' },
+  { id: '__measurements__',    title: 'Measurement Template' },
+  { id: '__tags__',            title: 'Tags & SEO' },
+];
+
+function initBuiltinSections(existing: CustomSection[]): CustomSection[] {
+  return BUILTIN_SECTIONS.map((bs, i) => {
+    const found = existing.find(s => s.id === bs.id);
+    return found ?? { id: bs.id, title: bs.title, order: i, fields: [] };
+  });
+}
+
+function mergeAllSections(existing: CustomSection[]): CustomSection[] {
+  const builtins = initBuiltinSections(existing);
+  const customs = existing.filter(s => !BUILTIN_SECTIONS.some(b => b.id === s.id));
+  return [...builtins, ...customs];
+}
+
 // ─── Field modal ─────────────────────────────────────────────────────────────
 
 interface FieldModalProps {
@@ -286,7 +314,7 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
         shoulder: false, waist: false, inseam: false, rise: false,
       },
     });
-    setCustomSections([]);
+    setCustomSections(mergeAllSections([]));
     setShowForm(true);
   };
 
@@ -329,7 +357,7 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
       discounted_shipping: (preset as any).discounted_shipping,
       custom_label_0: (preset as any).custom_label_0,
     });
-    setCustomSections((preset.custom_sections ?? []).map(s => ({ ...s, fields: [...s.fields] })));
+    setCustomSections(mergeAllSections(preset.custom_sections ?? []));
     setShowForm(true);
   };
 
@@ -396,7 +424,8 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
 
     const dataToSave: Partial<CategoryPresetInput> = {
       ...formData,
-      custom_sections: customSections,
+      // Only persist sections that have at least one field
+      custom_sections: customSections.filter(s => s.fields.length > 0),
     };
 
     try {
@@ -605,6 +634,14 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
                     <label>Description</label>
                     <textarea value={formData.description || ''} onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))} rows={2} />
                   </div>
+                  <CustomFieldsBlock
+                    fields={customSections.find(s => s.id === '__basic__')?.fields ?? []}
+                    onAdd={() => openAddField('__basic__')}
+                    onEdit={f => openEditField('__basic__', f)}
+                    onDelete={fieldId => deleteField('__basic__', fieldId)}
+                    onMoveUp={fieldId => moveFieldUp('__basic__', fieldId)}
+                    onMoveDown={fieldId => moveFieldDown('__basic__', fieldId)}
+                  />
                 </div>
 
                 {/* Shipping */}
@@ -631,6 +668,14 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
                       Requires Shipping
                     </label>
                   </div>
+                  <CustomFieldsBlock
+                    fields={customSections.find(s => s.id === '__shipping__')?.fields ?? []}
+                    onAdd={() => openAddField('__shipping__')}
+                    onEdit={f => openEditField('__shipping__', f)}
+                    onDelete={fieldId => deleteField('__shipping__', fieldId)}
+                    onMoveUp={fieldId => moveFieldUp('__shipping__', fieldId)}
+                    onMoveDown={fieldId => moveFieldDown('__shipping__', fieldId)}
+                  />
                 </div>
 
                 {/* Classification */}
@@ -648,6 +693,14 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
                     <label>Shopify Product Type</label>
                     <input type="text" value={formData.shopify_product_type || ''} onChange={e => setFormData(prev => ({ ...prev, shopify_product_type: e.target.value }))} placeholder="For Shopify integration" />
                   </div>
+                  <CustomFieldsBlock
+                    fields={customSections.find(s => s.id === '__classification__')?.fields ?? []}
+                    onAdd={() => openAddField('__classification__')}
+                    onEdit={f => openEditField('__classification__', f)}
+                    onDelete={fieldId => deleteField('__classification__', fieldId)}
+                    onMoveUp={fieldId => moveFieldUp('__classification__', fieldId)}
+                    onMoveDown={fieldId => moveFieldDown('__classification__', fieldId)}
+                  />
                 </div>
 
                 {/* Pricing */}
@@ -663,6 +716,14 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
                       <input type="number" step="0.01" value={formData.suggested_price_max || ''} onChange={e => setFormData(prev => ({ ...prev, suggested_price_max: parseFloat(e.target.value) || undefined }))} placeholder="75.00" />
                     </div>
                   </div>
+                  <CustomFieldsBlock
+                    fields={customSections.find(s => s.id === '__pricing__')?.fields ?? []}
+                    onAdd={() => openAddField('__pricing__')}
+                    onEdit={f => openEditField('__pricing__', f)}
+                    onDelete={fieldId => deleteField('__pricing__', fieldId)}
+                    onMoveUp={fieldId => moveFieldUp('__pricing__', fieldId)}
+                    onMoveDown={fieldId => moveFieldDown('__pricing__', fieldId)}
+                  />
                 </div>
 
                 {/* Attributes */}
@@ -687,6 +748,14 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
                       <option value="Fair">Fair</option>
                     </select>
                   </div>
+                  <CustomFieldsBlock
+                    fields={customSections.find(s => s.id === '__attributes__')?.fields ?? []}
+                    onAdd={() => openAddField('__attributes__')}
+                    onEdit={f => openEditField('__attributes__', f)}
+                    onDelete={fieldId => deleteField('__attributes__', fieldId)}
+                    onMoveUp={fieldId => moveFieldUp('__attributes__', fieldId)}
+                    onMoveDown={fieldId => moveFieldDown('__attributes__', fieldId)}
+                  />
                 </div>
 
                 {/* Shipping CSV */}
@@ -718,6 +787,14 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
                     <label>Ships From</label>
                     <input type="text" value={(formData as any).ships_from || ''} onChange={e => setFormData(prev => ({ ...prev, ships_from: e.target.value } as any))} placeholder="601 W. Lincoln Ave, Fresno CA 93706" />
                   </div>
+                  <CustomFieldsBlock
+                    fields={customSections.find(s => s.id === '__shipping_csv__')?.fields ?? []}
+                    onAdd={() => openAddField('__shipping_csv__')}
+                    onEdit={f => openEditField('__shipping_csv__', f)}
+                    onDelete={fieldId => deleteField('__shipping_csv__', fieldId)}
+                    onMoveUp={fieldId => moveFieldUp('__shipping_csv__', fieldId)}
+                    onMoveDown={fieldId => moveFieldDown('__shipping_csv__', fieldId)}
+                  />
                 </div>
 
                 {/* Classification CSV */}
@@ -756,6 +833,14 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
                       <input type="text" value={(formData as any).age_group || ''} onChange={e => setFormData(prev => ({ ...prev, age_group: e.target.value } as any))} placeholder="Adult (13+ years old)" />
                     </div>
                   </div>
+                  <CustomFieldsBlock
+                    fields={customSections.find(s => s.id === '__classification_csv__')?.fields ?? []}
+                    onAdd={() => openAddField('__classification_csv__')}
+                    onEdit={f => openEditField('__classification_csv__', f)}
+                    onDelete={fieldId => deleteField('__classification_csv__', fieldId)}
+                    onMoveUp={fieldId => moveFieldUp('__classification_csv__', fieldId)}
+                    onMoveDown={fieldId => moveFieldDown('__classification_csv__', fieldId)}
+                  />
                 </div>
 
                 {/* Policies */}
@@ -795,6 +880,14 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
                       <input type="text" value={(formData as any).custom_label_0 || ''} onChange={e => setFormData(prev => ({ ...prev, custom_label_0: e.target.value } as any))} placeholder="Top Seller" />
                     </div>
                   </div>
+                  <CustomFieldsBlock
+                    fields={customSections.find(s => s.id === '__policies__')?.fields ?? []}
+                    onAdd={() => openAddField('__policies__')}
+                    onEdit={f => openEditField('__policies__', f)}
+                    onDelete={fieldId => deleteField('__policies__', fieldId)}
+                    onMoveUp={fieldId => moveFieldUp('__policies__', fieldId)}
+                    onMoveDown={fieldId => moveFieldDown('__policies__', fieldId)}
+                  />
                 </div>
 
                 {/* Measurements */}
@@ -818,6 +911,14 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
                       </label>
                     ))}
                   </div>
+                  <CustomFieldsBlock
+                    fields={customSections.find(s => s.id === '__measurements__')?.fields ?? []}
+                    onAdd={() => openAddField('__measurements__')}
+                    onEdit={f => openEditField('__measurements__', f)}
+                    onDelete={fieldId => deleteField('__measurements__', fieldId)}
+                    onMoveUp={fieldId => moveFieldUp('__measurements__', fieldId)}
+                    onMoveDown={fieldId => moveFieldDown('__measurements__', fieldId)}
+                  />
                 </div>
 
                 {/* Tags & SEO */}
@@ -836,6 +937,14 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
                     <input type="text" value={formData.seo_title_template || ''} onChange={e => setFormData(prev => ({ ...prev, seo_title_template: e.target.value }))} placeholder="{size} {brand} {category} {color}" />
                     <small>Placeholders: {'{size}'}, {'{brand}'}, {'{category}'}, {'{color}'}, {'{era}'}</small>
                   </div>
+                  <CustomFieldsBlock
+                    fields={customSections.find(s => s.id === '__tags__')?.fields ?? []}
+                    onAdd={() => openAddField('__tags__')}
+                    onEdit={f => openEditField('__tags__', f)}
+                    onDelete={fieldId => deleteField('__tags__', fieldId)}
+                    onMoveUp={fieldId => moveFieldUp('__tags__', fieldId)}
+                    onMoveDown={fieldId => moveFieldDown('__tags__', fieldId)}
+                  />
                 </div>
 
                 {/* ── Custom Sections ─────────────────────────────────────── */}
