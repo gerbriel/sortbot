@@ -73,9 +73,13 @@ export interface AIGeneratedContent {
  */
 function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<string, any> {
   const extracted: Record<string, any> = {};
+  const lower = voiceDesc.toLowerCase();
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PASS 1: Explicit "field value period" commands (highest priority)
+  // ─────────────────────────────────────────────────────────────────────────
 
   // Helper: grab value between a field trigger and the word "period"
-  // Matches: <trigger word(s)> <captured value> period
   function extractCommand(pattern: RegExp): string | null {
     const match = voiceDesc.match(pattern);
     return match ? match[1].trim() : null;
@@ -96,94 +100,258 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
   }
 
   // ── COLOR ─────────────────────────────────────────────────────────────────
-  const color = extractCommand(/\bcolor\s+(.+?)\s+period\b/i);
-  if (color) {
-    // Support "black and white" or "black white" → primary + secondary
-    const parts = color.split(/\s+and\s+|\s*\/\s*|\s+/i).filter(Boolean);
+  const colorCmd = extractCommand(/\bcolou?r\s+(.+?)\s+period\b/i);
+  if (colorCmd) {
+    const parts = colorCmd.split(/\s+and\s+|\s*\/\s*|\s+/i).filter(Boolean);
     extracted.color = toTitleCase(parts[0]);
     if (parts[1]) extracted.secondaryColor = toTitleCase(parts[1]);
   }
 
   // ── MATERIAL ──────────────────────────────────────────────────────────────
-  const material = extractCommand(/\bmaterial\s+(.+?)\s+period\b/i);
-  if (material) extracted.material = toTitleCase(material);
+  const materialCmd = extractCommand(/\b(?:material|fabric)\s+(.+?)\s+period\b/i);
+  if (materialCmd) extracted.material = toTitleCase(materialCmd);
 
   // ── CONDITION ─────────────────────────────────────────────────────────────
   const condRaw = extractCommand(/\bcondition\s+(.+?)\s+period\b/i);
-  if (condRaw) {
-    const c = condRaw.toLowerCase();
-    if (/nwt|new with tags/.test(c)) extracted.condition = 'NWT';
-    else if (/like new|mint|pristine/.test(c)) extracted.condition = 'Like New';
-    else if (/excellent|great/.test(c)) extracted.condition = 'Excellent';
-    else if (/good|gently used/.test(c)) extracted.condition = 'Good';
-    else if (/fair|worn|used/.test(c)) extracted.condition = 'Fair';
-    else extracted.condition = toTitleCase(condRaw);
-  }
+  if (condRaw) extracted.condition = normalizeCondition(condRaw);
 
   // ── ERA ───────────────────────────────────────────────────────────────────
-  const era = extractCommand(/\bera\s+(.+?)\s+period\b/i);
-  if (era) extracted.era = era.toUpperCase().replace(/^(\d{2,4}S?)$/i, s => s.toUpperCase()) || toTitleCase(era);
+  const eraCmd = extractCommand(/\bera\s+(.+?)\s+period\b/i);
+  if (eraCmd) extracted.era = normalizeEra(eraCmd);
 
   // ── STYLE ─────────────────────────────────────────────────────────────────
-  const style = extractCommand(/\bstyle\s+(.+?)\s+period\b/i);
-  if (style) extracted.style = toTitleCase(style);
+  const styleCmd = extractCommand(/\bstyle\s+(.+?)\s+period\b/i);
+  if (styleCmd) extracted.style = toTitleCase(styleCmd);
 
   // ── GENDER ────────────────────────────────────────────────────────────────
-  const genderRaw = extractCommand(/\bgender\s+(.+?)\s+period\b/i);
-  if (genderRaw) {
-    const g = genderRaw.toLowerCase();
-    if (/men|male|masculine/.test(g)) extracted.gender = 'Men';
-    else if (/women|female|ladies|feminine/.test(g)) extracted.gender = 'Women';
-    else if (/unisex|neutral/.test(g)) extracted.gender = 'Unisex';
-    else if (/kid|child|youth/.test(g)) extracted.gender = 'Kids';
-    else extracted.gender = toTitleCase(genderRaw);
-  }
+  const genderCmd = extractCommand(/\bgender\s+(.+?)\s+period\b/i);
+  if (genderCmd) extracted.gender = normalizeGender(genderCmd);
 
   // ── PRICE ─────────────────────────────────────────────────────────────────
-  const priceRaw = extractCommand(/\bprice\s+(.+?)\s+period\b/i);
-  if (priceRaw) {
-    const num = priceRaw.replace(/[^0-9.]/g, '');
+  const priceCmd = extractCommand(/\bprice\s+(.+?)\s+period\b/i);
+  if (priceCmd) {
+    const num = priceCmd.replace(/[^0-9.]/g, '');
     if (num) extracted.price = num;
   }
 
   // ── FLAWS ─────────────────────────────────────────────────────────────────
-  const flaws = extractCommand(/\bflaws?\s+(.+?)\s+period\b/i);
-  if (flaws) extracted.flaws = flaws;
+  const flawsCmd = extractCommand(/\bflaws?\s+(.+?)\s+period\b/i);
+  if (flawsCmd) extracted.flaws = flawsCmd;
 
   // ── CARE ──────────────────────────────────────────────────────────────────
-  const care = extractCommand(/\bcare\s+(.+?)\s+period\b/i);
-  if (care) extracted.care = care;
+  const careCmd = extractCommand(/\bcare\s+(.+?)\s+period\b/i);
+  if (careCmd) extracted.care = careCmd;
 
-  // ── MEASUREMENTS ──────────────────────────────────────────────────────────
+  // ── MEASUREMENTS (explicit) ───────────────────────────────────────────────
   const measurements: Record<string, string> = {};
 
-  const width = extractCommand(/\bwidth\s+(.+?)\s+period\b/i);
-  if (width) measurements['Width'] = width.replace(/[^0-9.]/g, '');
+  const widthCmd = extractCommand(/\bwidth\s+(.+?)\s+period\b/i);
+  if (widthCmd) measurements['Width'] = widthCmd.replace(/[^0-9.]/g, '');
 
-  const length = extractCommand(/\blength\s+(.+?)\s+period\b/i);
-  if (length) measurements['Length'] = length.replace(/[^0-9.]/g, '');
+  const lengthCmd = extractCommand(/\blength\s+(.+?)\s+period\b/i);
+  if (lengthCmd) measurements['Length'] = lengthCmd.replace(/[^0-9.]/g, '');
 
-  const waist = extractCommand(/\bwaist\s+(.+?)\s+period\b/i);
-  if (waist) measurements['Waist'] = waist.replace(/[^0-9.]/g, '');
+  const waistCmd = extractCommand(/\bwaist\s+(.+?)\s+period\b/i);
+  if (waistCmd) measurements['Waist'] = waistCmd.replace(/[^0-9.]/g, '');
 
-  const shoulder = extractCommand(/\bshoulder\s+(.+?)\s+period\b/i);
-  if (shoulder) measurements['Shoulder'] = shoulder.replace(/[^0-9.]/g, '');
+  const shoulderCmd = extractCommand(/\bshoulder\s+(.+?)\s+period\b/i);
+  if (shoulderCmd) measurements['Shoulder'] = shoulderCmd.replace(/[^0-9.]/g, '');
 
-  const sleeve = extractCommand(/\bsleeve\s+(.+?)\s+period\b/i);
-  if (sleeve) measurements['Sleeve'] = sleeve.replace(/[^0-9.]/g, '');
+  const sleeveCmd = extractCommand(/\bsleeve\s+(.+?)\s+period\b/i);
+  if (sleeveCmd) measurements['Sleeve'] = sleeveCmd.replace(/[^0-9.]/g, '');
 
-  const inseam = extractCommand(/\binseam\s+(.+?)\s+period\b/i);
-  if (inseam) measurements['Inseam'] = inseam.replace(/[^0-9.]/g, '');
+  const inseamCmd = extractCommand(/\binseam\s+(.+?)\s+period\b/i);
+  if (inseamCmd) measurements['Inseam'] = inseamCmd.replace(/[^0-9.]/g, '');
 
-  if (Object.keys(measurements).length > 0) extracted.measurements = measurements;
-
-  // ── TAGS ──────────────────────────────────────────────────────────────────
+  // ── TAGS (explicit) ───────────────────────────────────────────────────────
   const tagsRaw = extractCommand(/\btags?\s+(.+?)\s+period\b/i);
   if (tagsRaw) {
     extracted.tags = tagsRaw.split(/[\s,]+/).filter(Boolean).map((t: string) => t.toLowerCase());
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // PASS 2: Contextual fuzzy fallbacks (fire only when explicit command was NOT used)
+  // These scan free-form natural speech for common patterns
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // ── SIZE fallback ─────────────────────────────────────────────────────────
+  // Handles: "XL", "men's XL", "size XL", "32x30", "size 32/34", "size 10.5" (shoes)
+  if (!extracted.size) {
+    const sizeFallback = voiceDesc.match(
+      /\b(?:size\s+|measurement\s+)?(4xl|3xl|2xl|xxl|xl|extra[\s-]large|large|medium|small|xs|x[\s-]small)\b|(?:size\s+|men'?s?\s+|women'?s?\s+)?(\d{1,2}(?:[xX]\d{1,2})?(?:\.\d)?)\b/i
+    );
+    if (sizeFallback) {
+      const raw = (sizeFallback[1] || sizeFallback[2] || '').trim();
+      // Don't grab years (1990), prices ($45), or lone single digits as sizes
+      if (raw && !/^(19|20)\d{2}$/.test(raw) && !/^\$/.test(raw)) {
+        extracted.size = normalizeSizeValue(raw);
+      }
+    }
+  }
+
+  // ── BRAND fallback ────────────────────────────────────────────────────────
+  // Scan for known brand names spoken naturally without the "brand X period" command
+  if (!extracted.brand) {
+    const KNOWN_BRANDS = [
+      'Nike', 'Adidas', 'Levi', 'Levis', "Levi's", 'Champion', 'Hanes', 'Fruit of the Loom',
+      'Supreme', 'Stussy', 'Carhartt', 'Dickies', 'Patagonia', 'North Face', 'Columbia',
+      'Ralph Lauren', 'Tommy Hilfiger', 'Calvin Klein', 'Polo', 'Gap', 'Old Navy',
+      'American Eagle', 'Hollister', 'Abercrombie', 'Fila', 'Puma', 'Reebok', 'New Balance',
+      'Vans', 'Converse', 'Jordan', 'Yeezy', 'Balenciaga', 'Gucci', 'Louis Vuitton',
+      'Burberry', 'Stone Island', 'Arc\'teryx', 'Arcteryx', 'Under Armour', 'Oakley',
+      'Wrangler', 'Lee', 'Jordache', 'Sergio Valente', 'Sergio', 'Zara', 'H&M',
+      'Nautica', 'Izod', 'Lacoste', 'Fred Perry', 'Kappa', 'Umbro', 'Russell',
+      'Starter', 'Logo Athletic', 'Salem', 'Anvil', 'Fruit', 'Gildan',
+      'Timberland', 'Red Wing', 'Doc Martens', 'Dr Martens', 'Birkenstock',
+      'Sperry', 'Clarks', 'UGG', 'Ugg', 'UGGS',
+    ];
+    for (const b of KNOWN_BRANDS) {
+      if (new RegExp(`\\b${b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(voiceDesc)) {
+        extracted.brand = toTitleCase(b);
+        break;
+      }
+    }
+  }
+
+  // ── COLOR fallback ────────────────────────────────────────────────────────
+  if (!extracted.color) {
+    const COLOR_WORDS = [
+      'black', 'white', 'grey', 'gray', 'navy', 'blue', 'red', 'green', 'yellow',
+      'orange', 'purple', 'pink', 'brown', 'tan', 'khaki', 'cream', 'beige', 'off white',
+      'olive', 'maroon', 'burgundy', 'teal', 'cyan', 'coral', 'salmon', 'lavender',
+      'charcoal', 'heather grey', 'heather gray', 'royal blue', 'forest green',
+    ];
+    const colorFound = COLOR_WORDS.find(c => new RegExp(`\\b${c}\\b`, 'i').test(lower));
+    if (colorFound) {
+      // Check for a second color immediately after (e.g. "black and white", "navy blue")
+      const secMatch = lower.match(new RegExp(`\\b${colorFound}\\b\\s+(?:and\\s+)?(\\w+(?:\\s+\\w+)?)`, 'i'));
+      const potentialSec = secMatch ? secMatch[1].trim() : null;
+      const secColor = potentialSec && COLOR_WORDS.find(c => c === potentialSec) ? potentialSec : null;
+      extracted.color = toTitleCase(colorFound);
+      if (secColor) extracted.secondaryColor = toTitleCase(secColor);
+    }
+  }
+
+  // ── MATERIAL fallback ─────────────────────────────────────────────────────
+  if (!extracted.material) {
+    const MATERIAL_WORDS = [
+      'cotton', 'polyester', 'wool', 'denim', 'leather', 'suede', 'linen', 'silk',
+      'nylon', 'fleece', 'flannel', 'corduroy', 'velvet', 'velour', 'canvas',
+      'spandex', 'lycra', 'rayon', 'cashmere', 'tweed', 'terry', 'mesh',
+      'heavyweight cotton', 'lightweight cotton', '100% cotton', 'pure cotton',
+    ];
+    const matFound = MATERIAL_WORDS.find(m => new RegExp(`\\b${m}\\b`, 'i').test(lower));
+    if (matFound) extracted.material = toTitleCase(matFound);
+  }
+
+  // ── CONDITION fallback ────────────────────────────────────────────────────
+  if (!extracted.condition) {
+    const condFallback = lower.match(
+      /\b(nwt|new with tags|brand new|like[\s-]new|mint(?:\s+condition)?|pristine|excellent(?:\s+condition)?|great(?:\s+condition)?|good(?:\s+condition)?|gently[\s-]used|fair(?:\s+condition)?|worn|pre[\s-]owned|used)\b/i
+    );
+    if (condFallback) extracted.condition = normalizeCondition(condFallback[1]);
+  }
+
+  // ── ERA fallback ──────────────────────────────────────────────────────────
+  if (!extracted.era) {
+    const eraFallback = lower.match(
+      /\b(y2k|90s|80s|70s|60s|50s|1990s?|1980s?|1970s?|1960s?|1950s?|2000s?|vintage|retro)\b/i
+    );
+    if (eraFallback) extracted.era = normalizeEra(eraFallback[1]);
+  }
+
+  // ── GENDER fallback ───────────────────────────────────────────────────────
+  if (!extracted.gender) {
+    const genderFallback = lower.match(
+      /\b(men'?s?|women'?s?|ladies|boys?|girls?|kids?|youth|unisex|mens|womens)\b/i
+    );
+    if (genderFallback) extracted.gender = normalizeGender(genderFallback[1]);
+  }
+
+  // ── PRICE fallback ────────────────────────────────────────────────────────
+  // Handles: "$45", "45 dollars", "asking 50", "priced at 65", "selling for 30"
+  if (!extracted.price) {
+    const priceFallback = voiceDesc.match(
+      /\$(\d+(?:\.\d{1,2})?)|(\d+(?:\.\d{1,2})?)\s*(?:dollars?|bucks?)|\b(?:asking|priced?\s*at|selling\s*for|listed\s*at)\s+\$?(\d+(?:\.\d{1,2})?)/i
+    );
+    if (priceFallback) {
+      const num = (priceFallback[1] || priceFallback[2] || priceFallback[3] || '').trim();
+      if (num) extracted.price = num;
+    }
+  }
+
+  // ── MEASUREMENTS fallback ─────────────────────────────────────────────────
+  // Handles: "22 inch pit to pit", "pit to pit 22", "22 pit", "length 28", "28 inches long", "inseam 30"
+  const measureFallbacks: Array<{ key: string; patterns: RegExp[] }> = [
+    { key: 'Width', patterns: [
+      /(\d+(?:\.\d)?)\s*(?:inch(?:es)?)?\s*(?:pit[\s-]to[\s-]pit|p2p|chest|across\s+chest)/i,
+      /(?:pit[\s-]to[\s-]pit|p2p|chest|across\s+chest)\s+(\d+(?:\.\d)?)/i,
+    ]},
+    { key: 'Length', patterns: [
+      /(\d+(?:\.\d)?)\s*(?:inch(?:es)?)?\s*(?:long|length|top\s+to\s+bottom)/i,
+      /(?:length|top\s+to\s+bottom)\s+(\d+(?:\.\d)?)/i,
+    ]},
+    { key: 'Waist', patterns: [
+      /(\d+(?:\.\d)?)\s*(?:inch(?:es)?)?\s*waist/i,
+      /waist\s+(\d+(?:\.\d)?)/i,
+    ]},
+    { key: 'Shoulder', patterns: [
+      /(\d+(?:\.\d)?)\s*(?:inch(?:es)?)?\s*shoulder/i,
+      /shoulder\s+(?:to\s+shoulder\s+)?(\d+(?:\.\d)?)/i,
+    ]},
+    { key: 'Sleeve', patterns: [
+      /(\d+(?:\.\d)?)\s*(?:inch(?:es)?)?\s*sleeve/i,
+      /sleeve\s+(?:length\s+)?(\d+(?:\.\d)?)/i,
+    ]},
+    { key: 'Inseam', patterns: [
+      /(\d+(?:\.\d)?)\s*(?:inch(?:es)?)?\s*inseam/i,
+      /inseam\s+(\d+(?:\.\d)?)/i,
+    ]},
+  ];
+  for (const { key, patterns } of measureFallbacks) {
+    if (!measurements[key]) {
+      for (const pat of patterns) {
+        const m = voiceDesc.match(pat);
+        if (m) { measurements[key] = m[1]; break; }
+      }
+    }
+  }
+
+  if (Object.keys(measurements).length > 0) extracted.measurements = measurements;
+
   return extracted;
+}
+
+// ── Normalizer helpers ────────────────────────────────────────────────────────
+
+function normalizeCondition(raw: string): string {
+  const c = raw.toLowerCase();
+  if (/nwt|new with tags|brand new/.test(c)) return 'NWT';
+  if (/like[\s-]new|mint|pristine/.test(c)) return 'Like New';
+  if (/excellent|great/.test(c)) return 'Excellent';
+  if (/good|gently[\s-]used/.test(c)) return 'Good';
+  if (/fair|worn|used|pre[\s-]owned/.test(c)) return 'Fair';
+  return toTitleCase(raw);
+}
+
+function normalizeEra(raw: string): string {
+  const r = raw.toLowerCase().replace(/\s+/g, '');
+  if (r === 'y2k' || r === '2000s') return 'Y2K';
+  if (/^90s?$|^1990s?$/.test(r)) return '90s';
+  if (/^80s?$|^1980s?$/.test(r)) return '80s';
+  if (/^70s?$|^1970s?$/.test(r)) return '70s';
+  if (/^60s?$|^1960s?$/.test(r)) return '60s';
+  if (/^50s?$|^1950s?$/.test(r)) return '50s';
+  return toTitleCase(raw);
+}
+
+function normalizeGender(raw: string): string {
+  const g = raw.toLowerCase();
+  if (/^men|^male|^mens/.test(g)) return 'Men';
+  if (/^women|^female|^ladies|^womens/.test(g)) return 'Women';
+  if (/unisex|neutral/.test(g)) return 'Unisex';
+  if (/kid|child|youth|boy|girl/.test(g)) return 'Kids';
+  return toTitleCase(raw);
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -193,7 +361,9 @@ function toTitleCase(str: string): string {
 }
 
 function normalizeSizeValue(raw: string): string {
-  const s = raw.trim().toLowerCase().replace(/[\s-]+/g, '');
+  // Take only the first token if there's a slash or slash+word (e.g., "XL/XLARGE" → "XL")
+  const first = raw.split(/[\/\s]+/)[0];
+  const s = first.trim().toLowerCase().replace(/[\s-]+/g, '');
   const map: Record<string, string> = {
     extrasmall: 'XS', xsmall: 'XS', xs: 'XS',
     small: 'S', s: 'S',
@@ -204,7 +374,8 @@ function normalizeSizeValue(raw: string): string {
     xxxlarge: '3XL', '3xlarge': '3XL', '3xl': '3XL', xxxl: '3XL',
     '4xlarge': '4XL', '4xl': '4XL', xxxxl: '4XL',
   };
-  return map[s] || raw.toUpperCase();
+  // Return mapped value or original uppercased first token (preserves "32", "32x30", "32/34")
+  return map[s] || first.toUpperCase();
 }
 
 /**
@@ -274,10 +445,10 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
     mainDesc = mainDesc.replace(new RegExp(`\\b(?:${fieldPrefixes})\\s+.+?\\s+period\\b`, 'gi'), '');
 
     // Strip condition phrases from description
-    mainDesc = mainDesc.replace(/\b(nwt|new with tags|like new|excellent\s*condition|great\s*condition|good\s*condition|gently used|fair\s*condition|worn\s*condition|brand new)\b[,.]?\s*/gi, '');
+    mainDesc = mainDesc.replace(/\b(nwt|new with tags|like[\s-]new|mint|pristine|excellent[\s-]condition|great[\s-]condition|good[\s-]condition|gently[\s-]used|fair[\s-]condition|worn[\s-]condition|brand[\s-]new|in[\s-]good[\s-]condition|in[\s-]great[\s-]condition|in[\s-]excellent[\s-]condition|very[\s-]good[\s-]condition|pre[\s-]owned)\b[,.]?\s*/gi, '');
 
     // Strip care instruction phrases from description
-    mainDesc = mainDesc.replace(/\b(machine wash\s*(cold|warm|hot)?|hand wash|dry clean( only)?|wash cold|wash warm|tumble dry(\s*(low|high|no heat))?|hang dry|air dry|do not bleach|do not tumble dry|iron\s*(low|medium|high)?|dry flat)[^.]*[.]?\s*/gi, '');
+    mainDesc = mainDesc.replace(/\b(machine[\s-]wash(?:[\s-]cold|[\s-]warm|[\s-]hot)?|hand[\s-]wash(?:[\s-]only)?|dry[\s-]clean(?:[\s-]only)?|wash[\s-]cold|wash[\s-]warm|wash[\s-]hot|tumble[\s-]dry(?:[\s-]low|[\s-]high|[\s-]no[\s-]heat)?|hang[\s-]dry|air[\s-]dry(?:[\s-]only)?|do[\s-]not[\s-]bleach|do[\s-]not[\s-]tumble[\s-]dry|iron(?:[\s-]low|[\s-]medium|[\s-]high)?|dry[\s-]flat|lay[\s-]flat[\s-]to[\s-]dry|line[\s-]dry)[^.]*[.]?\s*/gi, '');
 
     // Clean up any double spaces or leading/trailing commas left behind
     mainDesc = mainDesc.replace(/\s{2,}/g, ' ').replace(/^[,.\s]+|[,.\s]+$/g, '').trim();
