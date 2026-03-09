@@ -1438,6 +1438,242 @@ export const BRAND_DNA_EXPANSION_4: Record<string, PatternContext> = {
     pricePoint: 'budget',
   },
 
+  // ── E–M additions ──────────────────────────────────────────────────────────
+
+  'erin-london': {
+    keywords: ['erin london', 'erin london brand', 'erin london womens'],
+    vibes: ['womens boutique', 'contemporary casual', 'affordable fashion'],
+    categories: ['dresses', 'tops', 'womens'],
+    eras: ['2000s', '2010s'],
+    subculture: ['mainstream', 'womens fashion'],
+    pricePoint: 'budget',
+  },
+
+  'exclusive-leather': {
+    keywords: ['exclusive leather', 'exclusive leather brand', 'exclusive leather jacket'],
+    vibes: ['leather outerwear', 'budget leather', 'classic leather jacket'],
+    categories: ['jackets', 'leather goods'],
+    eras: ['1990s', '2000s'],
+    subculture: ['mainstream', 'biker adjacent'],
+    pricePoint: 'mid',
+  },
+
+  'fmc': {
+    keywords: ['fmc', 'fmc brand', 'fmc clothing'],
+    vibes: ['private label', 'budget basics', 'department store'],
+    categories: ['tees', 'shirts', 'casual'],
+    eras: ['1990s', '2000s'],
+    subculture: ['mainstream'],
+    pricePoint: 'budget',
+  },
+
+  'fsbn': {
+    keywords: ['fsbn', 'fsbn brand', 'fsbn clothing', 'fsbn jeans'],
+    vibes: ['budget denim', 'private label', 'casual brand'],
+    categories: ['jeans', 'pants', 'tees'],
+    eras: ['1990s', '2000s'],
+    subculture: ['mainstream'],
+    pricePoint: 'budget',
+  },
+
+  'famous-brand': {
+    keywords: ['famous', 'famous brand', 'famous clothing', 'famous footwear brand'],
+    vibes: ['budget casual', 'department store', 'accessible fashion'],
+    categories: ['tees', 'casual', 'shirts'],
+    eras: ['2000s', '2010s'],
+    subculture: ['mainstream'],
+    pricePoint: 'budget',
+  },
+
+  'foot-locker': {
+    keywords: ['foot locker', 'footlocker', 'foot locker brand', 'footlocker exclusive'],
+    vibes: ['athletic retail', 'sneaker culture', 'sporty casual'],
+    categories: ['sneakers', 'athletic', 'sportswear'],
+    eras: ['1990s', '2000s', '2010s'],
+    subculture: ['sneakerhead', 'athletic', 'urban'],
+    pricePoint: 'mid',
+  },
+
+  'ford-motorsport': {
+    keywords: ['ford motorsport', 'ford motor', 'ford racing', 'ford brand apparel', 'ford mustang merch'],
+    vibes: ['motorsport merch', 'automotive brand', 'racing heritage'],
+    categories: ['tees', 'jackets', 'caps'],
+    eras: ['1980s', '1990s', '2000s'],
+    subculture: ['motorsport', 'americana', 'racing'],
+    pricePoint: 'mid',
+  },
+
+  'forest-brand': {
+    keywords: ['forest', 'forest brand', 'forest clothing'],
+    vibes: ['outdoor casual', 'budget brand', 'nature inspired'],
+    categories: ['tees', 'shirts', 'casual'],
+    eras: ['1990s', '2000s'],
+    subculture: ['mainstream', 'outdoor adjacent'],
+    pricePoint: 'budget',
+  },
+
+  'freemans': {
+    keywords: ['freemans', 'freemans brand', 'freemans sporting club'],
+    vibes: ['americana workwear', 'rugged menswear', 'heritage craft'],
+    categories: ['shirts', 'pants', 'outerwear', 'mens'],
+    eras: ['2000s', '2010s'],
+    subculture: ['americana', 'workwear', 'heritage menswear'],
+    pricePoint: 'premium',
+  },
+
+  'gelco': {
+    keywords: ['gelco', 'gelco brand', 'gelco clothing'],
+    vibes: ['private label', 'budget womens', 'department store'],
+    categories: ['dresses', 'tops', 'womens'],
+    eras: ['1980s', '1990s'],
+    subculture: ['mainstream', 'womens fashion'],
+    pricePoint: 'budget',
+  },
+
+  'genuine-leather': {
+    keywords: ['genuine leather', 'genuine leather brand', 'genuine leather jacket'],
+    vibes: ['leather outerwear', 'budget leather', 'classic jacket'],
+    categories: ['jackets', 'leather goods'],
+    eras: ['1990s', '2000s'],
+    subculture: ['mainstream', 'biker adjacent'],
+    pricePoint: 'mid',
+  },
+
+  'giorgio-fellini': {
+    keywords: ['giorgio fellini', 'giorgio fellini brand', 'fellini brand'],
+    vibes: ['italian inspired', 'budget menswear', 'classic styling'],
+    categories: ['shirts', 'pants', 'suits', 'mens'],
+    eras: ['1990s', '2000s'],
+    subculture: ['mainstream', 'classic menswear'],
+    pricePoint: 'budget',
+  },
+
+  'giant-brand': {
+    keywords: ['giant', 'giant brand', 'giant clothing', 'giant tee'],
+    vibes: ['budget basics', 'private label', 'casual brand'],
+    categories: ['tees', 'shirts', 'casual'],
+    eras: ['1990s', '2000s'],
+    subculture: ['mainstream'],
+    pricePoint: 'budget',
+  },
+
+  'glossier': {
+    keywords: ['glossier', 'glossier brand', 'glossier merch', 'glossier hoodie'],
+    vibes: ['beauty brand merch', 'minimalist aesthetic', 'millennial pink'],
+    categories: ['tees', 'hoodies', 'accessories'],
+    eras: ['2010s', '2020s'],
+    subculture: ['beauty culture', 'minimalist', 'influencer'],
+    pricePoint: 'mid',
+  },
+
+  'hawaiian-reserve': {
+    keywords: ['hawaiian reserve', 'hawaiian reserve shirt', 'hawaiian reserve brand'],
+    vibes: ['hawaiian shirt', 'tropical casual', 'resort wear'],
+    categories: ['shirts', 'hawaiian', 'casual'],
+    eras: ['1990s', '2000s'],
+    subculture: ['beach', 'tropical', 'resort'],
+    pricePoint: 'budget',
+  },
+
+  'icon-brand': {
+    keywords: ['icon', 'icon brand', 'icon clothing', 'icon motorsport'],
+    vibes: ['motorsport apparel', 'urban casual', 'action sports'],
+    categories: ['jackets', 'tees', 'casual'],
+    eras: ['2000s', '2010s'],
+    subculture: ['motorsport', 'urban', 'action sports'],
+    pricePoint: 'mid',
+  },
+
+  'jm-collection': {
+    keywords: ['jm collection', 'jm collection brand', 'jm collection womens'],
+    vibes: ['macys private label', 'womens career', 'affordable fashion'],
+    categories: ['tops', 'pants', 'suits', 'womens'],
+    eras: ['2000s', '2010s'],
+    subculture: ['mainstream', 'womens fashion', 'professional'],
+    pricePoint: 'mid',
+  },
+
+  'jaded-london': {
+    keywords: ['jaded london', 'jaded london brand', 'jaded rave', 'jaded club wear'],
+    vibes: ['club wear', 'rave fashion', 'british y2k', 'festival fashion'],
+    categories: ['dresses', 'tops', 'bottoms', 'womens'],
+    eras: ['2010s', '2020s'],
+    subculture: ['rave', 'club wear', 'festival', 'y2k'],
+    pricePoint: 'mid',
+  },
+
+  'jessica-howard': {
+    keywords: ['jessica howard', 'jessica howard dress', 'jessica howard brand'],
+    vibes: ['womens occasion wear', 'department store', 'formal dresses'],
+    categories: ['dresses', 'formal', 'womens'],
+    eras: ['1990s', '2000s', '2010s'],
+    subculture: ['mainstream', 'womens fashion'],
+    pricePoint: 'mid',
+  },
+
+  'just-elegance': {
+    keywords: ['just elegance', 'just elegance brand', 'just elegance womens'],
+    vibes: ['womens formal', 'occasion wear', 'private label'],
+    categories: ['dresses', 'formal', 'womens'],
+    eras: ['1990s', '2000s'],
+    subculture: ['mainstream', 'womens fashion'],
+    pricePoint: 'mid',
+  },
+
+  'lauren-jeans-co': {
+    keywords: ['lauren jeans co', 'lauren jeans co ralph lauren', 'lauren jeans company', 'lauren ralph lauren jeans'],
+    vibes: ['ralph lauren diffusion', 'preppy denim', 'classic american'],
+    categories: ['jeans', 'denim', 'casual'],
+    eras: ['1990s', '2000s'],
+    subculture: ['preppy', 'classic american', 'mainstream'],
+    pricePoint: 'mid',
+  },
+
+  'lindbergh': {
+    keywords: ['lindbergh', 'lindbergh brand', 'lindbergh menswear', 'lindbergh clothing'],
+    vibes: ['scandinavian menswear', 'smart casual', 'contemporary'],
+    categories: ['shirts', 'pants', 'jackets', 'mens'],
+    eras: ['2000s', '2010s'],
+    subculture: ['scandinavian', 'smart casual', 'contemporary menswear'],
+    pricePoint: 'mid',
+  },
+
+  'logo-7': {
+    keywords: ['logo 7', 'logo7', 'logo 7 brand', 'logo 7 sports'],
+    vibes: ['90s sports graphics', 'vintage sports tee', 'team apparel'],
+    categories: ['tees', 'jerseys', 'sports'],
+    eras: ['1990s'],
+    subculture: ['sports fan', 'vintage sports', 'americana'],
+    pricePoint: 'budget',
+  },
+
+  'lot-29': {
+    keywords: ['lot 29', 'lot29', 'lot 29 brand', 'lot 29 clothing'],
+    vibes: ['budget casual', 'private label', 'basics'],
+    categories: ['tees', 'shirts', 'casual'],
+    eras: ['1990s', '2000s'],
+    subculture: ['mainstream'],
+    pricePoint: 'budget',
+  },
+
+  'met-brand': {
+    keywords: ['met brand', 'met clothing', 'met jeans', 'met italian jeans'],
+    vibes: ['italian denim', 'european casual', 'mid-range fashion'],
+    categories: ['jeans', 'pants', 'casual'],
+    eras: ['1990s', '2000s'],
+    subculture: ['european fashion', 'mainstream'],
+    pricePoint: 'mid',
+  },
+
+  'msgm': {
+    keywords: ['msgm', 'msgm brand', 'msgm clothing', 'massimo giorgetti'],
+    vibes: ['italian contemporary', 'colorful fashion', 'playful luxury'],
+    categories: ['dresses', 'tops', 'pants'],
+    eras: ['2010s', '2020s'],
+    subculture: ['contemporary fashion', 'italian style'],
+    pricePoint: 'premium',
+  },
+
 };
 
 export default BRAND_DNA_EXPANSION_4;
