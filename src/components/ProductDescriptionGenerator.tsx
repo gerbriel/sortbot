@@ -55,6 +55,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [availablePresets, setAvailablePresets] = useState<CategoryPreset[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<string>('');
+
+  // Photo reorder drag state (Step 4 thumbnails)
+  const [draggedThumbId, setDraggedThumbId] = useState<string | null>(null);
+  const [dragOverThumbId, setDragOverThumbId] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
   const isRecordingRef = useRef(false);
   const isStartingRef = useRef(false);
@@ -852,6 +856,53 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   };
   */
 
+  // ── Thumbnail photo reorder handlers ──────────────────────────────────────
+  const handleThumbDragStart = (e: React.DragEvent, photoId: string) => {
+    setDraggedThumbId(photoId);
+    e.dataTransfer.setData('application/json', JSON.stringify({ action: 'reorder-thumb', photoId }));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleThumbDragOver = (e: React.DragEvent, photoId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (draggedThumbId !== photoId) setDragOverThumbId(photoId);
+  };
+
+  const handleThumbDrop = (e: React.DragEvent, targetPhotoId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    let srcPhotoId: string | null = null;
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('application/json'));
+      if (data.action === 'reorder-thumb') srcPhotoId = data.photoId;
+    } catch { /* ignore */ }
+    srcPhotoId = srcPhotoId || draggedThumbId;
+
+    if (!srcPhotoId || srcPhotoId === targetPhotoId) {
+      setDraggedThumbId(null); setDragOverThumbId(null); return;
+    }
+
+    const groupId = currentGroup[0]?.productGroup || currentGroup[0]?.id;
+    const groupItems = [...currentGroup];
+    const fromIdx = groupItems.findIndex(p => p.id === srcPhotoId);
+    const toIdx = groupItems.findIndex(p => p.id === targetPhotoId);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const moved = groupItems.splice(fromIdx, 1)[0];
+    groupItems.splice(toIdx, 0, moved);
+
+    const otherItems = processedItems.filter(i => (i.productGroup || i.id) !== groupId);
+    setProcessedItems([...otherItems, ...groupItems]);
+    setDraggedThumbId(null); setDragOverThumbId(null);
+  };
+
+  const handleThumbDragEnd = () => {
+    setDraggedThumbId(null);
+    setDragOverThumbId(null);
+  };
+
   const handleNext = () => {
     if (currentGroupIndex < groupArray.length - 1) {
       setCurrentGroupIndex(currentGroupIndex + 1);
@@ -911,7 +962,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     key={groupItem.id} 
                     src={groupItem.preview} 
                     alt={`Image ${idx + 1}`}
-                    className="group-thumbnail"
+                    className={`group-thumbnail thumb-draggable${draggedThumbId === groupItem.id ? ' thumb-dragging' : ''}${dragOverThumbId === groupItem.id ? ' thumb-drag-over' : ''}`}
+                    draggable
+                    onDragStart={(e) => handleThumbDragStart(e, groupItem.id)}
+                    onDragOver={(e) => handleThumbDragOver(e, groupItem.id)}
+                    onDrop={(e) => handleThumbDrop(e, groupItem.id)}
+                    onDragEnd={handleThumbDragEnd}
+                    onDragLeave={() => setDragOverThumbId(null)}
                   />
                 ))}
               </div>

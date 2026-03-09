@@ -385,9 +385,14 @@
   aspect-ratio: 1;
   cursor: grab;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
   border: 3px solid transparent;
-  transition: all 0.2s ease;
+  transition: transform 0.12s ease, opacity 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.group-image-item img {
+  border-radius: 6px;
+  overflow: hidden;
 }
 
 .group-image-item:active {
@@ -397,6 +402,21 @@
 .group-image-item:hover {
   border-color: #667eea;
   transform: scale(1.05);
+}
+
+/* ── Photo drag-to-reorder (Step 2) ─────────────────────────────── */
+.group-image-item.photo-dragging {
+  opacity: 0.3;
+  transform: scale(0.88);
+  border-color: #667eea !important;
+  box-shadow: none !important;
+}
+
+.group-image-item.photo-drag-over {
+  border: 3px dashed #10b981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.45);
+  transform: scale(1.1);
+  background: rgba(16, 185, 129, 0.08);
 }
 
 /* Delete Button on Images */
