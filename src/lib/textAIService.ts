@@ -676,19 +676,45 @@ function buildIntroFromFields(context: ProductContext): string {
 }
 
 /**
- * Generate title ONLY from filled fields
+ * Generate title ONLY from filled fields.
+ * SEO priority order: brand → era → color → material → style → category → size
+ * Target: ≤60 characters. Words are never split mid-word — if a whole word fits
+ * (even slightly over 60 chars) it is kept; if it would push the title well over
+ * the limit the whole token is dropped.
  */
 function generateTitleFromFields(context: ProductContext): string {
-  const parts: string[] = [];
-  
-  // ONLY use what's explicitly filled
-  if (context.brand) parts.push(context.brand);
-  if (context.era) parts.push(context.era);
-  if (context.color) parts.push(context.color);
-  if (context.category) parts.push(context.category);
-  if (context.size) parts.push(`Size ${context.size}`);
+  // Build tokens in SEO-priority order (highest value first)
+  const candidates: string[] = [];
+  if (context.brand)    candidates.push(context.brand);
+  if (context.era)      candidates.push(context.era);
+  if (context.color)    candidates.push(context.color);
+  if (context.material) candidates.push(context.material);
+  if (context.style)    candidates.push(context.style);
+  if (context.category) candidates.push(context.category);
+  if (context.size)     candidates.push(`Size ${context.size}`);
 
-  return parts.length > 0 ? parts.join(' ') : 'Vintage Item';
+  if (candidates.length === 0) return 'Vintage Item';
+
+  const LIMIT = 60;
+  // Grace: allow a word to finish even if it pushes past 60, as long as the
+  // overshoot is small (≤ one average word, ~12 chars). This prevents cutting
+  // a word like "Embroidered" just because it lands at character 63.
+  const GRACE = 12;
+
+  const kept: string[] = [];
+  let length = 0;
+
+  for (const token of candidates) {
+    const needed = length === 0 ? token.length : length + 1 + token.length;
+    if (needed <= LIMIT + GRACE) {
+      kept.push(token);
+      length = needed;
+    }
+    // If this token alone would blow past LIMIT + GRACE, skip it entirely
+  }
+
+  const title = kept.join(' ');
+  return title.length > 0 ? title : 'Vintage Item';
 }
 
 /**
