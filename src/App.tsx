@@ -131,6 +131,7 @@ function App() {
   const [showCategoryPresets, setShowCategoryPresets] = useState(false);
   const [showCategoriesManager, setShowCategoriesManager] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showExportDetails, setShowExportDetails] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showStep2Info, setShowStep2Info] = useState(false);
   const [currentBatchId, setCurrentBatchId] = useState<string | null>(null);
@@ -723,7 +724,7 @@ function App() {
           </section>
         )}
 
-        {/* Step 3: Add Descriptions */}
+        {/* Step 3: Add Descriptions + Export */}
         {(sortedImages.length > 0 || groupedImages.length > 0) && (
           <section className="step-section">
             <h2>Step 3: Add Voice Descriptions &amp; Generate Product Info</h2>
@@ -731,36 +732,41 @@ function App() {
               items={processedItems.length > 0 ? processedItems : groupedImages}
               onProcessed={handleItemsProcessed}
             />
-          </section>
-        )}
 
-        {/* Step 4: Save & Export */}
-        {processedItems.length > 0 && (
-          <section className="step-section">
-            <h2>Step 4: Save &amp; Export</h2>
-            
-            <div className="batch-actions">
-              <button 
-                onClick={handleSaveBatch} 
-                className="button button-primary"
-                disabled={saving}
-              >
-                {saving ? '💾 Saving...' : '💾 Save Batch to Database'}
-              </button>
-              
-              <button 
-                onClick={handleClearBatch} 
-                className="button button-secondary"
-                disabled={saving}
-              >
-                🗑️ Clear Batch
-              </button>
-            </div>
+            {processedItems.length > 0 && (
+              <div className="export-bar">
+                <button
+                  onClick={handleSaveBatch}
+                  className="button button-primary"
+                  disabled={saving}
+                >
+                  {saving ? '💾 Saving...' : '💾 Save Batch to Database'}
+                </button>
 
-            <div className="export-section">
-              <h3>Export Options</h3>
-              <GoogleSheetExporter items={processedItems} />
-            </div>
+                <button
+                  className="export-drawer-toggle"
+                  onClick={() => setShowExportDetails(v => !v)}
+                  aria-expanded={showExportDetails}
+                >
+                  {showExportDetails ? '▲ Hide export options' : '▼ Export options'}
+                </button>
+
+                {showExportDetails && (
+                  <div className="export-drawer">
+                    <div className="export-drawer-actions">
+                      <button
+                        onClick={handleClearBatch}
+                        className="button button-secondary"
+                        disabled={saving}
+                      >
+                        🗑️ Clear Batch
+                      </button>
+                    </div>
+                    <GoogleSheetExporter items={processedItems} />
+                  </div>
+                )}
+              </div>
+            )}
           </section>
         )}
       </main>
