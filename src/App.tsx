@@ -636,11 +636,11 @@ function App() {
           )}
         </section>
 
-        {/* Step 2: Group Images */}
+        {/* Step 2: Group & Categorize */}
         {uploadedImages.length > 0 && (
           <section className="step-section">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <h2>Step 2: Group Product Images</h2>
+              <h2>Step 2: Group &amp; Categorize</h2>
               <button 
                 onClick={() => setShowStep2Info(!showStep2Info)}
                 style={{
@@ -679,6 +679,7 @@ function App() {
                   <li>🔗 <strong>Click "Group Selected"</strong> - works with 1+ images</li>
                   <li>✂️ <strong>Click "Ungroup Selected"</strong> - removes selected images from groups</li>
                   <li>🖱️ <strong>Drag photos</strong> between groups or to make them individual</li>
+                  <li>🏷️ <strong>Drag a group card</strong> onto a category on the right to categorize it</li>
                   <li>🗑️ <strong>Click × button</strong> to delete unwanted images</li>
                 </ul>
               </div>
@@ -686,43 +687,41 @@ function App() {
             <p className="step-description">
               Click to select images, group them, and organize your products. All images are auto-uploaded to your database.
             </p>
-            <ImageGrouper 
-              items={groupedImages.length > 0 ? groupedImages : uploadedImages} 
-              onGrouped={handleImagesGrouped}
-              userId={user.id}
-            />
+            {/* Split-pane: ImageGrouper left, CategoryZones right */}
+            <div className="step2-split">
+              <div className="step2-grouper">
+                <ImageGrouper 
+                  items={groupedImages.length > 0 ? groupedImages : uploadedImages} 
+                  onGrouped={handleImagesGrouped}
+                  userId={user.id}
+                />
+              </div>
+              <div className="step2-categories">
+                <CategoryZones
+                  items={groupedImages}
+                  onCategorized={handleImagesSorted}
+                  compactMode
+                />
+              </div>
+            </div>
           </section>
         )}
 
-        {/* Step 3: Drag & Drop Categorization */}
-        {groupedImages.length > 0 && (
+        {/* Step 3: Add Descriptions */}
+        {(sortedImages.length > 0 || groupedImages.length > 0) && (
           <section className="step-section">
-            <h2>Step 3: Drag Groups to Categories</h2>
-            <p className="step-description">
-              Drag your product groups onto category buttons to categorize them.
-            </p>
-            <CategoryZones 
-              items={groupedImages} 
-              onCategorized={handleImagesSorted}
-            />
-          </section>
-        )}
-
-        {/* Step 4: Add Descriptions */}
-        {sortedImages.length > 0 && (
-          <section className="step-section">
-            <h2>Step 4: Add Voice Descriptions & Generate Product Info</h2>
+            <h2>Step 3: Add Voice Descriptions &amp; Generate Product Info</h2>
             <ProductDescriptionGenerator
-              items={processedItems}
+              items={processedItems.length > 0 ? processedItems : groupedImages}
               onProcessed={handleItemsProcessed}
             />
           </section>
         )}
 
-        {/* Step 5: Save & Export */}
+        {/* Step 4: Save & Export */}
         {processedItems.length > 0 && (
           <section className="step-section">
-            <h2>Step 5: Save & Export</h2>
+            <h2>Step 4: Save &amp; Export</h2>
             
             <div className="batch-actions">
               <button 

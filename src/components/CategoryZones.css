@@ -2,6 +2,65 @@
   width: 100%;
 }
 
+/* ── Compact mode (sidebar) ─────────────────────────────────────────────── */
+.compact-mode {
+  width: 100%;
+}
+
+.category-zones-compact {
+  background: linear-gradient(135deg, #e0e7ff 0%, #f0f4ff 100%);
+  padding: 1rem;
+  border-radius: 12px;
+  margin-bottom: 0;
+  position: sticky;
+  top: 1rem;
+}
+
+.category-zones-compact h3 {
+  text-align: center;
+  color: #333;
+  margin-bottom: 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.category-zone-compact {
+  min-height: unset;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  border-width: 2px;
+}
+
+.category-zone-compact .category-icon {
+  font-size: 1.1rem;
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.category-zone-compact .category-name {
+  font-size: 0.85rem;
+  flex: 1;
+}
+
+.category-zone-compact .category-count {
+  font-size: 0.8rem;
+  color: #888;
+  flex-shrink: 0;
+}
+
+.category-zone-compact.drag-over {
+  transform: scale(1.02);
+}
+
 .category-zones {
   background: linear-gradient(135deg, #e0e7ff 0%, #f0f4ff 100%);
   padding: 2rem;
