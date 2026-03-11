@@ -173,7 +173,13 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
   // ── TAGS (explicit) ───────────────────────────────────────────────────────
   const tagsRaw = extractCommand(/\btags?\s+(.+?)\s+period\b/i);
   if (tagsRaw) {
-    extracted.tags = tagsRaw.split(/[\s,]+/).filter(Boolean).map((t: string) => t.toLowerCase());
+    // Split on spaces/commas, then also split any run-together words caused by
+    // the Web Speech API merging words from a mid-sentence pause (e.g. "vintageHip Hop"
+    // → the uppercase letter marks where the pause joined two tokens without a space).
+    // Strategy: insert a space before any uppercase letter that follows a lowercase letter,
+    // then split normally on spaces and commas.
+    const separated = tagsRaw.replace(/([a-z])([A-Z])/g, '$1 $2');
+    extracted.tags = separated.split(/[\s,]+/).filter(Boolean).map((t: string) => t.toLowerCase());
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -588,15 +594,27 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
   if (context.voiceDescription && context.voiceDescription.length > 5) {
     let mainDesc = context.voiceDescription.trim();
 
-    // Strip "field <value> period" voice commands from the display description
+    // Strip "field <value> period/." voice commands from the display description
     // These are handled separately via extractFieldsFromVoice; don't show them in the text
+    // Matches both:
+    //   "brand rock period" (not yet normalised)  →  \s+period\b
+    //   "brand rock."       (already normalised)  →  \.
+    //   "brand rock"        (no terminator, end of string)
     const fieldPrefixes = [
-      'brand', 'model', 'size', 'color', 'colour', 'secondary color', 'secondary colour',
+      'brand', 'model', 'size', 'colou?r', 'secondary colou?r',
       'material', 'fabric', 'condition', 'era', 'style', 'gender', 'price',
       'flaws?', 'damage', 'care', 'tags?',
       'width', 'length', 'waist', 'shoulder', 'sleeve', 'inseam'
     ].join('|');
-    mainDesc = mainDesc.replace(new RegExp(`\\b(?:${fieldPrefixes})\\s+.+?\\s+period\\b`, 'gi'), '');
+    // Strip "fieldname value." or "fieldname value period" or "fieldname value<end>"
+    mainDesc = mainDesc.replace(
+      new RegExp(`\\b(${fieldPrefixes})\\s+.+?(?:\\.(?=\\s|$)|\\s+period\\b|$)`, 'gi'), ''
+    );
+    // Also strip run-together variants where no space after field name due to pause-merge
+    // e.g. "sizeone size fits all." → strip from "size" onwards to next "." or end of string
+    mainDesc = mainDesc.replace(
+      new RegExp(`\\b(${fieldPrefixes})(?=\\S)[^.]*(?:\\.|$)`, 'g'), ''
+    );
 
     // Strip condition phrases from description
     mainDesc = mainDesc.replace(/\b(nwt|new with tags|like[\s-]new|mint|pristine|excellent[\s-]condition|great[\s-]condition|good[\s-]condition|gently[\s-]used|fair[\s-]condition|worn[\s-]condition|brand[\s-]new|in[\s-]good[\s-]condition|in[\s-]great[\s-]condition|in[\s-]excellent[\s-]condition|very[\s-]good[\s-]condition|pre[\s-]owned)\b[,.]?\s*/gi, '');

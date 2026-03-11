@@ -222,9 +222,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           currentGroup.forEach(groupItem => {
             const itemIndex = updated.findIndex(item => item.id === groupItem.id);
             if (itemIndex !== -1) {
+              // Ensure a space between existing description and new chunk
+              // (the Web Speech API emits separate final results when you pause,
+              //  so we must add the separator ourselves)
+              const separator = currentDescription && !currentDescription.endsWith(' ') ? ' ' : '';
               updated[itemIndex] = {
                 ...updated[itemIndex],
-                voiceDescription: (currentDescription + final).trim()
+                voiceDescription: (currentDescription + separator + final).trim()
               };
             }
           });
