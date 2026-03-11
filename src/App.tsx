@@ -345,13 +345,13 @@ function App() {
     
     setGroupedImages(itemsWithCategories);
     
-    // If we already have sorted images, update them with new grouping info
+    // If we already have sorted images, update them with new grouping info.
+    // We only push items that were already in sortedImages (had been categorized
+    // via CategoryZones), and we trust itemsWithCategories for the category value
+    // because it already did the correct preservation logic above.
     if (sortedImages.length > 0) {
-      // Merge new grouping info into sorted images
-      const updatedSorted = itemsWithCategories.map(item => {
-        const existingSorted = sortedImages.find(s => s.id === item.id);
-        return existingSorted ? { ...item, category: existingSorted.category } : item;
-      });
+      const sortedIds = new Set(sortedImages.map(s => s.id));
+      const updatedSorted = itemsWithCategories.filter(item => sortedIds.has(item.id));
       setSortedImages(updatedSorted);
     }
     
