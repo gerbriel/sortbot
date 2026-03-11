@@ -157,6 +157,12 @@ export const saveProductToDatabase = async (
       .single();
 
     if (productError) {
+      console.error('❌ Product INSERT failed:', {
+        message: productError.message,
+        details: productError.details,
+        hint: productError.hint,
+        code: productError.code,
+      });
       return null;
     }
 
