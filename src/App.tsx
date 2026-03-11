@@ -7,7 +7,7 @@ import ImageUpload from './components/ImageUpload';
 import ImageGrouper from './components/ImageGrouper';
 import CategoryZones from './components/CategoryZones';
 import ProductDescriptionGenerator from './components/ProductDescriptionGenerator';
-import GoogleSheetExporter from './components/GoogleSheetExporter';
+import GoogleSheetExporter, { downloadShopifyCSV } from './components/GoogleSheetExporter';
 import { Library } from './components/Library';
 import CategoryPresetsManager from './components/CategoryPresetsManager';
 import CategoriesManager from './components/CategoriesManager';
@@ -786,6 +786,13 @@ function App() {
                   disabled={saving}
                 >
                   {saving ? '💾 Saving...' : '💾 Save Batch to Database'}
+                </button>
+
+                <button
+                  className="button button-secondary"
+                  onClick={() => downloadShopifyCSV(processedItems)}
+                >
+                  📥 Download CSV
                 </button>
 
                 <button
