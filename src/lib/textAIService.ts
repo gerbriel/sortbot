@@ -509,7 +509,8 @@ function toTitleCase(str: string): string {
 function normalizeSizeValue(raw: string): string {
   const trimmed = raw.trim();
   // One-size phrases → "1 SIZE" (check before splitting on spaces)
-  if (/^(osfa|o\.s\.f\.a|one[\s-]size[\s-]fits?[\s-]all|one[\s-]size[\s-]fits?[\s-]most|one[\s-]size|os)$/i.test(trimmed)) {
+  // Also catches partial phrases like "one size fits" (missing "all") and "one size fit"
+  if (/^(osfa|o\.s\.f\.a|one[\s-]size[\s-]fits?[\s-](all|most)|one[\s-]size[\s-]fits?|one[\s-]size|os)$/i.test(trimmed)) {
     return '1 SIZE';
   }
   // Take only the first token if there's a slash or slash+word (e.g., "XL/XLARGE" → "XL")

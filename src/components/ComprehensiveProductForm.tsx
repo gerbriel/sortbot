@@ -198,11 +198,23 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
               <label>Size:</label>
               <input
                 type="text"
+                list="size-options"
                 value={currentItem.size || ''}
                 onChange={(e) => updateGroupField('size', e.target.value)}
                 placeholder="e.g., M, L, XL, 32, 10, 1 SIZE"
                 className="info-input"
               />
+              <datalist id="size-options">
+                <option value="XS" />
+                <option value="S" />
+                <option value="M" />
+                <option value="L" />
+                <option value="XL" />
+                <option value="XXL" />
+                <option value="3XL" />
+                <option value="4XL" />
+                <option value="1 SIZE" />
+              </datalist>
             </div>
 
             <div className="info-item">
