@@ -176,15 +176,21 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
 
   // ── SIZE fallback ─────────────────────────────────────────────────────────
   // Handles: "XL", "men's XL", "size XL", "32x30", "size 32/34", "size 10.5" (shoes)
+  // Also catches OSFA / OS / "one size" / "one size fits all" → "1 SIZE"
   if (!extracted.size) {
-    const sizeFallback = voiceDesc.match(
-      /\b(?:size\s+|measurement\s+)?(4xl|3xl|2xl|xxl|xl|extra[\s-]large|large|medium|small|xs|x[\s-]small)\b|(?:size\s+|men'?s?\s+|women'?s?\s+)?(\d{1,2}(?:[xX]\d{1,2})?(?:\.\d)?)\b/i
-    );
-    if (sizeFallback) {
-      const raw = (sizeFallback[1] || sizeFallback[2] || '').trim();
-      // Don't grab years (1990), prices ($45), or lone single digits as sizes
-      if (raw && !/^(19|20)\d{2}$/.test(raw) && !/^\$/.test(raw)) {
-        extracted.size = normalizeSizeValue(raw);
+    // Check for one-size phrases first (before the numeric fallback grabs stray digits)
+    if (/\b(osfa|o\.s\.f\.a|one\s+size\s+fits?\s+all|one\s+size\s+fits?\s+most|one\s+size|os\b)/i.test(voiceDesc)) {
+      extracted.size = '1 SIZE';
+    } else {
+      const sizeFallback = voiceDesc.match(
+        /\b(?:size\s+|measurement\s+)?(4xl|3xl|2xl|xxl|xl|extra[\s-]large|large|medium|small|xs|x[\s-]small)\b|(?:size\s+|men'?s?\s+|women'?s?\s+)?(\d{1,2}(?:[xX]\d{1,2})?(?:\.\d)?)\b/i
+      );
+      if (sizeFallback) {
+        const raw = (sizeFallback[1] || sizeFallback[2] || '').trim();
+        // Don't grab years (1990), prices ($45), or lone single digits as sizes
+        if (raw && !/^(19|20)\d{2}$/.test(raw) && !/^\$/.test(raw)) {
+          extracted.size = normalizeSizeValue(raw);
+        }
       }
     }
   }
@@ -494,8 +500,13 @@ function toTitleCase(str: string): string {
 }
 
 function normalizeSizeValue(raw: string): string {
+  const trimmed = raw.trim();
+  // One-size phrases → "1 SIZE" (check before splitting on spaces)
+  if (/^(osfa|o\.s\.f\.a|one[\s-]size[\s-]fits?[\s-]all|one[\s-]size[\s-]fits?[\s-]most|one[\s-]size|os)$/i.test(trimmed)) {
+    return '1 SIZE';
+  }
   // Take only the first token if there's a slash or slash+word (e.g., "XL/XLARGE" → "XL")
-  const first = raw.split(/[\/\s]+/)[0];
+  const first = trimmed.split(/[\/\s]+/)[0];
   const s = first.trim().toLowerCase().replace(/[\s-]+/g, '');
   const map: Record<string, string> = {
     extrasmall: 'XS', xsmall: 'XS', xs: 'XS',
@@ -506,6 +517,8 @@ function normalizeSizeValue(raw: string): string {
     xxlarge: 'XXL', '2xlarge': 'XXL', '2xl': 'XXL', xxl: 'XXL',
     xxxlarge: '3XL', '3xlarge': '3XL', '3xl': '3XL', xxxl: '3XL',
     '4xlarge': '4XL', '4xl': '4XL', xxxxl: '4XL',
+    // One-size abbreviations as standalone tokens
+    osfa: '1 SIZE', os: '1 SIZE', onesize: '1 SIZE',
   };
   // Return mapped value or original uppercased first token (preserves "32", "32x30", "32/34")
   return map[s] || first.toUpperCase();

@@ -200,7 +200,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
                 type="text"
                 value={currentItem.size || ''}
                 onChange={(e) => updateGroupField('size', e.target.value)}
-                placeholder="e.g., M, L, XL, 32, 10"
+                placeholder="e.g., M, L, XL, 32, 10, 1 SIZE"
                 className="info-input"
               />
             </div>
