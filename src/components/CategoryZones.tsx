@@ -79,9 +79,10 @@ const getCategoryIcon = (iconNameOrCategory: string, size: number = 24) => {
 interface CategoryZonesProps {
   items: ClothingItem[];
   onCategorized: (items: ClothingItem[]) => void;
+  compactMode?: boolean;
 }
 
-const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized }) => {
+const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, compactMode = false }) => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -342,24 +343,24 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized }) =
   };
 
   return (
-    <div className="category-zones-container">
+    <div className={`category-zones-container${compactMode ? ' compact-mode' : ''}`}>
       {/* Category Zones */}
-      <div className="category-zones">
-        <h3>🏷️ Drag Groups Here to Categorize</h3>
+      <div className={`category-zones${compactMode ? ' category-zones-compact' : ''}`}>
+        <h3>{compactMode ? '🏷️ Drag Groups to Categorize' : '🏷️ Drag Groups Here to Categorize'}</h3>
         {loading ? (
           <p>Loading categories...</p>
         ) : (
-          <div className="category-grid">
+          <div className={compactMode ? 'category-list' : 'category-grid'}>
             {categories.map(category => (
               <div
                 key={category.id}
-                className={`category-zone ${dragOverCategory === category.name ? 'drag-over' : ''}`}
+                className={`category-zone${compactMode ? ' category-zone-compact' : ''} ${dragOverCategory === category.name ? 'drag-over' : ''}`}
                 style={{ borderColor: category.color, '--category-color': category.color } as React.CSSProperties}
                 onDragOver={(e) => handleCategoryDragOver(e, category.name)}
                 onDrop={(e) => handleCategoryDrop(e, category.name)}
                 onDragLeave={handleCategoryDragLeave}
               >
-                <span className="category-icon">{getCategoryIcon(category.emoji || category.name, 32)}</span>
+                <span className="category-icon">{getCategoryIcon(category.emoji || category.name, compactMode ? 20 : 32)}</span>
                 <span className="category-name">{category.display_name}</span>
                 <span className="category-count">
                   ({items.filter(i => i.category === category.name).length})
@@ -370,8 +371,8 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized }) =
         )}
       </div>
 
-      {/* All Product Groups */}
-      {orderedGroups.length > 0 && (
+      {/* All Product Groups — hidden in compact mode (shown in ImageGrouper instead) */}
+      {!compactMode && orderedGroups.length > 0 && (
         <div className="groups-section">
           <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Package size={20} /> All Product Groups ({orderedGroups.length})

@@ -93,6 +93,32 @@
   gap: var(--space-6);
 }
 
+/* Step 2 split-pane: ImageGrouper (left) + CategoryZones sidebar (right) */
+.step2-split {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.step2-grouper {
+  min-width: 0; /* prevent grid blowout */
+}
+
+.step2-categories {
+  position: sticky;
+  top: 1rem;
+}
+
+@media (max-width: 1024px) {
+  .step2-split {
+    grid-template-columns: 1fr;
+  }
+  .step2-categories {
+    position: static;
+  }
+}
+
 /* Card/Section - Shopify Style */
 .step-section {
   background: white;
