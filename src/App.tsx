@@ -134,6 +134,7 @@ function App() {
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showStep2Info, setShowStep2Info] = useState(false);
   const [currentBatchId, setCurrentBatchId] = useState<string | null>(null);
+  const [pendingGroupId, setPendingGroupId] = useState<string | null>(null); // click-to-assign category
   const [currentBatchNumber, setCurrentBatchNumber] = useState<string>(`batch-${Date.now()}`);
 
   // Helper to determine current workflow step
@@ -694,6 +695,8 @@ function App() {
                   items={groupedImages.length > 0 ? groupedImages : uploadedImages} 
                   onGrouped={handleImagesGrouped}
                   userId={user.id}
+                  pendingGroupId={pendingGroupId}
+                  onGroupSelected={setPendingGroupId}
                 />
               </div>
               <div className="step2-categories">
@@ -701,6 +704,19 @@ function App() {
                   items={groupedImages}
                   onCategorized={handleImagesSorted}
                   compactMode
+                  pendingGroupId={pendingGroupId}
+                  onCategoryClick={(category) => {
+                    if (pendingGroupId) {
+                      // Apply the category to all items in the pending group
+                      const updated = groupedImages.map(item =>
+                        (item.productGroup || item.id) === pendingGroupId
+                          ? { ...item, category }
+                          : item
+                      );
+                      handleImagesSorted(updated);
+                      setPendingGroupId(null);
+                    }
+                  }}
                 />
               </div>
             </div>

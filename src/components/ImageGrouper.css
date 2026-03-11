@@ -374,6 +374,13 @@
   transform: scale(1.02);
 }
 
+/* Selected for click-to-assign — glows purple to match category sidebar */
+.product-group-card.pending-categorize {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.4);
+  background: #f0f4ff;
+}
+
 .single-item-card.drag-over {
   border-color: #10b981;
   box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
