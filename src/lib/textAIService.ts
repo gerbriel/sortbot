@@ -625,11 +625,17 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
     // Clean up any double spaces or leading/trailing commas left behind
     mainDesc = mainDesc.replace(/\s{2,}/g, ' ').replace(/^[,.\s]+|[,.\s]+$/g, '').trim();
 
-    // Capitalize first letter only
-    mainDesc = mainDesc.charAt(0).toUpperCase() + mainDesc.slice(1);
-    description += mainDesc;
+    if (mainDesc.length > 0) {
+      // Capitalize first letter only
+      mainDesc = mainDesc.charAt(0).toUpperCase() + mainDesc.slice(1);
+      description += mainDesc;
+    } else {
+      // All voice input was field commands — fall through to field-based intro
+      const intro = buildIntroFromFields(context);
+      description += intro || 'Vintage clothing item';
+    }
   } else {
-    // Fallback: build ONLY from filled fields (no assumptions)
+    // No voice description — build ONLY from filled fields (no assumptions)
     const intro = buildIntroFromFields(context);
     if (intro) {
       description += intro;
@@ -700,16 +706,20 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
  * No assumptions, no AI guessing
  */
 function buildIntroFromFields(context: ProductContext): string {
-  const { brand, category, color, era, style } = context;
+  const { brand, category, color, era, style, material, gender, condition, size } = context;
   
   const parts: string[] = [];
   
   // ONLY add if explicitly provided in fields
   if (era) parts.push(era.toLowerCase());
   if (style) parts.push(style.toLowerCase());
+  if (gender && gender.toLowerCase() !== 'unisex') parts.push(gender.toLowerCase() + "'s");
   if (brand) parts.push(brand); // Keep brand case as entered
   if (color) parts.push(color.toLowerCase());
+  if (material) parts.push(material.toLowerCase());
   if (category) parts.push(category.toLowerCase());
+  if (size) parts.push(`size ${size}`);
+  if (condition) parts.push(`in ${condition.toLowerCase()} condition`);
   
   return parts.join(' ');
 }
