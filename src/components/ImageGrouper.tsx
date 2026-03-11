@@ -9,9 +9,11 @@ interface ImageGrouperProps {
   items: ClothingItem[];
   onGrouped: (items: ClothingItem[]) => void;
   userId?: string;
+  pendingGroupId?: string | null;
+  onGroupSelected?: (groupId: string | null) => void;
 }
 
-const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId }) => {
+const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId, pendingGroupId, onGroupSelected }) => {
   const [groupedItems, setGroupedItems] = useState<ClothingItem[]>([]);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [draggedItem, setDraggedItem] = useState<ClothingItem | null>(null);
@@ -408,10 +410,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
   const handleDragStart = (e: React.DragEvent, item: ClothingItem, fromGroup: string) => {
     setDraggedItem(item);
     setDraggedFromGroup(fromGroup);
-    // Set data for cross-component dragging (Step 2 -> Step 3)
+    // Set data for cross-component dragging (ImageGrouper -> CategoryZones sidebar)
     const dragData = {
       item,
       productGroup: item.productGroup || item.id,
+      action: 'categorize',
       source: 'ImageGrouper'
     };
     e.dataTransfer.setData('application/json', JSON.stringify(dragData));
@@ -789,10 +792,18 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
               <div
                 key={groupId}
                 data-group-id={groupId}
-                className={`product-group-card ${dragOverGroup === groupId ? 'drag-over' : ''} ${items[0].category ? 'has-category' : ''}`}
+                className={`product-group-card ${dragOverGroup === groupId ? 'drag-over' : ''} ${items[0].category ? 'has-category' : ''} ${pendingGroupId === groupId ? 'pending-categorize' : ''}`}
                 onDragOver={(e) => handleDragOver(e, groupId)}
                 onDrop={(e) => handleDrop(e, groupId)}
                 onDragLeave={handleDragLeave}
+                onClick={(e) => {
+                  // Clicking the card background (not a photo or button) selects it for click-to-assign
+                  const target = e.target as HTMLElement;
+                  if (!target.closest('.group-image-item') && !target.closest('.delete-image-btn') && !target.closest('.group-header')) {
+                    e.stopPropagation();
+                    onGroupSelected?.(pendingGroupId === groupId ? null : groupId);
+                  }
+                }}
               >
                 {items[0].category && (
                   <div className="category-indicator">
@@ -800,7 +811,28 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
                     <span className="category-label">{items[0].category}</span>
                   </div>
                 )}
-                <div className="group-header">
+                <div
+                  className="group-header"
+                  draggable
+                  onDragStart={(e) => {
+                    // Drag the whole group to a category zone in the sidebar
+                    e.stopPropagation();
+                    const dragData = {
+                      item: items[0],
+                      productGroup: groupId,
+                      action: 'categorize',
+                      source: 'ImageGrouper',
+                    };
+                    e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onGroupSelected?.(pendingGroupId === groupId ? null : groupId);
+                  }}
+                  title={pendingGroupId === groupId ? 'Click a category on the right to assign, or click again to deselect' : 'Click to select, then click a category on the right — or drag here to a category'}
+                  style={{ cursor: 'pointer' }}
+                >
                   <span className="group-badge">
                     {items.length} images
                   </span>
