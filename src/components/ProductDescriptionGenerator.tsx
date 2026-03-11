@@ -100,16 +100,37 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   }, [processedItems, onProcessed]);
 
   // Update local state when items prop changes (e.g., opening a different batch)
-  // Only reset if the array length changed (indicating a different batch was opened)
+  // Reset on length change (new batch), or merge in category/_presetData changes
   useEffect(() => {
-    const itemsChanged = items.length !== previousItemsLengthRef.current;
-    
-    if (itemsChanged) {
+    const lengthChanged = items.length !== previousItemsLengthRef.current;
+
+    if (lengthChanged) {
       setProcessedItems(items);
       setCurrentGroupIndex(0); // Reset to first group
       previousItemsLengthRef.current = items.length;
+      return;
     }
-  }, [items]);
+
+    // Even when length is the same, propagate category + _presetData from parent
+    // (happens when user drags a group to a category in Step 2)
+    const hasCategoryChange = items.some(incomingItem => {
+      const localItem = processedItems.find(p => p.id === incomingItem.id);
+      return incomingItem.category && incomingItem.category !== localItem?.category;
+    });
+
+    if (hasCategoryChange) {
+      setProcessedItems(prev => prev.map(prevItem => {
+        const incoming = items.find(i => i.id === prevItem.id);
+        if (!incoming) return prevItem;
+        // Merge category + _presetData, preserve all other local state (voice, form data)
+        return {
+          ...prevItem,
+          category: incoming.category ?? prevItem.category,
+          _presetData: incoming._presetData ?? prevItem._presetData,
+        };
+      }));
+    }
+  }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     // Check if browser supports Speech Recognition
@@ -1164,20 +1185,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '1rem' }}>
               Fields pre-filled from category preset. Voice dictation takes precedence. Edit any field as needed.
             </p>
-            {/* DEBUG: preset check — remove after confirming presets work */}
-            {(() => {
-              console.log('🖼️ Rendering form. currentItem preset check:', {
-                category: currentItem.category,
-                _presetData: currentItem._presetData?.displayName,
-                policies: currentItem.policies,
-                shipsFrom: currentItem.shipsFrom,
-                gender: currentItem.gender,
-                requiresShipping: currentItem.requiresShipping,
-                whoMadeIt: currentItem.whoMadeIt,
-              });
-              return null;
-            })()}
-            
             <ComprehensiveProductForm
               currentItem={currentItem}
               currentGroup={currentGroup}
