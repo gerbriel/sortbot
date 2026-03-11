@@ -5,30 +5,31 @@ interface GoogleSheetExporterProps {
   items: ClothingItem[];
 }
 
-const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
-
-  // Group items by productGroup - each group is ONE product
+/**
+ * Build the grouped product list from raw ClothingItems.
+ * Exported so App.tsx can trigger a CSV download without rendering the full component.
+ */
+export function buildProductsForCSV(items: ClothingItem[]) {
   const productGroups = items.reduce((groups, item) => {
-    const groupId = item.productGroup || item.id; // If no group, item becomes its own product
-    if (!groups[groupId]) {
-      groups[groupId] = [];
-    }
+    const groupId = item.productGroup || item.id;
+    if (!groups[groupId]) groups[groupId] = [];
     groups[groupId].push(item);
     return groups;
   }, {} as Record<string, ClothingItem[]>);
 
-  const products = Object.values(productGroups).map(group => {
-    // Use the first item in the group as the product data (all should have same data)
-    const productData = group[0];
-    return {
-      ...productData,
-      // Use Supabase URLs if available, otherwise fall back to preview (blob URLs)
-      imageUrls: group.map(item => item.imageUrls?.[0] || item.preview), // All images in the group
-      imageCount: group.length
-    };
-  });
+  return Object.values(productGroups).map(group => ({
+    ...group[0],
+    imageUrls: group.map(item => item.imageUrls?.[0] || item.preview),
+    imageCount: group.length,
+  }));
+}
 
-  const handleDownloadCSV = () => {
+/**
+ * Generate and immediately download the Shopify CSV for the given items.
+ * Can be called from anywhere — no need to render GoogleSheetExporter.
+ */
+export function downloadShopifyCSV(items: ClothingItem[]) {
+  const products = buildProductsForCSV(items);
     // Create CSV content for Shopify - EXACT format from template (all 69 columns)
     const headers = [
       'Title',
@@ -235,7 +236,10 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
+}
+
+const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
+  const products = buildProductsForCSV(items);
 
   return (
     <div className="google-sheet-exporter">
@@ -297,7 +301,7 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
       <div className="export-actions">
         <button 
           className="button button-primary"
-          onClick={handleDownloadCSV}
+          onClick={() => downloadShopifyCSV(items)}
         >
           💾 Download CSV for Shopify Import
         </button>
