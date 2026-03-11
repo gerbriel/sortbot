@@ -170,13 +170,38 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId, p
         // This is a new image that needs uploading
         return true;
       });
-      
-      // Only show loading popup if there are actual new images to upload
-      if (newImages.length > 0) {
-        setIsLoading(true);
-        setLoadingProgress(0);
-        setLoadingMessage(`Uploading ${newImages.length} image${newImages.length > 1 ? 's' : ''}...`);
+
+      // ── Fast path: no uploads needed ────────────────────────────────────
+      // items changed only because a category/group was updated externally
+      // (e.g. onCategoryClick in App.tsx). Merge those changes into the
+      // existing groupedItems instead of tearing it down and rebuilding —
+      // that would drop any items whose blob URL expired and have no file.
+      if (newImages.length === 0) {
+        setGroupedItems(prev => {
+          if (prev.length === 0) {
+            // First render with already-uploaded items (e.g. restored batch)
+            return items.map(item => ({ ...item, productGroup: item.productGroup || item.id }));
+          }
+          // Sync category / productGroup changes from parent into existing state
+          const itemMap = new Map(items.map(i => [i.id, i]));
+          return prev.map(existing => {
+            const incoming = itemMap.get(existing.id);
+            if (!incoming) return existing; // item removed upstream — keep for safety
+            return {
+              ...existing,
+              category: incoming.category,
+              productGroup: incoming.productGroup || existing.productGroup,
+              _presetData: incoming._presetData ?? existing._presetData,
+            };
+          });
+        });
+        return;
       }
+
+      // ── Slow path: new uploads needed ───────────────────────────────────
+      setIsLoading(true);
+      setLoadingProgress(0);
+      setLoadingMessage(`Uploading ${newImages.length} image${newImages.length > 1 ? 's' : ''}...`);
       
       const initialized: ClothingItem[] = [];
       let processedCount = 0;
@@ -195,7 +220,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId, p
         // But we can't re-upload without the original file
         if (item.preview && item.preview.startsWith('blob:') && !item.file) {
           console.warn('⚠️ Item has expired blob URL but no file to re-upload:', item.id);
-          // Skip this item - it's broken and can't be recovered
+          // Keep the item in the list (don't drop it) so groups remain intact
+          initialized.push({ ...item, productGroup: item.productGroup || item.id });
           continue;
         }
 
@@ -213,31 +239,26 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId, p
           initialized.push({ ...item, productGroup: item.productGroup || item.id });
         }
         
-        // Update progress (only for new uploads)
-        if (newImages.length > 0) {
-          processedCount++;
-          const progress = (processedCount / newImages.length) * 100;
-          setLoadingProgress(progress);
-          
-          if (progress < 100) {
-            setLoadingMessage(`Uploading image ${processedCount} of ${newImages.length}...`);
-          } else {
-            setLoadingMessage('Upload complete!');
-          }
-          
-          // Small delay to allow animation to be visible
-          await new Promise(resolve => setTimeout(resolve, 50));
+        processedCount++;
+        const progress = (processedCount / newImages.length) * 100;
+        setLoadingProgress(progress);
+        
+        if (progress < 100) {
+          setLoadingMessage(`Uploading image ${processedCount} of ${newImages.length}...`);
+        } else {
+          setLoadingMessage('Upload complete!');
         }
+        
+        // Small delay to allow animation to be visible
+        await new Promise(resolve => setTimeout(resolve, 50));
       }
       
       setGroupedItems(initialized);
       
       // Show completion message briefly, then hide loading popup
-      if (newImages.length > 0) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setIsLoading(false);
-        setLoadingProgress(0);
-      }
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setIsLoading(false);
+      setLoadingProgress(0);
     };
 
     initializeItems();
