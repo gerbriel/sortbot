@@ -98,9 +98,38 @@ export function downloadShopifyCSV(items: ClothingItem[]) {
     ];
 
     const rows: string[][] = [];
-    
+
+    /**
+     * Resolve a template string like "{brand} {model} Sweatshirt - Vintage"
+     * against a product's actual field values.
+     * Any placeholder that has no value is removed, and extra whitespace / dashes
+     * left behind are cleaned up so the title reads naturally.
+     */
+    const resolveTemplate = (template: string, product: typeof products[0]): string => {
+      const replacements: Record<string, string> = {
+        brand:     product.brand      || '',
+        model:     product.modelName  || '',
+        category:  product.category   || '',
+        era:       product.era        || '',
+        color:     product.color      || '',
+        size:      product.size       || '',
+        condition: product.condition  || '',
+        style:     product.style      || '',
+        gender:    product.gender     || '',
+        material:  product.material   || '',
+      };
+      let result = template.replace(/\{(\w+)\}/gi, (_, key) => replacements[key.toLowerCase()] ?? '');
+      // Clean up: collapse multiple spaces/dashes left by empty placeholders
+      result = result.replace(/\s{2,}/g, ' ').replace(/(\s*-\s*){2,}/g, ' - ').replace(/^[\s\-–—]+|[\s\-–—]+$/g, '').trim();
+      return result;
+    };
+
     products.forEach((product, idx) => {
-      const handle = (product.seoTitle || `product-${idx + 1}`).toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      // Resolve template placeholders in seoTitle (e.g. "{brand} {model} Sweatshirt - Vintage")
+      const resolvedTitle = product.seoTitle
+        ? resolveTemplate(product.seoTitle, product)
+        : `product-${idx + 1}`;
+      const handle = resolvedTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
       const vendor = product.brand || '';
       const productCategory = product.category || '';
       const productType = product.productType || '';
@@ -130,7 +159,7 @@ export function downloadShopifyCSV(items: ClothingItem[]) {
       
       //First row with all main product info + first image
       rows.push([
-        product.seoTitle || '', // Title
+        resolvedTitle, // Title
         handle, // URL handle
         product.generatedDescription || '', // Description
         vendor, // Vendor / Brand
@@ -167,10 +196,10 @@ export function downloadShopifyCSV(items: ClothingItem[]) {
         product.shipsFrom || '', // Ships From
         product.imageUrls?.[0] || '', // Product image URL
         '1', // Image position
-        `${product.seoTitle || 'Product'}`, // Image alt text
+        `${resolvedTitle}`, // Image alt text
         '', // Variant image URL
         'FALSE', // Gift card
-        product.seoTitle || '', // SEO title
+        resolvedTitle, // SEO title
         product.seoDescription || product.generatedDescription?.substring(0, 160) || '', // SEO description
         primaryColor + (secondaryColor ? `; ${secondaryColor}` : ''), // Color metafield
         product.discountedShipping || '', // Discounted Shipping
@@ -188,7 +217,7 @@ export function downloadShopifyCSV(items: ClothingItem[]) {
         product.gender || '', // Google Shopping / Gender
         product.ageGroup || '', // Google Shopping / Age group
         product.mpn || '', // Google Shopping / MPN
-        product.seoTitle || '', // Google Shopping / Ad group name
+        resolvedTitle, // Google Shopping / Ad group name
         productType, // Google Shopping / Ads labels
         googleCondition, // Google Shopping / Condition
         'FALSE', // Google Shopping / Custom product
@@ -204,7 +233,7 @@ export function downloadShopifyCSV(items: ClothingItem[]) {
           ...Array(33).fill(''), // Empty columns 3-35
           product.imageUrls[i] || '', // Product image URL (column 36)
           String(i + 1), // Image position (column 37)
-          `${product.seoTitle || 'Product'}`, // Image alt text (column 38)
+          `${resolvedTitle}`, // Image alt text (column 38)
           ...Array(31).fill('') // Empty remaining columns
         ]);
       }
