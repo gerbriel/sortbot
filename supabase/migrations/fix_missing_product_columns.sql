@@ -26,6 +26,20 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS size_type TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS style TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS gender TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS age_group TEXT;
+
+-- ============================================================================
+-- FIX CHECK CONSTRAINTS THAT REJECT EMPTY STRINGS
+-- The app uses '' as a default for unset fields, which violates these constraints.
+-- ============================================================================
+
+-- Drop gender check constraint (allows only Men/Women/Unisex/Kids but app sends '')
+ALTER TABLE products DROP CONSTRAINT IF EXISTS products_gender_check;
+
+-- Drop parcel_size check constraint (same issue)
+ALTER TABLE products DROP CONSTRAINT IF EXISTS products_parcel_size_check;
+
+-- Drop size_type check constraint (same issue)
+ALTER TABLE products DROP CONSTRAINT IF EXISTS products_size_type_check;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS policies TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS renewal_options TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS who_made_it TEXT;
