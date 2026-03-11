@@ -306,10 +306,6 @@ function App() {
     const currentItems = groupedImages.length > 0 ? groupedImages : uploadedImages;
     const groupId = `group-${Date.now()}`;
 
-    console.log('[G&C] selectedImageIds:', [...selectedImageIds]);
-    console.log('[G&C] currentItems count:', currentItems.length);
-    console.log('[G&C] category:', categoryName, '| new groupId:', groupId);
-
     // Assign selected images to the new group
     const merged = currentItems.map(item =>
       selectedImageIds.has(item.id)
@@ -318,23 +314,19 @@ function App() {
     );
 
     const newGroupItems = merged.filter(item => item.productGroup === groupId);
-    console.log('[G&C] newGroupItems (should match selected count):', newGroupItems.length, newGroupItems.map(i => i.id));
 
     // Apply the category preset to the new group
     let final: typeof merged;
     try {
       const enriched = await applyPresetToProductGroup(newGroupItems, categoryName);
-      console.log('[G&C] enriched:', enriched.length, enriched.map(i => ({ id: i.id, category: i.category, group: i.productGroup })));
       final = merged.map(item => enriched.find(e => e.id === item.id) ?? item);
     } catch (err) {
-      console.error('[G&C] applyPresetToProductGroup threw:', err);
+      console.error('[G&C] applyPresetToProductGroup failed:', err);
       // Fallback: just set category without preset fields
       final = merged.map(item =>
         selectedImageIds.has(item.id) ? { ...item, category: categoryName } : item
       );
     }
-
-    console.log('[G&C] final items with category:', final.filter(i => i.category).map(i => ({ id: i.id, category: i.category, group: i.productGroup })));
 
     setSelectedImageIds(new Set()); // clear selection
     handleImagesGrouped(final);    // update groupedImages + save

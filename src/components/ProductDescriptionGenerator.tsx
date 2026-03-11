@@ -124,25 +124,52 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         if (!incoming) return prevItem;
         if (!incoming.category || incoming.category === prevItem.category) return prevItem;
 
-        // The incoming item is fully enriched by applyPresetToProductGroup in CategoryZones.
-        // Spread ALL incoming fields first (preset values), then overlay any local data the
-        // user has already entered (voice description, manually edited form fields).
-        // This ensures preset fields populate AND user edits are never overwritten.
+        // The incoming item is fully enriched by applyPresetToProductGroup.
+        // Spread ALL incoming fields first (all preset values), then overlay
+        // any field the user has already typed locally (non-empty local wins).
         return {
-          ...incoming,                                          // all preset-enriched fields
-          voiceDescription: prevItem.voiceDescription,         // preserve local voice
-          // Preserve any field the user manually typed (non-empty local value wins)
-          brand:            prevItem.brand            || incoming.brand,
-          color:            prevItem.color            || incoming.color,
-          secondaryColor:   prevItem.secondaryColor   || incoming.secondaryColor,
-          size:             prevItem.size             || incoming.size,
-          material:         prevItem.material         || incoming.material,
-          condition:        prevItem.condition        || incoming.condition,
-          era:              prevItem.era              || incoming.era,
-          style:            prevItem.style            || incoming.style,
-          gender:           prevItem.gender           || incoming.gender,
-          price:            prevItem.price            || incoming.price,
-          tags:             prevItem.tags?.length     ? prevItem.tags : incoming.tags,
+          ...incoming,                                                            // all preset-enriched fields
+          voiceDescription:        prevItem.voiceDescription,                    // always keep local voice
+          generatedDescription:    prevItem.generatedDescription || incoming.generatedDescription,
+          // ── Fields user may have manually typed — local non-empty value wins ──
+          seoTitle:                prevItem.seoTitle             || incoming.seoTitle,
+          brand:                   prevItem.brand                || incoming.brand,
+          productType:             prevItem.productType          || incoming.productType,
+          price:                   prevItem.price                || incoming.price,
+          compareAtPrice:          prevItem.compareAtPrice       || incoming.compareAtPrice,
+          costPerItem:             prevItem.costPerItem          || incoming.costPerItem,
+          color:                   prevItem.color                || incoming.color,
+          secondaryColor:          prevItem.secondaryColor       || incoming.secondaryColor,
+          size:                    prevItem.size                 || incoming.size,
+          material:                prevItem.material             || incoming.material,
+          condition:               prevItem.condition            || incoming.condition,
+          flaws:                   prevItem.flaws                || incoming.flaws,
+          era:                     prevItem.era                  || incoming.era,
+          style:                   prevItem.style                || incoming.style,
+          gender:                  prevItem.gender               || incoming.gender,
+          ageGroup:                prevItem.ageGroup             || incoming.ageGroup,
+          sizeType:                prevItem.sizeType             || incoming.sizeType,
+          care:                    prevItem.care                 || incoming.care,
+          modelName:               prevItem.modelName            || incoming.modelName,
+          modelNumber:             prevItem.modelNumber          || incoming.modelNumber,
+          sku:                     prevItem.sku                  || incoming.sku,
+          barcode:                 prevItem.barcode              || incoming.barcode,
+          weightValue:             prevItem.weightValue          || incoming.weightValue,
+          inventoryQuantity:       prevItem.inventoryQuantity    || incoming.inventoryQuantity,
+          shipsFrom:               prevItem.shipsFrom            || incoming.shipsFrom,
+          parcelSize:              prevItem.parcelSize           || incoming.parcelSize,
+          tags:                    prevItem.tags?.length         ? prevItem.tags : incoming.tags,
+          // Measurements: merge field-by-field so user entries survive
+          measurements: {
+            ...incoming.measurements,
+            width:    prevItem.measurements?.width    || incoming.measurements?.width,
+            length:   prevItem.measurements?.length   || incoming.measurements?.length,
+            sleeve:   prevItem.measurements?.sleeve   || incoming.measurements?.sleeve,
+            shoulder: prevItem.measurements?.shoulder || incoming.measurements?.shoulder,
+            waist:    prevItem.measurements?.waist    || incoming.measurements?.waist,
+            inseam:   prevItem.measurements?.inseam   || incoming.measurements?.inseam,
+            rise:     prevItem.measurements?.rise     || incoming.measurements?.rise,
+          },
         };
       }));
     }
@@ -377,7 +404,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         if (alreadyApplied) continue;
 
         try {
-          console.log(`🔄 Batch applying preset for category: "${firstItem.category}"`);
           const updatedGroup = await applyPresetToProductGroup(groupItems, firstItem.category);
           updatedGroup.forEach((updatedItem) => {
             const idx = updatedItems.findIndex(i => i.id === updatedItem.id);
@@ -389,7 +415,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       }
 
       if (hasChanges) {
-        console.log(`✅ Batch preset apply complete`);
         setProcessedItems(updatedItems);
       }
     };
@@ -418,7 +443,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
     const runAsync = async () => {
       try {
-        console.log(`🔄 Auto-applying preset for group ${currentGroupIndex}, category: ${currentItem.category}`);
         const updatedGroup = await applyPresetToProductGroup(currentGroup, currentItem.category!);
 
         setProcessedItems(prev => {
