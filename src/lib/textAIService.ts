@@ -79,10 +79,17 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
   // PASS 1: Explicit "field value period" commands (highest priority)
   // ─────────────────────────────────────────────────────────────────────────
 
-  // Helper: grab value between a field trigger and the word "period"
+  // Helper: grab value between a field trigger and the command terminator.
+  // Accepts BOTH the spoken word "period" AND the already-normalised "."
+  // so extraction works whether punctuation conversion has run or not.
   function extractCommand(pattern: RegExp): string | null {
-    const match = voiceDesc.match(pattern);
-    return match ? match[1].trim() : null;
+    // Re-build the pattern to accept both terminators dynamically.
+    // We reconstruct: replace the literal \s+period\b in the source with TERM.
+    const src = pattern.source.replace(/\\s\+period\\b/gi, '(?:\\s+period\\b|\\.)');
+    const match = voiceDesc.match(new RegExp(src, pattern.flags));
+    if (!match) return null;
+    // Strip any trailing "." left over from the normalised terminator
+    return match[1].trim().replace(/\.$/, '').trim();
   }
 
   // ── BRAND ────────────────────────────────────────────────────────────────
