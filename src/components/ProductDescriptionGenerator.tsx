@@ -139,6 +139,26 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       }, 1000);
     };
 
+    // Convert spoken punctuation words into actual punctuation marks.
+    // Handles: "period" → ".", "comma" → ",", "question mark" → "?",
+    //          "exclamation point" → "!", "new line" / "new paragraph" → "\n"
+    // The word boundary check prevents false positives (e.g. "Imperial").
+    const normalizeVoicePunctuation = (text: string): string => {
+      return text
+        // "period" → "." — must be a standalone word (not inside another word)
+        .replace(/\bperiod\b\.?/gi, '.')
+        // collapse any spaces that appear right before the inserted "."
+        .replace(/\s+\./g, '.')
+        // optional common extras
+        .replace(/\bcomma\b/gi, ',')
+        .replace(/\bquestion mark\b/gi, '?')
+        .replace(/\bexclamation point\b/gi, '!')
+        .replace(/\bnew (line|paragraph)\b/gi, '\n')
+        // tidy up: remove spaces before punctuation introduced above
+        .replace(/ ([,?!])/g, '$1')
+        .trim();
+    };
+
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let interim = '';
       let final = '';
@@ -151,6 +171,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           interim += transcript;
         }
       }
+
+      // Convert spoken punctuation words before storing
+      if (final) final = normalizeVoicePunctuation(final);
 
       if (final) {
         setProcessedItems(prev => {
