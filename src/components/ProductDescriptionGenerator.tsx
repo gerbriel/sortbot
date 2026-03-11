@@ -66,6 +66,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const buttonStateTransitionRef = useRef(0);
   const hasMountedRef = useRef(false); // Track if component has mounted
   const previousItemsLengthRef = useRef(0); // Track items array length for batch changes
+  // Always-current mirror of processedItems so async effects never read stale state
+  const processedItemsRef = useRef<ClothingItem[]>(items);
+  useEffect(() => { processedItemsRef.current = processedItems; }, [processedItems]);
 
   // Memoize group calculation to avoid unnecessary recalculations
   const { groupArray, currentGroup, currentItem } = useMemo(() => {
@@ -305,74 +308,64 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   }, []);
 
   // Apply presets to ALL groups whenever presets load or item count changes.
-  // Reads processedItems directly from the render closure so it's never stale.
+  // Uses processedItemsRef so the async callback always reads fresh state.
   useEffect(() => {
     if (availablePresets.length === 0) return;
 
     const runAsync = async () => {
-      // Group items by productGroup
-      const productGroups = processedItems.reduce((groups, item) => {
+      const current = processedItemsRef.current;
+
+      const productGroups = current.reduce((groups, item) => {
         const groupId = item.productGroup || item.id;
-        if (!groups[groupId]) {
-          groups[groupId] = [];
-        }
+        if (!groups[groupId]) groups[groupId] = [];
         groups[groupId].push(item);
         return groups;
       }, {} as Record<string, ClothingItem[]>);
 
       let hasChanges = false;
-      const updatedItems = [...processedItems];
+      const updatedItems = [...current];
 
       for (const [, groupItems] of Object.entries(productGroups)) {
         const firstItem = groupItems[0];
         if (!firstItem.category) continue;
 
-        const hasPresetData = groupItems.some(item => item._presetData);
-        const presetCategory = groupItems.find(item => item._presetData)?._presetData?.productType;
-        const isSameCategory = presetCategory?.toLowerCase() === firstItem.category?.toLowerCase();
-        const hasPresetFields = groupItems.some(item =>
-          item.policies || item.shipsFrom || item.gender || item.whoMadeIt
+        // Skip only if _presetData already set for this exact category on every item
+        const alreadyApplied = groupItems.every(item =>
+          item._presetData?.productType?.toLowerCase() === firstItem.category!.toLowerCase()
         );
-
-        if (hasPresetData && hasPresetFields && isSameCategory) continue;
+        if (alreadyApplied) continue;
 
         try {
+          console.log(`🔄 Batch applying preset for category: "${firstItem.category}"`);
           const updatedGroup = await applyPresetToProductGroup(groupItems, firstItem.category);
           updatedGroup.forEach((updatedItem) => {
-            const itemIndex = updatedItems.findIndex(item => item.id === updatedItem.id);
-            if (itemIndex !== -1) {
-              updatedItems[itemIndex] = updatedItem;
-              hasChanges = true;
-            }
+            const idx = updatedItems.findIndex(i => i.id === updatedItem.id);
+            if (idx !== -1) { updatedItems[idx] = updatedItem; hasChanges = true; }
           });
-        } catch {
-          // continue with other groups
+        } catch (err) {
+          console.error('Preset apply error for group:', firstItem.category, err);
         }
       }
 
       if (hasChanges) {
+        console.log(`✅ Batch preset apply complete`);
         setProcessedItems(updatedItems);
       }
     };
 
     runAsync();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [availablePresets, processedItems.length]); // re-run when presets load OR item count changes
+  }, [availablePresets, processedItems.length]);
 
   // Auto-apply default preset when navigating to a new group (currentGroupIndex changes)
   useEffect(() => {
     if (availablePresets.length === 0 || !currentItem || !currentItem.category) return;
 
-    const hasPresetData = currentGroup.some(item => item._presetData);
-    const presetCategory = currentGroup.find(item => item._presetData)?._presetData?.productType;
-    const isSameCategory = presetCategory?.toLowerCase() === currentItem.category?.toLowerCase();
-    const hasPresetFields = currentGroup.some(item =>
-      item.policies || item.shipsFrom || item.gender || item.whoMadeIt
+    // Skip only if _presetData already matches this exact category for every item in group
+    const alreadyApplied = currentGroup.every(item =>
+      item._presetData?.productType?.toLowerCase() === currentItem.category!.toLowerCase()
     );
-
-    // Already applied for this category — skip
-    if (hasPresetData && hasPresetFields && isSameCategory) {
-      // Still update the dropdown to show the correct preset
+    if (alreadyApplied) {
       const defaultPreset = availablePresets.find(p =>
         (p.product_type?.toLowerCase() === currentItem.category?.toLowerCase() ||
           p.category_name.toLowerCase() === currentItem.category?.toLowerCase()) &&
@@ -390,8 +383,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         setProcessedItems(prev => {
           const updated = [...prev];
           updatedGroup.forEach((updatedItem) => {
-            const itemIndex = updated.findIndex(item => item.id === updatedItem.id);
-            if (itemIndex !== -1) updated[itemIndex] = updatedItem;
+            const idx = updated.findIndex(i => i.id === updatedItem.id);
+            if (idx !== -1) updated[idx] = updatedItem;
           });
           return updated;
         });
@@ -1171,6 +1164,19 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '1rem' }}>
               Fields pre-filled from category preset. Voice dictation takes precedence. Edit any field as needed.
             </p>
+            {/* DEBUG: preset check — remove after confirming presets work */}
+            {(() => {
+              console.log('🖼️ Rendering form. currentItem preset check:', {
+                category: currentItem.category,
+                _presetData: currentItem._presetData?.displayName,
+                policies: currentItem.policies,
+                shipsFrom: currentItem.shipsFrom,
+                gender: currentItem.gender,
+                requiresShipping: currentItem.requiresShipping,
+                whoMadeIt: currentItem.whoMadeIt,
+              });
+              return null;
+            })()}
             
             <ComprehensiveProductForm
               currentItem={currentItem}
