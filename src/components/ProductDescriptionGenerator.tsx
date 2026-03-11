@@ -304,11 +304,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     loadPresets();
   }, []);
 
-  // Apply presets to ALL groups on initial load (batch processing)
+  // Apply presets to ALL groups whenever presets load or item count changes.
+  // Reads processedItems directly from the render closure so it's never stale.
   useEffect(() => {
-    const applyPresetsToAllGroups = async () => {
-      if (availablePresets.length === 0) return;
-      
+    if (availablePresets.length === 0) return;
+
+    const runAsync = async () => {
       // Group items by productGroup
       const productGroups = processedItems.reduce((groups, item) => {
         const groupId = item.productGroup || item.id;
@@ -322,29 +323,21 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       let hasChanges = false;
       const updatedItems = [...processedItems];
 
-      // Apply presets to each group that has a category but no preset data
       for (const [, groupItems] of Object.entries(productGroups)) {
         const firstItem = groupItems[0];
-        
-        // Skip if no category assigned
         if (!firstItem.category) continue;
-        
-        // Check if preset is already applied for this category
+
         const hasPresetData = groupItems.some(item => item._presetData);
         const presetCategory = groupItems.find(item => item._presetData)?._presetData?.productType;
         const isSameCategory = presetCategory?.toLowerCase() === firstItem.category?.toLowerCase();
-        const hasPresetFields = groupItems.some(item => 
+        const hasPresetFields = groupItems.some(item =>
           item.policies || item.shipsFrom || item.gender || item.whoMadeIt
         );
-        
-        // Skip if preset already applied for this category
+
         if (hasPresetData && hasPresetFields && isSameCategory) continue;
 
         try {
-          // Apply preset to this group
           const updatedGroup = await applyPresetToProductGroup(groupItems, firstItem.category);
-          
-          // Update items in the array
           updatedGroup.forEach((updatedItem) => {
             const itemIndex = updatedItems.findIndex(item => item.id === updatedItem.id);
             if (itemIndex !== -1) {
@@ -352,80 +345,71 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               hasChanges = true;
             }
           });
-        } catch (error) {
-          // Silently fail for this group, continue with others
+        } catch {
+          // continue with other groups
         }
       }
 
-      // Only update state if there were actual changes
       if (hasChanges) {
         setProcessedItems(updatedItems);
       }
     };
 
-    applyPresetsToAllGroups();
-  }, [availablePresets]); // Run when presets load
+    runAsync();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availablePresets, processedItems.length]); // re-run when presets load OR item count changes
 
-  // Auto-apply default preset when current group changes OR when category changes
+  // Auto-apply default preset when navigating to a new group (currentGroupIndex changes)
   useEffect(() => {
-    const autoApplyDefaultPreset = async () => {
-      if (!currentItem || !currentItem.category) {
-        return;
-      }
-      
-      // Check if the preset is already applied for THIS category
-      // Compare the category stored in _presetData with the current category
-      const hasPresetData = currentGroup.some(item => item._presetData);
-      const presetCategory = currentGroup.find(item => item._presetData)?._presetData?.productType;
-      const isSameCategory = presetCategory?.toLowerCase() === currentItem.category?.toLowerCase();
-      
-      // Check if key fields are actually filled
-      const hasPresetFields = currentGroup.some(item => 
-        item.policies || 
-        item.shipsFrom || 
-        item.gender || 
-        item.whoMadeIt
-      );
-      
-      // Only skip if preset exists, fields are filled, AND it's the same category
-      if (hasPresetData && hasPresetFields && isSameCategory) {
-        return;
-      }
+    if (availablePresets.length === 0 || !currentItem || !currentItem.category) return;
 
+    const hasPresetData = currentGroup.some(item => item._presetData);
+    const presetCategory = currentGroup.find(item => item._presetData)?._presetData?.productType;
+    const isSameCategory = presetCategory?.toLowerCase() === currentItem.category?.toLowerCase();
+    const hasPresetFields = currentGroup.some(item =>
+      item.policies || item.shipsFrom || item.gender || item.whoMadeIt
+    );
+
+    // Already applied for this category — skip
+    if (hasPresetData && hasPresetFields && isSameCategory) {
+      // Still update the dropdown to show the correct preset
+      const defaultPreset = availablePresets.find(p =>
+        (p.product_type?.toLowerCase() === currentItem.category?.toLowerCase() ||
+          p.category_name.toLowerCase() === currentItem.category?.toLowerCase()) &&
+        p.is_default && p.is_active
+      );
+      if (defaultPreset) setSelectedPresetId(defaultPreset.id);
+      return;
+    }
+
+    const runAsync = async () => {
       try {
-        const updatedGroup = await applyPresetToProductGroup(currentGroup, currentItem.category);
-        
-        // Update processedItems with preset-enriched items
-        const updated = [...processedItems];
-        updatedGroup.forEach((updatedItem) => {
-          const itemIndex = updated.findIndex(item => item.id === updatedItem.id);
-          if (itemIndex !== -1) {
-            updated[itemIndex] = updatedItem;
-          }
+        console.log(`🔄 Auto-applying preset for group ${currentGroupIndex}, category: ${currentItem.category}`);
+        const updatedGroup = await applyPresetToProductGroup(currentGroup, currentItem.category!);
+
+        setProcessedItems(prev => {
+          const updated = [...prev];
+          updatedGroup.forEach((updatedItem) => {
+            const itemIndex = updated.findIndex(item => item.id === updatedItem.id);
+            if (itemIndex !== -1) updated[itemIndex] = updatedItem;
+          });
+          return updated;
         });
-        
-        setProcessedItems(updated);
-        
-        // Find and set the default preset ID in the dropdown
-        const defaultPreset = availablePresets.find(p => 
-          (p.product_type?.toLowerCase() === currentItem.category?.toLowerCase() || 
-           p.category_name.toLowerCase() === currentItem.category?.toLowerCase()) &&
-          p.is_default && 
-          p.is_active
+
+        const defaultPreset = availablePresets.find(p =>
+          (p.product_type?.toLowerCase() === currentItem.category?.toLowerCase() ||
+            p.category_name.toLowerCase() === currentItem.category?.toLowerCase()) &&
+          p.is_default && p.is_active
         );
-        
-        if (defaultPreset) {
-          setSelectedPresetId(defaultPreset.id);
-        }
+        if (defaultPreset) setSelectedPresetId(defaultPreset.id);
       } catch (error) {
-        // Silently fail auto-apply
+        console.error('Auto-apply preset error:', error);
       }
     };
 
-    if (availablePresets.length > 0) {
-      autoApplyDefaultPreset();
-    }
-  }, [currentGroupIndex, currentItem?.category, availablePresets]); // Watch category changes too!
+    runAsync();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentGroupIndex, currentItem?.category, availablePresets]);
 
   // Apply manual preset override
   const handleApplyPreset = async (presetId: string) => {
