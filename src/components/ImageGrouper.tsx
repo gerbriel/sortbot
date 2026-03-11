@@ -190,7 +190,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onSelecti
           }
           // Sync category / productGroup changes from parent into existing state
           const itemMap = new Map(items.map(i => [i.id, i]));
-          return prev.map(existing => {
+          const prevIds = new Set(prev.map(i => i.id));
+
+          const updated = prev.map(existing => {
             const incoming = itemMap.get(existing.id);
             if (!incoming) return existing; // item removed upstream — keep for safety
             return {
@@ -200,6 +202,14 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onSelecti
               _presetData: incoming._presetData ?? existing._presetData,
             };
           });
+
+          // Append any new items that arrived in the parent but aren't in prev yet
+          // (e.g. photos uploaded via Step 1 after groups were already created)
+          const appended = items
+            .filter(i => !prevIds.has(i.id))
+            .map(i => ({ ...i, productGroup: i.productGroup || i.id }));
+
+          return appended.length > 0 ? [...updated, ...appended] : updated;
         });
         return;
       }
