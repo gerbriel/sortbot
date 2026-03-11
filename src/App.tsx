@@ -12,6 +12,7 @@ import { Library } from './components/Library';
 import CategoryPresetsManager from './components/CategoryPresetsManager';
 import CategoriesManager from './components/CategoriesManager';
 import { saveBatchToDatabase } from './lib/productService';
+import { applyPresetToProductGroup } from './lib/applyPresetToGroup';
 import { autoSaveWorkflowBatch, type WorkflowBatch } from './lib/workflowBatchService';
 import type { BrandCategory } from './lib/brandCategorySystem';
 import './App.css';
@@ -136,6 +137,7 @@ function App() {
   const [showStep2Info, setShowStep2Info] = useState(false);
   const [currentBatchId, setCurrentBatchId] = useState<string | null>(null);
   const [pendingGroupId, setPendingGroupId] = useState<string | null>(null); // click-to-assign category
+  const [selectedImageIds, setSelectedImageIds] = useState<Set<string>>(new Set()); // images selected in ImageGrouper
   const [currentBatchNumber, setCurrentBatchNumber] = useState<string>(`batch-${Date.now()}`);
 
   // Helper to determine current workflow step
@@ -294,6 +296,39 @@ function App() {
     });
 
     // Broadcast action for real-time collaboration
+  };
+
+  // Called when user clicks a category zone with images selected in ImageGrouper.
+  // Groups the selected images into a new product group and applies the preset.
+  const handleGroupAndCategorize = async (categoryName: string) => {
+    if (selectedImageIds.size === 0) return;
+
+    const currentItems = groupedImages.length > 0 ? groupedImages : uploadedImages;
+    const groupId = `group-${Date.now()}`;
+
+    // Assign selected images to the new group
+    const merged = currentItems.map(item =>
+      selectedImageIds.has(item.id)
+        ? { ...item, productGroup: groupId }
+        : item
+    );
+
+    const newGroupItems = merged.filter(item => item.productGroup === groupId);
+
+    // Apply the category preset to the new group
+    let final: typeof merged;
+    try {
+      const enriched = await applyPresetToProductGroup(newGroupItems, categoryName);
+      final = merged.map(item => enriched.find(e => e.id === item.id) ?? item);
+    } catch {
+      // Fallback: just set category without preset fields
+      final = merged.map(item =>
+        selectedImageIds.has(item.id) ? { ...item, category: categoryName } : item
+      );
+    }
+
+    setSelectedImageIds(new Set()); // clear selection
+    handleImagesGrouped(final);    // update groupedImages + save
   };
 
   const handleImagesGrouped = async (items: ClothingItem[]) => {
@@ -695,6 +730,7 @@ function App() {
                 <ImageGrouper 
                   items={groupedImages.length > 0 ? groupedImages : uploadedImages} 
                   onGrouped={handleImagesGrouped}
+                  onSelectionChange={setSelectedImageIds}
                   userId={user.id}
                   pendingGroupId={pendingGroupId}
                   onGroupSelected={setPendingGroupId}
@@ -706,9 +742,13 @@ function App() {
                   onCategorized={handleImagesSorted}
                   compactMode
                   pendingGroupId={pendingGroupId}
+                  selectedImageIds={selectedImageIds}
                   onCategoryClick={(category) => {
-                    if (pendingGroupId) {
-                      // Apply the category to all items in the pending group
+                    if (selectedImageIds.size > 0) {
+                      // Selected images in grouper — group + categorize them
+                      handleGroupAndCategorize(category);
+                    } else if (pendingGroupId) {
+                      // Existing group pending category assignment
                       const updated = groupedImages.map(item =>
                         (item.productGroup || item.id) === pendingGroupId
                           ? { ...item, category }
