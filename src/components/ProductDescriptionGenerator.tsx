@@ -122,11 +122,27 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       setProcessedItems(prev => prev.map(prevItem => {
         const incoming = items.find(i => i.id === prevItem.id);
         if (!incoming) return prevItem;
-        // Merge category + _presetData, preserve all other local state (voice, form data)
+        if (!incoming.category || incoming.category === prevItem.category) return prevItem;
+
+        // The incoming item is fully enriched by applyPresetToProductGroup in CategoryZones.
+        // Spread ALL incoming fields first (preset values), then overlay any local data the
+        // user has already entered (voice description, manually edited form fields).
+        // This ensures preset fields populate AND user edits are never overwritten.
         return {
-          ...prevItem,
-          category: incoming.category ?? prevItem.category,
-          _presetData: incoming._presetData ?? prevItem._presetData,
+          ...incoming,                                          // all preset-enriched fields
+          voiceDescription: prevItem.voiceDescription,         // preserve local voice
+          // Preserve any field the user manually typed (non-empty local value wins)
+          brand:            prevItem.brand            || incoming.brand,
+          color:            prevItem.color            || incoming.color,
+          secondaryColor:   prevItem.secondaryColor   || incoming.secondaryColor,
+          size:             prevItem.size             || incoming.size,
+          material:         prevItem.material         || incoming.material,
+          condition:        prevItem.condition        || incoming.condition,
+          era:              prevItem.era              || incoming.era,
+          style:            prevItem.style            || incoming.style,
+          gender:           prevItem.gender           || incoming.gender,
+          price:            prevItem.price            || incoming.price,
+          tags:             prevItem.tags?.length     ? prevItem.tags : incoming.tags,
         };
       }));
     }
