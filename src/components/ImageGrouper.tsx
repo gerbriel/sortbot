@@ -470,10 +470,22 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onSelecti
       return;
     }
 
+    // Inherit the target group's category + preset so the dropped photo
+    // matches its new siblings (e.g. dragging a photo into "Outerwear" group
+    // should make it outerwear too).
+    const targetSibling = groupedItems.find(
+      item => (item.productGroup || item.id) === targetGroup && item.id !== draggedItem.id
+    );
+
     // Move image to target group
     const updated = groupedItems.map(item =>
       item.id === draggedItem.id
-        ? { ...item, productGroup: targetGroup }
+        ? {
+            ...item,
+            productGroup: targetGroup,
+            category: targetSibling?.category ?? item.category,
+            _presetData: targetSibling?._presetData ?? item._presetData,
+          }
         : item
     );
 
