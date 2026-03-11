@@ -198,6 +198,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     e.stopPropagation();
 
     let productGroup: string | undefined;
+    let draggedGroupItems: ClothingItem[] | undefined;
     try {
       const data = e.dataTransfer.getData('application/json');
       if (data) {
@@ -205,6 +206,12 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
         // Accept: explicit 'categorize' action OR any drag from ImageGrouper
         if (dragData.action === 'categorize' || dragData.source === 'ImageGrouper') {
           productGroup = dragData.productGroup;
+          // Use the items carried in the drag payload (avoids stale-prop mismatch)
+          if (Array.isArray(dragData.groupItems) && dragData.groupItems.length > 0) {
+            draggedGroupItems = dragData.groupItems;
+          } else if (dragData.item) {
+            draggedGroupItems = [dragData.item];
+          }
         }
       }
     } catch (err) {
@@ -215,16 +222,38 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     }
     if (!productGroup) { setCatDraggedItem(null); setDragOverCategory(null); return; }
 
-    const groupItems = items.filter(item => (item.productGroup || item.id) === productGroup);
+    // Prefer items carried in drag data; fall back to filtering the items prop
+    const groupItems = (draggedGroupItems && draggedGroupItems.length > 0)
+      ? draggedGroupItems
+      : items.filter(item => (item.productGroup || item.id) === productGroup);
+
+    // Guard: nothing to categorize
+    if (groupItems.length === 0) {
+      console.warn('⚠️ handleCategoryDrop: no items found for group', productGroup);
+      setCatDraggedItem(null);
+      setDragOverCategory(null);
+      return;
+    }
+
     const itemsWithPreset = await applyPresetToProductGroup(groupItems, category);
 
     const updatedMap = { ...groupsMap };
-    updatedMap[productGroup] = groupsMap[productGroup].map(item => {
+    // groupsMap[productGroup] may be undefined if the group lives only in
+    // ImageGrouper's internal state and hasn't synced to groupedImages yet.
+    // Fall back to itemsWithPreset directly in that case.
+    const baseItems = groupsMap[productGroup] ?? groupItems;
+    updatedMap[productGroup] = baseItems.map(item => {
       const withPreset = itemsWithPreset.find(i => i.id === item.id);
       return withPreset || { ...item, category };
     });
 
-    emitReordered(groupOrderRef.current, updatedMap);
+    // If this group wasn't in groupOrder yet, append it
+    const currentOrder = groupOrderRef.current;
+    const newOrder = currentOrder.includes(productGroup)
+      ? currentOrder
+      : [...currentOrder, productGroup];
+
+    emitReordered(newOrder, updatedMap);
     setCatDraggedItem(null);
     setDragOverCategory(null);
   };
