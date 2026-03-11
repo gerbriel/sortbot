@@ -200,8 +200,12 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
       );
       if (sizeFallback) {
         const raw = (sizeFallback[1] || sizeFallback[2] || '').trim();
-        // Don't grab years (1990), prices ($45), or lone single digits as sizes
-        if (raw && !/^(19|20)\d{2}$/.test(raw) && !/^\$/.test(raw)) {
+        // Don't grab years (1990), prices ($45 / "price 60"), or lone single digits as sizes
+        // Also check: if the match position is right after "price" or "$", skip it
+        const matchIndex = sizeFallback.index ?? 0;
+        const before = voiceDesc.slice(Math.max(0, matchIndex - 10), matchIndex).toLowerCase();
+        const isPriceContext = /price\s*\$?$|\$$/.test(before);
+        if (raw && !isPriceContext && !/^(19|20)\d{2}$/.test(raw) && !/^\$/.test(raw)) {
           extracted.size = normalizeSizeValue(raw);
         }
       }
@@ -706,7 +710,7 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
  * No assumptions, no AI guessing
  */
 function buildIntroFromFields(context: ProductContext): string {
-  const { brand, category, color, era, style, material, gender, condition, size } = context;
+  const { brand, category, color, era, style, material, gender, condition, size, price } = context;
   
   const parts: string[] = [];
   
@@ -718,8 +722,9 @@ function buildIntroFromFields(context: ProductContext): string {
   if (color) parts.push(color.toLowerCase());
   if (material) parts.push(material.toLowerCase());
   if (category) parts.push(category.toLowerCase());
-  if (size) parts.push(`size ${size}`);
+  if (size) parts.push(size);   // just the value — no "size" prefix word
   if (condition) parts.push(`in ${condition.toLowerCase()} condition`);
+  if (price) parts.push(`$${price}`);
   
   return parts.join(' ');
 }
