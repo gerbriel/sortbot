@@ -840,6 +840,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId, p
                     e.stopPropagation();
                     const dragData = {
                       item: items[0],
+                      groupItems: items,          // ← carry ALL items so CategoryZones doesn't need to filter
                       productGroup: groupId,
                       action: 'categorize',
                       source: 'ImageGrouper',
