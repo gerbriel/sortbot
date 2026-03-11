@@ -81,10 +81,11 @@ interface CategoryZonesProps {
   onCategorized: (items: ClothingItem[]) => void;
   compactMode?: boolean;
   pendingGroupId?: string | null;
+  selectedImageIds?: Set<string>;
   onCategoryClick?: (category: string) => void;
 }
 
-const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, compactMode = false, pendingGroupId, onCategoryClick }) => {
+const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, compactMode = false, pendingGroupId, selectedImageIds, onCategoryClick }) => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -380,7 +381,11 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
       <div className={`category-zones${compactMode ? ' category-zones-compact' : ''}`}>
         <h3>
           {compactMode
-            ? (pendingGroupId ? '👆 Now click a category below' : '🏷️ Drag or click a group, then a category')
+            ? (selectedImageIds && selectedImageIds.size > 0
+                ? `✅ ${selectedImageIds.size} selected — click a category below`
+                : pendingGroupId
+                  ? '👆 Now click a category below'
+                  : '🏷️ Select images or drag a group, then click a category')
             : '🏷️ Drag Groups Here to Categorize'}
         </h3>
         {loading ? (
@@ -390,14 +395,14 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
             {categories.map(category => (
               <div
                 key={category.id}
-                className={`category-zone${compactMode ? ' category-zone-compact' : ''} ${dragOverCategory === category.name ? 'drag-over' : ''} ${pendingGroupId ? 'category-zone-clickable' : ''}`}
+                className={`category-zone${compactMode ? ' category-zone-compact' : ''} ${dragOverCategory === category.name ? 'drag-over' : ''} ${(pendingGroupId || (selectedImageIds && selectedImageIds.size > 0)) ? 'category-zone-clickable' : ''}`}
                 style={{ borderColor: category.color, '--category-color': category.color } as React.CSSProperties}
                 onDragOver={(e) => handleCategoryDragOver(e, category.name)}
                 onDrop={(e) => handleCategoryDrop(e, category.name)}
                 onDragLeave={handleCategoryDragLeave}
                 onClick={() => {
-                  if (pendingGroupId && onCategoryClick) {
-                    onCategoryClick(category.name);
+                  if ((selectedImageIds && selectedImageIds.size > 0) || pendingGroupId) {
+                    onCategoryClick?.(category.name);
                   }
                 }}
               >

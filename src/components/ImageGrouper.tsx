@@ -1,22 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
-import { Package, Image, Link2, Scissors, X, ArrowDown, Check, Tag, ChevronDown } from 'lucide-react';
+import { Package, Image, Link2, Scissors, X, ArrowDown, Check } from 'lucide-react';
 import LoadingProgress from './LoadingProgress';
-import { getCategoryPresets } from '../lib/categoryPresetsService';
-import type { CategoryPreset } from '../lib/categoryPresets';
-import { applyPresetToProductGroup } from '../lib/applyPresetToGroup';
 import './ImageGrouper.css';
 
 interface ImageGrouperProps {
   items: ClothingItem[];
   onGrouped: (items: ClothingItem[]) => void;
+  onSelectionChange?: (selectedIds: Set<string>) => void;
   userId?: string;
   pendingGroupId?: string | null;
   onGroupSelected?: (groupId: string | null) => void;
 }
 
-const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId, pendingGroupId, onGroupSelected }) => {
+const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onSelectionChange, userId, pendingGroupId, onGroupSelected }) => {
   const [groupedItems, setGroupedItems] = useState<ClothingItem[]>([]);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [draggedItem, setDraggedItem] = useState<ClothingItem | null>(null);
@@ -49,29 +47,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId, p
   
   const SELECTION_THRESHOLD = 5; // pixels - must move this much to activate selection
 
-  // Category-preset quick-group state
-  const [availablePresets, setAvailablePresets] = useState<CategoryPreset[]>([]);
-  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
-  const [isApplyingPreset, setIsApplyingPreset] = useState(false);
-  const categoryDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Load presets on mount
+  // Notify parent whenever selection changes so it can pass IDs to CategoryZones
   useEffect(() => {
-    getCategoryPresets().then(presets => {
-      setAvailablePresets(presets.filter(p => p.is_active && p.is_default));
-    }).catch(() => {});
-  }, []);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(e.target as Node)) {
-        setShowCategoryDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    onSelectionChange?.(selectedItems);
+  }, [selectedItems, onSelectionChange]);
 
   // Global mouse handlers for selection
   useEffect(() => {
@@ -453,46 +432,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId, p
     onGrouped(updated);
   };
 
-  // Group selected images into a new product group AND apply a category preset in one step
-  const groupAndCategorize = async (categoryName: string) => {
-    if (selectedItems.size < 1) return;
-    setShowCategoryDropdown(false);
-    setIsApplyingPreset(true);
-
-    try {
-      const groupId = `group-${groupCounter}`;
-
-      // Assign all selected items to the new group
-      const merged = groupedItems.map(item =>
-        selectedItems.has(item.id)
-          ? { ...item, productGroup: groupId }
-          : item
-      );
-
-      // Collect the new group items in order
-      const groupItems = merged.filter(item => item.productGroup === groupId);
-
-      // Apply category preset (sets category + all preset fields)
-      const enriched = await applyPresetToProductGroup(groupItems, categoryName);
-
-      // Splice enriched items back into the full list
-      const final = merged.map(item => {
-        const enrichedItem = enriched.find(e => e.id === item.id);
-        return enrichedItem ?? item;
-      });
-
-      setGroupedItems(final);
-      setSelectedItems(new Set());
-      setGroupCounter(groupCounter + 1);
-      onGrouped(final);
-    } catch (err) {
-      console.error('Group & Categorize failed:', err);
-    } finally {
-      setIsApplyingPreset(false);
-    }
-  };
-
-
   // Drag and Drop Handlers for Images
   const handleDragStart = (e: React.DragEvent, item: ClothingItem, fromGroup: string) => {
     setDraggedItem(item);
@@ -687,34 +626,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId, p
           <Link2 size={16} /> Group Selected ({selectedItems.size})
         </button>
 
-        {/* Group & Categorize dropdown — one-step group + preset apply */}
-        <div className="category-quick-group" ref={categoryDropdownRef}>
-          <button
-            className="button button-success"
-            onClick={() => setShowCategoryDropdown(v => !v)}
-            disabled={selectedItems.size < 1 || isApplyingPreset || availablePresets.length === 0}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-            title="Group selected images and apply a category preset in one step"
-          >
-            <Tag size={16} />
-            {isApplyingPreset ? 'Applying…' : `Group & Categorize (${selectedItems.size})`}
-            <ChevronDown size={14} />
-          </button>
-          {showCategoryDropdown && (
-            <div className="category-quick-dropdown">
-              <div className="category-quick-dropdown-header">Select a category preset:</div>
-              {availablePresets.map(preset => (
-                <button
-                  key={preset.id}
-                  className="category-quick-option"
-                  onClick={() => groupAndCategorize(preset.product_type || preset.category_name)}
-                >
-                  {preset.display_name || preset.product_type || preset.category_name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
         <button 
           className="button button-secondary" 
           onClick={ungroupSelected}
