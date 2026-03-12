@@ -113,13 +113,13 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
               <input type="text" list="size-options" value={currentItem.size || ''} onChange={e => updateGroupField('size', e.target.value)} placeholder="M, L, XL, 32…" className="info-input" />
               <datalist id="size-options">
                 {/* Standard apparel */}
-                <option value="XS" /><option value="S" /><option value="M" /><option value="L" /><option value="XL" /><option value="XXL" /><option value="3XL" /><option value="4XL" /><option value="1 SIZE" />
+                <option value="XS" /><option value="S" /><option value="M" /><option value="L" /><option value="XL" /><option value="XXL" /><option value="3XL" /><option value="4XL" /><option value="OSFA" />
                 {/* Hat sizes — numeric fitted */}
                 <option value="6" /><option value="6 1/2" /><option value="6 5/8" /><option value="6 3/4" /><option value="6 7/8" />
                 <option value="7" /><option value="7 1/8" /><option value="7 1/4" /><option value="7 3/8" /><option value="7 1/2" /><option value="7 5/8" /><option value="7 7/8" />
                 <option value="8" /><option value="8 1/2" />
                 {/* Hat sizes — one size */}
-                <option value="One Size/OSFA" />
+                <option value="OSFA" />
               </datalist>
             </div>
             <div className="info-item">

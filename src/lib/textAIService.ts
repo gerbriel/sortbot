@@ -189,11 +189,11 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
 
   // ── SIZE fallback ─────────────────────────────────────────────────────────
   // Handles: "XL", "men's XL", "size XL", "32x30", "size 32/34", "size 10.5" (shoes)
-  // Also catches OSFA / OS / "one size" / "one size fits all" → "1 SIZE"
+  // Also catches OSFA / OS / "one size" / "one size fits all" → "OSFA"
   if (!extracted.size) {
     // Check for one-size phrases first (before the numeric fallback grabs stray digits)
     if (/\b(osfa|o\.s\.f\.a|one\s+size\s+fits?\s+all|one\s+size\s+fits?\s+most|one\s+size|os\b)/i.test(voiceDesc)) {
-      extracted.size = '1 SIZE';
+      extracted.size = 'OSFA';
     } else {
       const sizeFallback = voiceDesc.match(
         /\b(?:size\s+|measurement\s+)?(4xl|3xl|2xl|xxl|xl|extra[\s-]large|large|medium|small|xs|x[\s-]small)\b|(?:size\s+|men'?s?\s+|women'?s?\s+)?(\d{1,2}(?:[xX]\d{1,2})?(?:\.\d)?)\b/i
@@ -518,10 +518,10 @@ function toTitleCase(str: string): string {
 
 function normalizeSizeValue(raw: string): string {
   const trimmed = raw.trim();
-  // One-size phrases → "1 SIZE" (check before splitting on spaces)
+  // One-size phrases → "OSFA" (check before splitting on spaces)
   // Also catches partial phrases like "one size fits" (missing "all") and "one size fit"
   if (/^(osfa|o\.s\.f\.a|one[\s-]size[\s-]fits?[\s-](all|most)|one[\s-]size[\s-]fits?|one[\s-]size|os)$/i.test(trimmed)) {
-    return '1 SIZE';
+    return 'OSFA';
   }
   // Take only the first token if there's a slash or slash+word (e.g., "XL/XLARGE" → "XL")
   const first = trimmed.split(/[\/\s]+/)[0];
@@ -536,7 +536,7 @@ function normalizeSizeValue(raw: string): string {
     xxxlarge: '3XL', '3xlarge': '3XL', '3xl': '3XL', xxxl: '3XL',
     '4xlarge': '4XL', '4xl': '4XL', xxxxl: '4XL',
     // One-size abbreviations as standalone tokens
-    osfa: '1 SIZE', os: '1 SIZE', onesize: '1 SIZE',
+    osfa: 'OSFA', os: 'OSFA', onesize: 'OSFA',
   };
   // Return mapped value or original uppercased first token (preserves "32", "32x30", "32/34")
   return map[s] || first.toUpperCase();
