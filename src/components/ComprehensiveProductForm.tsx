@@ -222,10 +222,11 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
               ['measurements.waist',    'Waist (")'],
               ['measurements.rise',     'Rise (")'],
               ['measurements.inseam',   'Inseam (")'],
-            ] as [string, string][]).map(([field, lbl]) => {
+            ] as [string, string][]).map(([field, lbl], idx, arr) => {
               const subKey = field.split('.')[1] as keyof NonNullable<ClothingItem['measurements']>;
+              const isLastOdd = idx === arr.length - 1 && arr.length % 2 !== 0;
               return (
-                <div className="info-item" key={field}>
+                <div className={`info-item${isLastOdd ? ' span-2' : ''}`} key={field}>
                   <label>{lbl}:</label>
                   <input type="text" value={currentItem.measurements?.[subKey] || ''} onChange={e => updateGroupField(field, e.target.value)} placeholder="e.g., 22" className="info-input" />
                 </div>
@@ -322,7 +323,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
               <label>What Is It: <PresetBadge show={isFromPreset('whatIsIt')} /></label>
               <input type="text" value={currentItem.whatIsIt || ''} onChange={e => updateGroupField('whatIsIt', e.target.value)} placeholder="A Finished Product" className="info-input" />
             </div>
-            <div className="info-item">
+            <div className="info-item span-2">
               <label>Listing Type: <PresetBadge show={isFromPreset('listingType')} /></label>
               <input type="text" value={currentItem.listingType || ''} onChange={e => updateGroupField('listingType', e.target.value)} placeholder="Physical Item" className="info-input" />
             </div>
