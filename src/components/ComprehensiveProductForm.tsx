@@ -213,7 +213,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
         {/* Measurements */}
         <div id="section-measurements" className="fields-group">
           <div className="fields-group-title">📏 Measurements</div>
-          <div className="fields-grid">
+          <div className="fields-grid-3">
             {([
               ['measurements.width',    'Width (")'],
               ['measurements.length',   'Length (")'],
@@ -222,11 +222,10 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
               ['measurements.waist',    'Waist (")'],
               ['measurements.rise',     'Rise (")'],
               ['measurements.inseam',   'Inseam (")'],
-            ] as [string, string][]).map(([field, lbl], idx, arr) => {
+            ] as [string, string][]).map(([field, lbl]) => {
               const subKey = field.split('.')[1] as keyof NonNullable<ClothingItem['measurements']>;
-              const isLastOdd = idx === arr.length - 1 && arr.length % 2 !== 0;
               return (
-                <div className={`info-item${isLastOdd ? ' span-2' : ''}`} key={field}>
+                <div className="info-item" key={field}>
                   <label>{lbl}:</label>
                   <input type="text" value={currentItem.measurements?.[subKey] || ''} onChange={e => updateGroupField(field, e.target.value)} placeholder="e.g., 22" className="info-input" />
                 </div>
@@ -261,7 +260,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
         {/* Shipping */}
         <div id="section-shipping" className="fields-group">
           <div className="fields-group-title">🚚 Shipping</div>
-          <div className="fields-grid">
+          <div className="fields-grid-3">
             <div className="info-item">
               <label>Requires Shipping: <PresetBadge show={isFromPreset('requiresShipping')} /></label>
               <select value={currentItem.requiresShipping === undefined ? '' : currentItem.requiresShipping ? 'true' : 'false'} onChange={e => updateGroupField('requiresShipping', e.target.value === 'true')} className="info-input">
@@ -288,11 +287,11 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
               <label>Discounted Shipping: <PresetBadge show={isFromPreset('discountedShipping')} /></label>
               <input type="text" value={currentItem.discountedShipping || ''} onChange={e => updateGroupField('discountedShipping', e.target.value)} placeholder="No Discount, 10% Off…" className="info-input" />
             </div>
-            <div className="info-item span-2">
+            <div className="info-item span-3">
               <label>Package Dimensions: <PresetBadge show={isFromPreset('packageDimensions')} /></label>
               <input type="text" value={currentItem.packageDimensions || ''} onChange={e => updateGroupField('packageDimensions', e.target.value)} placeholder="8 in - 6 in - 4 in" className="info-input" />
             </div>
-            <div className="info-item span-2">
+            <div className="info-item span-3">
               <label>Continue Selling Out of Stock: <PresetBadge show={isFromPreset('continueSellingOutOfStock')} /></label>
               <select value={currentItem.continueSellingOutOfStock === undefined ? '' : currentItem.continueSellingOutOfStock ? 'true' : 'false'} onChange={e => updateGroupField('continueSellingOutOfStock', e.target.value === 'true')} className="info-input">
                 <option value="">Select…</option>
@@ -306,8 +305,8 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
         {/* Policies & Marketplace */}
         <div id="section-policies" className="fields-group">
           <div className="fields-group-title">📜 Policies &amp; Marketplace</div>
-          <div className="fields-grid">
-            <div className="info-item span-2">
+          <div className="fields-grid-3">
+            <div className="info-item span-3">
               <label>Policies: <PresetBadge show={isFromPreset('policies')} /></label>
               <input type="text" value={currentItem.policies || ''} onChange={e => updateGroupField('policies', e.target.value)} placeholder="No Returns; No Exchanges" className="info-input" />
             </div>
@@ -323,7 +322,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
               <label>What Is It: <PresetBadge show={isFromPreset('whatIsIt')} /></label>
               <input type="text" value={currentItem.whatIsIt || ''} onChange={e => updateGroupField('whatIsIt', e.target.value)} placeholder="A Finished Product" className="info-input" />
             </div>
-            <div className="info-item span-2">
+            <div className="info-item span-3">
               <label>Listing Type: <PresetBadge show={isFromPreset('listingType')} /></label>
               <input type="text" value={currentItem.listingType || ''} onChange={e => updateGroupField('listingType', e.target.value)} placeholder="Physical Item" className="info-input" />
             </div>
