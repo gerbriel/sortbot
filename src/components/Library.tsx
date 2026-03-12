@@ -8,6 +8,8 @@ import {
   fetchSavedProducts,
   fetchSavedImages,
   deleteBatchWithCascade,
+  assignImagesToGroup,
+  groupLooseImagesIntoNewGroup,
 } from '../lib/libraryService';
 import { Folder, Calendar, Image, Layers, Tag, ArrowRight, Trash2, X, Grid3x3, Package, Edit2, Copy, Check } from 'lucide-react';
 import type { ClothingItem } from '../App';
@@ -65,6 +67,21 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
   const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null);
   const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [selectionThresholdMet, setSelectionThresholdMet] = useState(false);
+
+  // Assign / group loose images modal state
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showNewGroupModal, setShowNewGroupModal] = useState(false);
+  const [newGroupTitle, setNewGroupTitle] = useState('');
+  const [assignTargetGroupId, setAssignTargetGroupId] = useState('');
+  const [assignWorking, setAssignWorking] = useState(false);
+
+  // Filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStep, setFilterStep] = useState('');         // batches: step 1-5
+  const [filterCategory, setFilterCategory] = useState(''); // groups: category
+  const [filterBatchId, setFilterBatchId] = useState('');   // images: by batch
+  const [filterGroupId, setFilterGroupId] = useState('');   // images: by group
+  const [filterLooseOnly, setFilterLooseOnly] = useState(false); // images: loose only
   
   // Refs for selection containers
   const batchesGridRef = useRef<HTMLDivElement>(null);
@@ -84,9 +101,15 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
     }
   }, [userId, viewMode]);
   
-  // Clear selection when switching views (separate effect)
+  // Clear selection AND filters when switching views
   useEffect(() => {
     setSelectedItems(new Set());
+    setSearchQuery('');
+    setFilterStep('');
+    setFilterCategory('');
+    setFilterBatchId('');
+    setFilterGroupId('');
+    setFilterLooseOnly(false);
   }, [viewMode]);
 
   const loadBatches = async () => {
@@ -635,6 +658,43 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
     clearSelection();
   };
 
+  // IDs of currently selected images (used by assign/group handlers)
+  const selectedImageIds = Array.from(selectedItems);
+
+  const handleAssignToGroup = async () => {
+    if (!assignTargetGroupId || selectedItems.size === 0) return;
+    setAssignWorking(true);
+    const success = await assignImagesToGroup(selectedImageIds, assignTargetGroupId);
+    setAssignWorking(false);
+    if (success) {
+      // Update local state: mark images as belonging to this group
+      setImages(prev => prev.map(img =>
+        selectedItems.has(img.id) ? { ...img, productGroup: assignTargetGroupId } : img
+      ));
+      setShowAssignModal(false);
+      setAssignTargetGroupId('');
+      clearSelection();
+    }
+  };
+
+  const handleGroupIntoNew = async () => {
+    const title = newGroupTitle.trim() || 'New Group';
+    if (selectedItems.size < 1) return;
+    setAssignWorking(true);
+    const newGroupId = await groupLooseImagesIntoNewGroup(selectedImageIds, title);
+    setAssignWorking(false);
+    if (newGroupId) {
+      setImages(prev => prev.map(img =>
+        selectedItems.has(img.id) ? { ...img, productGroup: newGroupId } : img
+      ));
+      setShowNewGroupModal(false);
+      setNewGroupTitle('');
+      clearSelection();
+      // Reload groups so the new one shows up
+      loadProductGroups();
+    }
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -681,6 +741,55 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       .map(item => item.preview || item.imageUrls?.[0] || '')
       .filter(Boolean);
   };
+
+  // ── Derived filtered lists ──────────────────────────────────────────────────
+  const filteredBatches = batches.filter(b => {
+    const q = searchQuery.toLowerCase();
+    const nameMatch = !q ||
+      (b.batch_name || '').toLowerCase().includes(q) ||
+      b.batch_number.toLowerCase().includes(q);
+    const stepMatch = !filterStep || String(b.current_step) === filterStep;
+    return nameMatch && stepMatch;
+  });
+
+  // Collect unique categories from product groups for the category filter dropdown
+  const groupCategories = Array.from(new Set(productGroups.map(g => g.category).filter(Boolean))).sort();
+
+  const filteredGroups = productGroups.filter(g => {
+    const q = searchQuery.toLowerCase();
+    const nameMatch = !q || g.title.toLowerCase().includes(q) || g.category.toLowerCase().includes(q);
+    const catMatch = !filterCategory || g.category === filterCategory;
+    return nameMatch && catMatch;
+  });
+
+  // Collect unique batches from images for the batch filter dropdown
+  const imageBatches = Array.from(
+    new Map(
+      images
+        .filter(img => img.batchNumber)
+        .map(img => [img.batchNumber!, img.batchNumber!])
+    ).entries()
+  );
+
+  // Collect unique product groups from images for the group filter dropdown
+  const imageGroups = Array.from(
+    new Map(
+      images
+        .filter(img => img.productGroup)
+        .map(img => {
+          const pg = productGroups.find(g => g.id === img.productGroup);
+          return [img.productGroup!, pg?.title || img.productGroup!];
+        })
+    ).entries()
+  );
+
+  const filteredImages = images.filter(img => {
+    const batchMatch = !filterBatchId || img.batchNumber === filterBatchId;
+    const groupMatch = !filterGroupId || img.productGroup === filterGroupId;
+    const looseMatch = !filterLooseOnly || !img.productGroup;
+    return batchMatch && groupMatch && looseMatch;
+  });
+  // ────────────────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -786,6 +895,108 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
           </button>
         </div>
 
+        {/* Filter Bar */}
+        <div className="library-filter-bar">
+          {/* Batches filters */}
+          {viewMode === 'batches' && (
+            <>
+              <input
+                className="filter-search"
+                type="text"
+                placeholder="Search batches…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+              <select
+                className="filter-select"
+                value={filterStep}
+                onChange={e => setFilterStep(e.target.value)}
+              >
+                <option value="">All steps</option>
+                <option value="1">Step 1 – Upload</option>
+                <option value="2">Step 2 – Group</option>
+                <option value="3">Step 3 – Categorize</option>
+                <option value="4">Step 4 – Descriptions</option>
+                <option value="5">Step 5 – Complete</option>
+              </select>
+            </>
+          )}
+
+          {/* Product Groups filters */}
+          {viewMode === 'groups' && (
+            <>
+              <input
+                className="filter-search"
+                type="text"
+                placeholder="Search groups…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+              <select
+                className="filter-select"
+                value={filterCategory}
+                onChange={e => setFilterCategory(e.target.value)}
+              >
+                <option value="">All categories</option>
+                {groupCategories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </>
+          )}
+
+          {/* Images filters */}
+          {viewMode === 'images' && (
+            <>
+              <select
+                className="filter-select"
+                value={filterBatchId}
+                onChange={e => setFilterBatchId(e.target.value)}
+              >
+                <option value="">All batches</option>
+                {imageBatches.map(([id, label]) => (
+                  <option key={id} value={id}>{label}</option>
+                ))}
+              </select>
+              <select
+                className="filter-select"
+                value={filterGroupId}
+                onChange={e => setFilterGroupId(e.target.value)}
+              >
+                <option value="">All product groups</option>
+                {imageGroups.map(([id, label]) => (
+                  <option key={id} value={id}>{label}</option>
+                ))}
+              </select>
+              <label className="filter-toggle">
+                <input
+                  type="checkbox"
+                  checked={filterLooseOnly}
+                  onChange={e => setFilterLooseOnly(e.target.checked)}
+                />
+                Loose only
+              </label>
+            </>
+          )}
+
+          {/* Active filter count + clear */}
+          {(searchQuery || filterStep || filterCategory || filterBatchId || filterGroupId || filterLooseOnly) && (
+            <button
+              className="filter-clear"
+              onClick={() => {
+                setSearchQuery('');
+                setFilterStep('');
+                setFilterCategory('');
+                setFilterBatchId('');
+                setFilterGroupId('');
+                setFilterLooseOnly(false);
+              }}
+            >
+              ✕ Clear filters
+            </button>
+          )}
+        </div>
+
         {/* Selection Toolbar */}
         {selectedItems.size > 0 && (
           <div className="selection-toolbar">
@@ -799,6 +1010,26 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
               <button className="toolbar-button" onClick={selectAll}>
                 Select All
               </button>
+              {viewMode === 'images' && (
+                <>
+                  <button
+                    className="toolbar-button"
+                    onClick={() => { setShowAssignModal(true); setShowNewGroupModal(false); }}
+                    title="Assign selected images to an existing product group"
+                  >
+                    <Package size={16} />
+                    Assign to Group
+                  </button>
+                  <button
+                    className="toolbar-button"
+                    onClick={() => { setShowNewGroupModal(true); setShowAssignModal(false); setNewGroupTitle(''); }}
+                    title="Create a new product group from selected images"
+                  >
+                    <Layers size={16} />
+                    New Group from Selected
+                  </button>
+                </>
+              )}
               <button className="toolbar-button danger" onClick={handleBulkDelete}>
                 <Trash2 size={16} />
                 Delete Selected
@@ -807,14 +1038,75 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
           </div>
         )}
 
+        {/* Assign to Group Modal */}
+        {showAssignModal && viewMode === 'images' && (
+          <div className="assign-modal-overlay" onClick={() => setShowAssignModal(false)}>
+            <div className="assign-modal" onClick={e => e.stopPropagation()}>
+              <h3>Assign {selectedItems.size} image{selectedItems.size !== 1 ? 's' : ''} to a Product Group</h3>
+              <select
+                value={assignTargetGroupId}
+                onChange={e => setAssignTargetGroupId(e.target.value)}
+                className="assign-select"
+              >
+                <option value="">— Select a product group —</option>
+                {productGroups.map(g => (
+                  <option key={g.id} value={g.id}>{g.title} ({g.category})</option>
+                ))}
+              </select>
+              {productGroups.length === 0 && (
+                <p className="assign-hint">No product groups found. Switch to Product Groups view first, or use "New Group from Selected".</p>
+              )}
+              <div className="assign-modal-actions">
+                <button className="button button-secondary" onClick={() => setShowAssignModal(false)}>Cancel</button>
+                <button
+                  className="button button-primary"
+                  onClick={handleAssignToGroup}
+                  disabled={!assignTargetGroupId || assignWorking}
+                >
+                  {assignWorking ? 'Assigning…' : 'Assign'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* New Group from Selected Modal */}
+        {showNewGroupModal && viewMode === 'images' && (
+          <div className="assign-modal-overlay" onClick={() => setShowNewGroupModal(false)}>
+            <div className="assign-modal" onClick={e => e.stopPropagation()}>
+              <h3>Create New Group from {selectedItems.size} image{selectedItems.size !== 1 ? 's' : ''}</h3>
+              <label className="assign-label">Group name (optional):</label>
+              <input
+                type="text"
+                className="assign-input"
+                value={newGroupTitle}
+                onChange={e => setNewGroupTitle(e.target.value)}
+                placeholder="e.g. Vintage Levi's Jackets"
+                onKeyDown={e => { if (e.key === 'Enter') handleGroupIntoNew(); }}
+                autoFocus
+              />
+              <div className="assign-modal-actions">
+                <button className="button button-secondary" onClick={() => setShowNewGroupModal(false)}>Cancel</button>
+                <button
+                  className="button button-primary"
+                  onClick={handleGroupIntoNew}
+                  disabled={assignWorking}
+                >
+                  {assignWorking ? 'Creating…' : 'Create Group'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Batches View */}
         {viewMode === 'batches' && (
           <>
-            {batches.length === 0 ? (
+            {filteredBatches.length === 0 ? (
               <div className="empty-state">
                 <Folder size={64} className="empty-icon" />
-                <p>No saved batches yet.</p>
-                <p className="empty-subtitle">Start a new workflow to create your first batch.</p>
+                <p>{batches.length === 0 ? 'No saved batches yet.' : 'No batches match your filters.'}</p>
+                <p className="empty-subtitle">{batches.length === 0 ? 'Start a new workflow to create your first batch.' : 'Try adjusting or clearing your filters.'}</p>
               </div>
             ) : (
               <div 
@@ -845,11 +1137,11 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
         {/* Product Groups View */}
         {viewMode === 'groups' && (
           <>
-            {productGroups.length === 0 ? (
+            {filteredGroups.length === 0 ? (
               <div className="empty-state">
                 <Package size={64} className="empty-icon" />
-                <p>No product groups yet.</p>
-                <p className="empty-subtitle">Complete Step 2 (Group Images) to create product groups.</p>
+                <p>{productGroups.length === 0 ? 'No product groups yet.' : 'No groups match your filters.'}</p>
+                <p className="empty-subtitle">{productGroups.length === 0 ? 'Complete Step 2 (Group Images) to create product groups.' : 'Try adjusting or clearing your filters.'}</p>
               </div>
             ) : (
               <div 
@@ -880,11 +1172,11 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
         {/* Images View */}
         {viewMode === 'images' && (
           <>
-            {images.length === 0 ? (
+            {filteredImages.length === 0 ? (
               <div className="empty-state">
                 <Image size={64} className="empty-icon" />
-                <p>No images yet.</p>
-                <p className="empty-subtitle">Upload images in Step 1 to see them here.</p>
+                <p>{images.length === 0 ? 'No images yet.' : 'No images match your filters.'}</p>
+                <p className="empty-subtitle">{images.length === 0 ? 'Upload images in Step 1 to see them here.' : 'Try adjusting or clearing your filters.'}</p>
               </div>
             ) : (
               <div 
@@ -917,7 +1209,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
 
   // Render Batches View
   function renderBatchesView() {
-    return batches.map((batch) => {
+    return filteredBatches.map((batch) => {
       const thumbnails = getThumbnails(batch);
       const progress = getStepProgress(batch);
       const isSelected = selectedItems.has(batch.id);
@@ -1100,7 +1392,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
 
   // Render Product Groups View
   function renderProductGroupsView() {
-    return productGroups.map((group) => {
+    return filteredGroups.map((group) => {
       const isSelected = selectedItems.has(group.id);
       const isDragging = draggedItem === group.id;
       const isDragOver = dragOverItem === group.id;
@@ -1195,7 +1487,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
 
   // Render Images View
   function renderImagesView() {
-    return images.map((image) => {
+    return filteredImages.map((image) => {
       const isSelected = selectedItems.has(image.id);
       const isDragging = draggedItem === image.id;
       const isDragOver = dragOverItem === image.id;
@@ -1249,6 +1541,11 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
                 <div className="meta-tag">
                   <Folder size={10} />
                   <span>#{image.batchNumber.slice(0, 6)}</span>
+                </div>
+              )}
+              {!image.productGroup && (
+                <div className="meta-tag loose-badge" title="Not assigned to any product group">
+                  <span>Loose</span>
                 </div>
               )}
             </div>
