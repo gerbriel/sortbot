@@ -69,6 +69,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Always-current mirror of processedItems so async effects never read stale state
   const processedItemsRef = useRef<ClothingItem[]>(items);
   useEffect(() => { processedItemsRef.current = processedItems; }, [processedItems]);
+  // Always-current ref for onProcessed to avoid stale closures without adding it to deps
+  const onProcessedRef = useRef(onProcessed);
+  useEffect(() => { onProcessedRef.current = onProcessed; }, [onProcessed]);
 
   // Memoize group calculation to avoid unnecessary recalculations
   const { groupArray, currentGroup, currentItem } = useMemo(() => {
@@ -95,9 +98,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       return;
     }
     
-    // Subsequent updates - sync to parent
-    onProcessed(processedItems);
-  }, [processedItems, onProcessed]);
+    // Subsequent updates - sync to parent via ref so onProcessed is never a dependency
+    onProcessedRef.current(processedItems);
+  }, [processedItems]); // intentionally omit onProcessed — use ref instead
 
   // Update local state when items prop changes (e.g., opening a different batch)
   // Reset on length change (new batch), or merge in category/_presetData changes
