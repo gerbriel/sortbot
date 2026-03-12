@@ -9,28 +9,12 @@ interface ComprehensiveProductFormProps {
   setProcessedItems: (items: ClothingItem[]) => void;
 }
 
-const SECTIONS = [
-  { id: 'basic',        label: '💰 Basic Info' },
-  { id: 'details',      label: '📋 Product Details' },
-  { id: 'measurements', label: '📏 Measurements' },
-  { id: 'inventory',    label: '📦 Inventory & SKU' },
-  { id: 'shipping',     label: '🚚 Shipping' },
-  { id: 'policies',     label: '📜 Policies & Marketplace' },
-  { id: 'marketing',    label: '📈 Marketing & SEO' },
-  { id: 'status',       label: '⚡ Status & Publishing' },
-];
-
 export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> = ({
   currentItem,
   currentGroup,
   processedItems,
   setProcessedItems,
 }) => {
-  const scrollToSection = (id: string) => {
-    const el = document.getElementById('section-' + id);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
   const updateGroupField = (fieldPath: string, value: any) => {
     const updated = [...processedItems];
     currentGroup.forEach(groupItem => {
@@ -65,21 +49,6 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
 
   return (
     <div className="comprehensive-product-form">
-
-      {/* Jump-to dropdown */}
-      <div className="section-selector">
-        <select
-          className="section-dropdown"
-          defaultValue=""
-          onChange={e => {
-            scrollToSection(e.target.value);
-            (e.target as HTMLSelectElement).value = '';
-          }}
-        >
-          <option value="" disabled>Jump to section…</option>
-          {SECTIONS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-        </select>
-      </div>
 
       {/* All sections always visible */}
       <div className="section-fields">
