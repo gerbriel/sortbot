@@ -56,7 +56,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
         {/* Basic Info */}
         <div id="section-basic" className="fields-group">
           <div className="fields-group-title">💰 Basic Info</div>
-          <div className="fields-grid">
+          <div className="fields-grid-3">
             <div className="info-item">
               <label>Price ($): <PresetBadge show={isFromPreset('price')} /></label>
               <input type="number" value={currentItem.price || ''} onChange={e => updateGroupField('price', e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="49.99" className="info-input" step="0.01" min="0" />
@@ -89,15 +89,15 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
               <label>Product Type: <PresetBadge show={isFromPreset('productType')} /></label>
               <input type="text" value={currentItem.productType || ''} onChange={e => updateGroupField('productType', e.target.value)} placeholder="Graphic Tee, Hoodie…" className="info-input" />
             </div>
-            <div className="info-item span-2">
+            <div className="info-item span-3">
               <label>SEO Title:</label>
               <input type="text" value={currentItem.seoTitle || ''} onChange={e => updateGroupField('seoTitle', e.target.value)} placeholder="Vintage Black Rolling Stones Tee" className="info-input" />
             </div>
-            <div className="info-item span-2">
+            <div className="info-item span-3">
               <label>Tags (comma-separated): <PresetBadge show={isFromPreset('tags')} /></label>
               <input type="text" value={currentItem.tags?.join(', ') || ''} onChange={e => updateGroupField('tags', e.target.value ? e.target.value.split(',').map((t: string) => t.trim()).filter((t: string) => t) : [])} placeholder="vintage, tees, rock, black" className="info-input" />
             </div>
-            <div className="info-item span-2">
+            <div className="info-item span-3">
               <label>Flaws (if any):</label>
               <input type="text" value={currentItem.flaws || ''} onChange={e => updateGroupField('flaws', e.target.value)} placeholder="minor pilling on sleeves, small stain on hem" className="info-input" />
             </div>
