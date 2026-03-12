@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { fetchWorkflowBatches, deleteWorkflowBatch, type WorkflowBatch } from '../lib/workflowBatchService';
+import { fetchWorkflowBatches, type WorkflowBatch } from '../lib/workflowBatchService';
 import { 
   deleteProductGroup, 
   deleteImage, 
   updateBatchMetadata,
   duplicateBatch,
   fetchSavedProducts,
-  fetchSavedImages 
+  fetchSavedImages,
+  deleteBatchWithCascade,
 } from '../lib/libraryService';
 import { Folder, Calendar, Image, Layers, Tag, ArrowRight, Trash2, X, Grid3x3, Package, Edit2, Copy, Check } from 'lucide-react';
 import type { ClothingItem } from '../App';
@@ -216,8 +217,8 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       setDeletingItem({id: batchId, type: 'batch', progress});
     }
     
-    // Actually delete
-    const success = await deleteWorkflowBatch(batchId);
+    // Actually delete (cascades to products + product_images)
+    const success = await deleteBatchWithCascade(batchId);
     if (success) {
       setBatches(batches.filter(b => b.id !== batchId));
     }
@@ -603,7 +604,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
     // Delete items one by one with progress updates
     if (viewMode === 'batches') {
       for (const batchId of items) {
-        await deleteWorkflowBatch(batchId);
+        await deleteBatchWithCascade(batchId);
         deletedCount++;
         const progress = (deletedCount / totalItems) * 100;
         setDeletingItem({id: 'bulk', type: itemType, progress});
