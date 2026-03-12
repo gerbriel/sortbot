@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, type ReactNode } from 'react';
 import type { ClothingItem } from '../App';
 import { Target } from 'lucide-react';
 import { ComprehensiveProductForm } from './ComprehensiveProductForm';
@@ -11,6 +11,7 @@ import './ProductDescriptionGenerator.css';
 interface ProductDescriptionGeneratorProps {
   items: ClothingItem[];
   onProcessed: (items: ClothingItem[]) => void;
+  exportBar?: ReactNode;
 }
 
 // Web Speech API types
@@ -44,7 +45,8 @@ interface SpeechRecognitionErrorEvent extends Event {
 
 const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = ({ 
   items, 
-  onProcessed 
+  onProcessed,
+  exportBar,
 }) => {
   const [processedItems, setProcessedItems] = useState<ClothingItem[]>(items);
   const [currentGroupIndex, setCurrentGroupIndex] = useState(0);
@@ -1106,6 +1108,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem', marginBottom: 0 }}>
               AI will create a professional description from your voice input and fields
             </p>
+            {exportBar && (
+              <div style={{ marginTop: '1rem' }}>
+                {exportBar}
+              </div>
+            )}
           </div>
         </div>
 
