@@ -1058,6 +1058,29 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             </div>
           )}
 
+          {/* Listing navigation — navigates product groups, not images */}
+          <div className="preview-nav-controls">
+            <button
+              className="button"
+              onClick={handlePrevious}
+              disabled={currentGroupIndex === 0}
+            >
+              ← Prev
+            </button>
+            <span className="preview-nav-label">
+              {currentGroupIndex + 1} / {groupArray.length}
+            </span>
+            {currentGroupIndex < groupArray.length - 1 ? (
+              <button className="button" onClick={handleNext}>
+                Next →
+              </button>
+            ) : (
+              <button className="button button-secondary" onClick={handleFinish}>
+                Finish ✓
+              </button>
+            )}
+          </div>
+
         </div>
 
         <div className="product-form">
@@ -1289,29 +1312,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           </div>
 
         </div>
-      </div>
-
-      {/* Listing Navigation — spans full width below both columns */}
-      <div className="listing-nav-controls">
-        <button
-          className="button"
-          onClick={handlePrevious}
-          disabled={currentGroupIndex === 0}
-        >
-          ← Previous Listing
-        </button>
-        <span className="listing-nav-label">
-          Listing {currentGroupIndex + 1} of {groupArray.length}
-        </span>
-        {currentGroupIndex < groupArray.length - 1 ? (
-          <button className="button" onClick={handleNext}>
-            Next Listing →
-          </button>
-        ) : (
-          <button className="button button-secondary" onClick={handleFinish}>
-            Finish ✓
-          </button>
-        )}
       </div>
 
     </div>

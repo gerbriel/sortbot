@@ -562,9 +562,10 @@
   border: 1px solid var(--gray-200);
 }
 
-/* Prev/Next nav on left column (legacy, no longer used for listing nav) */
+/* Prev/Next listing nav under the left column image */
 .preview-nav-controls {
   display: flex;
+  align-items: center;
   gap: var(--space-3);
   margin-top: var(--space-4);
 }
@@ -573,27 +574,13 @@
   flex: 1;
 }
 
-/* Full-width listing navigation below both columns */
-.listing-nav-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin-top: var(--space-5);
-  padding: var(--space-4) var(--space-5);
-  background: white;
-  border: 1px solid var(--gray-200);
-  border-radius: var(--radius-md);
-}
-
-.listing-nav-controls .button {
-  min-width: 160px;
-}
-
-.listing-nav-label {
-  font-size: 0.95rem;
+.preview-nav-label {
+  font-size: 0.85rem;
   font-weight: 600;
-  color: var(--gray-600);
+  color: var(--gray-500);
+  white-space: nowrap;
+  text-align: center;
+  min-width: 40px;
 }
 
 /* AI description block on left column */
