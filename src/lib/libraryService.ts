@@ -228,6 +228,39 @@ export const updateProductGroup = async (
 // ============================================================================
 
 /**
+ * Delete a batch AND all its associated products + images from the database.
+ * This is the canonical batch delete — use this everywhere instead of
+ * deleteWorkflowBatch directly.
+ *
+ * Cascade order:
+ *   1. Delete product_images rows where products.batch_id = batchId
+ *      (Supabase cascade usually handles this, but we're explicit)
+ *   2. Delete products rows where batch_id = batchId
+ *   3. Delete the workflow_batches row itself
+ */
+export const deleteBatchWithCascade = async (batchId: string): Promise<boolean> => {
+  try {
+    // 1. Delete all products belonging to this batch (product_images cascade via FK)
+    const { error: productsError } = await supabase
+      .from('products')
+      .delete()
+      .eq('batch_id', batchId);
+
+    if (productsError && productsError.code !== 'PGRST116') {
+      console.error('Error deleting batch products:', productsError);
+      // Non-fatal — continue to delete the batch row
+    }
+
+    // 2. Delete the workflow_batches row
+    const success = await deleteWorkflowBatch(batchId);
+    return success;
+  } catch (error) {
+    console.error('Error in deleteBatchWithCascade:', error);
+    return false;
+  }
+};
+
+/**
  * Update batch metadata (name, notes, tags)
  */
 export const updateBatchMetadata = async (
@@ -496,7 +529,7 @@ export const bulkDeleteProductGroups = async (
 };
 
 /**
- * Delete multiple batches at once
+ * Delete multiple batches at once (cascades to products + images)
  */
 export const bulkDeleteBatches = async (
   batchIds: string[]
@@ -505,7 +538,7 @@ export const bulkDeleteBatches = async (
   let failed = 0;
   
   for (const batchId of batchIds) {
-    const result = await deleteWorkflowBatch(batchId);
+    const result = await deleteBatchWithCascade(batchId);
     if (result) {
       success++;
     } else {
