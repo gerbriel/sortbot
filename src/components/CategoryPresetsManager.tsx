@@ -442,9 +442,9 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
       await loadPresets();
       setShowForm(false);
       setEditingPreset(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving preset:', error);
-      alert('Failed to save preset');
+      alert(`Failed to save preset: ${error?.message || JSON.stringify(error)}`);
     }
   };
 
