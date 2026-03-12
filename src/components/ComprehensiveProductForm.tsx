@@ -107,7 +107,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
         {/* Product Details */}
         <div id="section-details" className="fields-group">
           <div className="fields-group-title">📋 Product Details</div>
-          <div className="fields-grid">
+          <div className="fields-grid-3">
             <div className="info-item">
               <label>Size:</label>
               <input type="text" list="size-options" value={currentItem.size || ''} onChange={e => updateGroupField('size', e.target.value)} placeholder="M, L, XL, 32…" className="info-input" />
@@ -172,7 +172,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
               <label>Care Instructions: <PresetBadge show={isFromPreset('care')} /></label>
               <input type="text" value={currentItem.care || ''} onChange={e => updateGroupField('care', e.target.value)} placeholder="Machine wash cold" className="info-input" />
             </div>
-            <div className="info-item span-2">
+            <div className="info-item span-3">
               <label>SEO Description:</label>
               <textarea value={currentItem.seoDescription || ''} onChange={e => updateGroupField('seoDescription', e.target.value)} placeholder="Meta description for search engines" className="info-input" rows={2} />
             </div>
