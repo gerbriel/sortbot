@@ -256,11 +256,11 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
               <label>Discounted Shipping: <PresetBadge show={isFromPreset('discountedShipping')} /></label>
               <input type="text" value={currentItem.discountedShipping || ''} onChange={e => updateGroupField('discountedShipping', e.target.value)} placeholder="No Discount, 10% Off…" className="info-input" />
             </div>
-            <div className="info-item span-3">
+            <div className="info-item">
               <label>Package Dimensions: <PresetBadge show={isFromPreset('packageDimensions')} /></label>
               <input type="text" value={currentItem.packageDimensions || ''} onChange={e => updateGroupField('packageDimensions', e.target.value)} placeholder="8 in - 6 in - 4 in" className="info-input" />
             </div>
-            <div className="info-item span-3">
+            <div className="info-item">
               <label>Continue Selling Out of Stock: <PresetBadge show={isFromPreset('continueSellingOutOfStock')} /></label>
               <select value={currentItem.continueSellingOutOfStock === undefined ? '' : currentItem.continueSellingOutOfStock ? 'true' : 'false'} onChange={e => updateGroupField('continueSellingOutOfStock', e.target.value === 'true')} className="info-input">
                 <option value="">Select…</option>
