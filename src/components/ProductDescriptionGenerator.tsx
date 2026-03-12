@@ -1074,46 +1074,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             )}
           </div>
 
-          {/* AI Generated Description */}
-          <div className="preview-ai-description">
-            <h3>AI Generated Description</h3>
-            <textarea
-              value={currentItem.generatedDescription}
-              onChange={(e) => {
-                const updated = [...processedItems];
-                currentGroup.forEach(groupItem => {
-                  const itemIndex = updated.findIndex(item => item.id === groupItem.id);
-                  if (itemIndex !== -1) {
-                    updated[itemIndex].generatedDescription = e.target.value;
-                  }
-                });
-                setProcessedItems(updated);
-              }}
-              className="info-textarea"
-              rows={10}
-              style={{ width: '100%' }}
-            />
-            <button
-              className="button button-primary"
-              onClick={regenerateDescription}
-              disabled={isGenerating}
-              style={{
-                marginTop: '0.5rem',
-                width: '100%',
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-              }}
-            >
-              {isGenerating ? '🧠 Generating...' : '✨ Generate AI Description'}
-            </button>
-            <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem', marginBottom: 0 }}>
-              AI will create a professional description from your voice input and fields
-            </p>
-            {exportBar && (
-              <div style={{ marginTop: '1rem' }}>
-                {exportBar}
-              </div>
-            )}
-          </div>
         </div>
 
         <div className="product-form">
@@ -1186,7 +1146,48 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 className="description-textarea"
               />
             </div>
-            
+
+            {/* AI Generated Description */}
+            <div className="preview-ai-description" style={{ marginTop: '1rem' }}>
+              <h3>AI Generated Description</h3>
+              <textarea
+                value={currentItem.generatedDescription}
+                onChange={(e) => {
+                  const updated = [...processedItems];
+                  currentGroup.forEach(groupItem => {
+                    const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                    if (itemIndex !== -1) {
+                      updated[itemIndex].generatedDescription = e.target.value;
+                    }
+                  });
+                  setProcessedItems(updated);
+                }}
+                className="info-textarea"
+                rows={10}
+                style={{ width: '100%' }}
+              />
+              <button
+                className="button button-primary"
+                onClick={regenerateDescription}
+                disabled={isGenerating}
+                style={{
+                  marginTop: '0.5rem',
+                  width: '100%',
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                }}
+              >
+                {isGenerating ? '🧠 Generating...' : '✨ Generate AI Description'}
+              </button>
+              <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem', marginBottom: 0 }}>
+                AI will create a professional description from your voice input and fields
+              </p>
+              {exportBar && (
+                <div style={{ marginTop: '1rem' }}>
+                  {exportBar}
+                </div>
+              )}
+            </div>
+
             {/* Display Intelligent Match Results */}
             {currentItem.modelName && (
               <div className="match-results" style={{
