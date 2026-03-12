@@ -688,7 +688,7 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
   // PART 6: Tags (ONLY from explicitly filled fields, no assumptions)
   const tags = generateTagsFromFields(context);
   if (tags.length > 0) {
-    description += tags.map(tag => `#${tag.toLowerCase().replace(/\s+/g, '')}`).join(' ');
+    description += tags.map(tag => `#${tag.toLowerCase().replace(/\s+/g, '')}`).join(', ');
     description += '\n\n';
   }
 

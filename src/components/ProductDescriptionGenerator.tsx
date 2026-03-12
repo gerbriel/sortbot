@@ -696,6 +696,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         
         // Use generated description
         const finalDescription = aiResult.description;
+        const suggestedTags = aiResult.suggestedTags || [];
         
         // Update all fields with generated data
         const updated = [...processedItems];
@@ -705,6 +706,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             updated[itemIndex] = {
               ...updated[itemIndex],
               generatedDescription: finalDescription,
+              ...(suggestedTags.length > 0 && {
+                tags: [...new Set([...(updated[itemIndex].tags || []), ...suggestedTags])]
+              }),
             };
           }
         });
