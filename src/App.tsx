@@ -776,49 +776,48 @@ function App() {
             <ProductDescriptionGenerator
               items={processedItems.length > 0 ? processedItems : groupedImages}
               onProcessed={handleItemsProcessed}
-            />
+              exportBar={processedItems.length > 0 ? (
+                <div className="export-bar">
+                  <button
+                    onClick={handleSaveBatch}
+                    className="button button-primary"
+                    disabled={saving}
+                  >
+                    {saving ? '💾 Saving...' : '💾 Save Batch to Database'}
+                  </button>
 
-            {processedItems.length > 0 && (
-              <div className="export-bar">
-                <button
-                  onClick={handleSaveBatch}
-                  className="button button-primary"
-                  disabled={saving}
-                >
-                  {saving ? '💾 Saving...' : '💾 Save Batch to Database'}
-                </button>
+                  <button
+                    className="button button-secondary"
+                    onClick={() => downloadShopifyCSV(processedItems)}
+                  >
+                    📥 Download CSV
+                  </button>
 
-                <button
-                  className="button button-secondary"
-                  onClick={() => downloadShopifyCSV(processedItems)}
-                >
-                  📥 Download CSV
-                </button>
+                  <button
+                    className="export-drawer-toggle"
+                    onClick={() => setShowExportDetails(v => !v)}
+                    aria-expanded={showExportDetails}
+                  >
+                    {showExportDetails ? '▲ Hide export options' : '▼ Export options'}
+                  </button>
 
-                <button
-                  className="export-drawer-toggle"
-                  onClick={() => setShowExportDetails(v => !v)}
-                  aria-expanded={showExportDetails}
-                >
-                  {showExportDetails ? '▲ Hide export options' : '▼ Export options'}
-                </button>
-
-                {showExportDetails && (
-                  <div className="export-drawer">
-                    <div className="export-drawer-actions">
-                      <button
-                        onClick={handleClearBatch}
-                        className="button button-secondary"
-                        disabled={saving}
-                      >
-                        🗑️ Clear Batch
-                      </button>
+                  {showExportDetails && (
+                    <div className="export-drawer">
+                      <div className="export-drawer-actions">
+                        <button
+                          onClick={handleClearBatch}
+                          className="button button-secondary"
+                          disabled={saving}
+                        >
+                          🗑️ Clear Batch
+                        </button>
+                      </div>
+                      <GoogleSheetExporter items={processedItems} />
                     </div>
-                    <GoogleSheetExporter items={processedItems} />
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              ) : undefined}
+            />
           </section>
         )}
       </main>
