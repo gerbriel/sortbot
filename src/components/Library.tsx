@@ -33,6 +33,10 @@ interface ImageRecord {
   category?: string;
   productGroup?: string;
   batchNumber?: string;
+  brand?: string;
+  size?: string;
+  condition?: string;
+  tags?: string[];
   createdAt: string;
   isSaved?: boolean; // Track if from database vs workflow_state
 }
@@ -81,7 +85,10 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
   const [filterCategory, setFilterCategory] = useState(''); // groups: category
   const [filterBatchId, setFilterBatchId] = useState('');   // images: by batch
   const [filterGroupId, setFilterGroupId] = useState('');   // images: by group
-  const [filterLooseOnly, setFilterLooseOnly] = useState(false); // images: loose only
+  const [filterUnassigned, setFilterUnassigned] = useState(false); // images: unassigned only
+  const [filterBrand, setFilterBrand] = useState('');       // images: by brand
+  const [filterSize, setFilterSize] = useState('');         // images: by size
+  const [filterCondition, setFilterCondition] = useState(''); // images: by condition
   
   // Refs for selection containers
   const batchesGridRef = useRef<HTMLDivElement>(null);
@@ -109,7 +116,10 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
     setFilterCategory('');
     setFilterBatchId('');
     setFilterGroupId('');
-    setFilterLooseOnly(false);
+    setFilterUnassigned(false);
+    setFilterBrand('');
+    setFilterSize('');
+    setFilterCondition('');
   }, [viewMode]);
 
   const loadBatches = async () => {
@@ -208,6 +218,10 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
           category: img.products?.product_category,
           productGroup: img.products?.id,
           batchNumber: img.products?.batch_id,
+          brand: img.products?.vendor,
+          size: img.products?.size,
+          condition: img.products?.condition,
+          tags: img.products?.tags,
           createdAt: img.created_at,
           isSaved: true,
         });
@@ -783,11 +797,19 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
     ).entries()
   );
 
+  // Collect unique filter option lists for images
+  const imageBrands = Array.from(new Set(images.map(img => img.brand).filter(Boolean))).sort() as string[];
+  const imageSizes = Array.from(new Set(images.map(img => img.size).filter(Boolean))).sort() as string[];
+  const imageConditions = Array.from(new Set(images.map(img => img.condition).filter(Boolean))).sort() as string[];
+
   const filteredImages = images.filter(img => {
     const batchMatch = !filterBatchId || img.batchNumber === filterBatchId;
     const groupMatch = !filterGroupId || img.productGroup === filterGroupId;
-    const looseMatch = !filterLooseOnly || !img.productGroup;
-    return batchMatch && groupMatch && looseMatch;
+    const unassignedMatch = !filterUnassigned || !img.productGroup;
+    const brandMatch = !filterBrand || img.brand === filterBrand;
+    const sizeMatch = !filterSize || img.size === filterSize;
+    const conditionMatch = !filterCondition || img.condition === filterCondition;
+    return batchMatch && groupMatch && unassignedMatch && brandMatch && sizeMatch && conditionMatch;
   });
   // ────────────────────────────────────────────────────────────────────────────
 
@@ -968,19 +990,55 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
                   <option key={id} value={id}>{label}</option>
                 ))}
               </select>
+              {imageBrands.length > 0 && (
+                <select
+                  className="filter-select"
+                  value={filterBrand}
+                  onChange={e => setFilterBrand(e.target.value)}
+                >
+                  <option value="">All brands</option>
+                  {imageBrands.map(b => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+              )}
+              {imageSizes.length > 0 && (
+                <select
+                  className="filter-select"
+                  value={filterSize}
+                  onChange={e => setFilterSize(e.target.value)}
+                >
+                  <option value="">All sizes</option>
+                  {imageSizes.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              )}
+              {imageConditions.length > 0 && (
+                <select
+                  className="filter-select"
+                  value={filterCondition}
+                  onChange={e => setFilterCondition(e.target.value)}
+                >
+                  <option value="">All conditions</option>
+                  {imageConditions.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              )}
               <label className="filter-toggle">
                 <input
                   type="checkbox"
-                  checked={filterLooseOnly}
-                  onChange={e => setFilterLooseOnly(e.target.checked)}
+                  checked={filterUnassigned}
+                  onChange={e => setFilterUnassigned(e.target.checked)}
                 />
-                Loose only
+                Unassigned
               </label>
             </>
           )}
 
           {/* Active filter count + clear */}
-          {(searchQuery || filterStep || filterCategory || filterBatchId || filterGroupId || filterLooseOnly) && (
+          {(searchQuery || filterStep || filterCategory || filterBatchId || filterGroupId || filterUnassigned || filterBrand || filterSize || filterCondition) && (
             <button
               className="filter-clear"
               onClick={() => {
@@ -989,7 +1047,10 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
                 setFilterCategory('');
                 setFilterBatchId('');
                 setFilterGroupId('');
-                setFilterLooseOnly(false);
+                setFilterUnassigned(false);
+                setFilterBrand('');
+                setFilterSize('');
+                setFilterCondition('');
               }}
             >
               ✕ Clear filters
