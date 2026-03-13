@@ -51,6 +51,17 @@ export const saveProductToDatabase = async (
   groupImages: ClothingItem[],
   batchId?: string
 ): Promise<string | null> => {
+  // Guard: if userId is missing, fetch from auth session
+  let resolvedUserId = userId;
+  if (!resolvedUserId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      console.error('saveProductToDatabase: no authenticated user');
+      return null;
+    }
+    resolvedUserId = user.id;
+  }
+
   try {
     // 1. Insert product
     // Note: We don't check for existing products here because:
@@ -60,7 +71,7 @@ export const saveProductToDatabase = async (
     const { data: productData, error: productError } = await supabase
       .from('products')
       .insert({
-        user_id: userId,
+        user_id: resolvedUserId,
         batch_id: batchId || null,
         
         // Core product info
@@ -177,7 +188,7 @@ export const saveProductToDatabase = async (
         // Image not uploaded yet - upload now
         const uploadResult = await uploadImageToStorage(
           item.file,
-          userId,
+          resolvedUserId,
           productData.id,
           i
         );
@@ -204,7 +215,7 @@ export const saveProductToDatabase = async (
             .from('product_images')
             .insert({
               product_id: productData.id,
-              user_id: userId,
+              user_id: resolvedUserId,
               image_url: imageUrl,
               storage_path: storagePath,
               position: i,
