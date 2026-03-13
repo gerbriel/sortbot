@@ -133,8 +133,13 @@ function App() {
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showStep2Info, setShowStep2Info] = useState(false);
-  const [currentBatchId, setCurrentBatchId] = useState<string | null>(null);
-  const [currentBatchNumber, setCurrentBatchNumber] = useState<string>(`batch-${Date.now()}`);
+  const [currentBatchId, setCurrentBatchId] = useState<string | null>(() => {
+    // Restore batch ID from localStorage so reloads don't lose progress
+    return localStorage.getItem('sortbot_current_batch_id') || null;
+  });
+  const [currentBatchNumber, setCurrentBatchNumber] = useState<string>(() => {
+    return localStorage.getItem('sortbot_current_batch_number') || `batch-${Date.now()}`;
+  });
 
   // Helper to determine current workflow step
 
@@ -143,9 +148,32 @@ function App() {
   // Check authentication status on mount
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
+
+      // Auto-restore last batch on page load so users don't lose progress on reload
+      const savedBatchId = localStorage.getItem('sortbot_current_batch_id');
+      if (savedBatchId && session?.user) {
+        try {
+          const { data: batch } = await supabase
+            .from('workflow_batches')
+            .select('*')
+            .eq('id', savedBatchId)
+            .single();
+          if (batch?.workflow_state) {
+            const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state;
+            if (uploadedImages?.length) setUploadedImages(uploadedImages);
+            if (groupedImages?.length) setGroupedImages(groupedImages);
+            if (sortedImages?.length) setSortedImages(sortedImages);
+            if (processedItems?.length) setProcessedItems(processedItems);
+          }
+        } catch {
+          // Batch may have been deleted; clear stale ID
+          localStorage.removeItem('sortbot_current_batch_id');
+          localStorage.removeItem('sortbot_current_batch_number');
+        }
+      }
     });
 
     // Listen for auth changes
@@ -166,6 +194,8 @@ function App() {
     setSortedImages([]);
     setGroupedImages([]);
     setProcessedItems([]);
+    localStorage.removeItem('sortbot_current_batch_id');
+    localStorage.removeItem('sortbot_current_batch_number');
   };
 
   const handleSaveBatch = async () => {
@@ -221,6 +251,11 @@ function App() {
       setSortedImages([]);
       setUploadedImages([]);
       setSaveMessage(null);
+      // Clear persisted batch so reload starts fresh
+      setCurrentBatchId(null);
+      setCurrentBatchNumber(`batch-${Date.now()}`);
+      localStorage.removeItem('sortbot_current_batch_id');
+      localStorage.removeItem('sortbot_current_batch_number');
     }
   };
 
@@ -388,8 +423,10 @@ function App() {
       );
       
       if (batchId && !currentBatchId) {
-        // First time saving - set the batch ID
+        // First time saving - set the batch ID and persist it
         setCurrentBatchId(batchId);
+        localStorage.setItem('sortbot_current_batch_id', batchId);
+        localStorage.setItem('sortbot_current_batch_number', currentBatchNumber);
       }
     } catch (error) {
       console.error('Auto-save failed:', error);
@@ -550,9 +587,11 @@ function App() {
       if (processedItems) setProcessedItems(processedItems);
     }
     
-    // Set current batch info
+    // Set current batch info and persist for reload survival
     setCurrentBatchId(batch.id);
     setCurrentBatchNumber(batch.batch_number);
+    localStorage.setItem('sortbot_current_batch_id', batch.id);
+    localStorage.setItem('sortbot_current_batch_number', batch.batch_number);
     
     // Close library
     setShowLibrary(false);
@@ -719,6 +758,21 @@ function App() {
         {sortedImages.length > 0 && (
           <section className="step-section">
             <h2>Step 3: Add Voice Descriptions & Generate Product Info</h2>
+            {(() => {
+              // Count unique product groups so user can verify grouping
+              const uniqueGroups = new Set(processedItems.map(i => i.productGroup || i.id));
+              const groupCount = uniqueGroups.size;
+              const imageCount = processedItems.length;
+              return groupCount < imageCount ? (
+                <p style={{ color: '#6366f1', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+                  📦 {groupCount} listing{groupCount !== 1 ? 's' : ''} ({imageCount} images grouped) — use Next/Previous to navigate listings
+                </p>
+              ) : (
+                <p style={{ color: '#888', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                  ⚠️ {imageCount} image{imageCount !== 1 ? 's' : ''} — each is its own listing. Go back to Step 2 to group multi-image products.
+                </p>
+              );
+            })()}
             <ProductDescriptionGenerator
               items={processedItems}
               onProcessed={handleItemsProcessed}
