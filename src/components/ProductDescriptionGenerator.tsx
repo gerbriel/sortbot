@@ -1123,7 +1123,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
           {/* Download / Export - always available below nav */}
           <div style={{ marginTop: '1rem' }}>
-            <GoogleSheetExporter items={processedItems} />
+            <GoogleSheetExporter items={processedItems} compactMode={true} />
           </div>
         </div>
 
