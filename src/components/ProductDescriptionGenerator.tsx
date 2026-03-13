@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import type { ClothingItem } from '../App';
-import { Target } from 'lucide-react';
 import { ComprehensiveProductForm } from './ComprehensiveProductForm';
 import { getCategoryPresets } from '../lib/categoryPresetsService';
 import type { CategoryPreset } from '../lib/categoryPresets';
@@ -1044,6 +1043,82 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               </div>
             </div>
           )}
+
+          {/* Override Preset Dropdown - below images */}
+          {availablePresets.length > 0 && (
+            <div style={{
+              marginTop: '1rem',
+              padding: '0.75rem',
+              background: '#f8f9fa',
+              border: '1px solid #dee2e6',
+              borderRadius: '8px'
+            }}>
+              <label style={{ 
+                display: 'block', 
+                fontWeight: 600, 
+                marginBottom: '0.4rem',
+                fontSize: '0.9rem',
+                color: '#495057'
+              }}>
+                🎨 Override Preset (Optional):
+              </label>
+              <select
+                value={selectedPresetId}
+                onChange={(e) => handleApplyPreset(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.4rem 0.5rem',
+                  border: '1px solid #ced4da',
+                  borderRadius: '4px',
+                  fontSize: '0.9rem',
+                  background: 'white',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="">
+                  {currentItem._presetData 
+                    ? `Keep Current: ${currentItem._presetData.displayName}` 
+                    : 'Select a preset to apply...'}
+                </option>
+                {availablePresets.map(preset => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.display_name}
+                    {preset.is_default && ' (Default)'}
+                    {preset.product_type && ` - ${preset.product_type}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Previous / Next navigation - navigates product groups */}
+          <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+            <button
+              className="button"
+              onClick={handlePrevious}
+              disabled={currentGroupIndex === 0}
+              style={{ flex: 1 }}
+            >
+              ← Previous
+            </button>
+            {currentGroupIndex < groupArray.length - 1 ? (
+              <button
+                className="button"
+                onClick={handleNext}
+                style={{ flex: 1 }}
+              >
+                Next →
+              </button>
+            ) : (
+              <button
+                className="button button-secondary"
+                onClick={handleFinish}
+                style={{ flex: 1 }}
+              >
+                Finish ✓
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="product-form">
@@ -1116,163 +1191,97 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 className="description-textarea"
               />
             </div>
-            
-            {/* Display Intelligent Match Results */}
-            {currentItem.modelName && (
-              <div className="match-results" style={{
-                marginTop: '1rem',
-                padding: '1rem',
-                background: '#f0f9ff',
-                border: '2px solid #3b82f6',
-                borderRadius: '8px'
-              }}>
-                <h4 style={{ margin: '0 0 0.5rem 0', color: '#1e40af', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Target size={18} /> Intelligent Match Detected
-                </h4>
-                <div style={{ fontSize: '0.9rem', display: 'grid', gap: '0.5rem' }}>
-                  {currentItem.brand && <div><strong>Brand:</strong> {currentItem.brand}</div>}
-                  {currentItem.modelName && <div><strong>Model:</strong> {currentItem.modelName} {currentItem.modelNumber && `(${currentItem.modelNumber})`}</div>}
-                  {currentItem.brandCategory && <div><strong>Category:</strong> {currentItem.brandCategory}</div>}
-                  {currentItem.subculture && currentItem.subculture.length > 0 && (
-                    <div><strong>Subcultures:</strong> {currentItem.subculture.join(', ')}</div>
-                  )}
-                </div>
-              </div>
-            )}
 
-            {/* Category Preset Applied Indicator */}
-            {currentItem._presetData && (
-              <div style={{
-                marginBottom: '1.5rem',
-                padding: '1rem',
-                background: '#f0fdf4',
-                border: '2px solid #10b981',
-                borderRadius: '8px'
-              }}>
-                <h4 style={{ margin: '0 0 0.5rem 0', color: '#047857', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  ✓ Category Preset Applied
-                </h4>
-                <div style={{ fontSize: '0.9rem', display: 'grid', gap: '0.5rem' }}>
-                  <div><strong>Category:</strong> {currentItem._presetData.displayName}</div>
-                  {currentItem._presetData.description && (
-                    <div style={{ color: '#666', fontStyle: 'italic' }}>{currentItem._presetData.description}</div>
-                  )}
-                  <div style={{ fontSize: '0.85rem', color: '#059669', marginTop: '0.5rem' }}>
-                    📋 Form fields have been pre-filled with preset defaults. You can edit any field to override.
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Manual Preset Override Dropdown */}
-            {availablePresets.length > 0 && (
-              <div style={{
-                marginBottom: '1.5rem',
-                padding: '1rem',
-                background: '#f8f9fa',
-                border: '1px solid #dee2e6',
-                borderRadius: '8px'
-              }}>
-                <label style={{ 
-                  display: 'block', 
-                  fontWeight: 600, 
-                  marginBottom: '0.5rem',
-                  color: '#495057'
-                }}>
-                  🎨 Override Preset (Optional):
-                </label>
-                <select
-                  value={selectedPresetId}
-                  onChange={(e) => handleApplyPreset(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem',
-                    border: '1px solid #ced4da',
-                    borderRadius: '4px',
-                    fontSize: '0.95rem',
-                    background: 'white',
-                    cursor: 'pointer'
+            {/* AI Generated Description - directly below voice input */}
+            <div className="generated-info">
+              <h3>AI Generated Content (Edit as needed)</h3>
+              <div className="info-item">
+                <label>Product Description:</label>
+                <textarea 
+                  value={currentItem.generatedDescription}
+                  onChange={(e) => {
+                    const updated = [...processedItems];
+                    currentGroup.forEach(groupItem => {
+                      const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                      if (itemIndex !== -1) {
+                        updated[itemIndex].generatedDescription = e.target.value;
+                      }
+                    });
+                    setProcessedItems(updated);
                   }}
-                >
-                  <option value="">
-                    {currentItem._presetData 
-                      ? `Keep Current: ${currentItem._presetData.displayName}` 
-                      : 'Select a preset to apply...'}
-                  </option>
-                  {availablePresets.map(preset => (
-                    <option key={preset.id} value={preset.id}>
-                      {preset.display_name}
-                      {preset.is_default && ' (Default)'}
-                      {preset.product_type && ` - ${preset.product_type}`}
-                    </option>
-                  ))}
-                </select>
-                <p style={{ 
-                  fontSize: '0.85rem', 
-                  color: '#6c757d', 
-                  marginTop: '0.5rem',
-                  marginBottom: 0
-                }}>
-                  💡 Select a different preset to override the current one. Voice dictation always takes precedence.
+                  className="info-textarea"
+                  rows={12}
+                  style={{ width: '100%', minHeight: '300px' }}
+                />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginTop: '0.5rem' }}>
+                  <button
+                    className="button button-primary"
+                    onClick={regenerateDescription}
+                    disabled={isGenerating || isSyncingFields}
+                    style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+                    title="Generate professional description from your voice + fields"
+                  >
+                    {isGenerating ? '🧠 Generating...' : '✨ Generate AI Description'}
+                  </button>
+                  <button
+                    className="button"
+                    onClick={syncFieldsFromDescription}
+                    disabled={isSyncingFields || isGenerating}
+                    style={{
+                      background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                      color: '#fff',
+                      border: 'none',
+                    }}
+                    title="Parse the description text and update all structured fields (size, brand, color, etc.)"
+                  >
+                    {isSyncingFields ? '🔄 Syncing fields...' : '🔁 Sync Fields from Description'}
+                  </button>
+                </div>
+                <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem', marginBottom: 0 }}>
+                  AI will create a professional description from your voice input and fields
                 </p>
               </div>
-            )}
-          </div>
-
-          {/* AI Generated Description - directly below voice input */}
-          <div className="generated-info">
-            <h3>AI Generated Content (Edit as needed)</h3>
-            <div className="info-item">
-              <label>Product Description:</label>
-              <textarea 
-                value={currentItem.generatedDescription}
-                onChange={(e) => {
-                  const updated = [...processedItems];
-                  // Update all items in the group
-                  currentGroup.forEach(groupItem => {
-                    const itemIndex = updated.findIndex(item => item.id === groupItem.id);
-                    if (itemIndex !== -1) {
-                      updated[itemIndex].generatedDescription = e.target.value;
-                    }
-                  });
-                  setProcessedItems(updated);
-                }}
-                className="info-textarea"
-                rows={12}
-                style={{ width: '100%', minHeight: '300px' }}
-              />
-              <button
-                className="button button-primary"
-                onClick={regenerateDescription}
-                disabled={isGenerating || isSyncingFields}
-                style={{ 
-                  marginTop: '0.5rem', 
-                  width: '100%',
-                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-                }}
-                title="Generate professional description from your voice + fields"
-              >
-                {isGenerating ? '🧠 Generating...' : '✨ Generate AI Description'}
-              </button>
-              <button
-                className="button"
-                onClick={syncFieldsFromDescription}
-                disabled={isSyncingFields || isGenerating}
-                style={{
-                  marginTop: '0.5rem',
-                  width: '100%',
-                  background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                  color: '#fff',
-                  border: 'none',
-                }}
-                title="Parse the description text and update all structured fields (size, brand, color, etc.)"
-              >
-                {isSyncingFields ? '🔄 Syncing fields...' : '🔁 Sync Fields from Description'}
-              </button>
-              <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem', marginBottom: 0 }}>
-                AI will create a professional description from your voice input and fields
-              </p>
             </div>
+            
+            {/* Intelligent Match + Category Preset - side by side compact */}
+            {(currentItem.modelName || currentItem._presetData) && (
+              <div style={{ display: 'grid', gridTemplateColumns: currentItem.modelName && currentItem._presetData ? '1fr 1fr' : '1fr', gap: '0.75rem', marginTop: '0.75rem' }}>
+                {currentItem.modelName && (
+                  <div style={{
+                    padding: '0.6rem 0.75rem',
+                    background: '#f0f9ff',
+                    border: '2px solid #3b82f6',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    lineHeight: '1.4'
+                  }}>
+                    <strong style={{ color: '#1e40af' }}>🎯 Intelligent Match</strong>
+                    {currentItem.brand && <span style={{ marginLeft: '0.5rem' }}>· {currentItem.brand}</span>}
+                    {currentItem.modelName && <span style={{ marginLeft: '0.5rem' }}>· {currentItem.modelName}{currentItem.modelNumber ? ` (${currentItem.modelNumber})` : ''}</span>}
+                    {currentItem.brandCategory && <span style={{ marginLeft: '0.5rem' }}>· {currentItem.brandCategory}</span>}
+                    {currentItem.subculture && currentItem.subculture.length > 0 && (
+                      <span style={{ marginLeft: '0.5rem' }}>· {currentItem.subculture.join(', ')}</span>
+                    )}
+                  </div>
+                )}
+                {currentItem._presetData && (
+                  <div style={{
+                    padding: '0.6rem 0.75rem',
+                    background: '#f0fdf4',
+                    border: '2px solid #10b981',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    lineHeight: '1.4'
+                  }}>
+                    <strong style={{ color: '#047857' }}>✓ Preset Applied</strong>
+                    <span style={{ marginLeft: '0.5rem' }}>· {currentItem._presetData.displayName}</span>
+                    {currentItem._presetData.description && (
+                      <span style={{ marginLeft: '0.5rem', color: '#666', fontStyle: 'italic' }}>· {currentItem._presetData.description}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Comprehensive Product Form - All 62 CSV Fields */}
@@ -1291,32 +1300,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           </div>
         </div>
         </div>
-
-      <div className="navigation-controls">
-        <button 
-          className="button" 
-          onClick={handlePrevious}
-          disabled={currentGroupIndex === 0}
-        >
-          ← Previous
-        </button>
-        
-        {currentGroupIndex < groupArray.length - 1 ? (
-          <button 
-            className="button" 
-            onClick={handleNext}
-          >
-            Next →
-          </button>
-        ) : (
-          <button 
-            className="button button-secondary" 
-            onClick={handleFinish}
-          >
-            Finish Processing ✓
-          </button>
-        )}
-      </div>
     </div>
   );
 };
