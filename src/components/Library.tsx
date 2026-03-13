@@ -8,7 +8,8 @@ import {
   fetchSavedProducts,
   fetchSavedImages 
 } from '../lib/libraryService';
-import { Folder, Calendar, Image, Layers, Tag, ArrowRight, Trash2, X, Grid3x3, Package, Edit2, Copy, Check } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { Folder, Calendar, Image, Layers, Tag, ArrowRight, Trash2, X, Grid3x3, Package, Edit2, Copy, Check, Search, Plus } from 'lucide-react';
 import type { ClothingItem } from '../App';
 import './Library.css';
 
@@ -54,6 +55,9 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
   const [editingBatch, setEditingBatch] = useState<string | null>(null);
   const [editBatchName, setEditBatchName] = useState<string>('');
   
+  // Search / filter state
+  const [searchQuery, setSearchQuery] = useState('');
+
   // Selection and drag-drop state
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [draggedItem, setDraggedItem] = useState<string | null>(null);
@@ -198,6 +202,77 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       // Silent error handling
     }
     setLoading(false);
+  };
+
+  // Create a brand-new empty batch in the database
+  const handleCreateNewBatch = async () => {
+    const name = prompt('Batch name (leave blank for auto-name):');
+    if (name === null) return; // cancelled
+    const batchNumber = `batch-${Date.now()}`;
+    const batchName = name.trim() || `Batch ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    try {
+      const { data, error } = await supabase
+        .from('workflow_batches')
+        .insert({
+          batch_number: batchNumber,
+          batch_name: batchName,
+          current_step: 1,
+          total_images: 0,
+          product_groups_count: 0,
+          workflow_state: { uploadedImages: [], groupedImages: [], sortedImages: [], processedItems: [] },
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      if (data) {
+        setBatches(prev => [data, ...prev]);
+        alert(`✅ Created "${batchName}". Open it to start adding images.`);
+      }
+    } catch (err) {
+      console.error('Create batch error:', err);
+      alert('Failed to create batch. Please try again.');
+    }
+  };
+
+  // Assign selected product-group images to a new batch
+  const handleAssignSelectedToNewBatch = async () => {
+    if (selectedItems.size === 0) return;
+    const name = prompt('New batch name for selected items:');
+    if (name === null) return;
+    const batchNumber = `batch-${Date.now()}`;
+    const batchName = name.trim() || `Batch ${new Date().toLocaleDateString()}`;
+    try {
+      const { data: newBatch, error: batchErr } = await supabase
+        .from('workflow_batches')
+        .insert({
+          batch_number: batchNumber,
+          batch_name: batchName,
+          current_step: 2,
+          total_images: selectedItems.size,
+          product_groups_count: selectedItems.size,
+          workflow_state: { uploadedImages: [], groupedImages: [], sortedImages: [], processedItems: [] },
+        })
+        .select()
+        .single();
+      if (batchErr) throw batchErr;
+      if (!newBatch) throw new Error('No batch returned');
+
+      // Reassign products in DB to this new batch
+      const ids = Array.from(selectedItems);
+      const { error: updateErr } = await supabase
+        .from('products')
+        .update({ batch_id: newBatch.id })
+        .in('id', ids);
+      if (updateErr) throw updateErr;
+
+      clearSelection();
+      await loadBatches();
+      if (viewMode === 'groups') await loadProductGroups();
+      alert(`✅ ${ids.length} group(s) moved to "${batchName}".`);
+    } catch (err) {
+      console.error('Assign to batch error:', err);
+      alert('Failed to assign items to new batch.');
+    }
   };
 
   const handleDelete = async (batchId: string) => {
@@ -760,7 +835,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
           </div>
         )}
 
-        {/* View Switcher */}
+        {/* View Switcher + Search + New Batch */}
         <div className="view-switcher">
           <button 
             className={`view-tab ${viewMode === 'batches' ? 'active' : ''}`}
@@ -785,6 +860,45 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
           </button>
         </div>
 
+        {/* Search bar + New Batch button */}
+        <div style={{ display: 'flex', gap: '0.5rem', padding: '0.5rem 1rem', alignItems: 'center' }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <Search size={16} style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: '#888', pointerEvents: 'none' }} />
+            <input
+              type="text"
+              placeholder={`Search ${viewMode}...`}
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                paddingLeft: '2rem',
+                paddingRight: '0.75rem',
+                paddingTop: '0.45rem',
+                paddingBottom: '0.45rem',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '0.9rem',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+          {viewMode === 'batches' && (
+            <button
+              onClick={handleCreateNewBatch}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.3rem',
+                background: '#6366f1', color: '#fff', border: 'none',
+                borderRadius: '6px', padding: '0.45rem 0.85rem',
+                fontSize: '0.85rem', cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+              title="Create a new empty batch"
+            >
+              <Plus size={15} /> New Batch
+            </button>
+          )}
+        </div>
+
         {/* Selection Toolbar */}
         {selectedItems.size > 0 && (
           <div className="selection-toolbar">
@@ -798,6 +912,12 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
               <button className="toolbar-button" onClick={selectAll}>
                 Select All
               </button>
+              {(viewMode === 'groups') && (
+                <button className="toolbar-button" onClick={handleAssignSelectedToNewBatch} title="Move selected groups into a new batch">
+                  <Plus size={16} />
+                  Assign to New Batch
+                </button>
+              )}
               <button className="toolbar-button danger" onClick={handleBulkDelete}>
                 <Trash2 size={16} />
                 Delete Selected
@@ -916,7 +1036,14 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
 
   // Render Batches View
   function renderBatchesView() {
-    return batches.map((batch) => {
+    const q = searchQuery.toLowerCase();
+    const filtered = q
+      ? batches.filter(b => {
+          const name = b.batch_name || `Batch ${new Date(b.created_at).toLocaleDateString()}`;
+          return name.toLowerCase().includes(q) || b.batch_number.toLowerCase().includes(q);
+        })
+      : batches;
+    return filtered.map((batch) => {
       const thumbnails = getThumbnails(batch);
       const progress = getStepProgress(batch);
       const isSelected = selectedItems.has(batch.id);
@@ -1099,7 +1226,13 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
 
   // Render Product Groups View
   function renderProductGroupsView() {
-    return productGroups.map((group) => {
+    const q = searchQuery.toLowerCase();
+    const filtered = q
+      ? productGroups.filter(g =>
+          g.title.toLowerCase().includes(q) || g.category.toLowerCase().includes(q)
+        )
+      : productGroups;
+    return filtered.map((group) => {
       const isSelected = selectedItems.has(group.id);
       const isDragging = draggedItem === group.id;
       const isDragOver = dragOverItem === group.id;
@@ -1194,7 +1327,14 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
 
   // Render Images View
   function renderImagesView() {
-    return images.map((image) => {
+    const q = searchQuery.toLowerCase();
+    const filtered = q
+      ? images.filter(img =>
+          (img.category || '').toLowerCase().includes(q) ||
+          (img.batchNumber || '').toLowerCase().includes(q)
+        )
+      : images;
+    return filtered.map((image) => {
       const isSelected = selectedItems.has(image.id);
       const isDragging = draggedItem === image.id;
       const isDragOver = dragOverItem === image.id;

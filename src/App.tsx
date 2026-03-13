@@ -440,6 +440,12 @@ function App() {
       return;
     }
 
+    // ── Clear ALL current state first so nothing from the active session bleeds in ──
+    setUploadedImages([]);
+    setGroupedImages([]);
+    setSortedImages([]);
+    setProcessedItems([]);
+
     // Restore workflow state
     const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state;
     
