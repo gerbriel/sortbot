@@ -75,13 +75,10 @@ export async function updateCategoryPreset(
   id: string,
   updates: Partial<CategoryPresetInput>
 ): Promise<CategoryPreset> {
-  const { data: { user } } = await supabase.auth.getUser();
-
   const { data, error } = await supabase
     .from('category_presets')
     .update(updates)
     .eq('id', id)
-    .eq('user_id', user?.id ?? '')
     .select()
     .single();
 

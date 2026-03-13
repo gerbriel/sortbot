@@ -8,13 +8,10 @@ import './ImageGrouper.css';
 interface ImageGrouperProps {
   items: ClothingItem[];
   onGrouped: (items: ClothingItem[]) => void;
-  onSelectionChange?: (selectedIds: Set<string>) => void;
   userId?: string;
-  pendingGroupId?: string | null;
-  onGroupSelected?: (groupId: string | null) => void;
 }
 
-const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onSelectionChange, userId, pendingGroupId, onGroupSelected }) => {
+const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId }) => {
   const [groupedItems, setGroupedItems] = useState<ClothingItem[]>([]);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [draggedItem, setDraggedItem] = useState<ClothingItem | null>(null);
@@ -46,11 +43,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onSelecti
   const currentContainerRef = useRef<HTMLElement | null>(null);
   
   const SELECTION_THRESHOLD = 5; // pixels - must move this much to activate selection
-
-  // Notify parent whenever selection changes so it can pass IDs to CategoryZones
-  useEffect(() => {
-    onSelectionChange?.(selectedItems);
-  }, [selectedItems, onSelectionChange]);
 
   // Global mouse handlers for selection
   useEffect(() => {
@@ -158,123 +150,101 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onSelecti
     };
   }, [isSelecting, selectionStart, selectionBox, selectedItems, groupedItems]);
 
-  // Initialize items with individual groups and auto-upload
+  // Initialize items with individual groups and auto-upload.
+  // IMPORTANT: Only process items that are genuinely new (not already in groupedItems).
+  // This prevents the items prop feedback loop from resetting group state every time
+  // onGrouped() is called (which triggers a re-render with updated items).
   useEffect(() => {
     const initializeItems = async () => {
-      // Find truly new images that need uploading (have file but not uploaded yet)
-      const newImages = items.filter(item => {
-        // Skip if already tracked as uploaded
-        if (uploadedImages.has(item.id)) return false;
-        
-        // Skip if has permanent Supabase URL
-        const hasSupabaseUrl = item.imageUrls?.length || (item.preview && item.preview.startsWith('https://'));
-        if (hasSupabaseUrl) return false;
-        
-        // Skip if no file to upload
-        if (!item.file) return false;
-        
-        // This is a new image that needs uploading
-        return true;
-      });
+      // Determine which items are already tracked locally
+      const existingIds = new Set(groupedItems.map(i => i.id));
 
-      // ── Fast path: no uploads needed ────────────────────────────────────
-      // items changed only because a category/group was updated externally
-      // (e.g. onCategoryClick in App.tsx). Merge those changes into the
-      // existing groupedItems instead of tearing it down and rebuilding —
-      // that would drop any items whose blob URL expired and have no file.
-      if (newImages.length === 0) {
-        setGroupedItems(prev => {
-          if (prev.length === 0) {
-            // First render with already-uploaded items (e.g. restored batch)
-            return items.map(item => ({ ...item, productGroup: item.productGroup || item.id }));
-          }
-          // Sync category / productGroup changes from parent into existing state
-          const itemMap = new Map(items.map(i => [i.id, i]));
-          const prevIds = new Set(prev.map(i => i.id));
+      // Only process truly new items
+      const newItems = items.filter(item => !existingIds.has(item.id));
 
-          const updated = prev.map(existing => {
-            const incoming = itemMap.get(existing.id);
-            if (!incoming) return existing; // item removed upstream — keep for safety
-            return {
-              ...existing,
-              category: incoming.category,
-              productGroup: incoming.productGroup || existing.productGroup,
-              _presetData: incoming._presetData ?? existing._presetData,
-            };
-          });
-
-          // Append any new items that arrived in the parent but aren't in prev yet
-          // (e.g. photos uploaded via Step 1 after groups were already created)
-          const appended = items
-            .filter(i => !prevIds.has(i.id))
-            .map(i => ({ ...i, productGroup: i.productGroup || i.id }));
-
-          return appended.length > 0 ? [...updated, ...appended] : updated;
-        });
+      // If nothing is new, just sync categories/metadata that may have changed externally
+      // (e.g. category assigned via CategoryZones) without disturbing group assignments.
+      if (newItems.length === 0) {
+        setGroupedItems(prev =>
+          prev.map(existing => {
+            const updated = items.find(i => i.id === existing.id);
+            if (!updated) return existing;
+            // Preserve local productGroup; only pick up external metadata changes
+            return { ...updated, productGroup: existing.productGroup };
+          })
+        );
         return;
       }
 
-      // ── Slow path: new uploads needed ───────────────────────────────────
-      setIsLoading(true);
-      setLoadingProgress(0);
-      setLoadingMessage(`Uploading ${newImages.length} image${newImages.length > 1 ? 's' : ''}...`);
-      
-      const initialized: ClothingItem[] = [];
-      let processedCount = 0;
-      
-      for (const item of items) {
-        // Check if already uploaded (has imageUrls or Supabase preview URL) or already tracked
+      // Find truly new images that need uploading (have file but not uploaded yet)
+      const toUpload = newItems.filter(item => {
+        if (uploadedImages.has(item.id)) return false;
         const hasSupabaseUrl = item.imageUrls?.length || (item.preview && item.preview.startsWith('https://'));
-        
-        // If already has permanent Supabase URL, skip upload
+        if (hasSupabaseUrl) return false;
+        if (!item.file) return false;
+        return true;
+      });
+
+      if (toUpload.length > 0) {
+        setIsLoading(true);
+        setLoadingProgress(0);
+        setLoadingMessage(`Uploading ${toUpload.length} image${toUpload.length > 1 ? 's' : ''}...`);
+      }
+
+      const incoming: ClothingItem[] = [];
+      let processedCount = 0;
+
+      for (const item of newItems) {
+        const hasSupabaseUrl = item.imageUrls?.length || (item.preview && item.preview.startsWith('https://'));
+
         if (uploadedImages.has(item.id) || hasSupabaseUrl) {
-          initialized.push({ ...item, productGroup: item.productGroup || item.id });
+          incoming.push({ ...item, productGroup: item.productGroup || item.id });
           continue;
         }
 
-        // Handle items with blob URLs (expired temporary URLs) - need to re-upload
-        // But we can't re-upload without the original file
         if (item.preview && item.preview.startsWith('blob:') && !item.file) {
           console.warn('⚠️ Item has expired blob URL but no file to re-upload:', item.id);
-          // Keep the item in the list (don't drop it) so groups remain intact
-          initialized.push({ ...item, productGroup: item.productGroup || item.id });
           continue;
         }
 
-        // Upload to Supabase Storage immediately (only if has file)
         if (userId && item.file) {
           const uploaded = await uploadImageImmediately(item, userId);
           if (uploaded) {
             setUploadedImages(prev => new Set(prev).add(item.id));
-            initialized.push({ ...uploaded, productGroup: uploaded.productGroup || uploaded.id });
+            incoming.push({ ...uploaded, productGroup: uploaded.productGroup || uploaded.id });
           } else {
-            initialized.push({ ...item, productGroup: item.productGroup || item.id });
+            incoming.push({ ...item, productGroup: item.productGroup || item.id });
           }
         } else {
-          // Item doesn't have file (restored from database) - use as-is
-          initialized.push({ ...item, productGroup: item.productGroup || item.id });
+          incoming.push({ ...item, productGroup: item.productGroup || item.id });
         }
-        
-        processedCount++;
-        const progress = (processedCount / newImages.length) * 100;
-        setLoadingProgress(progress);
-        
-        if (progress < 100) {
-          setLoadingMessage(`Uploading image ${processedCount} of ${newImages.length}...`);
-        } else {
-          setLoadingMessage('Upload complete!');
+
+        if (toUpload.length > 0) {
+          processedCount++;
+          const progress = (processedCount / toUpload.length) * 100;
+          setLoadingProgress(progress);
+          setLoadingMessage(progress < 100
+            ? `Uploading image ${processedCount} of ${toUpload.length}...`
+            : 'Upload complete!');
+          await new Promise(resolve => setTimeout(resolve, 50));
         }
-        
-        // Small delay to allow animation to be visible
-        await new Promise(resolve => setTimeout(resolve, 50));
       }
-      
-      setGroupedItems(initialized);
-      
-      // Show completion message briefly, then hide loading popup
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setIsLoading(false);
-      setLoadingProgress(0);
+
+      // Append new items; preserve existing grouped items untouched
+      setGroupedItems(prev => [...prev, ...incoming]);
+
+      // Advance groupCounter past any existing group numbers to avoid ID collisions
+      const maxExisting = [...existingIds, ...incoming.map(i => i.productGroup || '')].reduce((max, id) => {
+        const match = id.match(/^group-(\d+)$/);
+        return match ? Math.max(max, parseInt(match[1], 10)) : max;
+      }, 0);
+      if (maxExisting >= groupCounter) setGroupCounter(maxExisting + 1);
+
+      if (toUpload.length > 0) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        setIsLoading(false);
+        setLoadingProgress(0);
+      }
     };
 
     initializeItems();
@@ -442,15 +412,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onSelecti
     onGrouped(updated);
   };
 
+
   // Drag and Drop Handlers for Images
   const handleDragStart = (e: React.DragEvent, item: ClothingItem, fromGroup: string) => {
     setDraggedItem(item);
     setDraggedFromGroup(fromGroup);
-    // Set data for cross-component dragging (ImageGrouper -> CategoryZones sidebar)
+    // Set data for cross-component dragging (Step 2 -> Step 3)
     const dragData = {
       item,
       productGroup: item.productGroup || item.id,
-      action: 'categorize',
       source: 'ImageGrouper'
     };
     e.dataTransfer.setData('application/json', JSON.stringify(dragData));
@@ -480,22 +450,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onSelecti
       return;
     }
 
-    // Inherit the target group's category + preset so the dropped photo
-    // matches its new siblings (e.g. dragging a photo into "Outerwear" group
-    // should make it outerwear too).
-    const targetSibling = groupedItems.find(
-      item => (item.productGroup || item.id) === targetGroup && item.id !== draggedItem.id
-    );
-
     // Move image to target group
     const updated = groupedItems.map(item =>
       item.id === draggedItem.id
-        ? {
-            ...item,
-            productGroup: targetGroup,
-            category: targetSibling?.category ?? item.category,
-            _presetData: targetSibling?._presetData ?? item._presetData,
-          }
+        ? { ...item, productGroup: targetGroup }
         : item
     );
 
@@ -542,6 +500,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onSelecti
 
     srcPhotoId = srcPhotoId || draggedPhotoId;
     srcGroupId = srcGroupId || draggedPhotoGroupId;
+
+    // If dragging from a DIFFERENT group (or a single item), fall through to group-level drop
+    if (srcGroupId && srcGroupId !== groupId) {
+      handleDrop(e, groupId);
+      setDraggedPhotoId(null); setDraggedPhotoGroupId(null); setDragOverPhotoId(null);
+      return;
+    }
 
     if (!srcPhotoId || !srcGroupId || srcGroupId !== groupId || srcPhotoId === targetPhotoId) {
       setDraggedPhotoId(null); setDraggedPhotoGroupId(null); setDragOverPhotoId(null);
@@ -647,7 +612,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onSelecti
         >
           <Link2 size={16} /> Group Selected ({selectedItems.size})
         </button>
-
         <button 
           className="button button-secondary" 
           onClick={ungroupSelected}
@@ -841,18 +805,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onSelecti
               <div
                 key={groupId}
                 data-group-id={groupId}
-                className={`product-group-card ${dragOverGroup === groupId ? 'drag-over' : ''} ${items[0].category ? 'has-category' : ''} ${pendingGroupId === groupId ? 'pending-categorize' : ''}`}
+                className={`product-group-card ${dragOverGroup === groupId ? 'drag-over' : ''} ${items[0].category ? 'has-category' : ''}`}
                 onDragOver={(e) => handleDragOver(e, groupId)}
                 onDrop={(e) => handleDrop(e, groupId)}
                 onDragLeave={handleDragLeave}
-                onClick={(e) => {
-                  // Clicking the card background (not a photo or button) selects it for click-to-assign
-                  const target = e.target as HTMLElement;
-                  if (!target.closest('.group-image-item') && !target.closest('.delete-image-btn') && !target.closest('.group-header')) {
-                    e.stopPropagation();
-                    onGroupSelected?.(pendingGroupId === groupId ? null : groupId);
-                  }
-                }}
               >
                 {items[0].category && (
                   <div className="category-indicator">
@@ -860,29 +816,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onSelecti
                     <span className="category-label">{items[0].category}</span>
                   </div>
                 )}
-                <div
-                  className="group-header"
-                  draggable
-                  onDragStart={(e) => {
-                    // Drag the whole group to a category zone in the sidebar
-                    e.stopPropagation();
-                    const dragData = {
-                      item: items[0],
-                      groupItems: items,          // ← carry ALL items so CategoryZones doesn't need to filter
-                      productGroup: groupId,
-                      action: 'categorize',
-                      source: 'ImageGrouper',
-                    };
-                    e.dataTransfer.setData('application/json', JSON.stringify(dragData));
-                    e.dataTransfer.effectAllowed = 'move';
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onGroupSelected?.(pendingGroupId === groupId ? null : groupId);
-                  }}
-                  title={pendingGroupId === groupId ? 'Click a category on the right to assign, or click again to deselect' : 'Click to select, then click a category on the right — or drag here to a category'}
-                  style={{ cursor: 'pointer' }}
-                >
+                <div className="group-header">
                   <span className="group-badge">
                     {items.length} images
                   </span>

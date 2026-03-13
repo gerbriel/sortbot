@@ -79,17 +79,10 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
   // PASS 1: Explicit "field value period" commands (highest priority)
   // ─────────────────────────────────────────────────────────────────────────
 
-  // Helper: grab value between a field trigger and the command terminator.
-  // Accepts BOTH the spoken word "period" AND the already-normalised "."
-  // so extraction works whether punctuation conversion has run or not.
+  // Helper: grab value between a field trigger and the word "period"
   function extractCommand(pattern: RegExp): string | null {
-    // Re-build the pattern to accept both terminators dynamically.
-    // We reconstruct: replace the literal \s+period\b in the source with TERM.
-    const src = pattern.source.replace(/\\s\+period\\b/gi, '(?:\\s+period\\b|\\.)');
-    const match = voiceDesc.match(new RegExp(src, pattern.flags));
-    if (!match) return null;
-    // Strip any trailing "." left over from the normalised terminator
-    return match[1].trim().replace(/\.$/, '').trim();
+    const match = voiceDesc.match(pattern);
+    return match ? match[1].trim() : null;
   }
 
   // ── BRAND ────────────────────────────────────────────────────────────────
@@ -173,13 +166,7 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
   // ── TAGS (explicit) ───────────────────────────────────────────────────────
   const tagsRaw = extractCommand(/\btags?\s+(.+?)\s+period\b/i);
   if (tagsRaw) {
-    // Split on spaces/commas, then also split any run-together words caused by
-    // the Web Speech API merging words from a mid-sentence pause (e.g. "vintageHip Hop"
-    // → the uppercase letter marks where the pause joined two tokens without a space).
-    // Strategy: insert a space before any uppercase letter that follows a lowercase letter,
-    // then split normally on spaces and commas.
-    const separated = tagsRaw.replace(/([a-z])([A-Z])/g, '$1 $2');
-    extracted.tags = separated.split(/[\s,]+/).filter(Boolean).map((t: string) => t.toLowerCase());
+    extracted.tags = tagsRaw.split(/[\s,]+/).filter(Boolean).map((t: string) => t.toLowerCase());
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -189,25 +176,15 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
 
   // ── SIZE fallback ─────────────────────────────────────────────────────────
   // Handles: "XL", "men's XL", "size XL", "32x30", "size 32/34", "size 10.5" (shoes)
-  // Also catches OSFA / OS / "one size" / "one size fits all" → "OSFA"
   if (!extracted.size) {
-    // Check for one-size phrases first (before the numeric fallback grabs stray digits)
-    if (/\b(osfa|o\.s\.f\.a|one\s+size\s+fits?\s+all|one\s+size\s+fits?\s+most|one\s+size|os\b)/i.test(voiceDesc)) {
-      extracted.size = 'OSFA';
-    } else {
-      const sizeFallback = voiceDesc.match(
-        /\b(?:size\s+|measurement\s+)?(4xl|3xl|2xl|xxl|xl|extra[\s-]large|large|medium|small|xs|x[\s-]small)\b|(?:size\s+|men'?s?\s+|women'?s?\s+)?(\d{1,2}(?:[xX]\d{1,2})?(?:\.\d)?)\b/i
-      );
-      if (sizeFallback) {
-        const raw = (sizeFallback[1] || sizeFallback[2] || '').trim();
-        // Don't grab years (1990), prices ($45 / "price 60"), or lone single digits as sizes
-        // Also check: if the match position is right after "price" or "$", skip it
-        const matchIndex = sizeFallback.index ?? 0;
-        const before = voiceDesc.slice(Math.max(0, matchIndex - 10), matchIndex).toLowerCase();
-        const isPriceContext = /price\s*\$?$|\$$/.test(before);
-        if (raw && !isPriceContext && !/^(19|20)\d{2}$/.test(raw) && !/^\$/.test(raw)) {
-          extracted.size = normalizeSizeValue(raw);
-        }
+    const sizeFallback = voiceDesc.match(
+      /\b(?:size\s+|measurement\s+)?(4xl|3xl|2xl|xxl|xl|extra[\s-]large|large|medium|small|xs|x[\s-]small)\b|(?:size\s+|men'?s?\s+|women'?s?\s+)?(\d{1,2}(?:[xX]\d{1,2})?(?:\.\d)?)\b/i
+    );
+    if (sizeFallback) {
+      const raw = (sizeFallback[1] || sizeFallback[2] || '').trim();
+      // Don't grab years (1990), prices ($45), or lone single digits as sizes
+      if (raw && !/^(19|20)\d{2}$/.test(raw) && !/^\$/.test(raw)) {
+        extracted.size = normalizeSizeValue(raw);
       }
     }
   }
@@ -481,48 +458,55 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
 // ── Normalizer helpers ────────────────────────────────────────────────────────
 
 function normalizeCondition(raw: string): string {
-  const c = raw.toLowerCase();
+  const c = raw.toLowerCase().replace(/\bperiod\b/gi, '').trim();
   if (/nwt|new with tags|brand new/.test(c)) return 'NWT';
   if (/like[\s-]new|mint|pristine/.test(c)) return 'Like New';
   if (/excellent|great/.test(c)) return 'Excellent';
   if (/good|gently[\s-]used/.test(c)) return 'Good';
   if (/fair|worn|used|pre[\s-]owned/.test(c)) return 'Fair';
-  return toTitleCase(raw);
+  return toTitleCase(c);
 }
 
 function normalizeEra(raw: string): string {
-  const r = raw.toLowerCase().replace(/\s+/g, '');
+  const cleaned = raw.replace(/\bperiod\b/gi, '').replace(/\s{2,}/g, ' ').trim();
+  const r = cleaned.toLowerCase().replace(/\s+/g, '');
   if (r === 'y2k' || r === '2000s') return 'Y2K';
   if (/^90s?$|^1990s?$/.test(r)) return '90s';
   if (/^80s?$|^1980s?$/.test(r)) return '80s';
   if (/^70s?$|^1970s?$/.test(r)) return '70s';
   if (/^60s?$|^1960s?$/.test(r)) return '60s';
   if (/^50s?$|^1950s?$/.test(r)) return '50s';
-  return toTitleCase(raw);
+  return toTitleCase(cleaned);
 }
 
 function normalizeGender(raw: string): string {
-  const g = raw.toLowerCase();
+  const g = raw.toLowerCase().replace(/\bperiod\b/gi, '').trim();
   if (/^men|^male|^mens/.test(g)) return 'Men';
   if (/^women|^female|^ladies|^womens/.test(g)) return 'Women';
   if (/unisex|neutral/.test(g)) return 'Unisex';
   if (/kid|child|youth|boy|girl/.test(g)) return 'Kids';
-  return toTitleCase(raw);
+  return toTitleCase(g);
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function toTitleCase(str: string): string {
-  return str.trim().replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+  return str
+    .replace(/\bperiod\b/gi, '') // never let the voice delimiter word appear in display fields
+    .trim()
+    .replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 }
 
 function normalizeSizeValue(raw: string): string {
   const trimmed = raw.trim();
-  // One-size phrases → "OSFA" (check before splitting on spaces)
-  // Also catches partial phrases like "one size fits" (missing "all") and "one size fit"
-  if (/^(osfa|o\.s\.f\.a|one[\s-]size[\s-]fits?[\s-](all|most)|one[\s-]size[\s-]fits?|one[\s-]size|os)$/i.test(trimmed)) {
-    return 'OSFA';
+
+  // OSFA / One Size Fits All → "1 SIZE"
+  if (/\b(osfa|one[\s-]?size[\s-]?fits[\s-]?all|one[\s-]?size[\s-]?fits[\s-]?most|one[\s-]?size|os)\b/i.test(trimmed)) {
+    return '1 SIZE';
   }
+
   // Take only the first token if there's a slash or slash+word (e.g., "XL/XLARGE" → "XL")
   const first = trimmed.split(/[\/\s]+/)[0];
   const s = first.trim().toLowerCase().replace(/[\s-]+/g, '');
@@ -535,8 +519,7 @@ function normalizeSizeValue(raw: string): string {
     xxlarge: 'XXL', '2xlarge': 'XXL', '2xl': 'XXL', xxl: 'XXL',
     xxxlarge: '3XL', '3xlarge': '3XL', '3xl': '3XL', xxxl: '3XL',
     '4xlarge': '4XL', '4xl': '4XL', xxxxl: '4XL',
-    // One-size abbreviations as standalone tokens
-    osfa: 'OSFA', os: 'OSFA', onesize: 'OSFA',
+    '1size': '1 SIZE', onesize: '1 SIZE',
   };
   // Return mapped value or original uppercased first token (preserves "32", "32x30", "32/34")
   return map[s] || first.toUpperCase();
@@ -598,27 +581,18 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
   if (context.voiceDescription && context.voiceDescription.length > 5) {
     let mainDesc = context.voiceDescription.trim();
 
-    // Strip "field <value> period/." voice commands from the display description
+    // Strip "field <value> period" voice commands from the display description
     // These are handled separately via extractFieldsFromVoice; don't show them in the text
-    // Matches both:
-    //   "brand rock period" (not yet normalised)  →  \s+period\b
-    //   "brand rock."       (already normalised)  →  \.
-    //   "brand rock"        (no terminator, end of string)
     const fieldPrefixes = [
-      'brand', 'model', 'size', 'colou?r', 'secondary colou?r',
+      'brand', 'model', 'size', 'color', 'colour', 'secondary color', 'secondary colour',
       'material', 'fabric', 'condition', 'era', 'style', 'gender', 'price',
       'flaws?', 'damage', 'care', 'tags?',
       'width', 'length', 'waist', 'shoulder', 'sleeve', 'inseam'
     ].join('|');
-    // Strip "fieldname value." or "fieldname value period" or "fieldname value<end>"
-    mainDesc = mainDesc.replace(
-      new RegExp(`\\b(${fieldPrefixes})\\s+.+?(?:\\.(?=\\s|$)|\\s+period\\b|$)`, 'gi'), ''
-    );
-    // Also strip run-together variants where no space after field name due to pause-merge
-    // e.g. "sizeone size fits all." → strip from "size" onwards to next "." or end of string
-    mainDesc = mainDesc.replace(
-      new RegExp(`\\b(${fieldPrefixes})(?=\\S)[^.]*(?:\\.|$)`, 'g'), ''
-    );
+    mainDesc = mainDesc.replace(new RegExp(`\\b(?:${fieldPrefixes})\\s+.+?\\s+period\\b`, 'gi'), '');
+
+    // Any remaining standalone spoken "period" → "." (sentence end)
+    mainDesc = mainDesc.replace(/\bperiod\b/gi, '.').replace(/\.\.+/g, '.').replace(/\s+\./g, '.');
 
     // Strip condition phrases from description
     mainDesc = mainDesc.replace(/\b(nwt|new with tags|like[\s-]new|mint|pristine|excellent[\s-]condition|great[\s-]condition|good[\s-]condition|gently[\s-]used|fair[\s-]condition|worn[\s-]condition|brand[\s-]new|in[\s-]good[\s-]condition|in[\s-]great[\s-]condition|in[\s-]excellent[\s-]condition|very[\s-]good[\s-]condition|pre[\s-]owned)\b[,.]?\s*/gi, '');
@@ -629,17 +603,11 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
     // Clean up any double spaces or leading/trailing commas left behind
     mainDesc = mainDesc.replace(/\s{2,}/g, ' ').replace(/^[,.\s]+|[,.\s]+$/g, '').trim();
 
-    if (mainDesc.length > 0) {
-      // Capitalize first letter only
-      mainDesc = mainDesc.charAt(0).toUpperCase() + mainDesc.slice(1);
-      description += mainDesc;
-    } else {
-      // All voice input was field commands — fall through to field-based intro
-      const intro = buildIntroFromFields(context);
-      description += intro || 'Vintage clothing item';
-    }
+    // Capitalize first letter only
+    mainDesc = mainDesc.charAt(0).toUpperCase() + mainDesc.slice(1);
+    description += mainDesc;
   } else {
-    // No voice description — build ONLY from filled fields (no assumptions)
+    // Fallback: build ONLY from filled fields (no assumptions)
     const intro = buildIntroFromFields(context);
     if (intro) {
       description += intro;
@@ -688,7 +656,7 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
   // PART 6: Tags (ONLY from explicitly filled fields, no assumptions)
   const tags = generateTagsFromFields(context);
   if (tags.length > 0) {
-    description += tags.map(tag => `#${tag.toLowerCase().replace(/\s+/g, '')}`).join(', ');
+    description += tags.map(tag => `#${tag.toLowerCase().replace(/\s+/g, '')}`).join(' ');
     description += '\n\n';
   }
 
@@ -710,65 +678,51 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
  * No assumptions, no AI guessing
  */
 function buildIntroFromFields(context: ProductContext): string {
-  const { brand, category, color, era, style, material, gender, condition, size, price } = context;
+  const { brand, category, color, era, style } = context;
   
   const parts: string[] = [];
   
   // ONLY add if explicitly provided in fields
   if (era) parts.push(era.toLowerCase());
   if (style) parts.push(style.toLowerCase());
-  if (gender && gender.toLowerCase() !== 'unisex') parts.push(gender.toLowerCase() + "'s");
   if (brand) parts.push(brand); // Keep brand case as entered
   if (color) parts.push(color.toLowerCase());
-  if (material) parts.push(material.toLowerCase());
   if (category) parts.push(category.toLowerCase());
-  if (size) parts.push(size);   // just the value — no "size" prefix word
-  if (condition) parts.push(`in ${condition.toLowerCase()} condition`);
-  if (price) parts.push(`$${price}`);
   
   return parts.join(' ');
 }
 
 /**
- * Generate title ONLY from filled fields.
- * SEO priority order: brand → era → color → material → style → category → size
- * Target: ≤60 characters. Words are never split mid-word — if a whole word fits
- * (even slightly over 60 chars) it is kept; if it would push the title well over
- * the limit the whole token is dropped.
+ * Generate SEO title ONLY from filled fields.
+ * - Max 60 characters (Google/Shopify best practice)
+ * - Priority order: Brand → Era/Style → Color → Category → Size
+ * - "period" word is never included (it's a voice delimiter, not content)
  */
 function generateTitleFromFields(context: ProductContext): string {
-  // Build tokens in SEO-priority order (highest value first)
-  const candidates: string[] = [];
-  if (context.brand)    candidates.push(context.brand);
-  if (context.era)      candidates.push(context.era);
-  if (context.color)    candidates.push(context.color);
-  if (context.material) candidates.push(context.material);
-  if (context.style)    candidates.push(context.style);
-  if (context.category) candidates.push(context.category);
-  if (context.size)     candidates.push(`Size ${context.size}`);
+  // Strip the voice delimiter word "period" from any field value before using it
+  const clean = (s?: string) =>
+    (s || '').replace(/\bperiod\b/gi, '').replace(/\s{2,}/g, ' ').trim();
 
-  if (candidates.length === 0) return 'Vintage Item';
+  const parts: string[] = [];
 
-  const LIMIT = 60;
-  // Grace: allow a word to finish even if it pushes past 60, as long as the
-  // overshoot is small (≤ one average word, ~12 chars). This prevents cutting
-  // a word like "Embroidered" just because it lands at character 63.
-  const GRACE = 12;
+  if (context.brand) parts.push(clean(context.brand));
+  if (context.era)   parts.push(clean(context.era));
+  if (context.style) parts.push(clean(context.style));
+  if (context.color) parts.push(clean(context.color));
+  if (context.category) parts.push(clean(context.category));
+  if (context.size)  parts.push(`(${clean(context.size)})`);
 
-  const kept: string[] = [];
-  let length = 0;
+  const raw = parts.filter(Boolean).join(' ') || 'Vintage Item';
 
-  for (const token of candidates) {
-    const needed = length === 0 ? token.length : length + 1 + token.length;
-    if (needed <= LIMIT + GRACE) {
-      kept.push(token);
-      length = needed;
-    }
-    // If this token alone would blow past LIMIT + GRACE, skip it entirely
+  // Trim to 60 characters at a word boundary
+  if (raw.length <= 60) return raw;
+  let trimmed = '';
+  for (const word of raw.split(' ')) {
+    const candidate = trimmed ? `${trimmed} ${word}` : word;
+    if (candidate.length > 60) break;
+    trimmed = candidate;
   }
-
-  const title = kept.join(' ');
-  return title.length > 0 ? title : 'Vintage Item';
+  return trimmed || raw.slice(0, 60);
 }
 
 /**

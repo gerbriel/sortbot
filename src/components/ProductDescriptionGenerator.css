@@ -38,10 +38,9 @@
 /* Product Editor Layout */
 .product-editor {
   display: grid;
-  grid-template-columns: 360px 1fr;
+  grid-template-columns: 400px 1fr;
   gap: var(--space-6);
   margin-bottom: var(--space-6);
-  align-items: start;
 }
 
 /* Product Preview Card */
@@ -560,43 +559,6 @@
   background: var(--gray-50);
   border-radius: var(--radius-md);
   border: 1px solid var(--gray-200);
-}
-
-/* Prev/Next listing nav under the left column image */
-.preview-nav-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin-top: var(--space-4);
-}
-
-.preview-nav-controls .button {
-  flex: 1;
-}
-
-.preview-nav-label {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--gray-500);
-  white-space: nowrap;
-  text-align: center;
-  min-width: 40px;
-}
-
-/* AI description block on left column */
-.preview-ai-description {
-  margin-top: var(--space-4);
-  padding: var(--space-4);
-  background: white;
-  border: 1px solid var(--gray-200);
-  border-radius: var(--radius-md);
-}
-
-.preview-ai-description h3 {
-  margin: 0 0 var(--space-3) 0;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--gray-700);
 }
 
 .group-thumbnails p {

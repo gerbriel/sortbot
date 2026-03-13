@@ -75,10 +75,7 @@ export const fetchSavedImages = async () => {
           title,
           product_category,
           vendor,
-          batch_id,
-          size,
-          condition,
-          tags
+          batch_id
         )
       `)
       .order('created_at', { ascending: false });
@@ -229,39 +226,6 @@ export const updateProductGroup = async (
 // ============================================================================
 // BATCH OPERATIONS
 // ============================================================================
-
-/**
- * Delete a batch AND all its associated products + images from the database.
- * This is the canonical batch delete — use this everywhere instead of
- * deleteWorkflowBatch directly.
- *
- * Cascade order:
- *   1. Delete product_images rows where products.batch_id = batchId
- *      (Supabase cascade usually handles this, but we're explicit)
- *   2. Delete products rows where batch_id = batchId
- *   3. Delete the workflow_batches row itself
- */
-export const deleteBatchWithCascade = async (batchId: string): Promise<boolean> => {
-  try {
-    // 1. Delete all products belonging to this batch (product_images cascade via FK)
-    const { error: productsError } = await supabase
-      .from('products')
-      .delete()
-      .eq('batch_id', batchId);
-
-    if (productsError && productsError.code !== 'PGRST116') {
-      console.error('Error deleting batch products:', productsError);
-      // Non-fatal — continue to delete the batch row
-    }
-
-    // 2. Delete the workflow_batches row
-    const success = await deleteWorkflowBatch(batchId);
-    return success;
-  } catch (error) {
-    console.error('Error in deleteBatchWithCascade:', error);
-    return false;
-  }
-};
 
 /**
  * Update batch metadata (name, notes, tags)
@@ -485,125 +449,6 @@ export const moveImageToGroup = async (
   return updateImage(imageId, { productGroup: newGroupId });
 };
 
-/**
- * Assign one or more images (product_images rows) to an existing product group.
- * Updates product_images.product_id in the DB and syncs workflow_state.
- */
-export const assignImagesToGroup = async (
-  imageIds: string[],
-  targetGroupId: string
-): Promise<boolean> => {
-  try {
-    // 1. Update product_images rows in DB
-    const { error } = await supabase
-      .from('product_images')
-      .update({ product_id: targetGroupId })
-      .in('id', imageIds);
-
-    if (error) {
-      console.error('Error assigning images to group:', error);
-      return false;
-    }
-
-    // 2. Sync workflow_state across all batches
-    const batches = await fetchWorkflowBatches();
-    const updatePromises = batches.map(async (batch) => {
-      let modified = false;
-      const updatedState = { ...batch.workflow_state };
-
-      ['uploadedImages', 'groupedImages', 'sortedImages', 'processedItems'].forEach(key => {
-        const items = updatedState[key as keyof typeof updatedState];
-        if (Array.isArray(items)) {
-          const updated = items.map((item: any) => {
-            if (imageIds.includes(item.id)) {
-              modified = true;
-              return { ...item, productGroup: targetGroupId };
-            }
-            return item;
-          });
-          (updatedState as any)[key] = updated;
-        }
-      });
-
-      if (modified) return updateWorkflowBatch(batch.id, { workflow_state: updatedState });
-      return true;
-    });
-
-    await Promise.all(updatePromises);
-    return true;
-  } catch (error) {
-    console.error('Error in assignImagesToGroup:', error);
-    return false;
-  }
-};
-
-/**
- * Group selected loose images into a brand-new product group.
- * Creates a new products row, re-parents those product_images rows to it,
- * and updates workflow_state across all batches.
- */
-export const groupLooseImagesIntoNewGroup = async (
-  imageIds: string[],
-  groupTitle: string
-): Promise<string | null> => {
-  try {
-    // 1. Create new products row
-    const { data: newProduct, error: insertError } = await supabase
-      .from('products')
-      .insert({ title: groupTitle })
-      .select('id')
-      .single();
-
-    if (insertError || !newProduct) {
-      console.error('Error creating new product group:', insertError);
-      return null;
-    }
-
-    const newGroupId = newProduct.id;
-
-    // 2. Re-parent product_images rows
-    const { error: updateError } = await supabase
-      .from('product_images')
-      .update({ product_id: newGroupId })
-      .in('id', imageIds);
-
-    if (updateError) {
-      console.error('Error re-parenting images to new group:', updateError);
-      // Don't bail — group was created, still try workflow sync
-    }
-
-    // 3. Sync workflow_state
-    const batches = await fetchWorkflowBatches();
-    const updatePromises = batches.map(async (batch) => {
-      let modified = false;
-      const updatedState = { ...batch.workflow_state };
-
-      ['uploadedImages', 'groupedImages', 'sortedImages', 'processedItems'].forEach(key => {
-        const items = updatedState[key as keyof typeof updatedState];
-        if (Array.isArray(items)) {
-          const updated = items.map((item: any) => {
-            if (imageIds.includes(item.id)) {
-              modified = true;
-              return { ...item, productGroup: newGroupId };
-            }
-            return item;
-          });
-          (updatedState as any)[key] = updated;
-        }
-      });
-
-      if (modified) return updateWorkflowBatch(batch.id, { workflow_state: updatedState });
-      return true;
-    });
-
-    await Promise.all(updatePromises);
-    return newGroupId;
-  } catch (error) {
-    console.error('Error in groupLooseImagesIntoNewGroup:', error);
-    return null;
-  }
-};
-
 // ============================================================================
 // BULK OPERATIONS
 // ============================================================================
@@ -651,7 +496,7 @@ export const bulkDeleteProductGroups = async (
 };
 
 /**
- * Delete multiple batches at once (cascades to products + images)
+ * Delete multiple batches at once
  */
 export const bulkDeleteBatches = async (
   batchIds: string[]
@@ -660,7 +505,7 @@ export const bulkDeleteBatches = async (
   let failed = 0;
   
   for (const batchId of batchIds) {
-    const result = await deleteBatchWithCascade(batchId);
+    const result = await deleteWorkflowBatch(batchId);
     if (result) {
       success++;
     } else {
