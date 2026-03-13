@@ -1,85 +1,20 @@
 .comprehensive-product-form {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 1rem;
 }
 
-/* Always-visible section groups */
-.fields-group {
-  padding-top: 0.25rem;
-}
-
-.fields-group-title {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--shopify-gray-500, #6b7280);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 0.35rem 0;
-  border-bottom: 1px solid var(--shopify-gray-200, #e5e7eb);
-  margin-bottom: 0.5rem;
-}
-
-/* Section selector dropdown */
-.section-selector {
-  display: flex;
-  align-items: center;
-}
-
-.section-dropdown {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--shopify-gray-300);
-  border-radius: 8px;
-  background: var(--shopify-gray-50);
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--shopify-gray-700);
-  cursor: pointer;
-  transition: border-color 0.2s;
-}
-
-.section-dropdown:focus {
-  outline: none;
-  border-color: var(--shopify-blue-500);
-  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
-}
-
-/* Fields container — no extra styles needed */
-
-
-/* 2-column grid for fields */
-.fields-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.6rem 1rem;
-}
-
-.fields-grid-3 {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 0.6rem 1rem;
-}
-
-.fields-grid .info-item,
-.fields-grid-3 .info-item {
-  min-width: 0;
-}
-
-.fields-grid .info-item.span-2 {
-  grid-column: 1 / -1;
-}
-
-.fields-grid-3 .info-item.span-3 {
-  grid-column: 1 / -1;
-}
-
-/* Keep old collapsible styles in case anything still references them */
 .form-section-collapsible {
   border: 1px solid var(--shopify-gray-200);
   border-radius: 8px;
   background: white;
   overflow: hidden;
+  transition: all 0.2s;
+}
+
+.form-section-collapsible:hover {
+  border-color: var(--shopify-gray-300);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .section-header {
@@ -90,12 +25,18 @@
   background: var(--shopify-gray-50);
   cursor: pointer;
   user-select: none;
+  transition: background 0.2s;
+}
+
+.section-header:hover {
+  background: var(--shopify-gray-100);
 }
 
 .section-icon {
   font-size: 14px;
   color: var(--shopify-gray-600);
   min-width: 16px;
+  transition: transform 0.2s;
 }
 
 .section-header h3 {
@@ -109,6 +50,10 @@
 .field-count {
   font-size: 13px;
   color: var(--shopify-gray-500);
+  background: white;
+  padding: 4px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--shopify-gray-200);
 }
 
 .section-content {

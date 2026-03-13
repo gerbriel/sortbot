@@ -157,12 +157,6 @@ export const saveProductToDatabase = async (
       .single();
 
     if (productError) {
-      console.error('❌ Product INSERT failed:', {
-        message: productError.message,
-        details: productError.details,
-        hint: productError.hint,
-        code: productError.code,
-      });
       return null;
     }
 
@@ -197,20 +191,12 @@ export const saveProductToDatabase = async (
       // Save image record to database
       if (imageUrl && storagePath) {
         // Check if this image URL already exists for this product to prevent duplicates
-        // Wrapped in try/catch — a CORS or network failure here should not abort the whole save
-        let existing: { id: string } | null = null;
-        try {
-          const { data } = await supabase
-            .from('product_images')
-            .select('id')
-            .eq('product_id', productData.id)
-            .eq('image_url', imageUrl)
-            .maybeSingle();
-          existing = data;
-        } catch {
-          // Network error on duplicate check — assume no duplicate and proceed
-          existing = null;
-        }
+        const { data: existing } = await supabase
+          .from('product_images')
+          .select('id')
+          .eq('product_id', productData.id)
+          .eq('image_url', imageUrl)
+          .maybeSingle();
         
         // Only insert if it doesn't already exist
         if (!existing) {

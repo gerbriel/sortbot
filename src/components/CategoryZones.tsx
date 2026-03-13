@@ -79,13 +79,11 @@ const getCategoryIcon = (iconNameOrCategory: string, size: number = 24) => {
 interface CategoryZonesProps {
   items: ClothingItem[];
   onCategorized: (items: ClothingItem[]) => void;
+  /** When true, renders a compact vertical list (used inside the combined Step 2+3 panel) */
   compactMode?: boolean;
-  pendingGroupId?: string | null;
-  selectedImageIds?: Set<string>;
-  onCategoryClick?: (category: string) => void;
 }
 
-const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, compactMode = false, pendingGroupId, selectedImageIds, onCategoryClick }) => {
+const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, compactMode = false }) => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -199,20 +197,12 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     e.stopPropagation();
 
     let productGroup: string | undefined;
-    let draggedGroupItems: ClothingItem[] | undefined;
     try {
       const data = e.dataTransfer.getData('application/json');
       if (data) {
         const dragData = JSON.parse(data);
-        // Accept: explicit 'categorize' action OR any drag from ImageGrouper
-        if (dragData.action === 'categorize' || dragData.source === 'ImageGrouper') {
+        if (dragData.action === 'categorize') {
           productGroup = dragData.productGroup;
-          // Use the items carried in the drag payload (avoids stale-prop mismatch)
-          if (Array.isArray(dragData.groupItems) && dragData.groupItems.length > 0) {
-            draggedGroupItems = dragData.groupItems;
-          } else if (dragData.item) {
-            draggedGroupItems = [dragData.item];
-          }
         }
       }
     } catch (err) {
@@ -223,38 +213,16 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     }
     if (!productGroup) { setCatDraggedItem(null); setDragOverCategory(null); return; }
 
-    // Prefer items carried in drag data; fall back to filtering the items prop
-    const groupItems = (draggedGroupItems && draggedGroupItems.length > 0)
-      ? draggedGroupItems
-      : items.filter(item => (item.productGroup || item.id) === productGroup);
-
-    // Guard: nothing to categorize
-    if (groupItems.length === 0) {
-      console.warn('⚠️ handleCategoryDrop: no items found for group', productGroup);
-      setCatDraggedItem(null);
-      setDragOverCategory(null);
-      return;
-    }
-
+    const groupItems = items.filter(item => (item.productGroup || item.id) === productGroup);
     const itemsWithPreset = await applyPresetToProductGroup(groupItems, category);
 
     const updatedMap = { ...groupsMap };
-    // groupsMap[productGroup] may be undefined if the group lives only in
-    // ImageGrouper's internal state and hasn't synced to groupedImages yet.
-    // Fall back to itemsWithPreset directly in that case.
-    const baseItems = groupsMap[productGroup] ?? groupItems;
-    updatedMap[productGroup] = baseItems.map(item => {
+    updatedMap[productGroup] = groupsMap[productGroup].map(item => {
       const withPreset = itemsWithPreset.find(i => i.id === item.id);
       return withPreset || { ...item, category };
     });
 
-    // If this group wasn't in groupOrder yet, append it
-    const currentOrder = groupOrderRef.current;
-    const newOrder = currentOrder.includes(productGroup)
-      ? currentOrder
-      : [...currentOrder, productGroup];
-
-    emitReordered(newOrder, updatedMap);
+    emitReordered(groupOrderRef.current, updatedMap);
     setCatDraggedItem(null);
     setDragOverCategory(null);
   };
@@ -376,18 +344,10 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
   };
 
   return (
-    <div className={`category-zones-container${compactMode ? ' compact-mode' : ''}`}>
+    <div className={`category-zones-container${compactMode ? ' compact' : ''}`}>
       {/* Category Zones */}
-      <div className={`category-zones${compactMode ? ' category-zones-compact' : ''}`}>
-        <h3>
-          {compactMode
-            ? (selectedImageIds && selectedImageIds.size > 0
-                ? `✅ ${selectedImageIds.size} selected — click a category below`
-                : pendingGroupId
-                  ? '👆 Now click a category below'
-                  : '🏷️ Select images or drag a group, then click a category')
-            : '🏷️ Drag Groups Here to Categorize'}
-        </h3>
+      <div className="category-zones">
+        <h3>{compactMode ? '🏷️ Drop Here to Categorize' : '🏷️ Drag Groups Here to Categorize'}</h3>
         {loading ? (
           <p>Loading categories...</p>
         ) : (
@@ -395,16 +355,11 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
             {categories.map(category => (
               <div
                 key={category.id}
-                className={`category-zone${compactMode ? ' category-zone-compact' : ''} ${dragOverCategory === category.name ? 'drag-over' : ''} ${(pendingGroupId || (selectedImageIds && selectedImageIds.size > 0)) ? 'category-zone-clickable' : ''}`}
+                className={`category-zone ${dragOverCategory === category.name ? 'drag-over' : ''}`}
                 style={{ borderColor: category.color, '--category-color': category.color } as React.CSSProperties}
                 onDragOver={(e) => handleCategoryDragOver(e, category.name)}
                 onDrop={(e) => handleCategoryDrop(e, category.name)}
                 onDragLeave={handleCategoryDragLeave}
-                onClick={() => {
-                  if ((selectedImageIds && selectedImageIds.size > 0) || pendingGroupId) {
-                    onCategoryClick?.(category.name);
-                  }
-                }}
               >
                 <span className="category-icon">{getCategoryIcon(category.emoji || category.name, compactMode ? 20 : 32)}</span>
                 <span className="category-name">{category.display_name}</span>
@@ -417,7 +372,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
         )}
       </div>
 
-      {/* All Product Groups — hidden in compact mode (shown in ImageGrouper instead) */}
+      {/* All Product Groups — hidden in compactMode (they live in ImageGrouper on the left) */}
       {!compactMode && orderedGroups.length > 0 && (
         <div className="groups-section">
           <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

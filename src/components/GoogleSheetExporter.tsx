@@ -5,31 +5,30 @@ interface GoogleSheetExporterProps {
   items: ClothingItem[];
 }
 
-/**
- * Build the grouped product list from raw ClothingItems.
- * Exported so App.tsx can trigger a CSV download without rendering the full component.
- */
-export function buildProductsForCSV(items: ClothingItem[]) {
+const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
+
+  // Group items by productGroup - each group is ONE product
   const productGroups = items.reduce((groups, item) => {
-    const groupId = item.productGroup || item.id;
-    if (!groups[groupId]) groups[groupId] = [];
+    const groupId = item.productGroup || item.id; // If no group, item becomes its own product
+    if (!groups[groupId]) {
+      groups[groupId] = [];
+    }
     groups[groupId].push(item);
     return groups;
   }, {} as Record<string, ClothingItem[]>);
 
-  return Object.values(productGroups).map(group => ({
-    ...group[0],
-    imageUrls: group.map(item => item.imageUrls?.[0] || item.preview),
-    imageCount: group.length,
-  }));
-}
+  const products = Object.values(productGroups).map(group => {
+    // Use the first item in the group as the product data (all should have same data)
+    const productData = group[0];
+    return {
+      ...productData,
+      // Use Supabase URLs if available, otherwise fall back to preview (blob URLs)
+      imageUrls: group.map(item => item.imageUrls?.[0] || item.preview), // All images in the group
+      imageCount: group.length
+    };
+  });
 
-/**
- * Generate and immediately download the Shopify CSV for the given items.
- * Can be called from anywhere — no need to render GoogleSheetExporter.
- */
-export function downloadShopifyCSV(items: ClothingItem[]) {
-  const products = buildProductsForCSV(items);
+  const handleDownloadCSV = () => {
     // Create CSV content for Shopify - EXACT format from template (all 69 columns)
     const headers = [
       'Title',
@@ -98,38 +97,9 @@ export function downloadShopifyCSV(items: ClothingItem[]) {
     ];
 
     const rows: string[][] = [];
-
-    /**
-     * Resolve a template string like "{brand} {model} Sweatshirt - Vintage"
-     * against a product's actual field values.
-     * Any placeholder that has no value is removed, and extra whitespace / dashes
-     * left behind are cleaned up so the title reads naturally.
-     */
-    const resolveTemplate = (template: string, product: typeof products[0]): string => {
-      const replacements: Record<string, string> = {
-        brand:     product.brand      || '',
-        model:     product.modelName  || '',
-        category:  product.category   || '',
-        era:       product.era        || '',
-        color:     product.color      || '',
-        size:      product.size       || '',
-        condition: product.condition  || '',
-        style:     product.style      || '',
-        gender:    product.gender     || '',
-        material:  product.material   || '',
-      };
-      let result = template.replace(/\{(\w+)\}/gi, (_, key) => replacements[key.toLowerCase()] ?? '');
-      // Clean up: collapse multiple spaces/dashes left by empty placeholders
-      result = result.replace(/\s{2,}/g, ' ').replace(/(\s*-\s*){2,}/g, ' - ').replace(/^[\s\-–—]+|[\s\-–—]+$/g, '').trim();
-      return result;
-    };
-
+    
     products.forEach((product, idx) => {
-      // Resolve template placeholders in seoTitle (e.g. "{brand} {model} Sweatshirt - Vintage")
-      const resolvedTitle = product.seoTitle
-        ? resolveTemplate(product.seoTitle, product)
-        : `product-${idx + 1}`;
-      const handle = resolvedTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      const handle = (product.seoTitle || `product-${idx + 1}`).toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
       const vendor = product.brand || '';
       const productCategory = product.category || '';
       const productType = product.productType || '';
@@ -159,7 +129,7 @@ export function downloadShopifyCSV(items: ClothingItem[]) {
       
       //First row with all main product info + first image
       rows.push([
-        resolvedTitle, // Title
+        product.seoTitle || '', // Title
         handle, // URL handle
         product.generatedDescription || '', // Description
         vendor, // Vendor / Brand
@@ -196,10 +166,10 @@ export function downloadShopifyCSV(items: ClothingItem[]) {
         product.shipsFrom || '', // Ships From
         product.imageUrls?.[0] || '', // Product image URL
         '1', // Image position
-        `${resolvedTitle}`, // Image alt text
+        `${product.seoTitle || 'Product'}`, // Image alt text
         '', // Variant image URL
         'FALSE', // Gift card
-        resolvedTitle, // SEO title
+        product.seoTitle || '', // SEO title
         product.seoDescription || product.generatedDescription?.substring(0, 160) || '', // SEO description
         primaryColor + (secondaryColor ? `; ${secondaryColor}` : ''), // Color metafield
         product.discountedShipping || '', // Discounted Shipping
@@ -217,7 +187,7 @@ export function downloadShopifyCSV(items: ClothingItem[]) {
         product.gender || '', // Google Shopping / Gender
         product.ageGroup || '', // Google Shopping / Age group
         product.mpn || '', // Google Shopping / MPN
-        resolvedTitle, // Google Shopping / Ad group name
+        product.seoTitle || '', // Google Shopping / Ad group name
         productType, // Google Shopping / Ads labels
         googleCondition, // Google Shopping / Condition
         'FALSE', // Google Shopping / Custom product
@@ -233,7 +203,7 @@ export function downloadShopifyCSV(items: ClothingItem[]) {
           ...Array(33).fill(''), // Empty columns 3-35
           product.imageUrls[i] || '', // Product image URL (column 36)
           String(i + 1), // Image position (column 37)
-          `${resolvedTitle}`, // Image alt text (column 38)
+          `${product.seoTitle || 'Product'}`, // Image alt text (column 38)
           ...Array(31).fill('') // Empty remaining columns
         ]);
       }
@@ -265,10 +235,7 @@ export function downloadShopifyCSV(items: ClothingItem[]) {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-}
-
-const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
-  const products = buildProductsForCSV(items);
+  };
 
   return (
     <div className="google-sheet-exporter">
@@ -330,7 +297,7 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
       <div className="export-actions">
         <button 
           className="button button-primary"
-          onClick={() => downloadShopifyCSV(items)}
+          onClick={handleDownloadCSV}
         >
           💾 Download CSV for Shopify Import
         </button>

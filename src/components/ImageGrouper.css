@@ -27,70 +27,6 @@
   justify-content: center;
 }
 
-/* Group & Categorize dropdown */
-.category-quick-group {
-  position: relative;
-}
-
-.button-success {
-  background: #059669;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 0.5rem 1rem;
-  cursor: pointer;
-  font-weight: 600;
-  transition: background 0.15s;
-}
-.button-success:hover:not(:disabled) {
-  background: #047857;
-}
-.button-success:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.category-quick-dropdown {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 200;
-  background: #fff;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.14);
-  min-width: 200px;
-  overflow: hidden;
-}
-
-.category-quick-dropdown-header {
-  padding: 0.5rem 0.9rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #6b7280;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-bottom: 1px solid #e5e7eb;
-  background: #f9fafb;
-}
-
-.category-quick-option {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 0.6rem 0.9rem;
-  background: none;
-  border: none;
-  font-size: 0.9rem;
-  color: #111827;
-  cursor: pointer;
-  transition: background 0.1s;
-}
-.category-quick-option:hover {
-  background: #f0fdf4;
-  color: #059669;
-}
-
 .grouper-instructions {
   background: #f0f4ff;
   padding: 1.5rem;
@@ -436,13 +372,6 @@
   background: #d1fae5;
   box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
   transform: scale(1.02);
-}
-
-/* Selected for click-to-assign — glows purple to match category sidebar */
-.product-group-card.pending-categorize {
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.4);
-  background: #f0f4ff;
 }
 
 .single-item-card.drag-over {

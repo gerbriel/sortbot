@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, type ReactNode } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import type { ClothingItem } from '../App';
 import { Target } from 'lucide-react';
 import { ComprehensiveProductForm } from './ComprehensiveProductForm';
@@ -11,7 +11,6 @@ import './ProductDescriptionGenerator.css';
 interface ProductDescriptionGeneratorProps {
   items: ClothingItem[];
   onProcessed: (items: ClothingItem[]) => void;
-  exportBar?: ReactNode;
 }
 
 // Web Speech API types
@@ -45,8 +44,7 @@ interface SpeechRecognitionErrorEvent extends Event {
 
 const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = ({ 
   items, 
-  onProcessed,
-  exportBar,
+  onProcessed 
 }) => {
   const [processedItems, setProcessedItems] = useState<ClothingItem[]>(items);
   const [currentGroupIndex, setCurrentGroupIndex] = useState(0);
@@ -68,12 +66,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const buttonStateTransitionRef = useRef(0);
   const hasMountedRef = useRef(false); // Track if component has mounted
   const previousItemsLengthRef = useRef(0); // Track items array length for batch changes
-  // Always-current mirror of processedItems so async effects never read stale state
-  const processedItemsRef = useRef<ClothingItem[]>(items);
-  useEffect(() => { processedItemsRef.current = processedItems; }, [processedItems]);
-  // Always-current ref for onProcessed to avoid stale closures without adding it to deps
-  const onProcessedRef = useRef(onProcessed);
-  useEffect(() => { onProcessedRef.current = onProcessed; }, [onProcessed]);
 
   // Memoize group calculation to avoid unnecessary recalculations
   const { groupArray, currentGroup, currentItem } = useMemo(() => {
@@ -100,85 +92,21 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       return;
     }
     
-    // Subsequent updates - sync to parent via ref so onProcessed is never a dependency
-    onProcessedRef.current(processedItems);
-  }, [processedItems]); // intentionally omit onProcessed — use ref instead
+    // Subsequent updates - sync to parent
+    onProcessed(processedItems);
+  }, [processedItems, onProcessed]);
 
   // Update local state when items prop changes (e.g., opening a different batch)
-  // Reset on length change (new batch), or merge in category/_presetData changes
+  // Only reset if the array length changed (indicating a different batch was opened)
   useEffect(() => {
-    const lengthChanged = items.length !== previousItemsLengthRef.current;
-
-    if (lengthChanged) {
+    const itemsChanged = items.length !== previousItemsLengthRef.current;
+    
+    if (itemsChanged) {
       setProcessedItems(items);
       setCurrentGroupIndex(0); // Reset to first group
       previousItemsLengthRef.current = items.length;
-      return;
     }
-
-    // Even when length is the same, propagate category + _presetData from parent
-    // (happens when user drags a group to a category in Step 2)
-    const hasCategoryChange = items.some(incomingItem => {
-      const localItem = processedItems.find(p => p.id === incomingItem.id);
-      return incomingItem.category && incomingItem.category !== localItem?.category;
-    });
-
-    if (hasCategoryChange) {
-      setProcessedItems(prev => prev.map(prevItem => {
-        const incoming = items.find(i => i.id === prevItem.id);
-        if (!incoming) return prevItem;
-        if (!incoming.category || incoming.category === prevItem.category) return prevItem;
-
-        // The incoming item is fully enriched by applyPresetToProductGroup.
-        // Spread ALL incoming fields first (all preset values), then overlay
-        // any field the user has already typed locally (non-empty local wins).
-        return {
-          ...incoming,                                                            // all preset-enriched fields
-          voiceDescription:        prevItem.voiceDescription,                    // always keep local voice
-          generatedDescription:    prevItem.generatedDescription || incoming.generatedDescription,
-          // ── Fields user may have manually typed — local non-empty value wins ──
-          seoTitle:                prevItem.seoTitle             || incoming.seoTitle,
-          brand:                   prevItem.brand                || incoming.brand,
-          productType:             prevItem.productType          || incoming.productType,
-          price:                   prevItem.price                || incoming.price,
-          compareAtPrice:          prevItem.compareAtPrice       || incoming.compareAtPrice,
-          costPerItem:             prevItem.costPerItem          || incoming.costPerItem,
-          color:                   prevItem.color                || incoming.color,
-          secondaryColor:          prevItem.secondaryColor       || incoming.secondaryColor,
-          size:                    prevItem.size                 || incoming.size,
-          material:                prevItem.material             || incoming.material,
-          condition:               prevItem.condition            || incoming.condition,
-          flaws:                   prevItem.flaws                || incoming.flaws,
-          era:                     prevItem.era                  || incoming.era,
-          style:                   prevItem.style                || incoming.style,
-          gender:                  prevItem.gender               || incoming.gender,
-          ageGroup:                prevItem.ageGroup             || incoming.ageGroup,
-          sizeType:                prevItem.sizeType             || incoming.sizeType,
-          care:                    prevItem.care                 || incoming.care,
-          modelName:               prevItem.modelName            || incoming.modelName,
-          modelNumber:             prevItem.modelNumber          || incoming.modelNumber,
-          sku:                     prevItem.sku                  || incoming.sku,
-          barcode:                 prevItem.barcode              || incoming.barcode,
-          weightValue:             prevItem.weightValue          || incoming.weightValue,
-          inventoryQuantity:       prevItem.inventoryQuantity    || incoming.inventoryQuantity,
-          shipsFrom:               prevItem.shipsFrom            || incoming.shipsFrom,
-          parcelSize:              prevItem.parcelSize           || incoming.parcelSize,
-          tags:                    prevItem.tags?.length         ? prevItem.tags : incoming.tags,
-          // Measurements: merge field-by-field so user entries survive
-          measurements: {
-            ...incoming.measurements,
-            width:    prevItem.measurements?.width    || incoming.measurements?.width,
-            length:   prevItem.measurements?.length   || incoming.measurements?.length,
-            sleeve:   prevItem.measurements?.sleeve   || incoming.measurements?.sleeve,
-            shoulder: prevItem.measurements?.shoulder || incoming.measurements?.shoulder,
-            waist:    prevItem.measurements?.waist    || incoming.measurements?.waist,
-            inseam:   prevItem.measurements?.inseam   || incoming.measurements?.inseam,
-            rise:     prevItem.measurements?.rise     || incoming.measurements?.rise,
-          },
-        };
-      }));
-    }
-  }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [items]);
 
   useEffect(() => {
     // Check if browser supports Speech Recognition
@@ -211,26 +139,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       }, 1000);
     };
 
-    // Convert spoken punctuation words into actual punctuation marks.
-    // Handles: "period" → ".", "comma" → ",", "question mark" → "?",
-    //          "exclamation point" → "!", "new line" / "new paragraph" → "\n"
-    // The word boundary check prevents false positives (e.g. "Imperial").
-    const normalizeVoicePunctuation = (text: string): string => {
-      return text
-        // "period" → "." — must be a standalone word (not inside another word)
-        .replace(/\bperiod\b\.?/gi, '.')
-        // collapse any spaces that appear right before the inserted "."
-        .replace(/\s+\./g, '.')
-        // optional common extras
-        .replace(/\bcomma\b/gi, ',')
-        .replace(/\bquestion mark\b/gi, '?')
-        .replace(/\bexclamation point\b/gi, '!')
-        .replace(/\bnew (line|paragraph)\b/gi, '\n')
-        // tidy up: remove spaces before punctuation introduced above
-        .replace(/ ([,?!])/g, '$1')
-        .trim();
-    };
-
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let interim = '';
       let final = '';
@@ -243,9 +151,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           interim += transcript;
         }
       }
-
-      // Convert spoken punctuation words before storing
-      if (final) final = normalizeVoicePunctuation(final);
 
       if (final) {
         setProcessedItems(prev => {
@@ -270,13 +175,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           currentGroup.forEach(groupItem => {
             const itemIndex = updated.findIndex(item => item.id === groupItem.id);
             if (itemIndex !== -1) {
-              // Ensure a space between existing description and new chunk
-              // (the Web Speech API emits separate final results when you pause,
-              //  so we must add the separator ourselves)
-              const separator = currentDescription && !currentDescription.endsWith(' ') ? ' ' : '';
               updated[itemIndex] = {
                 ...updated[itemIndex],
-                voiceDescription: (currentDescription + separator + final).trim()
+                voiceDescription: (currentDescription + final).trim()
               };
             }
           });
@@ -380,99 +281,128 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     loadPresets();
   }, []);
 
-  // Apply presets to ALL groups whenever presets load or item count changes.
-  // Uses processedItemsRef so the async callback always reads fresh state.
+  // Apply presets to ALL groups on initial load (batch processing)
   useEffect(() => {
-    if (availablePresets.length === 0) return;
-
-    const runAsync = async () => {
-      const current = processedItemsRef.current;
-
-      const productGroups = current.reduce((groups, item) => {
+    const applyPresetsToAllGroups = async () => {
+      if (availablePresets.length === 0) return;
+      
+      // Group items by productGroup
+      const productGroups = processedItems.reduce((groups, item) => {
         const groupId = item.productGroup || item.id;
-        if (!groups[groupId]) groups[groupId] = [];
+        if (!groups[groupId]) {
+          groups[groupId] = [];
+        }
         groups[groupId].push(item);
         return groups;
       }, {} as Record<string, ClothingItem[]>);
 
       let hasChanges = false;
-      const updatedItems = [...current];
+      const updatedItems = [...processedItems];
 
+      // Apply presets to each group that has a category but no preset data
       for (const [, groupItems] of Object.entries(productGroups)) {
         const firstItem = groupItems[0];
+        
+        // Skip if no category assigned
         if (!firstItem.category) continue;
-
-        // Skip only if _presetData already set for this exact category on every item
-        const alreadyApplied = groupItems.every(item =>
-          item._presetData?.productType?.toLowerCase() === firstItem.category!.toLowerCase()
+        
+        // Check if preset is already applied for this category
+        const hasPresetData = groupItems.some(item => item._presetData);
+        const presetCategory = groupItems.find(item => item._presetData)?._presetData?.productType;
+        const isSameCategory = presetCategory?.toLowerCase() === firstItem.category?.toLowerCase();
+        const hasPresetFields = groupItems.some(item => 
+          item.policies || item.shipsFrom || item.gender || item.whoMadeIt
         );
-        if (alreadyApplied) continue;
+        
+        // Skip if preset already applied for this category
+        if (hasPresetData && hasPresetFields && isSameCategory) continue;
 
         try {
+          // Apply preset to this group
           const updatedGroup = await applyPresetToProductGroup(groupItems, firstItem.category);
+          
+          // Update items in the array
           updatedGroup.forEach((updatedItem) => {
-            const idx = updatedItems.findIndex(i => i.id === updatedItem.id);
-            if (idx !== -1) { updatedItems[idx] = updatedItem; hasChanges = true; }
+            const itemIndex = updatedItems.findIndex(item => item.id === updatedItem.id);
+            if (itemIndex !== -1) {
+              updatedItems[itemIndex] = updatedItem;
+              hasChanges = true;
+            }
           });
-        } catch (err) {
-          console.error('Preset apply error for group:', firstItem.category, err);
+        } catch (error) {
+          // Silently fail for this group, continue with others
         }
       }
 
+      // Only update state if there were actual changes
       if (hasChanges) {
         setProcessedItems(updatedItems);
       }
     };
 
-    runAsync();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [availablePresets, processedItems.length]);
+    applyPresetsToAllGroups();
+  }, [availablePresets]); // Run when presets load
 
-  // Auto-apply default preset when navigating to a new group (currentGroupIndex changes)
+  // Auto-apply default preset when current group changes OR when category changes
   useEffect(() => {
-    if (availablePresets.length === 0 || !currentItem || !currentItem.category) return;
-
-    // Skip only if _presetData already matches this exact category for every item in group
-    const alreadyApplied = currentGroup.every(item =>
-      item._presetData?.productType?.toLowerCase() === currentItem.category!.toLowerCase()
-    );
-    if (alreadyApplied) {
-      const defaultPreset = availablePresets.find(p =>
-        (p.product_type?.toLowerCase() === currentItem.category?.toLowerCase() ||
-          p.category_name.toLowerCase() === currentItem.category?.toLowerCase()) &&
-        p.is_default && p.is_active
+    const autoApplyDefaultPreset = async () => {
+      if (!currentItem || !currentItem.category) {
+        return;
+      }
+      
+      // Check if the preset is already applied for THIS category
+      // Compare the category stored in _presetData with the current category
+      const hasPresetData = currentGroup.some(item => item._presetData);
+      const presetCategory = currentGroup.find(item => item._presetData)?._presetData?.productType;
+      const isSameCategory = presetCategory?.toLowerCase() === currentItem.category?.toLowerCase();
+      
+      // Check if key fields are actually filled
+      const hasPresetFields = currentGroup.some(item => 
+        item.policies || 
+        item.shipsFrom || 
+        item.gender || 
+        item.whoMadeIt
       );
-      if (defaultPreset) setSelectedPresetId(defaultPreset.id);
-      return;
-    }
+      
+      // Only skip if preset exists, fields are filled, AND it's the same category
+      if (hasPresetData && hasPresetFields && isSameCategory) {
+        return;
+      }
 
-    const runAsync = async () => {
       try {
-        const updatedGroup = await applyPresetToProductGroup(currentGroup, currentItem.category!);
-
-        setProcessedItems(prev => {
-          const updated = [...prev];
-          updatedGroup.forEach((updatedItem) => {
-            const idx = updated.findIndex(i => i.id === updatedItem.id);
-            if (idx !== -1) updated[idx] = updatedItem;
-          });
-          return updated;
+        const updatedGroup = await applyPresetToProductGroup(currentGroup, currentItem.category);
+        
+        // Update processedItems with preset-enriched items
+        const updated = [...processedItems];
+        updatedGroup.forEach((updatedItem) => {
+          const itemIndex = updated.findIndex(item => item.id === updatedItem.id);
+          if (itemIndex !== -1) {
+            updated[itemIndex] = updatedItem;
+          }
         });
-
-        const defaultPreset = availablePresets.find(p =>
-          (p.product_type?.toLowerCase() === currentItem.category?.toLowerCase() ||
-            p.category_name.toLowerCase() === currentItem.category?.toLowerCase()) &&
-          p.is_default && p.is_active
+        
+        setProcessedItems(updated);
+        
+        // Find and set the default preset ID in the dropdown
+        const defaultPreset = availablePresets.find(p => 
+          (p.product_type?.toLowerCase() === currentItem.category?.toLowerCase() || 
+           p.category_name.toLowerCase() === currentItem.category?.toLowerCase()) &&
+          p.is_default && 
+          p.is_active
         );
-        if (defaultPreset) setSelectedPresetId(defaultPreset.id);
+        
+        if (defaultPreset) {
+          setSelectedPresetId(defaultPreset.id);
+        }
       } catch (error) {
-        console.error('Auto-apply preset error:', error);
+        // Silently fail auto-apply
       }
     };
 
-    runAsync();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentGroupIndex, currentItem?.category, availablePresets]);
+    if (availablePresets.length > 0) {
+      autoApplyDefaultPreset();
+    }
+  }, [currentGroupIndex, currentItem?.category, availablePresets]); // Watch category changes too!
 
   // Apply manual preset override
   const handleApplyPreset = async (presetId: string) => {
@@ -696,7 +626,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         
         // Use generated description
         const finalDescription = aiResult.description;
-        const suggestedTags = aiResult.suggestedTags || [];
         
         // Update all fields with generated data
         const updated = [...processedItems];
@@ -706,9 +635,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             updated[itemIndex] = {
               ...updated[itemIndex],
               generatedDescription: finalDescription,
-              ...(suggestedTags.length > 0 && {
-                tags: [...new Set([...(updated[itemIndex].tags || []), ...suggestedTags])]
-              }),
             };
           }
         });
@@ -1057,30 +983,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               </div>
             </div>
           )}
-
-          {/* Listing navigation — navigates product groups, not images */}
-          <div className="preview-nav-controls">
-            <button
-              className="button"
-              onClick={handlePrevious}
-              disabled={currentGroupIndex === 0}
-            >
-              ← Prev
-            </button>
-            <span className="preview-nav-label">
-              {currentGroupIndex + 1} / {groupArray.length}
-            </span>
-            {currentGroupIndex < groupArray.length - 1 ? (
-              <button className="button" onClick={handleNext}>
-                Next →
-              </button>
-            ) : (
-              <button className="button button-secondary" onClick={handleFinish}>
-                Finish ✓
-              </button>
-            )}
-          </div>
-
         </div>
 
         <div className="product-form">
@@ -1153,48 +1055,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 className="description-textarea"
               />
             </div>
-
-            {/* AI Generated Description */}
-            <div className="preview-ai-description" style={{ marginTop: '1rem' }}>
-              <h3>AI Generated Description</h3>
-              <textarea
-                value={currentItem.generatedDescription}
-                onChange={(e) => {
-                  const updated = [...processedItems];
-                  currentGroup.forEach(groupItem => {
-                    const itemIndex = updated.findIndex(item => item.id === groupItem.id);
-                    if (itemIndex !== -1) {
-                      updated[itemIndex].generatedDescription = e.target.value;
-                    }
-                  });
-                  setProcessedItems(updated);
-                }}
-                className="info-textarea"
-                rows={10}
-                style={{ width: '100%' }}
-              />
-              <button
-                className="button button-primary"
-                onClick={regenerateDescription}
-                disabled={isGenerating}
-                style={{
-                  marginTop: '0.5rem',
-                  width: '100%',
-                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-                }}
-              >
-                {isGenerating ? '🧠 Generating...' : '✨ Generate AI Description'}
-              </button>
-              <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem', marginBottom: 0 }}>
-                AI will create a professional description from your voice input and fields
-              </p>
-              {exportBar && (
-                <div style={{ marginTop: '1rem' }}>
-                  {exportBar}
-                </div>
-              )}
-            </div>
-
+            
             {/* Display Intelligent Match Results */}
             {currentItem.modelName && (
               <div className="match-results" style={{
@@ -1303,6 +1164,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '1rem' }}>
               Fields pre-filled from category preset. Voice dictation takes precedence. Edit any field as needed.
             </p>
+            
             <ComprehensiveProductForm
               currentItem={currentItem}
               currentGroup={currentGroup}
@@ -1311,9 +1173,78 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             />
           </div>
 
+          <div className="generated-info">
+              <h3>AI Generated Content (Edit as needed)</h3>
+              
+              <div className="info-item">
+                <label>Product Description:</label>
+                <textarea 
+                  value={currentItem.generatedDescription}
+                  onChange={(e) => {
+                    const updated = [...processedItems];
+                    // Update all items in the group
+                    currentGroup.forEach(groupItem => {
+                      const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                      if (itemIndex !== -1) {
+                        updated[itemIndex].generatedDescription = e.target.value;
+                      }
+                    });
+                    setProcessedItems(updated);
+                  }}
+                  className="info-textarea"
+                  rows={12}
+                  style={{ width: '100%', minHeight: '300px' }}
+                />
+                <button
+                  className="button button-primary"
+                  onClick={regenerateDescription}
+                  disabled={isGenerating}
+                  style={{ 
+                    marginTop: '0.5rem', 
+                    width: '100%',
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                  }}
+                  title="Generate professional description from your voice + fields"
+                >
+                  {isGenerating ? (
+                    '🧠 Generating...'
+                  ) : (
+                    '✨ Generate AI Description'
+                  )}
+                </button>
+                <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem', marginBottom: 0 }}>
+                  AI will create a professional description from your voice input and fields
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
 
+      <div className="navigation-controls">
+        <button 
+          className="button" 
+          onClick={handlePrevious}
+          disabled={currentGroupIndex === 0}
+        >
+          ← Previous
+        </button>
+        
+        {currentGroupIndex < groupArray.length - 1 ? (
+          <button 
+            className="button" 
+            onClick={handleNext}
+          >
+            Next →
+          </button>
+        ) : (
+          <button 
+            className="button button-secondary" 
+            onClick={handleFinish}
+          >
+            Finish Processing ✓
+          </button>
+        )}
+      </div>
     </div>
   );
 };

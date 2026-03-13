@@ -7,12 +7,11 @@ import ImageUpload from './components/ImageUpload';
 import ImageGrouper from './components/ImageGrouper';
 import CategoryZones from './components/CategoryZones';
 import ProductDescriptionGenerator from './components/ProductDescriptionGenerator';
-import GoogleSheetExporter, { downloadShopifyCSV } from './components/GoogleSheetExporter';
+import GoogleSheetExporter from './components/GoogleSheetExporter';
 import { Library } from './components/Library';
 import CategoryPresetsManager from './components/CategoryPresetsManager';
 import CategoriesManager from './components/CategoriesManager';
 import { saveBatchToDatabase } from './lib/productService';
-import { applyPresetToProductGroup } from './lib/applyPresetToGroup';
 import { autoSaveWorkflowBatch, type WorkflowBatch } from './lib/workflowBatchService';
 import type { BrandCategory } from './lib/brandCategorySystem';
 import './App.css';
@@ -132,12 +131,9 @@ function App() {
   const [showCategoryPresets, setShowCategoryPresets] = useState(false);
   const [showCategoriesManager, setShowCategoriesManager] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [showExportDetails, setShowExportDetails] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showStep2Info, setShowStep2Info] = useState(false);
   const [currentBatchId, setCurrentBatchId] = useState<string | null>(null);
-  const [pendingGroupId, setPendingGroupId] = useState<string | null>(null); // click-to-assign category
-  const [selectedImageIds, setSelectedImageIds] = useState<Set<string>>(new Set()); // images selected in ImageGrouper
   const [currentBatchNumber, setCurrentBatchNumber] = useState<string>(`batch-${Date.now()}`);
 
   // Helper to determine current workflow step
@@ -298,62 +294,22 @@ function App() {
     // Broadcast action for real-time collaboration
   };
 
-  // Called when user clicks a category zone with images selected in ImageGrouper.
-  // Groups the selected images into a new product group and applies the preset.
-  const handleGroupAndCategorize = async (categoryName: string) => {
-    if (selectedImageIds.size === 0) return;
-
-    const currentItems = groupedImages.length > 0 ? groupedImages : uploadedImages;
-    const groupId = `group-${Date.now()}`;
-
-    // Assign selected images to the new group
-    const merged = currentItems.map(item =>
-      selectedImageIds.has(item.id)
-        ? { ...item, productGroup: groupId }
-        : item
-    );
-
-    const newGroupItems = merged.filter(item => item.productGroup === groupId);
-
-    // Apply the category preset to the new group
-    let final: typeof merged;
-    try {
-      const enriched = await applyPresetToProductGroup(newGroupItems, categoryName);
-      final = merged.map(item => enriched.find(e => e.id === item.id) ?? item);
-    } catch (err) {
-      console.error('[G&C] applyPresetToProductGroup failed:', err);
-      // Fallback: just set category without preset fields
-      final = merged.map(item =>
-        selectedImageIds.has(item.id) ? { ...item, category: categoryName } : item
-      );
-    }
-
-    setSelectedImageIds(new Set()); // clear selection
-    handleImagesGrouped(final);    // update groupedImages + save
-  };
-
   const handleImagesGrouped = async (items: ClothingItem[]) => {
-    // Preserve existing categories when updating groups, but don't overwrite
-    // a category that was just assigned (e.g. via handleGroupAndCategorize).
+    // Preserve existing categories when updating groups
     const itemsWithCategories = items.map(item => {
-      // If the incoming item already has a category, keep it as-is.
-      if (item.category) return item;
-      // Otherwise fall back to whatever was stored in groupedImages.
       const existingItem = groupedImages.find(g => g.id === item.id);
       return existingItem?.category ? { ...item, category: existingItem.category } : item;
     });
     
     setGroupedImages(itemsWithCategories);
     
-    // If we already have sorted images, update them with new grouping info.
-    // We only push items that were already in sortedImages (had been categorized
-    // via CategoryZones), and we trust itemsWithCategories for the category value
-    // because it already did the correct preservation logic above.
-    if (sortedImages.length > 0) {
-      const sortedIds = new Set(sortedImages.map(s => s.id));
-      const updatedSorted = itemsWithCategories.filter(item => sortedIds.has(item.id));
-      setSortedImages(updatedSorted);
-    }
+    // Always sync sortedImages so Step 4 is accessible once groups exist.
+    // Preserve any categories that were already assigned via drag-to-category.
+    const updatedSorted = itemsWithCategories.map(item => {
+      const existingSorted = sortedImages.find(s => s.id === item.id);
+      return existingSorted ? { ...item, category: existingSorted.category } : item;
+    });
+    setSortedImages(updatedSorted);
     
     // Auto-save workflow state (Step 2 complete - groups created)
     autoSaveWorkflow({
@@ -678,11 +634,11 @@ function App() {
           )}
         </section>
 
-        {/* Step 2: Group & Categorize */}
+        {/* Steps 2 & 3 Combined: Group Images + Drag to Categories */}
         {uploadedImages.length > 0 && (
           <section className="step-section">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <h2>Step 2: Group &amp; Categorize</h2>
+              <h2>Step 2: Group & Categorize</h2>
               <button 
                 onClick={() => setShowStep2Info(!showStep2Info)}
                 style={{
@@ -720,104 +676,83 @@ function App() {
                   <li>⌨️ <strong>Shift+Click</strong> to select multiple at once</li>
                   <li>🔗 <strong>Click "Group Selected"</strong> - works with 1+ images</li>
                   <li>✂️ <strong>Click "Ungroup Selected"</strong> - removes selected images from groups</li>
-                  <li>🖱️ <strong>Drag photos</strong> between groups or to make them individual</li>
-                  <li>🏷️ <strong>Drag a group card</strong> onto a category on the right to categorize it</li>
+                  <li>🖱️ <strong>Drag photos</strong> onto a group card to add them to that group</li>
+                  <li>🏷️ <strong>Drag a group card</strong> onto a category (right panel) to categorize it</li>
                   <li>🗑️ <strong>Click × button</strong> to delete unwanted images</li>
                 </ul>
               </div>
             )}
-            <p className="step-description">
-              Click to select images, group them, and organize your products. All images are auto-uploaded to your database.
-            </p>
-            {/* Split-pane: ImageGrouper left, CategoryZones right */}
-            <div className="step2-split">
-              <div className="step2-grouper">
+            {/* Split pane: ImageGrouper left, CategoryZones right */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 340px',
+              gap: '1.5rem',
+              alignItems: 'start',
+            }} className="step2-split">
+              {/* Left: Group images — scrollable panel so page doesn't grow tall */}
+              <div style={{ maxHeight: '75vh', overflowY: 'auto', overflowX: 'hidden', borderRadius: '8px' }}>
+                <p className="step-description" style={{ marginTop: 0 }}>
+                  Select &amp; group your product images, then drag groups to a category on the right.
+                </p>
                 <ImageGrouper 
                   items={groupedImages.length > 0 ? groupedImages : uploadedImages} 
                   onGrouped={handleImagesGrouped}
-                  onSelectionChange={setSelectedImageIds}
                   userId={user.id}
-                  pendingGroupId={pendingGroupId}
-                  onGroupSelected={setPendingGroupId}
                 />
               </div>
-              <div className="step2-categories">
-                <CategoryZones
-                  items={groupedImages}
+              {/* Right: Category drop zones — sticky so always visible */}
+              <div style={{ position: 'sticky', top: '1rem' }}>
+                <p className="step-description" style={{ marginTop: 0 }}>
+                  Drag a group here to assign a category.
+                </p>
+                <CategoryZones 
+                  items={groupedImages.length > 0 ? groupedImages : uploadedImages}
                   onCategorized={handleImagesSorted}
                   compactMode
-                  pendingGroupId={pendingGroupId}
-                  selectedImageIds={selectedImageIds}
-                  onCategoryClick={(category) => {
-                    if (selectedImageIds.size > 0) {
-                      // Selected images in grouper — group + categorize them
-                      handleGroupAndCategorize(category);
-                    } else if (pendingGroupId) {
-                      // Existing group pending category assignment
-                      const updated = groupedImages.map(item =>
-                        (item.productGroup || item.id) === pendingGroupId
-                          ? { ...item, category }
-                          : item
-                      );
-                      handleImagesSorted(updated);
-                      setPendingGroupId(null);
-                    }
-                  }}
                 />
               </div>
             </div>
           </section>
         )}
 
-        {/* Step 3: Add Descriptions + Export */}
-        {(sortedImages.length > 0 || groupedImages.length > 0) && (
+        {/* Step 3: Add Descriptions */}
+        {sortedImages.length > 0 && (
           <section className="step-section">
-            <h2>Step 3: Add Voice Descriptions &amp; Generate Product Info</h2>
+            <h2>Step 3: Add Voice Descriptions & Generate Product Info</h2>
             <ProductDescriptionGenerator
-              items={processedItems.length > 0 ? processedItems : groupedImages}
+              items={processedItems}
               onProcessed={handleItemsProcessed}
-              exportBar={processedItems.length > 0 ? (
-                <div className="export-bar">
-                  <button
-                    onClick={handleSaveBatch}
-                    className="button button-primary"
-                    disabled={saving}
-                  >
-                    {saving ? '💾 Saving...' : '💾 Save Batch to Database'}
-                  </button>
-
-                  <button
-                    className="button button-secondary"
-                    onClick={() => downloadShopifyCSV(processedItems)}
-                  >
-                    📥 Download CSV
-                  </button>
-
-                  <button
-                    className="export-drawer-toggle"
-                    onClick={() => setShowExportDetails(v => !v)}
-                    aria-expanded={showExportDetails}
-                  >
-                    {showExportDetails ? '▲ Hide export options' : '▼ Export options'}
-                  </button>
-
-                  {showExportDetails && (
-                    <div className="export-drawer">
-                      <div className="export-drawer-actions">
-                        <button
-                          onClick={handleClearBatch}
-                          className="button button-secondary"
-                          disabled={saving}
-                        >
-                          🗑️ Clear Batch
-                        </button>
-                      </div>
-                      <GoogleSheetExporter items={processedItems} />
-                    </div>
-                  )}
-                </div>
-              ) : undefined}
             />
+          </section>
+        )}
+
+        {/* Step 4: Save & Export */}
+        {processedItems.length > 0 && (
+          <section className="step-section">
+            <h2>Step 4: Save & Export</h2>
+            
+            <div className="batch-actions">
+              <button 
+                onClick={handleSaveBatch} 
+                className="button button-primary"
+                disabled={saving}
+              >
+                {saving ? '💾 Saving...' : '💾 Save Batch to Database'}
+              </button>
+              
+              <button 
+                onClick={handleClearBatch} 
+                className="button button-secondary"
+                disabled={saving}
+              >
+                🗑️ Clear Batch
+              </button>
+            </div>
+
+            <div className="export-section">
+              <h3>Export Options</h3>
+              <GoogleSheetExporter items={processedItems} />
+            </div>
           </section>
         )}
       </main>

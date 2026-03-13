@@ -43,7 +43,6 @@ export async function fetchWorkflowBatches(): Promise<WorkflowBatch[]> {
     if (error) throw error;
     return data || [];
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') return [];
     console.error('Error fetching workflow batches:', error);
     return [];
   }
