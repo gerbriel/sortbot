@@ -577,6 +577,9 @@ export const generateProductDescription = async (
 function createFallbackDescription(context: ProductContext): AIGeneratedContent {
   let description = '';
 
+  // Always open with the brand prefix
+  description += 'Vintage / Y2K\n\n';
+
   // PART 1: Main voice description (use EXACTLY as provided, minus condition/care)
   if (context.voiceDescription && context.voiceDescription.length > 5) {
     let mainDesc = context.voiceDescription.trim();
