@@ -275,6 +275,116 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
     }
   };
 
+  // Assign selected product groups to an EXISTING batch
+  const handleAssignGroupsToExistingBatch = async () => {
+    if (selectedItems.size === 0 || batches.length === 0) return;
+    const batchOptions = batches.map((b, i) => {
+      const name = b.batch_name || `Batch ${new Date(b.created_at).toLocaleDateString()}`;
+      return `${i + 1}. ${name}`;
+    }).join('\n');
+    const input = prompt(`Choose a batch number to move ${selectedItems.size} group(s) into:\n\n${batchOptions}`);
+    if (input === null) return;
+    const idx = parseInt(input.trim(), 10) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= batches.length) { alert('Invalid selection.'); return; }
+    const target = batches[idx];
+    try {
+      const ids = Array.from(selectedItems);
+      const { error } = await supabase.from('products').update({ batch_id: target.id }).in('id', ids);
+      if (error) throw error;
+      clearSelection();
+      await loadProductGroups();
+      const name = target.batch_name || `Batch ${new Date(target.created_at).toLocaleDateString()}`;
+      alert(`✅ ${ids.length} group(s) moved to "${name}".`);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to assign groups to batch.');
+    }
+  };
+
+  // Group selected images (from Images view) into a new product group
+  const handleGroupSelectedImages = async () => {
+    if (selectedItems.size < 2) { alert('Select at least 2 images to group.'); return; }
+    const title = prompt('Product group title (e.g. "Black Hoodie"):');
+    if (title === null) return;
+
+    // Pick which batch to assign the new product to
+    let batchId: string | null = null;
+    if (batches.length > 0) {
+      const batchOptions = batches.map((b, i) => {
+        const name = b.batch_name || `Batch ${new Date(b.created_at).toLocaleDateString()}`;
+        return `${i + 1}. ${name}`;
+      }).join('\n');
+      const input = prompt(`Assign to which batch? (enter number, or leave blank to skip)\n\n${batchOptions}`);
+      if (input !== null && input.trim() !== '') {
+        const idx = parseInt(input.trim(), 10) - 1;
+        if (!isNaN(idx) && idx >= 0 && idx < batches.length) batchId = batches[idx].id;
+      }
+    }
+
+    try {
+      const groupId = `group-${Date.now()}`;
+      const imageIds = Array.from(selectedItems);
+
+      // Create a new product record
+      const { data: newProduct, error: prodErr } = await supabase
+        .from('products')
+        .insert({
+          title: title.trim() || 'Untitled Product',
+          product_group: groupId,
+          batch_id: batchId,
+          status: 'Draft',
+        })
+        .select()
+        .single();
+      if (prodErr) throw prodErr;
+      if (!newProduct) throw new Error('No product returned');
+
+      // Reassign the selected product_images rows to this new product
+      const { error: imgErr } = await supabase
+        .from('product_images')
+        .update({ product_id: newProduct.id })
+        .in('id', imageIds);
+      if (imgErr) throw imgErr;
+
+      clearSelection();
+      await loadImages();
+      if (viewMode === 'groups') await loadProductGroups();
+      alert(`✅ Created product group "${title}" with ${imageIds.length} images.`);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to create product group.');
+    }
+  };
+
+  // Assign selected images to an existing product group
+  const handleAssignImagesToGroup = async () => {
+    if (selectedItems.size === 0) return;
+    // Load available product groups for selection
+    const { data: products } = await supabase
+      .from('products')
+      .select('id, title')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (!products || products.length === 0) { alert('No product groups found. Create one first.'); return; }
+    const options = products.map((p: any, i: number) => `${i + 1}. ${p.title || 'Untitled'}`).join('\n');
+    const input = prompt(`Assign ${selectedItems.size} image(s) to which product group?\n\n${options}`);
+    if (input === null) return;
+    const idx = parseInt(input.trim(), 10) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= products.length) { alert('Invalid selection.'); return; }
+    const target = products[idx];
+    try {
+      const ids = Array.from(selectedItems);
+      const { error } = await supabase.from('product_images').update({ product_id: target.id }).in('id', ids);
+      if (error) throw error;
+      clearSelection();
+      await loadImages();
+      alert(`✅ ${ids.length} image(s) assigned to "${target.title || 'Untitled'}".`);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to assign images to group.');
+    }
+  };
+
   const handleDelete = async (batchId: string) => {
     // Start deletion animation
     setDeletingItem({id: batchId, type: 'batch', progress: 0});
@@ -912,12 +1022,35 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
               <button className="toolbar-button" onClick={selectAll}>
                 Select All
               </button>
-              {(viewMode === 'groups') && (
-                <button className="toolbar-button" onClick={handleAssignSelectedToNewBatch} title="Move selected groups into a new batch">
-                  <Plus size={16} />
-                  Assign to New Batch
-                </button>
+
+              {/* ── Product Groups toolbar actions ── */}
+              {viewMode === 'groups' && (
+                <>
+                  <button className="toolbar-button" onClick={handleAssignGroupsToExistingBatch} title="Move selected groups into an existing batch">
+                    <Folder size={16} />
+                    Move to Batch
+                  </button>
+                  <button className="toolbar-button" onClick={handleAssignSelectedToNewBatch} title="Move selected groups into a new batch">
+                    <Plus size={16} />
+                    New Batch from Selection
+                  </button>
+                </>
               )}
+
+              {/* ── Images toolbar actions ── */}
+              {viewMode === 'images' && (
+                <>
+                  <button className="toolbar-button" onClick={handleAssignImagesToGroup} title="Add selected images to an existing product group">
+                    <Package size={16} />
+                    Add to Group
+                  </button>
+                  <button className="toolbar-button" onClick={handleGroupSelectedImages} title="Create a new product group from selected images">
+                    <Plus size={16} />
+                    Create New Group
+                  </button>
+                </>
+              )}
+
               <button className="toolbar-button danger" onClick={handleBulkDelete}>
                 <Trash2 size={16} />
                 Delete Selected
