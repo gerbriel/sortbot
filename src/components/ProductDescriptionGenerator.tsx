@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import type { ClothingItem } from '../App';
 import { ComprehensiveProductForm } from './ComprehensiveProductForm';
+import GoogleSheetExporter from './GoogleSheetExporter';
 import { getCategoryPresets } from '../lib/categoryPresetsService';
 import type { CategoryPreset } from '../lib/categoryPresets';
 import { applyPresetToProductGroup } from '../lib/applyPresetToGroup';
@@ -1118,6 +1119,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 Finish ✓
               </button>
             )}
+          </div>
+
+          {/* Download / Export - always available below nav */}
+          <div style={{ marginTop: '1rem' }}>
+            <GoogleSheetExporter items={processedItems} />
           </div>
         </div>
 
