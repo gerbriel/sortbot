@@ -3,9 +3,10 @@ import './GoogleSheetExporter.css';
 
 interface GoogleSheetExporterProps {
   items: ClothingItem[];
+  compactMode?: boolean;
 }
 
-const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
+const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items, compactMode = false }) => {
 
   // Group items by productGroup - each group is ONE product
   const productGroups = items.reduce((groups, item) => {
@@ -239,60 +240,64 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
 
   return (
     <div className="google-sheet-exporter">
-      <div className="export-summary">
-        <h3>Export Summary</h3>
-        <div className="summary-stats">
-          <div className="stat-card">
-            <span className="stat-number">{products.length}</span>
-            <span className="stat-label">Total Products</span>
+      {!compactMode && (
+        <>
+          <div className="export-summary">
+            <h3>Export Summary</h3>
+            <div className="summary-stats">
+              <div className="stat-card">
+                <span className="stat-number">{products.length}</span>
+                <span className="stat-label">Total Products</span>
+              </div>
+              <div className="stat-card">
+                <span className="stat-number">
+                  {products.filter(p => p.price).length}
+                </span>
+                <span className="stat-label">Priced Items</span>
+              </div>
+              <div className="stat-card">
+                <span className="stat-number">
+                  {new Set(products.map(p => p.category)).size}
+                </span>
+                <span className="stat-label">Categories</span>
+              </div>
+            </div>
           </div>
-          <div className="stat-card">
-            <span className="stat-number">
-              {products.filter(p => p.price).length}
-            </span>
-            <span className="stat-label">Priced Items</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-number">
-              {new Set(products.map(p => p.category)).size}
-            </span>
-            <span className="stat-label">Categories</span>
-          </div>
-        </div>
-      </div>
 
-      <div className="export-preview">
-        <h3>Preview (Shopify Format)</h3>
-        <div className="table-container">
-          <table className="preview-table">
-            <thead>
-              <tr>
-                <th>Title</th>
-                <th>Category</th>
-                <th>Price</th>
-                <th>Tags</th>
-                <th>Description</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.slice(0, 5).map(product => (
-                <tr key={product.id}>
-                  <td>{product.seoTitle}</td>
-                  <td>{product.category}</td>
-                  <td>${product.price?.toFixed(2)}</td>
-                  <td>{product.tags?.join(', ')}</td>
-                  <td className="description-cell">
-                    {product.generatedDescription?.substring(0, 100)}...
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {products.length > 5 && (
-            <p className="preview-note">Showing 5 of {products.length} items</p>
-          )}
-        </div>
-      </div>
+          <div className="export-preview">
+            <h3>Preview (Shopify Format)</h3>
+            <div className="table-container">
+              <table className="preview-table">
+                <thead>
+                  <tr>
+                    <th>Title</th>
+                    <th>Category</th>
+                    <th>Price</th>
+                    <th>Tags</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {products.slice(0, 5).map(product => (
+                    <tr key={product.id}>
+                      <td>{product.seoTitle}</td>
+                      <td>{product.category}</td>
+                      <td>${product.price?.toFixed(2)}</td>
+                      <td>{product.tags?.join(', ')}</td>
+                      <td className="description-cell">
+                        {product.generatedDescription?.substring(0, 100)}...
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {products.length > 5 && (
+                <p className="preview-note">Showing 5 of {products.length} items</p>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="export-actions">
         <button 
@@ -303,28 +308,30 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items }) => {
         </button>
       </div>
 
-      <div className="export-instructions">
-        <h3>📄 CSV Export</h3>
-        <p style={{ fontSize: '0.95rem', color: '#666', marginTop: '0.5rem', lineHeight: '1.5' }}>
-          Downloads a CSV file with <strong>all product data and fields</strong> ready for Shopify import. 
-          The CSV includes image URLs that Shopify will automatically fetch during import.
-        </p>
-        <div style={{ marginTop: '1rem', padding: '1rem', background: '#f0f9ff', borderRadius: '8px', fontSize: '0.9rem' }}>
-          <strong>✅ Includes all fields:</strong>
-          <ul style={{ marginTop: '0.5rem', marginBottom: 0, paddingLeft: '1.5rem' }}>
-            <li>Product details (title, description, brand, category)</li>
-            <li>Pricing (price, compare-at price, cost)</li>
-            <li>Variants (size, color, secondary color)</li>
-            <li>Inventory (SKU, barcode, quantity)</li>
-            <li>Shipping (weight, dimensions, parcel size)</li>
-            <li>Product classification (style, gender, age group, size type)</li>
-            <li>Policies & marketplace info</li>
-            <li>SEO fields (title, description)</li>
-            <li>Google Shopping fields (MPN, custom labels)</li>
-            <li>Image URLs (automatically fetched by Shopify)</li>
-          </ul>
+      {!compactMode && (
+        <div className="export-instructions">
+          <h3>📄 CSV Export</h3>
+          <p style={{ fontSize: '0.95rem', color: '#666', marginTop: '0.5rem', lineHeight: '1.5' }}>
+            Downloads a CSV file with <strong>all product data and fields</strong> ready for Shopify import. 
+            The CSV includes image URLs that Shopify will automatically fetch during import.
+          </p>
+          <div style={{ marginTop: '1rem', padding: '1rem', background: '#f0f9ff', borderRadius: '8px', fontSize: '0.9rem' }}>
+            <strong>✅ Includes all fields:</strong>
+            <ul style={{ marginTop: '0.5rem', marginBottom: 0, paddingLeft: '1.5rem' }}>
+              <li>Product details (title, description, brand, category)</li>
+              <li>Pricing (price, compare-at price, cost)</li>
+              <li>Variants (size, color, secondary color)</li>
+              <li>Inventory (SKU, barcode, quantity)</li>
+              <li>Shipping (weight, dimensions, parcel size)</li>
+              <li>Product classification (style, gender, age group, size type)</li>
+              <li>Policies & marketplace info</li>
+              <li>SEO fields (title, description)</li>
+              <li>Google Shopping fields (MPN, custom labels)</li>
+              <li>Image URLs (automatically fetched by Shopify)</li>
+            </ul>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
