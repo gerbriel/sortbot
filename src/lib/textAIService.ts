@@ -577,9 +577,6 @@ export const generateProductDescription = async (
 function createFallbackDescription(context: ProductContext): AIGeneratedContent {
   let description = '';
 
-  // Always open with the brand prefix
-  description += 'Vintage / Y2K\n\n';
-
   // PART 1: Main voice description (use EXACTLY as provided, minus condition/care)
   if (context.voiceDescription && context.voiceDescription.length > 5) {
     let mainDesc = context.voiceDescription.trim();
@@ -608,15 +605,13 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
 
     // Capitalize first letter only
     mainDesc = mainDesc.charAt(0).toUpperCase() + mainDesc.slice(1);
-    description += mainDesc;
+
+    // Prepend "Vintage / Y2K" inline at the start of the paragraph
+    description += `Vintage / Y2K ${mainDesc}`;
   } else {
     // Fallback: build ONLY from filled fields (no assumptions)
     const intro = buildIntroFromFields(context);
-    if (intro) {
-      description += intro;
-    } else {
-      description += 'Vintage clothing item'; // Generic fallback
-    }
+    description += `Vintage / Y2K ${intro || 'Vintage clothing item'}`;
   }
 
   description += '\n\n\n';
