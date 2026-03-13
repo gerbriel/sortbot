@@ -230,8 +230,12 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
         }
       }
 
-      // Append new items; preserve existing grouped items untouched
-      setGroupedItems(prev => [...prev, ...incoming]);
+      // Append new items; deduplicate by ID to prevent React key collisions
+      setGroupedItems(prev => {
+        const existingIdSet = new Set(prev.map(i => i.id));
+        const deduped = incoming.filter(i => !existingIdSet.has(i.id));
+        return [...prev, ...deduped];
+      });
 
       // Advance groupCounter past any existing group numbers to avoid ID collisions
       const maxExisting = [...existingIds, ...incoming.map(i => i.productGroup || '')].reduce((max, id) => {
