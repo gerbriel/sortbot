@@ -852,17 +852,37 @@ function App() {
             {(() => {
               // Count unique product groups so user can verify grouping
               const uniqueGroups = new Set(processedItems.map(i => i.productGroup || i.id));
-              const groupCount = uniqueGroups.size;
+              const totalListings = uniqueGroups.size;
               const imageCount = processedItems.length;
-              return groupCount < imageCount ? (
-                <p style={{ color: '#6366f1', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
-                  📦 {groupCount} listing{groupCount !== 1 ? 's' : ''} ({imageCount} images grouped) — use Next/Previous to navigate listings
-                </p>
-              ) : (
-                <p style={{ color: '#888', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
-                  ⚠️ {imageCount} image{imageCount !== 1 ? 's' : ''} — each is its own listing. Go back to Step 2 to group multi-image products.
-                </p>
-              );
+
+              // Determine how many are multi-image groups vs singles
+              const groupMap: Record<string, number> = {};
+              processedItems.forEach(i => {
+                const key = i.productGroup || i.id;
+                groupMap[key] = (groupMap[key] || 0) + 1;
+              });
+              const multiGroups = Object.values(groupMap).filter(c => c > 1).length;
+              const singles = Object.values(groupMap).filter(c => c === 1).length;
+
+              if (multiGroups > 0 && singles > 0) {
+                return (
+                  <p style={{ color: '#6366f1', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+                    📦 {totalListings} total listing{totalListings !== 1 ? 's' : ''}: {multiGroups} multi-image group{multiGroups !== 1 ? 's' : ''} + {singles} single{singles !== 1 ? 's' : ''} ({imageCount} images) — use Next/Previous to navigate
+                  </p>
+                );
+              } else if (multiGroups > 0) {
+                return (
+                  <p style={{ color: '#6366f1', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+                    📦 {multiGroups} product group{multiGroups !== 1 ? 's' : ''} ({imageCount} images grouped) — use Next/Previous to navigate listings
+                  </p>
+                );
+              } else {
+                return (
+                  <p style={{ color: '#888', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                    ⚠️ {singles} image{singles !== 1 ? 's' : ''} — each is its own listing. Go back to Step 2 to group multi-image products.
+                  </p>
+                );
+              }
             })()}
             <ProductDescriptionGenerator
               items={processedItems}
