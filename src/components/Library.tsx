@@ -80,7 +80,7 @@ interface LibraryProps {
 }
 
 export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }) => {
-  const [viewMode, setViewMode] = useState<ViewMode>('batches');
+  const [viewMode, setViewMode] = useState<ViewMode>('images');
   const [batches, setBatches] = useState<WorkflowBatch[]>([]);
   const [productGroups, setProductGroups] = useState<ProductGroup[]>([]);
   const [images, setImages] = useState<ImageRecord[]>([]);
@@ -1356,11 +1356,11 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
         )}
         <div className="view-switcher">
           <button 
-            className={`view-tab ${viewMode === 'batches' ? 'active' : ''}`}
-            onClick={() => setViewMode('batches')}
+            className={`view-tab ${viewMode === 'images' ? 'active' : ''}`}
+            onClick={() => setViewMode('images')}
           >
-            <Folder size={18} />
-            <span>Batches</span>
+            <Grid3x3 size={18} />
+            <span>Images</span>
           </button>
           <button 
             className={`view-tab ${viewMode === 'groups' ? 'active' : ''}`}
@@ -1370,11 +1370,11 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
             <span>Product Groups</span>
           </button>
           <button 
-            className={`view-tab ${viewMode === 'images' ? 'active' : ''}`}
-            onClick={() => setViewMode('images')}
+            className={`view-tab ${viewMode === 'batches' ? 'active' : ''}`}
+            onClick={() => setViewMode('batches')}
           >
-            <Grid3x3 size={18} />
-            <span>Images</span>
+            <Folder size={18} />
+            <span>Batches</span>
           </button>
         </div>
 
