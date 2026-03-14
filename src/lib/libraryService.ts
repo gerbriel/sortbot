@@ -31,6 +31,12 @@ export const fetchSavedProducts = async () => {
         created_at,
         updated_at,
         batch_id,
+        workflow_batches (
+          id,
+          batch_name,
+          batch_number,
+          created_at
+        ),
         product_images (
           id,
           image_url,

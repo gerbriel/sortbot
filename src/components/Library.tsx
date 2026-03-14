@@ -9,7 +9,7 @@ import {
   fetchSavedImages 
 } from '../lib/libraryService';
 import { supabase } from '../lib/supabase';
-import { Folder, Calendar, Image, Layers, Tag, ArrowRight, Trash2, X, Grid3x3, Package, Edit2, Copy, Check, Search, Plus } from 'lucide-react';
+import { Folder, Calendar, Image, Layers, Tag, ArrowRight, Trash2, X, Grid3x3, Package, Edit2, Copy, Check, Search, Plus, Merge, ChevronDown, ChevronRight } from 'lucide-react';
 import type { ClothingItem } from '../App';
 import './Library.css';
 
@@ -23,6 +23,8 @@ interface ProductGroup {
   itemCount: number;
   createdAt: string;
   isSaved?: boolean; // Track if from database vs workflow_state
+  batchId?: string;
+  batchName?: string;
 }
 
 interface ImageRecord {
@@ -57,6 +59,9 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
   
   // Search / filter state
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Collapsed batch sections in product groups view
+  const [collapsedBatches, setCollapsedBatches] = useState<Set<string>>(new Set());
 
   // Selection and drag-drop state
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -131,6 +136,8 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
             images: groupItems.map(item => item.preview || item.imageUrls?.[0] || '').filter(Boolean),
             itemCount: groupItems.length,
             createdAt: batch.created_at,
+            batchId: batch.id,
+            batchName: batch.batch_name || `Batch ${new Date(batch.created_at).toLocaleDateString()} ${new Date(batch.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
           });
         });
       });
@@ -150,6 +157,8 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
           itemCount: product.product_images?.length || 0,
           createdAt: product.created_at,
           isSaved: true, // Mark as saved
+          batchId: product.batch_id || undefined,
+          batchName: product.workflow_batches?.batch_name || (product.batch_id ? `Batch ${new Date(product.created_at).toLocaleDateString()}` : undefined),
         });
       });
       
@@ -382,6 +391,57 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
     } catch (err) {
       console.error(err);
       alert('Failed to assign images to group.');
+    }
+  };
+
+  // Merge selected product groups into one
+  const handleMergeGroups = async () => {
+    if (selectedItems.size < 2) return;
+    const groupIds = Array.from(selectedItems);
+    const selectedGroups = productGroups.filter(g => groupIds.includes(g.id));
+    // Only saved groups (in DB) can be merged
+    const savedGroups = selectedGroups.filter(g => g.isSaved);
+    if (savedGroups.length < 2) {
+      alert('Merge requires at least 2 saved product groups. Groups still in workflow state (not yet saved to DB) cannot be merged here.\n\nTip: Complete Step 4 (Save & Export) to save groups to the database first.');
+      return;
+    }
+    const defaultName = savedGroups[0].title;
+    const name = prompt(`Merge ${savedGroups.length} groups into one product.\n\nNew product title:`, defaultName);
+    if (name === null) return;
+    const trimmedName = name.trim() || defaultName;
+
+    try {
+      // Use the first group as the primary, reassign all images from other groups to it
+      const [primary, ...rest] = savedGroups;
+      const restIds = rest.map(g => g.id);
+
+      // 1. Reassign all images from the other groups to the primary group
+      const { error: imgError } = await supabase
+        .from('product_images')
+        .update({ product_id: primary.id })
+        .in('product_id', restIds);
+      if (imgError) throw imgError;
+
+      // 2. Update the primary group's title
+      const { error: titleError } = await supabase
+        .from('products')
+        .update({ title: trimmedName })
+        .eq('id', primary.id);
+      if (titleError) throw titleError;
+
+      // 3. Delete the now-empty groups
+      const { error: delError } = await supabase
+        .from('products')
+        .delete()
+        .in('id', restIds);
+      if (delError) throw delError;
+
+      clearSelection();
+      await loadProductGroups();
+      alert(`✅ Merged ${savedGroups.length} groups into "${trimmedName}".`);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to merge groups. Please try again.');
     }
   };
 
@@ -1034,6 +1094,12 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
                     <Plus size={16} />
                     New Batch from Selection
                   </button>
+                  {selectedItems.size >= 2 && (
+                    <button className="toolbar-button merge" onClick={handleMergeGroups} title="Merge selected groups into one product">
+                      <Merge size={16} />
+                      Merge Groups
+                    </button>
+                  )}
                 </>
               )}
 
@@ -1357,30 +1423,42 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
     });
   }
 
-  // Render Product Groups View
+  // Render Product Groups View — grouped by batch with collapsible sections
   function renderProductGroupsView() {
     const q = searchQuery.toLowerCase();
     const filtered = q
       ? productGroups.filter(g =>
-          g.title.toLowerCase().includes(q) || g.category.toLowerCase().includes(q)
+          g.title.toLowerCase().includes(q) || g.category.toLowerCase().includes(q) || (g.batchName || '').toLowerCase().includes(q)
         )
       : productGroups;
-    return filtered.map((group) => {
+
+    // Build ordered sections: group by batchId (null/undefined → "No Batch")
+    const sectionMap = new Map<string, { label: string; groups: ProductGroup[] }>();
+    filtered.forEach(group => {
+      const key = group.batchId || 'no-batch';
+      if (!sectionMap.has(key)) {
+        sectionMap.set(key, {
+          label: group.batchName || 'No Batch',
+          groups: [],
+        });
+      }
+      sectionMap.get(key)!.groups.push(group);
+    });
+
+    const sections = Array.from(sectionMap.entries());
+
+    const renderGroupCard = (group: ProductGroup) => {
       const isSelected = selectedItems.has(group.id);
       const isDragging = draggedItem === group.id;
       const isDragOver = dragOverItem === group.id;
-      
       return (
-        <div 
+        <div
           key={group.id}
           data-item-id={group.id}
           className={`group-card ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''}`}
           onClick={(e) => {
-            // Only prevent selection if directly clicking buttons
             const target = e.target as HTMLElement;
-            if (target.tagName === 'BUTTON' || target.closest('button')) {
-              return;
-            }
+            if (target.tagName === 'BUTTON' || target.closest('button')) return;
             handleItemClick(group.id, e);
           }}
           draggable
@@ -1390,7 +1468,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
           onDrop={(e) => handleDrop(group.id, e)}
           onDragEnd={handleDragEnd}
         >
-          {/* Selection Indicator - Matches ImageGrouper style */}
           {isSelected && (
             <div className="selection-indicator">
               <Check size={20} />
@@ -1436,7 +1513,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
 
           {/* Group Actions */}
           <div className="group-actions">
-            <button 
+            <button
               className="action-button danger"
               onClick={(e) => {
                 e.stopPropagation();
@@ -1455,7 +1532,65 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
           </div>
         </div>
       );
-    });
+    };
+
+    return (
+      <>
+        {sections.map(([batchKey, section]) => {
+          const isCollapsed = collapsedBatches.has(batchKey);
+          const allSectionSelected = section.groups.every(g => selectedItems.has(g.id));
+          return (
+            <div key={batchKey} className="batch-section">
+              {/* Section Header */}
+              <div
+                className="batch-section-header"
+                onClick={() =>
+                  setCollapsedBatches(prev => {
+                    const next = new Set(prev);
+                    if (next.has(batchKey)) next.delete(batchKey);
+                    else next.add(batchKey);
+                    return next;
+                  })
+                }
+              >
+                <button className="collapse-toggle" title={isCollapsed ? 'Expand' : 'Collapse'}>
+                  {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                </button>
+                <Folder size={16} className="section-folder-icon" />
+                <span className="section-label">{section.label}</span>
+                <span className="section-count">{section.groups.length} {section.groups.length === 1 ? 'group' : 'groups'}</span>
+                {/* Select all in section */}
+                <button
+                  className="section-select-all"
+                  title={allSectionSelected ? 'Deselect all in batch' : 'Select all in batch'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedItems(prev => {
+                      const next = new Set(prev);
+                      if (allSectionSelected) {
+                        section.groups.forEach(g => next.delete(g.id));
+                      } else {
+                        section.groups.forEach(g => next.add(g.id));
+                      }
+                      return next;
+                    });
+                  }}
+                >
+                  {allSectionSelected ? 'Deselect' : 'Select all'}
+                </button>
+              </div>
+
+              {/* Section Cards */}
+              {!isCollapsed && (
+                <div className="batch-section-cards">
+                  {section.groups.map(renderGroupCard)}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </>
+    );
   }
 
   // Render Images View
