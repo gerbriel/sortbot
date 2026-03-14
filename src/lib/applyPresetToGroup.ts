@@ -3,6 +3,34 @@ import type { CategoryPreset } from './categoryPresets';
 import { getCategoryPresets } from './categoryPresetsService';
 
 /**
+ * Interpolate a SEO title template string, replacing {placeholder} tokens
+ * with actual field values from the item and preset.
+ * Removes unresolved placeholders and cleans up extra whitespace.
+ *
+ * Supported tokens: {brand}, {model}, {color}, {size}, {era}, {category}
+ */
+function interpolateSeoTemplate(
+  template: string,
+  item: ClothingItem,
+  preset: CategoryPreset
+): string {
+  const replacements: Record<string, string> = {
+    brand:    item.brand    || preset.vendor         || '',
+    model:    item.modelName|| preset.model_name     || '',
+    color:    item.color    || preset.color          || '',
+    size:     item.size     || '',
+    era:      item.era      || preset.era            || '',
+    category: item.category || preset.product_type   || preset.category_name || '',
+  };
+
+  return template
+    .replace(/\{(\w+)\}/g, (_, key) => replacements[key] ?? '')
+    // Remove empty tokens that left consecutive spaces or leading/trailing dashes/spaces
+    .replace(/\s{2,}/g, ' ')
+    .replace(/(^[\s\-]+|[\s\-]+$)/g, '')
+    .trim();
+}
+/**
  * Apply category preset data to a product group
  * Automatically applies the DEFAULT preset for the category
  * Manual entries take precedence over preset values
@@ -82,7 +110,19 @@ export async function applyPresetToProductGroup(
       costPerItem: item.costPerItem || preset.cost_per_item || undefined,
       
       // ======= BASIC PRODUCT INFO =======
-      seoTitle: item.seoTitle || preset.seo_title_template || undefined,
+      // If the item already has a real seoTitle (not a raw template), keep it.
+      // Otherwise interpolate the preset template with actual field values.
+      seoTitle: (() => {
+        if (item.seoTitle && !/\{[a-z]+\}/i.test(item.seoTitle)) {
+          return item.seoTitle; // Real title already set
+        }
+        if (preset.seo_title_template) {
+          // Use item's brand/model from voice OR from the preset template interpolation
+          const interpolated = interpolateSeoTemplate(preset.seo_title_template, item, preset);
+          return interpolated || undefined;
+        }
+        return undefined;
+      })(),
       brand: item.brand || preset.vendor || undefined,
       productType: item.productType || preset.shopify_product_type || undefined,
       
