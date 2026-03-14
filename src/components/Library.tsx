@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { fetchWorkflowBatches, deleteWorkflowBatch, type WorkflowBatch } from '../lib/workflowBatchService';
 import { 
   deleteProductGroup, 
@@ -12,6 +12,39 @@ import { supabase } from '../lib/supabase';
 import { Folder, Calendar, Image, Layers, Tag, ArrowRight, Trash2, X, Grid3x3, Package, Edit2, Copy, Check, Search, Plus, Merge, ChevronDown, ChevronRight } from 'lucide-react';
 import type { ClothingItem } from '../App';
 import './Library.css';
+
+// ── Lazy-loading image with skeleton shimmer placeholder ──────────────────────
+const LazyImg: React.FC<{ src: string; alt: string; className?: string }> = ({ src, alt, className }) => {
+  const [loaded, setLoaded] = useState(false);
+  const [errored, setErrored] = useState(false);
+  // Reset state when src changes (e.g. navigating between batches)
+  const prevSrc = useRef(src);
+  if (prevSrc.current !== src) {
+    prevSrc.current = src;
+    // useState setters can't be called directly during render — use a ref flag
+  }
+  useEffect(() => {
+    setLoaded(false);
+    setErrored(false);
+  }, [src]);
+
+  return (
+    <>
+      {!loaded && !errored && <div className="img-skeleton" aria-hidden="true" />}
+      <img
+        src={src}
+        alt={alt}
+        className={`lazy-img${loaded ? ' loaded' : ''}${className ? ` ${className}` : ''}`}
+        loading="lazy"
+        onLoad={() => setLoaded(true)}
+        onError={() => { setLoaded(true); setErrored(true); }}
+        style={errored ? { display: 'none' } : undefined}
+      />
+      {errored && <div className="img-skeleton" style={{ opacity: 0.4 }} aria-hidden="true" />}
+    </>
+  );
+};
+// ─────────────────────────────────────────────────────────────────────────────
 
 type ViewMode = 'batches' | 'groups' | 'images';
 
@@ -115,6 +148,34 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
   const currentContainerRef = useRef<HTMLElement | null>(null);
   // Track whether a native HTML drag is in progress — suppresses rubber-band selection
   const isDraggingRef = useRef(false);
+
+  // Scroll preservation across optimistic state updates
+  const savedScrollRef = useRef<number>(0);
+  const shouldRestoreScrollRef = useRef(false);
+
+  // Returns the active scrollable grid element for the current view
+  const activeScrollRef = () => {
+    if (viewMode === 'images') return imagesGridRef.current;
+    if (viewMode === 'groups') return groupsGridRef.current;
+    return batchesGridRef.current;
+  };
+
+  // Call before an optimistic setImages / setProductGroups
+  const saveScroll = () => {
+    const el = activeScrollRef();
+    if (el) {
+      savedScrollRef.current = el.scrollTop;
+      shouldRestoreScrollRef.current = true;
+    }
+  };
+
+  // Runs synchronously after every render — restores scroll if flagged
+  useLayoutEffect(() => {
+    if (!shouldRestoreScrollRef.current) return;
+    shouldRestoreScrollRef.current = false;
+    const el = activeScrollRef();
+    if (el) el.scrollTop = savedScrollRef.current;
+  });
   
   const SELECTION_THRESHOLD = 5; // pixels - must move this much to activate selection
 
@@ -672,7 +733,30 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
     const type = viewMode === 'batches' ? 'batch' : viewMode === 'groups' ? 'group' : 'image';
     setDragType(type);
     event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', itemId);
+
+    // For images: if the dragged item is part of a multi-selection, encode ALL
+    // selected IDs so the drop handler can move them all at once.
+    if (type === 'image' && selectedItems.has(itemId) && selectedItems.size > 1) {
+      const allIds = Array.from(selectedItems).join(',');
+      event.dataTransfer.setData('text/plain', allIds);
+      event.dataTransfer.setData('drag-ids', allIds);
+
+      // Custom drag ghost showing count badge
+      const ghost = document.createElement('div');
+      ghost.style.cssText = `
+        position:fixed; top:-9999px; left:-9999px;
+        background:#667eea; color:#fff; font-size:13px; font-weight:600;
+        padding:6px 14px; border-radius:20px; box-shadow:0 4px 12px rgba(0,0,0,0.25);
+        pointer-events:none; white-space:nowrap;
+      `;
+      ghost.textContent = `Moving ${selectedItems.size} images`;
+      document.body.appendChild(ghost);
+      event.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, 20);
+      setTimeout(() => ghost.remove(), 0);
+    } else {
+      event.dataTransfer.setData('text/plain', itemId);
+      event.dataTransfer.setData('drag-ids', itemId);
+    }
     event.dataTransfer.setData('drag-type', type);
   };
 
@@ -686,48 +770,109 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
     setDragOverItem(null);
   };
 
-  // Drop an image onto a product group header (Images view)
+  // Drop one or more images onto a product group section (Images view)
   const handleDropImageOntoGroup = async (targetGroupId: string, event: React.DragEvent) => {
     event.preventDefault();
     event.stopPropagation();
-    const imageId = event.dataTransfer.getData('text/plain');
+    const rawIds = event.dataTransfer.getData('drag-ids') || event.dataTransfer.getData('text/plain');
     const type = event.dataTransfer.getData('drag-type');
-    if (!imageId || type !== 'image' || !targetGroupId || targetGroupId === 'no-group') {
+    if (!rawIds || type !== 'image' || !targetGroupId) {
       return;
     }
     setDragOverItem(null);
     setDraggedItem(null);
     setDragType(null);
+
+    const isUngroup = targetGroupId === 'no-group';
+    const imageIds = new Set(rawIds.split(',').map(id => id.trim()).filter(Boolean));
+    if (imageIds.size === 0) return;
+
+    // ── Optimistic local update ──────────────────────────────────────
+    // Find the target group's metadata from existing images state so we
+    // can immediately update affected ImageRecord entries without a reload.
+    const targetMeta = isUngroup
+      ? { productGroup: undefined, productGroupTitle: undefined, batchId: undefined, batchName: undefined, category: undefined }
+      : (() => {
+          const sample = images.find(img => img.productGroup === targetGroupId);
+          return {
+            productGroup: targetGroupId,
+            productGroupTitle: sample?.productGroupTitle,
+            batchId: sample?.batchId,
+            batchName: sample?.batchName,
+            category: sample?.category,
+          };
+        })();
+
+    saveScroll();
+    setImages(prev =>
+      prev
+        .filter(img => {
+          // Remove duplicates: if the image URL already exists in target group, drop this record
+          if (!imageIds.has(img.id)) return true;
+          if (isUngroup) return true; // always keep when ungrouping
+          // Keep if target group doesn't already have the same URL
+          const alreadyInTarget = prev.some(
+            other => other.productGroup === targetGroupId && other.preview === img.preview && other.id !== img.id
+          );
+          return !alreadyInTarget;
+        })
+        .map(img => {
+          if (!imageIds.has(img.id)) return img;
+          return {
+            ...img,
+            productGroup: targetMeta.productGroup,
+            productGroupTitle: targetMeta.productGroupTitle,
+            batchId: targetMeta.batchId,
+            batchName: targetMeta.batchName,
+            category: targetMeta.category ?? img.category,
+          };
+        })
+    );
+    clearSelection();
+    // ────────────────────────────────────────────────────────────────
+
+    // Fire DB write in background — no reload needed
     try {
-      const { data: imgRow } = await supabase
-        .from('product_images')
-        .select('id, image_url, product_id')
-        .eq('id', imageId)
-        .single();
-      if (!imgRow) return;
-
-      if (imgRow.product_id === targetGroupId) {
-        return;
-      }
-
-      const { data: conflict } = await supabase
-        .from('product_images')
-        .select('id')
-        .eq('product_id', targetGroupId)
-        .eq('image_url', imgRow.image_url)
-        .maybeSingle();
-
-      if (conflict) {
-        await supabase.from('product_images').delete().eq('id', imageId);
-      } else {
+      const imageIdArray = Array.from(imageIds);
+      if (isUngroup) {
         const { error } = await supabase
           .from('product_images')
-          .update({ product_id: targetGroupId })
-          .eq('id', imageId);
+          .update({ product_id: null })
+          .in('id', imageIdArray);
         if (error) throw error;
+      } else {
+        // Fetch only what we need to detect duplicates
+        const { data: imgRows } = await supabase
+          .from('product_images')
+          .select('id, image_url, product_id')
+          .in('id', imageIdArray);
+
+        if (!imgRows || imgRows.length === 0) return;
+
+        const { data: existingInTarget } = await supabase
+          .from('product_images')
+          .select('image_url')
+          .eq('product_id', targetGroupId);
+        const existingUrls = new Set((existingInTarget || []).map(r => r.image_url));
+
+        await Promise.all(
+          imgRows.map(async (imgRow) => {
+            if (imgRow.product_id === targetGroupId) return;
+            if (existingUrls.has(imgRow.image_url)) {
+              await supabase.from('product_images').delete().eq('id', imgRow.id);
+            } else {
+              await supabase
+                .from('product_images')
+                .update({ product_id: targetGroupId })
+                .eq('id', imgRow.id);
+              existingUrls.add(imgRow.image_url);
+            }
+          })
+        );
       }
-      await loadImages();
     } catch (err) {
+      // DB write failed — reload to resync local state with DB
+      await loadImages();
     }
   };
 
@@ -744,19 +889,42 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
     setDraggedItem(null);
     setDragType(null);
 
-    const idsToMove = selectedItems.has(groupId) && selectedItems.size > 1
-      ? Array.from(selectedItems)
-      : [groupId];
+    const idsToMove = new Set(
+      selectedItems.has(groupId) && selectedItems.size > 1
+        ? Array.from(selectedItems)
+        : [groupId]
+    );
+
+    // ── Optimistic local update ──────────────────────────────────────
+    const targetBatch = targetBatchId === 'no-batch'
+      ? null
+      : batches.find(b => b.id === targetBatchId);
+    const newBatchName = targetBatch
+      ? (targetBatch.batch_name || `Batch ${new Date(targetBatch.created_at).toLocaleDateString()} ${new Date(targetBatch.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`)
+      : undefined;
+
+    saveScroll();
+    setProductGroups(prev =>
+      prev.map(group => {
+        if (!idsToMove.has(group.id)) return group;
+        return {
+          ...group,
+          batchId: targetBatchId === 'no-batch' ? undefined : targetBatchId,
+          batchName: newBatchName,
+        };
+      })
+    );
+    clearSelection();
 
     try {
       const { error } = await supabase
         .from('products')
         .update({ batch_id: targetBatchId === 'no-batch' ? null : targetBatchId })
-        .in('id', idsToMove);
+        .in('id', Array.from(idsToMove));
       if (error) throw error;
-      clearSelection();
-      await loadProductGroups();
     } catch (err) {
+      // DB write failed — reload to resync
+      await loadProductGroups();
     }
   };
 
@@ -1462,7 +1630,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
               <div className={`thumbnail-grid grid-${Math.min(thumbnails.length, 4)}`}>
                 {thumbnails.map((url, idx) => (
                   <div key={idx} className="thumbnail-item">
-                    <img src={url} alt={`Product ${idx + 1}`} />
+                    <LazyImg src={url} alt={`Product ${idx + 1}`} />
                   </div>
                 ))}
               </div>
@@ -1660,7 +1828,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
               <div className={`thumbnail-grid grid-${Math.min(group.images.length, 4)}`}>
                 {group.images.slice(0, 4).map((url, idx) => (
                   <div key={idx} className="thumbnail-item">
-                    <img src={url} alt={`${group.title} ${idx + 1}`} />
+                    <LazyImg src={url} alt={`${group.title} ${idx + 1}`} />
                   </div>
                 ))}
               </div>
@@ -1827,7 +1995,9 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
 
     const renderImageCard = (image: ImageRecord) => {
       const isSelected = selectedItems.has(image.id);
-      const isDragging = draggedItem === image.id;
+      // Show dragging style on ALL selected cards when any one of them is being dragged
+      const isDragging = draggedItem === image.id ||
+        (dragType === 'image' && draggedItem !== null && isSelected && selectedItems.has(draggedItem));
       const isDragOver = dragOverItem === image.id;
       return (
         <div
@@ -1854,7 +2024,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
 
           <div className="image-preview">
             {image.preview ? (
-              <img src={image.preview} alt="Product" />
+              <LazyImg src={image.preview} alt="Product" />
             ) : (
               <div className="image-placeholder">
                 <Image size={32} />
@@ -1964,9 +2134,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
                     }}
                     onDrop={(e) => {
                       e.stopPropagation();
-                      if (groupKey !== 'no-group') {
-                        handleDropImageOntoGroup(groupKey, e);
-                      }
+                      handleDropImageOntoGroup(groupKey, e);
                     }}
                   >
                     {/* Product group sub-header */}
@@ -1987,6 +2155,9 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
                       </button>
                       <Package size={14} className="section-folder-icon" />
                       <span className="image-group-label">{groupSection.groupTitle}</span>
+                      {groupKey === 'no-group' && dragType === 'image' && draggedItem !== null && (
+                        <span className="section-drop-hint">drop to unassign</span>
+                      )}
                       <span className="section-count">{groupSection.images.length} {groupSection.images.length === 1 ? 'image' : 'images'}</span>
                       <button
                         className="section-select-all"

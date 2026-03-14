@@ -3,6 +3,7 @@ import type { ClothingItem } from '../App';
 import { getCategories } from '../lib/categoriesService';
 import type { Category } from '../lib/categories';
 import { applyPresetToProductGroup } from '../lib/applyPresetToGroup';
+import LazyImg from './LazyImg';
 import { 
   Shirt, 
   Wind, 
@@ -440,7 +441,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
                       onDragLeave={() => setDragOverPhotoId(null)}
                       title="Drag to reorder photo within group"
                     >
-                      <img src={item.preview} alt="Product" draggable={false} />
+                      <LazyImg src={item.preview} alt="Product" draggable={false} />
                     </div>
                   ))}
                 </div>

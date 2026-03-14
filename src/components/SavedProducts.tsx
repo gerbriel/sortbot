@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchUserProducts, deleteProduct } from '../lib/productService';
+import LazyImg from './LazyImg';
 import './SavedProducts.css';
 
 interface SavedProductsProps {
@@ -141,7 +142,7 @@ export const SavedProducts: React.FC<SavedProductsProps> = ({ userId, onClose })
               <div key={product.id} className="product-card">
                 {getMainImage(product) && (
                   <div className="product-image">
-                    <img src={getMainImage(product)} alt={product.title} />
+                    <LazyImg src={getMainImage(product)!} alt={product.title} />
                     {product.product_images.length > 1 && (
                       <div className="image-count">
                         +{product.product_images.length - 1}
@@ -269,7 +270,7 @@ export const SavedProducts: React.FC<SavedProductsProps> = ({ userId, onClose })
                                 <td className="col-image">
                                   {getMainImage(product) && (
                                     <div className="table-product-image">
-                                      <img src={getMainImage(product)} alt={product.title} />
+                                      <LazyImg src={getMainImage(product)!} alt={product.title} />
                                     </div>
                                   )}
                                 </td>
