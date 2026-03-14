@@ -38,7 +38,7 @@ export async function fetchWorkflowBatches(): Promise<WorkflowBatch[]> {
     const { data, error } = await supabase
       .from('workflow_batches')
       .select('*')
-      .order('updated_at', { ascending: false });
+      .order('updated_at', { ascending: true });
 
     if (error) throw error;
     return data || [];

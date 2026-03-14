@@ -46,7 +46,7 @@ export const fetchSavedProducts = async () => {
           created_at
         )
       `)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: true });
     
     if (error) {
       console.error('❌ Supabase error fetching saved products:', {
@@ -90,7 +90,7 @@ export const fetchSavedImages = async () => {
           )
         )
       `)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: true });
     
     if (error) {
       console.error('Error fetching saved images:', error);
