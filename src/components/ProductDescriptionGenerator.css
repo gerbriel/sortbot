@@ -58,7 +58,7 @@
 .preview-image {
   width: 100%;
   height: auto;
-  max-height: 400px;
+  max-height: 280px;
   object-fit: contain;
   border-radius: var(--radius-md);
   border: 1px solid var(--gray-200);
@@ -570,14 +570,14 @@
 
 .thumbnail-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
   gap: var(--space-2);
   max-width: 100%;
 }
 
 .group-thumbnail {
   width: 100%;
-  height: 80px;
+  height: 60px;
   object-fit: cover;
   border-radius: var(--radius-sm);
   border: 2px solid var(--gray-300);
@@ -593,6 +593,10 @@
   transform: scale(1.05);
   border-color: var(--shopify-green);
   box-shadow: var(--shadow-md);
+}
+
+.preview-image:hover {
+  cursor: zoom-in;
 }
 
 /* ── Thumbnail drag-to-reorder (Step 4) ──────────────────────────── */
@@ -638,4 +642,53 @@
   .group-thumbnails {
     padding: var(--space-3);
   }
+}
+
+/* ── Lightbox modal ────────────────────────────────────────────── */
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  cursor: zoom-out;
+  animation: pdgFadeIn 0.15s ease;
+}
+
+@keyframes pdgFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.lightbox-image {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+  cursor: default;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: white;
+  font-size: 1.4rem;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.3);
 }

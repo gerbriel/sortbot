@@ -29,7 +29,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
   const [isLoading, setIsLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingMessage, setLoadingMessage] = useState('');
-  
+
+  // Lightbox state
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+
   // Selection box state
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null);
@@ -732,6 +735,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
                       toggleItemSelection(item.id, e);
                     }
                   }}
+                  onDoubleClick={() => setLightboxSrc(item.preview)}
                 >
                   {item.category && (
                     <div className="category-indicator-small">
@@ -844,6 +848,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
                           toggleItemSelection(item.id, e);
                         }
                       }}
+                      onDoubleClick={() => setLightboxSrc(item.preview)}
                     >
                       <img 
                         src={item.preview} 
@@ -872,6 +877,22 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
         </div>
       )}
       </div>
+
+      {/* Lightbox modal */}
+      {lightboxSrc && (
+        <div
+          className="lightbox-overlay"
+          onClick={() => setLightboxSrc(null)}
+        >
+          <button className="lightbox-close" onClick={() => setLightboxSrc(null)}>✕</button>
+          <img
+            src={lightboxSrc}
+            alt="Full size preview"
+            className="lightbox-image"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </>
   );
 };
