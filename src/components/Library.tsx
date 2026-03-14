@@ -32,7 +32,10 @@ interface ImageRecord {
   preview: string;
   category?: string;
   productGroup?: string;
+  productGroupTitle?: string;
+  batchId?: string;
   batchNumber?: string;
+  batchName?: string;
   createdAt: string;
   isSaved?: boolean; // Track if from database vs workflow_state
 }
@@ -191,12 +194,16 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       const savedImages = await fetchSavedImages();
       
       savedImages.forEach((img: any) => {
+        const batch = img.products?.workflow_batches;
         imageList.push({
-          id: img.id, // Use database ID, not image URL
+          id: img.id,
           preview: img.image_url,
           category: img.products?.product_category,
           productGroup: img.products?.id,
+          productGroupTitle: img.products?.title || undefined,
+          batchId: img.products?.batch_id || undefined,
           batchNumber: img.products?.batch_id,
+          batchName: batch?.batch_name || (img.products?.batch_id ? `Batch ${new Date(batch?.created_at || img.created_at).toLocaleDateString()} ${new Date(batch?.created_at || img.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : undefined),
           createdAt: img.created_at,
           isSaved: true,
         });
@@ -1206,7 +1213,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
               </div>
             ) : (
               <div 
-                className="images-grid"
+                className="images-sections"
                 ref={imagesGridRef}
                 onMouseDown={(e) => handleMouseDown(e, imagesGridRef)}
               >
@@ -1593,31 +1600,50 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
     );
   }
 
-  // Render Images View
+  // Render Images View — grouped by batch → product group
   function renderImagesView() {
     const q = searchQuery.toLowerCase();
     const filtered = q
       ? images.filter(img =>
           (img.category || '').toLowerCase().includes(q) ||
-          (img.batchNumber || '').toLowerCase().includes(q)
+          (img.productGroupTitle || '').toLowerCase().includes(q) ||
+          (img.batchName || '').toLowerCase().includes(q)
         )
       : images;
-    return filtered.map((image) => {
+
+    // Build: batchKey → { batchName, productGroups: Map<groupKey, { groupTitle, images }> }
+    type GroupSection = { groupTitle: string; images: ImageRecord[] };
+    type BatchSection = { batchName: string; groups: Map<string, GroupSection> };
+    const batchMap = new Map<string, BatchSection>();
+
+    filtered.forEach(img => {
+      const batchKey = img.batchId || 'no-batch';
+      const batchName = img.batchName || 'No Batch';
+      const groupKey = img.productGroup || 'no-group';
+      const groupTitle = img.productGroupTitle || 'Ungrouped Images';
+
+      if (!batchMap.has(batchKey)) {
+        batchMap.set(batchKey, { batchName, groups: new Map() });
+      }
+      const batchSection = batchMap.get(batchKey)!;
+      if (!batchSection.groups.has(groupKey)) {
+        batchSection.groups.set(groupKey, { groupTitle, images: [] });
+      }
+      batchSection.groups.get(groupKey)!.images.push(img);
+    });
+
+    const renderImageCard = (image: ImageRecord) => {
       const isSelected = selectedItems.has(image.id);
       const isDragging = draggedItem === image.id;
       const isDragOver = dragOverItem === image.id;
-      
       return (
-        <div 
+        <div
           key={image.id}
           data-item-id={image.id}
           className={`image-card ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''}`}
           onClick={(e) => {
-            // Only prevent selection if directly clicking buttons
             const target = e.target as HTMLElement;
-            if (target.tagName === 'BUTTON' || target.closest('button')) {
-              return;
-            }
+            if (target.tagName === 'BUTTON' || target.closest('button')) return;
             handleItemClick(image.id, e);
           }}
           draggable
@@ -1627,7 +1653,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
           onDrop={(e) => handleDrop(image.id, e)}
           onDragEnd={handleDragEnd}
         >
-          {/* Selection Indicator - Matches ImageGrouper style */}
           {isSelected && (
             <div className="selection-indicator">
               <Check size={20} />
@@ -1643,7 +1668,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
               </div>
             )}
           </div>
-          
+
           <div className="image-info">
             <div className="image-meta">
               {image.category && (
@@ -1652,24 +1677,13 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
                   <span>{image.category}</span>
                 </div>
               )}
-              {image.batchNumber && (
-                <div className="meta-tag">
-                  <Folder size={10} />
-                  <span>#{image.batchNumber.slice(0, 6)}</span>
-                </div>
-              )}
             </div>
-            
-            <button 
+            <button
               className="image-delete"
               onClick={(e) => {
                 e.stopPropagation();
                 if (deleteConfirm === image.id) {
-                  // Find the storage path for this image
-                  const storagePath = images.find(img => img.id === image.id)?.preview?.includes('supabase')
-                    ? images.find(img => img.id === image.id)?.preview
-                    : undefined;
-                  handleDeleteImage(image.id, storagePath);
+                  handleDeleteImage(image.id, undefined);
                 } else {
                   setDeleteConfirm(image.id);
                   setTimeout(() => setDeleteConfirm(null), 3000);
@@ -1682,6 +1696,116 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
           </div>
         </div>
       );
-    });
+    };
+
+    return (
+      <>
+        {Array.from(batchMap.entries()).map(([batchKey, batchSection]) => {
+          const isBatchCollapsed = collapsedBatches.has(`img-batch-${batchKey}`);
+          const allBatchImages = Array.from(batchSection.groups.values()).flatMap(g => g.images);
+          const allBatchSelected = allBatchImages.every(img => selectedItems.has(img.id));
+
+          return (
+            <div key={batchKey} className="batch-section">
+              {/* Batch header */}
+              <div
+                className="batch-section-header"
+                onClick={() =>
+                  setCollapsedBatches(prev => {
+                    const next = new Set(prev);
+                    const key = `img-batch-${batchKey}`;
+                    if (next.has(key)) next.delete(key);
+                    else next.add(key);
+                    return next;
+                  })
+                }
+              >
+                <button className="collapse-toggle" title={isBatchCollapsed ? 'Expand' : 'Collapse'}>
+                  {isBatchCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                </button>
+                <Folder size={16} className="section-folder-icon" />
+                <span className="section-label">{batchSection.batchName}</span>
+                <span className="section-count">{allBatchImages.length} {allBatchImages.length === 1 ? 'image' : 'images'}</span>
+                <button
+                  className="section-select-all"
+                  title={allBatchSelected ? 'Deselect all' : 'Select all in batch'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedItems(prev => {
+                      const next = new Set(prev);
+                      if (allBatchSelected) {
+                        allBatchImages.forEach(img => next.delete(img.id));
+                      } else {
+                        allBatchImages.forEach(img => next.add(img.id));
+                      }
+                      return next;
+                    });
+                  }}
+                >
+                  {allBatchSelected ? 'Deselect' : 'Select all'}
+                </button>
+              </div>
+
+              {/* Product group sub-sections */}
+              {!isBatchCollapsed && Array.from(batchSection.groups.entries()).map(([groupKey, groupSection]) => {
+                const isGroupCollapsed = collapsedBatches.has(`img-group-${groupKey}`);
+                const allGroupSelected = groupSection.images.every(img => selectedItems.has(img.id));
+
+                return (
+                  <div key={groupKey} className="image-group-section">
+                    {/* Product group sub-header */}
+                    <div
+                      className="image-group-header"
+                      onClick={() =>
+                        setCollapsedBatches(prev => {
+                          const next = new Set(prev);
+                          const key = `img-group-${groupKey}`;
+                          if (next.has(key)) next.delete(key);
+                          else next.add(key);
+                          return next;
+                        })
+                      }
+                    >
+                      <button className="collapse-toggle" title={isGroupCollapsed ? 'Expand' : 'Collapse'}>
+                        {isGroupCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                      </button>
+                      <Package size={14} className="section-folder-icon" />
+                      <span className="image-group-label">{groupSection.groupTitle}</span>
+                      <span className="section-count">{groupSection.images.length} {groupSection.images.length === 1 ? 'image' : 'images'}</span>
+                      <button
+                        className="section-select-all"
+                        title={allGroupSelected ? 'Deselect all' : 'Select all in group'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedItems(prev => {
+                            const next = new Set(prev);
+                            if (allGroupSelected) {
+                              groupSection.images.forEach(img => next.delete(img.id));
+                            } else {
+                              groupSection.images.forEach(img => next.add(img.id));
+                            }
+                            return next;
+                          });
+                        }}
+                      >
+                        {allGroupSelected ? 'Deselect' : 'Select all'}
+                      </button>
+                    </div>
+
+                    {/* Image cards */}
+                    {!isGroupCollapsed && (
+                      <div className="image-group-cards">
+                        {groupSection.images.map(renderImageCard)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </>
+    );
   }
 };
+

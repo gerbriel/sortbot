@@ -81,7 +81,13 @@ export const fetchSavedImages = async () => {
           title,
           product_category,
           vendor,
-          batch_id
+          batch_id,
+          workflow_batches (
+            id,
+            batch_name,
+            batch_number,
+            created_at
+          )
         )
       `)
       .order('created_at', { ascending: false });
