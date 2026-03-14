@@ -1055,6 +1055,29 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               </div>
             </div>
           )}
+
+          {/* Navigation — cycles through product groups */}
+          <div className="preview-nav-controls">
+            <button
+              className="button button-secondary"
+              onClick={handlePrevious}
+              disabled={currentGroupIndex === 0}
+            >
+              ← Prev
+            </button>
+            <span className="preview-nav-counter">
+              {currentGroupIndex + 1} / {groupArray.length}
+            </span>
+            {currentGroupIndex < groupArray.length - 1 ? (
+              <button className="button" onClick={handleNext}>
+                Next →
+              </button>
+            ) : (
+              <button className="button button-secondary" onClick={handleFinish}>
+                Finish ✓
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="product-form">
@@ -1126,6 +1149,60 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 rows={4}
                 className="description-textarea"
               />
+            </div>
+
+            {/* AI Description — sits directly below the voice box */}
+            <div style={{ marginTop: '0.75rem' }}>
+              <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem' }}>
+                AI Generated Description:
+              </label>
+              <textarea
+                value={currentItem.generatedDescription}
+                onChange={(e) => {
+                  const updated = [...processedItems];
+                  currentGroup.forEach(groupItem => {
+                    const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                    if (itemIndex !== -1) {
+                      updated[itemIndex].generatedDescription = e.target.value;
+                    }
+                  });
+                  setProcessedItems(updated);
+                }}
+                className="info-textarea"
+                rows={6}
+                style={{ width: '100%' }}
+              />
+              <button
+                className="button button-primary"
+                onClick={regenerateDescription}
+                disabled={isGenerating || isSyncingFields}
+                style={{
+                  marginTop: '0.5rem',
+                  width: '100%',
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                }}
+                title="Generate professional description from your voice + fields"
+              >
+                {isGenerating ? '🧠 Generating...' : '✨ Generate AI Description'}
+              </button>
+              <button
+                className="button"
+                onClick={syncFieldsFromDescription}
+                disabled={isSyncingFields || isGenerating}
+                style={{
+                  marginTop: '0.5rem',
+                  width: '100%',
+                  background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                  color: '#fff',
+                  border: 'none',
+                }}
+                title="Parse the description text and update all structured fields"
+              >
+                {isSyncingFields ? '🔄 Syncing fields...' : '🔁 Sync Fields from Description'}
+              </button>
+              <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem', marginBottom: 0 }}>
+                AI will create a professional description from your voice input and fields
+              </p>
             </div>
             
             {/* Display Intelligent Match Results */}
@@ -1244,93 +1321,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               setProcessedItems={setProcessedItems}
             />
           </div>
-
-          <div className="generated-info">
-              <h3>AI Generated Content (Edit as needed)</h3>
-              
-              <div className="info-item">
-                <label>Product Description:</label>
-                <textarea 
-                  value={currentItem.generatedDescription}
-                  onChange={(e) => {
-                    const updated = [...processedItems];
-                    // Update all items in the group
-                    currentGroup.forEach(groupItem => {
-                      const itemIndex = updated.findIndex(item => item.id === groupItem.id);
-                      if (itemIndex !== -1) {
-                        updated[itemIndex].generatedDescription = e.target.value;
-                      }
-                    });
-                    setProcessedItems(updated);
-                  }}
-                  className="info-textarea"
-                  rows={12}
-                  style={{ width: '100%', minHeight: '300px' }}
-                />
-                <button
-                  className="button button-primary"
-                  onClick={regenerateDescription}
-                  disabled={isGenerating || isSyncingFields}
-                  style={{ 
-                    marginTop: '0.5rem', 
-                    width: '100%',
-                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-                  }}
-                  title="Generate professional description from your voice + fields"
-                >
-                  {isGenerating ? (
-                    '🧠 Generating...'
-                  ) : (
-                    '✨ Generate AI Description'
-                  )}
-                </button>
-                <button
-                  className="button"
-                  onClick={syncFieldsFromDescription}
-                  disabled={isSyncingFields || isGenerating}
-                  style={{
-                    marginTop: '0.5rem',
-                    width: '100%',
-                    background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                    color: '#fff',
-                    border: 'none',
-                  }}
-                  title="Parse the description text and update all structured fields (size, brand, color, etc.)"
-                >
-                  {isSyncingFields ? '🔄 Syncing fields...' : '🔁 Sync Fields from Description'}
-                </button>
-                <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem', marginBottom: 0 }}>
-                  AI will create a professional description from your voice input and fields
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
-
-      <div className="navigation-controls">
-        <button 
-          className="button" 
-          onClick={handlePrevious}
-          disabled={currentGroupIndex === 0}
-        >
-          ← Previous
-        </button>
-        
-        {currentGroupIndex < groupArray.length - 1 ? (
-          <button 
-            className="button" 
-            onClick={handleNext}
-          >
-            Next →
-          </button>
-        ) : (
-          <button 
-            className="button button-secondary" 
-            onClick={handleFinish}
-          >
-            Finish Processing ✓
-          </button>
-        )}
       </div>
 
       {/* Lightbox modal */}
