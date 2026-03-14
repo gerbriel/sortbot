@@ -40,15 +40,8 @@ export async function applyPresetToProductGroup(
   categoryName: string
 ): Promise<ClothingItem[]> {
   try {
-    console.log(`🎯 applyPresetToProductGroup called:`, {
-      categoryName,
-      itemCount: items.length,
-      firstItemId: items[0]?.id
-    });
-
     // Get all presets for the user
     const presets = await getCategoryPresets();
-    console.log(`📚 Found ${presets.length} total presets`);
     
     // Find the DEFAULT preset for this category (by product_type)
     // Look for is_default=true first, fallback to any matching preset
@@ -70,18 +63,7 @@ export async function applyPresetToProductGroup(
       );
     }
     
-    console.log(`🔍 Preset lookup for "${categoryName}":`, {
-      found: !!preset,
-      presetId: preset?.id,
-      presetName: preset?.display_name,
-      productType: preset?.product_type,
-      policies: preset?.policies?.substring(0, 50),
-      shipsFrom: preset?.ships_from?.substring(0, 30),
-      gender: preset?.gender
-    });
-    
     if (!preset) {
-      console.warn(`⚠️ No preset found for category: ${categoryName}`);
       // Still apply category even if no preset exists
       return items.map(item => ({
         ...item,

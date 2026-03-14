@@ -517,7 +517,7 @@
 }
 
 /* Product Groups Grid */
-.groups-grid {
+.library-groups-grid {
   display: block;
   padding: 16px 24px 24px;
   overflow-y: auto;
@@ -614,12 +614,59 @@
 }
 
 .batch-section-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
+  display: flex !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  gap: 6px;
+  padding: 8px 0 8px 24px;
 }
 
-/* Merge button in toolbar */
+/* Group cards in library: horizontal list rows, no wrapping */
+.batch-section-cards .group-card {
+  min-height: unset !important;
+  height: auto !important;
+  flex-direction: row !important;
+  align-items: center;
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.batch-section-cards .group-card .group-images {
+  width: 72px !important;
+  min-width: 72px !important;
+  height: 72px !important;
+  aspect-ratio: unset !important;
+  padding: 6px;
+  flex-shrink: 0;
+}
+
+.batch-section-cards .group-card .group-info {
+  flex: 1;
+  padding: 8px 12px;
+  min-width: 0;
+}
+
+.batch-section-cards .group-card .group-info h3 {
+  margin: 0 0 4px 0;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.batch-section-cards .group-card .group-meta {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.batch-section-cards .group-card .group-actions {
+  position: static !important;
+  opacity: 1 !important;
+  padding: 0 10px;
+  flex-shrink: 0;
+}
+
+
 .toolbar-button.merge {
   background: linear-gradient(135deg, #7c3aed, #4f46e5);
   color: #fff;
@@ -921,26 +968,26 @@
 }
 
 /* Scrollbar styles for new grids */
-.groups-grid::-webkit-scrollbar,
+.library-groups-grid::-webkit-scrollbar,
 .images-grid::-webkit-scrollbar,
 .images-sections::-webkit-scrollbar {
   width: 8px;
 }
 
-.groups-grid::-webkit-scrollbar-track,
+.library-groups-grid::-webkit-scrollbar-track,
 .images-grid::-webkit-scrollbar-track,
 .images-sections::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.groups-grid::-webkit-scrollbar-thumb,
+.library-groups-grid::-webkit-scrollbar-thumb,
 .images-grid::-webkit-scrollbar-thumb,
 .images-sections::-webkit-scrollbar-thumb {
   background: #c7c7cc;
   border-radius: 4px;
 }
 
-.groups-grid::-webkit-scrollbar-thumb:hover,
+.library-groups-grid::-webkit-scrollbar-thumb:hover,
 .images-grid::-webkit-scrollbar-thumb:hover,
 .images-sections::-webkit-scrollbar-thumb:hover {
   background: #aeaeb2;
@@ -1160,7 +1207,7 @@
 
 /* Grid containers need position relative for selection box */
 .batch-grid,
-.groups-grid,
+.library-groups-grid,
 .images-grid {
   position: relative;
 }

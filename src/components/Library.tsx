@@ -208,6 +208,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       
       // 1. Load products from workflow_batches.workflow_state
       const batches = await fetchWorkflowBatches();
+      setBatches(batches); // keep batches state in sync so empty batches show as sections
       batches.forEach(batch => {
         const items = batch.workflow_state?.processedItems || 
                      batch.workflow_state?.sortedImages || 
@@ -282,6 +283,10 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
     setLoading(true);
     try {
       const imageList: ImageRecord[] = [];
+
+      // Also load all batches so empty batches show as sections in images view
+      const allBatches = await fetchWorkflowBatches();
+      setBatches(allBatches);
       
       // Load ONLY saved images from database (not workflow_state)
       // This gives us a true 1:1 representation of the product_images table
@@ -324,6 +329,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       const { data, error } = await supabase
         .from('workflow_batches')
         .insert({
+          user_id: userId,
           batch_number: batchNumber,
           batch_name: batchName,
           current_step: 1,
@@ -353,6 +359,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       const { data: newBatch, error: batchErr } = await supabase
         .from('workflow_batches')
         .insert({
+          user_id: userId,
           batch_number: batchNumber,
           batch_name: batchName,
           current_step: 2,
@@ -406,7 +413,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
         const batchName = batchNameInput.trim() || `Batch ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
         const { data: newBatch, error: batchErr } = await supabase
           .from('workflow_batches')
-          .insert({ batch_number: batchNumber, batch_name: batchName, current_step: 1, workflow_state: {} })
+          .insert({ user_id: userId, batch_number: batchNumber, batch_name: batchName, current_step: 1, workflow_state: {} })
           .select()
           .single();
         if (batchErr) throw batchErr;
@@ -1511,7 +1518,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
         {/* Product Groups View */}
         {viewMode === 'groups' && (
           <>
-            {productGroups.length === 0 ? (
+            {productGroups.length === 0 && batches.length === 0 ? (
               <div className="empty-state">
                 <Package size={64} className="empty-icon" />
                 <p>No product groups yet.</p>
@@ -1519,7 +1526,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
               </div>
             ) : (
               <div 
-                className="groups-grid"
+                className="library-groups-grid"
                 ref={groupsGridRef}
                 onMouseDown={(e) => handleMouseDown(e, groupsGridRef)}
               >
@@ -1782,6 +1789,16 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
 
     // Build ordered sections: group by batchId (null/undefined → "No Batch")
     const sectionMap = new Map<string, { label: string; groups: ProductGroup[] }>();
+
+    // Seed all known batches so empty batches still show as drop-target sections
+    batches.forEach(batch => {
+      const key = batch.id;
+      const label = batch.batch_name || `Batch ${new Date(batch.created_at).toLocaleDateString()} ${new Date(batch.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      if (!sectionMap.has(key)) {
+        sectionMap.set(key, { label, groups: [] });
+      }
+    });
+
     filtered.forEach(group => {
       const key = group.batchId || 'no-batch';
       if (!sectionMap.has(key)) {
@@ -1976,6 +1993,15 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
     type GroupSection = { groupTitle: string; images: ImageRecord[] };
     type BatchSection = { batchName: string; groups: Map<string, GroupSection> };
     const batchMap = new Map<string, BatchSection>();
+
+    // Seed all known batches so empty ones still show as drop targets
+    batches.forEach(batch => {
+      const key = batch.id;
+      const name = batch.batch_name || `Batch ${new Date(batch.created_at).toLocaleDateString()} ${new Date(batch.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      if (!batchMap.has(key)) {
+        batchMap.set(key, { batchName: name, groups: new Map() });
+      }
+    });
 
     filtered.forEach(img => {
       const batchKey = img.batchId || 'no-batch';
