@@ -172,3 +172,38 @@ input:disabled, textarea:disabled, select:disabled {
   h2 { font-size: 1.375rem; }
   h3 { font-size: 1.125rem; }
 }
+
+/* ── Global LazyImg skeleton / shimmer ─────────────────────────────────────── */
+@keyframes global-shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position:  600px 0; }
+}
+
+.lazy-skeleton {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    #f0f0f0 25%,
+    #e0e0e0 37%,
+    #f0f0f0 63%
+  );
+  background-size: 1200px 100%;
+  animation: global-shimmer 1.4s ease-in-out infinite;
+  border-radius: 2px;
+}
+
+.lazy-skeleton--error {
+  opacity: 0.35;
+  animation: none;
+}
+
+/* The real image — fades in once loaded */
+img.lazy-img {
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+img.lazy-img.loaded {
+  opacity: 1;
+}

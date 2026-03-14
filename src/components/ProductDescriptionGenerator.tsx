@@ -7,6 +7,7 @@ import type { CategoryPreset } from '../lib/categoryPresets';
 import { applyPresetToProductGroup } from '../lib/applyPresetToGroup';
 import { generateProductDescription } from '../lib/textAIService';
 import { syncGroupFieldsToDatabase } from '../lib/productService';
+import LazyImg from './LazyImg';
 import './ProductDescriptionGenerator.css';
 
 interface ProductDescriptionGeneratorProps {
@@ -1070,13 +1071,15 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
       <div className="product-editor">
         <div className="product-preview">
-          <img
-            src={currentItem.preview}
-            alt="Product"
-            className="preview-image"
-            style={{ cursor: 'zoom-in' }}
-            onDoubleClick={() => setLightboxSrc(currentItem.preview)}
-          />
+          <div className="preview-image-wrap">
+            <LazyImg
+              src={currentItem.preview}
+              alt="Product"
+              className="preview-image"
+              style={{ cursor: 'zoom-in' }}
+              onDoubleClick={() => setLightboxSrc(currentItem.preview)}
+            />
+          </div>
           <div className="product-info">
             <span className="category-badge">{currentItem.category}</span>
           </div>
@@ -1085,11 +1088,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               <p><strong>All images in this group:</strong></p>
               <div className="thumbnail-grid">
                 {currentGroup.map((groupItem, idx) => (
-                  <img 
-                    key={groupItem.id} 
-                    src={groupItem.preview} 
-                    alt={`Image ${idx + 1}`}
-                    className={`group-thumbnail thumb-draggable${draggedThumbId === groupItem.id ? ' thumb-dragging' : ''}${dragOverThumbId === groupItem.id ? ' thumb-drag-over' : ''}`}
+                  <div
+                    key={groupItem.id}
+                    className={`group-thumbnail-wrap thumb-draggable${draggedThumbId === groupItem.id ? ' thumb-dragging' : ''}${dragOverThumbId === groupItem.id ? ' thumb-drag-over' : ''}`}
                     draggable
                     onDragStart={(e) => handleThumbDragStart(e, groupItem.id)}
                     onDragOver={(e) => handleThumbDragOver(e, groupItem.id)}
@@ -1097,7 +1098,14 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     onDragEnd={handleThumbDragEnd}
                     onDragLeave={() => setDragOverThumbId(null)}
                     onDoubleClick={() => setLightboxSrc(groupItem.preview)}
-                  />
+                    title={`Image ${idx + 1}`}
+                  >
+                    <LazyImg
+                      src={groupItem.preview}
+                      alt={`Image ${idx + 1}`}
+                      className="group-thumbnail"
+                    />
+                  </div>
                 ))}
               </div>
             </div>
