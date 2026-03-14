@@ -33,12 +33,36 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items, compac
   }, {} as Record<string, ClothingItem[]>);
 
   const products = Object.values(productGroups).map(group => {
-    // Use the first item in the group as the product data (all should have same data)
+    // Use the first item in the group as the base product data
     const productData = group[0];
+
+    // Find the best seoTitle from any item in the group:
+    // prefer a real title (no unresolved {tokens}) over a raw template
+    const resolvedTitle = group
+      .map(item => item.seoTitle || '')
+      .find(t => t.trim() && !/\{[a-z_]+\}/i.test(t));
+
+    // If no real title exists, build one from filled fields
+    const autoTitle = (() => {
+      const src = group.find(i => i.brand || i.color || i.category || i.modelName) || productData;
+      const parts: string[] = [];
+      if (src.brand) parts.push(src.brand);
+      if (src.modelName) parts.push(src.modelName);
+      if (src.color) parts.push(src.color);
+      if (src.category) parts.push(src.category);
+      if (src.size) parts.push(`(${src.size})`);
+      const built = parts.filter(Boolean).join(' ');
+      return built || '';
+    })();
+
+    // Strip any remaining {tokens} from whichever title we use
+    const bestTitle = stripUnresolvedTokens(resolvedTitle || autoTitle || productData.seoTitle || '');
+
     return {
       ...productData,
+      seoTitle: bestTitle,
       // Use Supabase URLs if available, otherwise fall back to preview (blob URLs)
-      imageUrls: group.map(item => item.imageUrls?.[0] || item.preview), // All images in the group
+      imageUrls: group.map(item => item.imageUrls?.[0] || item.preview),
       imageCount: group.length
     };
   });
