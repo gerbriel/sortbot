@@ -5,13 +5,21 @@ import { Package, Image, Link2, Scissors, X, ArrowDown, Check } from 'lucide-rea
 import LoadingProgress from './LoadingProgress';
 import './ImageGrouper.css';
 
+export interface ImageGrouperStats {
+  multiImageGroups: number;
+  singles: number;
+  totalListings: number;
+  totalImages: number;
+}
+
 interface ImageGrouperProps {
   items: ClothingItem[];
   onGrouped: (items: ClothingItem[]) => void;
+  onStatsChange?: (stats: ImageGrouperStats) => void;
   userId?: string;
 }
 
-const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId }) => {
+const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsChange, userId }) => {
   const [groupedItems, setGroupedItems] = useState<ClothingItem[]>([]);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [draggedItem, setDraggedItem] = useState<ClothingItem | null>(null);
@@ -580,6 +588,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
   const multiItemGroups = groupEntries.filter(([_, items]) => items.length > 1);
   const singleItems = groupEntries.filter(([_, items]) => items.length === 1).flatMap(([_, items]) => items);
 
+  // Notify parent whenever the group stats change so Step 3 can show matching numbers
+  useEffect(() => {
+    onStatsChange?.({
+      multiImageGroups: multiItemGroups.length,
+      singles: singleItems.length,
+      totalListings: multiItemGroups.length + singleItems.length,
+      totalImages: groupedItems.length,
+    });
+  }, [multiItemGroups.length, singleItems.length, groupedItems.length, onStatsChange]);
+
   return (
     <>
       {isLoading && (
@@ -817,6 +835,19 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
                 key={groupId}
                 data-group-id={groupId}
                 className={`product-group-card ${dragOverGroup === groupId ? 'drag-over' : ''} ${items[0].category ? 'has-category' : ''}`}
+                draggable={!selectionThresholdMet}
+                onDragStart={(e) => {
+                  if (selectionThresholdMet) { e.preventDefault(); return; }
+                  // Drag the whole group to a CategoryZone
+                  const dragData = {
+                    item: items[0],
+                    productGroup: groupId,
+                    source: 'ImageGrouper',
+                  };
+                  e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+                  e.dataTransfer.effectAllowed = 'move';
+                }}
+                onDragEnd={handleDragEnd}
                 onDragOver={(e) => handleDragOver(e, groupId)}
                 onDrop={(e) => handleDrop(e, groupId)}
                 onDragLeave={handleDragLeave}

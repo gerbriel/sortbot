@@ -203,7 +203,11 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
       if (data) {
         const dragData = JSON.parse(data);
         if (dragData.action === 'categorize') {
+          // Drag from CategoryZones own group cards
           productGroup = dragData.productGroup;
+        } else if (dragData.source === 'ImageGrouper') {
+          // Drag from Step 2 ImageGrouper — use the item's productGroup or its own id
+          productGroup = dragData.productGroup || dragData.item?.productGroup || dragData.item?.id;
         }
       }
     } catch (err) {
