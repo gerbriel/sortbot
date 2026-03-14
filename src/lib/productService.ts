@@ -360,36 +360,161 @@ export const deleteProduct = async (productId: string): Promise<boolean> => {
 };
 
 /**
- * Update product data
+ * Update product data — syncs all ClothingItem fields back to the products table.
+ * Called whenever fields change (preset apply, voice extract, manual edit).
  */
 export const updateProduct = async (
   productId: string,
   updates: Partial<ClothingItem>
 ): Promise<boolean> => {
   try {
+    // Build url_handle if seoTitle changed
+    const urlHandle = updates.seoTitle
+      ? updates.seoTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+      : undefined;
+
+    const patch: Record<string, unknown> = {};
+
+    // Core
+    if (updates.seoTitle !== undefined)              patch.title               = updates.seoTitle;
+    if (urlHandle !== undefined)                     patch.url_handle          = urlHandle;
+    if (updates.generatedDescription !== undefined)  patch.description         = updates.generatedDescription;
+    if (updates.brand !== undefined)                 patch.vendor              = updates.brand;
+    if (updates.category !== undefined)              patch.product_category    = updates.category;
+    if (updates.productType !== undefined)           patch.product_type        = updates.productType;
+    if (updates.tags !== undefined)                  patch.tags                = updates.tags;
+    if (updates.published !== undefined)             patch.published           = updates.published;
+    if (updates.status !== undefined)                patch.status              = updates.status;
+
+    // Variants
+    if (updates.size !== undefined)                  patch.size                = updates.size;
+    if (updates.color !== undefined)                 patch.color               = updates.color;
+    if (updates.secondaryColor !== undefined)        patch.secondary_color     = updates.secondaryColor;
+
+    // Pricing
+    if (updates.price !== undefined)                 patch.price               = updates.price;
+    if (updates.compareAtPrice !== undefined)        patch.compare_at_price    = updates.compareAtPrice;
+    if (updates.costPerItem !== undefined)           patch.cost_per_item       = updates.costPerItem;
+
+    // Inventory
+    if (updates.sku !== undefined)                   patch.sku                 = updates.sku;
+    if (updates.barcode !== undefined)               patch.barcode             = updates.barcode;
+    if (updates.inventoryQuantity !== undefined)     patch.inventory_quantity  = updates.inventoryQuantity;
+
+    // Shipping
+    if (updates.weightValue !== undefined)           patch.weight_value        = updates.weightValue;
+    if (updates.requiresShipping !== undefined)      patch.requires_shipping   = updates.requiresShipping;
+    if (updates.continueSellingOutOfStock !== undefined) patch.continue_selling_out_of_stock = updates.continueSellingOutOfStock;
+    if (updates.packageDimensions !== undefined)     patch.package_dimensions  = updates.packageDimensions;
+    if (updates.parcelSize !== undefined)            patch.parcel_size         = updates.parcelSize;
+    if (updates.shipsFrom !== undefined)             patch.ships_from          = updates.shipsFrom;
+
+    // Product details
+    if (updates.condition !== undefined)             patch.condition           = updates.condition;
+    if (updates.flaws !== undefined)                 patch.flaws               = updates.flaws;
+    if (updates.material !== undefined)              patch.material            = updates.material;
+    if (updates.era !== undefined)                   patch.era                 = updates.era;
+    if (updates.care !== undefined)                  patch.care_instructions   = updates.care;
+    if (updates.measurements !== undefined)          patch.measurements        = updates.measurements;
+    if (updates.modelName !== undefined)             patch.model_name          = updates.modelName;
+    if (updates.modelNumber !== undefined)           patch.model_number        = updates.modelNumber;
+    if (updates.subculture !== undefined)            patch.subculture          = updates.subculture;
+
+    // Classification
+    if (updates.sizeType !== undefined)              patch.size_type           = updates.sizeType;
+    if (updates.style !== undefined)                 patch.style               = updates.style;
+    if (updates.gender !== undefined)                patch.gender              = updates.gender;
+    if (updates.ageGroup !== undefined)              patch.age_group           = updates.ageGroup;
+
+    // Policies & marketplace
+    if (updates.policies !== undefined)              patch.policies            = updates.policies;
+    if (updates.renewalOptions !== undefined)        patch.renewal_options     = updates.renewalOptions;
+    if (updates.whoMadeIt !== undefined)             patch.who_made_it         = updates.whoMadeIt;
+    if (updates.whatIsIt !== undefined)              patch.what_is_it          = updates.whatIsIt;
+    if (updates.listingType !== undefined)           patch.listing_type        = updates.listingType;
+    if (updates.discountedShipping !== undefined)    patch.discounted_shipping = updates.discountedShipping;
+
+    // Marketing / SEO
+    if (updates.mpn !== undefined)                   patch.mpn                 = updates.mpn;
+    if (updates.customLabel0 !== undefined)          patch.custom_label_0      = updates.customLabel0;
+    if (updates.seoTitle !== undefined)              patch.seo_title           = updates.seoTitle;
+    if (updates.seoDescription !== undefined)        patch.seo_description     = updates.seoDescription;
+    if (updates.voiceDescription !== undefined)      patch.voice_description   = updates.voiceDescription;
+
+    // Advanced
+    if (updates.taxCode !== undefined)               patch.tax_code            = updates.taxCode;
+    if (updates.unitPriceTotalMeasure !== undefined) patch.unit_price_total_measure = updates.unitPriceTotalMeasure;
+    if (updates.unitPriceTotalMeasureUnit !== undefined) patch.unit_price_total_measure_unit = updates.unitPriceTotalMeasureUnit;
+    if (updates.unitPriceBaseMeasure !== undefined)  patch.unit_price_base_measure = updates.unitPriceBaseMeasure;
+    if (updates.unitPriceBaseMeasureUnit !== undefined) patch.unit_price_base_measure_unit = updates.unitPriceBaseMeasureUnit;
+    if (updates.brandCategory !== undefined)         patch.brand_category      = updates.brandCategory;
+
+    if (Object.keys(patch).length === 0) return true; // Nothing to update
+
     const { error } = await supabase
       .from('products')
-      .update({
-        title: updates.seoTitle,
-        description: updates.generatedDescription,
-        vendor: updates.brand,
-        size: updates.size,
-        color: updates.color,
-        price: updates.price,
-        condition: updates.condition,
-        flaws: updates.flaws,
-        material: updates.material,
-        tags: updates.tags,
-        // ... add other fields as needed
-      })
+      .update(patch)
       .eq('id', productId);
 
     if (error) {
+      console.error('updateProduct error:', error);
       return false;
     }
 
     return true;
   } catch (error) {
+    console.error('updateProduct exception:', error);
     return false;
+  }
+};
+
+/**
+ * Sync all preset/voice/manual field changes for a group of items back to the
+ * products table. Looks up the existing product row by seo_title + batch_id
+ * (or by image URL as fallback) and calls updateProduct.
+ *
+ * This ensures preset fields survive a page reload on a different device.
+ */
+export const syncGroupFieldsToDatabase = async (
+  groupItems: ClothingItem[],
+  batchId: string | null
+): Promise<void> => {
+  if (!groupItems.length) return;
+
+  const representative = groupItems[0];
+
+  try {
+    // Try to find the product row: match by seo_title within this batch
+    let query = supabase
+      .from('products')
+      .select('id, seo_title')
+      .limit(1);
+
+    if (batchId) {
+      query = query.eq('batch_id', batchId);
+    }
+
+    if (representative.seoTitle) {
+      query = query.eq('seo_title', representative.seoTitle);
+    }
+
+    const { data: rows } = await query;
+    let productId = rows?.[0]?.id;
+
+    // Fallback: find by image URL from product_images
+    if (!productId && representative.preview) {
+      const { data: imgRows } = await supabase
+        .from('product_images')
+        .select('product_id')
+        .eq('image_url', representative.preview)
+        .limit(1);
+      productId = imgRows?.[0]?.product_id;
+    }
+
+    if (!productId) return; // Product hasn't been saved to DB yet — skip
+
+    await updateProduct(productId, representative);
+  } catch {
+    // Silently fail — workflow_state blob is still the source of truth
   }
 };

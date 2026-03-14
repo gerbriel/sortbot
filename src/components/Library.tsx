@@ -66,10 +66,41 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
   // Collapsed batch sections in product groups view
   const [collapsedBatches, setCollapsedBatches] = useState<Set<string>>(new Set());
 
+  // Inline prompt modal (replaces browser prompt())
+  const [promptModal, setPromptModal] = useState<{
+    title: string;
+    message?: string;
+    defaultValue?: string;
+    onConfirm: (value: string) => void;
+    onCancel: () => void;
+  } | null>(null);
+  const [promptValue, setPromptValue] = useState('');
+  const promptInputRef = useRef<HTMLInputElement>(null);
+
+  // Helper: show inline prompt, returns a Promise<string | null>
+  const showPrompt = (title: string, message?: string, defaultValue = ''): Promise<string | null> => {
+    return new Promise((resolve) => {
+      setPromptValue(defaultValue);
+      setPromptModal({
+        title,
+        message,
+        defaultValue,
+        onConfirm: (value) => { setPromptModal(null); resolve(value.trim() || defaultValue || ''); },
+        onCancel: () => { setPromptModal(null); resolve(null); },
+      });
+      // Focus after render
+      setTimeout(() => promptInputRef.current?.focus(), 50);
+    });
+  };
+
   // Selection and drag-drop state
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [draggedItem, setDraggedItem] = useState<string | null>(null);
   const [dragOverItem, setDragOverItem] = useState<string | null>(null);
+  // Cross-type drag state: what kind of thing is being dragged
+  const [dragType, setDragType] = useState<'batch' | 'group' | 'image' | null>(null);
+  // When dragging a group over a batch section header, track which batch key is highlighted
+  const [dragOverBatch, setDragOverBatch] = useState<string | null>(null);
   
   // Selection box state (for drag-to-select)
   const [isSelecting, setIsSelecting] = useState(false);
@@ -82,6 +113,8 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
   const groupsGridRef = useRef<HTMLDivElement>(null);
   const imagesGridRef = useRef<HTMLDivElement>(null);
   const currentContainerRef = useRef<HTMLElement | null>(null);
+  // Track whether a native HTML drag is in progress — suppresses rubber-band selection
+  const isDraggingRef = useRef(false);
   
   const SELECTION_THRESHOLD = 5; // pixels - must move this much to activate selection
 
@@ -222,8 +255,8 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
 
   // Create a brand-new empty batch in the database
   const handleCreateNewBatch = async () => {
-    const name = prompt('Batch name (leave blank for auto-name):');
-    if (name === null) return; // cancelled
+    const name = await showPrompt('New Batch', 'Enter a batch name (leave blank to auto-name):');
+    if (name === null) return;
     const batchNumber = `batch-${Date.now()}`;
     const batchName = name.trim() || `Batch ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     try {
@@ -242,18 +275,16 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       if (error) throw error;
       if (data) {
         setBatches(prev => [data, ...prev]);
-        alert(`✅ Created "${batchName}". Open it to start adding images.`);
       }
     } catch (err) {
       console.error('Create batch error:', err);
-      alert('Failed to create batch. Please try again.');
     }
   };
 
   // Assign selected product-group images to a new batch
   const handleAssignSelectedToNewBatch = async () => {
     if (selectedItems.size === 0) return;
-    const name = prompt('New batch name for selected items:');
+    const name = await showPrompt('New Batch from Selection', 'Enter a name for the new batch:');
     if (name === null) return;
     const batchNumber = `batch-${Date.now()}`;
     const batchName = name.trim() || `Batch ${new Date().toLocaleDateString()}`;
@@ -273,7 +304,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       if (batchErr) throw batchErr;
       if (!newBatch) throw new Error('No batch returned');
 
-      // Reassign products in DB to this new batch
       const ids = Array.from(selectedItems);
       const { error: updateErr } = await supabase
         .from('products')
@@ -284,10 +314,8 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       clearSelection();
       await loadBatches();
       if (viewMode === 'groups') await loadProductGroups();
-      alert(`✅ ${ids.length} group(s) moved to "${batchName}".`);
     } catch (err) {
       console.error('Assign to batch error:', err);
-      alert('Failed to assign items to new batch.');
     }
   };
 
@@ -295,13 +323,15 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
   const handleAssignGroupsToExistingBatch = async () => {
     if (selectedItems.size === 0) return;
 
-    // Build options list — always offer "0. Create new batch" at top
     const existingOptions = batches.map((b, i) => {
       const name = b.batch_name || `Batch ${new Date(b.created_at).toLocaleDateString()}`;
       return `${i + 1}. ${name}`;
     }).join('\n');
     const optionsList = `0. ➕ Create new batch\n${existingOptions}`;
-    const input = prompt(`Move ${selectedItems.size} group(s) to which batch?\n\n${optionsList}`);
+    const input = await showPrompt(
+      `Move ${selectedItems.size} group(s) to batch`,
+      optionsList
+    );
     if (input === null) return;
     const idx = parseInt(input.trim(), 10);
 
@@ -309,8 +339,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       const ids = Array.from(selectedItems);
 
       if (idx === 0) {
-        // Create a new batch inline
-        const batchNameInput = prompt('New batch name (leave blank to auto-name):');
+        const batchNameInput = await showPrompt('New Batch Name', 'Leave blank to auto-name:');
         if (batchNameInput === null) return;
         const batchNumber = `batch-${Date.now()}`;
         const batchName = batchNameInput.trim() || `Batch ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
@@ -326,54 +355,39 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
         clearSelection();
         await loadBatches();
         await loadProductGroups();
-        alert(`✅ ${ids.length} group(s) moved to new batch "${batchName}".`);
       } else {
-        // Assign to existing batch
         const batchIdx = idx - 1;
-        if (isNaN(batchIdx) || batchIdx < 0 || batchIdx >= batches.length) { alert('Invalid selection.'); return; }
+        if (isNaN(batchIdx) || batchIdx < 0 || batchIdx >= batches.length) return;
         const target = batches[batchIdx];
         const { error } = await supabase.from('products').update({ batch_id: target.id }).in('id', ids);
         if (error) throw error;
         clearSelection();
         await loadProductGroups();
-        const name = target.batch_name || `Batch ${new Date(target.created_at).toLocaleDateString()}`;
-        alert(`✅ ${ids.length} group(s) moved to "${name}".`);
       }
     } catch (err) {
       console.error(err);
-      alert('Failed to assign groups to batch.');
     }
   };
 
   // Group selected images (from Images view) into a new product group
   const handleGroupSelectedImages = async () => {
-    if (selectedItems.size < 2) { alert('Select at least 2 images to group.'); return; }
-
-    // Name is optional — leave blank to auto-name
-    const titleInput = prompt('Product group title (leave blank to auto-name):');
-    if (titleInput === null) return; // cancelled
+    if (selectedItems.size < 2) return;
+    const titleInput = await showPrompt('New Product Group', 'Enter a title (leave blank to auto-name):');
+    if (titleInput === null) return;
     const title = titleInput.trim() || `Group ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
-    // Batch is fully optional — no prompt, just create without one
     try {
       const groupId = `group-${Date.now()}`;
       const imageIds = Array.from(selectedItems);
 
-      // Create a new product record (no batch required)
       const { data: newProduct, error: prodErr } = await supabase
         .from('products')
-        .insert({
-          title,
-          product_group: groupId,
-          batch_id: null,
-          status: 'Draft',
-        })
+        .insert({ title, product_group: groupId, batch_id: null, status: 'Draft' })
         .select()
         .single();
       if (prodErr) throw prodErr;
       if (!newProduct) throw new Error('No product returned');
 
-      // Reassign the selected product_images rows to this new product
       const { error: imgErr } = await supabase
         .from('product_images')
         .update({ product_id: newProduct.id })
@@ -382,29 +396,25 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
 
       clearSelection();
       await loadImages();
-      if (viewMode === 'groups') await loadProductGroups();
-      alert(`✅ Created product group "${title}" with ${imageIds.length} images.`);
     } catch (err) {
       console.error(err);
-      alert('Failed to create product group.');
     }
   };
 
   // Assign selected images to an existing product group
   const handleAssignImagesToGroup = async () => {
     if (selectedItems.size === 0) return;
-    // Load available product groups for selection
     const { data: products } = await supabase
       .from('products')
       .select('id, title')
       .order('created_at', { ascending: false })
       .limit(50);
-    if (!products || products.length === 0) { alert('No product groups found. Create one first.'); return; }
+    if (!products || products.length === 0) return;
     const options = products.map((p: any, i: number) => `${i + 1}. ${p.title || 'Untitled'}`).join('\n');
-    const input = prompt(`Assign ${selectedItems.size} image(s) to which product group?\n\n${options}`);
+    const input = await showPrompt(`Add ${selectedItems.size} image(s) to group`, options);
     if (input === null) return;
     const idx = parseInt(input.trim(), 10) - 1;
-    if (isNaN(idx) || idx < 0 || idx >= products.length) { alert('Invalid selection.'); return; }
+    if (isNaN(idx) || idx < 0 || idx >= products.length) return;
     const target = products[idx];
     try {
       const ids = Array.from(selectedItems);
@@ -412,10 +422,8 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       if (error) throw error;
       clearSelection();
       await loadImages();
-      alert(`✅ ${ids.length} image(s) assigned to "${target.title || 'Untitled'}".`);
     } catch (err) {
       console.error(err);
-      alert('Failed to assign images to group.');
     }
   };
 
@@ -424,37 +432,66 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
     if (selectedItems.size < 2) return;
     const groupIds = Array.from(selectedItems);
     const selectedGroups = productGroups.filter(g => groupIds.includes(g.id));
-    // Only saved groups (in DB) can be merged
     const savedGroups = selectedGroups.filter(g => g.isSaved);
     if (savedGroups.length < 2) {
-      alert('Merge requires at least 2 saved product groups. Groups still in workflow state (not yet saved to DB) cannot be merged here.\n\nTip: Complete Step 4 (Save & Export) to save groups to the database first.');
+      await showPrompt('Cannot Merge', 'Merge requires at least 2 saved product groups. Complete Step 4 to save groups first.');
       return;
     }
     const defaultName = savedGroups[0].title;
-    const name = prompt(`Merge ${savedGroups.length} groups into one product.\n\nNew product title:`, defaultName);
+    const name = await showPrompt('Merge Groups', `Merge ${savedGroups.length} groups into one product.\n\nNew title:`, defaultName);
     if (name === null) return;
-    const trimmedName = name.trim() || defaultName;
+    const trimmedName = name || defaultName;
 
     try {
-      // Use the first group as the primary, reassign all images from other groups to it
       const [primary, ...rest] = savedGroups;
       const restIds = rest.map(g => g.id);
 
-      // 1. Reassign all images from the other groups to the primary group
-      const { error: imgError } = await supabase
+      // 1. Fetch existing image URLs in the primary group to avoid duplicate constraint
+      const { data: primaryImages } = await supabase
         .from('product_images')
-        .update({ product_id: primary.id })
-        .in('product_id', restIds);
-      if (imgError) throw imgError;
+        .select('id, image_url')
+        .eq('product_id', primary.id);
+      const existingUrls = new Set((primaryImages || []).map((img: any) => img.image_url));
 
-      // 2. Update the primary group's title
+      // 2. For each non-primary group, fetch its images and reassign non-duplicates
+      for (const groupId of restIds) {
+        const { data: groupImages } = await supabase
+          .from('product_images')
+          .select('id, image_url')
+          .eq('product_id', groupId);
+
+        if (!groupImages) continue;
+
+        const toMove = groupImages.filter((img: any) => !existingUrls.has(img.image_url));
+        const toDrop = groupImages.filter((img: any) => existingUrls.has(img.image_url));
+
+        // Move unique images to primary
+        if (toMove.length > 0) {
+          const { error } = await supabase
+            .from('product_images')
+            .update({ product_id: primary.id })
+            .in('id', toMove.map((img: any) => img.id));
+          if (error) throw error;
+          toMove.forEach((img: any) => existingUrls.add(img.image_url));
+        }
+
+        // Delete duplicate images (same URL already in primary)
+        if (toDrop.length > 0) {
+          await supabase
+            .from('product_images')
+            .delete()
+            .in('id', toDrop.map((img: any) => img.id));
+        }
+      }
+
+      // 3. Update the primary group's title
       const { error: titleError } = await supabase
         .from('products')
         .update({ title: trimmedName })
         .eq('id', primary.id);
       if (titleError) throw titleError;
 
-      // 3. Delete the now-empty groups
+      // 4. Delete the now-empty secondary groups
       const { error: delError } = await supabase
         .from('products')
         .delete()
@@ -463,10 +500,8 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
 
       clearSelection();
       await loadProductGroups();
-      alert(`✅ Merged ${savedGroups.length} groups into "${trimmedName}".`);
     } catch (err) {
       console.error(err);
-      alert('Failed to merge groups. Please try again.');
     }
   };
 
@@ -546,11 +581,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
   const handleDuplicateBatch = async (batchId: string) => {
     const newBatchId = await duplicateBatch(batchId);
     if (newBatchId) {
-      // Reload batches to show the duplicate
       await loadBatches();
-      alert('Batch duplicated successfully!');
-    } else {
-      alert('Failed to duplicate batch. Please try again.');
     }
   };
 
@@ -629,9 +660,20 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
 
   // Drag and drop handlers
   const handleDragStart = (itemId: string, event: React.DragEvent) => {
+    // Mark native drag as active — prevents rubber-band selection from starting
+    isDraggingRef.current = true;
+    // Cancel any rubber-band selection that may have started on mousedown
+    setIsSelecting(false);
+    setSelectionStart(null);
+    setSelectionBox(null);
+    setSelectionThresholdMet(false);
+
     setDraggedItem(itemId);
+    const type = viewMode === 'batches' ? 'batch' : viewMode === 'groups' ? 'group' : 'image';
+    setDragType(type);
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', itemId);
+    event.dataTransfer.setData('drag-type', type);
   };
 
   const handleDragOver = (itemId: string, event: React.DragEvent) => {
@@ -644,6 +686,80 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
     setDragOverItem(null);
   };
 
+  // Drop an image onto a product group header (Images view)
+  const handleDropImageOntoGroup = async (targetGroupId: string, event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const imageId = event.dataTransfer.getData('text/plain');
+    const type = event.dataTransfer.getData('drag-type');
+    if (!imageId || type !== 'image' || !targetGroupId || targetGroupId === 'no-group') {
+      return;
+    }
+    setDragOverItem(null);
+    setDraggedItem(null);
+    setDragType(null);
+    try {
+      const { data: imgRow } = await supabase
+        .from('product_images')
+        .select('id, image_url, product_id')
+        .eq('id', imageId)
+        .single();
+      if (!imgRow) return;
+
+      if (imgRow.product_id === targetGroupId) {
+        return;
+      }
+
+      const { data: conflict } = await supabase
+        .from('product_images')
+        .select('id')
+        .eq('product_id', targetGroupId)
+        .eq('image_url', imgRow.image_url)
+        .maybeSingle();
+
+      if (conflict) {
+        await supabase.from('product_images').delete().eq('id', imageId);
+      } else {
+        const { error } = await supabase
+          .from('product_images')
+          .update({ product_id: targetGroupId })
+          .eq('id', imageId);
+        if (error) throw error;
+      }
+      await loadImages();
+    } catch (err) {
+    }
+  };
+
+  // Drop a product group onto a batch section header (Groups view)
+  const handleDropGroupOntoBatch = async (targetBatchId: string, event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const groupId = event.dataTransfer.getData('text/plain');
+    const type = event.dataTransfer.getData('drag-type');
+    if (!groupId || type !== 'group') {
+      return;
+    }
+    setDragOverBatch(null);
+    setDraggedItem(null);
+    setDragType(null);
+
+    const idsToMove = selectedItems.has(groupId) && selectedItems.size > 1
+      ? Array.from(selectedItems)
+      : [groupId];
+
+    try {
+      const { error } = await supabase
+        .from('products')
+        .update({ batch_id: targetBatchId === 'no-batch' ? null : targetBatchId })
+        .in('id', idsToMove);
+      if (error) throw error;
+      clearSelection();
+      await loadProductGroups();
+    } catch (err) {
+    }
+  };
+
   const handleDrop = (targetId: string, event: React.DragEvent) => {
     event.preventDefault();
     
@@ -653,12 +769,11 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       return;
     }
 
-    // Reorder items based on view mode
+    // Same-type reorder only
     if (viewMode === 'batches') {
       const items = [...batches];
       const draggedIndex = items.findIndex(b => b.id === draggedItem);
       const targetIndex = items.findIndex(b => b.id === targetId);
-      
       if (draggedIndex !== -1 && targetIndex !== -1) {
         const [removed] = items.splice(draggedIndex, 1);
         items.splice(targetIndex, 0, removed);
@@ -668,7 +783,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       const items = [...productGroups];
       const draggedIndex = items.findIndex(g => g.id === draggedItem);
       const targetIndex = items.findIndex(g => g.id === targetId);
-      
       if (draggedIndex !== -1 && targetIndex !== -1) {
         const [removed] = items.splice(draggedIndex, 1);
         items.splice(targetIndex, 0, removed);
@@ -678,7 +792,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       const items = [...images];
       const draggedIndex = items.findIndex(img => img.id === draggedItem);
       const targetIndex = items.findIndex(img => img.id === targetId);
-      
       if (draggedIndex !== -1 && targetIndex !== -1) {
         const [removed] = items.splice(draggedIndex, 1);
         items.splice(targetIndex, 0, removed);
@@ -691,15 +804,24 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
   };
 
   const handleDragEnd = () => {
+    isDraggingRef.current = false;
     setDraggedItem(null);
     setDragOverItem(null);
+    setDragOverBatch(null);
+    setDragType(null);
   };
 
   // Rubber band selection handlers
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>, containerRef: React.RefObject<HTMLDivElement | null>) => {
+    // Never start rubber-band selection while a native drag is in progress
+    if (isDraggingRef.current) return;
     // Ignore if clicking on a button or interactive element
     const target = e.target as HTMLElement;
     if (target.tagName === 'BUTTON' || target.closest('button') || target.closest('input')) {
+      return;
+    }
+    // Don't start rubber-band selection if mousedown is on a draggable card
+    if (target.closest('[draggable="true"]')) {
       return;
     }
 
@@ -709,7 +831,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
 
     const scrollTop = containerRef.current?.scrollTop || 0;
     const startX = e.clientX - rect.left;
-    const startY = e.clientY - rect.top + scrollTop; // Account for current scroll position
+    const startY = e.clientY - rect.top + scrollTop;
 
     setIsSelecting(true);
     setSelectionStart({ x: startX, y: startY });
@@ -725,6 +847,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
 
     const handleMouseMove = (e: MouseEvent) => {
       if (!isSelecting || !selectionStart || !currentContainerRef.current) return;
+      if (isDraggingRef.current) return;
 
       const rect = currentContainerRef.current.getBoundingClientRect();
       const scrollTop = currentContainerRef.current.scrollTop;
@@ -830,6 +953,9 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
         clearInterval(scrollInterval);
         scrollInterval = null;
       }
+
+      // Don't interfere with native drag-and-drop
+      if (isDraggingRef.current) return;
 
       if (isSelecting) {
         setIsSelecting(false);
@@ -1031,6 +1157,35 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
         )}
 
         {/* View Switcher + Search + New Batch */}
+
+        {/* Inline Prompt Modal */}
+        {promptModal && (
+          <div className="prompt-modal-overlay" onClick={promptModal.onCancel}>
+            <div className="prompt-modal" onClick={e => e.stopPropagation()}>
+              <h3 className="prompt-modal-title">{promptModal.title}</h3>
+              {promptModal.message && (
+                <pre className="prompt-modal-message">{promptModal.message}</pre>
+              )}
+              <input
+                ref={promptInputRef}
+                className="prompt-modal-input"
+                type="text"
+                value={promptValue}
+                onChange={e => setPromptValue(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') promptModal.onConfirm(promptValue);
+                  if (e.key === 'Escape') promptModal.onCancel();
+                }}
+                placeholder={promptModal.defaultValue || ''}
+                autoFocus
+              />
+              <div className="prompt-modal-actions">
+                <button className="prompt-btn cancel" onClick={promptModal.onCancel}>Cancel</button>
+                <button className="prompt-btn confirm" onClick={() => promptModal.onConfirm(promptValue)}>OK</button>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="view-switcher">
           <button 
             className={`view-tab ${viewMode === 'batches' ? 'active' : ''}`}
@@ -1564,9 +1719,29 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
         {sections.map(([batchKey, section]) => {
           const isCollapsed = collapsedBatches.has(batchKey);
           const allSectionSelected = section.groups.every(g => selectedItems.has(g.id));
+          const isBatchDragOver = dragOverBatch === batchKey;
           return (
-            <div key={batchKey} className="batch-section">
-              {/* Section Header */}
+            <div
+              key={batchKey}
+              className={`batch-section ${isBatchDragOver ? 'batch-drop-over' : ''}`}
+              onDragOver={(e) => {
+                if (dragType === 'group') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.dataTransfer.dropEffect = 'move';
+                  setDragOverBatch(batchKey);
+                }
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                  setDragOverBatch(null);
+                }
+              }}
+              onDrop={(e) => {
+                e.stopPropagation();
+                handleDropGroupOntoBatch(batchKey, e);
+              }}
+            >
               <div
                 className="batch-section-header"
                 onClick={() =>
@@ -1770,7 +1945,30 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
                 const allGroupSelected = groupSection.images.every(img => selectedItems.has(img.id));
 
                 return (
-                  <div key={groupKey} className="image-group-section">
+                  <div
+                    key={groupKey}
+                    className={`image-group-section ${dragOverItem === groupKey && dragType === 'image' ? 'group-drop-over' : ''}`}
+                    onDragOver={(e) => {
+                      if (dragType === 'image') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.dataTransfer.dropEffect = 'move';
+                        setDragOverItem(groupKey);
+                      }
+                    }}
+                    onDragLeave={(e) => {
+                      // Only clear if leaving the section entirely (not entering a child)
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                        setDragOverItem(null);
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.stopPropagation();
+                      if (groupKey !== 'no-group') {
+                        handleDropImageOntoGroup(groupKey, e);
+                      }
+                    }}
+                  >
                     {/* Product group sub-header */}
                     <div
                       className="image-group-header"

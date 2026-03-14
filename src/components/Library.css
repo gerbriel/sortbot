@@ -1035,6 +1035,22 @@
   box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
 }
 
+/* Drop target: batch section (accepts dragged product groups) */
+.batch-section.batch-drop-over {
+  background: #d1fae5;
+  border: 2px dashed #10b981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
+  border-radius: 6px;
+}
+
+/* Drop target: image group section (accepts dragged images) */
+.image-group-section.group-drop-over {
+  background: #d1fae5;
+  border: 2px dashed #10b981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
+  border-radius: 6px;
+}
+
 /* Cursor changes */
 .batch-card,
 .group-card,
@@ -1090,6 +1106,102 @@
   z-index: 2000;
   backdrop-filter: blur(4px);
   animation: fadeIn 0.3s ease;
+}
+
+/* ── Inline Prompt Modal ─────────────────────────────────────── */
+.prompt-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+  backdrop-filter: blur(2px);
+  animation: fadeIn 0.15s ease;
+}
+
+.prompt-modal {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  min-width: 340px;
+  max-width: 480px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.prompt-modal-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.prompt-modal-message {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #4b5563;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  white-space: pre-wrap;
+  font-family: inherit;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.prompt-modal-input {
+  border: 1.5px solid #d1d5db;
+  border-radius: 7px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.prompt-modal-input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+}
+
+.prompt-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.prompt-btn {
+  padding: 0.45rem 1.1rem;
+  border-radius: 7px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s;
+}
+
+.prompt-btn.cancel {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.prompt-btn.cancel:hover {
+  background: #e5e7eb;
+}
+
+.prompt-btn.confirm {
+  background: #667eea;
+  color: white;
+}
+
+.prompt-btn.confirm:hover {
+  background: #5a6fd6;
 }
 
 @keyframes fadeIn {
