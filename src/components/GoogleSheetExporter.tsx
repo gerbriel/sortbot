@@ -1,6 +1,20 @@
 import type { ClothingItem } from '../App';
 import './GoogleSheetExporter.css';
 
+/**
+ * Strip any unresolved {placeholder} tokens from a string.
+ * Used as a safety net so raw templates like "{brand} {model} Hat - Vintage"
+ * never appear in the exported CSV.
+ */
+function stripUnresolvedTokens(value: string | undefined): string {
+  if (!value) return '';
+  return value
+    .replace(/\{[a-z_]+\}/gi, '')  // Remove {brand}, {model}, etc.
+    .replace(/\s{2,}/g, ' ')        // Collapse multiple spaces
+    .replace(/(^[\s\-–]+|[\s\-–]+$)/g, '') // Trim leading/trailing dashes & spaces
+    .trim();
+}
+
 interface GoogleSheetExporterProps {
   items: ClothingItem[];
   compactMode?: boolean;
@@ -100,7 +114,6 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items, compac
     const rows: string[][] = [];
     
     products.forEach((product, idx) => {
-      const handle = (product.seoTitle || `product-${idx + 1}`).toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
       const vendor = product.brand || '';
       const productCategory = product.category || '';
       const productType = product.productType || '';
@@ -127,10 +140,18 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items, compac
       
       // Google condition - only if provided
       const googleCondition = condition;
-      
+
+      // Clean the SEO title — strip any unresolved {placeholder} tokens
+      // that may have come through from preset templates
+      const rawTitle = product.seoTitle || '';
+      const cleanTitle = /\{[a-z_]+\}/i.test(rawTitle)
+        ? stripUnresolvedTokens(rawTitle) || `product-${idx + 1}`
+        : rawTitle;
+      const handle = cleanTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || `product-${idx + 1}`;
+
       //First row with all main product info + first image
       rows.push([
-        product.seoTitle || '', // Title
+        cleanTitle, // Title
         handle, // URL handle
         product.generatedDescription || '', // Description
         vendor, // Vendor / Brand
@@ -167,10 +188,10 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items, compac
         product.shipsFrom || '', // Ships From
         product.imageUrls?.[0] || '', // Product image URL
         '1', // Image position
-        `${product.seoTitle || 'Product'}`, // Image alt text
+        cleanTitle || 'Product', // Image alt text
         '', // Variant image URL
         'FALSE', // Gift card
-        product.seoTitle || '', // SEO title
+        cleanTitle, // SEO title
         product.seoDescription || product.generatedDescription?.substring(0, 160) || '', // SEO description
         primaryColor + (secondaryColor ? `; ${secondaryColor}` : ''), // Color metafield
         product.discountedShipping || '', // Discounted Shipping
@@ -188,7 +209,7 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items, compac
         product.gender || '', // Google Shopping / Gender
         product.ageGroup || '', // Google Shopping / Age group
         product.mpn || '', // Google Shopping / MPN
-        product.seoTitle || '', // Google Shopping / Ad group name
+        cleanTitle, // Google Shopping / Ad group name
         productType, // Google Shopping / Ads labels
         googleCondition, // Google Shopping / Condition
         'FALSE', // Google Shopping / Custom product
@@ -204,7 +225,7 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items, compac
           ...Array(33).fill(''), // Empty columns 3-35
           product.imageUrls[i] || '', // Product image URL (column 36)
           String(i + 1), // Image position (column 37)
-          `${product.seoTitle || 'Product'}`, // Image alt text (column 38)
+          `${cleanTitle || 'Product'}`, // Image alt text (column 38)
           ...Array(31).fill('') // Empty remaining columns
         ]);
       }
