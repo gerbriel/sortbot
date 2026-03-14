@@ -593,10 +593,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, userId })
       <div className="grouper-header">
         <div className="stats">
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Package size={20} /> {multiItemGroups.length} Product Groups
+            <Package size={20} /> {multiItemGroups.length} Multi-Image Groups
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Image size={20} /> {singleItems.length} Single Items
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#6366f1' }}>
+            <Package size={20} /> {multiItemGroups.length + singleItems.length} Total Listings
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Image size={20} /> {groupedItems.length} Total Images
