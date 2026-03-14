@@ -707,7 +707,55 @@
   height: 14px;
 }
 
-/* Images Grid */
+/* Images Sections (grouped view) */
+.images-sections {
+  display: block;
+  padding: 16px 24px 24px;
+  overflow-y: auto;
+  max-height: calc(90vh - 200px);
+}
+
+/* Image group sub-section */
+.image-group-section {
+  margin-bottom: 16px;
+  margin-left: 24px;
+}
+
+.image-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background: #f5f7ff;
+  border: 1px solid #dde2f8;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 10px;
+  transition: background 0.15s ease;
+}
+
+.image-group-header:hover {
+  background: #eaedff;
+}
+
+.image-group-label {
+  font-weight: 500;
+  font-size: 13px;
+  color: #374151;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-group-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+/* Images Grid (legacy, keep for fallback) */
 .images-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -718,6 +766,7 @@
   /* Prevent grid items from shrinking */
   grid-auto-rows: minmax(220px, auto);
 }
+
 
 .image-card {
   background: #ffffff;
@@ -796,23 +845,27 @@
 
 /* Scrollbar styles for new grids */
 .groups-grid::-webkit-scrollbar,
-.images-grid::-webkit-scrollbar {
+.images-grid::-webkit-scrollbar,
+.images-sections::-webkit-scrollbar {
   width: 8px;
 }
 
 .groups-grid::-webkit-scrollbar-track,
-.images-grid::-webkit-scrollbar-track {
+.images-grid::-webkit-scrollbar-track,
+.images-sections::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .groups-grid::-webkit-scrollbar-thumb,
-.images-grid::-webkit-scrollbar-thumb {
+.images-grid::-webkit-scrollbar-thumb,
+.images-sections::-webkit-scrollbar-thumb {
   background: #c7c7cc;
   border-radius: 4px;
 }
 
 .groups-grid::-webkit-scrollbar-thumb:hover,
-.images-grid::-webkit-scrollbar-thumb:hover {
+.images-grid::-webkit-scrollbar-thumb:hover,
+.images-sections::-webkit-scrollbar-thumb:hover {
   background: #aeaeb2;
 }
 
