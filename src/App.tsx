@@ -4,7 +4,7 @@ import type { User } from '@supabase/supabase-js';
 import { Tag, Settings, Package, ShoppingBag } from 'lucide-react';
 import Auth from './components/Auth';
 import ImageUpload from './components/ImageUpload';
-import ImageGrouper from './components/ImageGrouper';
+import ImageGrouper, { type ImageGrouperStats } from './components/ImageGrouper';
 import CategoryZones from './components/CategoryZones';
 import ProductDescriptionGenerator from './components/ProductDescriptionGenerator';
 import GoogleSheetExporter from './components/GoogleSheetExporter';
@@ -128,6 +128,7 @@ function App() {
   const [sortedImages, setSortedImages] = useState<ClothingItem[]>([]);
   const [groupedImages, setGroupedImages] = useState<ClothingItem[]>([]);
   const [processedItems, setProcessedItems] = useState<ClothingItem[]>([]);
+  const [grouperStats, setGrouperStats] = useState<ImageGrouperStats | null>(null);
   const [showLibrary, setShowLibrary] = useState(false);
   const [showCategoryPresets, setShowCategoryPresets] = useState(false);
   const [showCategoriesManager, setShowCategoriesManager] = useState(false);
@@ -169,8 +170,15 @@ function App() {
             const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state;
             if (uploadedImages?.length) setUploadedImages(uploadedImages);
             if (groupedImages?.length) setGroupedImages(groupedImages);
-            if (sortedImages?.length) setSortedImages(sortedImages);
-            if (processedItems?.length) setProcessedItems(processedItems);
+            if (sortedImages?.length) {
+              setSortedImages(sortedImages);
+              // Always use sortedImages as the base for processedItems so the
+              // count matches the grouping. processedItems may be stale from a
+              // prior session with different data.
+              setProcessedItems(sortedImages);
+            } else if (processedItems?.length) {
+              setProcessedItems(processedItems);
+            }
           }
         } catch {
           // Batch may have been deleted; clear stale ID
@@ -349,13 +357,15 @@ function App() {
       return existingSorted ? { ...item, category: existingSorted.category } : item;
     });
     setSortedImages(updatedSorted);
+    // Reset processedItems to the new grouping so Step 3 nav reflects current groups
+    setProcessedItems(updatedSorted);
     
     // Auto-save workflow state (Step 2 complete - groups created)
     autoSaveWorkflow({
       uploadedImages,
       groupedImages: itemsWithCategories,
-      sortedImages,
-      processedItems,
+      sortedImages: updatedSorted,
+      processedItems: updatedSorted,
     });
 
     // Broadcast action for real-time collaboration
@@ -549,10 +559,15 @@ function App() {
       
       const productsToUse = savedProducts && savedProducts.length > 0 ? savedProducts : potentialOrphans;
       
+      // Always derive processedItems from sortedImages (the current grouping),
+      // not from the stale saved processedItems. This ensures the count always
+      // matches the grouping state even if processedItems was saved with different data.
+      const baseItems: ClothingItem[] = sortedImages || processedItems || [];
+
       // Merge saved data back into processedItems
-      let restoredProcessedItems = processedItems;
-      if (processedItems && productsToUse && productsToUse.length > 0) {
-        restoredProcessedItems = processedItems.map((item: ClothingItem, index: number) => {
+      let restoredProcessedItems: ClothingItem[] = baseItems;
+      if (baseItems.length > 0 && productsToUse && productsToUse.length > 0) {
+        restoredProcessedItems = baseItems.map((item: ClothingItem, index: number) => {
           // Try to match by seoTitle first (most reliable for our use case)
           let savedProduct = productsToUse.find((p: any) => 
             p.seo_title && item.seoTitle && p.seo_title.trim() === item.seoTitle.trim()
@@ -646,36 +661,20 @@ function App() {
       if (sortedImages) {
         setSortedImages(sortedImages);
       }
-      if (restoredProcessedItems) {
-        // Sync categories from sortedImages to processedItems when opening batch
-        // This ensures categories are present even if they weren't saved to processedItems
-        if (sortedImages && sortedImages.length > 0) {
-          const syncedItems = restoredProcessedItems.map(procItem => {
-            const sortedItem = sortedImages.find(i => i.id === procItem.id);
-            if (sortedItem && sortedItem.category && !procItem.category) {
-              return {
-                ...procItem,
-                category: sortedItem.category,
-                _presetData: sortedItem._presetData,
-              };
-            }
-            return procItem;
-          });
-          setProcessedItems(syncedItems);
-        } else {
-          setProcessedItems(restoredProcessedItems);
-        }
-      } else if (sortedImages && sortedImages.length > 0) {
-        // If no processedItems but we have sortedImages, initialize processedItems
-        setProcessedItems(sortedImages);
-      }
+      // restoredProcessedItems is always derived from sortedImages (the grouping source of truth),
+      // with saved DB product data merged in. Set it directly.
+      setProcessedItems(restoredProcessedItems);
     } catch (error) {
       console.error('Error restoring saved product data:', error);
-      // Fallback to basic workflow state
+      // Fallback to basic workflow state — always use sortedImages as base for processedItems
       if (uploadedImages) setUploadedImages(uploadedImages);
       if (groupedImages) setGroupedImages(groupedImages);
-      if (sortedImages) setSortedImages(sortedImages);
-      if (processedItems) setProcessedItems(processedItems);
+      if (sortedImages) {
+        setSortedImages(sortedImages);
+        setProcessedItems(sortedImages);
+      } else if (processedItems) {
+        setProcessedItems(processedItems);
+      }
     }
     
     // Set current batch info and persist for reload survival
@@ -827,6 +826,7 @@ function App() {
                 <ImageGrouper 
                   items={groupedImages.length > 0 ? groupedImages : uploadedImages} 
                   onGrouped={handleImagesGrouped}
+                  onStatsChange={setGrouperStats}
                   userId={user.id}
                 />
               </div>
@@ -850,19 +850,19 @@ function App() {
           <section className="step-section">
             <h2>Step 3: Add Voice Descriptions & Generate Product Info</h2>
             {(() => {
-              // Count unique product groups so user can verify grouping
-              const uniqueGroups = new Set(processedItems.map(i => i.productGroup || i.id));
-              const totalListings = uniqueGroups.size;
-              const imageCount = processedItems.length;
-
-              // Determine how many are multi-image groups vs singles
-              const groupMap: Record<string, number> = {};
-              processedItems.forEach(i => {
-                const key = i.productGroup || i.id;
-                groupMap[key] = (groupMap[key] || 0) + 1;
-              });
-              const multiGroups = Object.values(groupMap).filter(c => c > 1).length;
-              const singles = Object.values(groupMap).filter(c => c === 1).length;
+              // Use live stats from ImageGrouper if available, otherwise fall back to processedItems
+              const multiGroups = grouperStats?.multiImageGroups ?? (() => {
+                const groupMap: Record<string, number> = {};
+                processedItems.forEach(i => { const k = i.productGroup || i.id; groupMap[k] = (groupMap[k] || 0) + 1; });
+                return Object.values(groupMap).filter(c => c > 1).length;
+              })();
+              const singles = grouperStats?.singles ?? (() => {
+                const groupMap: Record<string, number> = {};
+                processedItems.forEach(i => { const k = i.productGroup || i.id; groupMap[k] = (groupMap[k] || 0) + 1; });
+                return Object.values(groupMap).filter(c => c === 1).length;
+              })();
+              const totalListings = grouperStats?.totalListings ?? (multiGroups + singles);
+              const imageCount = grouperStats?.totalImages ?? processedItems.length;
 
               if (multiGroups > 0 && singles > 0) {
                 return (
@@ -885,6 +885,7 @@ function App() {
               }
             })()}
             <ProductDescriptionGenerator
+              key={currentBatchId ?? 'new'}
               items={processedItems}
               onProcessed={handleItemsProcessed}
               onDownloadCSV={() => exporterRef.current?.downloadCSV()}

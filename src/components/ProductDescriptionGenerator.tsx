@@ -79,6 +79,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const buttonStateTransitionRef = useRef(0);
   const hasMountedRef = useRef(false); // Track if component has mounted
   const previousItemsLengthRef = useRef(0); // Track items array length for batch changes
+  const previousBatchIdRef = useRef<string | null | undefined>(undefined); // Track batchId for batch switches
+  const previousItemsRefRef = useRef<ClothingItem[]>([]); // Track items reference for any-change detection
+  const isResettingRef = useRef(false); // Track when we're mid-reset to suppress sync-back
 
   // Memoize group calculation to avoid unnecessary recalculations
   const { groupArray, currentGroup, currentItem } = useMemo(() => {
@@ -104,6 +107,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       hasMountedRef.current = true;
       return;
     }
+    // Skip sync-back when we just reset from incoming props (avoids writing stale data back up)
+    if (isResettingRef.current) {
+      isResettingRef.current = false;
+      return;
+    }
     
     // Subsequent updates - sync to parent
     onProcessed(processedItems);
@@ -112,21 +120,28 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Mark unsaved changes whenever processedItems mutates after mount
   useEffect(() => {
     if (!hasMountedRef.current) return;
+    if (isResettingRef.current) return;
     setHasUnsavedChanges(true);
     setSaveConfirmed(false);
   }, [processedItems]);
 
   // Update local state when items prop changes (e.g., opening a different batch)
-  // Only reset if the array length changed (indicating a different batch was opened)
+  // Reset whenever batchId changes, or items array reference/length/content changes
   useEffect(() => {
-    const itemsChanged = items.length !== previousItemsLengthRef.current;
-    
-    if (itemsChanged) {
+    const batchChanged = batchId !== previousBatchIdRef.current;
+    const lengthChanged = items.length !== previousItemsLengthRef.current;
+    // Also detect same-length but different content (e.g. re-group same number of items)
+    const firstIdChanged = items[0]?.id !== previousItemsRefRef.current[0]?.id;
+
+    if (batchChanged || lengthChanged || firstIdChanged) {
+      isResettingRef.current = true;
       setProcessedItems(items);
       setCurrentGroupIndex(0); // Reset to first group
       previousItemsLengthRef.current = items.length;
+      previousBatchIdRef.current = batchId;
+      previousItemsRefRef.current = items;
     }
-  }, [items]);
+  }, [items, batchId]);
 
   useEffect(() => {
     // Check if browser supports Speech Recognition
