@@ -291,26 +291,54 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
     }
   };
 
-  // Assign selected product groups to an EXISTING batch
+  // Assign selected product groups to an EXISTING batch (or create a new one inline)
   const handleAssignGroupsToExistingBatch = async () => {
-    if (selectedItems.size === 0 || batches.length === 0) return;
-    const batchOptions = batches.map((b, i) => {
+    if (selectedItems.size === 0) return;
+
+    // Build options list — always offer "0. Create new batch" at top
+    const existingOptions = batches.map((b, i) => {
       const name = b.batch_name || `Batch ${new Date(b.created_at).toLocaleDateString()}`;
       return `${i + 1}. ${name}`;
     }).join('\n');
-    const input = prompt(`Choose a batch number to move ${selectedItems.size} group(s) into:\n\n${batchOptions}`);
+    const optionsList = `0. ➕ Create new batch\n${existingOptions}`;
+    const input = prompt(`Move ${selectedItems.size} group(s) to which batch?\n\n${optionsList}`);
     if (input === null) return;
-    const idx = parseInt(input.trim(), 10) - 1;
-    if (isNaN(idx) || idx < 0 || idx >= batches.length) { alert('Invalid selection.'); return; }
-    const target = batches[idx];
+    const idx = parseInt(input.trim(), 10);
+
     try {
       const ids = Array.from(selectedItems);
-      const { error } = await supabase.from('products').update({ batch_id: target.id }).in('id', ids);
-      if (error) throw error;
-      clearSelection();
-      await loadProductGroups();
-      const name = target.batch_name || `Batch ${new Date(target.created_at).toLocaleDateString()}`;
-      alert(`✅ ${ids.length} group(s) moved to "${name}".`);
+
+      if (idx === 0) {
+        // Create a new batch inline
+        const batchNameInput = prompt('New batch name (leave blank to auto-name):');
+        if (batchNameInput === null) return;
+        const batchNumber = `batch-${Date.now()}`;
+        const batchName = batchNameInput.trim() || `Batch ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        const { data: newBatch, error: batchErr } = await supabase
+          .from('workflow_batches')
+          .insert({ batch_number: batchNumber, batch_name: batchName, current_step: 1, workflow_state: {} })
+          .select()
+          .single();
+        if (batchErr) throw batchErr;
+        if (!newBatch) throw new Error('No batch returned');
+        const { error } = await supabase.from('products').update({ batch_id: newBatch.id }).in('id', ids);
+        if (error) throw error;
+        clearSelection();
+        await loadBatches();
+        await loadProductGroups();
+        alert(`✅ ${ids.length} group(s) moved to new batch "${batchName}".`);
+      } else {
+        // Assign to existing batch
+        const batchIdx = idx - 1;
+        if (isNaN(batchIdx) || batchIdx < 0 || batchIdx >= batches.length) { alert('Invalid selection.'); return; }
+        const target = batches[batchIdx];
+        const { error } = await supabase.from('products').update({ batch_id: target.id }).in('id', ids);
+        if (error) throw error;
+        clearSelection();
+        await loadProductGroups();
+        const name = target.batch_name || `Batch ${new Date(target.created_at).toLocaleDateString()}`;
+        alert(`✅ ${ids.length} group(s) moved to "${name}".`);
+      }
     } catch (err) {
       console.error(err);
       alert('Failed to assign groups to batch.');
@@ -320,34 +348,24 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
   // Group selected images (from Images view) into a new product group
   const handleGroupSelectedImages = async () => {
     if (selectedItems.size < 2) { alert('Select at least 2 images to group.'); return; }
-    const title = prompt('Product group title (e.g. "Black Hoodie"):');
-    if (title === null) return;
 
-    // Pick which batch to assign the new product to
-    let batchId: string | null = null;
-    if (batches.length > 0) {
-      const batchOptions = batches.map((b, i) => {
-        const name = b.batch_name || `Batch ${new Date(b.created_at).toLocaleDateString()}`;
-        return `${i + 1}. ${name}`;
-      }).join('\n');
-      const input = prompt(`Assign to which batch? (enter number, or leave blank to skip)\n\n${batchOptions}`);
-      if (input !== null && input.trim() !== '') {
-        const idx = parseInt(input.trim(), 10) - 1;
-        if (!isNaN(idx) && idx >= 0 && idx < batches.length) batchId = batches[idx].id;
-      }
-    }
+    // Name is optional — leave blank to auto-name
+    const titleInput = prompt('Product group title (leave blank to auto-name):');
+    if (titleInput === null) return; // cancelled
+    const title = titleInput.trim() || `Group ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
+    // Batch is fully optional — no prompt, just create without one
     try {
       const groupId = `group-${Date.now()}`;
       const imageIds = Array.from(selectedItems);
 
-      // Create a new product record
+      // Create a new product record (no batch required)
       const { data: newProduct, error: prodErr } = await supabase
         .from('products')
         .insert({
-          title: title.trim() || 'Untitled Product',
+          title,
           product_group: groupId,
-          batch_id: batchId,
+          batch_id: null,
           status: 'Draft',
         })
         .select()
