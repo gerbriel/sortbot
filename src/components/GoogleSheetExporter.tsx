@@ -1,3 +1,4 @@
+import { forwardRef, useImperativeHandle } from 'react';
 import type { ClothingItem } from '../App';
 import './GoogleSheetExporter.css';
 
@@ -20,7 +21,12 @@ interface GoogleSheetExporterProps {
   compactMode?: boolean;
 }
 
-const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items, compactMode = false }) => {
+export interface GoogleSheetExporterHandle {
+  downloadCSV: () => void;
+}
+
+const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExporterProps>(
+  ({ items, compactMode = false }, ref) => {
 
   // Group items by productGroup - each group is ONE product
   const productGroups = items.reduce((groups, item) => {
@@ -68,7 +74,6 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items, compac
   });
 
   const handleDownloadCSV = () => {
-    // Create CSV content for Shopify - EXACT format from template (all 69 columns)
     const headers = [
       'Title',
       'URL handle',
@@ -183,7 +188,7 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items, compac
         productType, // Type
         tags, // Tags
         product.published === false ? 'FALSE' : 'TRUE', // Published on online store
-        product.status || '', // Status
+        product.status || 'Active', // Status
         product.sku || '', // SKU
         product.barcode || '', // Barcode
         condition, // Condition
@@ -241,17 +246,17 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items, compac
       ]);
       
       // Additional rows for remaining images (if any)
+      const productStatus = product.status || 'Active';
       const imageCount = product.imageUrls?.length || 0;
       for (let i = 1; i < imageCount; i++) {
-        rows.push([
-          '', // Empty title for image rows
-          handle, // URL handle
-          ...Array(33).fill(''), // Empty columns 3-35
-          product.imageUrls[i] || '', // Product image URL (column 36)
-          String(i + 1), // Image position (column 37)
-          `${cleanTitle || 'Product'}`, // Image alt text (column 38)
-          ...Array(31).fill('') // Empty remaining columns
-        ]);
+        // Build a full 62-column row; only handle, status, image URL, position, and alt text are populated
+        const imageRow = Array(headers.length).fill('') as string[];
+        imageRow[1] = handle;            // URL handle
+        imageRow[8] = productStatus;     // Status
+        imageRow[35] = product.imageUrls[i] || ''; // Product image URL
+        imageRow[36] = String(i + 1);   // Image position
+        imageRow[37] = cleanTitle || 'Product'; // Image alt text
+        rows.push(imageRow);
       }
     });
 
@@ -282,6 +287,9 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items, compac
     link.click();
     document.body.removeChild(link);
   };
+
+  // Expose downloadCSV so a parent can trigger it via ref
+  useImperativeHandle(ref, () => ({ downloadCSV: handleDownloadCSV }));
 
   return (
     <div className="google-sheet-exporter">
@@ -344,14 +352,7 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items, compac
         </>
       )}
 
-      <div className="export-actions">
-        <button 
-          className="button button-primary"
-          onClick={handleDownloadCSV}
-        >
-          💾 Download CSV for Shopify Import
-        </button>
-      </div>
+      {/* Download button removed — triggered via ref from Step 3 sidebar */}
 
       {!compactMode && (
         <div className="export-instructions">
@@ -379,6 +380,8 @@ const GoogleSheetExporter: React.FC<GoogleSheetExporterProps> = ({ items, compac
       )}
     </div>
   );
-};
+});
+
+GoogleSheetExporter.displayName = 'GoogleSheetExporter';
 
 export default GoogleSheetExporter;

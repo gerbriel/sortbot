@@ -190,7 +190,7 @@ export async function applyPresetToProductGroup(
       mpn: item.mpn || preset.mpn_prefix || undefined,
       
       // ======= STATUS & PUBLISHING =======
-      status: item.status || preset.default_status || undefined,
+      status: item.status || preset.default_status || 'Active',
       published: item.published ?? preset.default_published,
       
       // ======= ADVANCED FIELDS =======

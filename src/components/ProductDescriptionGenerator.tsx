@@ -6,11 +6,14 @@ import { getCategoryPresets } from '../lib/categoryPresetsService';
 import type { CategoryPreset } from '../lib/categoryPresets';
 import { applyPresetToProductGroup } from '../lib/applyPresetToGroup';
 import { generateProductDescription } from '../lib/textAIService';
+import { syncGroupFieldsToDatabase } from '../lib/productService';
 import './ProductDescriptionGenerator.css';
 
 interface ProductDescriptionGeneratorProps {
   items: ClothingItem[];
   onProcessed: (items: ClothingItem[]) => void;
+  onDownloadCSV?: () => void;
+  batchId?: string | null;
 }
 
 // Web Speech API types
@@ -44,7 +47,9 @@ interface SpeechRecognitionErrorEvent extends Event {
 
 const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = ({ 
   items, 
-  onProcessed 
+  onProcessed,
+  onDownloadCSV,
+  batchId,
 }) => {
   const [processedItems, setProcessedItems] = useState<ClothingItem[]>(items);
   const [currentGroupIndex, setCurrentGroupIndex] = useState(0);
@@ -55,6 +60,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [availablePresets, setAvailablePresets] = useState<CategoryPreset[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<string>('');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveConfirmed, setSaveConfirmed] = useState(false);
 
   // Photo reorder drag state (Step 4 thumbnails)
   const [draggedThumbId, setDraggedThumbId] = useState<string | null>(null);
@@ -99,6 +107,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     // Subsequent updates - sync to parent
     onProcessed(processedItems);
   }, [processedItems, onProcessed]);
+
+  // Mark unsaved changes whenever processedItems mutates after mount
+  useEffect(() => {
+    if (!hasMountedRef.current) return;
+    setHasUnsavedChanges(true);
+    setSaveConfirmed(false);
+  }, [processedItems]);
 
   // Update local state when items prop changes (e.g., opening a different batch)
   // Only reset if the array length changed (indicating a different batch was opened)
@@ -570,6 +585,38 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       } finally {
         setIsGenerating(false);
       }
+    }
+  };
+
+  // Explicit save — pushes all current field values to Supabase immediately.
+  // This takes priority over any stale data that might be loaded later.
+  const handleSave = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      // Group items by productGroup
+      const groups: Record<string, ClothingItem[]> = {};
+      processedItems.forEach(item => {
+        const gid = item.productGroup || item.id;
+        if (!groups[gid]) groups[gid] = [];
+        groups[gid].push(item);
+      });
+      // Sync every group to Supabase in parallel
+      await Promise.all(
+        Object.values(groups).map(groupItems =>
+          syncGroupFieldsToDatabase(groupItems, batchId ?? null)
+        )
+      );
+      // Also trigger the parent auto-save so workflow_state blob is updated too
+      onProcessed(processedItems);
+      setHasUnsavedChanges(false);
+      setSaveConfirmed(true);
+      // Clear the "Saved ✓" indicator after 3 seconds
+      setTimeout(() => setSaveConfirmed(false), 3000);
+    } catch {
+      // Silently fail — user can try again
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -1078,6 +1125,47 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               </button>
             )}
           </div>
+
+          {/* Download CSV — quick access below nav */}
+          {/* Save Changes button — explicit Supabase push */}
+          <button
+            className="button"
+            onClick={handleSave}
+            disabled={isSaving || (!hasUnsavedChanges && !saveConfirmed)}
+            style={{
+              marginTop: '0.5rem',
+              width: '100%',
+              justifyContent: 'center',
+              fontSize: '0.8125rem',
+              background: saveConfirmed
+                ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                : hasUnsavedChanges
+                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                  : '#9ca3af',
+              cursor: isSaving || (!hasUnsavedChanges && !saveConfirmed) ? 'default' : 'pointer',
+              opacity: isSaving ? 0.7 : 1,
+              transition: 'background 0.3s',
+            }}
+          >
+            {isSaving ? '⏳ Saving…' : saveConfirmed ? '✅ Saved!' : hasUnsavedChanges ? '💾 Save Changes' : '💾 Save Changes'}
+          </button>
+
+          {/* Download CSV — quick access below nav */}
+          {onDownloadCSV && (
+            <button
+              className="button"
+              onClick={onDownloadCSV}
+              style={{
+                marginTop: '0.5rem',
+                width: '100%',
+                justifyContent: 'center',
+                fontSize: '0.8125rem',
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              }}
+            >
+              💾 Download CSV
+            </button>
+          )}
         </div>
 
         <div className="product-form">

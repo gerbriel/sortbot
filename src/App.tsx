@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { Tag, Settings, Package, ShoppingBag } from 'lucide-react';
@@ -8,6 +8,7 @@ import ImageGrouper from './components/ImageGrouper';
 import CategoryZones from './components/CategoryZones';
 import ProductDescriptionGenerator from './components/ProductDescriptionGenerator';
 import GoogleSheetExporter from './components/GoogleSheetExporter';
+import type { GoogleSheetExporterHandle } from './components/GoogleSheetExporter';
 import { Library } from './components/Library';
 import CategoryPresetsManager from './components/CategoryPresetsManager';
 import CategoriesManager from './components/CategoriesManager';
@@ -132,6 +133,9 @@ function App() {
   const [showCategoriesManager, setShowCategoriesManager] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Ref to GoogleSheetExporter so Step 3 sidebar can trigger the download
+  const exporterRef = useRef<GoogleSheetExporterHandle>(null);
   const [showStep2Info, setShowStep2Info] = useState(false);
   const [currentBatchId, setCurrentBatchId] = useState<string | null>(() => {
     // Restore batch ID from localStorage so reloads don't lose progress
@@ -451,22 +455,66 @@ function App() {
     
     // Fetch saved products from database to restore descriptions
     try {
+      const fullProductSelect = `
+        id,
+        title,
+        url_handle,
+        description,
+        vendor,
+        product_category,
+        product_type,
+        tags,
+        published,
+        status,
+        size,
+        color,
+        secondary_color,
+        price,
+        compare_at_price,
+        cost_per_item,
+        sku,
+        barcode,
+        inventory_quantity,
+        weight_value,
+        requires_shipping,
+        continue_selling_out_of_stock,
+        package_dimensions,
+        parcel_size,
+        ships_from,
+        condition,
+        flaws,
+        material,
+        era,
+        care_instructions,
+        measurements,
+        model_name,
+        model_number,
+        size_type,
+        style,
+        gender,
+        age_group,
+        policies,
+        renewal_options,
+        who_made_it,
+        what_is_it,
+        listing_type,
+        discounted_shipping,
+        mpn,
+        custom_label_0,
+        seo_title,
+        seo_description,
+        voice_description,
+        batch_id,
+        created_at,
+        product_images (
+          image_url,
+          position
+        )
+      `;
+
       const { data: savedProducts } = await supabase
         .from('products')
-        .select(`
-          id,
-          title,
-          description,
-          vendor,
-          size,
-          price,
-          created_at,
-          batch_id,
-          product_images (
-            image_url,
-            position
-          )
-        `)
+        .select(fullProductSelect)
         .eq('batch_id', batch.id)
         .order('created_at', { ascending: true });
       
@@ -482,20 +530,7 @@ function App() {
         
         const { data: recentProducts } = await supabase
           .from('products')
-          .select(`
-            id,
-            title,
-            description,
-            vendor,
-            size,
-            price,
-            created_at,
-            batch_id,
-            product_images (
-              image_url,
-              position
-            )
-          `)
+          .select(fullProductSelect)
           .gte('created_at', startTime.toISOString())
           .lte('created_at', endTime.toISOString())
           .order('created_at', { ascending: true });
@@ -536,15 +571,65 @@ function App() {
           }
           
           if (savedProduct) {
+            // DB row wins — it was written by an explicit Save which is authoritative.
+            // workflow_state (item) is the fallback for fields not yet in the DB.
             return {
               ...item,
-              // Restore voice description and AI-generated description
-              voiceDescription: savedProduct.voice_description || item.voiceDescription || '',
-              generatedDescription: savedProduct.description || item.generatedDescription || '',
-              // Also restore other fields that might have been edited
-              seoTitle: savedProduct.seo_title || item.seoTitle,
-              seoDescription: savedProduct.seo_description || item.seoDescription,
-              tags: savedProduct.tags || item.tags,
+              // Core
+              voiceDescription:         savedProduct.voice_description   ?? item.voiceDescription   ?? '',
+              generatedDescription:     savedProduct.description         ?? item.generatedDescription ?? '',
+              seoTitle:                 savedProduct.seo_title           || item.seoTitle,
+              seoDescription:           savedProduct.seo_description     || item.seoDescription,
+              tags:                     savedProduct.tags?.length        ? savedProduct.tags        : (item.tags || []),
+              // Shopify fields
+              brand:                    savedProduct.vendor              || item.brand,
+              category:                 savedProduct.product_category    || item.category,
+              productType:              savedProduct.product_type        || item.productType,
+              published:                savedProduct.published           ?? item.published,
+              status:                   savedProduct.status              || item.status,
+              // Variants
+              size:                     savedProduct.size                || item.size,
+              color:                    savedProduct.color               || item.color,
+              secondaryColor:           savedProduct.secondary_color     || item.secondaryColor,
+              // Pricing
+              price:                    savedProduct.price               ?? item.price,
+              compareAtPrice:           savedProduct.compare_at_price    ?? item.compareAtPrice,
+              costPerItem:              savedProduct.cost_per_item       ?? item.costPerItem,
+              // Inventory
+              sku:                      savedProduct.sku                 || item.sku,
+              barcode:                  savedProduct.barcode             || item.barcode,
+              inventoryQuantity:        savedProduct.inventory_quantity  ?? item.inventoryQuantity,
+              // Shipping
+              weightValue:              savedProduct.weight_value        || item.weightValue,
+              requiresShipping:         savedProduct.requires_shipping   ?? item.requiresShipping,
+              continueSellingOutOfStock:savedProduct.continue_selling_out_of_stock ?? item.continueSellingOutOfStock,
+              packageDimensions:        savedProduct.package_dimensions  || item.packageDimensions,
+              parcelSize:               savedProduct.parcel_size         || item.parcelSize,
+              shipsFrom:                savedProduct.ships_from          || item.shipsFrom,
+              // Details
+              condition:                savedProduct.condition           || item.condition,
+              flaws:                    savedProduct.flaws               || item.flaws,
+              material:                 savedProduct.material            || item.material,
+              era:                      savedProduct.era                 || item.era,
+              care:                     savedProduct.care_instructions   || item.care,
+              measurements:             savedProduct.measurements        || item.measurements,
+              modelName:                savedProduct.model_name          || item.modelName,
+              modelNumber:              savedProduct.model_number        || item.modelNumber,
+              // Classification
+              sizeType:                 savedProduct.size_type           || item.sizeType,
+              style:                    savedProduct.style               || item.style,
+              gender:                   savedProduct.gender              || item.gender,
+              ageGroup:                 savedProduct.age_group           || item.ageGroup,
+              // Policies
+              policies:                 savedProduct.policies            || item.policies,
+              renewalOptions:           savedProduct.renewal_options     || item.renewalOptions,
+              whoMadeIt:                savedProduct.who_made_it         || item.whoMadeIt,
+              whatIsIt:                 savedProduct.what_is_it          || item.whatIsIt,
+              listingType:              savedProduct.listing_type        || item.listingType,
+              discountedShipping:       savedProduct.discounted_shipping || item.discountedShipping,
+              // Marketing
+              mpn:                      savedProduct.mpn                 || item.mpn,
+              customLabel0:             savedProduct.custom_label_0      || item.customLabel0,
             };
           }
           
@@ -735,7 +820,7 @@ function App() {
               alignItems: 'start',
             }} className="step2-split">
               {/* Left: Group images — scrollable panel so page doesn't grow tall */}
-              <div style={{ maxHeight: '75vh', overflowY: 'auto', overflowX: 'hidden', borderRadius: '8px' }}>
+              <div style={{ maxHeight: '75vh', overflowY: 'auto', borderRadius: '8px' }}>
                 <p className="step-description" style={{ marginTop: 0 }}>
                   Select &amp; group your product images, then drag groups to a category on the right.
                 </p>
@@ -782,6 +867,8 @@ function App() {
             <ProductDescriptionGenerator
               items={processedItems}
               onProcessed={handleItemsProcessed}
+              onDownloadCSV={() => exporterRef.current?.downloadCSV()}
+              batchId={currentBatchId}
             />
           </section>
         )}
@@ -789,30 +876,36 @@ function App() {
         {/* Step 4: Save & Export */}
         {processedItems.length > 0 && (
           <section className="step-section">
-            <h2>Step 4: Save & Export</h2>
-            
-            <div className="batch-actions">
-              <button 
-                onClick={handleSaveBatch} 
-                className="button button-primary"
-                disabled={saving}
-              >
-                {saving ? '💾 Saving...' : '💾 Save Batch to Database'}
-              </button>
-              
-              <button 
-                onClick={handleClearBatch} 
-                className="button button-secondary"
-                disabled={saving}
-              >
-                🗑️ Clear Batch
-              </button>
-            </div>
+            <details>
+              <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: '1.1rem', userSelect: 'none', padding: '0.25rem 0' }}>
+                Step 4: Review &amp; Export ▾
+              </summary>
 
-            <div className="export-section">
-              <h3>Export Options</h3>
-              <GoogleSheetExporter items={processedItems} />
-            </div>
+              <div style={{ marginTop: '1rem' }}>
+                <div className="batch-actions">
+                  <button 
+                    onClick={handleSaveBatch} 
+                    className="button button-primary"
+                    disabled={saving}
+                  >
+                    {saving ? '💾 Saving...' : '💾 Save Batch to Database'}
+                  </button>
+                  
+                  <button 
+                    onClick={handleClearBatch} 
+                    className="button button-secondary"
+                    disabled={saving}
+                  >
+                    🗑️ Clear Batch
+                  </button>
+                </div>
+
+                <div className="export-section">
+                  <h3>Export Options</h3>
+                  <GoogleSheetExporter ref={exporterRef} items={processedItems} />
+                </div>
+              </div>
+            </details>
           </section>
         )}
       </main>
