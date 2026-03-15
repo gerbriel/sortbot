@@ -282,36 +282,75 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
   const loadImages = async () => {
     setLoading(true);
     try {
+      const seenIds = new Set<string>();
       const imageList: ImageRecord[] = [];
 
-      // Also load all batches so empty batches show as sections in images view
+      // Load all batches first so every batch shows as a section (even empty ones)
       const allBatches = await fetchWorkflowBatches();
       setBatches(allBatches);
-      
-      // Load ONLY saved images from database (not workflow_state)
-      // This gives us a true 1:1 representation of the product_images table
-      const savedImages = await fetchSavedImages();
-      
-      savedImages.forEach((img: any) => {
-        const batch = img.products?.workflow_batches;
-        imageList.push({
-          id: img.id,
-          preview: img.image_url,
-          category: img.products?.product_category,
-          productGroup: img.products?.id,
-          productGroupTitle: img.products?.title || undefined,
-          batchId: img.products?.batch_id || undefined,
-          batchNumber: img.products?.batch_id,
-          batchName: batch?.batch_name || (img.products?.batch_id ? `Batch ${new Date(batch?.created_at || img.created_at).toLocaleDateString()} ${new Date(batch?.created_at || img.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : undefined),
-          createdAt: img.created_at,
-          isSaved: true,
+
+      const makeBatchName = (b: WorkflowBatch) =>
+        b.batch_name || `Batch ${new Date(b.created_at).toLocaleDateString()} ${new Date(b.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+      // 1. Pull images from workflow_state (same source as Product Groups tab)
+      allBatches.forEach(batch => {
+        const items: ClothingItem[] =
+          batch.workflow_state?.processedItems ||
+          batch.workflow_state?.sortedImages ||
+          batch.workflow_state?.groupedImages || [];
+        items.forEach((item: ClothingItem) => {
+          if (!item.id || seenIds.has(item.id)) return;
+          seenIds.add(item.id);
+          imageList.push({
+            id: item.id,
+            preview: item.preview || item.imageUrls?.[0] || '',
+            category: item.category,
+            productGroup: item.productGroup || item.id,
+            productGroupTitle: item.seoTitle || undefined,
+            batchId: batch.id,
+            batchName: makeBatchName(batch),
+            createdAt: batch.created_at,
+            isSaved: false,
+          });
         });
       });
-      
-      // NO deduplication for Images view!
-      // Each row in product_images should appear in the library,
-      // even if multiple products share the same image URL.
-      // Deduplication should only happen at the Product Groups level.
+
+      // 2. Overlay saved images from DB (mark as saved, prefer DB record)
+      const savedImages = await fetchSavedImages();
+      savedImages.forEach((img: any) => {
+        const batch = img.products?.workflow_batches as WorkflowBatch | undefined;
+        const batchId: string | undefined = img.products?.batch_id || undefined;
+        const batchName = batch
+          ? makeBatchName(batch)
+          : batchId
+          ? `Batch ${new Date(img.created_at).toLocaleDateString()}`
+          : undefined;
+
+        if (seenIds.has(img.id)) {
+          // Update the existing entry to mark it as saved
+          const existing = imageList.find(i => i.id === img.id);
+          if (existing) {
+            existing.isSaved = true;
+            existing.preview = img.image_url || existing.preview;
+            existing.batchId = batchId || existing.batchId;
+            existing.batchName = batchName || existing.batchName;
+          }
+        } else {
+          seenIds.add(img.id);
+          imageList.push({
+            id: img.id,
+            preview: img.image_url,
+            category: img.products?.product_category,
+            productGroup: img.products?.id,
+            productGroupTitle: img.products?.title || undefined,
+            batchId,
+            batchName,
+            createdAt: img.created_at,
+            isSaved: true,
+          });
+        }
+      });
+
       setImages(imageList);
     } catch (error) {
       // Silent error handling
@@ -1803,12 +1842,19 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       const key = group.batchId || 'no-batch';
       if (!sectionMap.has(key)) {
         sectionMap.set(key, {
-          label: group.batchName || 'No Batch',
+          label: group.batchName || '📁 Unassigned',
           groups: [],
         });
       }
       sectionMap.get(key)!.groups.push(group);
     });
+
+    // Move 'no-batch' to end so named batches appear first
+    if (sectionMap.has('no-batch')) {
+      const unassigned = sectionMap.get('no-batch')!;
+      sectionMap.delete('no-batch');
+      sectionMap.set('no-batch', unassigned);
+    }
 
     const sections = Array.from(sectionMap.entries());
 
@@ -2005,7 +2051,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
 
     filtered.forEach(img => {
       const batchKey = img.batchId || 'no-batch';
-      const batchName = img.batchName || 'No Batch';
+      const batchName = img.batchName || '📁 Unassigned';
       const groupKey = img.productGroup || 'no-group';
       const groupTitle = img.productGroupTitle || 'Ungrouped Images';
 
@@ -2019,6 +2065,12 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       batchSection.groups.get(groupKey)!.images.push(img);
     });
 
+    // Move 'no-batch' to end so named batches appear first
+    if (batchMap.has('no-batch')) {
+      const unassigned = batchMap.get('no-batch')!;
+      batchMap.delete('no-batch');
+      batchMap.set('no-batch', unassigned);
+    }
     const renderImageCard = (image: ImageRecord) => {
       const isSelected = selectedItems.has(image.id);
       // Show dragging style on ALL selected cards when any one of them is being dragged
