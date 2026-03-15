@@ -79,6 +79,19 @@ interface LibraryProps {
   onOpenBatch: (batch: WorkflowBatch) => void;
 }
 
+/** Strip unfilled template tokens like {brand}, {model}, {color} and collapse extra spaces/dashes */
+function cleanTitle(raw: string | undefined | null, fallback = 'Untitled Product'): string {
+  if (!raw) return fallback;
+  const cleaned = raw
+    .replace(/\{[^}]+\}/g, '')   // remove {brand}, {model}, etc.
+    .replace(/\s{2,}/g, ' ')     // collapse multiple spaces
+    .replace(/^\s*[-–—·]\s*/g, '') // strip leading dash/bullet
+    .replace(/\s*[-–—·]\s*$/g, '') // strip trailing dash/bullet
+    .replace(/\s*-\s*-+/g, ' - ') // collapse double dashes
+    .trim();
+  return cleaned || fallback;
+}
+
 export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('images');
   const [batches, setBatches] = useState<WorkflowBatch[]>([]);
@@ -196,8 +209,41 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
 
   const loadBatches = async () => {
     setLoading(true);
-    const data = await fetchWorkflowBatches();
-    setBatches(data);
+    try {
+      const wfBatches = await fetchWorkflowBatches();
+      const batchesById = new Map<string, WorkflowBatch>(wfBatches.map(b => [b.id, b]));
+
+      // Also pick up any batches referenced by saved products but not in workflow_batches
+      const savedProducts = await fetchSavedProducts();
+      savedProducts.forEach((product: any) => {
+        if (product.batch_id && !batchesById.has(product.batch_id)) {
+          const wb = product.workflow_batches;
+          batchesById.set(product.batch_id, {
+            id: product.batch_id,
+            user_id: '',
+            batch_number: wb?.batch_number || product.batch_id,
+            batch_name: wb?.batch_name || undefined,
+            workflow_state: undefined,
+            total_images: 0,
+            product_groups_count: 0,
+            categorized_count: 0,
+            processed_count: 0,
+            saved_products_count: 0,
+            current_step: 0,
+            is_completed: false,
+            created_at: wb?.created_at || product.created_at,
+            updated_at: wb?.created_at || product.created_at,
+          });
+        }
+      });
+
+      setBatches(Array.from(batchesById.values()));
+
+      // Also load images + groups so live counts are accurate on the Batches tab
+      await Promise.all([loadImages(), loadProductGroups()]);
+    } catch (error) {
+      // silent
+    }
     setLoading(false);
   };
 
@@ -207,9 +253,10 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       const groups: ProductGroup[] = [];
       
       // 1. Load products from workflow_batches.workflow_state
-      const batches = await fetchWorkflowBatches();
-      setBatches(batches); // keep batches state in sync so empty batches show as sections
-      batches.forEach(batch => {
+      const wfBatches = await fetchWorkflowBatches();
+      const batchesById = new Map<string, WorkflowBatch>(wfBatches.map(b => [b.id, b]));
+
+      wfBatches.forEach(batch => {
         const items = batch.workflow_state?.processedItems || 
                      batch.workflow_state?.sortedImages || 
                      batch.workflow_state?.groupedImages || [];
@@ -229,7 +276,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
           const firstItem = groupItems[0];
           groups.push({
             id: groupId,
-            title: firstItem.seoTitle || 'Untitled Product',
+            title: cleanTitle(firstItem.seoTitle),
             category: firstItem.category || 'Uncategorized',
             images: groupItems.map(item => item.preview || item.imageUrls?.[0] || '').filter(Boolean),
             itemCount: groupItems.length,
@@ -244,9 +291,31 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       const savedProducts = await fetchSavedProducts();
       
       savedProducts.forEach((product: any) => {
+        // If this product's batch isn't in workflow_batches, synthesize a batch entry
+        if (product.batch_id && !batchesById.has(product.batch_id)) {
+          const wb = product.workflow_batches;
+          const syntheticBatch: WorkflowBatch = {
+            id: product.batch_id,
+            user_id: '',
+            batch_number: wb?.batch_number || product.batch_id,
+            batch_name: wb?.batch_name || null,
+            workflow_state: undefined,
+            total_images: 0,
+            product_groups_count: 0,
+            categorized_count: 0,
+            processed_count: 0,
+            saved_products_count: 0,
+            current_step: 0,
+            is_completed: false,
+            created_at: wb?.created_at || product.created_at,
+            updated_at: wb?.created_at || product.created_at,
+          };
+          batchesById.set(product.batch_id, syntheticBatch);
+        }
+
         groups.push({
           id: product.id,
-          title: product.title || product.seo_title || 'Untitled Product',
+          title: cleanTitle(product.title || product.seo_title),
           category: product.product_category || 'Uncategorized',
           images: (product.product_images || [])
             .sort((a: any, b: any) => a.position - b.position)
@@ -254,19 +323,19 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
             .filter(Boolean),
           itemCount: product.product_images?.length || 0,
           createdAt: product.created_at,
-          isSaved: true, // Mark as saved
+          isSaved: true,
           batchId: product.batch_id || undefined,
           batchName: product.workflow_batches?.batch_name || (product.batch_id ? `Batch ${new Date(product.created_at).toLocaleDateString()}` : undefined),
         });
       });
+
+      // Sync ALL known batches (workflow + synthesized from products)
+      setBatches(Array.from(batchesById.values()));
       
-      // Remove duplicates by ID only - same product appearing in both workflow_state and database
-      // Do NOT deduplicate by title - multiple products can legitimately have the same title
+      // Remove duplicates by ID only
       const groupMap = new Map<string, ProductGroup>();
       groups.forEach(group => {
         const existing = groupMap.get(group.id);
-        
-        // If no existing, or existing is not saved but this one is, use this one
         if (!existing || (!existing.isSaved && group.isSaved)) {
           groupMap.set(group.id, group);
         }
@@ -282,28 +351,78 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
   const loadImages = async () => {
     setLoading(true);
     try {
-      const seenIds = new Set<string>();
       const imageList: ImageRecord[] = [];
 
-      // Load all batches first so every batch shows as a section (even empty ones)
-      const allBatches = await fetchWorkflowBatches();
-      setBatches(allBatches);
+      // Load all workflow batches AND product groups in parallel so counts always match
+      const [allBatches] = await Promise.all([
+        fetchWorkflowBatches(),
+        loadProductGroups(), // ensures productGroups state is populated for count display
+      ]);
+      const batchesById = new Map<string, WorkflowBatch>(allBatches.map(b => [b.id, b]));
 
       const makeBatchName = (b: WorkflowBatch) =>
         b.batch_name || `Batch ${new Date(b.created_at).toLocaleDateString()} ${new Date(b.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
-      // 1. Pull images from workflow_state (same source as Product Groups tab)
+      // 1. Load saved DB images first (these are the "official" records)
+      const savedImages = await fetchSavedImages();
+      const savedImageUrls = new Set<string>(); // track by URL to prevent workflow_state dupes
+
+      savedImages.forEach((img: any) => {
+        const wfBatch = img.products?.workflow_batches as WorkflowBatch | undefined;
+        const batchId: string | undefined = img.products?.batch_id || undefined;
+
+        // Synthesize a batch entry if this batch_id isn't in workflow_batches
+        if (batchId && !batchesById.has(batchId)) {
+          batchesById.set(batchId, {
+            id: batchId,
+            user_id: '',
+            batch_number: wfBatch?.batch_number || batchId,
+            batch_name: wfBatch?.batch_name || undefined,
+            workflow_state: undefined,
+            total_images: 0,
+            product_groups_count: 0,
+            categorized_count: 0,
+            processed_count: 0,
+            saved_products_count: 0,
+            current_step: 0,
+            is_completed: false,
+            created_at: wfBatch?.created_at || img.created_at,
+            updated_at: wfBatch?.created_at || img.created_at,
+          });
+        }
+
+        const batchEntry = batchId ? batchesById.get(batchId) : undefined;
+        const batchName = batchEntry ? makeBatchName(batchEntry) : undefined;
+
+        if (img.image_url) savedImageUrls.add(img.image_url);
+
+        imageList.push({
+          id: img.id,
+          preview: img.image_url,
+          category: img.products?.product_category,
+          productGroup: img.products?.id,
+          productGroupTitle: img.products?.title || undefined,
+          batchId,
+          batchName,
+          createdAt: img.created_at,
+          isSaved: true,
+        });
+      });
+
+      // 2. Add workflow_state images that haven't been saved to DB yet
+      //    (i.e. their preview URL isn't already in savedImageUrls)
       allBatches.forEach(batch => {
         const items: ClothingItem[] =
           batch.workflow_state?.processedItems ||
           batch.workflow_state?.sortedImages ||
           batch.workflow_state?.groupedImages || [];
         items.forEach((item: ClothingItem) => {
-          if (!item.id || seenIds.has(item.id)) return;
-          seenIds.add(item.id);
+          const url = item.preview || item.imageUrls?.[0] || '';
+          if (!url || savedImageUrls.has(url)) return; // already in DB
+          savedImageUrls.add(url);
           imageList.push({
             id: item.id,
-            preview: item.preview || item.imageUrls?.[0] || '',
+            preview: url,
             category: item.category,
             productGroup: item.productGroup || item.id,
             productGroupTitle: item.seoTitle || undefined,
@@ -315,42 +434,32 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
         });
       });
 
-      // 2. Overlay saved images from DB (mark as saved, prefer DB record)
-      const savedImages = await fetchSavedImages();
-      savedImages.forEach((img: any) => {
-        const batch = img.products?.workflow_batches as WorkflowBatch | undefined;
-        const batchId: string | undefined = img.products?.batch_id || undefined;
-        const batchName = batch
-          ? makeBatchName(batch)
-          : batchId
-          ? `Batch ${new Date(img.created_at).toLocaleDateString()}`
-          : undefined;
-
-        if (seenIds.has(img.id)) {
-          // Update the existing entry to mark it as saved
-          const existing = imageList.find(i => i.id === img.id);
-          if (existing) {
-            existing.isSaved = true;
-            existing.preview = img.image_url || existing.preview;
-            existing.batchId = batchId || existing.batchId;
-            existing.batchName = batchName || existing.batchName;
-          }
-        } else {
-          seenIds.add(img.id);
-          imageList.push({
-            id: img.id,
-            preview: img.image_url,
-            category: img.products?.product_category,
-            productGroup: img.products?.id,
-            productGroupTitle: img.products?.title || undefined,
-            batchId,
-            batchName,
-            createdAt: img.created_at,
-            isSaved: true,
-          });
-        }
+      // 3. Ensure any batch referenced by saved products also appears
+      //    even if it has 0 images (e.g. products saved without images)
+      const savedProducts = await fetchSavedProducts();
+      savedProducts.forEach((product: any) => {
+        const batchId: string | undefined = product.batch_id || undefined;
+        if (!batchId || batchesById.has(batchId)) return;
+        const wb = product.workflow_batches as WorkflowBatch | undefined;
+        batchesById.set(batchId, {
+          id: batchId,
+          user_id: '',
+          batch_number: wb?.batch_number || batchId,
+          batch_name: wb?.batch_name || undefined,
+          workflow_state: undefined,
+          total_images: 0,
+          product_groups_count: 0,
+          categorized_count: 0,
+          processed_count: 0,
+          saved_products_count: 0,
+          current_step: 0,
+          is_completed: false,
+          created_at: wb?.created_at || product.created_at,
+          updated_at: wb?.created_at || product.created_at,
+        });
       });
 
+      setBatches(Array.from(batchesById.values()));
       setImages(imageList);
     } catch (error) {
       // Silent error handling
@@ -1318,7 +1427,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
               <span className="batch-count">({productGroups.length} {productGroups.length === 1 ? 'group' : 'groups'})</span>
             )}
             {viewMode === 'images' && (
-              <span className="batch-count">({images.length} {images.length === 1 ? 'image' : 'images'})</span>
+              <span className="batch-count">({productGroups.reduce((s, g) => s + g.itemCount, 0)} {productGroups.reduce((s, g) => s + g.itemCount, 0) === 1 ? 'image' : 'images'})</span>
             )}
           </div>
           <button className="close-button" onClick={onClose} aria-label="Close">
@@ -1642,6 +1751,13 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       const isSelected = selectedItems.has(batch.id);
       const isDragging = draggedItem === batch.id;
       const isDragOver = dragOverItem === batch.id;
+
+      // Compute live counts — use productGroups as single source of truth for both
+      // (same data loadBatches already fetches, consistent with Product Groups tab)
+      const batchGroups = productGroups.filter(g => g.batchId === batch.id);
+      const liveGroupCount = batchGroups.length || batch.product_groups_count;
+      const liveImageCount = batchGroups.reduce((sum, g) => sum + g.itemCount, 0)
+        || batch.total_images;
       
       return (
         <div 
@@ -1740,11 +1856,11 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
               </div>
               <div className="meta-row">
                 <Image size={14} />
-                <span>{batch.total_images} {batch.total_images === 1 ? 'image' : 'images'}</span>
+                <span>{liveImageCount} {liveImageCount === 1 ? 'image' : 'images'}</span>
               </div>
               <div className="meta-row">
                 <Layers size={14} />
-                <span>{batch.product_groups_count} {batch.product_groups_count === 1 ? 'group' : 'groups'}</span>
+                <span>{liveGroupCount} {liveGroupCount === 1 ? 'group' : 'groups'}</span>
               </div>
             </div>
 
@@ -1989,7 +2105,11 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
                 </button>
                 <Folder size={16} className="section-folder-icon" />
                 <span className="section-label">{section.label}</span>
-                <span className="section-count">{section.groups.length} {section.groups.length === 1 ? 'group' : 'groups'}</span>
+                <span className="section-count">
+                  {section.groups.length} {section.groups.length === 1 ? 'group' : 'groups'}
+                  {' · '}
+                  {section.groups.reduce((sum, g) => sum + g.itemCount, 0)} images
+                </span>
                 {/* Select all in section */}
                 <button
                   className="section-select-all"
@@ -2145,6 +2265,11 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
           const isBatchCollapsed = collapsedBatches.has(`img-batch-${batchKey}`);
           const allBatchImages = Array.from(batchSection.groups.values()).flatMap(g => g.images);
           const allBatchSelected = allBatchImages.every(img => selectedItems.has(img.id));
+          // Use productGroups sum as authoritative image count (matches Product Groups + Batches tabs)
+          const batchImageCount = productGroups
+            .filter(g => g.batchId === batchKey)
+            .reduce((sum, g) => sum + g.itemCount, 0)
+            || allBatchImages.length;
 
           return (
             <div key={batchKey} className="batch-section">
@@ -2166,7 +2291,16 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
                 </button>
                 <Folder size={16} className="section-folder-icon" />
                 <span className="section-label">{batchSection.batchName}</span>
-                <span className="section-count">{allBatchImages.length} {allBatchImages.length === 1 ? 'image' : 'images'}</span>
+                <span className="section-count">
+                  {(() => {
+                    const batchGroups = batchKey === 'no-batch'
+                      ? productGroups.filter(g => !g.batchId)
+                      : productGroups.filter(g => g.batchId === batchKey);
+                    const groupCount = batchGroups.length;
+                    const imgCount = batchImageCount || batchGroups.reduce((s, g) => s + g.itemCount, 0);
+                    return `${imgCount} ${imgCount === 1 ? 'image' : 'images'} · ${groupCount} ${groupCount === 1 ? 'group' : 'groups'}`;
+                  })()}
+                </span>
                 <button
                   className="section-select-all"
                   title={allBatchSelected ? 'Deselect all' : 'Select all in batch'}
@@ -2188,7 +2322,38 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
               </div>
 
               {/* Product group sub-sections */}
-              {!isBatchCollapsed && Array.from(batchSection.groups.entries()).map(([groupKey, groupSection]) => {
+              {!isBatchCollapsed && (() => {
+                const groupEntries = Array.from(batchSection.groups.entries());
+                // If no saved images but product groups exist in state, show group stubs
+                const batchProductGroups = batchKey === 'no-batch'
+                  ? productGroups.filter(g => !g.batchId)
+                  : productGroups.filter(g => g.batchId === batchKey);
+
+                if (groupEntries.length === 0 && batchProductGroups.length > 0) {
+                  return (
+                    <div style={{ padding: '8px 24px', color: '#888', fontSize: '13px' }}>
+                      {batchProductGroups.map(g => (
+                        <div key={g.id} className="image-group-section">
+                          <div className="image-group-header" style={{ cursor: 'default' }}>
+                            <Package size={14} className="section-folder-icon" />
+                            <span className="image-group-label">{g.title}</span>
+                            <span className="section-count">{g.itemCount} {g.itemCount === 1 ? 'image' : 'images'} · no saved files</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                }
+
+                if (groupEntries.length === 0) {
+                  return (
+                    <div style={{ padding: '12px 24px', color: '#aaa', fontSize: '13px', fontStyle: 'italic' }}>
+                      No images in this batch yet
+                    </div>
+                  );
+                }
+
+                return groupEntries.map(([groupKey, groupSection]) => {
                 const isGroupCollapsed = collapsedBatches.has(`img-group-${groupKey}`);
                 const allGroupSelected = groupSection.images.every(img => selectedItems.has(img.id));
 
@@ -2265,7 +2430,8 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
                     )}
                   </div>
                 );
-              })}
+              })
+              })()}
             </div>
           );
         })}
