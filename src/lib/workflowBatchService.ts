@@ -200,23 +200,37 @@ export async function autoSaveWorkflowBatch(
 }
 
 /**
- * Calculate workflow statistics from state
+ * Calculate workflow statistics from state.
+ * Uses the most-progressed image list as the source of truth so counts
+ * always match what is actually loaded when the batch is opened.
  */
 function calculateWorkflowStats(workflowState: WorkflowBatch['workflow_state']) {
   const uploadedImages = workflowState?.uploadedImages || [];
-  const groupedImages = workflowState?.groupedImages || [];
-  const sortedImages = workflowState?.sortedImages || [];
+  const groupedImages  = workflowState?.groupedImages  || [];
+  const sortedImages   = workflowState?.sortedImages   || [];
   const processedItems = workflowState?.processedItems || [];
 
-  // Count unique product groups
+  // Pick the most-progressed list as the single source of truth for counts.
+  // This prevents the card from showing uploadedImages.length (all individual images)
+  // when the user has already grouped them into fewer listings.
+  const liveItems =
+    processedItems.length > 0 ? processedItems :
+    sortedImages.length   > 0 ? sortedImages   :
+    groupedImages.length  > 0 ? groupedImages  :
+    uploadedImages;
+
+  // Count unique product groups from the live list
   const productGroups = new Set<string>();
-  groupedImages.forEach(item => {
+  liveItems.forEach(item => {
     const groupId = item.productGroup || item.id;
     productGroups.add(groupId);
   });
 
+  // Total images = all individual images across every group
+  const totalImages = liveItems.length || uploadedImages.length;
+
   // Count categorized items
-  const categorizedCount = sortedImages.filter(item => item.category).length;
+  const categorizedCount = liveItems.filter(item => item.category).length;
 
   // Count processed items (with descriptions)
   const processedCount = processedItems.filter(
@@ -224,7 +238,7 @@ function calculateWorkflowStats(workflowState: WorkflowBatch['workflow_state']) 
   ).length;
 
   return {
-    total_images: uploadedImages.length,
+    total_images: totalImages,
     product_groups_count: productGroups.size,
     categorized_count: categorizedCount,
     processed_count: processedCount,
