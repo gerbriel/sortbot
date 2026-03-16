@@ -449,11 +449,6 @@ function App() {
 
   // Handle opening a batch from Library
   const handleOpenBatch = async (batch: WorkflowBatch) => {
-    if (!batch.workflow_state) {
-      alert('This batch has no saved workflow state.');
-      return;
-    }
-
     // ── Clear ALL current state first so nothing from the active session bleeds in ──
     setUploadedImages([]);
     setGroupedImages([]);
@@ -461,7 +456,7 @@ function App() {
     setProcessedItems([]);
 
     // Restore workflow state
-    const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state;
+    const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state ?? {};
     
     // Fetch saved products from database to restore descriptions
     try {
@@ -562,7 +557,70 @@ function App() {
       // Always derive processedItems from sortedImages (the current grouping),
       // not from the stale saved processedItems. This ensures the count always
       // matches the grouping state even if processedItems was saved with different data.
-      const baseItems: ClothingItem[] = sortedImages || processedItems || [];
+      // When there is NO workflow_state at all, reconstruct ClothingItems from DB products.
+      let baseItems: ClothingItem[] = sortedImages || processedItems || [];
+
+      if (baseItems.length === 0 && productsToUse && productsToUse.length > 0) {
+        // No workflow_state — build items from the DB products table
+        baseItems = productsToUse.map((p: any): ClothingItem => {
+          const images: string[] = (p.product_images || [])
+            .sort((a: any, b: any) => a.position - b.position)
+            .map((img: any) => img.image_url)
+            .filter(Boolean);
+          return {
+            id: p.id,
+            preview: images[0] || '',
+            imageUrls: images,
+            file: null as any,
+            productGroup: p.id,
+            voiceDescription:          p.voice_description   || '',
+            generatedDescription:      p.description         || '',
+            seoTitle:                  p.seo_title           || '',
+            seoDescription:            p.seo_description     || '',
+            tags:                      p.tags                || [],
+            brand:                     p.vendor              || '',
+            category:                  p.product_category    || '',
+            productType:               p.product_type        || '',
+            published:                 p.published           ?? true,
+            status:                    p.status              || 'active',
+            size:                      p.size                || '',
+            color:                     p.color               || '',
+            secondaryColor:            p.secondary_color     || '',
+            price:                     p.price               ?? undefined,
+            compareAtPrice:            p.compare_at_price    ?? undefined,
+            costPerItem:               p.cost_per_item       ?? undefined,
+            sku:                       p.sku                 || '',
+            barcode:                   p.barcode             || '',
+            inventoryQuantity:         p.inventory_quantity  ?? undefined,
+            weightValue:               p.weight_value        || '',
+            requiresShipping:          p.requires_shipping   ?? true,
+            continueSellingOutOfStock: p.continue_selling_out_of_stock ?? false,
+            packageDimensions:         p.package_dimensions  || '',
+            parcelSize:                p.parcel_size         || '',
+            shipsFrom:                 p.ships_from          || '',
+            condition:                 p.condition           || '',
+            flaws:                     p.flaws               || '',
+            material:                  p.material            || '',
+            era:                       p.era                 || '',
+            care:                      p.care_instructions   || '',
+            measurements:              p.measurements        || '',
+            modelName:                 p.model_name          || '',
+            modelNumber:               p.model_number        || '',
+            sizeType:                  p.size_type           || '',
+            style:                     p.style               || '',
+            gender:                    (p.gender             || '') as any,
+            ageGroup:                  p.age_group           || '',
+            policies:                  p.policies            || '',
+            renewalOptions:            p.renewal_options     || '',
+            whoMadeIt:                 p.who_made_it         || '',
+            whatIsIt:                  p.what_is_it          || '',
+            listingType:               p.listing_type        || '',
+            discountedShipping:        p.discounted_shipping || '',
+            mpn:                       p.mpn                 || '',
+            customLabel0:              p.custom_label_0      || '',
+          };
+        });
+      }
 
       // Merge saved data back into processedItems
       let restoredProcessedItems: ClothingItem[] = baseItems;
@@ -664,6 +722,12 @@ function App() {
       // restoredProcessedItems is always derived from sortedImages (the grouping source of truth),
       // with saved DB product data merged in. Set it directly.
       setProcessedItems(restoredProcessedItems);
+      // If there was no workflow_state, seed all image arrays from DB-reconstructed items
+      if (!batch.workflow_state && restoredProcessedItems.length > 0) {
+        setUploadedImages(restoredProcessedItems);
+        setGroupedImages(restoredProcessedItems);
+        setSortedImages(restoredProcessedItems);
+      }
     } catch (error) {
       console.error('Error restoring saved product data:', error);
       // Fallback to basic workflow state — always use sortedImages as base for processedItems
@@ -676,7 +740,6 @@ function App() {
         setProcessedItems(processedItems);
       }
     }
-    
     // Set current batch info and persist for reload survival
     setCurrentBatchId(batch.id);
     setCurrentBatchNumber(batch.batch_number);
