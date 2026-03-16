@@ -257,9 +257,12 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       const batchesById = new Map<string, WorkflowBatch>(wfBatches.map(b => [b.id, b]));
 
       wfBatches.forEach(batch => {
-        const items = batch.workflow_state?.processedItems || 
-                     batch.workflow_state?.sortedImages || 
-                     batch.workflow_state?.groupedImages || [];
+        // Always use the most-progressed image list so counts match what the dashboard shows
+        const items =
+          (batch.workflow_state?.processedItems?.length  ? batch.workflow_state.processedItems  : null) ||
+          (batch.workflow_state?.sortedImages?.length    ? batch.workflow_state.sortedImages    : null) ||
+          (batch.workflow_state?.groupedImages?.length   ? batch.workflow_state.groupedImages   : null) ||
+          [];
         
         // Group items by productGroup
         const groupMap = new Map<string, ClothingItem[]>();
@@ -286,8 +289,13 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
           });
         });
       });
+
+      // Build a set of first-image-URLs already covered by workflow_state groups
+      // so we can skip DB products that are just saved copies of the same listings.
+      const wfFirstImageUrls = new Set<string>();
+      groups.forEach(g => { if (g.images[0]) wfFirstImageUrls.add(g.images[0]); });
       
-      // 2. Load saved products from database
+      // 2. Load saved products from database — only add ones NOT already in workflow_state
       const savedProducts = await fetchSavedProducts();
       
       savedProducts.forEach((product: any) => {
@@ -313,6 +321,16 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
           batchesById.set(product.batch_id, syntheticBatch);
         }
 
+        // Skip DB product if its primary image is already represented by a workflow_state group
+        // (avoids double-counting the same listing that exists in both workflow_state and products table)
+        const dbFirstImage = (product.product_images || [])
+          .sort((a: any, b: any) => a.position - b.position)[0]?.image_url;
+        if (dbFirstImage && wfFirstImageUrls.has(dbFirstImage)) return;
+
+        // Only add if this batch has no workflow_state (i.e. it's a purely DB-saved batch)
+        const hasBatchWorkflowState = batchesById.get(product.batch_id)?.workflow_state != null;
+        if (hasBatchWorkflowState) return;
+
         groups.push({
           id: product.id,
           title: cleanTitle(product.title || product.seo_title),
@@ -332,7 +350,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
       // Sync ALL known batches (workflow + synthesized from products)
       setBatches(Array.from(batchesById.values()));
       
-      // Remove duplicates by ID only
+      // Remove duplicates by ID
       const groupMap = new Map<string, ProductGroup>();
       groups.forEach(group => {
         const existing = groupMap.get(group.id);
