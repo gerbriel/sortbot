@@ -77,6 +77,7 @@ interface LibraryProps {
   userId: string;
   onClose: () => void;
   onOpenBatch: (batch: WorkflowBatch) => void;
+  refreshTrigger?: number; // increment from parent to force a reload
 }
 
 /** Strip unfilled template tokens like {brand}, {model}, {color} and collapse extra spaces/dashes */
@@ -92,7 +93,7 @@ function cleanTitle(raw: string | undefined | null, fallback = 'Untitled Product
   return cleaned || fallback;
 }
 
-export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }) => {
+export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, refreshTrigger }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('images');
   const [batches, setBatches] = useState<WorkflowBatch[]>([]);
   const [productGroups, setProductGroups] = useState<ProductGroup[]>([]);
@@ -193,144 +194,103 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
   const SELECTION_THRESHOLD = 5; // pixels - must move this much to activate selection
 
   useEffect(() => {
-    if (viewMode === 'batches') {
-      loadBatches();
-    } else if (viewMode === 'groups') {
-      loadProductGroups();
-    } else if (viewMode === 'images') {
-      loadImages();
-    }
-  }, [userId, viewMode]);
+    const cancelRef = { current: false };
+    loadAll(cancelRef).catch(() => {});
+    return () => { cancelRef.current = true; };
+  }, [userId, viewMode, refreshTrigger]);
   
   // Clear selection when switching views (separate effect)
   useEffect(() => {
     setSelectedItems(new Set());
   }, [viewMode]);
 
-  const loadBatches = async () => {
+  // Single entry-point — fetches fetchWorkflowBatches() exactly ONCE per invocation,
+  // then populates batches, productGroups, and images from that single response.
+  // Accepts an optional cancel ref so React 18 Strict Mode double-invoke is harmless.
+  const loadAll = async (cancelRef?: { current: boolean }) => {
+    const isCancelled = () => cancelRef?.current === true;
     setLoading(true);
     try {
+      // ── 1. Fetch workflow batches ONCE ──────────────────────────────────
       const wfBatches = await fetchWorkflowBatches();
+      if (isCancelled()) { setLoading(false); return; }
+
       const batchesById = new Map<string, WorkflowBatch>(wfBatches.map(b => [b.id, b]));
 
-      // Also pick up any batches referenced by saved products but not in workflow_batches
-      const savedProducts = await fetchSavedProducts();
-      savedProducts.forEach((product: any) => {
-        if (product.batch_id && !batchesById.has(product.batch_id)) {
-          const wb = product.workflow_batches;
-          batchesById.set(product.batch_id, {
-            id: product.batch_id,
-            user_id: '',
-            batch_number: wb?.batch_number || product.batch_id,
-            batch_name: wb?.batch_name || undefined,
-            workflow_state: undefined,
-            total_images: 0,
-            product_groups_count: 0,
-            categorized_count: 0,
-            processed_count: 0,
-            saved_products_count: 0,
-            current_step: 0,
-            is_completed: false,
-            created_at: wb?.created_at || product.created_at,
-            updated_at: wb?.created_at || product.created_at,
-          });
-        }
-      });
+      const makeBatchName = (b: WorkflowBatch) =>
+        b.batch_name || `Batch ${new Date(b.created_at).toLocaleDateString()} ${new Date(b.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
-      setBatches(Array.from(batchesById.values()));
+      // ── 2. Fetch DB tables in parallel ──────────────────────────────────
+      const [savedProducts, savedImages] = await Promise.all([
+        fetchSavedProducts(),
+        fetchSavedImages(),
+      ]);
+      if (isCancelled()) { setLoading(false); return; }
 
-      // Also load images + groups so live counts are accurate on the Batches tab
-      await Promise.all([loadImages(), loadProductGroups()]);
-    } catch (error) {
-      // silent
-    }
-    setLoading(false);
-  };
+      // Helper: synthesize a batch entry for any batch_id missing from workflow_batches
+      const synthesizeBatch = (batchId: string, wb: any, fallbackDate: string) => {
+        if (!batchId || batchesById.has(batchId)) return;
+        batchesById.set(batchId, {
+          id: batchId,
+          user_id: '',
+          batch_number: wb?.batch_number || batchId,
+          batch_name: wb?.batch_name || undefined,
+          workflow_state: undefined,
+          total_images: 0,
+          product_groups_count: 0,
+          categorized_count: 0,
+          processed_count: 0,
+          saved_products_count: 0,
+          current_step: 0,
+          is_completed: false,
+          created_at: wb?.created_at || fallbackDate,
+          updated_at: wb?.created_at || fallbackDate,
+        });
+      };
 
-  const loadProductGroups = async () => {
-    setLoading(true);
-    try {
+      savedProducts.forEach((p: any) => synthesizeBatch(p.batch_id, p.workflow_batches, p.created_at));
+      savedImages.forEach((img: any) => synthesizeBatch(img.products?.batch_id, img.products?.workflow_batches, img.created_at));
+
+      // ── 3. Build productGroups ──────────────────────────────────────────
       const groups: ProductGroup[] = [];
-      
-      // 1. Load products from workflow_batches.workflow_state
-      const wfBatches = await fetchWorkflowBatches();
-      const batchesById = new Map<string, WorkflowBatch>(wfBatches.map(b => [b.id, b]));
 
       wfBatches.forEach(batch => {
-        // Always use the most-progressed image list so counts match what the dashboard shows
-        const items =
+        const items: ClothingItem[] =
           (batch.workflow_state?.processedItems?.length  ? batch.workflow_state.processedItems  : null) ||
           (batch.workflow_state?.sortedImages?.length    ? batch.workflow_state.sortedImages    : null) ||
           (batch.workflow_state?.groupedImages?.length   ? batch.workflow_state.groupedImages   : null) ||
           [];
-        
-        // Group items by productGroup
+
         const groupMap = new Map<string, ClothingItem[]>();
         items.forEach((item: ClothingItem) => {
-          const groupId = item.productGroup || item.id;
-          if (!groupMap.has(groupId)) {
-            groupMap.set(groupId, []);
-          }
-          groupMap.get(groupId)!.push(item);
+          const gid = item.productGroup || item.id;
+          if (!groupMap.has(gid)) groupMap.set(gid, []);
+          groupMap.get(gid)!.push(item);
         });
-        
-        // Convert to ProductGroup objects
+
         groupMap.forEach((groupItems, groupId) => {
-          const firstItem = groupItems[0];
+          const first = groupItems[0];
           groups.push({
             id: groupId,
-            title: cleanTitle(firstItem.seoTitle),
-            category: firstItem.category || 'Uncategorized',
-            images: groupItems.map(item => item.preview || item.imageUrls?.[0] || '').filter(Boolean),
+            title: cleanTitle(first.seoTitle),
+            category: first.category || 'Uncategorized',
+            images: groupItems.map(i => i.preview || i.imageUrls?.[0] || '').filter(Boolean),
             itemCount: groupItems.length,
             createdAt: batch.created_at,
             batchId: batch.id,
-            batchName: batch.batch_name || `Batch ${new Date(batch.created_at).toLocaleDateString()} ${new Date(batch.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+            batchName: makeBatchName(batch),
           });
         });
       });
 
-      // Build a set of first-image-URLs already covered by workflow_state groups
-      // so we can skip DB products that are just saved copies of the same listings.
-      const wfFirstImageUrls = new Set<string>();
-      groups.forEach(g => { if (g.images[0]) wfFirstImageUrls.add(g.images[0]); });
-      
-      // 2. Load saved products from database — only add ones NOT already in workflow_state
-      const savedProducts = await fetchSavedProducts();
-      
-      savedProducts.forEach((product: any) => {
-        // If this product's batch isn't in workflow_batches, synthesize a batch entry
-        if (product.batch_id && !batchesById.has(product.batch_id)) {
-          const wb = product.workflow_batches;
-          const syntheticBatch: WorkflowBatch = {
-            id: product.batch_id,
-            user_id: '',
-            batch_number: wb?.batch_number || product.batch_id,
-            batch_name: wb?.batch_name || null,
-            workflow_state: undefined,
-            total_images: 0,
-            product_groups_count: 0,
-            categorized_count: 0,
-            processed_count: 0,
-            saved_products_count: 0,
-            current_step: 0,
-            is_completed: false,
-            created_at: wb?.created_at || product.created_at,
-            updated_at: wb?.created_at || product.created_at,
-          };
-          batchesById.set(product.batch_id, syntheticBatch);
-        }
+      const wfFirstImageUrls = new Set<string>(groups.map(g => g.images[0]).filter(Boolean));
 
-        // Skip DB product if its primary image is already represented by a workflow_state group
-        // (avoids double-counting the same listing that exists in both workflow_state and products table)
+      savedProducts.forEach((product: any) => {
         const dbFirstImage = (product.product_images || [])
           .sort((a: any, b: any) => a.position - b.position)[0]?.image_url;
         if (dbFirstImage && wfFirstImageUrls.has(dbFirstImage)) return;
-
-        // Only add if this batch has no workflow_state (i.e. it's a purely DB-saved batch)
-        const hasBatchWorkflowState = batchesById.get(product.batch_id)?.workflow_state != null;
-        if (hasBatchWorkflowState) return;
-
+        const hasBatchWfState = batchesById.get(product.batch_id)?.workflow_state != null;
+        if (hasBatchWfState) return;
         groups.push({
           id: product.id,
           title: cleanTitle(product.title || product.seo_title),
@@ -347,73 +307,22 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
         });
       });
 
-      // Sync ALL known batches (workflow + synthesized from products)
-      setBatches(Array.from(batchesById.values()));
-      
-      // Remove duplicates by ID
       const groupMap = new Map<string, ProductGroup>();
-      groups.forEach(group => {
-        const existing = groupMap.get(group.id);
-        if (!existing || (!existing.isSaved && group.isSaved)) {
-          groupMap.set(group.id, group);
-        }
+      groups.forEach(g => {
+        const existing = groupMap.get(g.id);
+        if (!existing || (!existing.isSaved && g.isSaved)) groupMap.set(g.id, g);
       });
-      
-      setProductGroups(Array.from(groupMap.values()));
-    } catch (error) {
-      // Silent error handling
-    }
-    setLoading(false);
-  };
 
-  const loadImages = async () => {
-    setLoading(true);
-    try {
+      // ── 4. Build imageList ──────────────────────────────────────────────
       const imageList: ImageRecord[] = [];
-
-      // Load all workflow batches AND product groups in parallel so counts always match
-      const [allBatches] = await Promise.all([
-        fetchWorkflowBatches(),
-        loadProductGroups(), // ensures productGroups state is populated for count display
-      ]);
-      const batchesById = new Map<string, WorkflowBatch>(allBatches.map(b => [b.id, b]));
-
-      const makeBatchName = (b: WorkflowBatch) =>
-        b.batch_name || `Batch ${new Date(b.created_at).toLocaleDateString()} ${new Date(b.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-
-      // 1. Load saved DB images first (these are the "official" records)
-      const savedImages = await fetchSavedImages();
-      const savedImageUrls = new Set<string>(); // track by URL to prevent workflow_state dupes
+      const savedImageUrls = new Set<string>();
 
       savedImages.forEach((img: any) => {
-        const wfBatch = img.products?.workflow_batches as WorkflowBatch | undefined;
         const batchId: string | undefined = img.products?.batch_id || undefined;
-
-        // Synthesize a batch entry if this batch_id isn't in workflow_batches
-        if (batchId && !batchesById.has(batchId)) {
-          batchesById.set(batchId, {
-            id: batchId,
-            user_id: '',
-            batch_number: wfBatch?.batch_number || batchId,
-            batch_name: wfBatch?.batch_name || undefined,
-            workflow_state: undefined,
-            total_images: 0,
-            product_groups_count: 0,
-            categorized_count: 0,
-            processed_count: 0,
-            saved_products_count: 0,
-            current_step: 0,
-            is_completed: false,
-            created_at: wfBatch?.created_at || img.created_at,
-            updated_at: wfBatch?.created_at || img.created_at,
-          });
-        }
-
         const batchEntry = batchId ? batchesById.get(batchId) : undefined;
         const batchName = batchEntry ? makeBatchName(batchEntry) : undefined;
-
         if (img.image_url) savedImageUrls.add(img.image_url);
-
+        if (!img.image_url) return;
         imageList.push({
           id: img.id,
           preview: img.image_url,
@@ -427,16 +336,14 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
         });
       });
 
-      // 2. Add workflow_state images that haven't been saved to DB yet
-      //    (i.e. their preview URL isn't already in savedImageUrls)
-      allBatches.forEach(batch => {
+      wfBatches.forEach(batch => {
         const items: ClothingItem[] =
           batch.workflow_state?.processedItems ||
           batch.workflow_state?.sortedImages ||
           batch.workflow_state?.groupedImages || [];
         items.forEach((item: ClothingItem) => {
           const url = item.preview || item.imageUrls?.[0] || '';
-          if (!url || savedImageUrls.has(url)) return; // already in DB
+          if (!url || savedImageUrls.has(url)) return;
           savedImageUrls.add(url);
           imageList.push({
             id: item.id,
@@ -452,38 +359,22 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
         });
       });
 
-      // 3. Ensure any batch referenced by saved products also appears
-      //    even if it has 0 images (e.g. products saved without images)
-      const savedProducts = await fetchSavedProducts();
-      savedProducts.forEach((product: any) => {
-        const batchId: string | undefined = product.batch_id || undefined;
-        if (!batchId || batchesById.has(batchId)) return;
-        const wb = product.workflow_batches as WorkflowBatch | undefined;
-        batchesById.set(batchId, {
-          id: batchId,
-          user_id: '',
-          batch_number: wb?.batch_number || batchId,
-          batch_name: wb?.batch_name || undefined,
-          workflow_state: undefined,
-          total_images: 0,
-          product_groups_count: 0,
-          categorized_count: 0,
-          processed_count: 0,
-          saved_products_count: 0,
-          current_step: 0,
-          is_completed: false,
-          created_at: wb?.created_at || product.created_at,
-          updated_at: wb?.created_at || product.created_at,
-        });
-      });
-
-      setBatches(Array.from(batchesById.values()));
-      setImages(imageList);
+      // ── 5. Commit all state at once ─────────────────────────────────────
+      if (!isCancelled()) {
+        setBatches(Array.from(batchesById.values()));
+        setProductGroups(Array.from(groupMap.values()));
+        setImages(imageList);
+      }
     } catch (error) {
-      // Silent error handling
+      // silent — individual fetch errors are logged in their service functions
     }
     setLoading(false);
   };
+
+  // Thin wrappers so existing post-action call-sites (delete, rename, etc.) still work
+  const loadBatches = () => loadAll();
+  const loadProductGroups = () => loadAll();
+  const loadImages = () => loadAll();
 
   // Create a brand-new empty batch in the database
   const handleCreateNewBatch = async () => {
@@ -1390,18 +1281,17 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch }
   };
 
   const getStepLabel = (step: number): string => {
-    const labels = {
+    const labels: Record<number, string> = {
       1: 'Upload Images',
-      2: 'Group Images',
-      3: 'Categorize',
-      4: 'Add Descriptions',
-      5: 'Save & Export',
+      2: 'Group & Categorize',
+      3: 'Add Descriptions',
+      4: 'Save & Export',
     };
-    return labels[step as keyof typeof labels] || 'Unknown';
+    return labels[step] || 'Unknown';
   };
 
   const getStepProgress = (batch: WorkflowBatch): number => {
-    return (batch.current_step / 5) * 100;
+    return Math.min((batch.current_step / 4) * 100, 100);
   };
 
   // Get thumbnail grid (2x2) from workflow state

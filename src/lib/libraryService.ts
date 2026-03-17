@@ -59,7 +59,9 @@ export const fetchSavedProducts = async () => {
     }
     
     return products || [];
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === 'AbortError') return []; // expected from React 18 Strict Mode cleanup
+    if (error?.message === 'Failed to fetch') return []; // network down / Supabase unreachable
     console.error('❌ Exception fetching saved products:', error);
     return [];
   }
@@ -98,7 +100,9 @@ export const fetchSavedImages = async () => {
     }
     
     return images || [];
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === 'AbortError') return []; // expected from React 18 Strict Mode cleanup
+    if (error?.message === 'Failed to fetch') return []; // network down / Supabase unreachable
     console.error('Error fetching saved images:', error);
     return [];
   }

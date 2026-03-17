@@ -1088,11 +1088,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         <div className="product-preview">
           <div className="preview-image-wrap">
             <LazyImg
-              src={currentItem.preview}
+              src={currentItem.preview || currentItem.imageUrls?.[0] || ''}
               alt="Product"
               className="preview-image"
               style={{ cursor: 'zoom-in' }}
-              onDoubleClick={() => setLightboxSrc(currentItem.preview)}
+              onDoubleClick={() => setLightboxSrc(currentItem.preview || currentItem.imageUrls?.[0] || '')}
             />
           </div>
           <div className="product-info">
@@ -1112,11 +1112,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     onDrop={(e) => handleThumbDrop(e, groupItem.id)}
                     onDragEnd={handleThumbDragEnd}
                     onDragLeave={() => setDragOverThumbId(null)}
-                    onDoubleClick={() => setLightboxSrc(groupItem.preview)}
+                    onDoubleClick={() => setLightboxSrc(groupItem.preview || groupItem.imageUrls?.[0] || '')}
                     title={`Image ${idx + 1}`}
                   >
                     <LazyImg
-                      src={groupItem.preview}
+                      src={groupItem.preview || groupItem.imageUrls?.[0] || ''}
                       alt={`Image ${idx + 1}`}
                       className="group-thumbnail"
                     />
