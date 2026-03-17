@@ -73,7 +73,7 @@ const ImageSorter: React.FC<ImageSorterProps> = ({ images, onSorted }) => {
           return (
             <div key={groupId} className="item-card">
               <div className="item-image-wrap">
-                <LazyImg src={representativeItem.preview} alt="Product" className="item-image" />
+                <LazyImg src={representativeItem.preview || representativeItem.imageUrls?.[0] || ''} alt="Product" className="item-image" />
               </div>
               {isGroup && (
                 <div className="group-badge">

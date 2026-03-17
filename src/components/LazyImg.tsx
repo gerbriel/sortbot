@@ -21,6 +21,8 @@ const LazyImg: React.FC<{
     setErrored(false);
   }, [src]);
 
+  if (!src) return <div className="lazy-skeleton lazy-skeleton--error" aria-hidden="true" />;
+
   return (
     <>
       {!loaded && !errored && (

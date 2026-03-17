@@ -445,7 +445,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
                       onDragLeave={() => setDragOverPhotoId(null)}
                       title="Drag to reorder photo within group"
                     >
-                      <LazyImg src={item.preview} alt="Product" draggable={false} />
+                      <LazyImg src={item.preview || item.imageUrls?.[0] || ''} alt="Product" draggable={false} />
                     </div>
                   ))}
                 </div>

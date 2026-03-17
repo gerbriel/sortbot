@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
-import { Package, Image, Link2, Scissors, X, ArrowDown, Check } from 'lucide-react';
+import { Package, Image, Link2, Scissors, X, ArrowDown, Check, Trash2 } from 'lucide-react';
 import LoadingProgress from './LoadingProgress';
 import './ImageGrouper.css';
 
@@ -582,6 +582,21 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     });
   };
 
+  // Bulk delete selected items
+  const handleDeleteSelected = async () => {
+    if (selectedItems.size === 0) return;
+    if (!confirm(`Delete ${selectedItems.size} selected image${selectedItems.size > 1 ? 's' : ''}? This cannot be undone.`)) return;
+
+    const toDelete = groupedItems.filter(i => selectedItems.has(i.id));
+    // Delete from storage in parallel
+    await Promise.all(toDelete.filter(i => i.storagePath).map(i => deleteImageFromStorage(i.storagePath!)));
+
+    const updated = groupedItems.filter(i => !selectedItems.has(i.id));
+    setGroupedItems(updated);
+    setSelectedItems(new Set());
+    onGrouped(updated);
+  };
+
   const groups = getGroups();
   const groupEntries = Object.entries(groups);
   
@@ -656,6 +671,20 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
         >
           <X size={16} /> Clear Selection
+        </button>
+        <button
+          className="button"
+          onClick={handleDeleteSelected}
+          disabled={selectedItems.size === 0}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+            background: selectedItems.size > 0 ? '#ef4444' : undefined,
+            color: selectedItems.size > 0 ? '#fff' : undefined,
+            border: 'none',
+          }}
+          title="Permanently delete all selected images"
+        >
+          <Trash2 size={16} /> Delete Selected ({selectedItems.size})
         </button>
       </div>
 
@@ -756,18 +785,20 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       toggleItemSelection(item.id, e);
                     }
                   }}
-                  onDoubleClick={() => setLightboxSrc(item.preview)}
+                  onDoubleClick={() => setLightboxSrc(item.preview || item.imageUrls?.[0] || '')}
                 >
                   {item.category && (
-                    <div className="category-indicator-small">
+                    <div className="category-indicator-small" style={{ display: 'none' }}>
                       <Check size={12} className="category-check" />
                     </div>
                   )}
-                  <img 
-                    src={item.preview} 
-                    alt="Product" 
-                    draggable={false}
-                  />
+                  {(item.preview || item.imageUrls?.[0]) && (
+                    <img 
+                      src={item.preview || item.imageUrls?.[0]} 
+                      alt="Product" 
+                      draggable={false}
+                    />
+                  )}
                   {selectedItems.has(item.id) && (
                     <div className="selection-indicator"><Check size={20} /></div>
                   )}
@@ -853,7 +884,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 onDragLeave={handleDragLeave}
               >
                 {items[0].category && (
-                  <div className="category-indicator">
+                  <div className="category-indicator" style={{ display: 'none' }}>
                     <Check size={14} className="category-check" />
                     <span className="category-label">{items[0].category}</span>
                   </div>
@@ -882,13 +913,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                           toggleItemSelection(item.id, e);
                         }
                       }}
-                      onDoubleClick={() => setLightboxSrc(item.preview)}
+                      onDoubleClick={() => setLightboxSrc(item.preview || item.imageUrls?.[0] || '')}
                     >
-                      <img 
-                        src={item.preview} 
-                        alt="Product" 
-                        draggable={false}
-                      />
+                      {(item.preview || item.imageUrls?.[0]) && (
+                        <img 
+                          src={item.preview || item.imageUrls?.[0]} 
+                          alt="Product" 
+                          draggable={false}
+                        />
+                      )}
                       {selectedItems.has(item.id) && (
                         <div className="selection-indicator"><Check size={20} /></div>
                       )}

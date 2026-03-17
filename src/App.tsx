@@ -133,6 +133,7 @@ function App() {
   const [showCategoryPresets, setShowCategoryPresets] = useState(false);
   const [showCategoriesManager, setShowCategoriesManager] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [libraryRefreshTrigger, setLibraryRefreshTrigger] = useState(0);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Ref to GoogleSheetExporter so Step 3 sidebar can trigger the download
@@ -142,6 +143,8 @@ function App() {
     // Restore batch ID from localStorage so reloads don't lose progress
     return localStorage.getItem('sortbot_current_batch_id') || null;
   });
+  // Ref mirror so async callbacks always read the latest batchId without closure staleness
+  const currentBatchIdRef = useRef<string | null>(localStorage.getItem('sortbot_current_batch_id') || null);
   const [currentBatchNumber, setCurrentBatchNumber] = useState<string>(() => {
     return localStorage.getItem('sortbot_current_batch_number') || `batch-${Date.now()}`;
   });
@@ -167,6 +170,8 @@ function App() {
             .eq('id', savedBatchId)
             .single();
           if (batch?.workflow_state) {
+            // Confirm the ref matches the confirmed-valid batch ID
+            currentBatchIdRef.current = savedBatchId;
             const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state;
             if (uploadedImages?.length) setUploadedImages(uploadedImages);
             if (groupedImages?.length) setGroupedImages(groupedImages);
@@ -182,6 +187,8 @@ function App() {
           }
         } catch {
           // Batch may have been deleted; clear stale ID
+          currentBatchIdRef.current = null;
+          setCurrentBatchId(null);
           localStorage.removeItem('sortbot_current_batch_id');
           localStorage.removeItem('sortbot_current_batch_number');
         }
@@ -264,6 +271,7 @@ function App() {
       setUploadedImages([]);
       setSaveMessage(null);
       // Clear persisted batch so reload starts fresh
+      currentBatchIdRef.current = null;
       setCurrentBatchId(null);
       setCurrentBatchNumber(`batch-${Date.now()}`);
       localStorage.removeItem('sortbot_current_batch_id');
@@ -349,6 +357,13 @@ function App() {
     });
     
     setGroupedImages(itemsWithCategories);
+
+    // Keep uploadedImages in sync — remove any items that were deleted in Step 2
+    const remainingIds = new Set(itemsWithCategories.map(i => i.id));
+    const prunedUploaded = uploadedImages.filter(i => remainingIds.has(i.id));
+    if (prunedUploaded.length !== uploadedImages.length) {
+      setUploadedImages(prunedUploaded);
+    }
     
     // Always sync sortedImages so Step 4 is accessible once groups exist.
     // Preserve any categories that were already assigned via drag-to-category.
@@ -362,7 +377,7 @@ function App() {
     
     // Auto-save workflow state (Step 2 complete - groups created)
     autoSaveWorkflow({
-      uploadedImages,
+      uploadedImages: prunedUploaded,
       groupedImages: itemsWithCategories,
       sortedImages: updatedSorted,
       processedItems: updatedSorted,
@@ -428,20 +443,36 @@ function App() {
     processedItems: ClothingItem[];
   }) => {
     if (!user) return;
+
+    // Strip blob previews and File objects before saving — they cause timeouts
+    // because base64/blob data makes the JSON enormous.
+    const strip = (items: ClothingItem[]): ClothingItem[] =>
+      items.map(({ file: _f, preview: _p, ...rest }) => rest as ClothingItem);
+
+    const safeState = {
+      uploadedImages: strip(workflowState.uploadedImages),
+      groupedImages:  strip(workflowState.groupedImages),
+      sortedImages:   strip(workflowState.sortedImages),
+      processedItems: strip(workflowState.processedItems),
+    };
     
     try {
+      // Use ref so we always get the latest batchId regardless of closure age
       const batchId = await autoSaveWorkflowBatch(
-        currentBatchId,
+        currentBatchIdRef.current,
         currentBatchNumber,
-        workflowState
+        safeState
       );
       
-      if (batchId && !currentBatchId) {
-        // First time saving - set the batch ID and persist it
+      if (batchId && batchId !== currentBatchIdRef.current) {
+        // First save OR old batch was deleted and a new one was created
+        currentBatchIdRef.current = batchId;
         setCurrentBatchId(batchId);
         localStorage.setItem('sortbot_current_batch_id', batchId);
         localStorage.setItem('sortbot_current_batch_number', currentBatchNumber);
       }
+      // Notify Library to refresh its counts/step
+      setLibraryRefreshTrigger(prev => prev + 1);
     } catch (error) {
       console.error('Auto-save failed:', error);
     }
@@ -741,6 +772,7 @@ function App() {
       }
     }
     // Set current batch info and persist for reload survival
+    currentBatchIdRef.current = batch.id;
     setCurrentBatchId(batch.id);
     setCurrentBatchNumber(batch.batch_number);
     localStorage.setItem('sortbot_current_batch_id', batch.id);
@@ -1014,6 +1046,7 @@ function App() {
           userId={user.id} 
           onClose={() => setShowLibrary(false)}
           onOpenBatch={handleOpenBatch}
+          refreshTrigger={libraryRefreshTrigger}
         />
       )}
     </div>

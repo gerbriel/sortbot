@@ -33,7 +33,7 @@ export interface WorkflowBatch {
 export async function fetchWorkflowBatches(): Promise<WorkflowBatch[]> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    if (!user) return []; // not authenticated or network unavailable — silently return empty
 
     const { data, error } = await supabase
       .from('workflow_batches')
@@ -42,7 +42,9 @@ export async function fetchWorkflowBatches(): Promise<WorkflowBatch[]> {
 
     if (error) throw error;
     return data || [];
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === 'AbortError') return []; // expected from React 18 Strict Mode cleanup
+    if (error?.message === 'Failed to fetch') return []; // network down / Supabase unreachable
     console.error('Error fetching workflow batches:', error);
     return [];
   }
@@ -181,13 +183,27 @@ export async function autoSaveWorkflowBatch(
     const currentStep = determineCurrentStep(workflowState);
 
     if (batchId) {
-      // Update existing batch
-      await updateWorkflowBatch(batchId, {
-        workflow_state: workflowState,
-        current_step: currentStep,
-        ...stats,
-      });
-      return batchId;
+      // Check if the batch still exists before updating
+      const { data: existing } = await supabase
+        .from('workflow_batches')
+        .select('id')
+        .eq('id', batchId)
+        .maybeSingle();
+
+      if (existing) {
+        // Update existing batch
+        await updateWorkflowBatch(batchId, {
+          workflow_state: workflowState,
+          current_step: currentStep,
+          ...stats,
+        });
+        return batchId;
+      } else {
+        // Batch was deleted — create a fresh one
+        console.warn(`Batch ${batchId} no longer exists, creating new batch`);
+        const batch = await createWorkflowBatch(batchNumber, workflowState, stats);
+        return batch?.id || null;
+      }
     } else {
       // Create new batch
       const batch = await createWorkflowBatch(batchNumber, workflowState, stats);
@@ -246,33 +262,39 @@ function calculateWorkflowStats(workflowState: WorkflowBatch['workflow_state']) 
 }
 
 /**
- * Determine which step the workflow is currently on
+ * Determine which step the workflow is currently on.
+ * Steps (post-merge of old Steps 2+3):
+ *   1 = Upload Images
+ *   2 = Group & Categorize  (groupedImages exist)
+ *   3 = Add Descriptions    (processedItems exist with voice/generated descriptions)
+ *   4 = Save & Export       (processedItems with descriptions complete)
  */
 function determineCurrentStep(workflowState: WorkflowBatch['workflow_state']): number {
   if (!workflowState) return 1;
 
   const { uploadedImages, groupedImages, sortedImages, processedItems } = workflowState;
 
-  // Step 5: Has processed items (completed descriptions)
-  if (processedItems && processedItems.length > 0) {
-    return 5;
-  }
-
-  // Step 4: Has sorted/categorized images
-  if (sortedImages && sortedImages.length > 0 && sortedImages.some(item => item.category)) {
+  // Step 4: Has processed items with descriptions (fully processed)
+  if (processedItems && processedItems.length > 0 &&
+      processedItems.some(item => item.voiceDescription || item.generatedDescription)) {
     return 4;
   }
 
-  // Step 3: Has grouped images
-  if (groupedImages && groupedImages.length > 0) {
+  // Step 3: Has voice/AI descriptions started
+  if (processedItems && processedItems.length > 0) {
     return 3;
   }
 
-  // Step 2: Has uploaded images
-  if (uploadedImages && uploadedImages.length > 0) {
+  // Step 2: Has grouped or categorized images
+  if ((groupedImages && groupedImages.length > 0) ||
+      (sortedImages && sortedImages.length > 0)) {
     return 2;
   }
 
-  // Step 1: Default
+  // Step 1: Has uploaded images only
+  if (uploadedImages && uploadedImages.length > 0) {
+    return 1;
+  }
+
   return 1;
 }

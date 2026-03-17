@@ -592,16 +592,7 @@
   white-space: nowrap;
 }
 
-.product-group-card.has-category {
-  border-color: #10b981;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
-  background: linear-gradient(to bottom, rgba(16, 185, 129, 0.05) 0%, white 100%);
-}
-
-.single-item-card.has-category {
-  border-color: #10b981;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
-}
+/* .has-category green border removed — category shown via text badge */
 
 @keyframes categoryAssigned {
   0% {
