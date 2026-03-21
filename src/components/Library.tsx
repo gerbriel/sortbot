@@ -295,14 +295,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         });
       });
 
-      const wfFirstImageUrls = new Set<string>(groups.map(g => g.images[0]).filter(Boolean));
-
       savedProducts.forEach((product: any) => {
-        const dbFirstImage = (product.product_images || [])
-          .sort((a: any, b: any) => a.position - b.position)[0]?.image_url;
-        if (dbFirstImage && wfFirstImageUrls.has(dbFirstImage)) return;
-        const hasBatchWfState = batchesById.get(product.batch_id)?.workflow_state != null;
-        if (hasBatchWfState) return;
         groups.push({
           id: product.id,
           title: cleanTitle(product.title || product.seo_title),
@@ -1347,7 +1340,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
               <span className="batch-count">({productGroups.length} {productGroups.length === 1 ? 'group' : 'groups'})</span>
             )}
             {viewMode === 'images' && (
-              <span className="batch-count">({productGroups.reduce((s, g) => s + g.itemCount, 0)} {productGroups.reduce((s, g) => s + g.itemCount, 0) === 1 ? 'image' : 'images'})</span>
+              <span className="batch-count">({images.length} {images.length === 1 ? 'image' : 'images'})</span>
             )}
           </div>
           <button className="close-button" onClick={onClose} aria-label="Close">
