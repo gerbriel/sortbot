@@ -166,6 +166,8 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   // Scroll preservation across optimistic state updates
   const savedScrollRef = useRef<number>(0);
   const shouldRestoreScrollRef = useRef(false);
+  // Prevents overlapping loadAll calls — new calls are no-ops while a fetch is in flight
+  const isLoadingRef = useRef(false);
 
   // Returns the active scrollable grid element for the current view
   const activeScrollRef = () => {
@@ -220,6 +222,9 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   // then populates batches, productGroups, and images from that single response.
   // Accepts an optional cancel ref so React 18 Strict Mode double-invoke is harmless.
   const loadAll = async (cancelRef?: { current: boolean }) => {
+    // If a fetch is already in flight, skip — prevents the auto-save → loadAll → re-render → auto-save loop
+    if (isLoadingRef.current) return;
+    isLoadingRef.current = true;
     const isCancelled = () => cancelRef?.current === true;
     setLoading(true);
     try {
@@ -375,6 +380,8 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       }
     } catch (error) {
       // silent — individual fetch errors are logged in their service functions
+    } finally {
+      isLoadingRef.current = false;
     }
     setLoading(false);
   };
