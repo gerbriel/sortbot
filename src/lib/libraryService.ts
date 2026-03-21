@@ -49,7 +49,7 @@ export const fetchSavedProducts = async () => {
         )
       `)
       .order('created_at', { ascending: true })
-      .limit(2000); // safety cap — prevents full-table scans on large datasets
+      .range(0, 2999); // Supabase REST default cap is 1000 rows; .range() sends the proper Range header
     
     if (error) {
       console.error('❌ Supabase error fetching saved products:', {
@@ -96,7 +96,7 @@ export const fetchSavedImages = async () => {
         )
       `)
       .order('created_at', { ascending: true })
-      .limit(5000); // safety cap — product_images can grow large
+      .range(0, 4999); // Supabase REST default cap is 1000 rows; .range() sends the proper Range header
     
     if (error) {
       console.error('Error fetching saved images:', error);
