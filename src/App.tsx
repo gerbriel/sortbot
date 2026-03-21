@@ -182,12 +182,19 @@ function App() {
               sortedImages?.length    ? sortedImages     :
               groupedImages?.length   ? groupedImages    :
               uploadedImages          ? uploadedImages   : [];
-            // Re-hydrate preview from imageUrls[0] — preview is stripped before saving
-            // to reduce payload size, so it must be restored here for images to display.
-            const liveItems = rawItems.map((item: any) => ({
-              ...item,
-              preview: item.preview || item.imageUrls?.[0] || '',
-            }));
+            // Re-hydrate preview — stripped before saving to reduce payload size.
+            // imageUrls may also be empty for older items; reconstruct from storagePath
+            // (synchronous, no extra DB query) as the final fallback.
+            const liveItems = rawItems.map((item: any) => {
+              const reconstructed = item.storagePath
+                ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
+                : '';
+              return {
+                ...item,
+                preview: item.preview || item.imageUrls?.[0] || reconstructed,
+                imageUrls: item.imageUrls?.length ? item.imageUrls : (reconstructed ? [reconstructed] : []),
+              };
+            });
             if (liveItems.length) {
               setUploadedImages(liveItems);
               setGroupedImages(liveItems);
@@ -523,12 +530,19 @@ function App() {
       uploadedImages?.length  ? uploadedImages   : []
     ) as ClothingItem[];
 
-    // Re-hydrate preview — it is stripped before saving (to reduce payload size).
-    // Without this, every image renders as a blank gray tile after a batch is opened.
-    const workflowItems: ClothingItem[] = rawWorkflowItems.map(item => ({
-      ...item,
-      preview: item.preview || item.imageUrls?.[0] || '',
-    }));
+    // Re-hydrate preview — stripped before saving to reduce payload size.
+    // imageUrls may also be empty for older items; reconstruct from storagePath
+    // (synchronous, no extra DB query) as the final fallback.
+    const workflowItems: ClothingItem[] = rawWorkflowItems.map(item => {
+      const reconstructed = item.storagePath
+        ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
+        : '';
+      return {
+        ...item,
+        preview: item.preview || item.imageUrls?.[0] || reconstructed,
+        imageUrls: item.imageUrls?.length ? item.imageUrls : (reconstructed ? [reconstructed] : []),
+      };
+    });
     
     // Fetch saved products from database to restore descriptions
     try {
