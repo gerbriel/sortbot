@@ -569,6 +569,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     // Delete from storage if it was uploaded
     if (item.storagePath) {
       await deleteImageFromStorage(item.storagePath);
+      // Also delete the corresponding product_images DB row
+      await supabase.from('product_images').delete().eq('storage_path', item.storagePath);
     }
 
     // Remove from UI
@@ -588,8 +590,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     if (!confirm(`Delete ${selectedItems.size} selected image${selectedItems.size > 1 ? 's' : ''}? This cannot be undone.`)) return;
 
     const toDelete = groupedItems.filter(i => selectedItems.has(i.id));
+    const storagePaths = toDelete.map(i => i.storagePath).filter(Boolean) as string[];
+
     // Delete from storage in parallel
-    await Promise.all(toDelete.filter(i => i.storagePath).map(i => deleteImageFromStorage(i.storagePath!)));
+    await Promise.all(storagePaths.map(p => deleteImageFromStorage(p)));
+
+    // Delete corresponding product_images DB rows in one query
+    if (storagePaths.length > 0) {
+      await supabase.from('product_images').delete().in('storage_path', storagePaths);
+    }
 
     const updated = groupedItems.filter(i => !selectedItems.has(i.id));
     setGroupedItems(updated);
