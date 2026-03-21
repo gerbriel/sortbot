@@ -17,9 +17,10 @@ interface ImageGrouperProps {
   onGrouped: (items: ClothingItem[]) => void;
   onStatsChange?: (stats: ImageGrouperStats) => void;
   userId?: string;
+  onImageDeleted?: () => void; // called after any delete syncs to DB, so Library can refresh
 }
 
-const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsChange, userId }) => {
+const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsChange, userId, onImageDeleted }) => {
   const [groupedItems, setGroupedItems] = useState<ClothingItem[]>([]);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [draggedItem, setDraggedItem] = useState<ClothingItem | null>(null);
@@ -582,6 +583,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       next.delete(item.id);
       return next;
     });
+
+    // Notify parent that a real DB change happened — Library should refresh
+    onImageDeleted?.();
   };
 
   // Bulk delete selected items
@@ -604,6 +608,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     setGroupedItems(updated);
     setSelectedItems(new Set());
     onGrouped(updated);
+
+    // Notify parent that real DB changes happened — Library should refresh
+    onImageDeleted?.();
   };
 
   const groups = getGroups();
