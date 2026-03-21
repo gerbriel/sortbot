@@ -130,6 +130,9 @@ function App() {
   const [processedItems, setProcessedItems] = useState<ClothingItem[]>([]);
   const [grouperStats, setGrouperStats] = useState<ImageGrouperStats | null>(null);
   const [showLibrary, setShowLibrary] = useState(false);
+  // Ref mirror so the autoSave closure (inside setTimeout) can read the live value
+  // without capturing a stale boolean from the render where autoSave was scheduled.
+  const showLibraryRef = useRef(false);
   const [showCategoryPresets, setShowCategoryPresets] = useState(false);
   const [showCategoriesManager, setShowCategoriesManager] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -150,6 +153,9 @@ function App() {
   const [currentBatchNumber, setCurrentBatchNumber] = useState<string>(() => {
     return localStorage.getItem('sortbot_current_batch_number') || `batch-${Date.now()}`;
   });
+
+  // Keep showLibraryRef in sync so the autoSave closure always reads the live value
+  useEffect(() => { showLibraryRef.current = showLibrary; }, [showLibrary]);
 
   // Helper to determine current workflow step
 
@@ -501,8 +507,13 @@ function App() {
           localStorage.setItem('sortbot_current_batch_id', batchId);
           localStorage.setItem('sortbot_current_batch_number', currentBatchNumber);
         }
-        // Notify Library to refresh its counts/step
-        setLibraryRefreshTrigger(prev => prev + 1);
+        // Notify Library to refresh its counts/step — only if it's open.
+        // Incrementing while closed is a no-op for the user but causes the Library
+        // to fire an infinite fetch loop (fetch → setState → re-render → auto-save
+        // → increment → fetch again) whenever it is subsequently opened.
+        if (showLibraryRef.current) {
+          setLibraryRefreshTrigger(prev => prev + 1);
+        }
       } catch (error) {
         console.error('Auto-save failed:', error);
       }

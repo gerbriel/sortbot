@@ -31,6 +31,8 @@ export const fetchSavedProducts = async () => {
         created_at,
         updated_at,
         batch_id,
+        product_category,
+        seo_title,
         workflow_batches (
           id,
           batch_name,
@@ -46,7 +48,8 @@ export const fetchSavedProducts = async () => {
           created_at
         )
       `)
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: true })
+      .limit(2000); // safety cap — prevents full-table scans on large datasets
     
     if (error) {
       console.error('❌ Supabase error fetching saved products:', {
@@ -92,7 +95,8 @@ export const fetchSavedImages = async () => {
           )
         )
       `)
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: true })
+      .limit(5000); // safety cap — product_images can grow large
     
     if (error) {
       console.error('Error fetching saved images:', error);
