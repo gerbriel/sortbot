@@ -506,13 +506,14 @@ function App() {
           setCurrentBatchId(batchId);
           localStorage.setItem('sortbot_current_batch_id', batchId);
           localStorage.setItem('sortbot_current_batch_number', currentBatchNumber);
-        }
-        // Notify Library to refresh its counts/step — only if it's open.
-        // Incrementing while closed is a no-op for the user but causes the Library
-        // to fire an infinite fetch loop (fetch → setState → re-render → auto-save
-        // → increment → fetch again) whenever it is subsequently opened.
-        if (showLibraryRef.current) {
-          setLibraryRefreshTrigger(prev => prev + 1);
+          // A genuinely new batch was created — refresh Library so it appears.
+          // Only refresh on batch creation, NOT on every routine auto-save update.
+          // Refreshing on every update re-triggers loadAll every 2 s while Library
+          // is open, which sets state, which causes re-renders, which schedule more
+          // auto-saves — an infinite fetch loop.
+          if (showLibraryRef.current) {
+            setLibraryRefreshTrigger(prev => prev + 1);
+          }
         }
       } catch (error) {
         console.error('Auto-save failed:', error);
