@@ -1,6 +1,18 @@
 import { supabase } from './supabase';
 import type { ClothingItem } from '../App';
 
+/**
+ * Minimal item stored in workflow_state — only what's needed to restore
+ * grouping/category state on reload. Everything else lives in the products table.
+ */
+export interface SlimItem {
+  id: string;
+  productGroup?: string;
+  category?: string;
+  storagePath?: string;
+  imageUrls?: string[];
+}
+
 export interface WorkflowBatch {
   id: string;
   user_id: string;
@@ -17,7 +29,7 @@ export interface WorkflowBatch {
     uploadedImages?: ClothingItem[];
     groupedImages?: ClothingItem[];
     sortedImages?: ClothingItem[];
-    processedItems?: ClothingItem[];
+    processedItems?: ClothingItem[] | SlimItem[];
   };
   thumbnail_url?: string;
   created_at: string;
@@ -67,13 +79,9 @@ export async function createWorkflowBatch(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    // Get thumbnail from first image
-    const firstImage = workflowState?.uploadedImages?.[0] || 
-                       workflowState?.groupedImages?.[0] || 
-                       workflowState?.sortedImages?.[0] || 
-                       workflowState?.processedItems?.[0];
-    
-    const thumbnail_url = firstImage?.preview || firstImage?.imageUrls?.[0];
+    // Get thumbnail from first image — only SlimItems are stored so use imageUrls
+    const firstItem = workflowState?.processedItems?.[0] as SlimItem | undefined;
+    const thumbnail_url = firstItem?.imageUrls?.[0];
 
     const { data, error } = await supabase
       .from('workflow_batches')
@@ -183,26 +191,31 @@ export async function autoSaveWorkflowBatch(
     const currentStep = determineCurrentStep(workflowState);
 
     if (batchId) {
-      // Check if the batch still exists before updating
-      const { data: existing } = await supabase
+      // Blind UPDATE — no pre-flight SELECT round-trip.
+      // If the batch no longer exists the update silently affects 0 rows; we
+      // detect that by checking the returned data array length.
+      const { data: updated, error: updateError } = await supabase
         .from('workflow_batches')
-        .select('id')
-        .eq('id', batchId)
-        .maybeSingle();
-
-      if (existing) {
-        // Update existing batch
-        await updateWorkflowBatch(batchId, {
+        .update({
           workflow_state: workflowState,
           current_step: currentStep,
+          last_opened_at: new Date().toISOString(),
           ...stats,
-        });
+        })
+        .eq('id', batchId)
+        .select('id');
+
+      if (!updateError && updated && updated.length > 0) {
+        // Update succeeded
         return batchId;
-      } else {
+      } else if (!updateError && (!updated || updated.length === 0)) {
         // Batch was deleted — create a fresh one
         console.warn(`Batch ${batchId} no longer exists, creating new batch`);
         const batch = await createWorkflowBatch(batchNumber, workflowState, stats);
         return batch?.id || null;
+      } else {
+        // Real DB error — surface it so outer catch logs it
+        throw updateError;
       }
     } else {
       // Create new batch
@@ -248,9 +261,10 @@ function calculateWorkflowStats(workflowState: WorkflowBatch['workflow_state']) 
   // Count categorized items
   const categorizedCount = liveItems.filter(item => item.category).length;
 
-  // Count processed items (with descriptions)
+  // Count processed items (with descriptions) — SlimItems don't carry descriptions,
+  // so we use category as a proxy for "processed"
   const processedCount = processedItems.filter(
-    item => item.voiceDescription && item.generatedDescription
+    item => item.category
   ).length;
 
   return {
@@ -274,24 +288,30 @@ function determineCurrentStep(workflowState: WorkflowBatch['workflow_state']): n
 
   const { uploadedImages, groupedImages, sortedImages, processedItems } = workflowState;
 
-  // Step 4: Has processed items with descriptions (fully processed)
+  // Step 4: All items are categorized (descriptions done — we no longer store descriptions
+  // in workflow_state, so use "all items have a category" as the step-4 signal)
   if (processedItems && processedItems.length > 0 &&
-      processedItems.some(item => item.voiceDescription || item.generatedDescription)) {
+      processedItems.every(item => item.category)) {
     return 4;
   }
 
-  // Step 3: Has voice/AI descriptions started
-  if (processedItems && processedItems.length > 0) {
+  // Step 3: Some items started but not all categorized
+  if (processedItems && processedItems.length > 0 &&
+      processedItems.some(item => item.category)) {
     return 3;
   }
 
-  // Step 2: Has grouped or categorized images
+  // Step 2: Items exist (grouping started)
+  if (processedItems && processedItems.length > 0) {
+    return 2;
+  }
+
+  // Legacy format fallbacks
   if ((groupedImages && groupedImages.length > 0) ||
       (sortedImages && sortedImages.length > 0)) {
     return 2;
   }
 
-  // Step 1: Has uploaded images only
   if (uploadedImages && uploadedImages.length > 0) {
     return 1;
   }
