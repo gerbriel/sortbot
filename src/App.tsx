@@ -150,8 +150,6 @@ function App() {
   const currentBatchIdRef = useRef<string | null>(localStorage.getItem('sortbot_current_batch_id') || null);
   // Debounce timer for auto-save — prevents a PATCH on every rapid grouping action
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Separate debounce for Library refresh — fires 3 s after last save to avoid re-triggering loadAll
-  const libraryRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [currentBatchNumber, setCurrentBatchNumber] = useState<string>(() => {
     return localStorage.getItem('sortbot_current_batch_number') || `batch-${Date.now()}`;
   });
@@ -260,7 +258,10 @@ function App() {
           type: 'success',
           text: `✅ Saved ${result.success} product(s)${result.failed > 0 ? `, ${result.failed} failed` : ''}!`,
         });
-        
+
+        // products/product_images rows were just written — refresh Library if open
+        setLibraryRefreshTrigger(prev => prev + 1);
+
         // Broadcast action for real-time collaboration
         
         // Clear the batch after successful save
@@ -509,15 +510,9 @@ function App() {
           localStorage.setItem('sortbot_current_batch_id', batchId);
           localStorage.setItem('sortbot_current_batch_number', currentBatchNumber);
         }
-
-        // Refresh Library whenever it's open — debounced 3 s after the last save so the
-        // loadAll triggered here doesn't itself cause re-renders that schedule another save.
-        if (showLibraryRef.current) {
-          if (libraryRefreshTimerRef.current) clearTimeout(libraryRefreshTimerRef.current);
-          libraryRefreshTimerRef.current = setTimeout(() => {
-            setLibraryRefreshTrigger(prev => prev + 1);
-          }, 3000);
-        }
+        // NOTE: No Library refresh here — auto-save only writes to workflow_state,
+        // NOT to products/product_images. The Library re-fetches on real DB changes only
+        // (explicit Save Batch or image delete), preventing the auto-save → loadAll loop.
       } catch (error) {
         console.error('Auto-save failed:', error);
       }
@@ -977,6 +972,7 @@ function App() {
                   onGrouped={handleImagesGrouped}
                   onStatsChange={setGrouperStats}
                   userId={user.id}
+                  onImageDeleted={() => setLibraryRefreshTrigger(prev => prev + 1)}
                 />
               </div>
               {/* Right: Category drop zones — sticky so always visible */}
