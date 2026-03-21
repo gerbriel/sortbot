@@ -193,11 +193,23 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   
   const SELECTION_THRESHOLD = 5; // pixels - must move this much to activate selection
 
+  // Load on mount and whenever userId or viewMode changes
   useEffect(() => {
     const cancelRef = { current: false };
     loadAll(cancelRef).catch(() => {});
     return () => { cancelRef.current = true; };
-  }, [userId, viewMode, refreshTrigger]);
+  }, [userId, viewMode]);
+
+  // Separate effect for explicit refresh requests (e.g. new batch created).
+  // Keeping this out of the main effect prevents loadAll from re-firing every time
+  // the parent increments refreshTrigger during a routine auto-save heartbeat.
+  useEffect(() => {
+    if ((refreshTrigger ?? 0) > 0) {
+      const cancelRef = { current: false };
+      loadAll(cancelRef).catch(() => {});
+      return () => { cancelRef.current = true; };
+    }
+  }, [refreshTrigger]);
   
   // Clear selection when switching views (separate effect)
   useEffect(() => {
