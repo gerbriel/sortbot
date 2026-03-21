@@ -51,30 +51,35 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId }) =
 
     setIsUploading(true);
 
-    // Upload all files to Supabase in parallel
-    const uploadPromises = acceptedFiles.map(async (file) => {
-      const uploaded = await uploadToSupabase(file);
-      if (!uploaded) {
-        // Fallback to blob URL if upload fails
-        console.warn('⚠️ Upload failed for:', file.name, '- using blob URL as fallback');
+    // Upload in chunks of 10 to avoid rate-limiting 100s of concurrent Supabase requests.
+    // Unconstrained Promise.all on large drops causes some uploads to fail and fall back
+    // to ephemeral blob URLs that break on page reload.
+    const CHUNK = 10;
+    const items: ClothingItem[] = [];
+
+    for (let i = 0; i < acceptedFiles.length; i += CHUNK) {
+      const chunk = acceptedFiles.slice(i, i + CHUNK);
+      const results = await Promise.all(chunk.map(async (file) => {
+        const uploaded = await uploadToSupabase(file);
+        if (!uploaded) {
+          console.warn('⚠️ Upload failed for:', file.name, '- using blob URL as fallback');
+          return {
+            id: `${Date.now()}-${Math.random()}`,
+            file,
+            preview: URL.createObjectURL(file),
+          };
+        }
         return {
           id: `${Date.now()}-${Math.random()}`,
           file,
-          preview: URL.createObjectURL(file),
+          preview: uploaded.preview,
+          imageUrls: uploaded.imageUrls,
+          storagePath: uploaded.storagePath,
         };
-      }
+      }));
+      items.push(...results);
+    }
 
-      return {
-        id: `${Date.now()}-${Math.random()}`,
-        file,
-        preview: uploaded.preview,
-        imageUrls: uploaded.imageUrls,
-        storagePath: uploaded.storagePath,
-      };
-    });
-
-    const items = await Promise.all(uploadPromises);
-    
     setIsUploading(false);
     onImagesUploaded(items);
   }, [onImagesUploaded, userId]);
