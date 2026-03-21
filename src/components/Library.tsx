@@ -195,20 +195,20 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   
   const SELECTION_THRESHOLD = 5; // pixels - must move this much to activate selection
 
-  // Load on mount and whenever userId or viewMode changes
+  // Load on mount and whenever userId or viewMode changes.
+  // force=true bypasses the in-flight guard — mount calls must always run.
   useEffect(() => {
     const cancelRef = { current: false };
-    loadAll(cancelRef).catch(() => {});
+    loadAll(cancelRef, true).catch(() => {});
     return () => { cancelRef.current = true; };
   }, [userId, viewMode]);
 
-  // Separate effect for explicit refresh requests (e.g. new batch created).
-  // Keeping this out of the main effect prevents loadAll from re-firing every time
-  // the parent increments refreshTrigger during a routine auto-save heartbeat.
+  // Separate effect for explicit refresh requests (e.g. Save Batch, image delete).
+  // Uses the normal guard so an already-running fetch won't be double-triggered.
   useEffect(() => {
     if ((refreshTrigger ?? 0) > 0) {
       const cancelRef = { current: false };
-      loadAll(cancelRef).catch(() => {});
+      loadAll(cancelRef, false).catch(() => {});
       return () => { cancelRef.current = true; };
     }
   }, [refreshTrigger]);
@@ -220,17 +220,25 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
   // Single entry-point — fetches fetchWorkflowBatches() exactly ONCE per invocation,
   // then populates batches, productGroups, and images from that single response.
-  // Accepts an optional cancel ref so React 18 Strict Mode double-invoke is harmless.
-  const loadAll = async (cancelRef?: { current: boolean }) => {
-    // If a fetch is already in flight, skip — prevents the auto-save → loadAll → re-render → auto-save loop
-    if (isLoadingRef.current) return;
+  // cancelRef: React 18 Strict Mode double-invoke is harmless when cancel fires.
+  // force: bypasses the isLoadingRef guard for mount calls (which MUST always run).
+  const loadAll = async (cancelRef?: { current: boolean }, force = false) => {
+    // Guard: skip if already in flight, unless this is a forced mount call
+    if (!force && isLoadingRef.current) return;
+    // If a prior forced call was cancelled mid-flight, the ref may still be true — reset it
     isLoadingRef.current = true;
-    const isCancelled = () => cancelRef?.current === true;
+    const isCancelled = () => {
+      if (cancelRef?.current === true) {
+        isLoadingRef.current = false; // release the lock so the next call can proceed
+        return true;
+      }
+      return false;
+    };
     setLoading(true);
     try {
       // ── 1. Fetch workflow batches ONCE ──────────────────────────────────
       const wfBatches = await fetchWorkflowBatches();
-      if (isCancelled()) { setLoading(false); return; }
+      if (isCancelled()) return;
 
       const batchesById = new Map<string, WorkflowBatch>(wfBatches.map(b => [b.id, b]));
 
@@ -245,7 +253,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       console.log(`[Library] fetchSavedProducts → ${savedProducts.length} rows`);
       console.log(`[Library] fetchSavedImages   → ${savedImages.length} rows`);
       console.log(`[Library] fetchWorkflowBatches → ${wfBatches.length} rows`);
-      if (isCancelled()) { setLoading(false); return; }
+      if (isCancelled()) return;
 
       // Helper: synthesize a batch entry for any batch_id missing from workflow_batches
       const synthesizeBatch = (batchId: string, wb: any, fallbackDate: string) => {
