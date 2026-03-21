@@ -576,7 +576,17 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
   // ── render ─────────────────────────────────────────────────────────────────
 
   if (loading) {
-    return <div className="presets-manager"><p>Loading category presets…</p></div>;
+    return (
+      <div className="presets-manager-overlay">
+        <div className="presets-manager">
+          <div className="presets-header">
+            <h2>Category Presets Manager</h2>
+            <button className="button-close" onClick={onClose} title="Close">✕</button>
+          </div>
+          <p style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>Loading category presets…</p>
+        </div>
+      </div>
+    );
   }
 
   return (

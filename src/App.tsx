@@ -177,11 +177,17 @@ function App() {
             const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state;
             // processedItems is now the single saved list (others are empty arrays).
             // Fall back through all arrays in case an older batch format is loaded.
-            const liveItems =
+            const rawItems =
               processedItems?.length  ? processedItems  :
               sortedImages?.length    ? sortedImages     :
               groupedImages?.length   ? groupedImages    :
               uploadedImages          ? uploadedImages   : [];
+            // Re-hydrate preview from imageUrls[0] — preview is stripped before saving
+            // to reduce payload size, so it must be restored here for images to display.
+            const liveItems = rawItems.map((item: any) => ({
+              ...item,
+              preview: item.preview || item.imageUrls?.[0] || '',
+            }));
             if (liveItems.length) {
               setUploadedImages(liveItems);
               setGroupedImages(liveItems);
@@ -510,12 +516,19 @@ function App() {
     // processedItems is now the single saved list (others are empty arrays in new format).
     // Fall back through all arrays for older batch formats.
     // Cast as ClothingItem[] — SlimItems have the same fields minus file/preview (which are runtime-only anyway).
-    const workflowItems: ClothingItem[] = (
+    const rawWorkflowItems = (
       processedItems?.length  ? processedItems  :
       sortedImages?.length    ? sortedImages     :
       groupedImages?.length   ? groupedImages    :
       uploadedImages?.length  ? uploadedImages   : []
     ) as ClothingItem[];
+
+    // Re-hydrate preview — it is stripped before saving (to reduce payload size).
+    // Without this, every image renders as a blank gray tile after a batch is opened.
+    const workflowItems: ClothingItem[] = rawWorkflowItems.map(item => ({
+      ...item,
+      preview: item.preview || item.imageUrls?.[0] || '',
+    }));
     
     // Fetch saved products from database to restore descriptions
     try {
