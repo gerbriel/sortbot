@@ -237,6 +237,9 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         fetchSavedProducts(),
         fetchSavedImages(),
       ]);
+      console.log(`[Library] fetchSavedProducts → ${savedProducts.length} rows`);
+      console.log(`[Library] fetchSavedImages   → ${savedImages.length} rows`);
+      console.log(`[Library] fetchWorkflowBatches → ${wfBatches.length} rows`);
       if (isCancelled()) { setLoading(false); return; }
 
       // Helper: synthesize a batch entry for any batch_id missing from workflow_batches

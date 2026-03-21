@@ -18,55 +18,65 @@ import type { WorkflowBatch } from './workflowBatchService';
  * NOTE: Products are SHARED across all users (collaborative workspace)
  */
 export const fetchSavedProducts = async () => {
+  // Paginate in chunks of 1000 to bypass PostgREST server-side max-rows cap
+  const PAGE = 1000;
+  const allProducts: any[] = [];
+  let from = 0;
   try {
-    const { data: products, error } = await supabase
-      .from('products')
-      .select(`
-        id,
-        title,
-        description,
-        vendor,
-        size,
-        price,
-        created_at,
-        updated_at,
-        batch_id,
-        product_category,
-        seo_title,
-        workflow_batches (
+    while (true) {
+      const { data, error } = await supabase
+        .from('products')
+        .select(`
           id,
-          batch_name,
-          batch_number,
-          created_at
-        ),
-        product_images (
-          id,
-          image_url,
-          storage_path,
-          position,
-          alt_text,
-          created_at
-        )
-      `)
-      .order('created_at', { ascending: true })
-      .range(0, 2999); // Supabase REST default cap is 1000 rows; .range() sends the proper Range header
-    
-    if (error) {
-      console.error('❌ Supabase error fetching saved products:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code
-      });
-      return [];
+          title,
+          description,
+          vendor,
+          size,
+          price,
+          created_at,
+          updated_at,
+          batch_id,
+          product_category,
+          seo_title,
+          workflow_batches (
+            id,
+            batch_name,
+            batch_number,
+            created_at
+          ),
+          product_images (
+            id,
+            image_url,
+            storage_path,
+            position,
+            alt_text,
+            created_at
+          )
+        `)
+        .order('created_at', { ascending: true })
+        .range(from, from + PAGE - 1);
+
+      if (error) {
+        console.error('❌ Supabase error fetching saved products:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        break;
+      }
+
+      if (!data || data.length === 0) break;
+      allProducts.push(...data);
+      if (data.length < PAGE) break; // last page
+      from += PAGE;
     }
-    
-    return products || [];
+    return allProducts;
   } catch (error: any) {
     if (error?.name === 'AbortError') return []; // expected from React 18 Strict Mode cleanup
     if (error?.message === 'Failed to fetch') return []; // network down / Supabase unreachable
     console.error('❌ Exception fetching saved products:', error);
-    return [];
+    return allProducts; // return whatever we got before the error
   }
 };
 
@@ -76,39 +86,49 @@ export const fetchSavedProducts = async () => {
  * NOTE: Images are SHARED across all users (collaborative workspace)
  */
 export const fetchSavedImages = async () => {
+  // Paginate in chunks of 1000 to bypass PostgREST server-side max-rows cap
+  const PAGE = 1000;
+  const allImages: any[] = [];
+  let from = 0;
   try {
-    const { data: images, error } = await supabase
-      .from('product_images')
-      .select(`
-        *,
-        products (
-          id,
-          title,
-          product_category,
-          vendor,
-          batch_id,
-          workflow_batches (
+    while (true) {
+      const { data, error } = await supabase
+        .from('product_images')
+        .select(`
+          *,
+          products (
             id,
-            batch_name,
-            batch_number,
-            created_at
+            title,
+            product_category,
+            vendor,
+            batch_id,
+            workflow_batches (
+              id,
+              batch_name,
+              batch_number,
+              created_at
+            )
           )
-        )
-      `)
-      .order('created_at', { ascending: true })
-      .range(0, 4999); // Supabase REST default cap is 1000 rows; .range() sends the proper Range header
-    
-    if (error) {
-      console.error('Error fetching saved images:', error);
-      return [];
+        `)
+        .order('created_at', { ascending: true })
+        .range(from, from + PAGE - 1);
+
+      if (error) {
+        console.error('Error fetching saved images:', error);
+        break;
+      }
+
+      if (!data || data.length === 0) break;
+      allImages.push(...data);
+      if (data.length < PAGE) break; // last page
+      from += PAGE;
     }
-    
-    return images || [];
+    return allImages;
   } catch (error: any) {
     if (error?.name === 'AbortError') return []; // expected from React 18 Strict Mode cleanup
     if (error?.message === 'Failed to fetch') return []; // network down / Supabase unreachable
     console.error('Error fetching saved images:', error);
-    return [];
+    return allImages; // return whatever we got before the error
   }
 };
 
