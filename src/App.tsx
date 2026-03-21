@@ -150,6 +150,8 @@ function App() {
   const currentBatchIdRef = useRef<string | null>(localStorage.getItem('sortbot_current_batch_id') || null);
   // Debounce timer for auto-save — prevents a PATCH on every rapid grouping action
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Separate debounce for Library refresh — fires 3 s after last save to avoid re-triggering loadAll
+  const libraryRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [currentBatchNumber, setCurrentBatchNumber] = useState<string>(() => {
     return localStorage.getItem('sortbot_current_batch_number') || `batch-${Date.now()}`;
   });
@@ -506,14 +508,15 @@ function App() {
           setCurrentBatchId(batchId);
           localStorage.setItem('sortbot_current_batch_id', batchId);
           localStorage.setItem('sortbot_current_batch_number', currentBatchNumber);
-          // A genuinely new batch was created — refresh Library so it appears.
-          // Only refresh on batch creation, NOT on every routine auto-save update.
-          // Refreshing on every update re-triggers loadAll every 2 s while Library
-          // is open, which sets state, which causes re-renders, which schedule more
-          // auto-saves — an infinite fetch loop.
-          if (showLibraryRef.current) {
+        }
+
+        // Refresh Library whenever it's open — debounced 3 s after the last save so the
+        // loadAll triggered here doesn't itself cause re-renders that schedule another save.
+        if (showLibraryRef.current) {
+          if (libraryRefreshTimerRef.current) clearTimeout(libraryRefreshTimerRef.current);
+          libraryRefreshTimerRef.current = setTimeout(() => {
             setLibraryRefreshTrigger(prev => prev + 1);
-          }
+          }, 3000);
         }
       } catch (error) {
         console.error('Auto-save failed:', error);
