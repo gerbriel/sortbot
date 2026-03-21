@@ -145,6 +145,8 @@ function App() {
   });
   // Ref mirror so async callbacks always read the latest batchId without closure staleness
   const currentBatchIdRef = useRef<string | null>(localStorage.getItem('sortbot_current_batch_id') || null);
+  // Debounce timer for auto-save — prevents a PATCH on every rapid grouping action
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [currentBatchNumber, setCurrentBatchNumber] = useState<string>(() => {
     return localStorage.getItem('sortbot_current_batch_number') || `batch-${Date.now()}`;
   });
@@ -173,16 +175,18 @@ function App() {
             // Confirm the ref matches the confirmed-valid batch ID
             currentBatchIdRef.current = savedBatchId;
             const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state;
-            if (uploadedImages?.length) setUploadedImages(uploadedImages);
-            if (groupedImages?.length) setGroupedImages(groupedImages);
-            if (sortedImages?.length) {
-              setSortedImages(sortedImages);
-              // Always use sortedImages as the base for processedItems so the
-              // count matches the grouping. processedItems may be stale from a
-              // prior session with different data.
-              setProcessedItems(sortedImages);
-            } else if (processedItems?.length) {
-              setProcessedItems(processedItems);
+            // processedItems is now the single saved list (others are empty arrays).
+            // Fall back through all arrays in case an older batch format is loaded.
+            const liveItems =
+              processedItems?.length  ? processedItems  :
+              sortedImages?.length    ? sortedImages     :
+              groupedImages?.length   ? groupedImages    :
+              uploadedImages          ? uploadedImages   : [];
+            if (liveItems.length) {
+              setUploadedImages(liveItems);
+              setGroupedImages(liveItems);
+              setSortedImages(liveItems);
+              setProcessedItems(liveItems);
             }
           }
         } catch {
@@ -435,8 +439,8 @@ function App() {
     // Broadcast action for real-time collaboration
   };
 
-  // Auto-save workflow state to batch
-  const autoSaveWorkflow = async (workflowState: {
+  // Auto-save workflow state to batch (debounced — 2 s after last call)
+  const autoSaveWorkflow = (workflowState: {
     uploadedImages: ClothingItem[];
     groupedImages: ClothingItem[];
     sortedImages: ClothingItem[];
@@ -444,38 +448,52 @@ function App() {
   }) => {
     if (!user) return;
 
-    // Strip blob previews and File objects before saving — they cause timeouts
-    // because base64/blob data makes the JSON enormous.
-    const strip = (items: ClothingItem[]): ClothingItem[] =>
-      items.map(({ file: _f, preview: _p, ...rest }) => rest as ClothingItem);
+    // Cancel any pending save
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
 
-    const safeState = {
-      uploadedImages: strip(workflowState.uploadedImages),
-      groupedImages:  strip(workflowState.groupedImages),
-      sortedImages:   strip(workflowState.sortedImages),
-      processedItems: strip(workflowState.processedItems),
-    };
-    
-    try {
-      // Use ref so we always get the latest batchId regardless of closure age
-      const batchId = await autoSaveWorkflowBatch(
-        currentBatchIdRef.current,
-        currentBatchNumber,
-        safeState
-      );
-      
-      if (batchId && batchId !== currentBatchIdRef.current) {
-        // First save OR old batch was deleted and a new one was created
-        currentBatchIdRef.current = batchId;
-        setCurrentBatchId(batchId);
-        localStorage.setItem('sortbot_current_batch_id', batchId);
-        localStorage.setItem('sortbot_current_batch_number', currentBatchNumber);
+    autoSaveTimerRef.current = setTimeout(async () => {
+      // Keep only the minimal fields needed to restore grouping/category state.
+      // Descriptions live in the products table; imageUrls are the only URLs we need.
+      // Saving 4 full arrays of every item caused statement timeouts.
+      const slim = (items: ClothingItem[]): ClothingItem[] =>
+        items.map(({ file: _f, preview: _p, voiceDescription: _v, generatedDescription: _g, _presetData: _pr, ...rest }) => rest as ClothingItem);
+
+      // Only persist ONE list — the most progressed one — to avoid 4x duplication.
+      // On restore, all four arrays are set from this single list.
+      const live =
+        workflowState.processedItems.length > 0 ? workflowState.processedItems :
+        workflowState.sortedImages.length    > 0 ? workflowState.sortedImages    :
+        workflowState.groupedImages.length   > 0 ? workflowState.groupedImages   :
+        workflowState.uploadedImages;
+
+      const safeState = {
+        uploadedImages: [] as ClothingItem[],
+        groupedImages:  [] as ClothingItem[],
+        sortedImages:   [] as ClothingItem[],
+        processedItems: slim(live),
+      };
+
+      try {
+        // Use ref so we always get the latest batchId regardless of closure age
+        const batchId = await autoSaveWorkflowBatch(
+          currentBatchIdRef.current,
+          currentBatchNumber,
+          safeState
+        );
+
+        if (batchId && batchId !== currentBatchIdRef.current) {
+          // First save OR old batch was deleted and a new one was created
+          currentBatchIdRef.current = batchId;
+          setCurrentBatchId(batchId);
+          localStorage.setItem('sortbot_current_batch_id', batchId);
+          localStorage.setItem('sortbot_current_batch_number', currentBatchNumber);
+        }
+        // Notify Library to refresh its counts/step
+        setLibraryRefreshTrigger(prev => prev + 1);
+      } catch (error) {
+        console.error('Auto-save failed:', error);
       }
-      // Notify Library to refresh its counts/step
-      setLibraryRefreshTrigger(prev => prev + 1);
-    } catch (error) {
-      console.error('Auto-save failed:', error);
-    }
+    }, 2000); // wait 2 s of inactivity before hitting Supabase
   };
 
   // Handle opening a batch from Library
@@ -488,6 +506,16 @@ function App() {
 
     // Restore workflow state
     const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state ?? {};
+
+    // processedItems is now the single saved list (others are empty arrays in new format).
+    // Fall back through all arrays for older batch formats.
+    // Cast as ClothingItem[] — SlimItems have the same fields minus file/preview (which are runtime-only anyway).
+    const workflowItems: ClothingItem[] = (
+      processedItems?.length  ? processedItems  :
+      sortedImages?.length    ? sortedImages     :
+      groupedImages?.length   ? groupedImages    :
+      uploadedImages?.length  ? uploadedImages   : []
+    ) as ClothingItem[];
     
     // Fetch saved products from database to restore descriptions
     try {
@@ -572,8 +600,8 @@ function App() {
           .order('created_at', { ascending: true });
         
         if (recentProducts && recentProducts.length > 0) {
-          // Try to match by image URLs from processedItems
-          const workflowImageUrls = new Set(processedItems?.map(item => item.preview) || []);
+          // Try to match by image URLs from workflowItems
+          const workflowImageUrls = new Set(workflowItems.map(item => item.preview).filter(Boolean));
           
           potentialOrphans = recentProducts.filter((product: any) => {
             return product.product_images?.some((img: any) => 
@@ -585,11 +613,11 @@ function App() {
       
       const productsToUse = savedProducts && savedProducts.length > 0 ? savedProducts : potentialOrphans;
       
-      // Always derive processedItems from sortedImages (the current grouping),
-      // not from the stale saved processedItems. This ensures the count always
-      // matches the grouping state even if processedItems was saved with different data.
+      // Always derive baseItems from the most-progressed single list (workflowItems),
+      // not from the stale individual arrays. This handles both the new single-list
+      // format and old multi-array formats via the fallback chain above.
       // When there is NO workflow_state at all, reconstruct ClothingItems from DB products.
-      let baseItems: ClothingItem[] = sortedImages || processedItems || [];
+      let baseItems: ClothingItem[] = workflowItems;
 
       if (baseItems.length === 0 && productsToUse && productsToUse.length > 0) {
         // No workflow_state — build items from the DB products table
@@ -741,35 +769,19 @@ function App() {
         });
       }
       
-      if (uploadedImages) {
-        setUploadedImages(uploadedImages);
-      }
-      if (groupedImages) {
-        setGroupedImages(groupedImages);
-      }
-      if (sortedImages) {
-        setSortedImages(sortedImages);
-      }
-      // restoredProcessedItems is always derived from sortedImages (the grouping source of truth),
-      // with saved DB product data merged in. Set it directly.
+      // Set all 4 arrays from the single restored list so every step stays in sync.
+      setUploadedImages(restoredProcessedItems);
+      setGroupedImages(restoredProcessedItems);
+      setSortedImages(restoredProcessedItems);
       setProcessedItems(restoredProcessedItems);
-      // If there was no workflow_state, seed all image arrays from DB-reconstructed items
-      if (!batch.workflow_state && restoredProcessedItems.length > 0) {
-        setUploadedImages(restoredProcessedItems);
-        setGroupedImages(restoredProcessedItems);
-        setSortedImages(restoredProcessedItems);
-      }
     } catch (error) {
       console.error('Error restoring saved product data:', error);
-      // Fallback to basic workflow state — always use sortedImages as base for processedItems
-      if (uploadedImages) setUploadedImages(uploadedImages);
-      if (groupedImages) setGroupedImages(groupedImages);
-      if (sortedImages) {
-        setSortedImages(sortedImages);
-        setProcessedItems(sortedImages);
-      } else if (processedItems) {
-        setProcessedItems(processedItems);
-      }
+      // Fallback to basic workflow state — use the same single-list logic
+      const fallbackItems: ClothingItem[] = workflowItems;
+      setUploadedImages(fallbackItems);
+      setGroupedImages(fallbackItems);
+      setSortedImages(fallbackItems);
+      setProcessedItems(fallbackItems);
     }
     // Set current batch info and persist for reload survival
     currentBatchIdRef.current = batch.id;
