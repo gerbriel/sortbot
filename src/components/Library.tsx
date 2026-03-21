@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { fetchWorkflowBatches, deleteWorkflowBatch, type WorkflowBatch } from '../lib/workflowBatchService';
+import { fetchWorkflowBatches, deleteWorkflowBatch, type WorkflowBatch, type SlimItem } from '../lib/workflowBatchService';
 import { 
   deleteProductGroup, 
   deleteImage, 
@@ -255,14 +255,14 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       const groups: ProductGroup[] = [];
 
       wfBatches.forEach(batch => {
-        const items: ClothingItem[] =
+        const items: (ClothingItem | SlimItem)[] =
           (batch.workflow_state?.processedItems?.length  ? batch.workflow_state.processedItems  : null) ||
           (batch.workflow_state?.sortedImages?.length    ? batch.workflow_state.sortedImages    : null) ||
           (batch.workflow_state?.groupedImages?.length   ? batch.workflow_state.groupedImages   : null) ||
           [];
 
-        const groupMap = new Map<string, ClothingItem[]>();
-        items.forEach((item: ClothingItem) => {
+        const groupMap = new Map<string, (ClothingItem | SlimItem)[]>();
+        items.forEach((item) => {
           const gid = item.productGroup || item.id;
           if (!groupMap.has(gid)) groupMap.set(gid, []);
           groupMap.get(gid)!.push(item);
@@ -272,9 +272,9 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
           const first = groupItems[0];
           groups.push({
             id: groupId,
-            title: cleanTitle(first.seoTitle),
+            title: cleanTitle((first as ClothingItem).seoTitle),
             category: first.category || 'Uncategorized',
-            images: groupItems.map(i => i.preview || i.imageUrls?.[0] || '').filter(Boolean),
+            images: groupItems.map(i => (i as ClothingItem).preview || i.imageUrls?.[0] || '').filter(Boolean),
             itemCount: groupItems.length,
             createdAt: batch.created_at,
             batchId: batch.id,
@@ -337,12 +337,12 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       });
 
       wfBatches.forEach(batch => {
-        const items: ClothingItem[] =
+        const items: (ClothingItem | SlimItem)[] =
           batch.workflow_state?.processedItems ||
           batch.workflow_state?.sortedImages ||
           batch.workflow_state?.groupedImages || [];
-        items.forEach((item: ClothingItem) => {
-          const url = item.preview || item.imageUrls?.[0] || '';
+        items.forEach((item) => {
+          const url = (item as ClothingItem).preview || item.imageUrls?.[0] || '';
           if (!url || savedImageUrls.has(url)) return;
           savedImageUrls.add(url);
           imageList.push({
@@ -350,7 +350,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
             preview: url,
             category: item.category,
             productGroup: item.productGroup || item.id,
-            productGroupTitle: item.seoTitle || undefined,
+            productGroupTitle: (item as ClothingItem).seoTitle || undefined,
             batchId: batch.id,
             batchName: makeBatchName(batch),
             createdAt: batch.created_at,
@@ -1304,7 +1304,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
     
     return items
       .slice(0, 4)
-      .map(item => item.preview || item.imageUrls?.[0] || '')
+      .map(item => (item as ClothingItem).preview || item.imageUrls?.[0] || '')
       .filter(Boolean);
   };
 
