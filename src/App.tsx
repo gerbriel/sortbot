@@ -349,8 +349,6 @@ function App() {
 
     // Write uploaded images to product_images immediately so Library stays in sync.
     // Uses upsert on storage_path so Step 4 "Save Batch" can't create duplicates.
-    // NOTE: No Library refresh trigger here — uploads fire per-chunk (every 10 images)
-    // which would spam loadAll. The Library will update when the user saves (Step 4).
     const uploadedItems = items.filter(i => i.storagePath && i.imageUrls?.[0]);
     if (uploadedItems.length > 0) {
       await supabase.from('product_images').upsert(
@@ -362,6 +360,9 @@ function App() {
         })),
         { onConflict: 'storage_path', ignoreDuplicates: true }
       );
+      // Refresh Library immediately — images are now in the DB
+      console.log('[App] setLibraryRefreshTrigger → upload complete (Step 1)');
+      setLibraryRefreshTrigger(prev => prev + 1);
     }
   };
 
