@@ -578,9 +578,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     // Delete from storage if it was uploaded
     if (item.storagePath) {
       await deleteImageFromStorage(item.storagePath);
-      // Also delete the corresponding product_images DB row
+      // Delete the product_images row
       await supabase.from('product_images').delete().eq('storage_path', item.storagePath);
     }
+    // Delete the products row (cleans up orphaned DB entries)
+    await supabase.from('products').delete().eq('id', item.id);
 
     // Remove from UI
     const updated = groupedItems.filter(i => i.id !== item.id);
@@ -604,13 +606,18 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
     const toDelete = groupedItems.filter(i => selectedItems.has(i.id));
     const storagePaths = toDelete.map(i => i.storagePath).filter(Boolean) as string[];
+    const deletedIds = toDelete.map(i => i.id);
 
     // Delete from storage in parallel
     await Promise.all(storagePaths.map(p => deleteImageFromStorage(p)));
 
-    // Delete corresponding product_images DB rows in one query
+    // Delete product_images rows by storage_path
     if (storagePaths.length > 0) {
       await supabase.from('product_images').delete().in('storage_path', storagePaths);
+    }
+    // Delete products rows by id (removes orphaned DB entries)
+    if (deletedIds.length > 0) {
+      await supabase.from('products').delete().in('id', deletedIds);
     }
 
     const updated = groupedItems.filter(i => !selectedItems.has(i.id));
