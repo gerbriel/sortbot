@@ -225,8 +225,9 @@ function App() {
               }
             }
           }
-        } catch {
-          // Batch may have been deleted; clear stale ID
+        } catch (err) {
+          // Log the actual error before clearing — this tells us what threw after the ref was set
+          console.error('[App] startup restore CATCH — clearing batchId. Error:', err);
           currentBatchIdRef.current = null;
           setCurrentBatchId(null);
           localStorage.removeItem('sortbot_current_batch_id');
