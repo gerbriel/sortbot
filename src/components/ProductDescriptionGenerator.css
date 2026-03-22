@@ -408,7 +408,7 @@
 }
 
 /* Mobile Responsiveness */
-@media (max-width: 1200px) {
+@media (max-width: 900px) {
   .product-editor {
     grid-template-columns: 1fr;
   }
