@@ -145,6 +145,33 @@ export async function updateWorkflowBatch(
  */
 export async function deleteWorkflowBatch(batchId: string): Promise<boolean> {
   try {
+    // 1. Collect storage paths for all images belonging to this batch's products
+    const { data: imageRows } = await supabase
+      .from('product_images')
+      .select('id, storage_path')
+      .in(
+        'product_id',
+        (await supabase.from('products').select('id').eq('batch_id', batchId)).data?.map((r: any) => r.id) ?? []
+      );
+
+    // 2. Delete files from Storage
+    const storagePaths = (imageRows ?? [])
+      .map((r: any) => r.storage_path)
+      .filter(Boolean) as string[];
+    if (storagePaths.length > 0) {
+      await supabase.storage.from('product-images').remove(storagePaths);
+    }
+
+    // 3. Delete product_images rows
+    const imageIds = (imageRows ?? []).map((r: any) => r.id);
+    if (imageIds.length > 0) {
+      await supabase.from('product_images').delete().in('id', imageIds);
+    }
+
+    // 4. Delete products rows
+    await supabase.from('products').delete().eq('batch_id', batchId);
+
+    // 5. Delete the workflow_batch row
     const { error } = await supabase
       .from('workflow_batches')
       .delete()

@@ -145,48 +145,36 @@ export const deleteProductGroup = async (
   groupId: string
 ): Promise<boolean> => {
   try {
-    // 1. Delete from products table (CASCADE will delete product_images)
+    // 1. Collect storage paths for all images belonging to this product
+    const { data: imageRows } = await supabase
+      .from('product_images')
+      .select('id, storage_path')
+      .eq('product_id', groupId);
+
+    // 2. Delete files from Storage
+    const storagePaths = (imageRows ?? [])
+      .map((r: any) => r.storage_path)
+      .filter(Boolean) as string[];
+    if (storagePaths.length > 0) {
+      await supabase.storage.from('product-images').remove(storagePaths);
+    }
+
+    // 3. Delete product_images rows
+    const imageIds = (imageRows ?? []).map((r: any) => r.id);
+    if (imageIds.length > 0) {
+      await supabase.from('product_images').delete().in('id', imageIds);
+    }
+
+    // 4. Delete the product row
     const { error: productError } = await supabase
       .from('products')
       .delete()
       .eq('id', groupId);
-    
-    if (productError && productError.code !== 'PGRST116') { // PGRST116 = no rows found (OK)
+
+    if (productError && productError.code !== 'PGRST116') {
       console.error('Error deleting product:', productError);
     }
-    
-    // 2. Fetch all batches and remove from workflow_state
-    const batches = await fetchWorkflowBatches();
-    
-    const updatePromises = batches.map(async (batch) => {
-      let modified = false;
-      const updatedState = { ...batch.workflow_state };
-      
-      // Remove items from all arrays
-      ['uploadedImages', 'groupedImages', 'sortedImages', 'processedItems'].forEach(key => {
-        const items = updatedState[key as keyof typeof updatedState];
-        if (Array.isArray(items)) {
-          const filtered = items.filter((item: any) => {
-            const itemGroup = item.productGroup || item.id;
-            return itemGroup !== groupId;
-          });
-          
-          if (filtered.length !== items.length) {
-            modified = true;
-            (updatedState as any)[key] = filtered;
-          }
-        }
-      });
-      
-      // Only update if something changed
-      if (modified) {
-        return updateWorkflowBatch(batch.id, { workflow_state: updatedState });
-      }
-      return true;
-    });
-    
-    await Promise.all(updatePromises);
-    
+
     return true;
   } catch (error) {
     console.error('Error deleting product group:', error);
