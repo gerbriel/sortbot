@@ -208,6 +208,7 @@ function App() {
               };
             });
             if (liveItems.length) {
+              console.log(`[App] startup restore | batchId=${savedBatchId} | items=${liveItems.length}`);
               setUploadedImages(liveItems);
               setGroupedImages(liveItems);
               setSortedImages(liveItems);
@@ -247,6 +248,7 @@ function App() {
   };
 
   const handleSaveBatch = async () => {
+    console.log(`[App] handleSaveBatch | processedItems=${processedItems.length} | batchId=${currentBatchId}`);
     if (!user || processedItems.length === 0) {
       alert('No products to save!');
       return;
@@ -297,6 +299,7 @@ function App() {
   };
 
   const handleClearBatch = () => {
+    console.log(`[App] handleClearBatch | uploadedImages=${uploadedImages.length} | batchId=${currentBatchId}`);
     if (confirm('Are you sure you want to clear this batch? Unsaved products will be lost.')) {
       setProcessedItems([]);
       setGroupedImages([]);
@@ -326,6 +329,7 @@ function App() {
   }
 
   const handleImagesUploaded = async (items: ClothingItem[]) => {
+    console.log(`[App] handleImagesUploaded | newItems=${items.length} | totalAfter=${uploadedImages.length + items.length}`);
     // APPEND new images to existing ones (don't replace)
     const newImages = [...uploadedImages, ...items];
     setUploadedImages(newImages);
@@ -362,6 +366,7 @@ function App() {
   };
 
   const handleImagesSorted = async (items: ClothingItem[]) => {
+    console.log(`[App] handleImagesSorted | items=${items.length} | categories=${[...new Set(items.map(i => i.category).filter(Boolean))].join(', ')}`);
     setSortedImages(items);
     // Also update groupedImages so Step 2 shows the categories
     setGroupedImages(items);
@@ -417,6 +422,8 @@ function App() {
   };
 
   const handleImagesGrouped = async (items: ClothingItem[]) => {
+    const groups = new Set(items.map(i => i.productGroup).filter(Boolean));
+    console.log(`[App] handleImagesGrouped | items=${items.length} | groups=${groups.size}`);
     // Preserve existing categories when updating groups
     const itemsWithCategories = items.map(item => {
       const existingItem = groupedImages.find(g => g.id === item.id);
@@ -491,6 +498,7 @@ function App() {
   };
 
   const handleItemsProcessed = (items: ClothingItem[]) => {
+    console.log(`[App] handleItemsProcessed | items=${items.length}`);
     setProcessedItems(items);
     
     // Auto-save workflow state
@@ -517,6 +525,9 @@ function App() {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
 
     autoSaveTimerRef.current = setTimeout(async () => {
+      console.log(`[App] autoSave fired | batchId=${currentBatchIdRef.current} | liveItemCount=${
+        workflowState.processedItems.length || workflowState.sortedImages.length || workflowState.groupedImages.length || workflowState.uploadedImages.length
+      }`);
       // Keep only the minimal fields needed to restore grouping/category state.
       // Descriptions live in the products table; imageUrls are the only URLs we need.
       // Saving 4 full arrays of every item caused statement timeouts.
@@ -564,6 +575,7 @@ function App() {
 
   // Handle opening a batch from Library
   const handleOpenBatch = async (batch: WorkflowBatch) => {
+    console.log(`[App] handleOpenBatch | batchId=${batch.id} | batchName="${batch.batch_name}" | step=${batch.current_step}`);
     // ── Clear ALL current state first so nothing from the active session bleeds in ──
     setUploadedImages([]);
     setGroupedImages([]);
@@ -850,6 +862,7 @@ function App() {
       }
       
       // Set all 4 arrays from the single restored list so every step stays in sync.
+      console.log(`[App] handleOpenBatch RESTORED | items=${restoredProcessedItems.length} | fromDB=${productsToUse?.length ?? 0} | fromWorkflowState=${workflowItems.length}`);
       setUploadedImages(restoredProcessedItems);
       setGroupedImages(restoredProcessedItems);
       setSortedImages(restoredProcessedItems);

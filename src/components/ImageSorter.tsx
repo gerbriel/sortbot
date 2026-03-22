@@ -40,6 +40,7 @@ const ImageSorter: React.FC<ImageSorterProps> = ({ images, onSorted }) => {
   }, [sortedItems]);
 
   const handleCategorySelect = (groupId: string, category: string) => {
+    console.log(`[Step3:Sorter] categorySelect | groupId=${groupId} category="${category}"`);
     const updated = sortedItems.map(item => {
       // If this item belongs to the selected group, update its category
       const itemGroupId = item.productGroup || item.id;
@@ -50,6 +51,7 @@ const ImageSorter: React.FC<ImageSorterProps> = ({ images, onSorted }) => {
 
   const handleFinishSorting = () => {
     const allCategorized = sortedItems.every(item => item.category);
+    console.log(`[Step3:Sorter] finishSorting | allCategorized=${allCategorized} | total=${sortedItems.length} | uncategorized=${sortedItems.filter(i => !i.category).length}`);
     if (allCategorized) {
       onSorted(sortedItems);
     } else {

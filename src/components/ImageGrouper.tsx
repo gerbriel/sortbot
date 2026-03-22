@@ -145,6 +145,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       });
       
       setSelectedItems(newSelected);
+      console.log(`[Step2:Grouper] rubberBandSelect | selected=${newSelected.size}`);
       setIsSelecting(false);
       setSelectionStart(null);
       setSelectionBox(null);
@@ -335,6 +336,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // Click-to-Select functionality (with Shift+Click for multi-select)
   const toggleItemSelection = (itemId: string, e?: React.MouseEvent) => {
     const newSelected = new Set(selectedItems);
+    const action = newSelected.has(itemId) ? 'deselect' : 'select';
+    console.log(`[Step2:Grouper] toggleSelect | ${action} id=${itemId} | shift=${!!e?.shiftKey} | totalAfter=${newSelected.size + (action === 'select' ? 1 : -1)}`);
     
     // If shift key is held, keep existing selection and add/remove this item
     if (e?.shiftKey) {
@@ -396,6 +399,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       alert('Please select at least 1 item to group');
       return;
     }
+    console.log(`[Step2:Grouper] createGroup | selected=${selectedItems.size} | newGroupId=group-${groupCounter}`);
 
     const groupId = `group-${groupCounter}`;
     const updated = groupedItems.map(item =>
@@ -416,6 +420,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       alert('Please select items to ungroup');
       return;
     }
+    console.log(`[Step2:Grouper] ungroupSelected | selected=${selectedItems.size}`);
 
     const updated = groupedItems.map(item =>
       selectedItems.has(item.id)
@@ -431,6 +436,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
   // Drag and Drop Handlers for Images
   const handleDragStart = (e: React.DragEvent, item: ClothingItem, fromGroup: string) => {
+    console.log(`[Step2:Grouper] dragStart | item=${item.id} fromGroup=${fromGroup}`);
     setDraggedItem(item);
     setDraggedFromGroup(fromGroup);
     // Set data for cross-component dragging (Step 2 -> Step 3)
@@ -466,7 +472,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       return;
     }
 
-    // Move image to target group
+    console.log(`[Step2:Grouper] drop | item=${draggedItem.id} from=${draggedFromGroup} → to=${targetGroup}`);
     const updated = groupedItems.map(item =>
       item.id === draggedItem.id
         ? { ...item, productGroup: targetGroup }
@@ -488,6 +494,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
   // ── Photo reorder handlers (drag photos within a group) ──────────────────
   const handlePhotoDragStart = (e: React.DragEvent, item: ClothingItem, groupId: string) => {
+    console.log(`[Step2:Grouper] photoDragStart | photo=${item.id} group=${groupId}`);
     e.stopPropagation();
     setDraggedPhotoId(item.id);
     setDraggedPhotoGroupId(groupId);
@@ -566,6 +573,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // Delete image handler
   const handleDeleteImage = async (item: ClothingItem) => {
     if (!confirm('Delete this image? This cannot be undone.')) return;
+    console.log(`[Step2:Grouper] deleteImage | item=${item.id} storagePath=${item.storagePath}`);
 
     // Delete from storage if it was uploaded
     if (item.storagePath) {
@@ -592,6 +600,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const handleDeleteSelected = async () => {
     if (selectedItems.size === 0) return;
     if (!confirm(`Delete ${selectedItems.size} selected image${selectedItems.size > 1 ? 's' : ''}? This cannot be undone.`)) return;
+    console.log(`[Step2:Grouper] deleteSelected | count=${selectedItems.size}`);
 
     const toDelete = groupedItems.filter(i => selectedItems.has(i.id));
     const storagePaths = toDelete.map(i => i.storagePath).filter(Boolean) as string[];
