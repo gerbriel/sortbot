@@ -576,6 +576,15 @@ function App() {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
 
     autoSaveTimerRef.current = setTimeout(async () => {
+      // Guard: if session hasn't resolved yet (getSession().then() still in flight),
+      // currentBatchIdRef.current will be null and we'd create a spurious new batch.
+      // This happens when PDG mounts immediately and calls handleItemsProcessed before
+      // getSession() completes. Safe to skip — the session resolving will trigger another
+      // autoSave call with the correct batchId.
+      if (!currentBatchIdRef.current) {
+        console.log(`[App] autoSave SKIPPED — batchId ref still null (session not resolved yet) | localStorage=${localStorage.getItem('sortbot_current_batch_id')}`);
+        return;
+      }
       // Diagnostic: snapshot the ref at the exact moment the timer fires
       console.log(`[App] autoSave fired | batchId=${currentBatchIdRef.current} | localStorage=${localStorage.getItem('sortbot_current_batch_id')} | liveItemCount=${
         workflowState.processedItems.length || workflowState.sortedImages.length || workflowState.groupedImages.length || workflowState.uploadedImages.length
