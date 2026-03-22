@@ -55,16 +55,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const [processedItems, setProcessedItems] = useState<ClothingItem[]>(items);
   const [currentGroupIndex, setCurrentGroupIndex] = useState(0);
 
-  // Sync internal state when parent prunes items (e.g. Step 2 bulk deletes).
-  // Without this, the component re-renders with the new prop but immediately
-  // calls onProcessed(staleLocalItems) back up, resetting App.tsx to the old count.
-  useEffect(() => {
-    if (items.length !== processedItems.length) {
-      console.log(`[Step4:PDG] prop items changed | ${processedItems.length} → ${items.length} — syncing internal state`);
-      setProcessedItems(items);
-      setCurrentGroupIndex(prev => Math.min(prev, Math.max(0, items.length - 1)));
-    }
-  }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
   const [isRecording, setIsRecording] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState('');
@@ -145,6 +135,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const firstIdChanged = items[0]?.id !== previousItemsRefRef.current[0]?.id;
 
     if (batchChanged || lengthChanged || firstIdChanged) {
+      console.log(`[Step4:PDG] prop sync | items: ${previousItemsLengthRef.current} → ${items.length} | batchChanged=${batchChanged} lengthChanged=${lengthChanged} firstIdChanged=${firstIdChanged}`);
       isResettingRef.current = true;
       setProcessedItems(items);
       setCurrentGroupIndex(0); // Reset to first group
