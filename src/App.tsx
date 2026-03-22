@@ -624,6 +624,7 @@ function App() {
   // the `user` React state hasn't been set yet (setUser is async via onAuthStateChange).
   const registerItemsInDB = async (liveItems: ClothingItem[], batchId: string | null, forceUser?: User | null) => {
     const activeUser = forceUser ?? user;
+    console.log(`[App] registerItemsInDB ENTRY | activeUser=${activeUser?.id ?? 'NULL'} | forceUser=${forceUser?.id ?? 'NULL'} | user(state)=${user?.id ?? 'NULL'} | items=${liveItems.length} | batchId=${batchId}`);
     if (!activeUser || liveItems.length === 0) return;
     // Accept items that have either imageUrls[0] OR storagePath — covers both legacy and new items
     const registerable = liveItems.filter(i => i.imageUrls?.[0] || (i.storagePath && i.storagePath !== ''));
