@@ -157,6 +157,64 @@ function App() {
   // Keep showLibraryRef in sync so the autoSave closure always reads the live value
   useEffect(() => { showLibraryRef.current = showLibrary; }, [showLibrary]);
 
+  // Register restored workflow items in products + product_images so Library sees them.
+  // Called after startup restore and handleOpenBatch. No-ops if rows already exist.
+  // Handles legacy items (pre-storagePath era) that only have imageUrls, and newer items
+  // that have storagePath but may have empty imageUrls after restore.
+  // forceUser: pass the session user explicitly when calling from startup restore, because
+  // the `user` React state hasn't been set yet (setUser is async via onAuthStateChange).
+  // IMPORTANT: must be defined BEFORE the auth useEffect([]) that calls it at startup.
+  const registerItemsInDB = async (liveItems: ClothingItem[], batchId: string | null, forceUser?: User | null) => {
+    const activeUser = forceUser ?? user;
+    if (!activeUser || liveItems.length === 0) return;
+    // Accept items that have either imageUrls[0] OR storagePath — covers both legacy and new items
+    const registerable = liveItems.filter(i => i.imageUrls?.[0] || (i.storagePath && i.storagePath !== ''));
+    const withStoragePath = registerable.filter(i => i.storagePath).length;
+    const withImageUrls = registerable.filter(i => i.imageUrls?.[0]).length;
+    console.log(`[App] registerItemsInDB | total=${liveItems.length} registerable=${registerable.length} withStoragePath=${withStoragePath} withImageUrls=${withImageUrls} | batchId=${batchId}`);
+    if (registerable.length === 0) return;
+    try {
+      await supabase.from('products').upsert(
+        registerable.map(item => ({
+          id: item.id,
+          user_id: activeUser.id,
+          batch_id: batchId,
+          title: item.seoTitle || null,
+          status: 'Draft',
+        })),
+        // ignoreDuplicates: false — allows updating batch_id on existing rows so products
+        // are correctly attributed to the current batch when restored from a new session.
+        { onConflict: 'id', ignoreDuplicates: false }
+      );
+      // Build product_images rows. For image_url: prefer imageUrls[0], fall back to getPublicUrl(storagePath).
+      // storage_path may be null for legacy items — that's fine, the column is nullable.
+      // Conflict key: (product_id, image_url) — matches the existing composite unique constraint.
+      const productImageRows = registerable.flatMap((item, idx) => {
+        const imageUrl = item.imageUrls?.[0] ||
+          (item.storagePath
+            ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
+            : null);
+        if (!imageUrl) return []; // no image_url available at all — skip
+        return [{
+          image_url: imageUrl,
+          storage_path: item.storagePath ?? null,
+          product_id: item.id,
+          position: idx,
+          alt_text: item.seoTitle || 'Uploaded image',
+        }];
+      });
+      if (productImageRows.length > 0) {
+        await supabase.from('product_images').upsert(
+          productImageRows,
+          { onConflict: 'product_id,image_url', ignoreDuplicates: true }
+        );
+      }
+      console.log(`[App] registerItemsInDB | registered ${registerable.length} products, ${productImageRows.length} product_images | batchId=${batchId}`);
+    } catch (err) {
+      console.error('[App] registerItemsInDB failed:', err);
+    }
+  };
+
   // Helper to determine current workflow step
 
   // Real-time presence tracking for collaborative viewing
@@ -640,57 +698,6 @@ function App() {
   // that have storagePath but may have empty imageUrls after restore.
   // forceUser: pass the session user explicitly when calling from startup restore, because
   // the `user` React state hasn't been set yet (setUser is async via onAuthStateChange).
-  const registerItemsInDB = async (liveItems: ClothingItem[], batchId: string | null, forceUser?: User | null) => {
-    const activeUser = forceUser ?? user;
-    if (!activeUser || liveItems.length === 0) return;
-    // Accept items that have either imageUrls[0] OR storagePath — covers both legacy and new items
-    const registerable = liveItems.filter(i => i.imageUrls?.[0] || (i.storagePath && i.storagePath !== ''));
-    const withStoragePath = registerable.filter(i => i.storagePath).length;
-    const withImageUrls = registerable.filter(i => i.imageUrls?.[0]).length;
-    console.log(`[App] registerItemsInDB | total=${liveItems.length} registerable=${registerable.length} withStoragePath=${withStoragePath} withImageUrls=${withImageUrls} | batchId=${batchId}`);
-    if (registerable.length === 0) return;
-    try {
-      await supabase.from('products').upsert(
-        registerable.map(item => ({
-          id: item.id,
-          user_id: activeUser.id,
-          batch_id: batchId,
-          title: item.seoTitle || null,
-          status: 'Draft',
-        })),
-        // ignoreDuplicates: false — allows updating batch_id on existing rows so products
-        // are correctly attributed to the current batch when restored from a new session.
-        { onConflict: 'id', ignoreDuplicates: false }
-      );
-      // Build product_images rows. For image_url: prefer imageUrls[0], fall back to getPublicUrl(storagePath).
-      // storage_path may be null for legacy items — that's fine, the column is nullable.
-      // Conflict key: (product_id, image_url) — matches the existing composite unique constraint.
-      const productImageRows = registerable.flatMap((item, idx) => {
-        const imageUrl = item.imageUrls?.[0] ||
-          (item.storagePath
-            ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
-            : null);
-        if (!imageUrl) return []; // no image_url available at all — skip
-        return [{
-          image_url: imageUrl,
-          storage_path: item.storagePath ?? null,
-          product_id: item.id,
-          position: idx,
-          alt_text: item.seoTitle || 'Uploaded image',
-        }];
-      });
-      if (productImageRows.length > 0) {
-        await supabase.from('product_images').upsert(
-          productImageRows,
-          { onConflict: 'product_id,image_url', ignoreDuplicates: true }
-        );
-      }
-      console.log(`[App] registerItemsInDB | registered ${registerable.length} products, ${productImageRows.length} product_images | batchId=${batchId}`);
-    } catch (err) {
-      console.error('[App] registerItemsInDB failed:', err);
-    }
-  };
-
   // Handle opening a batch from Library
   const handleOpenBatch = async (batch: WorkflowBatch) => {
     console.log(`[App] handleOpenBatch | batchId=${batch.id} | batchName="${batch.batch_name}" | step=${batch.current_step}`);
