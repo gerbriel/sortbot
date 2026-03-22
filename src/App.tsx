@@ -318,7 +318,7 @@ function App() {
     return <Auth onAuthenticated={() => {}} />;
   }
 
-  const handleImagesUploaded = (items: ClothingItem[]) => {
+  const handleImagesUploaded = async (items: ClothingItem[]) => {
     // APPEND new images to existing ones (don't replace)
     const newImages = [...uploadedImages, ...items];
     setUploadedImages(newImages);
@@ -336,31 +336,47 @@ function App() {
       processedItems,
     });
 
-    // Broadcast action for real-time collaboration
+    // Write uploaded images to product_images immediately so Library stays in sync.
+    // Uses upsert on storage_path so Step 4 "Save Batch" can't create duplicates.
+    const uploadedItems = items.filter(i => i.storagePath && i.imageUrls?.[0]);
+    if (uploadedItems.length > 0) {
+      await supabase.from('product_images').upsert(
+        uploadedItems.map((item, idx) => ({
+          image_url: item.imageUrls![0],
+          storage_path: item.storagePath!,
+          position: idx,
+          alt_text: item.seoTitle || 'Uploaded image',
+        })),
+        { onConflict: 'storage_path', ignoreDuplicates: true }
+      );
+      setLibraryRefreshTrigger(prev => prev + 1);
+    }
   };
 
-  const handleImagesSorted = (items: ClothingItem[]) => {
+  const handleImagesSorted = async (items: ClothingItem[]) => {
     setSortedImages(items);
     // Also update groupedImages so Step 2 shows the categories
     setGroupedImages(items);
     
     // Sync categories to processedItems (preserve voice descriptions if they exist)
+    let finalProcessed: ClothingItem[];
     if (processedItems.length > 0) {
       // Update existing processedItems with new categories
-      const updatedProcessed = processedItems.map(procItem => {
+      finalProcessed = processedItems.map(procItem => {
         const sortedItem = items.find(i => i.id === procItem.id);
         if (sortedItem) {
           return {
             ...procItem,
-            category: sortedItem.category, // Update category from Step 3
-            _presetData: sortedItem._presetData, // Update preset metadata
+            category: sortedItem.category,
+            _presetData: sortedItem._presetData,
           };
         }
         return procItem;
       });
-      setProcessedItems(updatedProcessed);
+      setProcessedItems(finalProcessed);
     } else {
       // Initialize processedItems with categorized items
+      finalProcessed = items;
       setProcessedItems(items);
     }
     
@@ -369,10 +385,27 @@ function App() {
       uploadedImages,
       groupedImages: items,
       sortedImages: items,
-      processedItems,
+      processedItems: finalProcessed,
     });
 
-    // Broadcast action for real-time collaboration
+    // Upsert category changes to products table immediately so Library reflects them
+    if (user && currentBatchId) {
+      const itemsWithCategory = items.filter(i => i.category && i.productGroup);
+      if (itemsWithCategory.length > 0) {
+        // Collect unique groups (one product row per productGroup)
+        const byGroup = new Map<string, ClothingItem>();
+        itemsWithCategory.forEach(i => byGroup.set(i.productGroup!, i));
+        await supabase.from('products').upsert(
+          Array.from(byGroup.values()).map(item => ({
+            id: item.productGroup,
+            product_category: item.category,
+            batch_id: currentBatchId,
+            user_id: user.id,
+          })),
+          { onConflict: 'id', ignoreDuplicates: false }
+        );
+      }
+    }
   };
 
   const handleImagesGrouped = async (items: ClothingItem[]) => {
@@ -440,6 +473,7 @@ function App() {
             text: `✅ Saved ${result.success} product group(s) to database!`,
           });
           setTimeout(() => setSaveMessage(null), 2000);
+          setLibraryRefreshTrigger(prev => prev + 1);
         }
       } catch (error) {
         console.error('Auto-save error:', error);
