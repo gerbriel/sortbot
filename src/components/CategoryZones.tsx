@@ -82,9 +82,11 @@ interface CategoryZonesProps {
   onCategorized: (items: ClothingItem[]) => void;
   /** When true, renders a compact vertical list (used inside the combined Step 2+3 panel) */
   compactMode?: boolean;
+  /** IDs of items currently selected in ImageGrouper — clicking a category assigns them */
+  selectedItemIds?: Set<string>;
 }
 
-const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, compactMode = false }) => {
+const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, compactMode = false, selectedItemIds }) => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -235,6 +237,34 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
   const handleCategoryDragLeave = () => setDragOverCategory(null);
 
   // ══════════════════════════════════════════════════════════════════════════
+  // Category-click handler (click category zone with items selected in Step 2)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const handleCategoryClick = async (categoryName: string) => {
+    if (!selectedItemIds || selectedItemIds.size === 0) return;
+
+    // Group selected items by their productGroup
+    const selected = items.filter(i => selectedItemIds.has(i.id));
+    const byGroup = new Map<string, ClothingItem[]>();
+    selected.forEach(item => {
+      const gid = item.productGroup || item.id;
+      if (!byGroup.has(gid)) byGroup.set(gid, []);
+      byGroup.get(gid)!.push(item);
+    });
+
+    const updatedMap = { ...groupsMap };
+    for (const [groupId, groupItems] of byGroup) {
+      const itemsWithPreset = await applyPresetToProductGroup(groupItems, categoryName);
+      updatedMap[groupId] = (groupsMap[groupId] || groupItems).map(item => {
+        const withPreset = itemsWithPreset.find(i => i.id === item.id);
+        return withPreset || { ...item, category: categoryName };
+      });
+    }
+
+    emitReordered(groupOrderRef.current, updatedMap);
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
   // Group reorder handlers (drag the ⠿ handle on a group card)
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -353,6 +383,11 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
       {/* Category Zones */}
       <div className="category-zones">
         <h3>{compactMode ? '🏷️ Drop Here to Categorize' : '🏷️ Drag Groups Here to Categorize'}</h3>
+        {compactMode && selectedItemIds && selectedItemIds.size > 0 && (
+          <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0 0 0.5rem', textAlign: 'center' }}>
+            {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} selected — click a category to assign
+          </p>
+        )}
         {loading ? (
           <p>Loading categories...</p>
         ) : (
@@ -360,11 +395,12 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
             {categories.map(category => (
               <div
                 key={category.id}
-                className={`category-zone ${dragOverCategory === category.name ? 'drag-over' : ''}`}
-                style={{ borderColor: category.color, '--category-color': category.color } as React.CSSProperties}
+                className={`category-zone ${dragOverCategory === category.name ? 'drag-over' : ''}${selectedItemIds && selectedItemIds.size > 0 ? ' clickable' : ''}`}
+                style={{ borderColor: category.color, '--category-color': category.color, cursor: selectedItemIds && selectedItemIds.size > 0 ? 'pointer' : undefined } as React.CSSProperties}
                 onDragOver={(e) => handleCategoryDragOver(e, category.name)}
                 onDrop={(e) => handleCategoryDrop(e, category.name)}
                 onDragLeave={handleCategoryDragLeave}
+                onClick={() => handleCategoryClick(category.name)}
               >
                 <span className="category-icon">{getCategoryIcon(category.emoji || category.name, compactMode ? 20 : 32)}</span>
                 <span className="category-name">{category.display_name}</span>
