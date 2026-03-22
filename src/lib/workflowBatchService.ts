@@ -163,9 +163,10 @@ export async function getWorkflowBatch(batchId: string): Promise<WorkflowBatch |
       .from('workflow_batches')
       .select('*')
       .eq('id', batchId)
-      .single();
+      .maybeSingle(); // .single() returns a 406 error when row doesn't exist; .maybeSingle() returns null
 
     if (error) throw error;
+    if (!data) return null;
     
     // Update last_opened_at
     await updateWorkflowBatch(batchId, {});

@@ -390,35 +390,11 @@ export const deleteImage = async (
     if (dbError && dbError.code !== 'PGRST116') {
       console.error('Error deleting product image record:', dbError);
     }
-    
-    // 3. Fetch all batches and remove image from workflow_state
-    const batches = await fetchWorkflowBatches();
-    
-    const updatePromises = batches.map(async (batch) => {
-      let modified = false;
-      const updatedState = { ...batch.workflow_state };
-      
-      // Remove from all arrays
-      ['uploadedImages', 'groupedImages', 'sortedImages', 'processedItems'].forEach(key => {
-        const items = updatedState[key as keyof typeof updatedState];
-        if (Array.isArray(items)) {
-          const filtered = items.filter((item: any) => item.id !== imageId);
-          
-          if (filtered.length !== items.length) {
-            modified = true;
-            (updatedState as any)[key] = filtered;
-          }
-        }
-      });
-      
-      // Only update if something changed
-      if (modified) {
-        return updateWorkflowBatch(batch.id, { workflow_state: updatedState });
-      }
-      return true;
-    });
-    
-    await Promise.all(updatePromises);
+
+    // NOTE: workflow_state scrubbing is intentionally omitted here.
+    // The active session in App.tsx manages its own workflow_state via autoSaveWorkflow.
+    // Trying to scrub all batches here requires fetching every workflow_batch row, which
+    // is slow (multiple paginated requests) and fragile (fails if a batch was deleted).
     
     return true;
   } catch (error) {
@@ -431,8 +407,8 @@ export const deleteImage = async (
  * Update an image's metadata
  */
 export const updateImage = async (
-  imageId: string,
-  updates: {
+  _imageId: string,
+  _updates: {
     category?: string;
     productGroup?: string;
     seoTitle?: string;
@@ -440,43 +416,12 @@ export const updateImage = async (
     size?: string;
   }
 ): Promise<boolean> => {
-  try {
-    // Fetch all batches and update the image
-    const batches = await fetchWorkflowBatches();
-    
-    const updatePromises = batches.map(async (batch) => {
-      let modified = false;
-      const updatedState = { ...batch.workflow_state };
-      
-      // Update in all arrays
-      ['uploadedImages', 'groupedImages', 'sortedImages', 'processedItems'].forEach(key => {
-        const items = updatedState[key as keyof typeof updatedState];
-        if (Array.isArray(items)) {
-          const updated = items.map((item: any) => {
-            if (item.id === imageId) {
-              modified = true;
-              return { ...item, ...updates };
-            }
-            return item;
-          });
-          
-          (updatedState as any)[key] = updated;
-        }
-      });
-      
-      // Only update if something changed
-      if (modified) {
-        return updateWorkflowBatch(batch.id, { workflow_state: updatedState });
-      }
-      return true;
-    });
-    
-    await Promise.all(updatePromises);
-    return true;
-  } catch (error) {
-    console.error('Error updating image:', error);
-    return false;
-  }
+  // workflow_state is managed by App.tsx's autoSaveWorkflow.
+  // The Library never updates individual image metadata in workflow_state directly.
+  // If this function is needed in the future, update the products/product_images
+  // tables directly rather than patching every workflow_batch row.
+  console.warn('updateImage called but workflow_state scrubbing is disabled — update products table directly');
+  return true;
 };
 
 /**

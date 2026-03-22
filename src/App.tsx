@@ -176,8 +176,14 @@ function App() {
             .from('workflow_batches')
             .select('*')
             .eq('id', savedBatchId)
-            .single();
-          if (batch?.workflow_state) {
+            .maybeSingle(); // .single() throws a 406 when the row doesn't exist; .maybeSingle() returns null
+          if (!batch) {
+            // Batch was deleted — clear stale localStorage so we start fresh
+            currentBatchIdRef.current = null;
+            setCurrentBatchId(null);
+            localStorage.removeItem('sortbot_current_batch_id');
+            localStorage.removeItem('sortbot_current_batch_number');
+          } else if (batch.workflow_state) {
             // Confirm the ref matches the confirmed-valid batch ID
             currentBatchIdRef.current = savedBatchId;
             const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state;
