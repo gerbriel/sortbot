@@ -199,32 +199,26 @@ export const saveProductToDatabase = async (
         }
       }
 
-      // Save image record to database
+      // Save image record to database — upsert on storage_path so early uploads
+      // (written in handleImagesUploaded) are updated with the real product_id
+      // rather than creating a duplicate row.
       if (imageUrl && storagePath) {
-        // Check if this image URL already exists for this product to prevent duplicates
-        const { data: existing } = await supabase
+        const { error: imageError } = await supabase
           .from('product_images')
-          .select('id')
-          .eq('product_id', productData.id)
-          .eq('image_url', imageUrl)
-          .maybeSingle();
-        
-        // Only insert if it doesn't already exist
-        if (!existing) {
-          const { error: imageError } = await supabase
-            .from('product_images')
-            .insert({
+          .upsert(
+            {
               product_id: productData.id,
               user_id: resolvedUserId,
               image_url: imageUrl,
               storage_path: storagePath,
               position: i,
               alt_text: `${product.seoTitle || 'Product'} - Image ${i + 1}`,
-            });
+            },
+            { onConflict: 'storage_path', ignoreDuplicates: false }
+          );
 
-          if (imageError) {
-            throw imageError;
-          }
+        if (imageError) {
+          throw imageError;
         }
       }
     }
