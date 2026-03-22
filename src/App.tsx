@@ -184,8 +184,10 @@ function App() {
             localStorage.removeItem('sortbot_current_batch_id');
             localStorage.removeItem('sortbot_current_batch_number');
           } else if (batch.workflow_state) {
-            // Confirm the ref matches the confirmed-valid batch ID
+            // Confirm the ref matches the confirmed-valid batch ID — sync both ref AND state
+            // immediately so any autoSave that fires in the next 2s uses the correct batchId.
             currentBatchIdRef.current = savedBatchId;
+            setCurrentBatchId(savedBatchId);
             const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state;
             // processedItems is now the single saved list (others are empty arrays).
             // Fall back through all arrays in case an older batch format is loaded.
