@@ -226,12 +226,22 @@ function App() {
             }
           }
         } catch (err) {
-          // Log the actual error before clearing — this tells us what threw after the ref was set
-          console.error('[App] startup restore CATCH — clearing batchId. Error:', err);
-          currentBatchIdRef.current = null;
-          setCurrentBatchId(null);
-          localStorage.removeItem('sortbot_current_batch_id');
-          localStorage.removeItem('sortbot_current_batch_number');
+          // Log the actual error — this tells us what threw in the restore path
+          console.error('[App] startup restore CATCH — Error:', err);
+          // NOTE: Only clear localStorage if this was a DB/network error suggesting the batch
+          // no longer exists. For other errors (e.g. a bug in item reconstruction), clearing
+          // localStorage would destroy the user's session needlessly.
+          // Check: if batch was fetched successfully (ref was already set), don't wipe.
+          if (!currentBatchIdRef.current) {
+            // Ref was never set — batch fetch itself failed, safe to clear
+            setCurrentBatchId(null);
+            localStorage.removeItem('sortbot_current_batch_id');
+            localStorage.removeItem('sortbot_current_batch_number');
+          } else {
+            // Ref was already set (batch exists) — something in item reconstruction threw.
+            // Keep localStorage intact so next reload can retry.
+            console.warn('[App] startup restore CATCH — keeping localStorage intact since batch ref was set. batchId:', currentBatchIdRef.current);
+          }
         }
       }
     });
