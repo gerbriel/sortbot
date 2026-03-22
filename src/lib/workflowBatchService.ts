@@ -45,7 +45,10 @@ export interface WorkflowBatch {
 export async function fetchWorkflowBatches(): Promise<WorkflowBatch[]> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return []; // not authenticated or network unavailable — silently return empty
+    if (!user) {
+      console.warn('[fetchWorkflowBatches] no authenticated user — returning []');
+      return []; // not authenticated or network unavailable — silently return empty
+    }
 
     const { data, error } = await supabase
       .from('workflow_batches')
@@ -53,6 +56,7 @@ export async function fetchWorkflowBatches(): Promise<WorkflowBatch[]> {
       .order('updated_at', { ascending: true });
 
     if (error) throw error;
+    console.log(`[fetchWorkflowBatches] returned ${data?.length ?? 0} rows`);
     return data || [];
   } catch (error: any) {
     if (error?.name === 'AbortError') return []; // expected from React 18 Strict Mode cleanup
