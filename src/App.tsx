@@ -727,6 +727,8 @@ function App() {
     });
     
     // Fetch saved products from database to restore descriptions
+    // Hoisted so registerItemsInDB (called after try/catch) can always access the final items.
+    let restoredProcessedItems: ClothingItem[] = workflowItems;
     try {
       const fullProductSelect = `
         id,
@@ -891,7 +893,7 @@ function App() {
       }
 
       // Merge saved data back into processedItems
-      let restoredProcessedItems: ClothingItem[] = baseItems;
+      restoredProcessedItems = baseItems;
       if (baseItems.length > 0 && productsToUse && productsToUse.length > 0) {
         restoredProcessedItems = baseItems.map((item: ClothingItem, index: number) => {
           // Try to match by seoTitle first (most reliable for our use case)
@@ -984,17 +986,19 @@ function App() {
       setGroupedImages(restoredProcessedItems);
       setSortedImages(restoredProcessedItems);
       setProcessedItems(restoredProcessedItems);
-      // Register items in DB so Library sees them immediately
-      await registerItemsInDB(restoredProcessedItems, batch.id);
     } catch (error) {
       console.error('Error restoring saved product data:', error);
-      // Fallback to basic workflow state — use the same single-list logic
-      const fallbackItems: ClothingItem[] = workflowItems;
-      setUploadedImages(fallbackItems);
-      setGroupedImages(fallbackItems);
-      setSortedImages(fallbackItems);
-      setProcessedItems(fallbackItems);
+      // Fallback to basic workflow state — restoredProcessedItems stays as workflowItems (hoisted default)
+      setUploadedImages(workflowItems);
+      setGroupedImages(workflowItems);
+      setSortedImages(workflowItems);
+      setProcessedItems(workflowItems);
     }
+
+    // Register items in DB so Library sees them — outside the product-data try/catch so
+    // registerItemsInDB errors surface separately and don't get silently swallowed above.
+    // restoredProcessedItems is always populated (either merged DB data or workflowItems fallback).
+    await registerItemsInDB(restoredProcessedItems, batch.id);
     // Set current batch info and persist for reload survival
     currentBatchIdRef.current = batch.id;
     setCurrentBatchId(batch.id);
