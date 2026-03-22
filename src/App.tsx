@@ -213,6 +213,8 @@ function App() {
               setGroupedImages(liveItems);
               setSortedImages(liveItems);
               setProcessedItems(liveItems);
+              // Register items in DB so Library sees them immediately
+              registerItemsInDB(liveItems, savedBatchId);
             }
           }
         } catch {
@@ -348,13 +350,27 @@ function App() {
     });
 
     // Write uploaded images to product_images immediately so Library stays in sync.
-    // Uses upsert on storage_path so Step 4 "Save Batch" can't create duplicates.
+    // Step 1: upsert a stub products row (one per item — no group yet) so product_images FK is valid.
+    // Step 2: upsert product_images rows linked to those products.
     const uploadedItems = items.filter(i => i.storagePath && i.imageUrls?.[0]);
-    if (uploadedItems.length > 0) {
+    if (uploadedItems.length > 0 && user) {
+      // Upsert stub products rows (keyed on id — the item's own id)
+      await supabase.from('products').upsert(
+        uploadedItems.map(item => ({
+          id: item.id,
+          user_id: user.id,
+          batch_id: currentBatchId,
+          title: item.seoTitle || null,
+          status: 'Draft',
+        })),
+        { onConflict: 'id', ignoreDuplicates: true }
+      );
+      // Upsert product_images rows linked to their products
       await supabase.from('product_images').upsert(
         uploadedItems.map((item, idx) => ({
           image_url: item.imageUrls![0],
           storage_path: item.storagePath!,
+          product_id: item.id,
           position: idx,
           alt_text: item.seoTitle || 'Uploaded image',
         })),
@@ -473,6 +489,23 @@ function App() {
     // Auto-save product groups to database
     if (!user) return;
 
+    // Upsert ALL items' products rows with their current productGroup so the Library
+    // Groups tab stays in sync with every drag/group change in Step 2.
+    const allRegisterable = itemsWithCategories.filter(i => i.storagePath && i.imageUrls?.[0]);
+    if (allRegisterable.length > 0) {
+      await supabase.from('products').upsert(
+        allRegisterable.map(item => ({
+          id: item.id,
+          user_id: user.id,
+          batch_id: currentBatchId,
+          product_group: item.productGroup || item.id,
+          title: item.seoTitle || null,
+          status: 'Draft',
+        })),
+        { onConflict: 'id', ignoreDuplicates: false }
+      );
+    }
+
     // Find items that are in multi-item groups (productGroup is set and matches other items)
     const groupedItemsMap = items.reduce((acc, item) => {
       if (item.productGroup) {
@@ -499,8 +532,6 @@ function App() {
             text: `✅ Saved ${result.success} product group(s) to database!`,
           });
           setTimeout(() => setSaveMessage(null), 2000);
-          // NOTE: No Library refresh here — handleImagesGrouped fires on every drag/group
-          // action, which would spam loadAll. Library updates on explicit Save Batch (Step 4).
         }
       } catch (error) {
         console.error('Auto-save error:', error);
@@ -582,6 +613,39 @@ function App() {
         console.error('Auto-save failed:', error);
       }
     }, 2000); // wait 2 s of inactivity before hitting Supabase
+  };
+
+  // Register restored workflow items in products + product_images so Library sees them.
+  // Called after startup restore and handleOpenBatch. No-ops if rows already exist.
+  const registerItemsInDB = async (liveItems: ClothingItem[], batchId: string | null) => {
+    if (!user || liveItems.length === 0) return;
+    const registerable = liveItems.filter(i => i.storagePath && i.imageUrls?.[0]);
+    if (registerable.length === 0) return;
+    try {
+      await supabase.from('products').upsert(
+        registerable.map(item => ({
+          id: item.id,
+          user_id: user.id,
+          batch_id: batchId,
+          title: item.seoTitle || null,
+          status: 'Draft',
+        })),
+        { onConflict: 'id', ignoreDuplicates: true }
+      );
+      await supabase.from('product_images').upsert(
+        registerable.map((item, idx) => ({
+          image_url: item.imageUrls![0],
+          storage_path: item.storagePath!,
+          product_id: item.id,
+          position: idx,
+          alt_text: item.seoTitle || 'Uploaded image',
+        })),
+        { onConflict: 'storage_path', ignoreDuplicates: true }
+      );
+      console.log(`[App] registerItemsInDB | registered ${registerable.length} items | batchId=${batchId}`);
+    } catch (err) {
+      console.error('[App] registerItemsInDB failed:', err);
+    }
   };
 
   // Handle opening a batch from Library
@@ -878,6 +942,8 @@ function App() {
       setGroupedImages(restoredProcessedItems);
       setSortedImages(restoredProcessedItems);
       setProcessedItems(restoredProcessedItems);
+      // Register items in DB so Library sees them immediately
+      await registerItemsInDB(restoredProcessedItems, batch.id);
     } catch (error) {
       console.error('Error restoring saved product data:', error);
       // Fallback to basic workflow state — use the same single-list logic
@@ -894,8 +960,9 @@ function App() {
     localStorage.setItem('sortbot_current_batch_id', batch.id);
     localStorage.setItem('sortbot_current_batch_number', batch.batch_number);
     
-    // Close library
+    // Close library and refresh it so new registrations are visible next open
     setShowLibrary(false);
+    setLibraryRefreshTrigger(prev => prev + 1);
     
     // Show success message
     const defaultName = `Batch ${new Date(batch.created_at).toLocaleDateString()} ${new Date(batch.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
