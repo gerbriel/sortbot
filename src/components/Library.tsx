@@ -198,6 +198,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   // Load on mount and whenever userId or viewMode changes.
   // force=true bypasses the in-flight guard — mount calls must always run.
   useEffect(() => {
+    console.log(`[Library] mount/viewMode effect → loadAll(force=true) | viewMode=${viewMode} | refreshTrigger=${refreshTrigger}`);
     const cancelRef = { current: false };
     loadAll(cancelRef, true).catch(() => {});
     return () => { cancelRef.current = true; };
@@ -207,6 +208,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   // Uses the normal guard so an already-running fetch won't be double-triggered.
   useEffect(() => {
     if ((refreshTrigger ?? 0) > 0) {
+      console.log(`[Library] refreshTrigger effect → loadAll(force=false) | refreshTrigger=${refreshTrigger} | isLoading=${isLoadingRef.current}`);
       const cancelRef = { current: false };
       loadAll(cancelRef, false).catch(() => {});
       return () => { cancelRef.current = true; };
@@ -224,11 +226,16 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   // force: bypasses the isLoadingRef guard for mount calls (which MUST always run).
   const loadAll = async (cancelRef?: { current: boolean }, force = false) => {
     // Guard: skip if already in flight, unless this is a forced mount call
-    if (!force && isLoadingRef.current) return;
+    if (!force && isLoadingRef.current) {
+      console.log(`[Library] loadAll SKIPPED — already in flight | force=${force}`);
+      return;
+    }
+    console.log(`[Library] loadAll START | force=${force} | ${new Date().toISOString()}`);
     // If a prior forced call was cancelled mid-flight, the ref may still be true — reset it
     isLoadingRef.current = true;
     const isCancelled = () => {
       if (cancelRef?.current === true) {
+        console.log(`[Library] loadAll CANCELLED mid-flight`);
         isLoadingRef.current = false; // release the lock so the next call can proceed
         return true;
       }
@@ -250,9 +257,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         fetchSavedProducts(),
         fetchSavedImages(),
       ]);
-      console.log(`[Library] fetchSavedProducts → ${savedProducts.length} rows`);
-      console.log(`[Library] fetchSavedImages   → ${savedImages.length} rows`);
-      console.log(`[Library] fetchWorkflowBatches → ${wfBatches.length} rows`);
+      console.log(`[Library] fetched: wfBatches=${wfBatches.length} | products=${savedProducts.length} | images=${savedImages.length} | ${new Date().toISOString()}`);
       if (isCancelled()) return;
 
       // Helper: synthesize a batch entry for any batch_id missing from workflow_batches
@@ -382,12 +387,15 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
       // ── 5. Commit all state at once ─────────────────────────────────────
       if (!isCancelled()) {
-        setBatches(Array.from(batchesById.values()));
-        setProductGroups(Array.from(groupMap.values()));
+        const finalBatches = Array.from(batchesById.values());
+        const finalGroups = Array.from(groupMap.values());
+        setBatches(finalBatches);
+        setProductGroups(finalGroups);
         setImages(imageList);
+        console.log(`[Library] loadAll DONE | batches=${finalBatches.length} groups=${finalGroups.length} images=${imageList.length} | ${new Date().toISOString()}`);
       }
     } catch (error) {
-      // silent — individual fetch errors are logged in their service functions
+      console.error('[Library] loadAll ERROR', error);
     } finally {
       isLoadingRef.current = false;
     }
