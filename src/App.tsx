@@ -179,7 +179,6 @@ function App() {
             .maybeSingle(); // .single() throws a 406 when the row doesn't exist; .maybeSingle() returns null
           if (!batch) {
             // Batch was deleted — clear stale localStorage so we start fresh
-            console.log(`[App] startup restore | batch NOT FOUND for savedBatchId=${savedBatchId} — clearing ref+state`);
             currentBatchIdRef.current = null;
             setCurrentBatchId(null);
             localStorage.removeItem('sortbot_current_batch_id');
@@ -187,7 +186,7 @@ function App() {
           } else {
             // Batch exists — sync ref+state immediately regardless of workflow_state presence,
             // so any autoSave that fires in the next 2s updates this batch instead of creating a new orphan.
-            console.log(`[App] startup restore | batch FOUND | hasWorkflowState=${!!batch.workflow_state} | setting ref+state to savedBatchId=${savedBatchId}`);
+            console.log(`[App] startup restore | batch FOUND | batchId=${savedBatchId} | hasWorkflowState=${!!batch.workflow_state}`);
             currentBatchIdRef.current = savedBatchId;
             setCurrentBatchId(savedBatchId);
 
@@ -226,22 +225,14 @@ function App() {
             }
           }
         } catch (err) {
-          // Log the actual error — this tells us what threw in the restore path
           console.error('[App] startup restore CATCH — Error:', err);
-          // NOTE: Only clear localStorage if this was a DB/network error suggesting the batch
-          // no longer exists. For other errors (e.g. a bug in item reconstruction), clearing
-          // localStorage would destroy the user's session needlessly.
-          // Check: if batch was fetched successfully (ref was already set), don't wipe.
           if (!currentBatchIdRef.current) {
-            // Ref was never set — batch fetch itself failed, safe to clear
+            // Ref was never set — batch fetch itself failed, safe to clear stale localStorage
             setCurrentBatchId(null);
             localStorage.removeItem('sortbot_current_batch_id');
             localStorage.removeItem('sortbot_current_batch_number');
-          } else {
-            // Ref was already set (batch exists) — something in item reconstruction threw.
-            // Keep localStorage intact so next reload can retry.
-            console.warn('[App] startup restore CATCH — keeping localStorage intact since batch ref was set. batchId:', currentBatchIdRef.current);
           }
+          // If ref was already set, keep localStorage intact so next reload can retry
         }
       }
     });
@@ -592,11 +583,10 @@ function App() {
       // getSession() completes. Safe to skip — the session resolving will trigger another
       // autoSave call with the correct batchId.
       if (!currentBatchIdRef.current) {
-        console.log(`[App] autoSave SKIPPED — batchId ref still null (session not resolved yet) | localStorage=${localStorage.getItem('sortbot_current_batch_id')}`);
+        console.log(`[App] autoSave SKIPPED — session not resolved yet (batchId ref null)`);
         return;
       }
-      // Diagnostic: snapshot the ref at the exact moment the timer fires
-      console.log(`[App] autoSave fired | batchId=${currentBatchIdRef.current} | localStorage=${localStorage.getItem('sortbot_current_batch_id')} | liveItemCount=${
+      console.log(`[App] autoSave fired | batchId=${currentBatchIdRef.current} | items=${
         workflowState.processedItems.length || workflowState.sortedImages.length || workflowState.groupedImages.length || workflowState.uploadedImages.length
       }`);
       // Keep only the minimal fields needed to restore grouping/category state.
@@ -652,7 +642,6 @@ function App() {
   // the `user` React state hasn't been set yet (setUser is async via onAuthStateChange).
   const registerItemsInDB = async (liveItems: ClothingItem[], batchId: string | null, forceUser?: User | null) => {
     const activeUser = forceUser ?? user;
-    console.log(`[App] registerItemsInDB ENTRY | activeUser=${activeUser?.id ?? 'NULL'} | forceUser=${forceUser?.id ?? 'NULL'} | user(state)=${user?.id ?? 'NULL'} | items=${liveItems.length} | batchId=${batchId}`);
     if (!activeUser || liveItems.length === 0) return;
     // Accept items that have either imageUrls[0] OR storagePath — covers both legacy and new items
     const registerable = liveItems.filter(i => i.imageUrls?.[0] || (i.storagePath && i.storagePath !== ''));
