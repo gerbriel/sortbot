@@ -113,6 +113,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       isResettingRef.current = false;
       return;
     }
+    // Don't write back if internal state is out of sync with the prop —
+    // the sync effect (below) hasn't run yet and will correct it next render.
+    if (processedItems.length !== items.length) return;
     
     // Subsequent updates - sync to parent
     onProcessed(processedItems);
