@@ -213,8 +213,9 @@ function App() {
               setGroupedImages(liveItems);
               setSortedImages(liveItems);
               setProcessedItems(liveItems);
-              // Register items in DB so Library sees them immediately
-              registerItemsInDB(liveItems, savedBatchId);
+              // Pass session.user explicitly — React `user` state hasn't been set yet at this point
+              // (setUser(session.user) queues a re-render but doesn't run synchronously)
+              registerItemsInDB(liveItems, savedBatchId, session.user);
             }
           }
         } catch {
@@ -619,8 +620,11 @@ function App() {
   // Called after startup restore and handleOpenBatch. No-ops if rows already exist.
   // Handles legacy items (pre-storagePath era) that only have imageUrls, and newer items
   // that have storagePath but may have empty imageUrls after restore.
-  const registerItemsInDB = async (liveItems: ClothingItem[], batchId: string | null) => {
-    if (!user || liveItems.length === 0) return;
+  // forceUser: pass the session user explicitly when calling from startup restore, because
+  // the `user` React state hasn't been set yet (setUser is async via onAuthStateChange).
+  const registerItemsInDB = async (liveItems: ClothingItem[], batchId: string | null, forceUser?: User | null) => {
+    const activeUser = forceUser ?? user;
+    if (!activeUser || liveItems.length === 0) return;
     // Accept items that have either imageUrls[0] OR storagePath — covers both legacy and new items
     const registerable = liveItems.filter(i => i.imageUrls?.[0] || (i.storagePath && i.storagePath !== ''));
     const withStoragePath = registerable.filter(i => i.storagePath).length;
@@ -631,7 +635,7 @@ function App() {
       await supabase.from('products').upsert(
         registerable.map(item => ({
           id: item.id,
-          user_id: user.id,
+          user_id: activeUser.id,
           batch_id: batchId,
           title: item.seoTitle || null,
           status: 'Draft',
