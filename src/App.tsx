@@ -658,7 +658,9 @@ function App() {
           title: item.seoTitle || null,
           status: 'Draft',
         })),
-        { onConflict: 'id', ignoreDuplicates: true }
+        // ignoreDuplicates: false — allows updating batch_id on existing rows so products
+        // are correctly attributed to the current batch when restored from a new session.
+        { onConflict: 'id', ignoreDuplicates: false }
       );
       // Build product_images rows. For image_url: prefer imageUrls[0], fall back to getPublicUrl(storagePath).
       // storage_path may be null for legacy items — that's fine, the column is nullable.
