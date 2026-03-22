@@ -344,6 +344,8 @@ function App() {
 
     // Write uploaded images to product_images immediately so Library stays in sync.
     // Uses upsert on storage_path so Step 4 "Save Batch" can't create duplicates.
+    // NOTE: No Library refresh trigger here — uploads fire per-chunk (every 10 images)
+    // which would spam loadAll. The Library will update when the user saves (Step 4).
     const uploadedItems = items.filter(i => i.storagePath && i.imageUrls?.[0]);
     if (uploadedItems.length > 0) {
       await supabase.from('product_images').upsert(
@@ -355,7 +357,6 @@ function App() {
         })),
         { onConflict: 'storage_path', ignoreDuplicates: true }
       );
-      setLibraryRefreshTrigger(prev => prev + 1);
     }
   };
 
@@ -479,7 +480,8 @@ function App() {
             text: `✅ Saved ${result.success} product group(s) to database!`,
           });
           setTimeout(() => setSaveMessage(null), 2000);
-          setLibraryRefreshTrigger(prev => prev + 1);
+          // NOTE: No Library refresh here — handleImagesGrouped fires on every drag/group
+          // action, which would spam loadAll. Library updates on explicit Save Batch (Step 4).
         }
       } catch (error) {
         console.error('Auto-save error:', error);
