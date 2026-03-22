@@ -129,6 +129,7 @@ function App() {
   const [groupedImages, setGroupedImages] = useState<ClothingItem[]>([]);
   const [processedItems, setProcessedItems] = useState<ClothingItem[]>([]);
   const [grouperStats, setGrouperStats] = useState<ImageGrouperStats | null>(null);
+  const [selectedGroupItems, setSelectedGroupItems] = useState<Set<string>>(new Set());
   const [showLibrary, setShowLibrary] = useState(false);
   // Ref mirror so the autoSave closure (inside setTimeout) can read the live value
   // without capturing a stale boolean from the render where autoSave was scheduled.
@@ -1164,6 +1165,7 @@ function App() {
                     console.log('[App] setLibraryRefreshTrigger → image deleted (Step 2)');
                     setLibraryRefreshTrigger(prev => prev + 1);
                   }}
+                  onSelectionChange={setSelectedGroupItems}
                 />
               </div>
               {/* Right: Category drop zones — sticky so always visible */}
@@ -1175,6 +1177,7 @@ function App() {
                   items={groupedImages.length > 0 ? groupedImages : uploadedImages}
                   onCategorized={handleImagesSorted}
                   compactMode
+                  selectedItemIds={selectedGroupItems}
                 />
               </div>
             </div>
