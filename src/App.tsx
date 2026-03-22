@@ -436,25 +436,35 @@ function App() {
     const remainingIds = new Set(itemsWithCategories.map(i => i.id));
     const prunedUploaded = uploadedImages.filter(i => remainingIds.has(i.id));
     if (prunedUploaded.length !== uploadedImages.length) {
+      console.log(`[App] handleImagesGrouped pruned uploadedImages | ${uploadedImages.length} → ${prunedUploaded.length}`);
       setUploadedImages(prunedUploaded);
     }
     
-    // Always sync sortedImages so Step 4 is accessible once groups exist.
-    // Preserve any categories that were already assigned via drag-to-category.
-    const updatedSorted = itemsWithCategories.map(item => {
-      const existingSorted = sortedImages.find(s => s.id === item.id);
-      return existingSorted ? { ...item, category: existingSorted.category } : item;
-    });
-    setSortedImages(updatedSorted);
+    // Sync sortedImages by FILTERING DOWN to only IDs still in itemsWithCategories,
+    // then merging in the latest grouping state. This ensures Step-2 deletes propagate
+    // to Steps 3 & 4 instead of re-inflating the old full set.
+    const updatedSorted = sortedImages
+      .filter(s => remainingIds.has(s.id))
+      .map(s => {
+        const grouped = itemsWithCategories.find(i => i.id === s.id);
+        return grouped ? { ...s, ...grouped, category: s.category || grouped.category } : s;
+      });
+    // For items not yet in sortedImages (newly added), include them from itemsWithCategories
+    const sortedIds = new Set(updatedSorted.map(s => s.id));
+    const newItems = itemsWithCategories.filter(i => !sortedIds.has(i.id));
+    const finalSorted = [...updatedSorted, ...newItems];
+
+    console.log(`[App] handleImagesGrouped sortedImages | ${sortedImages.length} → ${finalSorted.length} | deleted=${sortedImages.length - finalSorted.length + newItems.length}`);
+    setSortedImages(finalSorted);
     // Reset processedItems to the new grouping so Step 3 nav reflects current groups
-    setProcessedItems(updatedSorted);
+    setProcessedItems(finalSorted);
     
     // Auto-save workflow state (Step 2 complete - groups created)
     autoSaveWorkflow({
       uploadedImages: prunedUploaded,
       groupedImages: itemsWithCategories,
-      sortedImages: updatedSorted,
-      processedItems: updatedSorted,
+      sortedImages: finalSorted,
+      processedItems: finalSorted,
     });
 
     // Broadcast action for real-time collaboration
