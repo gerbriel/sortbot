@@ -48,6 +48,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId }) =
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
+    console.log(`[Step1:Upload] onDrop | files=${acceptedFiles.length} | names=${acceptedFiles.map(f => f.name).join(', ')}`);
 
     setIsUploading(true);
 
@@ -81,6 +82,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId }) =
     }
 
     setIsUploading(false);
+    console.log(`[Step1:Upload] upload complete | success=${items.filter(i => i.storagePath).length} fallback=${items.filter(i => !i.storagePath).length} | total=${items.length}`);
     onImagesUploaded(items);
   }, [onImagesUploaded, userId]);
 
