@@ -266,6 +266,7 @@ function App() {
         });
 
         // products/product_images rows were just written — refresh Library if open
+        console.log('[App] setLibraryRefreshTrigger → Save Batch (Step 4)');
         setLibraryRefreshTrigger(prev => prev + 1);
 
         // Broadcast action for real-time collaboration
@@ -1014,7 +1015,10 @@ function App() {
                   onGrouped={handleImagesGrouped}
                   onStatsChange={setGrouperStats}
                   userId={user.id}
-                  onImageDeleted={() => setLibraryRefreshTrigger(prev => prev + 1)}
+                  onImageDeleted={() => {
+                    console.log('[App] setLibraryRefreshTrigger → image deleted (Step 2)');
+                    setLibraryRefreshTrigger(prev => prev + 1);
+                  }}
                 />
               </div>
               {/* Right: Category drop zones — sticky so always visible */}
