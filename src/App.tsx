@@ -619,7 +619,9 @@ function App() {
   // Called after startup restore and handleOpenBatch. No-ops if rows already exist.
   const registerItemsInDB = async (liveItems: ClothingItem[], batchId: string | null) => {
     if (!user || liveItems.length === 0) return;
-    const registerable = liveItems.filter(i => i.storagePath && i.imageUrls?.[0]);
+    // Only requires storagePath — imageUrls[0] is reconstructed from it if missing
+    const registerable = liveItems.filter(i => i.storagePath && i.storagePath !== '');
+    console.log(`[App] registerItemsInDB | total=${liveItems.length} registerable=${registerable.length} | batchId=${batchId} | sample storagePath=${registerable[0]?.storagePath ?? 'none'} | sample imageUrls[0]=${registerable[0]?.imageUrls?.[0] ?? 'none'}`);
     if (registerable.length === 0) return;
     try {
       await supabase.from('products').upsert(
@@ -634,7 +636,9 @@ function App() {
       );
       await supabase.from('product_images').upsert(
         registerable.map((item, idx) => ({
-          image_url: item.imageUrls![0],
+          // Use existing imageUrls[0] if present; otherwise reconstruct from storagePath
+          image_url: item.imageUrls?.[0] ||
+            supabase.storage.from('product-images').getPublicUrl(item.storagePath!).data.publicUrl,
           storage_path: item.storagePath!,
           product_id: item.id,
           position: idx,
