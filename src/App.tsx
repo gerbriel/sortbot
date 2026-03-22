@@ -617,11 +617,15 @@ function App() {
 
   // Register restored workflow items in products + product_images so Library sees them.
   // Called after startup restore and handleOpenBatch. No-ops if rows already exist.
+  // Handles legacy items (pre-storagePath era) that only have imageUrls, and newer items
+  // that have storagePath but may have empty imageUrls after restore.
   const registerItemsInDB = async (liveItems: ClothingItem[], batchId: string | null) => {
     if (!user || liveItems.length === 0) return;
-    // Only requires storagePath — imageUrls[0] is reconstructed from it if missing
-    const registerable = liveItems.filter(i => i.storagePath && i.storagePath !== '');
-    console.log(`[App] registerItemsInDB | total=${liveItems.length} registerable=${registerable.length} | batchId=${batchId} | sample storagePath=${registerable[0]?.storagePath ?? 'none'} | sample imageUrls[0]=${registerable[0]?.imageUrls?.[0] ?? 'none'}`);
+    // Accept items that have either imageUrls[0] OR storagePath — covers both legacy and new items
+    const registerable = liveItems.filter(i => i.imageUrls?.[0] || (i.storagePath && i.storagePath !== ''));
+    const withStoragePath = registerable.filter(i => i.storagePath).length;
+    const withImageUrls = registerable.filter(i => i.imageUrls?.[0]).length;
+    console.log(`[App] registerItemsInDB | total=${liveItems.length} registerable=${registerable.length} withStoragePath=${withStoragePath} withImageUrls=${withImageUrls} | batchId=${batchId}`);
     if (registerable.length === 0) return;
     try {
       await supabase.from('products').upsert(
@@ -634,19 +638,30 @@ function App() {
         })),
         { onConflict: 'id', ignoreDuplicates: true }
       );
-      await supabase.from('product_images').upsert(
-        registerable.map((item, idx) => ({
-          // Use existing imageUrls[0] if present; otherwise reconstruct from storagePath
-          image_url: item.imageUrls?.[0] ||
-            supabase.storage.from('product-images').getPublicUrl(item.storagePath!).data.publicUrl,
-          storage_path: item.storagePath!,
+      // Build product_images rows. For image_url: prefer imageUrls[0], fall back to getPublicUrl(storagePath).
+      // storage_path may be null for legacy items — that's fine, the column is nullable.
+      // Conflict key: (product_id, image_url) — matches the existing composite unique constraint.
+      const productImageRows = registerable.flatMap((item, idx) => {
+        const imageUrl = item.imageUrls?.[0] ||
+          (item.storagePath
+            ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
+            : null);
+        if (!imageUrl) return []; // no image_url available at all — skip
+        return [{
+          image_url: imageUrl,
+          storage_path: item.storagePath ?? null,
           product_id: item.id,
           position: idx,
           alt_text: item.seoTitle || 'Uploaded image',
-        })),
-        { onConflict: 'storage_path', ignoreDuplicates: true }
-      );
-      console.log(`[App] registerItemsInDB | registered ${registerable.length} items | batchId=${batchId}`);
+        }];
+      });
+      if (productImageRows.length > 0) {
+        await supabase.from('product_images').upsert(
+          productImageRows,
+          { onConflict: 'product_id,image_url', ignoreDuplicates: true }
+        );
+      }
+      console.log(`[App] registerItemsInDB | registered ${registerable.length} products, ${productImageRows.length} product_images | batchId=${batchId}`);
     } catch (err) {
       console.error('[App] registerItemsInDB failed:', err);
     }
