@@ -179,45 +179,50 @@ function App() {
             .maybeSingle(); // .single() throws a 406 when the row doesn't exist; .maybeSingle() returns null
           if (!batch) {
             // Batch was deleted — clear stale localStorage so we start fresh
+            console.log(`[App] startup restore | batch NOT FOUND for savedBatchId=${savedBatchId} — clearing ref+state`);
             currentBatchIdRef.current = null;
             setCurrentBatchId(null);
             localStorage.removeItem('sortbot_current_batch_id');
             localStorage.removeItem('sortbot_current_batch_number');
-          } else if (batch.workflow_state) {
-            // Confirm the ref matches the confirmed-valid batch ID — sync both ref AND state
-            // immediately so any autoSave that fires in the next 2s uses the correct batchId.
+          } else {
+            // Batch exists — sync ref+state immediately regardless of workflow_state presence,
+            // so any autoSave that fires in the next 2s updates this batch instead of creating a new orphan.
+            console.log(`[App] startup restore | batch FOUND | hasWorkflowState=${!!batch.workflow_state} | setting ref+state to savedBatchId=${savedBatchId}`);
             currentBatchIdRef.current = savedBatchId;
             setCurrentBatchId(savedBatchId);
-            const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state;
-            // processedItems is now the single saved list (others are empty arrays).
-            // Fall back through all arrays in case an older batch format is loaded.
-            const rawItems =
-              processedItems?.length  ? processedItems  :
-              sortedImages?.length    ? sortedImages     :
-              groupedImages?.length   ? groupedImages    :
-              uploadedImages          ? uploadedImages   : [];
-            // Re-hydrate preview — stripped before saving to reduce payload size.
-            // imageUrls may also be empty for older items; reconstruct from storagePath
-            // (synchronous, no extra DB query) as the final fallback.
-            const liveItems = rawItems.map((item: any) => {
-              const reconstructed = item.storagePath
-                ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
-                : '';
-              return {
-                ...item,
-                preview: item.preview || item.imageUrls?.[0] || reconstructed,
-                imageUrls: item.imageUrls?.length ? item.imageUrls : (reconstructed ? [reconstructed] : []),
-              };
-            });
-            if (liveItems.length) {
-              console.log(`[App] startup restore | batchId=${savedBatchId} | items=${liveItems.length}`);
-              setUploadedImages(liveItems);
-              setGroupedImages(liveItems);
-              setSortedImages(liveItems);
-              setProcessedItems(liveItems);
-              // Pass session.user explicitly — React `user` state hasn't been set yet at this point
-              // (setUser(session.user) queues a re-render but doesn't run synchronously)
-              registerItemsInDB(liveItems, savedBatchId, session.user);
+
+            if (batch.workflow_state) {
+              const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state;
+              // processedItems is now the single saved list (others are empty arrays).
+              // Fall back through all arrays in case an older batch format is loaded.
+              const rawItems =
+                processedItems?.length  ? processedItems  :
+                sortedImages?.length    ? sortedImages     :
+                groupedImages?.length   ? groupedImages    :
+                uploadedImages          ? uploadedImages   : [];
+              // Re-hydrate preview — stripped before saving to reduce payload size.
+              // imageUrls may also be empty for older items; reconstruct from storagePath
+              // (synchronous, no extra DB query) as the final fallback.
+              const liveItems = rawItems.map((item: any) => {
+                const reconstructed = item.storagePath
+                  ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
+                  : '';
+                return {
+                  ...item,
+                  preview: item.preview || item.imageUrls?.[0] || reconstructed,
+                  imageUrls: item.imageUrls?.length ? item.imageUrls : (reconstructed ? [reconstructed] : []),
+                };
+              });
+              if (liveItems.length) {
+                console.log(`[App] startup restore | batchId=${savedBatchId} | items=${liveItems.length}`);
+                setUploadedImages(liveItems);
+                setGroupedImages(liveItems);
+                setSortedImages(liveItems);
+                setProcessedItems(liveItems);
+                // Pass session.user explicitly — React `user` state hasn't been set yet at this point
+                // (setUser(session.user) queues a re-render but doesn't run synchronously)
+                registerItemsInDB(liveItems, savedBatchId, session.user);
+              }
             }
           }
         } catch {
@@ -570,7 +575,8 @@ function App() {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
 
     autoSaveTimerRef.current = setTimeout(async () => {
-      console.log(`[App] autoSave fired | batchId=${currentBatchIdRef.current} | liveItemCount=${
+      // Diagnostic: snapshot the ref at the exact moment the timer fires
+      console.log(`[App] autoSave fired | batchId=${currentBatchIdRef.current} | localStorage=${localStorage.getItem('sortbot_current_batch_id')} | liveItemCount=${
         workflowState.processedItems.length || workflowState.sortedImages.length || workflowState.groupedImages.length || workflowState.uploadedImages.length
       }`);
       // Keep only the minimal fields needed to restore grouping/category state.
