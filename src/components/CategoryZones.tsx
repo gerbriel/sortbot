@@ -84,9 +84,11 @@ interface CategoryZonesProps {
   compactMode?: boolean;
   /** IDs of items currently selected in ImageGrouper — clicking a category assigns them */
   selectedItemIds?: Set<string>;
+  /** Called after a category is successfully assigned — parent should clear selection */
+  onCategoryAssigned?: () => void;
 }
 
-const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, compactMode = false, selectedItemIds }) => {
+const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, compactMode = false, selectedItemIds, onCategoryAssigned }) => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -240,6 +242,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     emitReordered(groupOrderRef.current, updatedMap);
     setCatDraggedItem(null);
     setDragOverCategory(null);
+    onCategoryAssigned?.();
   };
 
   const handleCategoryDragLeave = () => setDragOverCategory(null);
@@ -293,10 +296,11 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     if (!newGroupOrder.includes(mergedGroupId)) newGroupOrder.push(mergedGroupId);
 
     emitReordered(newGroupOrder, updatedMap);
+    onCategoryAssigned?.();
   };
 
   // ══════════════════════════════════════════════════════════════════════════
-  // Group reorder handlers (drag the ⠿ handle on a group card)
+  // Group reorder handlers (drag the grip handle on a group card)
   // ══════════════════════════════════════════════════════════════════════════
 
   const handleGroupDragStart = (e: React.DragEvent, groupId: string) => {
