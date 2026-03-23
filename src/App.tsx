@@ -207,11 +207,6 @@ function App() {
         }];
       });
       if (productImageRows.length > 0) {
-        // Log first row for diagnosis
-        console.log('[App] registerItemsInDB | product_images sample row:', JSON.stringify(productImageRows[0]));
-        // onConflict uses the constraint name directly — more reliable than column list
-        // when multiple unique indexes exist on the same columns.
-        // Constraint "unique_product_image_url" covers (product_id, image_url).
         const { error: imgErr, count: imgCount } = await supabase.from('product_images').upsert(
           productImageRows,
           { onConflict: 'product_id,image_url', ignoreDuplicates: false, count: 'exact' }
