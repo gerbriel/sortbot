@@ -1,3 +1,4 @@
+// Library v3 — user-scoped fetches; product_group deduplication; workflow_batch user_id filter
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { fetchWorkflowBatches, deleteWorkflowBatch, type WorkflowBatch, type SlimItem } from '../lib/workflowBatchService';
 import { 
@@ -316,20 +317,33 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         });
       });
 
+      // Build from DB products — group siblings by product_group value.
+      // Products where product_group === id are standalones (1-image listings).
+      // Products where product_group !== id share a group — merge them together.
+      const dbGroupMap = new Map<string, any[]>();
       savedProducts.forEach((product: any) => {
+        const gid = product.product_group || product.id;
+        if (!dbGroupMap.has(gid)) dbGroupMap.set(gid, []);
+        dbGroupMap.get(gid)!.push(product);
+      });
+
+      dbGroupMap.forEach((members, groupId) => {
+        // Use the member whose id === groupId as canonical (the group "leader"),
+        // falling back to the first member if none matches.
+        const canonical = members.find(p => p.id === groupId) || members[0];
+        const allImages = members
+          .flatMap((p: any) => (p.product_images || []).sort((a: any, b: any) => a.position - b.position).map((img: any) => img.image_url))
+          .filter(Boolean);
         groups.push({
-          id: product.id,
-          title: cleanTitle(product.title || product.seo_title),
-          category: product.product_category || 'Uncategorized',
-          images: (product.product_images || [])
-            .sort((a: any, b: any) => a.position - b.position)
-            .map((img: any) => img.image_url)
-            .filter(Boolean),
-          itemCount: product.product_images?.length || 0,
-          createdAt: product.created_at,
+          id: groupId,
+          title: cleanTitle(canonical.title || canonical.seo_title),
+          category: canonical.product_category || 'Uncategorized',
+          images: allImages,
+          itemCount: allImages.length || members.length,
+          createdAt: canonical.created_at,
           isSaved: true,
-          batchId: product.batch_id || undefined,
-          batchName: product.workflow_batches?.batch_name || (product.batch_id ? `Batch ${new Date(product.created_at).toLocaleDateString()}` : undefined),
+          batchId: canonical.batch_id || undefined,
+          batchName: canonical.workflow_batches?.batch_name || (canonical.batch_id ? `Batch ${new Date(canonical.created_at).toLocaleDateString()}` : undefined),
         });
       });
 
