@@ -199,16 +199,24 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     e.preventDefault();
     e.stopPropagation();
 
+    // If items are selected in ImageGrouper, treat the drop as a "click-to-assign":
+    // merge all selected items into one product group and apply the category.
+    if (selectedItemIds && selectedItemIds.size > 0) {
+      setCatDraggedItem(null);
+      setDragOverCategory(null);
+      await handleCategoryClick(category);
+      return;
+    }
+
+    // No selection — fall back to single-group drop behaviour
     let productGroup: string | undefined;
     try {
       const data = e.dataTransfer.getData('application/json');
       if (data) {
         const dragData = JSON.parse(data);
         if (dragData.action === 'categorize') {
-          // Drag from CategoryZones own group cards
           productGroup = dragData.productGroup;
         } else if (dragData.source === 'ImageGrouper') {
-          // Drag from Step 2 ImageGrouper — use the item's productGroup or its own id
           productGroup = dragData.productGroup || dragData.item?.productGroup || dragData.item?.id;
         }
       }
@@ -224,7 +232,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     const itemsWithPreset = await applyPresetToProductGroup(groupItems, category);
 
     const updatedMap = { ...groupsMap };
-    updatedMap[productGroup] = groupsMap[productGroup].map(item => {
+    updatedMap[productGroup] = (groupsMap[productGroup] || groupItems).map(item => {
       const withPreset = itemsWithPreset.find(i => i.id === item.id);
       return withPreset || { ...item, category };
     });
