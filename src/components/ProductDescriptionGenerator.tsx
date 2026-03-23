@@ -119,7 +119,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     
     // Subsequent updates - sync to parent
     onProcessed(processedItems);
-  }, [processedItems, onProcessed]);
+  // onProcessed intentionally omitted — it's a stable callback from the parent and
+  // including it causes this effect to re-fire on every App render (new function reference).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [processedItems]);
 
   // Mark unsaved changes whenever processedItems mutates after mount
   useEffect(() => {
