@@ -420,6 +420,17 @@ function App() {
     // APPEND new images to existing ones (don't replace)
     const newImages = [...uploadedImages, ...items];
     setUploadedImages(newImages);
+
+    // If this is the very first upload of a brand-new session (e.g. localStorage was cleared),
+    // currentBatchIdRef.current will still be null and every autoSave would be skipped by the
+    // null-guard below. Create and pin a new batch ID immediately so the debounced save fires.
+    if (!currentBatchIdRef.current) {
+      const newBatchId = crypto.randomUUID();
+      currentBatchIdRef.current = newBatchId;
+      setCurrentBatchId(newBatchId);
+      localStorage.setItem('sortbot_current_batch_id', newBatchId);
+      console.log(`[App] handleImagesUploaded | no batchId — created new batchId=${newBatchId}`);
+    }
     
     // If there are already grouped images, append to those too
     if (groupedImages.length > 0) {
@@ -444,7 +455,7 @@ function App() {
         uploadedItems.map(item => ({
           id: item.id,
           user_id: user.id,
-          batch_id: currentBatchId,
+          batch_id: currentBatchIdRef.current,   // use ref — state may still be null this render
           title: item.seoTitle || null,
           status: 'Draft',
           product_group: item.productGroup || item.id,
