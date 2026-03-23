@@ -163,6 +163,9 @@ export const saveProductToDatabase = async (
         
         // Original voice description
         voice_description: product.voiceDescription || '',
+        
+        // Product group (Step 2 grouping)
+        product_group: product.productGroup || product.id || '',
       })
       .select()
       .single();
