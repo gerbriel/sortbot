@@ -1175,6 +1175,7 @@ function App() {
                   onCategorized={handleImagesSorted}
                   compactMode
                   selectedItemIds={selectedGroupItems}
+                  onCategoryAssigned={() => setSelectedGroupItems(new Set())}
                 />
               </div>
             </div>

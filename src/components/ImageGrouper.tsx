@@ -346,6 +346,19 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     onSelectionChange?.(next);
   };
 
+  // Toggle all items in a product group in/out of selection
+  const toggleGroupSelection = (groupItems: ClothingItem[]) => {
+    const groupIds = groupItems.map(i => i.id);
+    const allSelected = groupIds.every(id => selectedItems.has(id));
+    const next = new Set(selectedItems);
+    if (allSelected) {
+      groupIds.forEach(id => next.delete(id));
+    } else {
+      groupIds.forEach(id => next.add(id));
+    }
+    updateSelection(next);
+  };
+
   const toggleItemSelection = (itemId: string, e?: React.MouseEvent) => {
     const newSelected = new Set(selectedItems);
     const action = newSelected.has(itemId) ? 'deselect' : 'select';
@@ -926,7 +939,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     <span className="category-label">{items[0].category}</span>
                   </div>
                 )}
-                <div className="group-header">
+                <div
+                  className={`group-header${items.every(i => selectedItems.has(i.id)) ? ' all-selected' : items.some(i => selectedItems.has(i.id)) ? ' some-selected' : ''}`}
+                  onClick={(e) => {
+                    if (!(e.target as HTMLElement).closest('button')) {
+                      toggleGroupSelection(items);
+                    }
+                  }}
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  title="Click to select/deselect all images in this group"
+                >
                   <span className="group-badge">
                     {items.length} images
                   </span>
