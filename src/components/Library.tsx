@@ -551,7 +551,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
     const title = titleInput.trim() || `Group ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
     try {
-      const groupId = `group-${Date.now()}`;
+      const groupId = crypto.randomUUID();
       const imageIds = Array.from(selectedItems);
 
       const { data: newProduct, error: prodErr } = await supabase
