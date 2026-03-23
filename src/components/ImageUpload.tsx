@@ -62,7 +62,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId }) =
     for (let i = 0; i < acceptedFiles.length; i += CHUNK) {
       const chunk = acceptedFiles.slice(i, i + CHUNK);
       const results = await Promise.all(chunk.map(async (file) => {
-        const productId = `${Date.now()}-${Math.random()}`;
+        const productId = crypto.randomUUID();
         const uploaded = await uploadToSupabase(file, productId);
         if (!uploaded) {
           console.warn('⚠️ Upload failed for:', file.name, '- using blob URL as fallback');

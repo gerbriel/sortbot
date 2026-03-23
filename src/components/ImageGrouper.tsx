@@ -32,7 +32,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const [draggedPhotoId, setDraggedPhotoId] = useState<string | null>(null);
   const [draggedPhotoGroupId, setDraggedPhotoGroupId] = useState<string | null>(null);
   const [dragOverPhotoId, setDragOverPhotoId] = useState<string | null>(null);
-  const [groupCounter, setGroupCounter] = useState(1);
   const [uploadedImages, setUploadedImages] = useState<Set<string>>(new Set());
   
   // Loading progress state
@@ -256,13 +255,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         return [...prev, ...deduped];
       });
 
-      // Advance groupCounter past any existing group numbers to avoid ID collisions
-      const maxExisting = [...existingIds, ...incoming.map(i => i.productGroup || '')].reduce((max, id) => {
-        const match = id.match(/^group-(\d+)$/);
-        return match ? Math.max(max, parseInt(match[1], 10)) : max;
-      }, 0);
-      if (maxExisting >= groupCounter) setGroupCounter(maxExisting + 1);
-
       if (toUpload.length > 0) {
         await new Promise(resolve => setTimeout(resolve, 1000));
         setIsLoading(false);
@@ -418,9 +410,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       alert('Please select at least 2 items to group together');
       return;
     }
-    console.log(`[Step2:Grouper] createGroup | selected=${selectedItems.size} | newGroupId=group-${groupCounter}`);
+    console.log(`[Step2:Grouper] createGroup | selected=${selectedItems.size}`);
 
-    const groupId = `group-${groupCounter}`;
+    const groupId = crypto.randomUUID();
     const updated = groupedItems.map(item =>
       selectedItems.has(item.id)
         ? { ...item, productGroup: groupId }
@@ -429,7 +421,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
     setGroupedItems(updated);
     updateSelection(new Set());
-    setGroupCounter(groupCounter + 1);
     onGrouped(updated);
   };
 
