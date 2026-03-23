@@ -793,6 +793,7 @@ function App() {
         seo_description,
         voice_description,
         batch_id,
+        product_group,
         created_at,
         product_images (
           image_url,
@@ -855,7 +856,7 @@ function App() {
             preview: images[0] || '',
             imageUrls: images,
             file: null as any,
-            productGroup: p.id,
+            productGroup: p.product_group || p.id,
             voiceDescription:          p.voice_description   || '',
             generatedDescription:      p.description         || '',
             seoTitle:                  p.seo_title           || '',
@@ -932,6 +933,7 @@ function App() {
             return {
               ...item,
               // Core
+              productGroup:             savedProduct.product_group       || item.productGroup       || item.id,
               voiceDescription:         savedProduct.voice_description   ?? item.voiceDescription   ?? '',
               generatedDescription:     savedProduct.description         ?? item.generatedDescription ?? '',
               seoTitle:                 savedProduct.seo_title           || item.seoTitle,
@@ -1012,6 +1014,29 @@ function App() {
     // registerItemsInDB errors surface separately and don't get silently swallowed above.
     // restoredProcessedItems is always populated (either merged DB data or workflowItems fallback).
     await registerItemsInDB(restoredProcessedItems, batch.id);
+
+    // Sync product_group values from workflow_state → DB immediately after restore.
+    // registerItemsInDB uses ignoreDuplicates:false but doesn't fire if rows already exist
+    // with the same id (it only upserts, not updates-all-fields). This targeted pass
+    // ensures every row's product_group reflects the live session state.
+    if (user) {
+      const registerable = restoredProcessedItems.filter(i => i.imageUrls?.[0] || i.storagePath);
+      if (registerable.length > 0) {
+        const { error: pgErr } = await supabase.from('products').upsert(
+          registerable.map(item => ({
+            id: item.id,
+            user_id: user.id,
+            batch_id: batch.id,
+            product_group: item.productGroup || item.id,
+            title: item.seoTitle || null,
+            status: 'Draft',
+          })),
+          { onConflict: 'id', ignoreDuplicates: false }
+        );
+        if (pgErr) console.warn('[App] handleOpenBatch | product_group sync upsert error:', pgErr.message);
+        else console.log(`[App] handleOpenBatch | synced product_group for ${registerable.length} items`);
+      }
+    }
     // Set current batch info and persist for reload survival
     currentBatchIdRef.current = batch.id;
     setCurrentBatchId(batch.id);
