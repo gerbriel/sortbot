@@ -929,9 +929,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 className={`product-group-card ${dragOverGroup === groupId ? 'drag-over' : ''} ${items[0].category ? 'has-category' : ''} ${items.every(i => selectedItems.has(i.id)) ? 'all-selected' : items.some(i => selectedItems.has(i.id)) ? 'some-selected' : ''}`}
                 draggable={!selectionThresholdMet}
                 onClick={(e) => {
-                  // Toggle select the whole group unless clicking an interactive child
-                  const target = e.target as HTMLElement;
-                  if (!target.closest('button') && !target.closest('.group-image-item')) {
+                  // Only toggle group selection when clicking the card background itself,
+                  // not any child element (image tiles handle their own toggle,
+                  // group-header has its own onClick, buttons have stopPropagation).
+                  if (e.target === e.currentTarget) {
                     toggleGroupSelection(items);
                   }
                 }}
