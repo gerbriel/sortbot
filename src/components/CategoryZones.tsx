@@ -243,25 +243,48 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
   const handleCategoryClick = async (categoryName: string) => {
     if (!selectedItemIds || selectedItemIds.size === 0) return;
 
-    // Group selected items by their productGroup
     const selected = items.filter(i => selectedItemIds.has(i.id));
-    const byGroup = new Map<string, ClothingItem[]>();
-    selected.forEach(item => {
-      const gid = item.productGroup || item.id;
-      if (!byGroup.has(gid)) byGroup.set(gid, []);
-      byGroup.get(gid)!.push(item);
+    if (selected.length === 0) return;
+
+    // If all selected items already share one group, reuse that group ID.
+    // Otherwise, merge them all into the first selected item's group ID.
+    const existingGroups = new Set(selected.map(i => i.productGroup || i.id));
+    const mergedGroupId = selected[0].productGroup || selected[0].id;
+
+    // Apply category preset to the merged set
+    const itemsWithPreset = await applyPresetToProductGroup(selected, categoryName);
+
+    // Rebuild the full items map:
+    //  - selected items → assign mergedGroupId + category/preset
+    //  - items that were in a now-absorbed group but NOT selected → keep them, but
+    //    re-point their productGroup to mergedGroupId so the group isn't orphaned
+    const selectedSet = new Set(selected.map(i => i.id));
+    const updatedMap = { ...groupsMap };
+
+    // Remove old entries for every group that's being merged away
+    existingGroups.forEach(gid => {
+      if (gid !== mergedGroupId) delete updatedMap[gid];
     });
 
-    const updatedMap = { ...groupsMap };
-    for (const [groupId, groupItems] of byGroup) {
-      const itemsWithPreset = await applyPresetToProductGroup(groupItems, categoryName);
-      updatedMap[groupId] = (groupsMap[groupId] || groupItems).map(item => {
+    // Rebuild mergedGroupId bucket: selected items (with preset) + any non-selected
+    // items that were already in mergedGroupId
+    const nonSelectedInMergedGroup = (groupsMap[mergedGroupId] || []).filter(
+      i => !selectedSet.has(i.id)
+    );
+    const mergedItems: ClothingItem[] = [
+      ...selected.map(item => {
         const withPreset = itemsWithPreset.find(i => i.id === item.id);
-        return withPreset || { ...item, category: categoryName };
-      });
-    }
+        return { ...(withPreset || { ...item, category: categoryName }), productGroup: mergedGroupId };
+      }),
+      ...nonSelectedInMergedGroup.map(i => ({ ...i, productGroup: mergedGroupId })),
+    ];
+    updatedMap[mergedGroupId] = mergedItems;
 
-    emitReordered(groupOrderRef.current, updatedMap);
+    // Rebuild group order: remove absorbed group IDs, keep everything else
+    const newGroupOrder = groupOrderRef.current.filter(gid => !existingGroups.has(gid) || gid === mergedGroupId);
+    if (!newGroupOrder.includes(mergedGroupId)) newGroupOrder.push(mergedGroupId);
+
+    emitReordered(newGroupOrder, updatedMap);
   };
 
   // ══════════════════════════════════════════════════════════════════════════
