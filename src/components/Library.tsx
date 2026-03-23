@@ -1400,7 +1400,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
               <span className="batch-count">({productGroups.length} {productGroups.length === 1 ? 'group' : 'groups'})</span>
             )}
             {viewMode === 'images' && (
-              <span className="batch-count">({images.length} {images.length === 1 ? 'image' : 'images'})</span>
+              <span className="batch-count">({images.length} {images.length === 1 ? 'image' : 'images'} across {batches.length} {batches.length === 1 ? 'batch' : 'batches'})</span>
             )}
           </div>
           <button className="close-button" onClick={onClose} aria-label="Close">
