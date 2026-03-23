@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { Tag, Settings, Package, ShoppingBag } from 'lucide-react';
@@ -207,7 +207,7 @@ function App() {
       if (productImageRows.length > 0) {
         await supabase.from('product_images').upsert(
           productImageRows,
-          { onConflict: 'product_id,image_url', ignoreDuplicates: true }
+          { onConflict: 'unique_product_image_url', ignoreDuplicates: true }
         );
       }
       console.log(`[App] registerItemsInDB | registered ${registerable.length} products, ${productImageRows.length} product_images | batchId=${batchId}`);
@@ -443,7 +443,7 @@ function App() {
           position: idx,
           alt_text: item.seoTitle || 'Uploaded image',
         })),
-        { onConflict: 'storage_path', ignoreDuplicates: true }
+        { onConflict: 'unique_product_image_url', ignoreDuplicates: true }
       );
       // Refresh Library immediately — images are now in the DB
       console.log('[App] setLibraryRefreshTrigger → upload complete (Step 1)');
@@ -608,7 +608,7 @@ function App() {
     }
   };
 
-  const handleItemsProcessed = (items: ClothingItem[]) => {
+  const handleItemsProcessed = useCallback((items: ClothingItem[]) => {
     console.log(`[App] handleItemsProcessed | items=${items.length}`);
     setProcessedItems(items);
     
@@ -621,7 +621,8 @@ function App() {
     });
 
     // Broadcast action for real-time collaboration
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploadedImages, groupedImages, sortedImages]);
 
   // Auto-save workflow state to batch (debounced — 2 s after last call)
   const autoSaveWorkflow = (workflowState: {
