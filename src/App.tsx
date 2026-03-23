@@ -205,10 +205,16 @@ function App() {
         }];
       });
       if (productImageRows.length > 0) {
-        await supabase.from('product_images').upsert(
+        // Use upsert with ignoreDuplicates (ON CONFLICT DO NOTHING) — avoids
+        // needing a named conflict target in PostgREST. Requires the unique index
+        // to exist in the DB (see migration fix_product_images_unique_index.sql).
+        const { error: imgErr } = await supabase.from('product_images').upsert(
           productImageRows,
           { onConflict: 'product_id,image_url', ignoreDuplicates: true }
         );
+        if (imgErr) {
+          console.warn('[App] registerItemsInDB | product_images upsert error:', imgErr.message);
+        }
       }
       console.log(`[App] registerItemsInDB | registered ${registerable.length} products, ${productImageRows.length} product_images | batchId=${batchId}`);
     } catch (err) {
@@ -434,8 +440,8 @@ function App() {
         })),
         { onConflict: 'id', ignoreDuplicates: true }
       );
-      // Upsert product_images rows linked to their products
-      await supabase.from('product_images').upsert(
+      // Upsert product_images rows; ignore duplicate rows (already uploaded)
+      const { error: imgErr2 } = await supabase.from('product_images').upsert(
         uploadedItems.map((item, idx) => ({
           image_url: item.imageUrls![0],
           storage_path: item.storagePath!,
@@ -445,6 +451,9 @@ function App() {
         })),
         { onConflict: 'product_id,image_url', ignoreDuplicates: true }
       );
+      if (imgErr2) {
+        console.warn('[App] upload | product_images upsert error:', imgErr2.message);
+      }
       // Refresh Library immediately — images are now in the DB
       console.log('[App] setLibraryRefreshTrigger → upload complete (Step 1)');
       setLibraryRefreshTrigger(prev => prev + 1);
@@ -562,7 +571,7 @@ function App() {
     // Accept items with imageUrls[0] OR storagePath (same as registerItemsInDB).
     const allRegisterable = itemsWithCategories.filter(i => i.imageUrls?.[0] || i.storagePath);
     if (allRegisterable.length > 0) {
-      await supabase.from('products').upsert(
+      const { error: grpErr } = await supabase.from('products').upsert(
         allRegisterable.map(item => ({
           id: item.id,
           user_id: user.id,
@@ -573,40 +582,8 @@ function App() {
         })),
         { onConflict: 'id', ignoreDuplicates: false }
       );
-      // Refresh Library so group changes appear immediately
-      setLibraryRefreshTrigger(prev => prev + 1);
-    }
-
-    // Find items that are in multi-item groups (productGroup is set and matches other items)
-    const groupedItemsMap = items.reduce((acc, item) => {
-      if (item.productGroup) {
-        if (!acc[item.productGroup]) acc[item.productGroup] = [];
-        acc[item.productGroup].push(item);
-      }
-      return acc;
-    }, {} as Record<string, ClothingItem[]>);
-
-    // Filter to only groups with 2+ items
-    const multiItemGroups = Object.values(groupedItemsMap).filter(group => group.length > 1);
-    
-    // Flatten back to array of items in product groups
-    const itemsToSave = multiItemGroups.flat();
-
-    if (itemsToSave.length > 0) {
-      try {
-        const result = await saveBatchToDatabase(itemsToSave, user.id, currentBatchId);
-        
-        if (result.success > 0) {
-          // Show brief success message
-          setSaveMessage({
-            type: 'success',
-            text: `✅ Saved ${result.success} product group(s) to database!`,
-          });
-          setTimeout(() => setSaveMessage(null), 2000);
-        }
-      } catch (error) {
-        console.error('Auto-save error:', error);
-      }
+      if (grpErr) console.warn('[App] handleImagesGrouped | products upsert error:', grpErr.message);
+      else setLibraryRefreshTrigger(prev => prev + 1);
     }
   };
 
