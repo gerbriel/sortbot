@@ -12,12 +12,13 @@ interface ImageUploadProps {
 const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId }) => {
   const [isUploading, setIsUploading] = useState(false);
   
-  const uploadToSupabase = async (file: File): Promise<{ preview: string; imageUrls: string[]; storagePath: string } | null> => {
+  const uploadToSupabase = async (file: File, productId: string): Promise<{ preview: string; imageUrls: string[]; storagePath: string } | null> => {
     try {
       const fileExt = file.name.split('.').pop();
       const randomId = Math.random().toString(36).substring(2, 15);
       const fileName = `${Date.now()}-${randomId}.${fileExt}`;
-      const filePath = `${userId}/temp/${fileName}`;
+      // Use permanent path so the URL stored in DB remains valid indefinitely.
+      const filePath = `${userId}/${productId}/${fileName}`;
 
       const { data, error } = await supabase.storage
         .from('product-images')
@@ -61,17 +62,18 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId }) =
     for (let i = 0; i < acceptedFiles.length; i += CHUNK) {
       const chunk = acceptedFiles.slice(i, i + CHUNK);
       const results = await Promise.all(chunk.map(async (file) => {
-        const uploaded = await uploadToSupabase(file);
+        const productId = `${Date.now()}-${Math.random()}`;
+        const uploaded = await uploadToSupabase(file, productId);
         if (!uploaded) {
           console.warn('⚠️ Upload failed for:', file.name, '- using blob URL as fallback');
           return {
-            id: `${Date.now()}-${Math.random()}`,
+            id: productId,
             file,
             preview: URL.createObjectURL(file),
           };
         }
         return {
-          id: `${Date.now()}-${Math.random()}`,
+          id: productId,
           file,
           preview: uploaded.preview,
           imageUrls: uploaded.imageUrls,
