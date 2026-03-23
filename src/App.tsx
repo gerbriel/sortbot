@@ -489,14 +489,11 @@ function App() {
 
     // Upsert category changes to products table immediately so Library reflects them
     if (user && currentBatchId) {
-      const itemsWithCategory = items.filter(i => i.category && i.productGroup);
+      const itemsWithCategory = items.filter(i => i.category);
       if (itemsWithCategory.length > 0) {
-        // Collect unique groups (one product row per productGroup)
-        const byGroup = new Map<string, ClothingItem>();
-        itemsWithCategory.forEach(i => byGroup.set(i.productGroup!, i));
         await supabase.from('products').upsert(
-          Array.from(byGroup.values()).map(item => ({
-            id: item.productGroup,
+          itemsWithCategory.map(item => ({
+            id: item.id,
             product_category: item.category,
             batch_id: currentBatchId,
             user_id: user.id,

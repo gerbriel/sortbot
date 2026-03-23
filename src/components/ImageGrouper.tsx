@@ -177,14 +177,19 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       const newItems = items.filter(item => !existingIds.has(item.id));
 
       // If nothing is new, just sync categories/metadata that may have changed externally
-      // (e.g. category assigned via CategoryZones) without disturbing group assignments.
+      // (e.g. category assigned via CategoryZones, or group merge from category click).
       if (newItems.length === 0) {
         setGroupedItems(prev =>
           prev.map(existing => {
             const updated = items.find(i => i.id === existing.id);
             if (!updated) return existing;
-            // Preserve local productGroup; only pick up external metadata changes
-            return { ...updated, productGroup: existing.productGroup };
+            // Allow productGroup to update from props ONLY when the incoming value differs
+            // from the item's own id — meaning an external merge/group was applied
+            // (e.g. category click in CategoryZones merged items into one group).
+            // Keep local productGroup when the prop still shows the item's own id (default singleton).
+            const incomingGroup = updated.productGroup || updated.id;
+            const newGroup = incomingGroup !== updated.id ? incomingGroup : existing.productGroup;
+            return { ...updated, productGroup: newGroup };
           })
         );
         return;
