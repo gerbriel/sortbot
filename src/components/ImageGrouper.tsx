@@ -284,7 +284,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       const fileExt = item.file.name.split('.').pop();
       const randomId = Math.random().toString(36).substring(2, 15);
       const fileName = `${Date.now()}-${randomId}.${fileExt}`;
-      const filePath = `${userId}/temp/${fileName}`;
+      // Use permanent path (userId/productId/...) so the URL in DB remains valid indefinitely.
+      const filePath = `${userId}/${item.id}/${fileName}`;
 
       const { data, error } = await supabase.storage
         .from('product-images')
