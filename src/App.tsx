@@ -495,11 +495,13 @@ function App() {
           itemsWithCategory.map(item => ({
             id: item.id,
             product_category: item.category,
+            product_group: item.productGroup || item.id,
             batch_id: currentBatchId,
             user_id: user.id,
           })),
           { onConflict: 'id', ignoreDuplicates: false }
         );
+        setLibraryRefreshTrigger(prev => prev + 1);
       }
     }
   };
@@ -557,7 +559,8 @@ function App() {
 
     // Upsert ALL items' products rows with their current productGroup so the Library
     // Groups tab stays in sync with every drag/group change in Step 2.
-    const allRegisterable = itemsWithCategories.filter(i => i.storagePath && i.imageUrls?.[0]);
+    // Accept items with imageUrls[0] OR storagePath (same as registerItemsInDB).
+    const allRegisterable = itemsWithCategories.filter(i => i.imageUrls?.[0] || i.storagePath);
     if (allRegisterable.length > 0) {
       await supabase.from('products').upsert(
         allRegisterable.map(item => ({
@@ -570,6 +573,8 @@ function App() {
         })),
         { onConflict: 'id', ignoreDuplicates: false }
       );
+      // Refresh Library so group changes appear immediately
+      setLibraryRefreshTrigger(prev => prev + 1);
     }
 
     // Find items that are in multi-item groups (productGroup is set and matches other items)
