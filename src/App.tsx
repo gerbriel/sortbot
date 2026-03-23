@@ -207,17 +207,19 @@ function App() {
         }];
       });
       if (productImageRows.length > 0) {
-        // Use upsert with ignoreDuplicates: false so existing rows (e.g. those missing
-        // user_id from before the fix) get updated with the full payload including user_id.
-        // Requires the explicit unique index idx_product_images_product_url_unique to exist
-        // in the DB (see migration fix_product_images_unique_index.sql — must be run once
-        // in Supabase SQL Editor).
-        const { error: imgErr } = await supabase.from('product_images').upsert(
+        // Log first row for diagnosis
+        console.log('[App] registerItemsInDB | product_images sample row:', JSON.stringify(productImageRows[0]));
+        // onConflict uses the constraint name directly — more reliable than column list
+        // when multiple unique indexes exist on the same columns.
+        // Constraint "unique_product_image_url" covers (product_id, image_url).
+        const { error: imgErr, count: imgCount } = await supabase.from('product_images').upsert(
           productImageRows,
-          { onConflict: 'product_id,image_url', ignoreDuplicates: false }
+          { onConflict: 'product_id,image_url', ignoreDuplicates: false, count: 'exact' }
         );
         if (imgErr) {
-          console.warn('[App] registerItemsInDB | product_images upsert error:', imgErr.message, imgErr.code);
+          console.warn('[App] registerItemsInDB | product_images upsert error:', imgErr.message, imgErr.code, imgErr.details);
+        } else {
+          console.log(`[App] registerItemsInDB | product_images upsert OK | attempted=${productImageRows.length} affected=${imgCount}`);
         }
       }
       console.log(`[App] registerItemsInDB | registered ${registerable.length} products, ${productImageRows.length} product_images | batchId=${batchId}`);
