@@ -254,8 +254,8 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
       // ── 2. Fetch DB tables in parallel ──────────────────────────────────
       const [savedProducts, savedImages] = await Promise.all([
-        fetchSavedProducts(),
-        fetchSavedImages(),
+        fetchSavedProducts(userId),
+        fetchSavedImages(userId),
       ]);
       console.log(`[Library] fetched: wfBatches=${wfBatches.length} | products=${savedProducts.length} | images=${savedImages.length} | ${new Date().toISOString()}`);
       if (isCancelled()) return;
