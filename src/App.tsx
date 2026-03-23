@@ -929,8 +929,20 @@ function App() {
           if (savedProduct) {
             // DB row wins — it was written by an explicit Save which is authoritative.
             // workflow_state (item) is the fallback for fields not yet in the DB.
+            // Reconstruct imageUrls from DB product_images rows if the workflow_state
+            // item's imageUrls are empty (slim() strips them before saving).
+            const dbImageUrls: string[] = (savedProduct.product_images || [])
+              .sort((a: any, b: any) => a.position - b.position)
+              .map((img: any) => img.image_url)
+              .filter(Boolean);
+            const resolvedImageUrls = dbImageUrls.length ? dbImageUrls : (item.imageUrls?.length ? item.imageUrls : []);
+            const resolvedPreview = resolvedImageUrls[0] || item.preview ||
+              (item.storagePath ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl : '');
             return {
               ...item,
+              // Images — must be set before any other field that depends on them
+              imageUrls: resolvedImageUrls,
+              preview:   resolvedPreview,
               // Core
               productGroup:             savedProduct.product_group       || item.productGroup       || item.id,
               voiceDescription:         savedProduct.voice_description   ?? item.voiceDescription   ?? '',
