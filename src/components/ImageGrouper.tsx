@@ -926,8 +926,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               <div
                 key={groupId}
                 data-group-id={groupId}
-                className={`product-group-card ${dragOverGroup === groupId ? 'drag-over' : ''} ${items[0].category ? 'has-category' : ''}`}
+                className={`product-group-card ${dragOverGroup === groupId ? 'drag-over' : ''} ${items[0].category ? 'has-category' : ''} ${items.every(i => selectedItems.has(i.id)) ? 'all-selected' : items.some(i => selectedItems.has(i.id)) ? 'some-selected' : ''}`}
                 draggable={!selectionThresholdMet}
+                onClick={(e) => {
+                  // Toggle select the whole group unless clicking an interactive child
+                  const target = e.target as HTMLElement;
+                  if (!target.closest('button') && !target.closest('.group-image-item')) {
+                    toggleGroupSelection(items);
+                  }
+                }}
                 onDragStart={(e) => {
                   if (selectionThresholdMet) { e.preventDefault(); return; }
                   // Drag the whole group to a CategoryZone

@@ -17,7 +17,7 @@ import type { WorkflowBatch } from './workflowBatchService';
  * Returns products with their images from the products and product_images tables
  * NOTE: Products are SHARED across all users (collaborative workspace)
  */
-export const fetchSavedProducts = async () => {
+export const fetchSavedProducts = async (userId: string) => {
   // Paginate in chunks of 1000 to bypass PostgREST server-side max-rows cap
   const PAGE = 1000;
   const allProducts: any[] = [];
@@ -38,6 +38,7 @@ export const fetchSavedProducts = async () => {
           batch_id,
           product_category,
           seo_title,
+          product_group,
           workflow_batches (
             id,
             batch_name,
@@ -53,6 +54,7 @@ export const fetchSavedProducts = async () => {
             created_at
           )
         `)
+        .eq('user_id', userId)
         .order('created_at', { ascending: true })
         .range(from, from + PAGE - 1);
 
@@ -83,9 +85,9 @@ export const fetchSavedProducts = async () => {
 /**
  * Fetch all saved images from database
  * Returns all product_images with their parent product info
- * NOTE: Images are SHARED across all users (collaborative workspace)
+ * NOTE: Images are filtered by user_id to avoid showing other users' products
  */
-export const fetchSavedImages = async () => {
+export const fetchSavedImages = async (userId: string) => {
   // Paginate in chunks of 1000 to bypass PostgREST server-side max-rows cap
   const PAGE = 1000;
   const allImages: any[] = [];
@@ -102,6 +104,7 @@ export const fetchSavedImages = async () => {
             product_category,
             vendor,
             batch_id,
+            user_id,
             workflow_batches (
               id,
               batch_name,
@@ -110,6 +113,7 @@ export const fetchSavedImages = async () => {
             )
           )
         `)
+        .eq('user_id', userId)
         .order('created_at', { ascending: true })
         .range(from, from + PAGE - 1);
 

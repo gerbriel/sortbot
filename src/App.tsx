@@ -182,6 +182,7 @@ function App() {
           batch_id: batchId,
           title: item.seoTitle || null,
           status: 'Draft',
+          product_group: item.productGroup || item.id,
         })),
         // ignoreDuplicates: false — allows updating batch_id on existing rows so products
         // are correctly attributed to the current batch when restored from a new session.
@@ -200,6 +201,7 @@ function App() {
           image_url: imageUrl,
           storage_path: item.storagePath ?? null,
           product_id: item.id,
+          user_id: activeUser.id,
           position: idx,
           alt_text: item.seoTitle || 'Uploaded image',
         }];
@@ -446,6 +448,7 @@ function App() {
           batch_id: currentBatchId,
           title: item.seoTitle || null,
           status: 'Draft',
+          product_group: item.productGroup || item.id,
         })),
         { onConflict: 'id', ignoreDuplicates: true }
       );
@@ -455,6 +458,7 @@ function App() {
           image_url: item.imageUrls![0],
           storage_path: item.storagePath!,
           product_id: item.id,
+          user_id: user.id,
           position: idx,
           alt_text: item.seoTitle || 'Uploaded image',
         })),
