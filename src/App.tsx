@@ -207,15 +207,17 @@ function App() {
         }];
       });
       if (productImageRows.length > 0) {
-        // Use upsert with ignoreDuplicates (ON CONFLICT DO NOTHING) — avoids
-        // needing a named conflict target in PostgREST. Requires the unique index
-        // to exist in the DB (see migration fix_product_images_unique_index.sql).
+        // Use upsert with ignoreDuplicates: false so existing rows (e.g. those missing
+        // user_id from before the fix) get updated with the full payload including user_id.
+        // Requires the explicit unique index idx_product_images_product_url_unique to exist
+        // in the DB (see migration fix_product_images_unique_index.sql — must be run once
+        // in Supabase SQL Editor).
         const { error: imgErr } = await supabase.from('product_images').upsert(
           productImageRows,
-          { onConflict: 'product_id,image_url', ignoreDuplicates: true }
+          { onConflict: 'product_id,image_url', ignoreDuplicates: false }
         );
         if (imgErr) {
-          console.warn('[App] registerItemsInDB | product_images upsert error:', imgErr.message);
+          console.warn('[App] registerItemsInDB | product_images upsert error:', imgErr.message, imgErr.code);
         }
       }
       console.log(`[App] registerItemsInDB | registered ${registerable.length} products, ${productImageRows.length} product_images | batchId=${batchId}`);
@@ -462,10 +464,10 @@ function App() {
           position: idx,
           alt_text: item.seoTitle || 'Uploaded image',
         })),
-        { onConflict: 'product_id,image_url', ignoreDuplicates: true }
+        { onConflict: 'product_id,image_url', ignoreDuplicates: false }
       );
       if (imgErr2) {
-        console.warn('[App] upload | product_images upsert error:', imgErr2.message);
+        console.warn('[App] upload | product_images upsert error:', imgErr2.message, imgErr2.code);
       }
       // Refresh Library immediately — images are now in the DB
       console.log('[App] setLibraryRefreshTrigger → upload complete (Step 1)');
