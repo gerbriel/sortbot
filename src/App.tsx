@@ -344,8 +344,17 @@ function App() {
           text: `✅ Saved ${result.success} product(s)${result.failed > 0 ? `, ${result.failed} failed` : ''}!`,
         });
 
-        // products/product_images rows were just written — refresh Library if open
+        // products/product_images rows were just written — prune stale rows then refresh Library
         console.log('[App] setLibraryRefreshTrigger → Save Batch (Step 4)');
+        if (currentBatchId) {
+          const savedIds = processedItems.map(i => i.id);
+          const { error: pruneErr } = await supabase
+            .from('products')
+            .delete()
+            .eq('batch_id', currentBatchId)
+            .not('id', 'in', `(${savedIds.join(',')})`);
+          if (pruneErr) console.warn('[App] handleSaveBatch | prune stale products error:', pruneErr.message);
+        }
         setLibraryRefreshTrigger(prev => prev + 1);
 
         // Broadcast action for real-time collaboration
@@ -582,8 +591,20 @@ function App() {
         })),
         { onConflict: 'id', ignoreDuplicates: false }
       );
-      if (grpErr) console.warn('[App] handleImagesGrouped | products upsert error:', grpErr.message);
-      else setLibraryRefreshTrigger(prev => prev + 1);
+      if (grpErr) {
+        console.warn('[App] handleImagesGrouped | products upsert error:', grpErr.message);
+      } else {
+        // Prune any stale products rows for this batch that are no longer in the current item set.
+        // This clears out orphaned rows from previous sessions / deleted items.
+        const currentIds = allRegisterable.map(i => i.id);
+        const { error: pruneErr } = await supabase
+          .from('products')
+          .delete()
+          .eq('batch_id', currentBatchId)
+          .not('id', 'in', `(${currentIds.join(',')})`);
+        if (pruneErr) console.warn('[App] handleImagesGrouped | prune stale products error:', pruneErr.message);
+        setLibraryRefreshTrigger(prev => prev + 1);
+      }
     }
   };
 

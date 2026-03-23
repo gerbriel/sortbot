@@ -491,11 +491,22 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     }
 
     console.log(`[Step2:Grouper] drop | item=${draggedItem.id} from=${draggedFromGroup} → to=${targetGroup}`);
-    const updated = groupedItems.map(item =>
+    const afterMove = groupedItems.map(item =>
       item.id === draggedItem.id
         ? { ...item, productGroup: targetGroup }
         : item
     );
+
+    // If the source group now has only 1 item left, revert that item to an individual
+    // (a "group of 1" is just a standalone listing — productGroup = its own id)
+    const sourceGroupItems = afterMove.filter(i => i.productGroup === draggedFromGroup);
+    const updated = sourceGroupItems.length === 1
+      ? afterMove.map(item =>
+          item.productGroup === draggedFromGroup
+            ? { ...item, productGroup: item.id }
+            : item
+        )
+      : afterMove;
 
     setGroupedItems(updated);
     onGrouped(updated);
