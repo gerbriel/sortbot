@@ -702,6 +702,8 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
     const success = await deleteWorkflowBatch(batchId);
     if (success) {
       setBatches(batches.filter(b => b.id !== batchId));
+      // Reload all data so images and product groups counts reflect the deletion
+      await loadAll();
     }
     
     setDeletingItem(null);
