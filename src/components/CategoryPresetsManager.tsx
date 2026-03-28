@@ -356,6 +356,7 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
       listing_type: (preset as any).listing_type,
       discounted_shipping: (preset as any).discounted_shipping,
       custom_label_0: (preset as any).custom_label_0,
+      default_status: (preset as any).default_status ?? 'Active',
     });
     setCustomSections(mergeAllSections(preset.custom_sections ?? []));
     setShowForm(true);
@@ -842,6 +843,14 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
                       <label>Age Group</label>
                       <input type="text" value={(formData as any).age_group || ''} onChange={e => setFormData(prev => ({ ...prev, age_group: e.target.value } as any))} placeholder="Adult (13+ years old)" />
                     </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Default Status</label>
+                    <select value={(formData as any).default_status || 'Active'} onChange={e => setFormData(prev => ({ ...prev, default_status: e.target.value } as any))}>
+                      <option value="Active">Active</option>
+                      <option value="Draft">Draft</option>
+                      <option value="Archived">Archived</option>
+                    </select>
                   </div>
                   <CustomFieldsBlock
                     fields={customSections.find(s => s.id === '__classification_csv__')?.fields ?? []}
