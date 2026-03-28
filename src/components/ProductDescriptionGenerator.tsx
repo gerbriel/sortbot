@@ -626,13 +626,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               ...(extractedFields.tags && extractedFields.tags.length > 0 && { 
                 tags: [...new Set([...(updated[itemIndex].tags || []), ...extractedFields.tags])].slice(0, 5)
               }),
-              // Strip "field value period" commands from the textarea — leave only prose.
-              // If the entire transcript was commands (nothing left), keep the original so
-              // the textarea isn't emptied.
-              voiceDescription: (() => {
-                const cleaned = stripVoiceCommands(updated[itemIndex].voiceDescription || '');
-                return cleaned.length > 0 ? cleaned : (updated[itemIndex].voiceDescription || '');
-              })(),
+              // Strip all "field value period" command blocks — leave only free-form prose.
+              // If the entire transcript was commands, the textarea will be empty (correct).
+              voiceDescription: stripVoiceCommands(updated[itemIndex].voiceDescription || ''),
             };
           }
         });
@@ -783,7 +779,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         
         // Build context from everything we know
         const aiResult = await generateProductDescription({
-          voiceDescription: currentItem.voiceDescription,
+          voiceDescription: stripVoiceCommands(currentItem.voiceDescription || ''),
           brand: currentItem.brand,
           color: currentItem.color,
           size: currentItem.size,
@@ -824,7 +820,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     }
     
     // Fallback: Use basic generation if Llama 3 not enabled
-    const voiceDesc = currentItem.voiceDescription || '';
+    const voiceDesc = stripVoiceCommands(currentItem.voiceDescription || '');
     const lowerDesc = voiceDesc.toLowerCase();
     
     // Detect colors and materials
