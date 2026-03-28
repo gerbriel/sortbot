@@ -107,8 +107,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
       const containerRef = currentContainerRef.current;
       
-      // Get all item elements and check which ones intersect with selection box
-      const itemElements = containerRef.querySelectorAll('.single-item-card, .product-group-card');
+      // Query individual image elements — singles AND per-photo items inside groups.
+      // This lets rubber-band select specific photos within a product group.
+      const itemElements = containerRef.querySelectorAll('.single-item-card[data-item-id], .group-image-item[data-item-id]');
       const newSelected = new Set(e.shiftKey ? selectedItems : new Set<string>());
       
       itemElements.forEach((element) => {
@@ -129,18 +130,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         );
         
         if (intersects) {
-          // Check if it's a single item or a group
           const itemId = element.getAttribute('data-item-id');
-          const groupId = element.getAttribute('data-group-id');
-          
-          if (itemId) {
-            // Single item - add just this item
-            newSelected.add(itemId);
-          } else if (groupId) {
-            // Product group - add all items in this group
-            const groupItems = groupedItems.filter(item => item.productGroup === groupId);
-            groupItems.forEach(item => newSelected.add(item.id));
-          }
+          if (itemId) newSelected.add(itemId);
         }
       });
       
@@ -1007,6 +998,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   {items.map((item) => (
                     <div
                       key={item.id}
+                      data-item-id={item.id}
                       className={`group-image-item ${selectedItems.has(item.id) ? 'selected' : ''} ${dragOverPhotoId === item.id && draggedPhotoGroupId === groupId ? 'photo-drag-over' : ''} ${draggedPhotoId === item.id ? 'photo-dragging' : ''}`}
                       draggable
                       onDragStart={(e) => handlePhotoDragStart(e, item, groupId)}
