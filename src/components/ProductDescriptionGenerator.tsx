@@ -608,8 +608,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               ...(extractedFields.tags && extractedFields.tags.length > 0 && { 
                 tags: [...new Set([...(updated[itemIndex].tags || []), ...extractedFields.tags])].slice(0, 5)
               }),
-              // Strip "field value period" commands from the textarea — leave only prose
-              voiceDescription: stripVoiceCommands(updated[itemIndex].voiceDescription || ''),
+              // Strip "field value period" commands from the textarea — leave only prose.
+              // If the entire transcript was commands (nothing left), keep the original so
+              // the textarea isn't emptied.
+              voiceDescription: (() => {
+                const cleaned = stripVoiceCommands(updated[itemIndex].voiceDescription || '');
+                return cleaned.length > 0 ? cleaned : (updated[itemIndex].voiceDescription || '');
+              })(),
             };
           }
         });
