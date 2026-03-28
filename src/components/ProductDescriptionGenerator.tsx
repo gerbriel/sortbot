@@ -562,9 +562,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     setInterimTranscript('');
 
     // AUTO-EXTRACT FIELDS FROM VOICE DESCRIPTION WHEN RECORDING STOPS
-    // Read from the ref so we always get the latest voiceDescription regardless of
-    // React's batched state — the onresult handler writes via setProcessedItems(prev=>)
-    // which may not have flushed to the render-cycle closure yet.
+    // Read from the ref for a best-effort snapshot to build the AI request.
+    // The actual state write uses setProcessedItems(prev=>) so it always
+    // merges into the true latest state regardless of render timing.
     const latestItems = processedItemsRef.current;
     const latestGroups = latestItems.reduce((groups, item) => {
       const groupId = item.productGroup || item.id;
@@ -575,6 +575,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const latestGroupArray = Object.values(latestGroups);
     const latestGroup = latestGroupArray[currentGroupIndex] || [];
     const latestItem = latestGroup[0];
+
+    // Capture target IDs now — before any async gap
+    const targetIds = new Set(latestGroup.map(g => g.id));
 
     if (latestItem?.voiceDescription) {
       try {
@@ -599,16 +602,15 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         // Extract fields from AI result (only fields with supporting info)
         const extractedFields = aiResult.extractedFields || {};
         
-        // Update all items in current group with extracted fields.
-        // Start from the ref snapshot (same one we used above) so the voice
-        // description written by onresult is present in the update.
-        const updated = [...processedItemsRef.current];
-        latestGroup.forEach(groupItem => {
-          const itemIndex = updated.findIndex(item => item.id === groupItem.id);
-          if (itemIndex !== -1) {
-            updated[itemIndex] = {
-              ...updated[itemIndex],
-              // Only update fields if extracted (don't overwrite with undefined)
+        // Use functional update so we always write into the true latest state —
+        // not the stale ref snapshot that was captured before the await resolved.
+        setProcessedItems(prev => {
+          const updated = [...prev];
+          updated.forEach((item, idx) => {
+            if (!targetIds.has(item.id)) return;
+            const cleaned = stripVoiceCommands(item.voiceDescription || '');
+            updated[idx] = {
+              ...item,
               ...(extractedFields.brand && { brand: extractedFields.brand }),
               ...(extractedFields.modelName && { modelName: extractedFields.modelName }),
               ...(extractedFields.color && { color: extractedFields.color }),
@@ -623,17 +625,16 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               ...(extractedFields.price && { price: parseFloat(extractedFields.price) || undefined }),
               ...(extractedFields.flaws && { flaws: extractedFields.flaws }),
               ...(extractedFields.care && { care: extractedFields.care }),
-              ...(extractedFields.tags && extractedFields.tags.length > 0 && { 
-                tags: [...new Set([...(updated[itemIndex].tags || []), ...extractedFields.tags])].slice(0, 5)
+              ...(extractedFields.tags && extractedFields.tags.length > 0 && {
+                tags: [...new Set([...(item.tags || []), ...extractedFields.tags])].slice(0, 5)
               }),
-              // Strip all "field value period" command blocks — leave only free-form prose.
-              // If the entire transcript was commands, the textarea will be empty (correct).
-              voiceDescription: stripVoiceCommands(updated[itemIndex].voiceDescription || ''),
+              // Keep cleaned prose; if nothing left (all commands) keep original so
+              // user can see what was spoken and manually clear if desired.
+              voiceDescription: cleaned.length > 0 ? cleaned : item.voiceDescription,
             };
-          }
+          });
+          return updated;
         });
-        
-        setProcessedItems(updated);
         
       } catch (error) {
         console.error('Error extracting fields from voice:', error);
@@ -1314,10 +1315,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     ['brand', 'Nike'],
                     ['size', 'large'],
                     ['material', 'cotton'],
+                    ['condition', 'good'],
                     ['price', '$20'],
                     ['era', '90s'],
                     ['style', 'casual'],
                     ['gender', 'women'],
+                    ['flaws', 'small hole'],
+                    ['care', 'hand wash'],
                     ['width', '18 inches'],
                     ['length', '28 inches'],
                   ].map(([field, ex]) => (
