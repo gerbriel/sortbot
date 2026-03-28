@@ -501,18 +501,24 @@ export function stripVoiceCommands(voiceDesc: string): string {
     'secondary colo(?:u?r)?', 'second color', 'second colour',
   ].join('|');
 
-  // Remove every "TRIGGER ... period" command block (greedy up to each "period").
-  // Uses 'g' + 's' flags so . also matches newlines.
+  // Pass 1 — raw format: "trigger value period" on one line (original speech output)
   let cleaned = voiceDesc.replace(
     new RegExp(`\\b(?:${FIELD_TRIGGERS})\\b[^]*?\\bperiod\\b`, 'gi'),
     ''
   );
 
-  // Strip any leftover bare "period" words (e.g. orphaned delimiter at transcript end)
+  // Pass 2 — formatted (newline) format: each line that STARTS with a trigger word
+  // is a command line and should be removed even if "period" was already stripped.
+  cleaned = cleaned.replace(
+    new RegExp(`^[ \\t]*(?:${FIELD_TRIGGERS})\\b.*$`, 'gim'),
+    ''
+  );
+
+  // Strip any leftover bare "period" words
   cleaned = cleaned.replace(/\bperiod\b/gi, '');
 
-  // Collapse multiple spaces / leading-trailing whitespace
-  return cleaned.replace(/\s{2,}/g, ' ').trim();
+  // Collapse blank lines and leading/trailing whitespace
+  return cleaned.replace(/\n{2,}/g, '\n').replace(/^\n+|\n+$/g, '').replace(/[ \t]{2,}/g, ' ').trim();
 }
 
 // ── Normalizer helpers ────────────────────────────────────────────────────────
