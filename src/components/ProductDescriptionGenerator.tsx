@@ -1314,13 +1314,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     ['brand', 'Nike'],
                     ['size', 'large'],
                     ['material', 'cotton'],
-                    ['condition', 'good'],
                     ['price', '$20'],
                     ['era', '90s'],
                     ['style', 'casual'],
                     ['gender', 'women'],
-                    ['flaws', 'small hole'],
-                    ['care', 'hand wash'],
                     ['width', '18 inches'],
                     ['length', '28 inches'],
                   ].map(([field, ex]) => (
