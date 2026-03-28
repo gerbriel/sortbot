@@ -480,33 +480,59 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const handleDrop = (e: React.DragEvent, targetGroup: string) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    if (!draggedItem) {
+
+    // Resolve which item is being dragged — could come from:
+    //   1. handleDragStart (whole-card drag) → draggedItem is set
+    //   2. handlePhotoDragStart (photo inside a group) → draggedPhotoId is set
+    let movingItem = draggedItem;
+    let sourceGroup = draggedFromGroup;
+
+    if (!movingItem && draggedPhotoId) {
+      movingItem = groupedItems.find(i => i.id === draggedPhotoId) || null;
+      sourceGroup = draggedPhotoGroupId;
+    }
+
+    // Also check the dataTransfer payload (cross-component / cross-render safety)
+    if (!movingItem) {
+      try {
+        const data = JSON.parse(e.dataTransfer.getData('application/json'));
+        if (data.action === 'reorder-photo' && data.photoId) {
+          movingItem = groupedItems.find(i => i.id === data.photoId) || null;
+          sourceGroup = data.groupId;
+        } else if (data.item?.id) {
+          movingItem = groupedItems.find(i => i.id === data.item.id) || null;
+          sourceGroup = data.productGroup || data.item.productGroup || data.item.id;
+        }
+      } catch { /* ignore */ }
+    }
+
+    if (!movingItem) {
       setDragOverGroup(null);
       return;
     }
 
-    // Don't do anything if dropping on the same group
-    if (draggedFromGroup === targetGroup) {
+    // No-op: dropped on its own group
+    if (sourceGroup === targetGroup) {
       setDragOverGroup(null);
       setDraggedItem(null);
       setDraggedFromGroup(null);
+      setDraggedPhotoId(null);
+      setDraggedPhotoGroupId(null);
       return;
     }
 
-    console.log(`[Step2:Grouper] drop | item=${draggedItem.id} from=${draggedFromGroup} → to=${targetGroup}`);
+    console.log(`[Step2:Grouper] drop | item=${movingItem.id} from=${sourceGroup} → to=${targetGroup}`);
     const afterMove = groupedItems.map(item =>
-      item.id === draggedItem.id
+      item.id === movingItem!.id
         ? { ...item, productGroup: targetGroup }
         : item
     );
 
-    // If the source group now has only 1 item left, revert that item to an individual
-    // (a "group of 1" is just a standalone listing — productGroup = its own id)
-    const sourceGroupItems = afterMove.filter(i => i.productGroup === draggedFromGroup);
+    // If the source group is now down to 1 item, dissolve it back to a singleton
+    const sourceGroupItems = afterMove.filter(i => (i.productGroup || i.id) === sourceGroup);
     const updated = sourceGroupItems.length === 1
       ? afterMove.map(item =>
-          item.productGroup === draggedFromGroup
+          (item.productGroup || item.id) === sourceGroup
             ? { ...item, productGroup: item.id }
             : item
         )
@@ -517,7 +543,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     updateSelection(new Set());
     setDraggedItem(null);
     setDraggedFromGroup(null);
+    setDraggedPhotoId(null);
+    setDraggedPhotoGroupId(null);
     setDragOverGroup(null);
+    setDragOverPhotoId(null);
   };
 
   const handleDragEnd = () => {
@@ -558,13 +587,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     srcPhotoId = srcPhotoId || draggedPhotoId;
     srcGroupId = srcGroupId || draggedPhotoGroupId;
 
-    // If dragging from a DIFFERENT group (or a single item), fall through to group-level drop
+    // Cross-group drop — delegate to handleDrop which now resolves photo drags too
     if (srcGroupId && srcGroupId !== groupId) {
       handleDrop(e, groupId);
-      setDraggedPhotoId(null); setDraggedPhotoGroupId(null); setDragOverPhotoId(null);
       return;
     }
 
+    // Same-group reorder
     if (!srcPhotoId || !srcGroupId || srcGroupId !== groupId || srcPhotoId === targetPhotoId) {
       setDraggedPhotoId(null); setDraggedPhotoGroupId(null); setDragOverPhotoId(null);
       return;
@@ -578,8 +607,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     const moved = photoList.splice(fromIdx, 1)[0];
     photoList.splice(toIdx, 0, moved);
 
-    // Replace the group's items in-place so the group's position in
-    // groupedItems never changes — preserving group order in steps 2/3.
     let slot = 0;
     const updated = groupedItems.map(i => {
       if ((i.productGroup || i.id) !== groupId) return i;
@@ -945,7 +972,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   e.dataTransfer.effectAllowed = 'move';
                 }}
                 onDragEnd={handleDragEnd}
-                onDragOver={(e) => handleDragOver(e, groupId)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setDragOverGroup(groupId);
+                }}
                 onDrop={(e) => handleDrop(e, groupId)}
                 onDragLeave={handleDragLeave}
               >
