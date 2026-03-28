@@ -101,6 +101,7 @@ export const fetchSavedImages = async (_userId: string) => {
             id,
             title,
             product_category,
+            product_group,
             vendor,
             batch_id,
             user_id,
