@@ -83,6 +83,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const previousBatchIdRef = useRef<string | null | undefined>(undefined); // Track batchId for batch switches
   const previousItemsRefRef = useRef<ClothingItem[]>([]); // Track items reference for any-change detection
   const isResettingRef = useRef(false); // Track when we're mid-reset to suppress sync-back
+  // Always-current snapshot of processedItems so async handlers (handleStopRecording)
+  // aren't trapped by stale closure state from before the last onresult update.
+  const processedItemsRef = useRef<ClothingItem[]>(processedItems);
+  useEffect(() => { processedItemsRef.current = processedItems; }, [processedItems]);
 
   // Memoize group calculation to avoid unnecessary recalculations
   const { groupArray, currentGroup, currentItem } = useMemo(() => {
@@ -558,34 +562,48 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     setInterimTranscript('');
 
     // AUTO-EXTRACT FIELDS FROM VOICE DESCRIPTION WHEN RECORDING STOPS
-    // This fills in fields automatically based on what user said
-    if (currentItem?.voiceDescription) {
+    // Read from the ref so we always get the latest voiceDescription regardless of
+    // React's batched state — the onresult handler writes via setProcessedItems(prev=>)
+    // which may not have flushed to the render-cycle closure yet.
+    const latestItems = processedItemsRef.current;
+    const latestGroups = latestItems.reduce((groups, item) => {
+      const groupId = item.productGroup || item.id;
+      if (!groups[groupId]) groups[groupId] = [];
+      groups[groupId].push(item);
+      return groups;
+    }, {} as Record<string, ClothingItem[]>);
+    const latestGroupArray = Object.values(latestGroups);
+    const latestGroup = latestGroupArray[currentGroupIndex] || [];
+    const latestItem = latestGroup[0];
+
+    if (latestItem?.voiceDescription) {
       try {
         setIsGenerating(true);
         
         // Use AI to extract fields from voice description
         const aiResult = await generateProductDescription({
-          voiceDescription: currentItem.voiceDescription,
-          brand: currentItem.brand, // Pass existing context
-          color: currentItem.color,
-          size: currentItem.size,
-          material: currentItem.material,
-          condition: currentItem.condition as any,
-          era: currentItem.era,
-          style: currentItem.style,
-          category: currentItem.productType,
-          measurements: currentItem.measurements,
-          flaws: currentItem.flaws,
-          care: currentItem.care
+          voiceDescription: latestItem.voiceDescription,
+          brand: latestItem.brand,
+          color: latestItem.color,
+          size: latestItem.size,
+          material: latestItem.material,
+          condition: latestItem.condition as any,
+          era: latestItem.era,
+          style: latestItem.style,
+          category: latestItem.productType,
+          measurements: latestItem.measurements,
+          flaws: latestItem.flaws,
+          care: latestItem.care
         });
 
         // Extract fields from AI result (only fields with supporting info)
         const extractedFields = aiResult.extractedFields || {};
         
-        // Update all items in current group with extracted fields
-        // Voice-extracted fields override category preset defaults
-        const updated = [...processedItems];
-        currentGroup.forEach(groupItem => {
+        // Update all items in current group with extracted fields.
+        // Start from the ref snapshot (same one we used above) so the voice
+        // description written by onresult is present in the update.
+        const updated = [...processedItemsRef.current];
+        latestGroup.forEach(groupItem => {
           const itemIndex = updated.findIndex(item => item.id === groupItem.id);
           if (itemIndex !== -1) {
             updated[itemIndex] = {
