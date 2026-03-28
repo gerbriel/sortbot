@@ -472,18 +472,20 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
  */
 export function stripVoiceCommands(voiceDesc: string): string {
   const FIELD_TRIGGERS = [
-    'brand', 'model', 'size', 'colou?r', 'material', 'fabric',
+    'brand', 'model', 'size', 'colo(?:u?r)?', 'material', 'fabric',
     'condition', 'era', 'style', 'gender', 'price',
     'flaws?', 'care', 'width', 'length', 'waist', 'shoulder', 'sleeve', 'inseam', 'tags?',
+    'secondary colo(?:u?r)?', 'second color', 'second colour',
   ].join('|');
 
-  // Remove every "TRIGGER  ...words...  period" command (case-insensitive)
+  // Remove every "TRIGGER ... period" command block (greedy up to each "period").
+  // Uses 'g' + 's' flags so . also matches newlines.
   let cleaned = voiceDesc.replace(
-    new RegExp(`\\b(?:${FIELD_TRIGGERS})\\s+.+?\\s+period\\b`, 'gi'),
+    new RegExp(`\\b(?:${FIELD_TRIGGERS})\\b[^]*?\\bperiod\\b`, 'gi'),
     ''
   );
 
-  // Also strip any orphaned trailing "period" words left over
+  // Strip any leftover bare "period" words (e.g. orphaned delimiter at transcript end)
   cleaned = cleaned.replace(/\bperiod\b/gi, '');
 
   // Collapse multiple spaces / leading-trailing whitespace
