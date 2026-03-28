@@ -804,19 +804,19 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         // Use generated description
         const finalDescription = aiResult.description;
         
-        // Update all fields with generated data
-        const updated = [...processedItems];
-        currentGroup.forEach(groupItem => {
-          const itemIndex = updated.findIndex(item => item.id === groupItem.id);
-          if (itemIndex !== -1) {
-            updated[itemIndex] = {
-              ...updated[itemIndex],
-              generatedDescription: finalDescription,
-            };
-          }
+        // Capture the target item IDs before any async-caused state drift.
+        // Use functional update so we always write into the latest processedItems
+        // rather than the stale closure snapshot.
+        const targetIds = new Set(currentGroup.map(g => g.id));
+        setProcessedItems(prev => {
+          const updated = [...prev];
+          updated.forEach((item, idx) => {
+            if (targetIds.has(item.id)) {
+              updated[idx] = { ...updated[idx], generatedDescription: finalDescription };
+            }
+          });
+          return updated;
         });
-        
-        setProcessedItems(updated);
         setIsGenerating(false);
         return;
       }
@@ -861,14 +861,16 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     if (!voiceDesc.endsWith('.')) desc += '.';
     desc += ' Perfect for any wardrobe. Don\'t miss out on this quality piece.';
     
-    const updated = [...processedItems];
-    currentGroup.forEach(groupItem => {
-      const itemIndex = updated.findIndex(item => item.id === groupItem.id);
-      if (itemIndex !== -1) {
-        updated[itemIndex].generatedDescription = desc;
-      }
+    const targetIds = new Set(currentGroup.map(g => g.id));
+    setProcessedItems(prev => {
+      const updated = [...prev];
+      updated.forEach((item, idx) => {
+        if (targetIds.has(item.id)) {
+          updated[idx] = { ...updated[idx], generatedDescription: desc };
+        }
+      });
+      return updated;
     });
-    setProcessedItems(updated);
     setIsGenerating(false);
   };
 
