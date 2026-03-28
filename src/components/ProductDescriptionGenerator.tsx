@@ -604,11 +604,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         
         // Use functional update so we always write into the true latest state —
         // not the stale ref snapshot that was captured before the await resolved.
+        // voiceDescription is intentionally LEFT AS-IS — the textarea always shows
+        // the full formatted transcript (field commands + any prose) so the user
+        // can review everything that was spoken. Strip only happens at AI call sites.
         setProcessedItems(prev => {
           const updated = [...prev];
           updated.forEach((item, idx) => {
             if (!targetIds.has(item.id)) return;
-            const cleaned = stripVoiceCommands(item.voiceDescription || '');
             updated[idx] = {
               ...item,
               ...(extractedFields.brand && { brand: extractedFields.brand }),
@@ -628,9 +630,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               ...(extractedFields.tags && extractedFields.tags.length > 0 && {
                 tags: [...new Set([...(item.tags || []), ...extractedFields.tags])].slice(0, 5)
               }),
-              // Keep cleaned prose; if nothing left (all commands) keep original so
-              // user can see what was spoken and manually clear if desired.
-              voiceDescription: cleaned.length > 0 ? cleaned : item.voiceDescription,
             };
           });
           return updated;
