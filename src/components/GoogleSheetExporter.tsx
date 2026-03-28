@@ -201,9 +201,15 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       // that may have come through from preset templates.
       // seoTitle is already deduplicated (e.g. "Nike Tee 2") by the pre-pass above.
       const rawTitle = product.seoTitle || '';
-      const cleanTitle = /\{[a-z_]+\}/i.test(rawTitle)
+      const strippedTitle = /\{[a-z_]+\}/i.test(rawTitle)
         ? stripUnresolvedTokens(rawTitle) || `product-${idx + 1}`
         : rawTitle || `product-${idx + 1}`;
+
+      // Prepend brand to title if it's not already present
+      const brandPrefix = (product.brand || '').trim();
+      const cleanTitle = (brandPrefix && !strippedTitle.toLowerCase().includes(brandPrefix.toLowerCase()))
+        ? `${brandPrefix} ${strippedTitle}`
+        : strippedTitle;
 
       // Build a URL handle and ensure it's globally unique within this export.
       let baseHandle = cleanTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || `product-${idx + 1}`;
