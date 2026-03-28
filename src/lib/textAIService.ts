@@ -470,6 +470,29 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
  * the free-form description text.  Called after field extraction so the textarea
  * shows clean prose instead of raw commands like "brand Nike period size XL period".
  */
+/**
+ * Format a raw voice transcript for display in the textarea.
+ * Each "trigger value period" command is placed on its own line so the
+ * wall-of-text is easy to read. Prose (non-command text) is kept inline.
+ */
+export function formatVoiceTranscript(voiceDesc: string): string {
+  const FIELD_TRIGGERS = [
+    'brand', 'model', 'size', 'colo(?:u?r)?', 'material', 'fabric',
+    'condition', 'era', 'style', 'gender', 'price',
+    'flaws?', 'care', 'width', 'length', 'waist', 'shoulder', 'sleeve', 'inseam', 'tags?',
+    'secondary colo(?:u?r)?', 'second color', 'second colour',
+  ].join('|');
+
+  // Insert a newline before each trigger word that starts a new command block,
+  // so each "trigger value period" chunk lands on its own line.
+  return voiceDesc
+    .replace(
+      new RegExp(`\\s*\\b(${FIELD_TRIGGERS})\\b`, 'gi'),
+      '\n$1'
+    )
+    .trim();
+}
+
 export function stripVoiceCommands(voiceDesc: string): string {
   const FIELD_TRIGGERS = [
     'brand', 'model', 'size', 'colo(?:u?r)?', 'material', 'fabric',
