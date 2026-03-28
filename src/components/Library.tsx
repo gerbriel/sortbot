@@ -365,12 +365,22 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         const batchName = batchEntry ? makeBatchName(batchEntry) : undefined;
         if (img.image_url) savedImageUrls.add(img.image_url);
         if (!img.image_url) return;
+
+        // Use product_group (group leader ID) as the grouping key so siblings share a section.
+        // Fall back to the product's own id for standalone (ungrouped) products.
+        const groupLeaderId = img.products?.product_group || img.products?.id;
+        // Look up the group leader's title from dbGroupMap for a consistent label
+        const groupLeaderMembers = dbGroupMap.get(groupLeaderId);
+        const groupLeaderTitle = groupLeaderMembers
+          ? cleanTitle((groupLeaderMembers.find((p: any) => p.id === groupLeaderId) || groupLeaderMembers[0])?.title)
+          : (img.products?.title || undefined);
+
         imageList.push({
           id: img.id,
           preview: img.image_url,
           category: img.products?.product_category,
-          productGroup: img.products?.id,
-          productGroupTitle: img.products?.title || undefined,
+          productGroup: groupLeaderId,
+          productGroupTitle: groupLeaderTitle,
           batchId,
           batchName,
           createdAt: img.created_at,
