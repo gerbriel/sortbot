@@ -177,8 +177,9 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       const primaryColor = product.color || '';
       const secondaryColor = product.secondaryColor || '';
       
-      // Weight format - only if provided
-      const weightLb = product.weightValue || '';
+      // Weight — round up to nearest whole number so Shopify doesn't reject decimals
+      const rawWeight = parseFloat(product.weightValue || '');
+      const weightLb = isNaN(rawWeight) ? '' : String(Math.ceil(rawWeight));
       
       // Package dimensions - only if provided
       const packageDims = product.packageDimensions || '';
