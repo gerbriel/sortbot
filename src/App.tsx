@@ -662,11 +662,11 @@ function App() {
       console.log(`[App] autoSave fired | batchId=${currentBatchIdRef.current} | items=${
         workflowState.processedItems.length || workflowState.sortedImages.length || workflowState.groupedImages.length || workflowState.uploadedImages.length
       }`);
-      // Keep only the minimal fields needed to restore grouping/category state.
-      // Descriptions live in the products table; imageUrls are the only URLs we need.
-      // Saving 4 full arrays of every item caused statement timeouts.
+      // Strip only runtime-only fields (File objects, blob URLs, preset cache) before saving.
+      // generatedDescription and voiceDescription ARE kept so export works after a page reload
+      // without requiring a separate DB fetch.
       const slim = (items: ClothingItem[]): ClothingItem[] =>
-        items.map(({ file: _f, preview: _p, voiceDescription: _v, generatedDescription: _g, _presetData: _pr, ...rest }) => rest as ClothingItem);
+        items.map(({ file: _f, preview: _p, _presetData: _pr, ...rest }) => rest as ClothingItem);
 
       // Only persist ONE list — the most progressed one — to avoid 4x duplication.
       // On restore, all four arrays are set from this single list.
@@ -897,7 +897,7 @@ function App() {
             material:                  p.material            || '',
             era:                       p.era                 || '',
             care:                      p.care_instructions   || '',
-            measurements:              p.measurements        || '',
+            measurements:              p.measurements        || {},
             modelName:                 p.model_name          || '',
             modelNumber:               p.model_number        || '',
             sizeType:                  p.size_type           || '',
