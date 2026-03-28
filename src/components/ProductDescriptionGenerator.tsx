@@ -762,7 +762,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   // Individual regenerate functions
   const regenerateDescription = async () => {
-    if (!currentItem.voiceDescription && !currentItem.file) {
+    const hasAnyData = !!(currentItem.voiceDescription || currentItem.file ||
+      currentItem.brand || currentItem.color || currentItem.size ||
+      currentItem.material || currentItem.condition || currentItem.productType);
+    if (!hasAnyData) {
       alert('Please add a voice description or image first');
       return;
     }
@@ -774,7 +777,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       const savedProvider = localStorage.getItem('ai_provider') as 'google-vision' | 'llama-vision' | null;
       const aiProvider = savedProvider === 'llama-vision' ? 'google-vision' : (savedProvider || 'google-vision');
       
-      if (aiProvider === 'google-vision' && currentItem.file) {
+      // Run the real AI generator if we have an image file OR any populated fields.
+      // (File objects are lost on page reload/restore, but extracted fields persist.)
+      const hasFields = !!(currentItem.brand || currentItem.color || currentItem.size ||
+        currentItem.material || currentItem.condition || currentItem.era ||
+        currentItem.style || currentItem.productType);
+      if (aiProvider === 'google-vision' && (currentItem.file || hasFields)) {
         // Use intelligent template system (Hugging Face is down)
         
         // Build context from everything we know
