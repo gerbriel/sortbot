@@ -163,6 +163,18 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     };
   }, [isSelecting, selectionStart, selectionBox, selectedItems, groupedItems]);
 
+  // Click-outside: deselect everything when clicking on neutral canvas area
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (!t.closest('.item-card, .product-group-card, .group-header, .toolbar, button, [role="button"]')) {
+        if (selectedItems.size > 0) updateSelection(new Set());
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [selectedItems]);
+
   // Initialize items with individual groups and auto-upload.
   // IMPORTANT: Only process items that are genuinely new (not already in groupedItems).
   // This prevents the items prop feedback loop from resetting group state every time
@@ -502,6 +514,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
     setGroupedItems(updated);
     onGrouped(updated);
+    updateSelection(new Set());
     setDraggedItem(null);
     setDraggedFromGroup(null);
     setDragOverGroup(null);
