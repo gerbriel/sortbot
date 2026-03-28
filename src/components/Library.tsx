@@ -419,13 +419,16 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         setProductGroups(finalGroups);
         setImages(imageList);
 
-        // Collapse all batches by default on load so tabs open in a clean closed state
+        // Collapse all batches AND product groups by default on load
         setCollapsedBatches(prev => {
           const next = new Set(prev);
           finalBatches.forEach(b => {
-            next.add(`img-batch-${b.id}`);   // Images tab
-            next.add(b.id);                  // Product Groups tab
+            next.add(`img-batch-${b.id}`);   // Images tab — batch
+            next.add(b.id);                  // Product Groups tab — batch
           });
+          // Collapse every product group within the images tab
+          const groupKeys = new Set(imageList.map(img => img.productGroup).filter(Boolean));
+          groupKeys.forEach(gk => next.add(`img-group-${gk}`));
           return next;
         });
         console.log(`[Library] loadAll DONE | batches=${finalBatches.length} groups=${finalGroups.length} images=${imageList.length} | ${new Date().toISOString()}`);
@@ -2342,6 +2345,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
                 }
 
                 return groupEntries.map(([groupKey, groupSection]) => {
+                const isGroupCollapsed = collapsedBatches.has(`img-group-${groupKey}`);
                 const allGroupSelected = groupSection.images.every(img => selectedItems.has(img.id));
 
                 return (
@@ -2367,8 +2371,22 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
                       handleDropImageOntoGroup(groupKey, e);
                     }}
                   >
-                    {/* Product group sub-header — always expanded, no collapse toggle */}
-                    <div className="image-group-header" style={{ cursor: 'default' }}>
+                    {/* Product group sub-header — collapsible */}
+                    <div
+                      className="image-group-header"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() =>
+                        setCollapsedBatches(prev => {
+                          const next = new Set(prev);
+                          const key = `img-group-${groupKey}`;
+                          if (next.has(key)) next.delete(key); else next.add(key);
+                          return next;
+                        })
+                      }
+                    >
+                      <button className="collapse-toggle" title={isGroupCollapsed ? 'Expand' : 'Collapse'}>
+                        {isGroupCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                      </button>
                       <Package size={14} className="section-folder-icon" />
                       <span className="image-group-label">{groupSection.groupTitle}</span>
                       {groupKey === 'no-group' && dragType === 'image' && draggedItem !== null && (
@@ -2395,10 +2413,12 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
                       </button>
                     </div>
 
-                    {/* Image cards — always visible */}
-                    <div className="image-group-cards">
-                      {groupSection.images.map(renderImageCard)}
-                    </div>
+                    {/* Image cards — shown when group is expanded */}
+                    {!isGroupCollapsed && (
+                      <div className="image-group-cards">
+                        {groupSection.images.map(renderImageCard)}
+                      </div>
+                    )}
                   </div>
                 );
               })
