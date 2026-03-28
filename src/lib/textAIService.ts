@@ -175,16 +175,26 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
   // ─────────────────────────────────────────────────────────────────────────
 
   // ── SIZE fallback ─────────────────────────────────────────────────────────
-  // Handles: "XL", "men's XL", "size XL", "32x30", "size 32/34", "size 10.5" (shoes)
+  // Handles spoken multi-word sizes ("extra large", "extra extra small", "double extra large")
+  // as well as abbreviations (XL, XXS, 3XL) and numeric sizes (32, 32x30, 10.5)
   if (!extracted.size) {
-    const sizeFallback = voiceDesc.match(
-      /\b(?:size\s+|measurement\s+)?(4xl|3xl|2xl|xxl|xl|extra[\s-]large|large|medium|small|xs|x[\s-]small)\b|(?:size\s+|men'?s?\s+|women'?s?\s+)?(\d{1,2}(?:[xX]\d{1,2})?(?:\.\d)?)\b/i
+    // Try multi-word spoken forms first (longest match wins)
+    const multiWordSize = voiceDesc.match(
+      /\b(triple\s+extra\s+large|triple\s+extra\s+small|double\s+extra\s+large|double\s+extra\s+small|extra\s+extra\s+extra\s+large|extra\s+extra\s+extra\s+small|extra\s+extra\s+large|extra\s+extra\s+small|extra\s+large|extra\s+small|one\s+size(?:\s+fits\s+(?:all|most))?)\b/i
     );
-    if (sizeFallback) {
-      const raw = (sizeFallback[1] || sizeFallback[2] || '').trim();
-      // Don't grab years (1990), prices ($45), or lone single digits as sizes
-      if (raw && !/^(19|20)\d{2}$/.test(raw) && !/^\$/.test(raw)) {
-        extracted.size = normalizeSizeValue(raw);
+    if (multiWordSize) {
+      extracted.size = normalizeSizeValue(multiWordSize[1]);
+    } else {
+      // Single-word / abbreviation / numeric fallback
+      const sizeFallback = voiceDesc.match(
+        /\b(?:size\s+|measurement\s+)?(5xl|4xl|3xl|xxxl|2xl|xxl|xl|large|medium|small|xxs|xs)\b|(?:size\s+|men'?s?\s+|women'?s?\s+)?(\d{1,2}(?:[xX]\d{1,2})?(?:\.\d)?)\b/i
+      );
+      if (sizeFallback) {
+        const raw = (sizeFallback[1] || sizeFallback[2] || '').trim();
+        // Don't grab years (1990), prices ($45), or lone single digits as sizes
+        if (raw && !/^(19|20)\d{2}$/.test(raw) && !/^\$/.test(raw)) {
+          extracted.size = normalizeSizeValue(raw);
+        }
       }
     }
   }
@@ -532,22 +542,44 @@ function normalizeSizeValue(raw: string): string {
     return '1 SIZE';
   }
 
-  // Take only the first token if there's a slash or slash+word (e.g., "XL/XLARGE" → "XL")
-  const first = trimmed.split(/[\/\s]+/)[0];
-  const s = first.trim().toLowerCase().replace(/[\s-]+/g, '');
+  // Collapse whitespace/hyphens and lowercase the whole string first so that
+  // multi-word spoken sizes like "extra large", "extra extra small", "double extra large"
+  // are matched before we fall back to splitting on the first token.
+  const collapsed = trimmed.toLowerCase().replace(/[\s-]+/g, '');
+
   const map: Record<string, string> = {
+    // XS
     extrasmall: 'XS', xsmall: 'XS', xs: 'XS',
+    xxsmall: 'XXS', extraextrasmall: 'XXS', doubleextrasmall: 'XXS', xxs: 'XXS',
+    xxxsmall: '3XS', tripleextrasmall: '3XS', xxxs: '3XS',
+    // S / M / L
     small: 'S', s: 'S',
     medium: 'M', m: 'M',
     large: 'L', l: 'L',
+    // XL
     extralarge: 'XL', xlarge: 'XL', xl: 'XL',
-    xxlarge: 'XXL', '2xlarge': 'XXL', '2xl': 'XXL', xxl: 'XXL',
-    xxxlarge: '3XL', '3xlarge': '3XL', '3xl': '3XL', xxxl: '3XL',
-    '4xlarge': '4XL', '4xl': '4XL', xxxxl: '4XL',
+    // XXL
+    xxlarge: 'XXL', extraextralarge: 'XXL', doubleextralarge: 'XXL',
+    '2xlarge': 'XXL', '2xl': 'XXL', xxl: 'XXL',
+    // 3XL
+    xxxlarge: '3XL', tripleextralarge: '3XL',
+    '3xlarge': '3XL', '3xl': '3XL', xxxl: '3XL',
+    // 4XL
+    '4xlarge': '4XL', '4xl': '4XL', xxxxl: '4XL', quadrupleextralarge: '4XL',
+    // 5XL
+    '5xlarge': '5XL', '5xl': '5XL', xxxxxl: '5XL',
+    // 1 SIZE
     '1size': '1 SIZE', onesize: '1 SIZE',
   };
-  // Return mapped value or original uppercased first token (preserves "32", "32x30", "32/34")
-  return map[s] || first.toUpperCase();
+
+  // Try the full collapsed string first (handles "extra large", "extra extra small", etc.)
+  if (map[collapsed]) return map[collapsed];
+
+  // Fall back to just the first space/slash-separated token for numeric sizes
+  // like "32", "32x30", "10.5" that don't need multi-word handling
+  const first = trimmed.split(/[\s/]+/)[0];
+  const firstCollapsed = first.toLowerCase().replace(/[\s-]+/g, '');
+  return map[firstCollapsed] || first.toUpperCase();
 }
 
 /**
