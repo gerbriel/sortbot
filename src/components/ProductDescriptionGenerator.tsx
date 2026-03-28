@@ -62,6 +62,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [availablePresets, setAvailablePresets] = useState<CategoryPreset[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<string>('');
+  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveConfirmed, setSaveConfirmed] = useState(false);
@@ -467,18 +468,34 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       const preset = availablePresets.find(p => p.id === presetId);
       if (!preset) return;
 
-      const updatedGroup = await applyPresetToProductGroup(currentGroup, preset.product_type || preset.category_name);
-      
-      const updated = [...processedItems];
-      updatedGroup.forEach((updatedItem) => {
-        const itemIndex = updated.findIndex(item => item.id === updatedItem.id);
-        if (itemIndex !== -1) {
-          updated[itemIndex] = updatedItem;
-        }
+      // Determine which groups to apply to: selected set OR just current group
+      const targetGroupLeaderIds = selectedGroupIds.size > 0
+        ? selectedGroupIds
+        : new Set([currentItem.productGroup || currentItem.id]);
+
+      // Collect all items belonging to those groups
+      const groupsToUpdate = groupArray.filter(g => {
+        const leaderId = g[0].productGroup || g[0].id;
+        return targetGroupLeaderIds.has(leaderId);
       });
-      
-      setProcessedItems(updated);
+
+      const allUpdatedItems: ClothingItem[] = [];
+      for (const group of groupsToUpdate) {
+        const updatedGroup = await applyPresetToProductGroup(group, preset.product_type || preset.category_name);
+        allUpdatedItems.push(...updatedGroup);
+      }
+
+      setProcessedItems(prev => {
+        const updated = [...prev];
+        allUpdatedItems.forEach((updatedItem) => {
+          const idx = updated.findIndex(item => item.id === updatedItem.id);
+          if (idx !== -1) updated[idx] = updatedItem;
+        });
+        return updated;
+      });
       setSelectedPresetId(presetId);
+      // Clear selection after applying
+      if (selectedGroupIds.size > 0) setSelectedGroupIds(new Set());
     } catch (error) {
       alert('Failed to apply preset. Please try again.');
     }
@@ -1133,10 +1150,37 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   return (
     <div className="product-description-container">
       <div className="progress-bar">
-        <span>Product Group {currentGroupIndex + 1} of {groupArray.length}</span>
-        {currentGroup.length > 1 && (
-          <span className="group-info"> ({currentGroup.length} images in this group)</span>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <span>Product Group {currentGroupIndex + 1} of {groupArray.length}</span>
+          {/* Badges — image count + category — top-left */}
+          <span className="group-info-badge">
+            {currentGroup.length} {currentGroup.length === 1 ? 'image' : 'images'}
+          </span>
+          {currentItem.category && (
+            <span className="category-badge">{currentItem.category}</span>
+          )}
+        </div>
+        {/* Checkbox — top-right — selects this group for bulk preset apply */}
+        <label
+          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.875rem', color: '#374151', userSelect: 'none', marginLeft: 'auto' }}
+          title="Select group for bulk preset apply"
+        >
+          <input
+            type="checkbox"
+            checked={selectedGroupIds.has(currentItem.productGroup || currentItem.id)}
+            onChange={(e) => {
+              const groupId = currentItem.productGroup || currentItem.id;
+              setSelectedGroupIds(prev => {
+                const next = new Set(prev);
+                if (e.target.checked) next.add(groupId);
+                else next.delete(groupId);
+                return next;
+              });
+            }}
+            style={{ width: '1rem', height: '1rem', cursor: 'pointer', accentColor: '#6366f1' }}
+          />
+          <span>Select</span>
+        </label>
         <div className="progress-fill" style={{ width: `${((currentGroupIndex + 1) / groupArray.length) * 100}%` }} />
       </div>
 
@@ -1152,7 +1196,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             />
           </div>
           <div className="product-info">
-            <span className="category-badge">{currentItem.category}</span>
           </div>
           {currentGroup.length > 1 && (
             <div className="group-thumbnails">
@@ -1466,18 +1509,28 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               <div style={{
                 marginBottom: '1.5rem',
                 padding: '1rem',
-                background: '#f8f9fa',
-                border: '1px solid #dee2e6',
+                background: selectedGroupIds.size > 0 ? '#eff6ff' : '#f8f9fa',
+                border: selectedGroupIds.size > 0 ? '1px solid #6366f1' : '1px solid #dee2e6',
                 borderRadius: '8px'
               }}>
-                <label style={{ 
-                  display: 'block', 
-                  fontWeight: 600, 
-                  marginBottom: '0.5rem',
-                  color: '#495057'
-                }}>
-                  🎨 Override Preset (Optional):
-                </label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                  <label style={{ 
+                    fontWeight: 600, 
+                    color: '#495057'
+                  }}>
+                    🎨 Override Preset (Optional):
+                  </label>
+                  {selectedGroupIds.size > 0 && (
+                    <span style={{ fontSize: '0.8rem', color: '#6366f1', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      ✦ {selectedGroupIds.size} group{selectedGroupIds.size > 1 ? 's' : ''} selected — will apply to all
+                      <button
+                        onClick={() => setSelectedGroupIds(new Set())}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '0.85rem', padding: '0 0.2rem' }}
+                        title="Clear selection"
+                      >✕</button>
+                    </span>
+                  )}
+                </div>
                 <select
                   value={selectedPresetId}
                   onChange={(e) => handleApplyPreset(e.target.value)}
