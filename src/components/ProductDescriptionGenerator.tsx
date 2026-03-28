@@ -1296,30 +1296,68 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             )}
             <div className="voice-result">
               <label><strong>Voice Description (edit as needed):</strong></label>
-              <textarea 
-                value={formatVoiceTranscript(currentItem.voiceDescription || interimTranscript || '')}
-                onChange={(e) => {
-                  const updated = [...processedItems];
-                  // Update all items in the current group
-                  currentGroup.forEach(groupItem => {
-                    const itemIndex = updated.findIndex(item => item.id === groupItem.id);
-                    if (itemIndex !== -1) {
-                      updated[itemIndex] = {
-                        ...updated[itemIndex],
-                        voiceDescription: e.target.value,
-                        // Mark generated description as stale so user knows to regenerate
-                        generatedDescription: updated[itemIndex].generatedDescription
-                          ? `[Voice updated — click Generate to refresh]\n\n${updated[itemIndex].generatedDescription}`
-                          : updated[itemIndex].generatedDescription,
-                      };
-                    }
-                  });
-                  setProcessedItems(updated);
-                }}
-                placeholder="Click 'Start Recording' and speak your description, or type here..."
-                rows={4}
-                className="description-textarea"
-              />
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                {/* Command key reference table */}
+                <div style={{
+                  flexShrink: 0,
+                  width: '150px',
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '6px',
+                  padding: '0.5rem 0.6rem',
+                  fontSize: '0.7rem',
+                  lineHeight: '1.6',
+                }}>
+                  <div style={{ fontWeight: 700, marginBottom: '0.3rem', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.65rem' }}>Voice Commands</div>
+                  {[
+                    ['color', 'red'],
+                    ['brand', 'Nike'],
+                    ['size', 'large'],
+                    ['material', 'cotton'],
+                    ['condition', 'good'],
+                    ['price', '$20'],
+                    ['era', '90s'],
+                    ['style', 'casual'],
+                    ['gender', 'women'],
+                    ['flaws', 'small hole'],
+                    ['care', 'hand wash'],
+                    ['width', '18 inches'],
+                    ['length', '28 inches'],
+                  ].map(([field, ex]) => (
+                    <div key={field} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.25rem' }}>
+                      <span style={{ color: '#6366f1', fontWeight: 600 }}>{field}</span>
+                      <span style={{ color: '#94a3b8', fontStyle: 'italic', textAlign: 'right' }}>{ex} <span style={{ color: '#cbd5e1' }}>•</span></span>
+                    </div>
+                  ))}
+                  <div style={{ marginTop: '0.4rem', paddingTop: '0.4rem', borderTop: '1px solid #e2e8f0', color: '#94a3b8', fontSize: '0.63rem' }}>
+                    Say <strong style={{ color: '#6366f1' }}>period</strong> to end each field
+                  </div>
+                </div>
+                {/* Textarea */}
+                <textarea 
+                  value={formatVoiceTranscript(currentItem.voiceDescription || interimTranscript || '')}
+                  onChange={(e) => {
+                    const updated = [...processedItems];
+                    currentGroup.forEach(groupItem => {
+                      const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                      if (itemIndex !== -1) {
+                        updated[itemIndex] = {
+                          ...updated[itemIndex],
+                          voiceDescription: e.target.value,
+                          generatedDescription: updated[itemIndex].generatedDescription
+                            ? `[Voice updated — click Generate to refresh]\n\n${updated[itemIndex].generatedDescription}`
+                            : updated[itemIndex].generatedDescription,
+                        };
+                      }
+                    });
+                    setProcessedItems(updated);
+                  }}
+                  placeholder={"Start Recording and speak...\n\nExample:\n  color black period\n  brand Nike period\n  size large period"}
+                  rows={8}
+                  className="description-textarea"
+                  style={{ flex: 1, minWidth: 0 }}
+                />
+              </div>
             </div>
 
             {/* AI Description — sits directly below the voice box */}
