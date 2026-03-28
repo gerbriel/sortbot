@@ -2242,11 +2242,9 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
           const isBatchCollapsed = collapsedBatches.has(`img-batch-${batchKey}`);
           const allBatchImages = Array.from(batchSection.groups.values()).flatMap(g => g.images);
           const allBatchSelected = allBatchImages.every(img => selectedItems.has(img.id));
-          // Use productGroups sum as authoritative image count (matches Product Groups + Batches tabs)
-          const batchImageCount = productGroups
-            .filter(g => g.batchId === batchKey)
-            .reduce((sum, g) => sum + g.itemCount, 0)
-            || allBatchImages.length;
+          // Count directly from what is actually rendered — ground truth
+          const batchImageCount = allBatchImages.length;
+          const batchGroupCount = batchSection.groups.size;
 
           return (
             <div key={batchKey} className="batch-section">
@@ -2269,14 +2267,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
                 <Folder size={16} className="section-folder-icon" />
                 <span className="section-label">{batchSection.batchName}</span>
                 <span className="section-count">
-                  {(() => {
-                    const batchGroups = batchKey === 'no-batch'
-                      ? productGroups.filter(g => !g.batchId)
-                      : productGroups.filter(g => g.batchId === batchKey);
-                    const groupCount = batchGroups.length;
-                    const imgCount = batchImageCount || batchGroups.reduce((s, g) => s + g.itemCount, 0);
-                    return `${imgCount} ${imgCount === 1 ? 'image' : 'images'} · ${groupCount} ${groupCount === 1 ? 'group' : 'groups'}`;
-                  })()}
+                  {`${batchImageCount} ${batchImageCount === 1 ? 'image' : 'images'} · ${batchGroupCount} ${batchGroupCount === 1 ? 'group' : 'groups'}`}
                 </span>
                 <button
                   className="section-select-all"
