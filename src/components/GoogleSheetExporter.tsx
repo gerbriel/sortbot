@@ -211,6 +211,12 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         ? `${brandPrefix} ${strippedTitle}`
         : strippedTitle;
 
+      // Build a rich image alt text: "Brand Title - Color - Size"
+      const altParts = [cleanTitle];
+      if (primaryColor && !cleanTitle.toLowerCase().includes(primaryColor.toLowerCase())) altParts.push(primaryColor);
+      if (product.size) altParts.push(product.size);
+      const imageAltText = altParts.filter(Boolean).join(' - ');
+
       // Build a URL handle and ensure it's globally unique within this export.
       let baseHandle = cleanTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || `product-${idx + 1}`;
       let handle = baseHandle;
@@ -259,7 +265,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         product.shipsFrom || '', // Ships From
         product.imageUrls?.[0] || '', // Product image URL
         '1', // Image position
-        cleanTitle || 'Product', // Image alt text
+        imageAltText || 'Product', // Image alt text (first image row)
         '', // Variant image URL
         'FALSE', // Gift card
         cleanTitle, // SEO title
@@ -297,7 +303,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         imageRow[8] = productStatus;     // Status
         imageRow[35] = product.imageUrls[i] || ''; // Product image URL
         imageRow[36] = String(i + 1);   // Image position
-        imageRow[37] = cleanTitle || 'Product'; // Image alt text
+        imageRow[37] = imageAltText || 'Product'; // Image alt text
         rows.push(imageRow);
       }
     });
