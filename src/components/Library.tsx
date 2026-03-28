@@ -418,6 +418,16 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         setBatches(finalBatches);
         setProductGroups(finalGroups);
         setImages(imageList);
+
+        // Collapse all batches by default on load so tabs open in a clean closed state
+        setCollapsedBatches(prev => {
+          const next = new Set(prev);
+          finalBatches.forEach(b => {
+            next.add(`img-batch-${b.id}`);   // Images tab
+            next.add(b.id);                  // Product Groups tab
+          });
+          return next;
+        });
         console.log(`[Library] loadAll DONE | batches=${finalBatches.length} groups=${finalGroups.length} images=${imageList.length} | ${new Date().toISOString()}`);
       }
     } catch (error) {
