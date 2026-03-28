@@ -747,6 +747,6 @@ function generateTagsFromFields(context: ProductContext): string[] {
   if (context.style) tags.push(context.style);
   if (context.material) tags.push(context.material);
   
-  // Remove duplicates
-  return Array.from(new Set(tags));
+  // Remove duplicates and cap at 5 hashtags
+  return Array.from(new Set(tags)).slice(0, 5);
 }

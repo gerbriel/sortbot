@@ -186,8 +186,15 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       let interim = '';
       let final = '';
 
+      // Correct common speech-to-text misrecognitions for clothing measurements
+      const fixTranscript = (t: string) =>
+        t
+          .replace(/\bwith\b(?=\s+\d)/gi, 'width')   // "with 18 inches" → "width 18 inches"
+          .replace(/\bwidth\b(?=\s+(a|an|the)\b)/gi, 'with') // "width a great" → "with a great"
+          .replace(/\bwidth\b(?=\s+[a-z]{3,}(?!\s*\d))/gi, 'with'); // "width nice" → "with nice"
+
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
+        const transcript = fixTranscript(event.results[i][0].transcript);
         if (event.results[i].isFinal) {
           final += transcript + ' ';
         } else {
@@ -599,7 +606,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               ...(extractedFields.flaws && { flaws: extractedFields.flaws }),
               ...(extractedFields.care && { care: extractedFields.care }),
               ...(extractedFields.tags && extractedFields.tags.length > 0 && { 
-                tags: [...new Set([...(updated[itemIndex].tags || []), ...extractedFields.tags])]
+                tags: [...new Set([...(updated[itemIndex].tags || []), ...extractedFields.tags])].slice(0, 5)
               }),
             };
           }
@@ -717,7 +724,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             ...(extractedFields.flaws && { flaws: extractedFields.flaws }),
             ...(extractedFields.care && { care: extractedFields.care }),
             ...(extractedFields.tags && extractedFields.tags.length > 0 && {
-              tags: [...new Set([...(updated[itemIndex].tags || []), ...extractedFields.tags])]
+              tags: [...new Set([...(updated[itemIndex].tags || []), ...extractedFields.tags])].slice(0, 5)
             }),
           };
         }
@@ -1268,7 +1275,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     if (itemIndex !== -1) {
                       updated[itemIndex] = {
                         ...updated[itemIndex],
-                        voiceDescription: e.target.value
+                        voiceDescription: e.target.value,
+                        // Mark generated description as stale so user knows to regenerate
+                        generatedDescription: updated[itemIndex].generatedDescription
+                          ? `[Voice updated — click Generate to refresh]\n\n${updated[itemIndex].generatedDescription}`
+                          : updated[itemIndex].generatedDescription,
                       };
                     }
                   });
