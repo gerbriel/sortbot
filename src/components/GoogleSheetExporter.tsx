@@ -38,7 +38,8 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
     return groups;
   }, {} as Record<string, ClothingItem[]>);
 
-  const products = Object.values(productGroups).map(group => {
+  // Build products, then deduplicate titles/handles in a second pass
+  const rawProducts = Object.values(productGroups).map(group => {
     // Use the first item in the group as the base product data
     const productData = group[0];
 
@@ -71,6 +72,30 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       imageUrls: group.map(item => item.imageUrls?.[0] || item.preview),
       imageCount: group.length
     };
+  });
+
+  // Second pass: make every title and URL handle unique.
+  // If two products share the same title, append " 2", " 3", etc.
+  const titleCounts: Record<string, number> = {};
+  const titleSeen: Record<string, number> = {};
+  rawProducts.forEach(p => {
+    const key = (p.seoTitle || '').toLowerCase();
+    titleCounts[key] = (titleCounts[key] || 0) + 1;
+  });
+
+  const products = rawProducts.map((p, idx) => {
+    const baseTitle = p.seoTitle || `product-${idx + 1}`;
+    const key = baseTitle.toLowerCase();
+    let uniqueTitle = baseTitle;
+
+    if (titleCounts[key] > 1) {
+      titleSeen[key] = (titleSeen[key] || 0) + 1;
+      if (titleSeen[key] > 1) {
+        uniqueTitle = `${baseTitle} ${titleSeen[key]}`;
+      }
+    }
+
+    return { ...p, seoTitle: uniqueTitle };
   });
 
   const handleDownloadCSV = () => {
@@ -141,6 +166,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
     ];
 
     const rows: string[][] = [];
+    const usedHandles = new Set<string>();
     
     products.forEach((product, idx) => {
       const vendor = product.brand || '';
@@ -171,12 +197,21 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       const googleCondition = condition;
 
       // Clean the SEO title — strip any unresolved {placeholder} tokens
-      // that may have come through from preset templates
+      // that may have come through from preset templates.
+      // seoTitle is already deduplicated (e.g. "Nike Tee 2") by the pre-pass above.
       const rawTitle = product.seoTitle || '';
       const cleanTitle = /\{[a-z_]+\}/i.test(rawTitle)
         ? stripUnresolvedTokens(rawTitle) || `product-${idx + 1}`
-        : rawTitle;
-      const handle = cleanTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || `product-${idx + 1}`;
+        : rawTitle || `product-${idx + 1}`;
+
+      // Build a URL handle and ensure it's globally unique within this export.
+      let baseHandle = cleanTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || `product-${idx + 1}`;
+      let handle = baseHandle;
+      let handleSuffix = 2;
+      while (usedHandles.has(handle)) {
+        handle = `${baseHandle}-${handleSuffix++}`;
+      }
+      usedHandles.add(handle);
 
       //First row with all main product info + first image
       rows.push([
