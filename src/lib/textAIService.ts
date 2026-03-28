@@ -455,6 +455,31 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
   return extracted;
 }
 
+/**
+ * Remove all "field value period" commands from a voice transcript, leaving only
+ * the free-form description text.  Called after field extraction so the textarea
+ * shows clean prose instead of raw commands like "brand Nike period size XL period".
+ */
+export function stripVoiceCommands(voiceDesc: string): string {
+  const FIELD_TRIGGERS = [
+    'brand', 'model', 'size', 'colou?r', 'material', 'fabric',
+    'condition', 'era', 'style', 'gender', 'price',
+    'flaws?', 'care', 'width', 'length', 'waist', 'shoulder', 'sleeve', 'inseam', 'tags?',
+  ].join('|');
+
+  // Remove every "TRIGGER  ...words...  period" command (case-insensitive)
+  let cleaned = voiceDesc.replace(
+    new RegExp(`\\b(?:${FIELD_TRIGGERS})\\s+.+?\\s+period\\b`, 'gi'),
+    ''
+  );
+
+  // Also strip any orphaned trailing "period" words left over
+  cleaned = cleaned.replace(/\bperiod\b/gi, '');
+
+  // Collapse multiple spaces / leading-trailing whitespace
+  return cleaned.replace(/\s{2,}/g, ' ').trim();
+}
+
 // ── Normalizer helpers ────────────────────────────────────────────────────────
 
 function normalizeCondition(raw: string): string {

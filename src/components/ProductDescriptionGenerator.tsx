@@ -5,7 +5,7 @@ import { ComprehensiveProductForm } from './ComprehensiveProductForm';
 import { getCategoryPresets } from '../lib/categoryPresetsService';
 import type { CategoryPreset } from '../lib/categoryPresets';
 import { applyPresetToProductGroup } from '../lib/applyPresetToGroup';
-import { generateProductDescription } from '../lib/textAIService';
+import { generateProductDescription, stripVoiceCommands } from '../lib/textAIService';
 import { syncGroupFieldsToDatabase } from '../lib/productService';
 import LazyImg from './LazyImg';
 import './ProductDescriptionGenerator.css';
@@ -608,6 +608,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               ...(extractedFields.tags && extractedFields.tags.length > 0 && { 
                 tags: [...new Set([...(updated[itemIndex].tags || []), ...extractedFields.tags])].slice(0, 5)
               }),
+              // Strip "field value period" commands from the textarea — leave only prose
+              voiceDescription: stripVoiceCommands(updated[itemIndex].voiceDescription || ''),
             };
           }
         });
