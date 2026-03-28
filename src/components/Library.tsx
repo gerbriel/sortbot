@@ -196,14 +196,16 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   
   const SELECTION_THRESHOLD = 5; // pixels - must move this much to activate selection
 
-  // Load on mount and whenever userId or viewMode changes.
-  // force=true bypasses the in-flight guard — mount calls must always run.
+  // Load on mount and whenever userId changes.
+  // viewMode is intentionally NOT a dependency — switching tabs only changes the
+  // display filter, not the underlying data. Removing it prevents a full DB reload
+  // every time the user clicks Images / Groups / Batches.
   useEffect(() => {
-    console.log(`[Library] mount/viewMode effect → loadAll(force=true) | viewMode=${viewMode} | refreshTrigger=${refreshTrigger}`);
+    console.log(`[Library] mount/userId effect → loadAll(force=true) | viewMode=${viewMode} | refreshTrigger=${refreshTrigger}`);
     const cancelRef = { current: false };
     loadAll(cancelRef, true).catch(() => {});
     return () => { cancelRef.current = true; };
-  }, [userId, viewMode]);
+  }, [userId]);
 
   // Separate effect for explicit refresh requests (e.g. Save Batch, image delete).
   // Uses the normal guard so an already-running fetch won't be double-triggered.
