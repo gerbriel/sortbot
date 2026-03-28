@@ -5,7 +5,7 @@ import { ComprehensiveProductForm } from './ComprehensiveProductForm';
 import { getCategoryPresets } from '../lib/categoryPresetsService';
 import type { CategoryPreset } from '../lib/categoryPresets';
 import { applyPresetToProductGroup } from '../lib/applyPresetToGroup';
-import { generateProductDescription, stripVoiceCommands } from '../lib/textAIService';
+import { generateProductDescription, stripVoiceCommands, formatVoiceTranscript } from '../lib/textAIService';
 import { syncGroupFieldsToDatabase } from '../lib/productService';
 import LazyImg from './LazyImg';
 import './ProductDescriptionGenerator.css';
@@ -1297,7 +1297,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             <div className="voice-result">
               <label><strong>Voice Description (edit as needed):</strong></label>
               <textarea 
-                value={currentItem.voiceDescription || interimTranscript || ''}
+                value={formatVoiceTranscript(currentItem.voiceDescription || interimTranscript || '')}
                 onChange={(e) => {
                   const updated = [...processedItems];
                   // Update all items in the current group
