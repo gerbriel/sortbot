@@ -356,20 +356,56 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       });
 
       // ── 4. Build imageList ──────────────────────────────────────────────
+      // SOURCE PRIORITY: workflow_state is authoritative for any batch that has one.
+      // DB product_images rows are only used for batches that have NO workflow_state
+      // (e.g. saved/completed batches whose state was cleared). This prevents phantom
+      // duplicate DB rows (from repeated upserts) from inflating the count.
       const imageList: ImageRecord[] = [];
-      const savedImageUrls = new Set<string>();
+      // Track which batch IDs are covered by workflow_state so we can skip their DB rows
+      const batchIdsCoveredByWfState = new Set<string>();
 
+      // Pass 1: workflow_state items (authoritative, deduplicated by item ID)
+      const wfItemIds = new Set<string>();
+      wfBatches.forEach(batch => {
+        const items: (ClothingItem | SlimItem)[] =
+          batch.workflow_state?.processedItems ||
+          batch.workflow_state?.sortedImages ||
+          batch.workflow_state?.groupedImages ||
+          batch.workflow_state?.uploadedImages || [];
+        if (items.length === 0) return;
+        batchIdsCoveredByWfState.add(batch.id);
+        items.forEach((item) => {
+          if (wfItemIds.has(item.id)) return; // dedup by item ID
+          wfItemIds.add(item.id);
+          const url = (item as ClothingItem).preview || item.imageUrls?.[0] || '';
+          imageList.push({
+            id: item.id,
+            preview: url,
+            category: item.category,
+            productGroup: item.productGroup || item.id,
+            productGroupTitle: (item as ClothingItem).seoTitle || undefined,
+            batchId: batch.id,
+            batchName: makeBatchName(batch),
+            createdAt: batch.created_at,
+            isSaved: false,
+          });
+        });
+      });
+
+      // Pass 2: DB product_images rows — only for batches NOT covered by workflow_state
+      // (dedup by image URL within this pass)
+      const dbImageUrls = new Set<string>();
       savedImages.forEach((img: any) => {
         const batchId: string | undefined = img.products?.batch_id || undefined;
+        // Skip if this batch already has its images from workflow_state
+        if (batchId && batchIdsCoveredByWfState.has(batchId)) return;
+        if (!img.image_url) return;
+        if (dbImageUrls.has(img.image_url)) return; // dedup by URL
+        dbImageUrls.add(img.image_url);
+
         const batchEntry = batchId ? batchesById.get(batchId) : undefined;
         const batchName = batchEntry ? makeBatchName(batchEntry) : undefined;
-        if (img.image_url) savedImageUrls.add(img.image_url);
-        if (!img.image_url) return;
-
-        // Use product_group (group leader ID) as the grouping key so siblings share a section.
-        // Fall back to the product's own id for standalone (ungrouped) products.
         const groupLeaderId = img.products?.product_group || img.products?.id;
-        // Look up the group leader's title from dbGroupMap for a consistent label
         const groupLeaderMembers = dbGroupMap.get(groupLeaderId);
         const groupLeaderTitle = groupLeaderMembers
           ? cleanTitle((groupLeaderMembers.find((p: any) => p.id === groupLeaderId) || groupLeaderMembers[0])?.title)
@@ -385,30 +421,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
           batchName,
           createdAt: img.created_at,
           isSaved: true,
-        });
-      });
-
-      wfBatches.forEach(batch => {
-        const items: (ClothingItem | SlimItem)[] =
-          batch.workflow_state?.processedItems ||
-          batch.workflow_state?.sortedImages ||
-          batch.workflow_state?.groupedImages || [];
-        items.forEach((item) => {
-          const url = (item as ClothingItem).preview || item.imageUrls?.[0] || '';
-          // Dedup by URL only when URL is present — items with no URL are still counted
-          if (url && savedImageUrls.has(url)) return;
-          if (url) savedImageUrls.add(url);
-          imageList.push({
-            id: item.id,
-            preview: url,
-            category: item.category,
-            productGroup: item.productGroup || item.id,
-            productGroupTitle: (item as ClothingItem).seoTitle || undefined,
-            batchId: batch.id,
-            batchName: makeBatchName(batch),
-            createdAt: batch.created_at,
-            isSaved: false,
-          });
         });
       });
 
