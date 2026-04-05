@@ -565,29 +565,27 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 
 ## 14. Known Bugs & Fragile Areas
 
-1. **`handleOpenBatch` is called twice on Library open** (React StrictMode). The `isOpeningBatchRef` guard was added to prevent this, but the second call within the same batch open is now silently skipped. If the first call fails mid-way, the guard may not release properly (mitigated by `finally{}`).
+1. **Startup restore always calls `registerItemsInDB`** even if the batch was just viewed and nothing changed. This deletes and re-inserts all `product_images` rows on every page refresh. Not harmful but wasteful.
 
-2. **Startup restore always calls `registerItemsInDB`** even if the batch was just viewed and nothing changed. This deletes and re-inserts all `product_images` rows on every page refresh. Not harmful but wasteful.
+2. **`getCategories()` in `categoriesService.ts` has no user_id filter** — it returns all active categories from all users. This is intentional for the shared workspace but means custom categories created by one user are visible to all users.
 
-3. **`getCategories()` in `categoriesService.ts` has no user_id filter** — it returns all active categories from all users. This is intentional for the shared workspace but means custom categories created by one user are visible to all users.
+3. **`SavedProducts.tsx` is dead code** — not rendered anywhere in App.tsx. It has its own `fetchUserProducts` calls and duplicate UI logic.
 
-4. **`SavedProducts.tsx` is dead code** — not rendered anywhere in App.tsx. It has its own `fetchUserProducts` calls and duplicate UI logic.
+4. **`services/api.ts` is a second AI description path** that is never called in the active flow. `textAIService.ts` is the active path. `api.ts` is dead for the main workflow.
 
-5. **`services/api.ts` is a second AI description path** that is never called in the active flow. `textAIService.ts` is the active path. `api.ts` is dead for the main workflow.
+5. **`workflow_state` type mismatch:** `WorkflowBatch.workflow_state.processedItems` is typed as `ClothingItem[] | SlimItem[]` but SlimItem only has 5 fields. Code that reads processedItems from workflow_state must cast carefully. Many places cast with `as ClothingItem[]` which is technically incorrect for slim items.
 
-6. **`workflow_state` type mismatch:** `WorkflowBatch.workflow_state.processedItems` is typed as `ClothingItem[] | SlimItem[]` but SlimItem only has 5 fields. Code that reads processedItems from workflow_state must cast carefully. Many places cast with `as ClothingItem[]` which is technically incorrect for slim items.
+6. **`batch_name` is null in many batches** — saved as `null` (not a string) and the code doesn't consistently handle this. `batchName="null"` appears in logs. Any display code must use `batch.batch_name || 'fallback'`.
 
-7. **`batch_name` is null in many batches** — saved as `null` (not a string) and the code doesn't consistently handle this. `batchName="null"` appears in logs. Any display code must use `batch.batch_name || 'fallback'`.
+7. **`autoSaveWorkflow` captures stale closure state** — it receives a `workflowState` parameter that was current at call time, but the 2s debounce means it fires after further state changes. The `slim(live)` picks the most-progressed list, which partially mitigates this, but the passed `workflowState` object may be stale.
 
-8. **`autoSaveWorkflow` captures stale closure state** — it receives a `workflowState` parameter that was current at call time, but the 2s debounce means it fires after further state changes. The `slim(live)` picks the most-progressed list, which partially mitigates this, but the passed `workflowState` object may be stale.
+8. **Photo reorder in Step 3 (PDG) is not persisted to DB.** Reordering thumbnails changes `imageUrls` array order in `processedItems` but this is only saved to `workflow_state` via auto-save. The `product_images.position` column in the DB is not updated.
 
-9. **Photo reorder in Step 3 (PDG) is not persisted to DB.** Reordering thumbnails changes `imageUrls` array order in `processedItems` but this is only saved to `workflow_state` via auto-save. The `product_images.position` column in the DB is not updated.
+9. **`proxy.log` is committed to the repo** — this is a log file from the local Hugging Face proxy. It should be in `.gitignore`.
 
-10. **`proxy.log` is committed to the repo** — this is a log file from the local Hugging Face proxy. It should be in `.gitignore`.
+10. **~140 markdown documentation files at root** — these are historical notes from AI-assisted development sessions. They are not authoritative and many are outdated or contradictory.
 
-11. **~140 markdown documentation files at root** — these are historical notes from AI-assisted development sessions. They are not authoritative and many are outdated or contradictory.
-
-12. **`productService.ts:saveProductToDatabase` uses INSERT (not upsert)** — calling "Save Batch" multiple times creates duplicate rows in the `products` table for the same items. The Library's `handleSaveBatch` prunes stale rows after save, but if the save is called more than once without a page refresh, the prune may not cover all duplicates.
+11. **`productService.ts:saveProductToDatabase` uses INSERT (not upsert)** — calling "Save Batch" multiple times creates duplicate rows in the `products` table for the same items. The Library's `handleSaveBatch` prunes stale rows after save, but if the save is called more than once without a page refresh, the prune may not cover all duplicates.
 
 ---
 
@@ -595,7 +593,7 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 
 - ✅ Email/password auth via Supabase
 - ✅ Image upload: drag-drop, folder import, ZIP import, Supabase Storage
-- ✅ Step 2 grouping: multi-select, Shift+click range, rubber-band, group/ungroup, remove-from-group, delete
+- ✅ Step 2 grouping: multi-select (click, Shift+click range, rubber-band), group/ungroup, remove-from-group, delete — all four multiselect bugs fixed (commit c7344c4)
 - ✅ Category assignment: drag groups to category zones, click-to-assign with selection
 - ✅ Voice recording via Web Speech API with field command parsing
 - ✅ AI-powered product description generation via Hugging Face text model
