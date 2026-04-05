@@ -63,14 +63,12 @@ export const saveProductToDatabase = async (
   }
 
   try {
-    // 1. Insert product
-    // Note: We don't check for existing products here because:
-    // - Products may have duplicate titles/seo_titles (common with "Untitled Product")
-    // - Each product is unique even if metadata is similar
-    // - Image-level duplicate prevention handles the real duplicate issue
+    // 1. Upsert product on id so calling "Save Batch" more than once
+    // updates the existing row instead of creating a duplicate.
     const { data: productData, error: productError } = await supabase
       .from('products')
-      .insert({
+      .upsert({
+        id: product.id,
         user_id: resolvedUserId,
         batch_id: batchId || null,
         
@@ -166,7 +164,7 @@ export const saveProductToDatabase = async (
         
         // Product group (Step 2 grouping)
         product_group: product.productGroup || product.id || '',
-      })
+      }, { onConflict: 'id' })
       .select()
       .single();
 

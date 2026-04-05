@@ -27,14 +27,6 @@ Sortbot is a web app for vintage clothing resellers. Users upload batches of clo
 | `lucide-react` | ^0.563.0 | Icon components throughout the UI. |
 | `react-dropzone` | ^14.4.0 | Drag-and-drop file upload zone in Step 1. |
 | `jszip` | ^3.10.1 | Extract images from ZIP files in ImageUpload. |
-| `openai` | ^6.17.0 | OpenAI SDK is installed but **not actively used** in production paths — the app calls OpenAI directly via `fetch` in `services/api.ts`. |
-| `@huggingface/inference` | ^4.13.12 | Hugging Face SDK. Installed but actual calls go through a **local proxy** at `localhost:3001` — not used in production deployment. |
-| `axios` | ^1.13.4 | Listed as a dependency but **not imported anywhere in `src/`**. Likely a dead dependency. |
-| `cors` | ^2.8.6 | Used in `huggingface-proxy.cjs` (local proxy server), not in browser code. |
-| `express` | ^5.2.1 | Used in `huggingface-proxy.cjs` (local proxy server), not in browser code. |
-| `node-fetch` | ^3.3.2 | Used in `huggingface-proxy.cjs` (local proxy server), not in browser code. |
-| `react-speech-recognition` | ^4.0.1 | Installed but the app implements speech recognition directly via the Web Speech API (`window.SpeechRecognition`) in `ProductDescriptionGenerator.tsx`. This package is unused. |
-| `@google-cloud/vision` | ^5.3.4 | Installed but **never called in `src/`**. Server-side SDK, wrong environment for a browser app. Dead dependency. |
 | `eslint` | ^9.39.1 | Linting. Config in `eslint.config.js`. |
 | `@vitejs/plugin-react` | ^5.1.1 | Vite plugin enabling React JSX transform and Fast Refresh. |
 
@@ -184,7 +176,7 @@ sortingapp/
 └── [~140 .md files]               # Documentation files generated during development. Historical, not authoritative.
 ```
 
-**Dead/unused components** (exist in components/ but not rendered in App.tsx): `SavedProducts.tsx`, `TestLlamaVision.tsx`, `LiveWorkspaceSelector.tsx`, `RemoteCursors.tsx`, `AISettings.tsx`.
+**Dead/unused components** (exist in `components/` but not rendered in `App.tsx`, each marked with `// UNUSED` banner): `SavedProducts.tsx`, `TestLlamaVision.tsx`, `LiveWorkspaceSelector.tsx`, `RemoteCursors.tsx`, `AISettings.tsx`.
 
 ---
 
@@ -585,7 +577,7 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 
 10. **~140 markdown documentation files at root** — these are historical notes from AI-assisted development sessions. They are not authoritative and many are outdated or contradictory.
 
-11. **`productService.ts:saveProductToDatabase` uses INSERT (not upsert)** — calling "Save Batch" multiple times creates duplicate rows in the `products` table for the same items. The Library's `handleSaveBatch` prunes stale rows after save, but if the save is called more than once without a page refresh, the prune may not cover all duplicates.
+11. **`productService.ts:saveProductToDatabase` was converted to upsert on `id`** — calling "Save Batch" multiple times now updates existing rows instead of creating duplicates. Fixed in this session.
 
 ---
 
@@ -610,8 +602,12 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 - ✅ Library: rubber-band selection, multi-select
 - ✅ Shared workspace: all users see all batches (RLS + no user_id filter)
 - ✅ Delete-then-insert strategy preventing product_images row accumulation
-- ✅ handleOpenBatch double-fire guard
-- ✅ Library imageList pass 1 URL reconstruction from storagePath
+- ✅ `saveProductToDatabase` upserts on `id` — safe to call Save Batch multiple times
+- ✅ Dead components (`SavedProducts`, `TestLlamaVision`, `LiveWorkspaceSelector`, `RemoteCursors`, `AISettings`) marked with `// UNUSED` banners
+- ✅ Dead dependencies removed from `package.json` (`axios`, `react-speech-recognition`, `@google-cloud/vision`, `@huggingface/inference`, `openai`, `cors`, `express`, `node-fetch`)
+- ✅ `proxy.log` added to `.gitignore`
+- ✅ ~140 stale root-level `.md` files deleted; only `README.md`, `CLAUDE.md`, `CHANGELOG.md` remain
+- ✅ `.github/copilot-instructions.md` updated to point to `CLAUDE.md`
 
 ---
 

@@ -1,3 +1,4 @@
+// UNUSED — not rendered in App.tsx. AI provider toggle (Google Vision vs Llama); neither provider is active in the main flow.
 import { useState, useEffect } from 'react';
 import { Settings, Sparkles, Brain } from 'lucide-react';
 import './AISettings.css';
