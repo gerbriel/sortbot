@@ -395,8 +395,9 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
           batch.workflow_state?.groupedImages || [];
         items.forEach((item) => {
           const url = (item as ClothingItem).preview || item.imageUrls?.[0] || '';
-          if (!url || savedImageUrls.has(url)) return;
-          savedImageUrls.add(url);
+          // Dedup by URL only when URL is present — items with no URL are still counted
+          if (url && savedImageUrls.has(url)) return;
+          if (url) savedImageUrls.add(url);
           imageList.push({
             id: item.id,
             preview: url,
@@ -1167,7 +1168,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   useEffect(() => {
     const SCROLL_ZONE = 50; // pixels from edge to trigger scroll
     const SCROLL_SPEED = 10; // pixels per frame
-    let scrollInterval: number | null = null;
+    let scrollInterval: ReturnType<typeof setInterval> | null = null;
 
     const handleMouseMove = (e: MouseEvent) => {
       if (!isSelecting || !selectionStart || !currentContainerRef.current) return;
@@ -1424,10 +1425,10 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
               <span className="batch-count">({batches.length} {batches.length === 1 ? 'batch' : 'batches'})</span>
             )}
             {viewMode === 'groups' && (
-              <span className="batch-count">({productGroups.length} {productGroups.length === 1 ? 'group' : 'groups'})</span>
+              <span className="batch-count">({productGroups.length} {productGroups.length === 1 ? 'listing' : 'listings'})</span>
             )}
             {viewMode === 'images' && (
-              <span className="batch-count">({images.length} {images.length === 1 ? 'image' : 'images'} across {batches.length} {batches.length === 1 ? 'batch' : 'batches'})</span>
+              <span className="batch-count">({images.length} {images.length === 1 ? 'image' : 'images'} in {batches.length} {batches.length === 1 ? 'batch' : 'batches'})</span>
             )}
           </div>
           <button className="close-button" onClick={onClose} aria-label="Close">
@@ -1752,12 +1753,25 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       const isDragging = draggedItem === batch.id;
       const isDragOver = dragOverItem === batch.id;
 
-      // Compute live counts — use productGroups as single source of truth for both
-      // (same data loadBatches already fetches, consistent with Product Groups tab)
+      // Compute live counts directly from workflow_state (most accurate source).
+      // workflow_state.processedItems is the single saved list in the new format,
+      // so count unique productGroup IDs = listings, and length = total photos.
+      const wfItems: (ClothingItem | SlimItem)[] =
+        (batch.workflow_state?.processedItems?.length  ? batch.workflow_state.processedItems  : null) ||
+        (batch.workflow_state?.sortedImages?.length    ? batch.workflow_state.sortedImages    : null) ||
+        (batch.workflow_state?.groupedImages?.length   ? batch.workflow_state.groupedImages   : null) ||
+        (batch.workflow_state?.uploadedImages?.length  ? batch.workflow_state.uploadedImages  : null) ||
+        [];
+      const wfGroupIds = new Set(wfItems.map(i => i.productGroup || i.id));
+      // If workflow_state has items, use those counts directly (live and authoritative).
+      // Otherwise fall back to productGroups derived from the DB, then to the stale DB columns.
       const batchGroups = productGroups.filter(g => g.batchId === batch.id);
-      const liveGroupCount = batchGroups.length || batch.product_groups_count;
-      const liveImageCount = batchGroups.reduce((sum, g) => sum + g.itemCount, 0)
-        || batch.total_images;
+      const liveGroupCount = wfItems.length > 0
+        ? wfGroupIds.size
+        : batchGroups.length || batch.product_groups_count;
+      const liveImageCount = wfItems.length > 0
+        ? wfItems.length
+        : batchGroups.reduce((sum, g) => sum + g.itemCount, 0) || batch.total_images;
       
       return (
         <div 
