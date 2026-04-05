@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
@@ -11,6 +11,50 @@ interface ImageUploadProps {
 
 const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId }) => {
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+
+  const processFiles = useCallback(async (acceptedFiles: File[]) => {
+    if (acceptedFiles.length === 0) return;
+
+    // Filter to images only and sort by lastModified (capture date) so folder imports stay in photo order
+    const imageFiles = acceptedFiles
+      .filter(f => f.type.startsWith('image/'))
+      .sort((a, b) => a.lastModified - b.lastModified);
+
+    console.log(`[Step1:Upload] processFiles | files=${imageFiles.length}`);
+    setIsUploading(true);
+    setUploadProgress({ done: 0, total: imageFiles.length });
+
+    const CHUNK = 10;
+    const items: ClothingItem[] = [];
+
+    for (let i = 0; i < imageFiles.length; i += CHUNK) {
+      const chunk = imageFiles.slice(i, i + CHUNK);
+      const results = await Promise.all(chunk.map(async (file) => {
+        const productId = crypto.randomUUID();
+        const uploaded = await uploadToSupabase(file, productId);
+        if (!uploaded) {
+          console.warn('⚠️ Upload failed for:', file.name, '- using blob URL as fallback');
+          return { id: productId, file, capturedAt: file.lastModified, preview: URL.createObjectURL(file) };
+        }
+        return {
+          id: productId, file,
+          capturedAt: file.lastModified,
+          preview: uploaded.preview,
+          imageUrls: uploaded.imageUrls,
+          storagePath: uploaded.storagePath,
+        };
+      }));
+      items.push(...results);
+      setUploadProgress({ done: Math.min(i + CHUNK, imageFiles.length), total: imageFiles.length });
+    }
+
+    setIsUploading(false);
+    setUploadProgress(null);
+    console.log(`[Step1:Upload] upload complete | success=${items.filter(i => i.storagePath).length} fallback=${items.filter(i => !i.storagePath).length} | total=${items.length}`);
+    onImagesUploaded(items);
+  }, [onImagesUploaded, userId]);
   
   const uploadToSupabase = async (file: File, productId: string): Promise<{ preview: string; imageUrls: string[]; storagePath: string } | null> => {
     try {
@@ -47,48 +91,16 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId }) =
     }
   };
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (acceptedFiles.length === 0) return;
-    console.log(`[Step1:Upload] onDrop | files=${acceptedFiles.length} | names=${acceptedFiles.map(f => f.name).join(', ')}`);
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    processFiles(acceptedFiles);
+  }, [processFiles]);
 
-    setIsUploading(true);
-
-    // Upload in chunks of 10 to avoid rate-limiting 100s of concurrent Supabase requests.
-    // Unconstrained Promise.all on large drops causes some uploads to fail and fall back
-    // to ephemeral blob URLs that break on page reload.
-    const CHUNK = 10;
-    const items: ClothingItem[] = [];
-
-    for (let i = 0; i < acceptedFiles.length; i += CHUNK) {
-      const chunk = acceptedFiles.slice(i, i + CHUNK);
-      const results = await Promise.all(chunk.map(async (file) => {
-        const productId = crypto.randomUUID();
-        const uploaded = await uploadToSupabase(file, productId);
-        if (!uploaded) {
-          console.warn('⚠️ Upload failed for:', file.name, '- using blob URL as fallback');
-          return {
-            id: productId,
-            file,
-            capturedAt: file.lastModified,
-            preview: URL.createObjectURL(file),
-          };
-        }
-        return {
-          id: productId,
-          file,
-          capturedAt: file.lastModified,
-          preview: uploaded.preview,
-          imageUrls: uploaded.imageUrls,
-          storagePath: uploaded.storagePath,
-        };
-      }));
-      items.push(...results);
-    }
-
-    setIsUploading(false);
-    console.log(`[Step1:Upload] upload complete | success=${items.filter(i => i.storagePath).length} fallback=${items.filter(i => !i.storagePath).length} | total=${items.length}`);
-    onImagesUploaded(items);
-  }, [onImagesUploaded, userId]);
+  const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    processFiles(files);
+    // Reset so same folder can be re-selected
+    e.target.value = '';
+  };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -101,6 +113,18 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId }) =
 
   return (
       <div className="image-upload-container">
+        {/* Hidden folder input */}
+        <input
+          ref={folderInputRef}
+          type="file"
+          style={{ display: 'none' }}
+          // @ts-ignore — webkitdirectory is non-standard but works in all modern browsers
+          webkitdirectory=""
+          multiple
+          accept="image/*"
+          onChange={handleFolderChange}
+        />
+
         <div 
           {...getRootProps()} 
           className={`dropzone ${isDragActive ? 'active' : ''} ${isUploading ? 'uploading' : ''}`}
@@ -110,7 +134,10 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId }) =
             {isUploading ? (
               <>
                 <div className="spinner"></div>
-                <p>Uploading images to Supabase...</p>
+                <p>
+                  Uploading images…
+                  {uploadProgress && ` (${uploadProgress.done} / ${uploadProgress.total})`}
+                </p>
               </>
             ) : (
               <>
@@ -140,6 +167,32 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId }) =
             )}
           </div>
         </div>
+
+        {/* Folder import button */}
+        {!isUploading && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); folderInputRef.current?.click(); }}
+            style={{
+              marginTop: '0.75rem',
+              width: '100%',
+              padding: '0.6rem 1rem',
+              background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              fontWeight: 600,
+              fontSize: '0.95rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+            }}
+          >
+            📁 Import Entire Folder
+          </button>
+        )}
       </div>
   );
 };
