@@ -1112,6 +1112,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   const handleNext = () => {
     console.log(`[Step4:PDG] next | ${currentGroupIndex} → ${currentGroupIndex + 1} of ${groupArray.length - 1}`);
+    // Auto-save in background — no waiting, no blocking navigation
+    if (hasUnsavedChanges) handleSave();
     if (currentGroupIndex < groupArray.length - 1) {
       setCurrentGroupIndex(currentGroupIndex + 1);
       // Scroll to top of Step 4 section
@@ -1124,6 +1126,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   const handlePrevious = () => {
     console.log(`[Step4:PDG] previous | ${currentGroupIndex} → ${currentGroupIndex - 1}`);
+    // Auto-save in background — no waiting, no blocking navigation
+    if (hasUnsavedChanges) handleSave();
     if (currentGroupIndex > 0) {
       setCurrentGroupIndex(currentGroupIndex - 1);
       // Scroll to top of Step 4 section
@@ -1380,6 +1384,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 <textarea 
                   value={formatVoiceTranscript(currentItem.voiceDescription || interimTranscript || '')}
                   onChange={(e) => {
+                    // Clear interimTranscript so user edits aren't overridden by live recognition
+                    setInterimTranscript('');
                     const updated = [...processedItems];
                     currentGroup.forEach(groupItem => {
                       const itemIndex = updated.findIndex(item => item.id === groupItem.id);
@@ -1399,6 +1405,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   rows={8}
                   className="description-textarea"
                   style={{ flex: 1, minWidth: 0 }}
+                  onKeyDown={(e) => e.stopPropagation()}
                 />
               </div>
             </div>

@@ -69,12 +69,14 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId }) =
           return {
             id: productId,
             file,
+            capturedAt: file.lastModified,
             preview: URL.createObjectURL(file),
           };
         }
         return {
           id: productId,
           file,
+          capturedAt: file.lastModified,
           preview: uploaded.preview,
           imageUrls: uploaded.imageUrls,
           storagePath: uploaded.storagePath,
