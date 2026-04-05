@@ -53,7 +53,6 @@ export async function fetchWorkflowBatches(): Promise<WorkflowBatch[]> {
     const { data, error } = await supabase
       .from('workflow_batches')
       .select('*')
-      .eq('user_id', user.id)
       .order('updated_at', { ascending: true });
 
     if (error) throw error;
