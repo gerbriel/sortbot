@@ -1,3 +1,4 @@
+// UNUSED — not rendered in App.tsx. Real-time collaboration feature built but not wired in.
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';

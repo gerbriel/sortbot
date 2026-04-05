@@ -1,3 +1,4 @@
+// UNUSED — not rendered in App.tsx. Real-time collaboration feature built but not wired in.
 import type { UserPresence } from '../hooks/useUserPresence';
 import './RemoteCursors.css';
 

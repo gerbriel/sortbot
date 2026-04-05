@@ -1,3 +1,4 @@
+// UNUSED — not rendered in App.tsx. Replaced by Library.tsx. Safe to delete.
 import React, { useState, useEffect } from 'react';
 import { fetchUserProducts, deleteProduct } from '../lib/productService';
 import LazyImg from './LazyImg';
