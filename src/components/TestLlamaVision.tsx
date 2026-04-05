@@ -1,3 +1,4 @@
+// UNUSED — not rendered in App.tsx. Dev/debug component for Llama vision testing only.
 import { useState } from 'react';
 import { Brain } from 'lucide-react';
 import { analyzeLlamaVision } from '../lib/huggingfaceService';
