@@ -261,6 +261,13 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         fetchSavedImages(userId),
       ]);
       console.log(`[Library] fetched: wfBatches=${wfBatches.length} | products=${savedProducts.length} | images=${savedImages.length} | ${new Date().toISOString()}`);
+      console.log('[Library] wfBatches detail:', wfBatches.map(b => ({
+        id: b.id, user_id: b.user_id, name: b.batch_name,
+        wf_processedItems: b.workflow_state?.processedItems?.length ?? 0,
+        wf_sortedImages:   b.workflow_state?.sortedImages?.length ?? 0,
+        wf_groupedImages:  b.workflow_state?.groupedImages?.length ?? 0,
+        wf_uploadedImages: b.workflow_state?.uploadedImages?.length ?? 0,
+      })));
       if (isCancelled()) return;
 
       // Helper: synthesize a batch entry for any batch_id missing from workflow_batches
@@ -428,6 +435,17 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       if (!isCancelled()) {
         const finalBatches = Array.from(batchesById.values());
         const finalGroups = Array.from(groupMap.values());
+
+        // ── Diagnostic summary ──────────────────────────────────────────
+        console.log('[Library] ── imageList build summary ──');
+        console.log(`  wfState items (pass 1): ${wfItemIds.size} | batchesCoveredByWfState: ${[...batchIdsCoveredByWfState].join(', ') || '(none)'}`);
+        console.log(`  DB image rows (pass 2, after wfState filter): ${imageList.length - wfItemIds.size}`);
+        console.log(`  FINAL imageList.length: ${imageList.length}`);
+        // Per-batch breakdown
+        const byBatch: Record<string, number> = {};
+        imageList.forEach(img => { const k = img.batchName || img.batchId || 'unknown'; byBatch[k] = (byBatch[k] || 0) + 1; });
+        console.log('[Library] images per batch:', byBatch);
+
         setBatches(finalBatches);
         setProductGroups(finalGroups);
         setImages(imageList);

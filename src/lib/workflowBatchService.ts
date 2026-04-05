@@ -56,8 +56,18 @@ export async function fetchWorkflowBatches(): Promise<WorkflowBatch[]> {
       .order('updated_at', { ascending: true });
 
     if (error) throw error;
-    console.log(`[fetchWorkflowBatches] returned ${data?.length ?? 0} rows`);
-    return data || [];
+    const rows = data || [];
+    console.log(`[fetchWorkflowBatches] current user id: ${user.id}`);
+    console.log(`[fetchWorkflowBatches] returned ${rows.length} rows`);
+    rows.forEach(b => {
+      const wfItems =
+        b.workflow_state?.processedItems?.length ||
+        b.workflow_state?.sortedImages?.length ||
+        b.workflow_state?.groupedImages?.length ||
+        b.workflow_state?.uploadedImages?.length || 0;
+      console.log(`  batch ${b.id} | user_id=${b.user_id} | name=${b.batch_name || '(none)'} | wf_items=${wfItems} | total_images_col=${b.total_images}`);
+    });
+    return rows;
   } catch (error: any) {
     if (error?.name === 'AbortError') return []; // expected from React 18 Strict Mode cleanup
     if (error?.message === 'Failed to fetch') return []; // network down / Supabase unreachable

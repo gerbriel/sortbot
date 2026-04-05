@@ -207,14 +207,30 @@ function App() {
         }];
       });
       if (productImageRows.length > 0) {
-        const { error: imgErr, count: imgCount } = await supabase.from('product_images').upsert(
+        // Delete-then-insert strategy: wipe ALL product_images rows for the
+        // products in this batch first, then insert the canonical set.
+        // This prevents stale rows accumulating when image_url changes between
+        // sessions (e.g. storage URL regenerated), which the upsert conflict key
+        // can't catch — it only matches (product_id, image_url) exactly.
+        const productIds = registerable.map(i => i.id);
+        const { error: delErr } = await supabase
+          .from('product_images')
+          .delete()
+          .in('product_id', productIds);
+        if (delErr) {
+          console.warn('[App] registerItemsInDB | product_images delete error:', delErr.message);
+        } else {
+          console.log(`[App] registerItemsInDB | deleted old product_images for ${productIds.length} products`);
+        }
+
+        const { error: imgErr, count: imgCount } = await supabase.from('product_images').insert(
           productImageRows,
-          { onConflict: 'product_id,image_url', ignoreDuplicates: false, count: 'exact' }
+          { count: 'exact' }
         );
         if (imgErr) {
-          console.warn('[App] registerItemsInDB | product_images upsert error:', imgErr.message, imgErr.code, imgErr.details);
+          console.warn('[App] registerItemsInDB | product_images insert error:', imgErr.message, imgErr.code, imgErr.details);
         } else {
-          console.log(`[App] registerItemsInDB | product_images upsert OK | attempted=${productImageRows.length} affected=${imgCount}`);
+          console.log(`[App] registerItemsInDB | product_images insert OK | attempted=${productImageRows.length} affected=${imgCount}`);
         }
       }
       console.log(`[App] registerItemsInDB | registered ${registerable.length} products, ${productImageRows.length} product_images | batchId=${batchId}`);
