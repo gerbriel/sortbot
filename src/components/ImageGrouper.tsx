@@ -173,13 +173,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       document.removeEventListener('mousemove', handleGlobalMouseMove);
       document.removeEventListener('mouseup', handleGlobalMouseUp);
     };
-  }, [isSelecting, selectionStart, selectionBox, selectedItems, groupedItems]);
+  }, [isSelecting, selectionStart, selectionBox, selectedItems, groupedItems, selectionThresholdMet]);
 
   // Click-outside: deselect everything when clicking on neutral canvas area
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       const t = e.target as HTMLElement;
-      if (!t.closest('.item-card, .product-group-card, .group-header, .toolbar, button, [role="button"]')) {
+      if (!t.closest('.single-item-card, .product-group-card, .group-header, .toolbar, button, [role="button"]')) {
         if (selectedItems.size > 0) updateSelection(new Set());
       }
     };
@@ -792,7 +792,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         <button 
           className="button button-primary" 
           onClick={createGroupFromSelected}
-          disabled={selectedItems.size < 1}
+          disabled={selectedItems.size < 2}
           style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
         >
           <Link2 size={16} /> Group Selected ({selectedItems.size})
@@ -839,8 +839,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           // Don't interfere with buttons, but handle empty areas
           if (!target.closest('button') && 
               !target.closest('.delete-image-btn') &&
-              !target.closest('.drop-zone-placeholder') &&
-              !target.closest('.items-grid')) {
+              !target.closest('.drop-zone-placeholder')) {
             handleMouseDown(e, singlesContainerRef.current, 'singles');
           }
         }}
