@@ -384,7 +384,13 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         items.forEach((item) => {
           if (wfItemIds.has(item.id)) return; // dedup by item ID
           wfItemIds.add(item.id);
-          const url = (item as ClothingItem).preview || item.imageUrls?.[0] || '';
+          // Reconstruct public URL from storagePath if preview/imageUrls are empty
+          // (slim() strips preview before saving; storagePath is always preserved)
+          const storagePath = (item as ClothingItem).storagePath || item.storagePath;
+          const reconstructed = (!( (item as ClothingItem).preview || item.imageUrls?.[0] ) && storagePath)
+            ? supabase.storage.from('product-images').getPublicUrl(storagePath).data.publicUrl
+            : '';
+          const url = (item as ClothingItem).preview || item.imageUrls?.[0] || reconstructed;
           imageList.push({
             id: item.id,
             preview: url,

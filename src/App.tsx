@@ -149,6 +149,8 @@ function App() {
   });
   // Ref mirror so async callbacks always read the latest batchId without closure staleness
   const currentBatchIdRef = useRef<string | null>(localStorage.getItem('sortbot_current_batch_id') || null);
+  // Guard: prevents handleOpenBatch from running twice simultaneously (React Strict Mode double-invoke)
+  const isOpeningBatchRef = useRef(false);
   // Debounce timer for auto-save — prevents a PATCH on every rapid grouping action
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [currentBatchNumber, setCurrentBatchNumber] = useState<string>(() => {
@@ -731,6 +733,13 @@ function App() {
   // the `user` React state hasn't been set yet (setUser is async via onAuthStateChange).
   // Handle opening a batch from Library
   const handleOpenBatch = async (batch: WorkflowBatch) => {
+    // Guard against double-fire (React Strict Mode, or rapid double-click)
+    if (isOpeningBatchRef.current) {
+      console.log(`[App] handleOpenBatch SKIPPED — already in progress | batchId=${batch.id}`);
+      return;
+    }
+    isOpeningBatchRef.current = true;
+    try {
     console.log(`[App] handleOpenBatch | batchId=${batch.id} | batchName="${batch.batch_name}" | step=${batch.current_step}`);
     // ── Clear ALL current state first so nothing from the active session bleeds in ──
     setUploadedImages([]);
@@ -1096,6 +1105,12 @@ function App() {
     
     // Clear message after 5 seconds
     setTimeout(() => setSaveMessage(null), 5000);
+
+    // Release the guard so the next open can proceed
+    isOpeningBatchRef.current = false;
+  } finally {
+    isOpeningBatchRef.current = false;
+  }
   };
 
   return (
