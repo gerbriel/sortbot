@@ -4,7 +4,7 @@ import type { User } from '@supabase/supabase-js';
 import { Tag, Settings, Package, ShoppingBag } from 'lucide-react';
 import Auth from './components/Auth';
 import ImageUpload from './components/ImageUpload';
-import ImageGrouper, { type ImageGrouperStats } from './components/ImageGrouper';
+import ImageGrouper from './components/ImageGrouper';
 import CategoryZones from './components/CategoryZones';
 import ProductDescriptionGenerator from './components/ProductDescriptionGenerator';
 import GoogleSheetExporter from './components/GoogleSheetExporter';
@@ -129,7 +129,6 @@ function App() {
   const [sortedImages, setSortedImages] = useState<ClothingItem[]>([]);
   const [groupedImages, setGroupedImages] = useState<ClothingItem[]>([]);
   const [processedItems, setProcessedItems] = useState<ClothingItem[]>([]);
-  const [grouperStats, setGrouperStats] = useState<ImageGrouperStats | null>(null);
   const [selectedGroupItems, setSelectedGroupItems] = useState<Set<string>>(new Set());
   const [showLibrary, setShowLibrary] = useState(false);
   // Ref mirror so the autoSave closure (inside setTimeout) can read the live value
@@ -1211,7 +1210,7 @@ function App() {
                 <ImageGrouper 
                   items={groupedImages.length > 0 ? groupedImages : uploadedImages} 
                   onGrouped={handleImagesGrouped}
-                  onStatsChange={setGrouperStats}
+                  onStatsChange={() => {}} // stats now computed directly from processedItems
                   userId={user.id}
                   onImageDeleted={() => {
                     console.log('[App] setLibraryRefreshTrigger → image deleted (Step 2)');
@@ -1242,19 +1241,15 @@ function App() {
           <section className="step-section">
             <h2>Step 3: Add Voice Descriptions & Generate Product Info</h2>
             {(() => {
-              // Use live stats from ImageGrouper if available, otherwise fall back to processedItems
-              const multiGroups = grouperStats?.multiImageGroups ?? (() => {
-                const groupMap: Record<string, number> = {};
-                processedItems.forEach(i => { const k = i.productGroup || i.id; groupMap[k] = (groupMap[k] || 0) + 1; });
-                return Object.values(groupMap).filter(c => c > 1).length;
-              })();
-              const singles = grouperStats?.singles ?? (() => {
-                const groupMap: Record<string, number> = {};
-                processedItems.forEach(i => { const k = i.productGroup || i.id; groupMap[k] = (groupMap[k] || 0) + 1; });
-                return Object.values(groupMap).filter(c => c === 1).length;
-              })();
-              const totalListings = grouperStats?.totalListings ?? (multiGroups + singles);
-              const imageCount = grouperStats?.totalImages ?? processedItems.length;
+              // Always compute from processedItems — same source PDG uses for navigation.
+              // grouperStats (from ImageGrouper) can diverge from processedItems when
+              // groupedImages and processedItems are briefly out of sync.
+              const groupMap: Record<string, number> = {};
+              processedItems.forEach(i => { const k = i.productGroup || i.id; groupMap[k] = (groupMap[k] || 0) + 1; });
+              const multiGroups = Object.values(groupMap).filter(c => c > 1).length;
+              const singles = Object.values(groupMap).filter(c => c === 1).length;
+              const totalListings = multiGroups + singles;
+              const imageCount = processedItems.length;
 
               if (multiGroups > 0 && singles > 0) {
                 return (
