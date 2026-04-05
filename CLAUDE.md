@@ -172,8 +172,7 @@ sortingapp/
 ├── database_migration_csv_fields.sql  # Ad-hoc migration SQL at root. Not in supabase/migrations/.
 ├── fix_orphaned_product.sql       # Ad-hoc fix SQL at root. Not in supabase/migrations/.
 ├── test-db-connection.html        # Standalone HTML test file. Not part of app.
-├── proxy.log                      # Log file from huggingface-proxy. Committed accidentally.
-└── [~140 .md files]               # Documentation files generated during development. Historical, not authoritative.
+└── proxy.log                      # Log file from huggingface-proxy. In .gitignore — never committed.
 ```
 
 **Dead/unused components** (exist in `components/` but not rendered in `App.tsx`, each marked with `// UNUSED` banner): `SavedProducts.tsx`, `TestLlamaVision.tsx`, `LiveWorkspaceSelector.tsx`, `RemoteCursors.tsx`, `AISettings.tsx`.
@@ -573,11 +572,9 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 
 8. **Photo reorder in Step 3 (PDG) is not persisted to DB.** Reordering thumbnails changes `imageUrls` array order in `processedItems` but this is only saved to `workflow_state` via auto-save. The `product_images.position` column in the DB is not updated.
 
-9. **`proxy.log` is committed to the repo** — this is a log file from the local Hugging Face proxy. It should be in `.gitignore`.
+9. **`proxy.log` is in `.gitignore`** and never tracked by git. Safe to ignore.
 
-10. **~140 markdown documentation files at root** — these are historical notes from AI-assisted development sessions. They are not authoritative and many are outdated or contradictory.
-
-11. **`productService.ts:saveProductToDatabase` was converted to upsert on `id`** — calling "Save Batch" multiple times now updates existing rows instead of creating duplicates. Fixed in this session.
+10. **`productService.ts:saveProductToDatabase` upserts on `id`** — fixed. Calling "Save Batch" multiple times now updates the existing row instead of creating duplicates.
 
 ---
 
@@ -621,7 +618,6 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 | Export library tracking | Partial | `exportLibraryService.ts` defines types and DB functions for `export_batches` table but no UI renders it. |
 | Batch duplication | Wired in Library service | `duplicateBatch()` exists in `libraryService.ts` and button exists in Library UI, but behavior after duplication is not fully tested. |
 | Photo reorder persistence | Missing | Reorder in Step 3 changes in-memory order but does not update `product_images.position` in DB. |
-| Save Batch duplicate prevention | Fragile | `saveProductToDatabase` uses INSERT not upsert. Multiple saves create duplicate `products` rows. |
 | Automated tests | Missing | No test runner, no test files. |
 | `SavedProducts` component | Dead | Exists but not rendered. Overlaps with Library functionality. |
 | `TestLlamaVision` component | Dev-only | Not rendered in production App.tsx. |
