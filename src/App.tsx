@@ -21,6 +21,7 @@ export interface ClothingItem {
   id: string;
   file: File;
   preview: string;
+  capturedAt?: number; // file.lastModified — used to sort by photo date
   category?: string;
   brandCategory?: BrandCategory; // Extended 160+ category system
   productGroup?: string; // For grouping multiple images of same product

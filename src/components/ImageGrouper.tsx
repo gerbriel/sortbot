@@ -685,7 +685,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const groupEntries = Object.entries(groups);
   
   const multiItemGroups = groupEntries.filter(([_, items]) => items.length > 1);
-  const singleItems = groupEntries.filter(([_, items]) => items.length === 1).flatMap(([_, items]) => items);
+  const singleItems = groupEntries
+    .filter(([_, items]) => items.length === 1)
+    .flatMap(([_, items]) => items)
+    .sort((a, b) => (a.capturedAt ?? 0) - (b.capturedAt ?? 0));
 
   // Notify parent whenever the group stats change so Step 3 can show matching numbers
   useEffect(() => {
