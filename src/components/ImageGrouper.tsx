@@ -107,33 +107,54 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
       const containerRef = currentContainerRef.current;
       
-      // Query individual image elements — singles AND per-photo items inside groups.
-      // This lets rubber-band select specific photos within a product group.
-      const itemElements = containerRef.querySelectorAll('.single-item-card[data-item-id], .group-image-item[data-item-id]');
+      // In the singles section: rubber-band selects individual items.
+      // In the groups section: rubber-band selects whole group cards.
       const newSelected = new Set(e.shiftKey ? selectedItems : new Set<string>());
-      
-      itemElements.forEach((element) => {
-        const itemRect = element.getBoundingClientRect();
-        const containerRect = containerRef.getBoundingClientRect();
-        
-        const itemX = itemRect.left - containerRect.left + containerRef.scrollLeft;
-        const itemY = itemRect.top - containerRect.top + containerRef.scrollTop;
-        const itemWidth = itemRect.width;
-        const itemHeight = itemRect.height;
-        
-        // Check if selection box intersects with item
-        const intersects = !(
-          selectionBox.x + selectionBox.width < itemX ||
-          selectionBox.x > itemX + itemWidth ||
-          selectionBox.y + selectionBox.height < itemY ||
-          selectionBox.y > itemY + itemHeight
-        );
-        
-        if (intersects) {
-          const itemId = element.getAttribute('data-item-id');
-          if (itemId) newSelected.add(itemId);
-        }
-      });
+
+      if (activeContainer === 'groups') {
+        // Select whole group cards that intersect the rubber-band
+        const groupCards = containerRef.querySelectorAll<HTMLElement>('.product-group-card[data-group-id]');
+        groupCards.forEach((element) => {
+          const itemRect = element.getBoundingClientRect();
+          const containerRect = containerRef.getBoundingClientRect();
+          const itemX = itemRect.left - containerRect.left + containerRef.scrollLeft;
+          const itemY = itemRect.top - containerRect.top + containerRef.scrollTop;
+          const intersects = !(
+            selectionBox.x + selectionBox.width < itemX ||
+            selectionBox.x > itemX + itemRect.width ||
+            selectionBox.y + selectionBox.height < itemY ||
+            selectionBox.y > itemY + itemRect.height
+          );
+          if (intersects) {
+            const gId = element.getAttribute('data-group-id');
+            if (gId) {
+              // Add all photo IDs in this group
+              groupedItems
+                .filter(i => (i.productGroup || i.id) === gId)
+                .forEach(i => newSelected.add(i.id));
+            }
+          }
+        });
+      } else {
+        // Singles section: select individual item cards
+        const itemElements = containerRef.querySelectorAll('.single-item-card[data-item-id]');
+        itemElements.forEach((element) => {
+          const itemRect = element.getBoundingClientRect();
+          const containerRect = containerRef.getBoundingClientRect();
+          const itemX = itemRect.left - containerRect.left + containerRef.scrollLeft;
+          const itemY = itemRect.top - containerRect.top + containerRef.scrollTop;
+          const intersects = !(
+            selectionBox.x + selectionBox.width < itemX ||
+            selectionBox.x > itemX + itemRect.width ||
+            selectionBox.y + selectionBox.height < itemY ||
+            selectionBox.y > itemY + itemRect.height
+          );
+          if (intersects) {
+            const itemId = element.getAttribute('data-item-id');
+            if (itemId) newSelected.add(itemId);
+          }
+        });
+      }
       
       setSelectedItems(newSelected);
       console.log(`[Step2:Grouper] rubberBandSelect | selected=${newSelected.size}`);
@@ -337,13 +358,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
   // Click-to-Select functionality (with Shift+Click for multi-select)
   // Helper: update selection state and notify parent so CategoryZones can use it
+  // Tracks the last-clicked single item id for Shift+click range selection
+  const lastClickedSingleRef = useRef<string | null>(null);
+
   const updateSelection = (next: Set<string>) => {
     setSelectedItems(next);
     onSelectionChange?.(next);
   };
 
-  // Toggle all items in a product group in/out of selection
-  const toggleGroupSelection = (groupItems: ClothingItem[]) => {
+  // Toggle a whole product group in/out of selection (groups are selected as a unit)
+  const toggleGroupSelection = (_groupId: string, groupItems: ClothingItem[]) => {
     const groupIds = groupItems.map(i => i.id);
     const allSelected = groupIds.every(id => selectedItems.has(id));
     const next = new Set(selectedItems);
@@ -355,34 +379,61 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     updateSelection(next);
   };
 
+  // Toggle a single (ungrouped) item, with Shift+click range and Ctrl/Cmd+click additive
   const toggleItemSelection = (itemId: string, e?: React.MouseEvent) => {
     const newSelected = new Set(selectedItems);
-    const action = newSelected.has(itemId) ? 'deselect' : 'select';
-    console.log(`[Step2:Grouper] toggleSelect | ${action} id=${itemId} | shift=${!!e?.shiftKey} | totalAfter=${newSelected.size + (action === 'select' ? 1 : -1)}`);
-    
-    if (e?.shiftKey) {
-      if (newSelected.has(itemId)) newSelected.delete(itemId);
-      else newSelected.add(itemId);
-    } else {
-      // Regular click — toggle this item in/out of selection (not replace)
-      if (newSelected.has(itemId)) newSelected.delete(itemId);
-      else newSelected.add(itemId);
+
+    if (e?.shiftKey && lastClickedSingleRef.current && singleItemsRef.current.length > 0) {
+      // Shift+click: select the range between last clicked and this one
+      const ids = singleItemsRef.current.map(i => i.id);
+      const fromIdx = ids.indexOf(lastClickedSingleRef.current);
+      const toIdx = ids.indexOf(itemId);
+      if (fromIdx !== -1 && toIdx !== -1) {
+        const [lo, hi] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
+        for (let i = lo; i <= hi; i++) newSelected.add(ids[i]);
+        updateSelection(newSelected);
+        return;
+      }
     }
-    
+
+    // Ctrl/Cmd+click or plain click: toggle this item without clearing others
+    if (newSelected.has(itemId)) {
+      newSelected.delete(itemId);
+    } else {
+      newSelected.add(itemId);
+      lastClickedSingleRef.current = itemId;
+    }
     updateSelection(newSelected);
+  };
+
+  // Eject a single photo from its group back to the singles section
+  const removePhotoFromGroup = (item: ClothingItem) => {
+    const updated = groupedItems.map(i =>
+      i.id === item.id ? { ...i, productGroup: i.id } : i
+    );
+    // If source group now has only 1 member, dissolve it too
+    const srcGroup = item.productGroup || item.id;
+    const remaining = updated.filter(i => (i.productGroup || i.id) === srcGroup && i.id !== item.id);
+    const final = remaining.length === 1
+      ? updated.map(i =>
+          (i.productGroup || i.id) === srcGroup && i.id !== item.id
+            ? { ...i, productGroup: i.id }
+            : i
+        )
+      : updated;
+    setGroupedItems(final);
+    onGrouped(final);
   };
 
   // Rectangle selection box handlers
   const handleMouseDown = (e: React.MouseEvent, containerRef: HTMLElement | null, containerType: 'singles' | 'groups') => {
     const target = e.target as HTMLElement;
     
-    // Don't start selection if clicking on interactive elements OR on cards/images
+    // Don't start selection if clicking on interactive elements OR on singles cards
     if (target.closest('button') || 
         target.closest('input') || 
         target.closest('a') ||
         target.closest('.single-item-card') ||
-        target.closest('.product-group-card') ||
-        target.closest('.group-image-item') ||
         target.tagName === 'BUTTON' ||
         target.tagName === 'INPUT' ||
         target.tagName === 'A' ||
@@ -690,6 +741,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     .flatMap(([_, items]) => items)
     .sort((a, b) => (a.capturedAt ?? 0) - (b.capturedAt ?? 0));
 
+  // Keep a ref so event-handler closures always see the current singleItems list
+  const singleItemsRef = useRef<ClothingItem[]>(singleItems);
+  singleItemsRef.current = singleItems;
+
   // Notify parent whenever the group stats change so Step 3 can show matching numbers
   useEffect(() => {
     onStatsChange?.({
@@ -853,7 +908,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 <div
                   key={item.id}
                   data-item-id={item.id}
-                  className={`single-item-card ${dragOverGroup === itemGroupId ? 'drag-over' : ''} ${item.category ? 'has-category' : ''}`}
+                  className={`single-item-card ${dragOverGroup === itemGroupId ? 'drag-over' : ''} ${item.category ? 'has-category' : ''} ${selectedItems.has(item.id) ? 'selected' : ''}`}
                   draggable={!selectionThresholdMet}
                   onDragStart={(e) => {
                     // If selection threshold is met, don't allow dragging
@@ -973,6 +1028,12 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 }}
                 onDrop={(e) => handleDrop(e, groupId)}
                 onDragLeave={handleDragLeave}
+                onClick={(e) => {
+                  // Clicking anywhere on the group card (not a button) selects the whole group
+                  if (!(e.target as HTMLElement).closest('button')) {
+                    toggleGroupSelection(groupId, items);
+                  }
+                }}
               >
                 {items[0].category && (
                   <div className="category-indicator" style={{ display: 'none' }}>
@@ -982,13 +1043,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 )}
                 <div
                   className={`group-header${items.every(i => selectedItems.has(i.id)) ? ' all-selected' : items.some(i => selectedItems.has(i.id)) ? ' some-selected' : ''}`}
-                  onClick={(e) => {
-                    if (!(e.target as HTMLElement).closest('button')) {
-                      toggleGroupSelection(items);
-                    }
-                  }}
                   style={{ cursor: 'pointer', userSelect: 'none' }}
-                  title="Click to select/deselect all images in this group"
+                  title="Click to select/deselect this group"
                 >
                   <span className="group-badge">
                     {items.length} images
@@ -996,45 +1052,65 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   {items[0].category && (
                     <span className="category-badge">{items[0].category}</span>
                   )}
+                  {/* Group-level selection indicator */}
+                  {items.every(i => selectedItems.has(i.id)) && (
+                    <div className="group-selected-indicator"><Check size={14} /></div>
+                  )}
+                  {/* Delete entire group button */}
+                  <button
+                    className="delete-image-btn group-delete-btn"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!confirm(`Delete all ${items.length} images in this group? This cannot be undone.`)) return;
+                      const storagePaths = items.map(i => i.storagePath).filter(Boolean) as string[];
+                      const deletedIds = items.map(i => i.id);
+                      await Promise.all(storagePaths.map(p => deleteImageFromStorage(p)));
+                      if (storagePaths.length > 0) await supabase.from('product_images').delete().in('storage_path', storagePaths);
+                      if (deletedIds.length > 0) await supabase.from('products').delete().in('id', deletedIds);
+                      const updated = groupedItems.filter(i => !deletedIds.includes(i.id));
+                      setGroupedItems(updated);
+                      updateSelection(new Set([...selectedItems].filter(id => !deletedIds.includes(id))));
+                      onGrouped(updated);
+                      onImageDeleted?.();
+                    }}
+                    title="Delete this entire group"
+                    style={{ marginLeft: 'auto' }}
+                  >
+                    ×
+                  </button>
                 </div>
                 <div className="group-images">
                   {items.map((item) => (
                     <div
                       key={item.id}
                       data-item-id={item.id}
-                      className={`group-image-item ${selectedItems.has(item.id) ? 'selected' : ''} ${dragOverPhotoId === item.id && draggedPhotoGroupId === groupId ? 'photo-drag-over' : ''} ${draggedPhotoId === item.id ? 'photo-dragging' : ''}`}
+                      className={`group-image-item ${dragOverPhotoId === item.id && draggedPhotoGroupId === groupId ? 'photo-drag-over' : ''} ${draggedPhotoId === item.id ? 'photo-dragging' : ''}`}
                       draggable
-                      onDragStart={(e) => handlePhotoDragStart(e, item, groupId)}
+                      onDragStart={(e) => { e.stopPropagation(); handlePhotoDragStart(e, item, groupId); }}
                       onDragOver={(e) => handlePhotoDragOver(e, item.id, groupId)}
                       onDrop={(e) => handlePhotoDrop(e, item.id, groupId)}
                       onDragEnd={handlePhotoDragEnd}
                       onDragLeave={() => setDragOverPhotoId(null)}
-                      onClick={(e) => {
-                        if (!(e.target as HTMLElement).closest('.delete-image-btn')) {
-                          toggleItemSelection(item.id, e);
-                        }
-                      }}
-                      onDoubleClick={() => setLightboxSrc(item.preview || item.imageUrls?.[0] || '')}
+                      onDoubleClick={(e) => { e.stopPropagation(); setLightboxSrc(item.preview || item.imageUrls?.[0] || ''); }}
+                      onClick={(e) => e.stopPropagation()} // don't bubble to group-level toggle
                     >
                       {(item.preview || item.imageUrls?.[0]) && (
-                        <img 
-                          src={item.preview || item.imageUrls?.[0]} 
-                          alt="Product" 
+                        <img
+                          src={item.preview || item.imageUrls?.[0]}
+                          alt="Product"
                           draggable={false}
                         />
                       )}
-                      {selectedItems.has(item.id) && (
-                        <div className="selection-indicator"><Check size={20} /></div>
-                      )}
+                      {/* Remove-from-group button (ejects photo back to singles) */}
                       <button
-                        className="delete-image-btn"
+                        className="remove-from-group-btn"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDeleteImage(item);
+                          removePhotoFromGroup(item);
                         }}
-                        title="Delete image"
+                        title="Remove from group (move back to singles)"
                       >
-                        ×
+                        ↩
                       </button>
                     </div>
                   ))}
