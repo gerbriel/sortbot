@@ -74,9 +74,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Lightbox state
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
-  // Thumbnail hover-zoom state
-  const [hoveredThumbSrc, setHoveredThumbSrc] = useState<string | null>(null);
-  const [hoveredThumbRect, setHoveredThumbRect] = useState<DOMRect | null>(null);
+  // Magnifier state — cursor-following zoom lens on main preview image
+  const [magnifier, setMagnifier] = useState<{ src: string; x: number; y: number; bgX: number; bgY: number } | null>(null);
+  const mainPreviewRef = useRef<HTMLDivElement | null>(null);
 
   const recognitionRef = useRef<any>(null);
   const isRecordingRef = useRef(false);
@@ -1194,7 +1194,23 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
       <div className="product-editor">
         <div className="product-preview">
-          <div className="preview-image-wrap">
+          <div
+            className="preview-image-wrap"
+            ref={mainPreviewRef}
+            onMouseMove={(e) => {
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              const xPct = (e.clientX - rect.left) / rect.width;
+              const yPct = (e.clientY - rect.top) / rect.height;
+              setMagnifier({
+                src: currentItem.preview || currentItem.imageUrls?.[0] || '',
+                x: e.clientX,
+                y: e.clientY,
+                bgX: xPct * 100,
+                bgY: yPct * 100,
+              });
+            }}
+            onMouseLeave={() => setMagnifier(null)}
+          >
             <LazyImg
               src={currentItem.preview || currentItem.imageUrls?.[0] || ''}
               alt="Product"
@@ -1220,11 +1236,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     onDragEnd={handleThumbDragEnd}
                     onDragLeave={() => setDragOverThumbId(null)}
                     onDoubleClick={() => setLightboxSrc(groupItem.preview || groupItem.imageUrls?.[0] || '')}
-                    onMouseEnter={(e) => {
-                      setHoveredThumbSrc(groupItem.preview || groupItem.imageUrls?.[0] || '');
-                      setHoveredThumbRect((e.currentTarget as HTMLElement).getBoundingClientRect());
-                    }}
-                    onMouseLeave={() => { setHoveredThumbSrc(null); setHoveredThumbRect(null); }}
                     title={`Image ${idx + 1} — double-click to expand`}
                   >
                     <LazyImg
@@ -1235,21 +1246,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   </div>
                 ))}
               </div>
-              {/* Hover zoom popup — positioned fixed relative to viewport */}
-              {hoveredThumbSrc && hoveredThumbRect && (
-                <div
-                  className="thumb-zoom-popup"
-                  style={{
-                    top: Math.min(
-                      hoveredThumbRect.top + window.scrollY,
-                      window.innerHeight + window.scrollY - 240
-                    ),
-                    left: hoveredThumbRect.right + 12 + window.scrollX,
-                  }}
-                >
-                  <img src={hoveredThumbSrc} alt="Zoom preview" />
-                </div>
-              )}
             </div>
           )}
 
@@ -1616,6 +1612,20 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           </div>
         </div>
       </div>
+
+      {/* Cursor-following magnifier lens */}
+      {magnifier && (
+        <div
+          className="magnifier-lens"
+          style={{
+            left: magnifier.x + 16,
+            top: magnifier.y - 100,
+            backgroundImage: `url(${magnifier.src})`,
+            backgroundPosition: `${magnifier.bgX}% ${magnifier.bgY}%`,
+            backgroundSize: '300%',
+          }}
+        />
+      )}
 
       {/* Lightbox modal */}
       {lightboxSrc && (
