@@ -2,17 +2,16 @@ import { supabase } from './supabase';
 import type { ClothingItem } from '../App';
 
 /**
- * Return a Supabase Storage thumbnail URL using the built-in transform API.
- * The full-resolution original is never modified — this generates a resized
- * derivative at the CDN level.
+ * Return the public CDN URL for a storage path.
+ * NOTE: Supabase Storage image transforms (resize) require the Pro plan Image Transformation
+ * add-on. This project uses the free tier, so we return the plain CDN URL and rely on
+ * CSS/HTML `object-fit` for visual cropping instead.
  *
  * @param storagePath  Path within the `product-images` bucket (e.g. userId/productId/file.jpg)
- * @param size         Max width/height in pixels (square crop, cover). Defaults to 300.
+ * @param _size        Ignored — kept for API compatibility.
  */
-export const getThumbnailUrl = (storagePath: string, size = 300): string => {
-  return supabase.storage.from('product-images').getPublicUrl(storagePath, {
-    transform: { width: size, height: size, resize: 'cover' },
-  }).data.publicUrl;
+export const getThumbnailUrl = (storagePath: string, _size = 300): string => {
+  return supabase.storage.from('product-images').getPublicUrl(storagePath).data.publicUrl;
 };
 
 /**
