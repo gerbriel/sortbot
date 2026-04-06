@@ -201,7 +201,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   // display filter, not the underlying data. Removing it prevents a full DB reload
   // every time the user clicks Images / Groups / Batches.
   useEffect(() => {
-    console.log(`[Library] mount/userId effect → loadAll(force=true) | viewMode=${viewMode} | refreshTrigger=${refreshTrigger}`);
     const cancelRef = { current: false };
     loadAll(cancelRef, true).catch(() => {});
     return () => { cancelRef.current = true; };
@@ -211,7 +210,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   // Uses the normal guard so an already-running fetch won't be double-triggered.
   useEffect(() => {
     if ((refreshTrigger ?? 0) > 0) {
-      console.log(`[Library] refreshTrigger effect → loadAll(force=false) | refreshTrigger=${refreshTrigger} | isLoading=${isLoadingRef.current}`);
       const cancelRef = { current: false };
       loadAll(cancelRef, false).catch(() => {});
       return () => { cancelRef.current = true; };
@@ -230,15 +228,12 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   const loadAll = async (cancelRef?: { current: boolean }, force = false) => {
     // Guard: skip if already in flight, unless this is a forced mount call
     if (!force && isLoadingRef.current) {
-      console.log(`[Library] loadAll SKIPPED — already in flight | force=${force}`);
       return;
     }
-    console.log(`[Library] loadAll START | force=${force} | ${new Date().toISOString()}`);
     // If a prior forced call was cancelled mid-flight, the ref may still be true — reset it
     isLoadingRef.current = true;
     const isCancelled = () => {
       if (cancelRef?.current === true) {
-        console.log(`[Library] loadAll CANCELLED mid-flight`);
         isLoadingRef.current = false; // release the lock so the next call can proceed
         return true;
       }
@@ -260,14 +255,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         fetchSavedProducts(userId),
         fetchSavedImages(userId),
       ]);
-      console.log(`[Library] fetched: wfBatches=${wfBatches.length} | products=${savedProducts.length} | images=${savedImages.length} | ${new Date().toISOString()}`);
-      console.log('[Library] wfBatches detail:', wfBatches.map(b => ({
-        id: b.id, user_id: b.user_id, name: b.batch_name,
-        wf_processedItems: b.workflow_state?.processedItems?.length ?? 0,
-        wf_sortedImages:   b.workflow_state?.sortedImages?.length ?? 0,
-        wf_groupedImages:  b.workflow_state?.groupedImages?.length ?? 0,
-        wf_uploadedImages: b.workflow_state?.uploadedImages?.length ?? 0,
-      })));
       if (isCancelled()) return;
 
       // Helper: synthesize a batch entry for any batch_id missing from workflow_batches
@@ -444,14 +431,9 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         const finalGroups = Array.from(groupMap.values());
 
         // ── Diagnostic summary ──────────────────────────────────────────
-        console.log('[Library] ── imageList build summary ──');
-        console.log(`  wfState items (pass 1): ${wfItemIds.size} | batchesCoveredByWfState: ${[...batchIdsCoveredByWfState].join(', ') || '(none)'}`);
-        console.log(`  DB image rows (pass 2, after wfState filter): ${imageList.length - wfItemIds.size}`);
-        console.log(`  FINAL imageList.length: ${imageList.length}`);
         // Per-batch breakdown
         const byBatch: Record<string, number> = {};
         imageList.forEach(img => { const k = img.batchName || img.batchId || 'unknown'; byBatch[k] = (byBatch[k] || 0) + 1; });
-        console.log('[Library] images per batch:', byBatch);
 
         setBatches(finalBatches);
         setProductGroups(finalGroups);
@@ -469,7 +451,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
           groupKeys.forEach(gk => next.add(`img-group-${gk}`));
           return next;
         });
-        console.log(`[Library] loadAll DONE | batches=${finalBatches.length} groups=${finalGroups.length} images=${imageList.length} | ${new Date().toISOString()}`);
       }
     } catch (error) {
       console.error('[Library] loadAll ERROR', error);
@@ -486,7 +467,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
   // Create a brand-new empty batch in the database
   const handleCreateNewBatch = async () => {
-    console.log('[Library] action: createNewBatch');
     const name = await showPrompt('New Batch', 'Enter a batch name (leave blank to auto-name):');
     if (name === null) return;
     const batchNumber = `batch-${Date.now()}`;
@@ -517,7 +497,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   // Assign selected product-group images to a new batch
   const handleAssignSelectedToNewBatch = async () => {
     if (selectedItems.size === 0) return;
-    console.log(`[Library] action: assignSelectedToNewBatch | selected=${selectedItems.size}`);
     const name = await showPrompt('New Batch from Selection', 'Enter a name for the new batch:');
     if (name === null) return;
     const batchNumber = `batch-${Date.now()}`;
@@ -557,7 +536,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   // Assign selected product groups to an EXISTING batch (or create a new one inline)
   const handleAssignGroupsToExistingBatch = async () => {
     if (selectedItems.size === 0) return;
-    console.log(`[Library] action: assignGroupsToExistingBatch | selected=${selectedItems.size}`);
 
     const existingOptions = batches.map((b, i) => {
       const name = b.batch_name || `Batch ${new Date(b.created_at).toLocaleDateString()}`;
@@ -608,7 +586,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   // Group selected images (from Images view) into a new product group
   const handleGroupSelectedImages = async () => {
     if (selectedItems.size < 2) return;
-    console.log(`[Library] action: groupSelectedImages | selected=${selectedItems.size}`);
     const titleInput = await showPrompt('New Product Group', 'Enter a title (leave blank to auto-name):');
     if (titleInput === null) return;
     const title = titleInput.trim() || `Group ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
@@ -641,7 +618,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   // Assign selected images to an existing product group
   const handleAssignImagesToGroup = async () => {
     if (selectedItems.size === 0) return;
-    console.log(`[Library] action: assignImagesToGroup | selected=${selectedItems.size}`);
     const { data: products } = await supabase
       .from('products')
       .select('id, title')
@@ -668,7 +644,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   // Merge selected product groups into one
   const handleMergeGroups = async () => {
     if (selectedItems.size < 2) return;
-    console.log(`[Library] action: mergeGroups | selected=${selectedItems.size}`);
     const groupIds = Array.from(selectedItems);
     const selectedGroups = productGroups.filter(g => groupIds.includes(g.id));
     const savedGroups = selectedGroups.filter(g => g.isSaved);
@@ -745,7 +720,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   };
 
   const handleDelete = async (batchId: string) => {
-    console.log(`[Library] action: deleteBatch | batchId=${batchId}`);
     // Start deletion animation
     setDeletingItem({id: batchId, type: 'batch', progress: 0});
     setDeleteConfirm(null);
@@ -773,7 +747,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   };
 
   const handleDeleteGroup = async (groupId: string) => {
-    console.log(`[Library] action: deleteGroup | groupId=${groupId}`);
     // Start deletion animation
     setDeletingItem({id: groupId, type: 'group', progress: 0});
     setDeleteConfirm(null);
@@ -798,7 +771,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   };
 
   const handleDeleteImage = async (imageId: string, storagePath?: string) => {
-    console.log(`[Library] action: deleteImage | imageId=${imageId} storagePath=${storagePath}`);
     // Start deletion animation
     setDeletingItem({id: imageId, type: 'image', progress: 0});
     setDeleteConfirm(null);
@@ -823,7 +795,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   };
 
   const handleDuplicateBatch = async (batchId: string) => {
-    console.log(`[Library] action: duplicateBatch | batchId=${batchId}`);
     const newBatchId = await duplicateBatch(batchId);
     if (newBatchId) {
       await loadBatches();
@@ -831,7 +802,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   };
 
   const handleEditBatchName = async (batchId: string) => {
-    console.log(`[Library] action: editBatchName | batchId=${batchId} newName="${editBatchName}"`);
     if (!editBatchName.trim()) {
       setEditingBatch(null);
       return;
@@ -868,8 +838,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
   // Selection handlers
   const handleItemClick = (itemId: string, event: React.MouseEvent) => {
-    const action = selectedItems.has(itemId) ? 'deselect' : 'select';
-    console.log(`[Library] action: itemClick | ${action} id=${itemId} | shift=${event.shiftKey} | totalSelected=${selectedItems.size + (action === 'select' ? 1 : -1)}`);
     // Matches ImageGrouper behavior
     const newSelected = new Set(selectedItems);
     
@@ -893,13 +861,10 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   };
 
   const clearSelection = () => {
-    if (selectedItems.size > 0) console.log(`[Library] action: clearSelection | had ${selectedItems.size} selected`);
     setSelectedItems(new Set());
   };
 
   const selectAll = () => {
-    const count = viewMode === 'batches' ? batches.length : viewMode === 'groups' ? productGroups.length : images.length;
-    console.log(`[Library] action: selectAll | viewMode=${viewMode} | count=${count}`);
     if (viewMode === 'batches') {
       setSelectedItems(new Set(batches.map(b => b.id)));
     } else if (viewMode === 'groups') {
@@ -911,8 +876,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
   // Drag and drop handlers
   const handleDragStart = (itemId: string, event: React.DragEvent) => {
-    const multiCount = selectedItems.has(itemId) && selectedItems.size > 1 ? selectedItems.size : 1;
-    console.log(`[Library] action: dragStart | itemId=${itemId} | type=${viewMode} | moving=${multiCount}`);
     // Mark native drag as active — prevents rubber-band selection from starting
     isDraggingRef.current = true;
     // Cancel any rubber-band selection that may have started on mousedown
@@ -972,7 +935,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       return;
     }
     const imageIds = new Set(rawIds.split(',').map(id => id.trim()).filter(Boolean));
-    console.log(`[Library] action: dropImageOntoGroup | targetGroup=${targetGroupId} | images=${imageIds.size} | ungroup=${targetGroupId === 'no-group'}`);
     setDragOverItem(null);
     setDraggedItem(null);
     setDragType(null);
@@ -1087,7 +1049,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         ? Array.from(selectedItems)
         : [groupId]
     );
-    console.log(`[Library] action: dropGroupOntoBatch | targetBatch=${targetBatchId} | groups=${idsToMove.size} | unassign=${targetBatchId === 'no-batch'}`);
 
     // ── Optimistic local update ──────────────────────────────────────
     const targetBatch = targetBatchId === 'no-batch'

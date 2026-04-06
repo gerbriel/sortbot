@@ -68,15 +68,12 @@ export const fetchSavedProducts = async (_userId: string) => {
 
       if (!data || data.length === 0) break;
       allProducts.push(...data);
-      console.log(`[fetchSavedProducts] page from=${from} got ${data.length} rows`);
       if (data.length < PAGE) break; // last page
       from += PAGE;
     }
-    console.log(`[fetchSavedProducts] TOTAL products=${allProducts.length}`);
     // Log a breakdown by user_id so we can see cross-user data
     const byUser: Record<string, number> = {};
     allProducts.forEach((p: any) => { byUser[p.user_id ?? 'null'] = (byUser[p.user_id ?? 'null'] || 0) + 1; });
-    console.log('[fetchSavedProducts] breakdown by user_id:', byUser);
     return allProducts;
   } catch (error: any) {
     if (error?.name === 'AbortError') return []; // expected from React 18 Strict Mode cleanup
@@ -127,15 +124,12 @@ export const fetchSavedImages = async (_userId: string) => {
 
       if (!data || data.length === 0) break;
       allImages.push(...data);
-      console.log(`[fetchSavedImages] page from=${from} got ${data.length} rows`);
       if (data.length < PAGE) break; // last page
       from += PAGE;
     }
-    console.log(`[fetchSavedImages] TOTAL images=${allImages.length}`);
     // Log a breakdown by user_id (on the parent product) so we can spot cross-user rows
     const byUser: Record<string, number> = {};
     allImages.forEach((img: any) => { const uid = img.products?.user_id ?? img.user_id ?? 'null'; byUser[uid] = (byUser[uid] || 0) + 1; });
-    console.log('[fetchSavedImages] breakdown by product.user_id:', byUser);
     return allImages;
   } catch (error: any) {
     if (error?.name === 'AbortError') return []; // expected from React 18 Strict Mode cleanup
