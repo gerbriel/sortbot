@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { log } from '../lib/debugLogger';
 
 /**
  * Lazy-loading image with shimmer skeleton placeholder.
@@ -40,12 +41,14 @@ const LazyImg: React.FC<{
       retryCountRef.current = attempt;
       // Exponential backoff: 500ms, 1500ms, 4500ms
       const delay = 500 * Math.pow(3, attempt - 1);
+      log.img(`load error → retry ${attempt}/${MAX_RETRIES} in ${delay}ms | src=${src.split('/').pop()}`);
       retryTimerRef.current = setTimeout(() => {
         // Cache-bust forces a new request, bypassing any broken QUIC connection
         const base = src.split('?')[0];
         setActiveSrc(`${base}?t=${Date.now()}`);
       }, delay);
     } else {
+      log.img(`load failed after ${MAX_RETRIES} retries | src=${src.split('/').pop()}`);
       setLoaded(true);
       setErrored(true);
     }

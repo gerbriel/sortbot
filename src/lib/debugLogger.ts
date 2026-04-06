@@ -36,6 +36,7 @@ const COLOURS: Record<string, string> = {
   DB:        '#0284c7',
   Auth:      '#7c3aed',
   DOM:       '#94a3b8',
+  Img:       '#f97316',
   Error:     '#ef4444',
 };
 
@@ -70,6 +71,7 @@ export const log = {
   db:      (msg: string, ...d: unknown[]) => dbg('DB',      msg, ...d),
   auth:    (msg: string, ...d: unknown[]) => dbg('Auth',    msg, ...d),
   dom:     (msg: string, ...d: unknown[]) => dbg('DOM',     msg, ...d),
+  img:     (msg: string, ...d: unknown[]) => dbg('Img',     msg, ...d),
   error:   (msg: string, ...d: unknown[]) => dbg('Error',   msg, ...d),
 };
 

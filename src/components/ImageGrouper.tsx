@@ -12,11 +12,15 @@ import './ImageGrouper.css';
 function retryImg(e: React.SyntheticEvent<HTMLImageElement>) {
   const img = e.currentTarget;
   const attempt = parseInt(img.dataset.retry ?? '0', 10);
-  if (attempt >= 3) return; // give up, show broken placeholder
+  if (attempt >= 3) {
+    log.img(`load failed after 3 retries | src=${img.src.split('/').pop()?.split('?')[0]}`);
+    return; // give up, show broken placeholder
+  }
   img.dataset.retry = String(attempt + 1);
   const delay = 500 * Math.pow(3, attempt); // 500ms, 1500ms, 4500ms
   const originalSrc = img.dataset.src ?? img.src.split('?')[0];
   if (!img.dataset.src) img.dataset.src = img.src.split('?')[0];
+  log.img(`load error → retry ${attempt + 1}/3 in ${delay}ms | src=${originalSrc.split('/').pop()}`);
   setTimeout(() => { img.src = `${originalSrc}?t=${Date.now()}`; }, delay);
 }
 
