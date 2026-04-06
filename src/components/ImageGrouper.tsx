@@ -394,6 +394,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     } else {
       groupIds.forEach(id => next.add(id));
     }
+    log.grouper(`toggleGroupSelection | ${allSelected ? 'deselect' : 'select'} group | groupSize=${groupIds.length} totalSelected=${next.size}`);
     updateSelection(next);
   };
 
@@ -409,23 +410,27 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       if (fromIdx !== -1 && toIdx !== -1) {
         const [lo, hi] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
         for (let i = lo; i <= hi; i++) newSelected.add(ids[i]);
+        log.grouper(`toggleItemSelection | shift-range | from=${fromIdx} to=${toIdx} totalSelected=${newSelected.size}`);
         updateSelection(newSelected);
         return;
       }
     }
 
     // Ctrl/Cmd+click or plain click: toggle this item without clearing others
-    if (newSelected.has(itemId)) {
+    const wasSelected = newSelected.has(itemId);
+    if (wasSelected) {
       newSelected.delete(itemId);
     } else {
       newSelected.add(itemId);
       lastClickedSingleRef.current = itemId;
     }
+    log.grouper(`toggleItemSelection | ${wasSelected ? 'deselect' : 'select'} item=${itemId} | totalSelected=${newSelected.size}`);
     updateSelection(newSelected);
   };
 
   // Eject a single photo from its group back to the singles section
   const removePhotoFromGroup = (item: ClothingItem) => {
+    log.grouper(`removePhotoFromGroup | item=${item.id} fromGroup=${item.productGroup || item.id}`);
     const updated = groupedItems.map(i =>
       i.id === item.id ? { ...i, productGroup: i.id } : i
     );
