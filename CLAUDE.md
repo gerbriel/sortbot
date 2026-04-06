@@ -95,13 +95,13 @@ sortingapp/
 │   │   ├── ImageGrouper.css
 │   │   ├── CategoryZones.tsx      # Step 2 right panel. Drag groups onto categories. Loads categories from DB.
 │   │   ├── CategoryZones.css
-│   │   ├── ProductDescriptionGenerator.tsx  # Step 3. Voice recording, AI generation, field editing. 1616 lines.
+│   │   ├── ProductDescriptionGenerator.tsx  # Step 3. Voice recording, AI generation, field editing. 1636 lines. Has cursor-following magnifier lens on main preview image.
 │   │   ├── ProductDescriptionGenerator.css
 │   │   ├── ComprehensiveProductForm.tsx     # Sub-form within Step 3 for all product fields. No local state.
 │   │   ├── ComprehensiveProductForm.css
 │   │   ├── GoogleSheetExporter.tsx          # Step 4. Generates Shopify-format CSV and triggers download.
 │   │   ├── GoogleSheetExporter.css
-│   │   ├── Library.tsx            # Modal overlay. Shows all batches, groups, images. 2478 lines.
+│   │   ├── Library.tsx            # Modal overlay. Shows all batches, groups, images. 2478 lines. Batches displayed newest-first (client-side sort by updated_at DESC after fetch).
 │   │   ├── Library.css
 │   │   ├── CategoriesManager.tsx  # Modal for CRUD on user categories.
 │   │   ├── CategoriesManager.css
@@ -126,8 +126,8 @@ sortingapp/
 │   │   └── useUserPresence.ts     # Supabase Realtime presence hook. Broadcasts cursor, step, action. Not used in App.tsx.
 │   ├── lib/
 │   │   ├── supabase.ts            # Supabase client + full TypeScript Database type definitions for all tables.
-│   │   ├── workflowBatchService.ts  # CRUD for workflow_batches table. autoSaveWorkflowBatch, fetchWorkflowBatches, delete.
-│   │   ├── productService.ts      # CRUD for products + product_images tables. saveBatchToDatabase, updateProduct, syncGroupFieldsToDatabase.
+│   │   ├── workflowBatchService.ts  # CRUD for workflow_batches table. autoSaveWorkflowBatch, fetchWorkflowBatches (ordered updated_at DESC — newest first), delete.
+│   │   ├── productService.ts      # CRUD for products + product_images tables. saveBatchToDatabase, updateProduct, syncGroupFieldsToDatabase. getThumbnailUrl() returns plain CDN URL (no Supabase transform — requires paid plan).
 │   │   ├── libraryService.ts      # fetchSavedProducts, fetchSavedImages (paginated, 1000/page). Delete operations for Library.
 │   │   ├── exportLibraryService.ts  # Types and DB functions for export_batches + export_batch_items tables. Partially implemented.
 │   │   ├── categoriesService.ts   # CRUD for categories table. getCategories, createCategory, deleteCategory, reorderCategories.
@@ -283,7 +283,7 @@ The central runtime type. Has ~60 fields. Key fields:
 - `id: string` — UUID generated at upload time. Stable across all steps.
 - `file: File` — Raw File object. **Stripped by `slim()` before saving to DB.** null when restored from DB.
 - `preview: string` — Blob URL (upload time) or Supabase CDN URL (after upload). **Stripped by `slim()`.** Reconstructed from `storagePath` on restore.
-- `thumbnailUrl?: string` — Supabase Storage CDN URL with `transform` (300×300px, cover crop). Built at restore time from `storagePath`. Used by ImageGrouper card `<img>` tags. Falls back to `imageUrls[0]` for legacy items. **Stripped by `slim()` (not in the slim type) — OK, rebuilt on restore.**
+- `thumbnailUrl?: string` — Supabase Storage CDN URL (plain, no transform). Built at restore time from `storagePath` via `getThumbnailUrl()`. Used by ImageGrouper card `<img>` tags. Falls back to `imageUrls[0]` for legacy items. **Stripped by `slim()` (not in the slim type) — OK, rebuilt on restore.** Note: Supabase Storage image transforms (resize/crop) require the paid Pro plan — `getThumbnailUrl()` intentionally returns the plain CDN URL to avoid transform errors on the free tier.
 - `imageUrls?: string[]` — Array of full-resolution CDN URLs. Index 0 = primary image. **Stripped by `slim()`.** Reconstructed on restore.
 - `storagePath?: string` — Supabase Storage path. **Preserved by `slim()`.** The only reliable image reference after a restore.
 - `productGroup?: string` — ID of the group leader item. All items sharing a group card have the same value.
@@ -463,6 +463,8 @@ The auto-save stores only the most-progressed list as `processedItems`, with the
 ### `registerItemsInDB` uses delete-then-insert
 `product_images` rows for a batch are **deleted** before inserting fresh ones. This prevents stale row accumulation from sessions where the public URL changed. Do NOT change this back to upsert without understanding why it was changed. See commit `a14876d`.
 
+**Chunk size (`DELETE_CHUNK_SIZE = 100`):** The delete is done in chunks of 100 product IDs at a time. PostgREST has a URL length limit that causes a 400 error when `IN(...)` clause exceeds ~794 IDs. Chunking prevents this. Do NOT remove the chunking loop.
+
 ### `handleOpenBatch` double-fire guard
 `isOpeningBatchRef` prevents the function from running twice simultaneously (React StrictMode double-invokes). If you restructure this function, ensure the guard is still in place. The lock is released in `finally {}`.
 
@@ -606,7 +608,11 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 - ✅ `proxy.log` added to `.gitignore`
 - ✅ ~140 stale root-level `.md` files deleted; only `README.md`, `CLAUDE.md`, `CHANGELOG.md` remain
 - ✅ `.github/copilot-instructions.md` updated to point to `CLAUDE.md`
-- ✅ Batch open performance: `getThumbnailUrl()` (300px Supabase Storage transform) used for ImageGrouper card `<img>` tags; `loading="lazy"` on both bare `<img>` tags in ImageGrouper; state set immediately from `workflowItems` before DB product fetch so images render before descriptions load; `registerItemsInDB` skipped when re-opening the already-active batch
+- ✅ Batch open performance: `getThumbnailUrl()` (plain CDN URL) used for ImageGrouper card `<img>` tags; `loading="lazy"` on both bare `<img>` tags in ImageGrouper; state set immediately from `workflowItems` before DB product fetch so images render before descriptions load; `registerItemsInDB` skipped when re-opening the already-active batch
+- ✅ `getThumbnailUrl()` returns plain CDN URL — Supabase Storage transform API requires paid Pro plan; free-tier transform URLs return errors, so transform params are intentionally omitted
+- ✅ `registerItemsInDB` deletes chunked to 100 IDs at a time (`DELETE_CHUNK_SIZE = 100`) — PostgREST 400 URL-length limit hit with 794+ IDs in a single `IN()` clause
+- ✅ Library batches sorted newest-first: `fetchWorkflowBatches` uses `updated_at DESC`, Library client-side also sorts `finalBatches` by `updated_at` descending before `setBatches()`
+- ✅ Cursor-following magnifier lens on main preview image in Step 3 — circular 200×200px `.magnifier-lens` (position fixed, pointer-events none) follows cursor over the `preview-image-wrap` div, showing a 3× zoomed region via CSS `background-image`/`background-position`/`background-size: 300%`
 
 ---
 
