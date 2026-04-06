@@ -32,6 +32,11 @@ interface ImageGrouperProps {
 
 const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsChange, userId, onImageDeleted, onSelectionChange, onActionsReady }) => {
   const [groupedItems, setGroupedItems] = useState<ClothingItem[]>([]);
+  // Ref mirror so the initializeItems effect always reads the live groupedItems value
+  // without capturing a stale closure (the effect only depends on [items]).
+  const groupedItemsRef = useRef<ClothingItem[]>([]);
+  groupedItemsRef.current = groupedItems;
+
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [draggedItem, setDraggedItem] = useState<ClothingItem | null>(null);
   const [draggedFromGroup, setDraggedFromGroup] = useState<string | null>(null);
@@ -200,10 +205,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // IMPORTANT: Only process items that are genuinely new (not already in groupedItems).
   // This prevents the items prop feedback loop from resetting group state every time
   // onGrouped() is called (which triggers a re-render with updated items).
+  // Uses groupedItemsRef (not groupedItems state) so the closure always sees the
+  // latest local state — prevents stale-closure false-positives that made every
+  // group/ungroup action re-trigger the loading spinner.
   useEffect(() => {
     const initializeItems = async () => {
-      // Determine which items are already tracked locally
-      const existingIds = new Set(groupedItems.map(i => i.id));
+      // Read the LIVE groupedItems via ref (avoids stale closure from [items] dep)
+      const existingIds = new Set(groupedItemsRef.current.map(i => i.id));
 
       // Only process truly new items
       const newItems = items.filter(item => !existingIds.has(item.id));
