@@ -74,6 +74,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Lightbox state
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
+  // Thumbnail hover-zoom state
+  const [hoveredThumbSrc, setHoveredThumbSrc] = useState<string | null>(null);
+  const [hoveredThumbRect, setHoveredThumbRect] = useState<DOMRect | null>(null);
+
   const recognitionRef = useRef<any>(null);
   const isRecordingRef = useRef(false);
   const isStartingRef = useRef(false);
@@ -1216,7 +1220,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     onDragEnd={handleThumbDragEnd}
                     onDragLeave={() => setDragOverThumbId(null)}
                     onDoubleClick={() => setLightboxSrc(groupItem.preview || groupItem.imageUrls?.[0] || '')}
-                    title={`Image ${idx + 1}`}
+                    onMouseEnter={(e) => {
+                      setHoveredThumbSrc(groupItem.preview || groupItem.imageUrls?.[0] || '');
+                      setHoveredThumbRect((e.currentTarget as HTMLElement).getBoundingClientRect());
+                    }}
+                    onMouseLeave={() => { setHoveredThumbSrc(null); setHoveredThumbRect(null); }}
+                    title={`Image ${idx + 1} — double-click to expand`}
                   >
                     <LazyImg
                       src={groupItem.preview || groupItem.imageUrls?.[0] || ''}
@@ -1226,6 +1235,21 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   </div>
                 ))}
               </div>
+              {/* Hover zoom popup — positioned fixed relative to viewport */}
+              {hoveredThumbSrc && hoveredThumbRect && (
+                <div
+                  className="thumb-zoom-popup"
+                  style={{
+                    top: Math.min(
+                      hoveredThumbRect.top + window.scrollY,
+                      window.innerHeight + window.scrollY - 240
+                    ),
+                    left: hoveredThumbRect.right + 12 + window.scrollX,
+                  }}
+                >
+                  <img src={hoveredThumbSrc} alt="Zoom preview" />
+                </div>
+              )}
             </div>
           )}
 
