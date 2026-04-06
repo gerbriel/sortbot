@@ -1236,6 +1236,19 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     onDragEnd={handleThumbDragEnd}
                     onDragLeave={() => setDragOverThumbId(null)}
                     onDoubleClick={() => setLightboxSrc(groupItem.preview || groupItem.imageUrls?.[0] || '')}
+                    onMouseMove={(e) => {
+                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                      const xPct = (e.clientX - rect.left) / rect.width;
+                      const yPct = (e.clientY - rect.top) / rect.height;
+                      setMagnifier({
+                        src: groupItem.preview || groupItem.imageUrls?.[0] || '',
+                        x: e.clientX,
+                        y: e.clientY,
+                        bgX: xPct * 100,
+                        bgY: yPct * 100,
+                      });
+                    }}
+                    onMouseLeave={() => setMagnifier(null)}
                     title={`Image ${idx + 1} — double-click to expand`}
                   >
                     <LazyImg
@@ -1618,11 +1631,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         <div
           className="magnifier-lens"
           style={{
-            left: magnifier.x + 16,
-            top: magnifier.y - 100,
+            left: magnifier.x + 20,
+            top: magnifier.y,
             backgroundImage: `url(${magnifier.src})`,
             backgroundPosition: `${magnifier.bgX}% ${magnifier.bgY}%`,
-            backgroundSize: '300%',
+            backgroundSize: '500%',
           }}
         />
       )}

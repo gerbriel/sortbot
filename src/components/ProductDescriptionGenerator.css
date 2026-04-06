@@ -749,11 +749,11 @@
 .magnifier-lens {
   position: fixed;
   z-index: 8000;
-  width: 200px;
-  height: 200px;
-  border-radius: 50%;
-  border: 3px solid rgba(255, 255, 255, 0.7);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  width: 300px;
+  height: 300px;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
   pointer-events: none;
   background-repeat: no-repeat;
   transform: translate(0, -50%);
@@ -761,7 +761,7 @@
 }
 
 @keyframes zoomPopIn {
-  from { opacity: 0; transform: translate(0, -50%) scale(0.88); }
+  from { opacity: 0; transform: translate(0, -50%) scale(0.92); }
   to   { opacity: 1; transform: translate(0, -50%) scale(1); }
 }
 
