@@ -439,7 +439,8 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
       // ── 5. Commit all state at once ─────────────────────────────────────
       if (!isCancelled()) {
-        const finalBatches = Array.from(batchesById.values());
+        const finalBatches = Array.from(batchesById.values())
+          .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
         const finalGroups = Array.from(groupMap.values());
 
         // ── Diagnostic summary ──────────────────────────────────────────
