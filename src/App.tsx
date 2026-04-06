@@ -358,12 +358,21 @@ function App() {
                 const missingIds = liveItems
                   .filter((i: any) => !i.thumbnailUrl && !i.preview && !i.imageUrls?.[0])
                   .map((i: any) => i.id);
+                const missingGroupIds = [...new Set(
+                  liveItems
+                    .filter((i: any) => missingIds.includes(i.id))
+                    .map((i: any) => i.productGroup)
+                    .filter(Boolean)
+                )];
+                log.app(`startup restore | DB fallback | missingIds=${missingIds.length} distinctGroups=${missingGroupIds.length} sampleIds=${missingIds.slice(0,3).join(',')}`);
+
                 // Primary: look up product_images directly by product_id
-                const { data: dbImages } = await supabase
+                const { data: dbImages, error: dbImgErr } = await supabase
                   .from('product_images')
                   .select('product_id, image_url, storage_path, position')
                   .in('product_id', missingIds)
                   .order('position', { ascending: true });
+                log.app(`startup restore | DB fallback stage1 | rows=${dbImages?.length ?? 0}${dbImgErr ? ` err=${dbImgErr.message}` : ''}`);
 
                 // Secondary: for items still missing, look up their productGroup peers in product_images.
                 // Legacy items that were secondary photos in a group may share a productGroup with an item
@@ -385,21 +394,24 @@ function App() {
                   const groupIds = [...new Set(stillMissingItems
                     .map((i: any) => i.productGroup)
                     .filter(Boolean)
-                  )];
+                  )] as string[];
+                  log.app(`startup restore | DB fallback stage2 | stillMissing=${stillMissingItems.length} groupIds=${groupIds.length} sampleGroups=${groupIds.slice(0,3).join(',')}`);
                   if (groupIds.length > 0) {
                     // Fetch product_images for ALL items that share these productGroups,
                     // so we can map group leader → images and hand them to orphan items.
-                    const { data: groupProducts } = await supabase
+                    const { data: groupProducts, error: gpErr } = await supabase
                       .from('products')
                       .select('id, product_group')
                       .in('product_group', groupIds);
+                    log.app(`startup restore | DB fallback stage2 products | rows=${groupProducts?.length ?? 0}${gpErr ? ` err=${gpErr.message}` : ''}`);
                     if (groupProducts && groupProducts.length > 0) {
                       const groupMemberIds = groupProducts.map((p: any) => p.id);
-                      const { data: groupImages } = await supabase
+                      const { data: groupImages, error: giErr } = await supabase
                         .from('product_images')
                         .select('product_id, image_url, storage_path, position')
                         .in('product_id', groupMemberIds)
                         .order('position', { ascending: true });
+                      log.app(`startup restore | DB fallback stage2 images | rows=${groupImages?.length ?? 0}${giErr ? ` err=${giErr.message}` : ''}`);
                       if (groupImages && groupImages.length > 0) {
                         // Build a map: productGroup → image_url list (from any member that has images)
                         const groupImgMap = new Map<string, string[]>();
@@ -425,8 +437,14 @@ function App() {
                         }
                       }
                     }
+                  } else {
+                    log.app(`startup restore | DB fallback stage2 | SKIPPED — no productGroup set on missing items`);
                   }
                 }
+                const afterFallback = imgMap.size > 0
+                  ? liveItems.filter((i: any) => missingIds.includes(i.id) && !imgMap.has(i.id)).length
+                  : noUrlCount;
+                log.app(`startup restore | DB fallback result | imgMapSize=${imgMap.size} fixed=${noUrlCount - afterFallback} stillMissing=${afterFallback}`);
                 if (imgMap.size > 0) {
                   hydratedItems = liveItems.map((item: any) => {
                     if (item.thumbnailUrl || item.preview || item.imageUrls?.[0]) return item;
@@ -444,11 +462,7 @@ function App() {
                       thumbnailUrl: thumbUrl || urls[0] || reconstructed,
                     };
                   });
-                }
-                const afterFallback = hydratedItems.filter((i: any) => !i.thumbnailUrl && !i.preview && !i.imageUrls?.[0]).length;
-                if (noUrlCount !== afterFallback) {
-                  log.app(`startup restore | DB image fallback | fixed=${noUrlCount - afterFallback} stillMissing=${afterFallback}`);
-                  noUrlCount = afterFallback;
+                  noUrlCount = hydratedItems.filter((i: any) => !i.thumbnailUrl && !i.preview && !i.imageUrls?.[0]).length;
                 }
               }
 
