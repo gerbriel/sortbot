@@ -109,23 +109,20 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const processedItemsRef = useRef<ClothingItem[]>(processedItems);
   useEffect(() => { processedItemsRef.current = processedItems; }, [processedItems]);
 
-  // Memoize group calculation to avoid unnecessary recalculations
-  const { groupArray, currentGroup, currentItem } = useMemo(() => {
-    const productGroups = processedItems.reduce((groups, item) => {
+  // Helper: build group array from items with groups-first ordering
+  const buildGroupArray = (items: ClothingItem[]): ClothingItem[][] => {
+    const productGroups = items.reduce((groups, item) => {
       const groupId = item.productGroup || item.id;
-      if (!groups[groupId]) {
-        groups[groupId] = [];
-      }
+      if (!groups[groupId]) groups[groupId] = [];
       groups[groupId].push(item);
       return groups;
     }, {} as Record<string, ClothingItem[]>);
-    
-    // Sort: multi-image product groups first, single images last
-    const groupArray = Object.values(productGroups).sort((a, b) => {
-      const aIsGroup = a.length > 1 ? 0 : 1;
-      const bIsGroup = b.length > 1 ? 0 : 1;
-      return aIsGroup - bIsGroup;
-    });
+    return Object.values(productGroups).sort((a, b) => (a.length > 1 ? 0 : 1) - (b.length > 1 ? 0 : 1));
+  };
+
+  // Memoize group calculation to avoid unnecessary recalculations
+  const { groupArray, currentGroup, currentItem } = useMemo(() => {
+    const groupArray = buildGroupArray(processedItems);
     const currentGroup = groupArray[currentGroupIndex] || [];
     const currentItem = currentGroup[0];
     
@@ -236,17 +233,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         setProcessedItems(prev => {
           const updated = [...prev];
           
-          // Recalculate groups from updated items
-          const updatedGroups = updated.reduce((groups, item) => {
-            const groupId = item.productGroup || item.id;
-            if (!groups[groupId]) {
-              groups[groupId] = [];
-            }
-            groups[groupId].push(item);
-            return groups;
-          }, {} as Record<string, ClothingItem[]>);
-          
-          const updatedGroupArray = Object.values(updatedGroups);
+          // Recalculate groups from updated items (same sort order as main groupArray)
+          const updatedGroupArray = buildGroupArray(updated);
           const currentGroup = updatedGroupArray[currentGroupIndex];
           const currentItem = currentGroup[0];
           const currentDescription = currentItem.voiceDescription || '';
@@ -608,13 +596,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     // The actual state write uses setProcessedItems(prev=>) so it always
     // merges into the true latest state regardless of render timing.
     const latestItems = processedItemsRef.current;
-    const latestGroups = latestItems.reduce((groups, item) => {
-      const groupId = item.productGroup || item.id;
-      if (!groups[groupId]) groups[groupId] = [];
-      groups[groupId].push(item);
-      return groups;
-    }, {} as Record<string, ClothingItem[]>);
-    const latestGroupArray = Object.values(latestGroups);
+    const latestGroupArray = buildGroupArray(latestItems);
     const latestGroup = latestGroupArray[currentGroupIndex] || [];
     const latestItem = latestGroup[0];
 
