@@ -348,9 +348,10 @@ function App() {
                   thumbnailUrl,
                 };
               });
+              const noUrlCount = liveItems.filter((i: any) => !i.thumbnailUrl && !i.preview && !i.imageUrls?.[0]).length;
               if (liveItems.length) {
                 const restoredFrom = processedItems?.length ? 'processedItems' : sortedImages?.length ? 'sortedImages' : groupedImages?.length ? 'groupedImages' : 'uploadedImages';
-                log.app(`startup restore | HYDRATED | batchId=${savedBatchId} | rawItems=${rawItems.length} liveItems=${liveItems.length} | restoredFrom=${restoredFrom}`);
+                log.app(`startup restore | HYDRATED | batchId=${savedBatchId} | rawItems=${rawItems.length} liveItems=${liveItems.length} | restoredFrom=${restoredFrom}${noUrlCount ? ` | noUrl=${noUrlCount}` : ''}`);
                 setUploadedImages(liveItems);
                 setGroupedImages(liveItems);
                 setSortedImages(liveItems);
