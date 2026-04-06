@@ -3,6 +3,7 @@ import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
 import { Package, Image, ArrowDown, Check } from 'lucide-react';
 import LoadingProgress from './LoadingProgress';
+import { log } from '../lib/debugLogger';
 import './ImageGrouper.css';
 
 export interface ImageGrouperStats {
@@ -170,6 +171,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         });
       }
       
+      log.grouper(`rubberBandSelect | selected=${newSelected.size}`);
       setSelectedItems(newSelected);
       setIsSelecting(false);
       setSelectionStart(null);
@@ -480,6 +482,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       alert('Please select at least 2 items to group together');
       return;
     }
+    log.grouper(`createGroup | selected=${selectedItems.size}`);
 
     const groupId = crypto.randomUUID();
     const updated = groupedItems.map(item =>
@@ -499,6 +502,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       alert('Please select items to ungroup');
       return;
     }
+    log.grouper(`ungroupSelected | selected=${selectedItems.size}`);
 
     const updated = groupedItems.map(item =>
       selectedItems.has(item.id)
@@ -514,6 +518,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
   // Drag and Drop Handlers for Images
   const handleDragStart = (e: React.DragEvent, item: ClothingItem, fromGroup: string) => {
+    log.grouper(`dragStart | item=${item.id} fromGroup=${fromGroup}`);
     setDraggedItem(item);
     setDraggedFromGroup(fromGroup);
     // Set data for cross-component dragging (Step 2 -> Step 3)
@@ -581,6 +586,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         ? { ...item, productGroup: targetGroup }
         : item
     );
+    log.grouper(`drop | item=${movingItem.id} from=${sourceGroup} → to=${targetGroup}`);
 
     // If the source group is now down to 1 item, dissolve it back to a singleton
     const sourceGroupItems = afterMove.filter(i => (i.productGroup || i.id) === sourceGroup);
@@ -687,6 +693,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // Delete image handler
   const handleDeleteImage = async (item: ClothingItem) => {
     if (!confirm('Delete this image? This cannot be undone.')) return;
+    log.grouper(`deleteImage | item=${item.id} storagePath=${item.storagePath}`);
 
     // Delete from storage if it was uploaded
     if (item.storagePath) {
@@ -715,6 +722,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const handleDeleteSelected = async () => {
     if (selectedItems.size === 0) return;
     if (!confirm(`Delete ${selectedItems.size} selected image${selectedItems.size > 1 ? 's' : ''}? This cannot be undone.`)) return;
+    log.grouper(`deleteSelected | count=${selectedItems.size}`);
 
     const toDelete = groupedItems.filter(i => selectedItems.has(i.id));
     const storagePaths = toDelete.map(i => i.storagePath).filter(Boolean) as string[];

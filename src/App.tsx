@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
-import { Tag, Settings, Package, ShoppingBag, Link2, Scissors, X, Trash2 } from 'lucide-react';
+import { Tag, Settings, Package, ShoppingBag, Link2, Scissors, X, Trash2, Bug } from 'lucide-react';
+import { log, setDebugEnabled, isDebugEnabled } from './lib/debugLogger';
 import Auth from './components/Auth';
 import ImageUpload from './components/ImageUpload';
 import ImageGrouper from './components/ImageGrouper';
@@ -146,6 +147,13 @@ function App() {
   const [saving, setSaving] = useState(false);
   const [libraryRefreshTrigger, setLibraryRefreshTrigger] = useState(0);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [debugEnabled, setDebugEnabledState] = useState(isDebugEnabled);
+
+  const toggleDebug = () => {
+    const next = !debugEnabled;
+    setDebugEnabledState(next);
+    setDebugEnabled(next);
+  };
 
   // Ref to GoogleSheetExporter so Step 3 sidebar can trigger the download
   const exporterRef = useRef<GoogleSheetExporterHandle>(null);
@@ -356,6 +364,7 @@ function App() {
   }, []);
 
   const handleSignOut = async () => {
+    log.auth('handleSignOut');
     await supabase.auth.signOut();
     setUser(null);
     // Reset all data
@@ -401,6 +410,7 @@ function App() {
       alert('No products to save!');
       return;
     }
+    log.app(`handleSaveBatch | items=${processedItems.length} batchId=${currentBatchId}`);
 
     setSaving(true);
     setSaveMessage(null);
@@ -449,6 +459,7 @@ function App() {
   };
 
   const handleClearBatch = () => {
+    log.app(`handleClearBatch | items=${uploadedImages.length} batchId=${currentBatchId}`);
     if (confirm('Are you sure you want to clear this batch? Unsaved products will be lost.')) {
       setProcessedItems([]);
       setGroupedImages([]);
@@ -478,6 +489,7 @@ function App() {
   }
 
   const handleImagesUploaded = async (items: ClothingItem[]) => {
+    log.upload(`handleImagesUploaded | newItems=${items.length} totalAfter=${uploadedImages.length + items.length}`);
     // APPEND new images to existing ones (don't replace)
     const newImages = [...uploadedImages, ...items];
     setUploadedImages(newImages);
@@ -543,6 +555,7 @@ function App() {
   };
 
   const handleImagesSorted = async (items: ClothingItem[]) => {
+    log.app(`handleImagesSorted | items=${items.length} categories=${[...new Set(items.map(i => i.category).filter(Boolean))].join(', ')}`);
     setSortedImages(items);
     // Also update groupedImages so Step 2 shows the categories
     setGroupedImages(items);
@@ -598,6 +611,7 @@ function App() {
 
   // Apply a category preset to all currently selected items (sidebar preset picker)
   const handleApplyPreset = async (preset: CategoryPreset) => {
+    log.app(`handleApplyPreset | preset="${preset.display_name}" selectedCount=${selectedGroupItems.size}`);
     if (selectedGroupItems.size === 0) return;
     const selected = (groupedImages.length > 0 ? groupedImages : uploadedImages).filter(i => selectedGroupItems.has(i.id));
     if (selected.length === 0) return;
@@ -632,6 +646,8 @@ function App() {
   };
 
   const handleImagesGrouped = async (items: ClothingItem[]) => {
+    const groups = new Set(items.map(i => i.productGroup).filter(Boolean));
+    log.grouper(`handleImagesGrouped | items=${items.length} groups=${groups.size}`);
     // Preserve existing categories when updating groups
     const itemsWithCategories = items.map(item => {
       const existingItem = groupedImages.find(g => g.id === item.id);
@@ -706,6 +722,7 @@ function App() {
   };
 
   const handleItemsProcessed = (items: ClothingItem[]) => {
+    log.pdg(`handleItemsProcessed | items=${items.length}`);
     setProcessedItems(items);
     
     // Auto-save workflow state
@@ -795,8 +812,10 @@ function App() {
   const handleOpenBatch = async (batch: WorkflowBatch) => {
     // Guard against double-fire (React Strict Mode, or rapid double-click)
     if (isOpeningBatchRef.current) {
+      log.app(`handleOpenBatch SKIPPED — already in progress | batchId=${batch.id}`);
       return;
     }
+    log.app(`handleOpenBatch | batchId=${batch.id} batchName="${batch.batch_name}" step=${batch.current_step}`);
     isOpeningBatchRef.current = true;
     try {
     // ── Clear ALL current state first so nothing from the active session bleeds in ──
@@ -1228,6 +1247,14 @@ function App() {
             <span className="user-email">{user.email}</span>
             <button onClick={handleSignOut} className="button button-secondary">
               Sign Out
+            </button>
+            <button
+              onClick={toggleDebug}
+              className={`button button-debug-toggle${debugEnabled ? ' button-debug-on' : ''}`}
+              title={debugEnabled ? 'Debug logging ON — click to disable' : 'Debug logging OFF — click to enable'}
+            >
+              <Bug size={15} />
+              {debugEnabled ? 'Debug: ON' : 'Debug: OFF'}
             </button>
           </div>
         </div>

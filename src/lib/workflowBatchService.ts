@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { ClothingItem } from '../App';
+import { log } from './debugLogger';
 
 /**
  * Minimal item stored in workflow_state — only what's needed to restore
@@ -57,6 +58,7 @@ export async function fetchWorkflowBatches(): Promise<WorkflowBatch[]> {
 
     if (error) throw error;
     const rows = data || [];
+    log.service(`fetchWorkflowBatches | rows=${rows.length}`);
     return rows;
   } catch (error: any) {
     if (error?.name === 'AbortError') return []; // expected from React 18 Strict Mode cleanup

@@ -201,6 +201,37 @@
   background: var(--shopify-red-dark);
 }
 
+/* Debug toggle button */
+.button-debug-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  padding: 0.3rem 0.6rem;
+  background: var(--gray-100, #f3f4f6);
+  color: var(--gray-500, #6b7280);
+  border: 1px solid var(--gray-300, #d1d5db);
+  border-radius: var(--radius-md, 6px);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.button-debug-toggle:hover {
+  background: var(--gray-200, #e5e7eb);
+}
+
+.button-debug-on {
+  background: #fef3c7;
+  color: #d97706;
+  border-color: #fbbf24;
+}
+
+.button-debug-on:hover {
+  background: #fde68a;
+}
+
 /* Batch Actions */
 .batch-actions {
   display: flex;
