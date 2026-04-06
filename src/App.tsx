@@ -16,6 +16,9 @@ import CategoriesManager from './components/CategoriesManager';
 import { saveBatchToDatabase, getThumbnailUrl } from './lib/productService';
 import { autoSaveWorkflowBatch, type WorkflowBatch } from './lib/workflowBatchService';
 import type { BrandCategory } from './lib/brandCategorySystem';
+import { getCategoryPresets } from './lib/categoryPresetsService';
+import type { CategoryPreset } from './lib/categoryPresets';
+import { applyPresetToProductGroup } from './lib/applyPresetToGroup';
 import './App.css';
 
 export interface ClothingItem {
@@ -133,6 +136,7 @@ function App() {
   const [processedItems, setProcessedItems] = useState<ClothingItem[]>([]);
   const [selectedGroupItems, setSelectedGroupItems] = useState<Set<string>>(new Set());
   const [grouperActions, setGrouperActions] = useState<GrouperActions | null>(null);
+  const [categoryPresets, setCategoryPresets] = useState<CategoryPreset[]>([]);
   const [showLibrary, setShowLibrary] = useState(false);
   // Ref mirror so the autoSave closure (inside setTimeout) can read the live value
   // without capturing a stale boolean from the render where autoSave was scheduled.
@@ -162,6 +166,23 @@ function App() {
 
   // Keep showLibraryRef in sync so the autoSave closure always reads the live value
   useEffect(() => { showLibraryRef.current = showLibrary; }, [showLibrary]);
+
+  // Load category presets once the user is known
+  useEffect(() => {
+    if (!user) return;
+    getCategoryPresets()
+      .then(data => setCategoryPresets(data))
+      .catch(err => console.warn('[App] getCategoryPresets failed:', err));
+  }, [user]);
+
+  // Re-load presets whenever the CategoryPresetsManager modal closes (presets may have changed)
+  useEffect(() => {
+    if (showCategoryPresets || !user) return;
+    getCategoryPresets()
+      .then(data => setCategoryPresets(data))
+      .catch(() => {/* ignore */});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCategoryPresets]);
 
   // Register restored workflow items in products + product_images so Library sees them.
   // Called after startup restore and handleOpenBatch. No-ops if rows already exist.
@@ -589,6 +610,41 @@ function App() {
         setLibraryRefreshTrigger(prev => prev + 1);
       }
     }
+  };
+
+  // Apply a category preset to all currently selected items (sidebar preset picker)
+  const handleApplyPreset = async (preset: CategoryPreset) => {
+    if (selectedGroupItems.size === 0) return;
+    const selected = (groupedImages.length > 0 ? groupedImages : uploadedImages).filter(i => selectedGroupItems.has(i.id));
+    if (selected.length === 0) return;
+
+    // Use the preset's product_type as the category name (same convention as applyPresetToProductGroup)
+    const categoryName = preset.product_type || preset.category_name;
+
+    // Group selected items by their productGroup so we apply per-group
+    const groupMap: Record<string, ClothingItem[]> = {};
+    selected.forEach(item => {
+      const gid = item.productGroup || item.id;
+      if (!groupMap[gid]) groupMap[gid] = [];
+      groupMap[gid].push(item);
+    });
+
+    // Apply preset to each group
+    const patchedById: Record<string, ClothingItem> = {};
+    for (const groupItems of Object.values(groupMap)) {
+      const applied = await applyPresetToProductGroup(groupItems, categoryName);
+      applied.forEach(item => { patchedById[item.id] = item; });
+    }
+
+    // Merge patches back into the full items list
+    const baseItems = groupedImages.length > 0 ? groupedImages : uploadedImages;
+    const updatedItems = baseItems.map(item =>
+      patchedById[item.id] ? { ...item, ...patchedById[item.id] } : item
+    );
+
+    // Route through the normal categorization path so all downstream state updates
+    await handleImagesSorted(updatedItems);
+    setSelectedGroupItems(new Set());
   };
 
   const handleImagesGrouped = async (items: ClothingItem[]) => {
@@ -1354,6 +1410,26 @@ function App() {
                     >
                       <Trash2 size={16} /> Delete Selected ({grouperActions.selectedCount})
                     </button>
+                  </div>
+                )}
+                {/* Category Preset picker — shown when items are selected */}
+                {selectedGroupItems.size > 0 && categoryPresets.length > 0 && (
+                  <div className="grouper-preset-picker">
+                    <p className="grouper-preset-label">
+                      <Tag size={13} /> Apply preset to {selectedGroupItems.size} selected
+                    </p>
+                    <div className="grouper-preset-buttons">
+                      {categoryPresets.map(preset => (
+                        <button
+                          key={preset.id}
+                          className="button button-preset"
+                          onClick={() => handleApplyPreset(preset)}
+                          title={`Apply "${preset.display_name}" preset — sets category, shipping defaults & SEO template`}
+                        >
+                          {preset.display_name}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
