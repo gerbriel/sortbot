@@ -282,6 +282,23 @@
   to { transform: rotate(360deg); }
 }
 
+/* Grouping action buttons rendered in right sidebar (Step 2) */
+.grouper-actions-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.grouper-actions-sidebar .button {
+  width: 100%;
+  justify-content: center;
+  font-size: 0.82rem;
+  padding: 0.45rem 0.75rem;
+}
+
 /* Mobile Responsiveness */
 @media (max-width: 1024px) {
   .app-main {
