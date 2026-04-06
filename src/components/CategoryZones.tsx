@@ -19,7 +19,8 @@ import {
   Heart,
   Star,
   Zap,
-  GripVertical
+  GripVertical,
+  X
 } from 'lucide-react';
 import './CategoryZones.css';
 
@@ -248,6 +249,54 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
   const handleCategoryDragLeave = () => setDragOverCategory(null);
 
   // ══════════════════════════════════════════════════════════════════════════
+  // Clear-category handler (removes category from selected or dragged group)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const [dragOverClear, setDragOverClear] = useState(false);
+
+  const handleClearCategory = async (e?: React.DragEvent) => {
+    // If called from a drop, try to get the group from drag data first
+    let productGroup: string | undefined;
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        const data = JSON.parse(e.dataTransfer.getData('application/json'));
+        if (data.action === 'categorize') productGroup = data.productGroup;
+        else if (data.source === 'ImageGrouper') productGroup = data.productGroup || data.item?.productGroup || data.item?.id;
+      } catch { /* ignore */ }
+      if (!productGroup && catDraggedItem) productGroup = catDraggedItem.productGroup || catDraggedItem.id;
+    }
+
+    // If items are selected (click path or drop with selection), clear all selected
+    if (selectedItemIds && selectedItemIds.size > 0) {
+      const updatedMap = { ...groupsMap };
+      Object.keys(updatedMap).forEach(gid => {
+        updatedMap[gid] = updatedMap[gid].map(item =>
+          selectedItemIds.has(item.id) ? { ...item, category: undefined } : item
+        );
+      });
+      emitReordered(groupOrderRef.current, updatedMap);
+      onCategoryAssigned?.();
+      setCatDraggedItem(null);
+      setDragOverClear(false);
+      return;
+    }
+
+    // Drop path without selection — clear the dragged group
+    if (productGroup) {
+      const updatedMap = { ...groupsMap };
+      if (updatedMap[productGroup]) {
+        updatedMap[productGroup] = updatedMap[productGroup].map(item => ({ ...item, category: undefined }));
+      }
+      emitReordered(groupOrderRef.current, updatedMap);
+      onCategoryAssigned?.();
+    }
+    setCatDraggedItem(null);
+    setDragOverClear(false);
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
   // Category-click handler (click category zone with items selected in Step 2)
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -444,6 +493,20 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
                 </span>
               </div>
             ))}
+            {/* Clear Category zone */}
+            <div
+              className={`category-zone category-zone-clear ${dragOverClear ? 'drag-over-clear' : ''}${selectedItemIds && selectedItemIds.size > 0 ? ' clickable' : ''}`}
+              onDragOver={(e) => { e.preventDefault(); setDragOverClear(true); }}
+              onDragLeave={() => setDragOverClear(false)}
+              onDrop={(e) => handleClearCategory(e)}
+              onClick={() => handleClearCategory()}
+            >
+              <span className="category-icon"><X size={compactMode ? 20 : 32} /></span>
+              <span className="category-name">Clear Category</span>
+              <span className="category-count">
+                ({items.filter(i => i.category).length})
+              </span>
+            </div>
           </div>
         )}
       </div>
