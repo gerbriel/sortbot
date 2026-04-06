@@ -215,16 +215,21 @@ function App() {
         // This prevents stale rows accumulating when image_url changes between
         // sessions (e.g. storage URL regenerated), which the upsert conflict key
         // can't catch — it only matches (product_id, image_url) exactly.
+        // Chunk into groups of 100 to avoid PostgREST URL length limits (400 error)
+        // that occur when passing hundreds of IDs in a single IN() clause.
         const productIds = registerable.map(i => i.id);
-        const { error: delErr } = await supabase
-          .from('product_images')
-          .delete()
-          .in('product_id', productIds);
-        if (delErr) {
-          console.warn('[App] registerItemsInDB | product_images delete error:', delErr.message);
-        } else {
-          console.log(`[App] registerItemsInDB | deleted old product_images for ${productIds.length} products`);
+        const DELETE_CHUNK_SIZE = 100;
+        for (let i = 0; i < productIds.length; i += DELETE_CHUNK_SIZE) {
+          const chunk = productIds.slice(i, i + DELETE_CHUNK_SIZE);
+          const { error: delErr } = await supabase
+            .from('product_images')
+            .delete()
+            .in('product_id', chunk);
+          if (delErr) {
+            console.warn('[App] registerItemsInDB | product_images delete error:', delErr.message);
+          }
         }
+        console.log(`[App] registerItemsInDB | deleted old product_images for ${productIds.length} products`);
 
         const { error: imgErr, count: imgCount } = await supabase.from('product_images').insert(
           productImageRows,
