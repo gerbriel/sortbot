@@ -73,49 +73,72 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // even though it was captured during the render that started the drag.
   const onSelectionChangeRef = useRef(onSelectionChange);
   onSelectionChangeRef.current = onSelectionChange;
-  
+
+  // Refs that let the rubber-band useEffect read live state without being in the dep array.
+  // This is critical: every setSelectionBox() call would otherwise re-register mousemove/mouseup
+  // listeners on every pixel of movement, causing event drops and an unreliable drag.
+  const selectionStartRef = useRef(selectionStart);
+  selectionStartRef.current = selectionStart;
+  const selectionBoxRef = useRef(selectionBox);
+  selectionBoxRef.current = selectionBox;
+  const selectionThresholdMetRef = useRef(selectionThresholdMet);
+  selectionThresholdMetRef.current = selectionThresholdMet;
+  const activeContainerRef = useRef(activeContainer);
+  activeContainerRef.current = activeContainer;
+  const selectedItemsRef = useRef(selectedItems);
+  selectedItemsRef.current = selectedItems;
+  // groupedItemsRef already mirrors groupedItems on every render (defined at line ~38)
+
   const SELECTION_THRESHOLD = 5; // pixels - must move this much to activate selection
 
-  // Global mouse handlers for selection
+  // Global mouse handlers for rubber-band selection.
+  //
+  // CRITICAL: dep array is [isSelecting] ONLY.
+  // All mutable values (selectionStart, selectionBox, selectedItems, etc.) are read
+  // through refs that are updated every render. If those values were in the dep array,
+  // every setSelectionBox() call during a drag would re-register the listeners on every
+  // pixel of movement — causing dropped events and making the selector feel unreliable.
   useEffect(() => {
     if (!isSelecting) return;
 
     const handleGlobalMouseMove = (e: MouseEvent) => {
-      if (!selectionStart || !currentContainerRef.current) return;
-      
+      const start = selectionStartRef.current;
+      if (!start || !currentContainerRef.current) return;
+
       const containerRef = currentContainerRef.current;
       const rect = containerRef.getBoundingClientRect();
       const currentX = e.clientX - rect.left + containerRef.scrollLeft;
       const currentY = e.clientY - rect.top + containerRef.scrollTop;
-      
+
       // Calculate distance moved
       const distanceMoved = Math.sqrt(
-        Math.pow(currentX - selectionStart.x, 2) + 
-        Math.pow(currentY - selectionStart.y, 2)
+        Math.pow(currentX - start.x, 2) +
+        Math.pow(currentY - start.y, 2)
       );
-      
+
       // Only show selection box if moved beyond threshold
       if (distanceMoved < SELECTION_THRESHOLD) {
-        return; // Don't create selection box yet
+        return;
       }
-      
-      // Threshold met - activate selection
-      if (!selectionThresholdMet) {
+
+      // Threshold met — activate selection box (idempotent setState is fine here)
+      if (!selectionThresholdMetRef.current) {
         setSelectionThresholdMet(true);
       }
-      
-      // Calculate selection box - ensure positive dimensions
-      const x = Math.min(selectionStart.x, currentX);
-      const y = Math.min(selectionStart.y, currentY);
-      const width = Math.abs(currentX - selectionStart.x);
-      const height = Math.abs(currentY - selectionStart.y);
-      
+
+      // Calculate selection box — ensure positive dimensions
+      const x = Math.min(start.x, currentX);
+      const y = Math.min(start.y, currentY);
+      const width = Math.abs(currentX - start.x);
+      const height = Math.abs(currentY - start.y);
+
       setSelectionBox({ x, y, width, height });
     };
 
     const handleGlobalMouseUp = (e: MouseEvent) => {
       // Only perform selection if threshold was met
-      if (!selectionBox || !currentContainerRef.current || !selectionThresholdMet) {
+      const box = selectionBoxRef.current;
+      if (!box || !currentContainerRef.current || !selectionThresholdMetRef.current) {
         setIsSelecting(false);
         setSelectionStart(null);
         setSelectionBox(null);
@@ -126,12 +149,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       }
 
       const containerRef = currentContainerRef.current;
-      
+      const container = activeContainerRef.current;
+
       // In the singles section: rubber-band selects individual items.
       // In the groups section: rubber-band selects whole group cards.
-      const newSelected = new Set(e.shiftKey ? selectedItems : new Set<string>());
+      const newSelected = new Set(e.shiftKey ? selectedItemsRef.current : new Set<string>());
 
-      if (activeContainer === 'groups') {
+      if (container === 'groups') {
         // Select whole group cards that intersect the rubber-band
         const groupCards = containerRef.querySelectorAll<HTMLElement>('.product-group-card[data-group-id]');
         groupCards.forEach((element) => {
@@ -140,16 +164,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           const itemX = itemRect.left - containerRect.left + containerRef.scrollLeft;
           const itemY = itemRect.top - containerRect.top + containerRef.scrollTop;
           const intersects = !(
-            selectionBox.x + selectionBox.width < itemX ||
-            selectionBox.x > itemX + itemRect.width ||
-            selectionBox.y + selectionBox.height < itemY ||
-            selectionBox.y > itemY + itemRect.height
+            box.x + box.width < itemX ||
+            box.x > itemX + itemRect.width ||
+            box.y + box.height < itemY ||
+            box.y > itemY + itemRect.height
           );
           if (intersects) {
             const gId = element.getAttribute('data-group-id');
             if (gId) {
               // Add all photo IDs in this group
-              groupedItems
+              groupedItemsRef.current
                 .filter(i => (i.productGroup || i.id) === gId)
                 .forEach(i => newSelected.add(i.id));
             }
@@ -164,10 +188,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           const itemX = itemRect.left - containerRect.left + containerRef.scrollLeft;
           const itemY = itemRect.top - containerRect.top + containerRef.scrollTop;
           const intersects = !(
-            selectionBox.x + selectionBox.width < itemX ||
-            selectionBox.x > itemX + itemRect.width ||
-            selectionBox.y + selectionBox.height < itemY ||
-            selectionBox.y > itemY + itemRect.height
+            box.x + box.width < itemX ||
+            box.x > itemX + itemRect.width ||
+            box.y + box.height < itemY ||
+            box.y > itemY + itemRect.height
           );
           if (intersects) {
             const itemId = element.getAttribute('data-item-id');
@@ -175,7 +199,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           }
         });
       }
-      
+
       log.grouper(`rubberBandSelect | selected=${newSelected.size}`);
       setSelectedItems(newSelected);
       onSelectionChangeRef.current?.(newSelected);
@@ -194,7 +218,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       document.removeEventListener('mousemove', handleGlobalMouseMove);
       document.removeEventListener('mouseup', handleGlobalMouseUp);
     };
-  }, [isSelecting, selectionStart, selectionBox, selectedItems, groupedItems, selectionThresholdMet]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSelecting]);
 
   // Click-outside: deselect everything when clicking on neutral canvas area.
   // IMPORTANT: Do NOT clear selection when the user clicks inside the CategoryZones
