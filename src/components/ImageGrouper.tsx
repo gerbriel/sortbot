@@ -921,11 +921,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   onDragOver={(e) => handleDragOver(e, itemGroupId)}
                   onDrop={(e) => handleDrop(e, itemGroupId)}
                   onDragLeave={handleDragLeave}
-                  onClick={(e) => {
+                  onMouseDown={(e) => {
+                    // Stop propagation so the container's rubber-band handler doesn't fire.
+                    // Handle selection on mousedown so dragging a card still registers the selection
+                    // even if the drag cancels the subsequent click event.
+                    e.stopPropagation();
                     if (!(e.target as HTMLElement).closest('.delete-image-btn')) {
                       toggleItemSelection(item.id, e);
                     }
                   }}
+                  onClick={(e) => e.stopPropagation()}
                   onDoubleClick={() => setLightboxSrc(item.preview || item.imageUrls?.[0] || '')}
                 >
                   {item.category && (
@@ -1028,12 +1033,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 }}
                 onDrop={(e) => handleDrop(e, groupId)}
                 onDragLeave={handleDragLeave}
-                onClick={(e) => {
-                  // Clicking anywhere on the group card (not a button) selects the whole group
+                onMouseDown={(e) => {
+                  // Handle selection on mousedown so dragging still registers the selection
+                  // even if the drag cancels the subsequent click event.
+                  e.stopPropagation();
                   if (!(e.target as HTMLElement).closest('button')) {
                     toggleGroupSelection(groupId, items);
                   }
                 }}
+                onClick={(e) => e.stopPropagation()}
               >
                 {items[0].category && (
                   <div className="category-indicator" style={{ display: 'none' }}>
