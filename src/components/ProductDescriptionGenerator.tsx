@@ -78,6 +78,22 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const [magnifier, setMagnifier] = useState<{ src: string; x: number; y: number; bgX: number; bgY: number } | null>(null);
   const mainPreviewRef = useRef<HTMLDivElement | null>(null);
 
+  // Magnifier settings — persisted to localStorage so they survive navigation
+  const [magnifierSettings, setMagnifierSettings] = useState<{ size: number; zoom: number; enabled: boolean }>(() => {
+    try {
+      const saved = localStorage.getItem('sortbot_magnifier_settings');
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return { size: 360, zoom: 5, enabled: true };
+  });
+  const updateMagnifierSettings = (patch: Partial<typeof magnifierSettings>) => {
+    setMagnifierSettings(prev => {
+      const next = { ...prev, ...patch };
+      try { localStorage.setItem('sortbot_magnifier_settings', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
+
   const recognitionRef = useRef<any>(null);
   const isRecordingRef = useRef(false);
   const isStartingRef = useRef(false);
@@ -1198,6 +1214,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             className="preview-image-wrap"
             ref={mainPreviewRef}
             onMouseMove={(e) => {
+              if (!magnifierSettings.enabled) return;
               const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
               const xPct = (e.clientX - rect.left) / rect.width;
               const yPct = (e.clientY - rect.top) / rect.height;
@@ -1237,6 +1254,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     onDragLeave={() => setDragOverThumbId(null)}
                     onDoubleClick={() => setLightboxSrc(groupItem.preview || groupItem.imageUrls?.[0] || '')}
                     onMouseMove={(e) => {
+                      if (!magnifierSettings.enabled) return;
                       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                       const xPct = (e.clientX - rect.left) / rect.width;
                       const yPct = (e.clientY - rect.top) / rect.height;
@@ -1261,6 +1279,45 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               </div>
             </div>
           )}
+
+          {/* Magnifier settings controls */}
+          <div className="magnifier-controls">
+            <span className="magnifier-controls-label">🔍 Magnifier</span>
+            <label className="magnifier-toggle">
+              <input
+                type="checkbox"
+                checked={magnifierSettings.enabled}
+                onChange={(e) => { setMagnifier(null); updateMagnifierSettings({ enabled: e.target.checked }); }}
+              />
+              <span>{magnifierSettings.enabled ? 'On' : 'Off'}</span>
+            </label>
+            <label className="magnifier-slider-label">
+              Size
+              <input
+                type="range"
+                min={160}
+                max={520}
+                step={40}
+                value={magnifierSettings.size}
+                disabled={!magnifierSettings.enabled}
+                onChange={(e) => updateMagnifierSettings({ size: Number(e.target.value) })}
+              />
+              <span className="magnifier-slider-value">{magnifierSettings.size}px</span>
+            </label>
+            <label className="magnifier-slider-label">
+              Zoom
+              <input
+                type="range"
+                min={2}
+                max={10}
+                step={1}
+                value={magnifierSettings.zoom}
+                disabled={!magnifierSettings.enabled}
+                onChange={(e) => updateMagnifierSettings({ zoom: Number(e.target.value) })}
+              />
+              <span className="magnifier-slider-value">{magnifierSettings.zoom}×</span>
+            </label>
+          </div>
 
           {/* Navigation — cycles through product groups */}
           <div className="preview-nav-controls">
@@ -1627,15 +1684,17 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       </div>
 
       {/* Cursor-following magnifier lens */}
-      {magnifier && (
+      {magnifier && magnifierSettings.enabled && (
         <div
           className="magnifier-lens"
           style={{
+            width: magnifierSettings.size,
+            height: magnifierSettings.size,
             left: magnifier.x + 20,
             top: magnifier.y,
             backgroundImage: `url(${magnifier.src})`,
             backgroundPosition: `${magnifier.bgX}% ${magnifier.bgY}%`,
-            backgroundSize: '500%',
+            backgroundSize: `${magnifierSettings.zoom * 100}%`,
           }}
         />
       )}
