@@ -168,6 +168,21 @@ function App() {
   const isOpeningBatchRef = useRef(false);
   // Debounce timer for auto-save — prevents a PATCH on every rapid grouping action
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Debounce timer for the products-table upsert in handleImagesGrouped.
+  // Separate from autoSaveTimerRef so the workflow_state save and the products upsert
+  // can debounce independently. Both fire after 2 s of inactivity.
+  const groupUpsertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Ref mirrors of the four item arrays so async handlers always read live state
+  // without capturing stale closures. Updated every render.
+  const sortedImagesRef = useRef<ClothingItem[]>([]);
+  sortedImagesRef.current = sortedImages;
+  const groupedImagesRef = useRef<ClothingItem[]>([]);
+  groupedImagesRef.current = groupedImages;
+  const processedItemsRef = useRef<ClothingItem[]>([]);
+  processedItemsRef.current = processedItems;
+  const uploadedImagesRef = useRef<ClothingItem[]>([]);
+  uploadedImagesRef.current = uploadedImages;
   const [currentBatchNumber, setCurrentBatchNumber] = useState<string>(() => {
     return localStorage.getItem('sortbot_current_batch_number') || `batch-${Date.now()}`;
   });
@@ -667,9 +682,12 @@ function App() {
   const handleImagesGrouped = async (items: ClothingItem[]) => {
     const groups = new Set(items.map(i => i.productGroup).filter(Boolean));
     log.grouper(`handleImagesGrouped | items=${items.length} groups=${groups.size}`);
-    // Preserve existing categories when updating groups
+    // Preserve existing categories when updating groups.
+    // Read from groupedImagesRef (not groupedImages closure) so rapid calls always
+    // see the latest categories, not a stale snapshot from the render that fired.
+    const liveCurrent = groupedImagesRef.current;
     const itemsWithCategories = items.map(item => {
-      const existingItem = groupedImages.find(g => g.id === item.id);
+      const existingItem = liveCurrent.find(g => g.id === item.id);
       return existingItem?.category ? { ...item, category: existingItem.category } : item;
     });
     
@@ -677,15 +695,19 @@ function App() {
 
     // Keep uploadedImages in sync — remove any items that were deleted in Step 2
     const remainingIds = new Set(itemsWithCategories.map(i => i.id));
-    const prunedUploaded = uploadedImages.filter(i => remainingIds.has(i.id));
-    if (prunedUploaded.length !== uploadedImages.length) {
+    const prunedUploaded = uploadedImagesRef.current.filter(i => remainingIds.has(i.id));
+    if (prunedUploaded.length !== uploadedImagesRef.current.length) {
       setUploadedImages(prunedUploaded);
     }
     
     // Sync sortedImages by FILTERING DOWN to only IDs still in itemsWithCategories,
     // then merging in the latest grouping state. This ensures Step-2 deletes propagate
     // to Steps 3 & 4 instead of re-inflating the old full set.
-    const updatedSorted = sortedImages
+    // Read from sortedImagesRef so we always merge against the LATEST sorted state,
+    // not a stale closure value (critical when handleImagesSorted just ran and set
+    // sortedImages, but handleImagesGrouped was already captured before that update).
+    const liveSorted = sortedImagesRef.current;
+    const updatedSorted = liveSorted
       .filter(s => remainingIds.has(s.id))
       .map(s => {
         const grouped = itemsWithCategories.find(i => i.id === s.id);
@@ -710,45 +732,57 @@ function App() {
 
     // Broadcast action for real-time collaboration
 
-    // Auto-save product groups to database
+    // Debounced DB upsert: update product_group for all items in the products table.
+    // Debounced separately from autoSave so rapid group/ungroup actions don't fire
+    // a 800-item Supabase upsert on every click — only after 2 s of inactivity.
     if (!user) return;
+    if (groupUpsertTimerRef.current) clearTimeout(groupUpsertTimerRef.current);
+    groupUpsertTimerRef.current = setTimeout(async () => {
+      const allRegisterable = itemsWithCategories.filter(i => i.imageUrls?.[0] || i.storagePath);
+      if (allRegisterable.length === 0) return;
 
-    // Upsert ALL items' products rows with their current productGroup so the Library
-    // Groups tab stays in sync with every drag/group change in Step 2.
-    // Accept items with imageUrls[0] OR storagePath (same as registerItemsInDB).
-    const allRegisterable = itemsWithCategories.filter(i => i.imageUrls?.[0] || i.storagePath);
-    if (allRegisterable.length > 0) {
-      const { error: grpErr } = await supabase.from('products').upsert(
-        allRegisterable.map(item => ({
-          id: item.id,
-          user_id: user.id,
-          batch_id: currentBatchId,
-          product_group: item.productGroup || item.id,
-          title: item.seoTitle || null,
-          status: 'Draft',
-        })),
-        { onConflict: 'id', ignoreDuplicates: false }
-      );
-      if (grpErr) {
-        console.warn('[App] handleImagesGrouped | products upsert error:', grpErr.message);
-      } else {
+      // Upsert in chunks of 100 to avoid PostgREST URL-length limit
+      const CHUNK = 100;
+      let hadError = false;
+      for (let i = 0; i < allRegisterable.length; i += CHUNK) {
+        const chunk = allRegisterable.slice(i, i + CHUNK);
+        const { error: grpErr } = await supabase.from('products').upsert(
+          chunk.map(item => ({
+            id: item.id,
+            user_id: user.id,
+            batch_id: currentBatchIdRef.current,
+            product_group: item.productGroup || item.id,
+            title: item.seoTitle || null,
+            status: 'Draft',
+          })),
+          { onConflict: 'id', ignoreDuplicates: false }
+        );
+        if (grpErr) {
+          console.warn('[App] handleImagesGrouped | products upsert error:', grpErr.message);
+          hadError = true;
+          break;
+        }
+      }
+      if (!hadError) {
         // Prune any stale products rows for this batch that are no longer in the current item set.
-        // This clears out orphaned rows from previous sessions / deleted items.
-        if (currentBatchId) await pruneStaleProducts(currentBatchId, allRegisterable.map(i => i.id));
+        if (currentBatchIdRef.current) {
+          await pruneStaleProducts(currentBatchIdRef.current, allRegisterable.map(i => i.id));
+        }
         setLibraryRefreshTrigger(prev => prev + 1);
       }
-    }
+    }, 2000);
   };
 
   const handleItemsProcessed = (items: ClothingItem[]) => {
     log.pdg(`handleItemsProcessed | items=${items.length}`);
     setProcessedItems(items);
     
-    // Auto-save workflow state
+    // Auto-save workflow state — read live arrays from refs, not the closure,
+    // so rapid PDG edits always save the latest groupedImages/sortedImages.
     autoSaveWorkflow({
-      uploadedImages,
-      groupedImages,
-      sortedImages,
+      uploadedImages: uploadedImagesRef.current,
+      groupedImages: groupedImagesRef.current,
+      sortedImages: sortedImagesRef.current,
       processedItems: items,
     });
 
