@@ -1248,17 +1248,19 @@ function App() {
             <button onClick={handleSignOut} className="button button-secondary">
               Sign Out
             </button>
-            <button
-              onClick={toggleDebug}
-              className={`button button-debug-toggle${debugEnabled ? ' button-debug-on' : ''}`}
-              title={debugEnabled ? 'Debug logging ON — click to disable' : 'Debug logging OFF — click to enable'}
-            >
-              <Bug size={15} />
-              {debugEnabled ? 'Debug: ON' : 'Debug: OFF'}
-            </button>
           </div>
         </div>
       </header>
+
+      {/* Debug toggle — fixed bottom-left corner */}
+      <button
+        onClick={toggleDebug}
+        className={`button-debug-toggle${debugEnabled ? ' button-debug-on' : ''}`}
+        title={debugEnabled ? 'Debug logging ON — click to disable' : 'Debug logging OFF — click to enable'}
+      >
+        <Bug size={13} />
+        {debugEnabled ? 'Debug: ON' : 'Debug: OFF'}
+      </button>
 
       <main className="app-main">
         {/* Save Message */}
