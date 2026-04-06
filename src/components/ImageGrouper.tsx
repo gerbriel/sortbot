@@ -68,6 +68,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const singlesContainerRef = useRef<HTMLDivElement>(null);
   const groupsContainerRef = useRef<HTMLDivElement>(null);
   const currentContainerRef = useRef<HTMLElement | null>(null);
+
+  // Stable ref so the rubber-band mouseup closure always calls the current callback
+  // even though it was captured during the render that started the drag.
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  onSelectionChangeRef.current = onSelectionChange;
   
   const SELECTION_THRESHOLD = 5; // pixels - must move this much to activate selection
 
@@ -173,6 +178,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       
       log.grouper(`rubberBandSelect | selected=${newSelected.size}`);
       setSelectedItems(newSelected);
+      onSelectionChangeRef.current?.(newSelected);
       setIsSelecting(false);
       setSelectionStart(null);
       setSelectionBox(null);
