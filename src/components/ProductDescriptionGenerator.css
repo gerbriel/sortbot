@@ -745,6 +745,33 @@
   }
 }
 
+/* ── Thumbnail hover-zoom popup ───────────────────────────────── */
+.thumb-zoom-popup {
+  position: fixed;
+  z-index: 8000;
+  width: 220px;
+  height: 220px;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  background: #000;
+  pointer-events: none; /* never blocks mouse events */
+  animation: zoomPopIn 0.12s ease;
+}
+
+.thumb-zoom-popup img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+@keyframes zoomPopIn {
+  from { opacity: 0; transform: scale(0.88); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
 /* ── Lightbox modal ────────────────────────────────────────────── */
 .lightbox-overlay {
   position: fixed;
