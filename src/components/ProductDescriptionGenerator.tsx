@@ -120,7 +120,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       return groups;
     }, {} as Record<string, ClothingItem[]>);
     
-    const groupArray = Object.values(productGroups);
+    // Sort: multi-image product groups first, single images last
+    const groupArray = Object.values(productGroups).sort((a, b) => {
+      const aIsGroup = a.length > 1 ? 0 : 1;
+      const bIsGroup = b.length > 1 ? 0 : 1;
+      return aIsGroup - bIsGroup;
+    });
     const currentGroup = groupArray[currentGroupIndex] || [];
     const currentItem = currentGroup[0];
     
