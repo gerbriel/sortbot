@@ -312,6 +312,7 @@ All state lives in `App.tsx`. There is no global store (no Redux, no Zustand, no
 | `currentBatchIdRef` | `MutableRef<string \| null>` | App.tsx | Same as `currentBatchId` | All async callbacks (autoSave, registerItemsInDB) | Ref mirror to avoid stale closure reads in async code. |
 | `showLibrary` | `boolean` | App.tsx | Header button, `handleOpenBatch` closes it | Renders `<Library>` | |
 | `libraryRefreshTrigger` | `number` | App.tsx | Incremented on: upload, group change, image delete, Save Batch | `<Library refreshTrigger>` | Library re-fetches when this increments. |
+| `categoryPresets` | `CategoryPreset[]` | App.tsx | `getCategoryPresets()` on user login + when `showCategoryPresets` closes | Step 2 right sidebar preset picker | Loaded once; refreshed after `CategoryPresetsManager` modal closes so new presets appear immediately. |
 | `processedItems` (local copy) | `ClothingItem[]` | `ProductDescriptionGenerator.tsx` | `setProcessedItems` inside PDG | Synced back to App via `onProcessed` | **Duplicate source of truth.** PDG has its own internal copy. Sync-back is suppressed during resets via `isResettingRef`. |
 
 **⚠️ Multiple sources of truth:** `processedItems` exists both in App.tsx and inside `ProductDescriptionGenerator.tsx`. They sync via prop-down / callback-up. If they diverge (e.g. during a batch switch), `isResettingRef` in PDG suppresses the write-back for one render cycle to prevent overwriting the newly loaded data.
@@ -586,7 +587,7 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 - ✅ Email/password auth via Supabase
 - ✅ Image upload: drag-drop, folder import, ZIP import, Supabase Storage
 - ✅ Step 2 grouping: multi-select (click, Shift+click range, rubber-band), group/ungroup, remove-from-group, delete — all four multiselect bugs fixed (commit c7344c4)
-- ✅ Category assignment: drag groups to category zones, click-to-assign with selection
+- ✅ Category assignment: drag groups to category zones, click-to-assign with selection, or apply preset buttons in right sidebar (assigns category + shipping/SEO defaults in one click)
 - ✅ Voice recording via Web Speech API with field command parsing
 - ✅ AI-powered product description generation via Hugging Face text model
 - ✅ Comprehensive product form (50+ fields)
@@ -613,6 +614,7 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 - ✅ `registerItemsInDB` deletes chunked to 100 IDs at a time (`DELETE_CHUNK_SIZE = 100`) — PostgREST 400 URL-length limit hit with 794+ IDs in a single `IN()` clause
 - ✅ Library batches sorted newest-first: `fetchWorkflowBatches` uses `updated_at DESC`, Library client-side also sorts `finalBatches` by `updated_at` descending before `setBatches()`
 - ✅ Cursor-following magnifier lens on main preview image in Step 3 — circular 200×200px `.magnifier-lens` (position fixed, pointer-events none) follows cursor over the `preview-image-wrap` div, showing a 3× zoomed region via CSS `background-image`/`background-position`/`background-size: 300%`
+- ✅ Category preset picker in Step 2 right sidebar — when items are selected, a green pill-button per active preset appears below the grouper action buttons; clicking applies the preset (category, shipping defaults, SEO template) to all selected items via `handleApplyPreset` → `applyPresetToProductGroup` → `handleImagesSorted`; presets loaded from DB on login and refreshed when `CategoryPresetsManager` modal closes (commit `0530e9f`)
 
 ---
 
