@@ -1003,7 +1003,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       <Check size={12} className="category-check" />
                     </div>
                   )}
-                  {(item.preview || item.imageUrls?.[0]) && (
+                  {(item.thumbnailUrl || item.preview || item.imageUrls?.[0]) ? (
                     <img 
                       src={item.thumbnailUrl || item.preview || item.imageUrls?.[0]} 
                       alt="Product" 
@@ -1011,6 +1011,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       loading="lazy"
                       onError={retryImg}
                     />
+                  ) : (
+                    <div className="lazy-skeleton lazy-skeleton--error" aria-hidden="true" />
                   )}
                   {selectedItems.has(item.id) && (
                     <div className="selection-indicator"><Check size={20} /></div>
@@ -1168,7 +1170,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       onDoubleClick={(e) => { e.stopPropagation(); setLightboxSrc(item.preview || item.imageUrls?.[0] || ''); }}
                       onClick={(e) => e.stopPropagation()} // don't bubble to group-level toggle
                     >
-                      {(item.preview || item.imageUrls?.[0]) && (
+                      {(item.thumbnailUrl || item.preview || item.imageUrls?.[0]) ? (
                         <img
                           src={item.thumbnailUrl || item.preview || item.imageUrls?.[0]}
                           alt="Product"
@@ -1176,6 +1178,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                           loading="lazy"
                           onError={retryImg}
                         />
+                      ) : (
+                        <div className="lazy-skeleton lazy-skeleton--error" aria-hidden="true" />
                       )}
                       {/* Remove-from-group button (ejects photo back to singles) */}
                       <button
