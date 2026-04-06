@@ -348,17 +348,61 @@ function App() {
                   thumbnailUrl,
                 };
               });
-              const noUrlCount = liveItems.filter((i: any) => !i.thumbnailUrl && !i.preview && !i.imageUrls?.[0]).length;
-              if (liveItems.length) {
+              let noUrlCount = liveItems.filter((i: any) => !i.thumbnailUrl && !i.preview && !i.imageUrls?.[0]).length;
+
+              // For items that still have no URL (storagePath was also absent in slim data),
+              // fall back to product_images DB rows — one query for all missing items at once.
+              let hydratedItems = liveItems;
+              if (noUrlCount > 0) {
+                const missingIds = liveItems
+                  .filter((i: any) => !i.thumbnailUrl && !i.preview && !i.imageUrls?.[0])
+                  .map((i: any) => i.id);
+                const { data: dbImages } = await supabase
+                  .from('product_images')
+                  .select('product_id, image_url, storage_path, position')
+                  .in('product_id', missingIds)
+                  .order('position', { ascending: true });
+                if (dbImages && dbImages.length > 0) {
+                  // Build a map: productId → sorted image_url list
+                  const imgMap = new Map<string, string[]>();
+                  const pathMap = new Map<string, string>();
+                  for (const row of dbImages) {
+                    if (!imgMap.has(row.product_id)) imgMap.set(row.product_id, []);
+                    if (row.image_url) imgMap.get(row.product_id)!.push(row.image_url);
+                    if (row.storage_path && !pathMap.has(row.product_id)) pathMap.set(row.product_id, row.storage_path);
+                  }
+                  hydratedItems = liveItems.map((item: any) => {
+                    if (item.thumbnailUrl || item.preview || item.imageUrls?.[0]) return item;
+                    const urls = imgMap.get(item.id) ?? [];
+                    const sp = pathMap.get(item.id) ?? item.storagePath ?? '';
+                    const reconstructed = sp
+                      ? supabase.storage.from('product-images').getPublicUrl(sp).data.publicUrl
+                      : (urls[0] ?? '');
+                    const thumbUrl = sp ? getThumbnailUrl(sp, 300) : (urls[0] ?? '');
+                    return {
+                      ...item,
+                      storagePath: sp || item.storagePath,
+                      preview: urls[0] || reconstructed,
+                      imageUrls: urls.length ? urls : (reconstructed ? [reconstructed] : []),
+                      thumbnailUrl: thumbUrl || urls[0] || reconstructed,
+                    };
+                  });
+                  const stillMissing = hydratedItems.filter((i: any) => !i.thumbnailUrl && !i.preview && !i.imageUrls?.[0]).length;
+                  log.app(`startup restore | DB image fallback | fixed=${noUrlCount - stillMissing} stillMissing=${stillMissing}`);
+                  noUrlCount = stillMissing;
+                }
+              }
+
+              if (hydratedItems.length) {
                 const restoredFrom = processedItems?.length ? 'processedItems' : sortedImages?.length ? 'sortedImages' : groupedImages?.length ? 'groupedImages' : 'uploadedImages';
-                log.app(`startup restore | HYDRATED | batchId=${savedBatchId} | rawItems=${rawItems.length} liveItems=${liveItems.length} | restoredFrom=${restoredFrom}${noUrlCount ? ` | noUrl=${noUrlCount}` : ''}`);
-                setUploadedImages(liveItems);
-                setGroupedImages(liveItems);
-                setSortedImages(liveItems);
-                setProcessedItems(liveItems);
+                log.app(`startup restore | HYDRATED | batchId=${savedBatchId} | rawItems=${rawItems.length} liveItems=${hydratedItems.length} | restoredFrom=${restoredFrom}${noUrlCount ? ` | noUrl=${noUrlCount}` : ''}`);
+                setUploadedImages(hydratedItems);
+                setGroupedImages(hydratedItems);
+                setSortedImages(hydratedItems);
+                setProcessedItems(hydratedItems);
                 // Pass session.user explicitly — React `user` state hasn't been set yet at this point
                 // (setUser(session.user) queues a re-render but doesn't run synchronously)
-                registerItemsInDB(liveItems, savedBatchId, session.user);
+                registerItemsInDB(hydratedItems, savedBatchId, session.user);
               }
             }
           }
