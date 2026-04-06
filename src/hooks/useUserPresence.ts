@@ -36,8 +36,8 @@ export function useUserPresence({
     if (!enabled) return;
 
     let channel: any;
-    let heartbeatInterval: number;
-    let cursorThrottle: number | null = null;
+    let heartbeatInterval: ReturnType<typeof setInterval>;
+    let cursorThrottle: ReturnType<typeof setTimeout> | null = null;
 
     const setupPresence = async () => {
       
