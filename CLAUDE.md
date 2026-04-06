@@ -283,7 +283,8 @@ The central runtime type. Has ~60 fields. Key fields:
 - `id: string` — UUID generated at upload time. Stable across all steps.
 - `file: File` — Raw File object. **Stripped by `slim()` before saving to DB.** null when restored from DB.
 - `preview: string` — Blob URL (upload time) or Supabase CDN URL (after upload). **Stripped by `slim()`.** Reconstructed from `storagePath` on restore.
-- `imageUrls?: string[]` — Array of CDN URLs. Index 0 = primary image. **Stripped by `slim()`.** Reconstructed on restore.
+- `thumbnailUrl?: string` — Supabase Storage CDN URL with `transform` (300×300px, cover crop). Built at restore time from `storagePath`. Used by ImageGrouper card `<img>` tags. Falls back to `imageUrls[0]` for legacy items. **Stripped by `slim()` (not in the slim type) — OK, rebuilt on restore.**
+- `imageUrls?: string[]` — Array of full-resolution CDN URLs. Index 0 = primary image. **Stripped by `slim()`.** Reconstructed on restore.
 - `storagePath?: string` — Supabase Storage path. **Preserved by `slim()`.** The only reliable image reference after a restore.
 - `productGroup?: string` — ID of the group leader item. All items sharing a group card have the same value.
 - `_presetData?: {...}` — Cached preset metadata. **Stripped by `slim()`.** Runtime-only.
@@ -397,7 +398,7 @@ All state lives in `App.tsx`. There is no global store (no Redux, no Zustand, no
 
 **Save Batch:**
 - Calls `saveBatchToDatabase(processedItems, userId, currentBatchId)`.
-- Groups items by `productGroup`. For each group, calls `saveProductToDatabase()` which INSERTs a new row in `products` (not upsert).
+- Groups items by `productGroup`. For each group, calls `saveProductToDatabase()` which **upserts** on `id` (safe to call multiple times — updates the existing row, does not create duplicates).
 - Images are re-associated using existing `storagePath` — no re-upload.
 - After save, prunes stale `products` rows for this batch (items that were deleted during the session).
 - `libraryRefreshTrigger` incremented.
@@ -605,6 +606,7 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 - ✅ `proxy.log` added to `.gitignore`
 - ✅ ~140 stale root-level `.md` files deleted; only `README.md`, `CLAUDE.md`, `CHANGELOG.md` remain
 - ✅ `.github/copilot-instructions.md` updated to point to `CLAUDE.md`
+- ✅ Batch open performance: `getThumbnailUrl()` (300px Supabase Storage transform) used for ImageGrouper card `<img>` tags; `loading="lazy"` on both bare `<img>` tags in ImageGrouper; state set immediately from `workflowItems` before DB product fetch so images render before descriptions load; `registerItemsInDB` skipped when re-opening the already-active batch
 
 ---
 
