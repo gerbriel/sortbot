@@ -352,25 +352,82 @@ function App() {
 
               // For items that still have no URL (storagePath was also absent in slim data),
               // fall back to product_images DB rows — one query for all missing items at once.
+              // These are legacy items uploaded before storagePath was tracked in slim data.
               let hydratedItems = liveItems;
               if (noUrlCount > 0) {
                 const missingIds = liveItems
                   .filter((i: any) => !i.thumbnailUrl && !i.preview && !i.imageUrls?.[0])
                   .map((i: any) => i.id);
+                // Primary: look up product_images directly by product_id
                 const { data: dbImages } = await supabase
                   .from('product_images')
                   .select('product_id, image_url, storage_path, position')
                   .in('product_id', missingIds)
                   .order('position', { ascending: true });
+
+                // Secondary: for items still missing, look up their productGroup peers in product_images.
+                // Legacy items that were secondary photos in a group may share a productGroup with an item
+                // that does have images — use the group leader's first image as the fallback.
+                const imgMap = new Map<string, string[]>();
+                const pathMap = new Map<string, string>();
                 if (dbImages && dbImages.length > 0) {
-                  // Build a map: productId → sorted image_url list
-                  const imgMap = new Map<string, string[]>();
-                  const pathMap = new Map<string, string>();
                   for (const row of dbImages) {
                     if (!imgMap.has(row.product_id)) imgMap.set(row.product_id, []);
                     if (row.image_url) imgMap.get(row.product_id)!.push(row.image_url);
                     if (row.storage_path && !pathMap.has(row.product_id)) pathMap.set(row.product_id, row.storage_path);
                   }
+                }
+                // Find items still without a hit and try their productGroup
+                const stillMissingItems = liveItems.filter((i: any) =>
+                  missingIds.includes(i.id) && !imgMap.has(i.id)
+                );
+                if (stillMissingItems.length > 0) {
+                  const groupIds = [...new Set(stillMissingItems
+                    .map((i: any) => i.productGroup)
+                    .filter(Boolean)
+                  )];
+                  if (groupIds.length > 0) {
+                    // Fetch product_images for ALL items that share these productGroups,
+                    // so we can map group leader → images and hand them to orphan items.
+                    const { data: groupProducts } = await supabase
+                      .from('products')
+                      .select('id, product_group')
+                      .in('product_group', groupIds);
+                    if (groupProducts && groupProducts.length > 0) {
+                      const groupMemberIds = groupProducts.map((p: any) => p.id);
+                      const { data: groupImages } = await supabase
+                        .from('product_images')
+                        .select('product_id, image_url, storage_path, position')
+                        .in('product_id', groupMemberIds)
+                        .order('position', { ascending: true });
+                      if (groupImages && groupImages.length > 0) {
+                        // Build a map: productGroup → image_url list (from any member that has images)
+                        const groupImgMap = new Map<string, string[]>();
+                        const groupPathMap = new Map<string, string>();
+                        for (const gp of groupProducts) {
+                          const imgs = groupImages.filter((gi: any) => gi.product_id === gp.id);
+                          if (imgs.length > 0) {
+                            const g = gp.product_group;
+                            if (!groupImgMap.has(g)) groupImgMap.set(g, []);
+                            for (const gi of imgs) {
+                              if (gi.image_url) groupImgMap.get(g)!.push(gi.image_url);
+                              if (gi.storage_path && !groupPathMap.has(g)) groupPathMap.set(g, gi.storage_path);
+                            }
+                          }
+                        }
+                        // Apply group images to the orphan items
+                        for (const item of stillMissingItems) {
+                          const g = item.productGroup;
+                          if (g && groupImgMap.has(g)) {
+                            imgMap.set(item.id, groupImgMap.get(g)!);
+                            if (groupPathMap.has(g)) pathMap.set(item.id, groupPathMap.get(g)!);
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                if (imgMap.size > 0) {
                   hydratedItems = liveItems.map((item: any) => {
                     if (item.thumbnailUrl || item.preview || item.imageUrls?.[0]) return item;
                     const urls = imgMap.get(item.id) ?? [];
@@ -387,9 +444,11 @@ function App() {
                       thumbnailUrl: thumbUrl || urls[0] || reconstructed,
                     };
                   });
-                  const stillMissing = hydratedItems.filter((i: any) => !i.thumbnailUrl && !i.preview && !i.imageUrls?.[0]).length;
-                  log.app(`startup restore | DB image fallback | fixed=${noUrlCount - stillMissing} stillMissing=${stillMissing}`);
-                  noUrlCount = stillMissing;
+                }
+                const afterFallback = hydratedItems.filter((i: any) => !i.thumbnailUrl && !i.preview && !i.imageUrls?.[0]).length;
+                if (noUrlCount !== afterFallback) {
+                  log.app(`startup restore | DB image fallback | fixed=${noUrlCount - afterFallback} stillMissing=${afterFallback}`);
+                  noUrlCount = afterFallback;
                 }
               }
 
