@@ -355,6 +355,35 @@ function App() {
     localStorage.removeItem('sortbot_current_batch_number');
   };
 
+  /**
+   * Prune stale `products` rows for a batch.
+   * Strategy: fetch current DB ids for the batch, diff against keepIds,
+   * then delete only the orphans in chunks of 100.
+   * This avoids a giant NOT IN(...) clause that hits PostgREST's URL-length 400 limit.
+   */
+  const pruneStaleProducts = async (batchId: string, keepIds: string[]) => {
+    const keepSet = new Set(keepIds);
+    const { data: dbRows, error: fetchErr } = await supabase
+      .from('products')
+      .select('id')
+      .eq('batch_id', batchId);
+    if (fetchErr) {
+      console.warn('[App] pruneStaleProducts | fetch error:', fetchErr.message);
+      return;
+    }
+    const staleIds = (dbRows ?? []).map(r => r.id).filter(id => !keepSet.has(id));
+    if (staleIds.length === 0) return;
+    const CHUNK = 100;
+    for (let i = 0; i < staleIds.length; i += CHUNK) {
+      const chunk = staleIds.slice(i, i + CHUNK);
+      const { error: delErr } = await supabase
+        .from('products')
+        .delete()
+        .in('id', chunk);
+      if (delErr) console.warn('[App] pruneStaleProducts | delete error:', delErr.message);
+    }
+  };
+
   const handleSaveBatch = async () => {
     console.log(`[App] handleSaveBatch | processedItems=${processedItems.length} | batchId=${currentBatchId}`);
     if (!user || processedItems.length === 0) {
@@ -378,13 +407,7 @@ function App() {
         // products/product_images rows were just written — prune stale rows then refresh Library
         console.log('[App] setLibraryRefreshTrigger → Save Batch (Step 4)');
         if (currentBatchId) {
-          const savedIds = processedItems.map(i => i.id);
-          const { error: pruneErr } = await supabase
-            .from('products')
-            .delete()
-            .eq('batch_id', currentBatchId)
-            .not('id', 'in', `(${savedIds.join(',')})`);
-          if (pruneErr) console.warn('[App] handleSaveBatch | prune stale products error:', pruneErr.message);
+          await pruneStaleProducts(currentBatchId, processedItems.map(i => i.id));
         }
         setLibraryRefreshTrigger(prev => prev + 1);
 
@@ -640,13 +663,7 @@ function App() {
       } else {
         // Prune any stale products rows for this batch that are no longer in the current item set.
         // This clears out orphaned rows from previous sessions / deleted items.
-        const currentIds = allRegisterable.map(i => i.id);
-        const { error: pruneErr } = await supabase
-          .from('products')
-          .delete()
-          .eq('batch_id', currentBatchId)
-          .not('id', 'in', `(${currentIds.join(',')})`);
-        if (pruneErr) console.warn('[App] handleImagesGrouped | prune stale products error:', pruneErr.message);
+        if (currentBatchId) await pruneStaleProducts(currentBatchId, allRegisterable.map(i => i.id));
         setLibraryRefreshTrigger(prev => prev + 1);
       }
     }
