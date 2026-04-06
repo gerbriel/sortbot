@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
-import { Package, Image, Link2, Scissors, X, ArrowDown, Check, Trash2 } from 'lucide-react';
+import { Package, Image, ArrowDown, Check } from 'lucide-react';
 import LoadingProgress from './LoadingProgress';
 import './ImageGrouper.css';
 
@@ -12,6 +12,14 @@ export interface ImageGrouperStats {
   totalImages: number;
 }
 
+export interface GrouperActions {
+  groupSelected: () => void;
+  ungroupSelected: () => void;
+  clearSelection: () => void;
+  deleteSelected: () => void;
+  selectedCount: number;
+}
+
 interface ImageGrouperProps {
   items: ClothingItem[];
   onGrouped: (items: ClothingItem[]) => void;
@@ -19,9 +27,10 @@ interface ImageGrouperProps {
   userId?: string;
   onImageDeleted?: () => void; // called after any delete syncs to DB, so Library can refresh
   onSelectionChange?: (selectedIds: Set<string>) => void; // lift selection state so parent can pass to CategoryZones
+  onActionsReady?: (actions: GrouperActions) => void; // lift action callbacks so parent can render buttons elsewhere
 }
 
-const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsChange, userId, onImageDeleted, onSelectionChange }) => {
+const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsChange, userId, onImageDeleted, onSelectionChange, onActionsReady }) => {
   const [groupedItems, setGroupedItems] = useState<ClothingItem[]>([]);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [draggedItem, setDraggedItem] = useState<ClothingItem | null>(null);
@@ -755,6 +764,18 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     });
   }, [multiItemGroups.length, singleItems.length, groupedItems.length, onStatsChange]);
 
+  // Notify parent of current action callbacks + selected count so it can render the toolbar
+  useEffect(() => {
+    onActionsReady?.({
+      groupSelected: createGroupFromSelected,
+      ungroupSelected,
+      clearSelection: () => updateSelection(new Set()),
+      deleteSelected: handleDeleteSelected,
+      selectedCount: selectedItems.size,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedItems.size, onActionsReady]);
+
   return (
     <>
       {isLoading && (
@@ -785,49 +806,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             </span>
           )}
         </div>
-      </div>
-
-      {/* Grouping Controls */}
-      <div className="grouper-actions">
-        <button 
-          className="button button-primary" 
-          onClick={createGroupFromSelected}
-          disabled={selectedItems.size < 2}
-          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-        >
-          <Link2 size={16} /> Group Selected ({selectedItems.size})
-        </button>
-        <button 
-          className="button button-secondary" 
-          onClick={ungroupSelected}
-          disabled={selectedItems.size === 0}
-          title="Remove selected images from their groups"
-          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-        >
-          <Scissors size={16} /> Ungroup Selected
-        </button>
-        <button 
-          className="button button-secondary" 
-          onClick={() => updateSelection(new Set())}
-          disabled={selectedItems.size === 0}
-          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-        >
-          <X size={16} /> Clear Selection
-        </button>
-        <button
-          className="button"
-          onClick={handleDeleteSelected}
-          disabled={selectedItems.size === 0}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '0.5rem',
-            background: selectedItems.size > 0 ? '#ef4444' : undefined,
-            color: selectedItems.size > 0 ? '#fff' : undefined,
-            border: 'none',
-          }}
-          title="Permanently delete all selected images"
-        >
-          <Trash2 size={16} /> Delete Selected ({selectedItems.size})
-        </button>
       </div>
 
       {/* Individual Items Section - Always Visible Drop Zone */}

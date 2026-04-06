@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
-import { Tag, Settings, Package, ShoppingBag } from 'lucide-react';
+import { Tag, Settings, Package, ShoppingBag, Link2, Scissors, X, Trash2 } from 'lucide-react';
 import Auth from './components/Auth';
 import ImageUpload from './components/ImageUpload';
 import ImageGrouper from './components/ImageGrouper';
+import type { GrouperActions } from './components/ImageGrouper';
 import CategoryZones from './components/CategoryZones';
 import ProductDescriptionGenerator from './components/ProductDescriptionGenerator';
 import GoogleSheetExporter from './components/GoogleSheetExporter';
@@ -131,6 +132,7 @@ function App() {
   const [groupedImages, setGroupedImages] = useState<ClothingItem[]>([]);
   const [processedItems, setProcessedItems] = useState<ClothingItem[]>([]);
   const [selectedGroupItems, setSelectedGroupItems] = useState<Set<string>>(new Set());
+  const [grouperActions, setGrouperActions] = useState<GrouperActions | null>(null);
   const [showLibrary, setShowLibrary] = useState(false);
   // Ref mirror so the autoSave closure (inside setTimeout) can read the live value
   // without capturing a stale boolean from the render where autoSave was scheduled.
@@ -1278,6 +1280,7 @@ function App() {
                     setLibraryRefreshTrigger(prev => prev + 1);
                   }}
                   onSelectionChange={setSelectedGroupItems}
+                  onActionsReady={setGrouperActions}
                 />
               </div>
               {/* Right: Category drop zones — sticky so always visible */}
@@ -1292,6 +1295,50 @@ function App() {
                   selectedItemIds={selectedGroupItems}
                   onCategoryAssigned={() => setSelectedGroupItems(new Set())}
                 />
+                {/* Selection action buttons — rendered here so they stay visible while scrolling left panel */}
+                {grouperActions && (
+                  <div className="grouper-actions-sidebar">
+                    <button
+                      className="button button-primary"
+                      onClick={grouperActions.groupSelected}
+                      disabled={grouperActions.selectedCount < 2}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                      <Link2 size={16} /> Group Selected ({grouperActions.selectedCount})
+                    </button>
+                    <button
+                      className="button button-secondary"
+                      onClick={grouperActions.ungroupSelected}
+                      disabled={grouperActions.selectedCount === 0}
+                      title="Remove selected images from their groups"
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                      <Scissors size={16} /> Ungroup Selected
+                    </button>
+                    <button
+                      className="button button-secondary"
+                      onClick={grouperActions.clearSelection}
+                      disabled={grouperActions.selectedCount === 0}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                      <X size={16} /> Clear Selection
+                    </button>
+                    <button
+                      className="button"
+                      onClick={grouperActions.deleteSelected}
+                      disabled={grouperActions.selectedCount === 0}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        background: grouperActions.selectedCount > 0 ? '#ef4444' : undefined,
+                        color: grouperActions.selectedCount > 0 ? '#fff' : undefined,
+                        border: 'none',
+                      }}
+                      title="Permanently delete all selected images"
+                    >
+                      <Trash2 size={16} /> Delete Selected ({grouperActions.selectedCount})
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </section>
