@@ -567,16 +567,17 @@ function App() {
     // Also update groupedImages so Step 2 shows the categories
     setGroupedImages(items);
     
-    // Sync categories to processedItems (preserve voice descriptions if they exist)
+    // Sync categories AND productGroup to processedItems (preserve voice descriptions if they exist)
     let finalProcessed: ClothingItem[];
     if (processedItems.length > 0) {
-      // Update existing processedItems with new categories
+      // Update existing processedItems with new categories + group assignments
       finalProcessed = processedItems.map(procItem => {
         const sortedItem = items.find(i => i.id === procItem.id);
         if (sortedItem) {
           return {
             ...procItem,
             category: sortedItem.category,
+            productGroup: sortedItem.productGroup,
             _presetData: sortedItem._presetData,
           };
         }
@@ -597,14 +598,16 @@ function App() {
       processedItems: finalProcessed,
     });
 
-    // Upsert category changes to products table immediately so Library reflects them
+    // Upsert category + group changes to products table immediately so Library reflects them
+    // We upsert ALL items (not just those with category) so productGroup reassignments
+    // from the category-click merge path are also persisted to the DB.
     if (user && currentBatchId) {
-      const itemsWithCategory = items.filter(i => i.category);
-      if (itemsWithCategory.length > 0) {
+      const registerable = items.filter(i => i.imageUrls?.[0] || i.storagePath);
+      if (registerable.length > 0) {
         await supabase.from('products').upsert(
-          itemsWithCategory.map(item => ({
+          registerable.map(item => ({
             id: item.id,
-            product_category: item.category,
+            product_category: item.category ?? null,
             product_group: item.productGroup || item.id,
             batch_id: currentBatchId,
             user_id: user.id,
@@ -617,35 +620,44 @@ function App() {
   };
 
   // Apply a category preset to all currently selected items (sidebar preset picker)
+  // This ALSO merges the selected items into a single product group — same as clicking
+  // a category zone with items selected.
   const handleApplyPreset = async (preset: CategoryPreset) => {
     log.app(`handleApplyPreset | preset="${preset.display_name}" selectedCount=${selectedGroupItems.size}`);
     if (selectedGroupItems.size === 0) return;
-    const selected = (groupedImages.length > 0 ? groupedImages : uploadedImages).filter(i => selectedGroupItems.has(i.id));
+    const baseItems = groupedImages.length > 0 ? groupedImages : uploadedImages;
+    const selected = baseItems.filter(i => selectedGroupItems.has(i.id));
     if (selected.length === 0) return;
 
     // Use the preset's product_type as the category name (same convention as applyPresetToProductGroup)
     const categoryName = preset.product_type || preset.category_name;
 
-    // Group selected items by their productGroup so we apply per-group
-    const groupMap: Record<string, ClothingItem[]> = {};
-    selected.forEach(item => {
-      const gid = item.productGroup || item.id;
-      if (!groupMap[gid]) groupMap[gid] = [];
-      groupMap[gid].push(item);
-    });
+    // Merge all selected items into one group (same as handleCategoryClick in CategoryZones)
+    const mergedGroupId = selected[0].productGroup || selected[0].id;
+    const existingGroups = new Set(selected.map(i => i.productGroup || i.id));
+    const selectedSet = new Set(selected.map(i => i.id));
 
-    // Apply preset to each group
+    // Apply preset to the merged set as one group
+    const itemsWithPreset = await applyPresetToProductGroup(selected, categoryName);
     const patchedById: Record<string, ClothingItem> = {};
-    for (const groupItems of Object.values(groupMap)) {
-      const applied = await applyPresetToProductGroup(groupItems, categoryName);
-      applied.forEach(item => { patchedById[item.id] = item; });
-    }
+    itemsWithPreset.forEach(item => { patchedById[item.id] = item; });
 
-    // Merge patches back into the full items list
-    const baseItems = groupedImages.length > 0 ? groupedImages : uploadedImages;
-    const updatedItems = baseItems.map(item =>
-      patchedById[item.id] ? { ...item, ...patchedById[item.id] } : item
-    );
+    // Rebuild the full items list:
+    //  - selected items → use preset-applied version, assign mergedGroupId
+    //  - non-selected items in now-absorbed groups → re-point to mergedGroupId
+    //  - everything else → unchanged
+    const updatedItems = baseItems.map(item => {
+      if (selectedSet.has(item.id)) {
+        const patched = patchedById[item.id] || { ...item, category: categoryName };
+        return { ...patched, productGroup: mergedGroupId };
+      }
+      // Re-point non-selected members of absorbed groups to the merged group
+      const itemGid = item.productGroup || item.id;
+      if (existingGroups.has(itemGid) && itemGid !== mergedGroupId) {
+        return { ...item, productGroup: mergedGroupId };
+      }
+      return item;
+    });
 
     // Route through the normal categorization path so all downstream state updates
     await handleImagesSorted(updatedItems);
