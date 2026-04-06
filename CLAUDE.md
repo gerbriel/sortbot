@@ -587,6 +587,8 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 
 13. **`handleApplyPreset` routes through `handleImagesSorted` (not `handleImagesGrouped`).** This means a preset-button click sets `category` on the items, which shows them in the CategoryZones panel and advances the workflow. If you ever need to apply a preset WITHOUT setting a category, a new code path is needed.
 
+14. **Ref mirror pattern is now canonical for all async handlers in App.tsx.** `sortedImagesRef`, `groupedImagesRef`, `uploadedImagesRef`, and `processedItemsRef` are updated every render. Any NEW handler added to App.tsx that reads these arrays inside an async callback or `setTimeout` MUST read from the ref (e.g. `sortedImagesRef.current`) not the state variable, to avoid the same stale-closure category-overwrite bug fixed in commit `aae35fc`.
+
 ---
 
 ## 15. What's Done
@@ -633,6 +635,8 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 - ✅ Click-outside deselect no longer clears selection when clicking category zone or preset button — `mousedown` safe-selector list expanded to include `.category-zone`, `.category-zones-container`, `.category-zones`, `.category-list`, `.grouper-preset-picker`, `.grouper-preset-buttons`, `.button-preset`, `.grouper-actions-sidebar` (commit `0c43ff8`)
 - ✅ Rubber-band selection propagation fixed — `handleGlobalMouseUp` now calls `onSelectionChangeRef.current?.(newSelected)` (via a stable ref) in addition to `setSelectedItems`; previously only local state was updated so `selectedGroupItems` in App.tsx stayed empty and category clicks had no items to act on (commit `0ba0160`)
 - ✅ Rubber-band selector reliability fixed — `useEffect` dep array reduced to `[isSelecting]` only; all mutable values read through refs (`selectionStartRef`, `selectionBoxRef`, `selectionThresholdMetRef`, `activeContainerRef`, `selectedItemsRef`); previously every `setSelectionBox()` call during a drag triggered a full listener re-registration causing frequent event drops that required multiple attempts to activate (commit `903347e`)
+- ✅ Stale-closure fix in `handleImagesGrouped` — added ref mirrors (`sortedImagesRef`, `groupedImagesRef`, `uploadedImagesRef`, `processedItemsRef`) updated every render; `handleImagesGrouped` now reads from refs so rapid `handleImagesSorted` → `handleImagesGrouped` chains always merge against the latest state, not the pre-`handleImagesSorted` snapshot; previously a clear-category drag immediately followed by an ungroup click would restore the cleared category silently (commit `aae35fc`)
+- ✅ `handleImagesGrouped` DB upsert debounced + chunked — separate `groupUpsertTimerRef` (2 s) prevents a full 800-item `products` upsert on every single group/ungroup click; upsert now chunked at 100 rows to match the `DELETE_CHUNK_SIZE` pattern and avoid PostgREST URL-length limits; `handleItemsProcessed` also updated to use ref mirrors for the `autoSaveWorkflow` call (commit `aae35fc`)
 
 ---
 
