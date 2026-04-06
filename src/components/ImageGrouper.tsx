@@ -935,9 +935,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   )}
                   {(item.preview || item.imageUrls?.[0]) && (
                     <img 
-                      src={item.preview || item.imageUrls?.[0]} 
+                      src={item.thumbnailUrl || item.preview || item.imageUrls?.[0]} 
                       alt="Product" 
                       draggable={false}
+                      loading="lazy"
                     />
                   )}
                   {selectedItems.has(item.id) && (
@@ -1095,9 +1096,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     >
                       {(item.preview || item.imageUrls?.[0]) && (
                         <img
-                          src={item.preview || item.imageUrls?.[0]}
+                          src={item.thumbnailUrl || item.preview || item.imageUrls?.[0]}
                           alt="Product"
                           draggable={false}
+                          loading="lazy"
                         />
                       )}
                       {/* Remove-from-group button (ejects photo back to singles) */}
