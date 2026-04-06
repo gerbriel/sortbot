@@ -8,6 +8,7 @@ import { applyPresetToProductGroup } from '../lib/applyPresetToGroup';
 import { generateProductDescription, stripVoiceCommands, formatVoiceTranscript } from '../lib/textAIService';
 import { syncGroupFieldsToDatabase } from '../lib/productService';
 import LazyImg from './LazyImg';
+import { log } from '../lib/debugLogger';
 import './ProductDescriptionGenerator.css';
 
 interface ProductDescriptionGeneratorProps {
@@ -474,6 +475,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Apply manual preset override
   const handleApplyPreset = async (presetId: string) => {
     if (!presetId) return;
+    log.pdg(`handleApplyPreset | presetId=${presetId} selectedGroups=${selectedGroupIds.size}`);
     
     try {
       const preset = availablePresets.find(p => p.id === presetId);
@@ -516,6 +518,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     if (isTransitioning) {
       return;
     }
+    log.pdg('handleStartRecording');
     
     // Prevent rapid clicks
     const now = Date.now();
@@ -556,6 +559,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     if (isTransitioning) {
       return;
     }
+    log.pdg('handleStopRecording');
     
     // Prevent clicks within 1000ms of button state transition (increased from 500ms)
     const timeSinceTransition = Date.now() - buttonStateTransitionRef.current;
@@ -667,6 +671,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // This takes priority over any stale data that might be loaded later.
   const handleSave = async () => {
     if (isSaving) return;
+    log.pdg(`handleSave | items=${processedItems.length} batchId=${batchId ?? 'none'}`);
     setIsSaving(true);
     try {
       // Group items by productGroup
@@ -696,6 +701,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   };
 
   const handleClearTranscript = () => {
+    log.pdg(`handleClearTranscript | groupSize=${currentGroup.length}`);
     const updated = [...processedItems];
     
     // Clear voice description for all items in the current group
@@ -1055,6 +1061,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   // ── Thumbnail photo reorder handlers ──────────────────────────────────────
   const handleThumbDragStart = (e: React.DragEvent, photoId: string) => {
+    log.pdg(`thumbDragStart | photoId=${photoId}`);
     setDraggedThumbId(photoId);
     e.dataTransfer.setData('application/json', JSON.stringify({ action: 'reorder-thumb', photoId }));
     e.dataTransfer.effectAllowed = 'move';
@@ -1101,6 +1108,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     });
 
     setProcessedItems(nextItemsFinal);
+    log.pdg(`thumbDrop | from=${srcPhotoId} to=${targetPhotoId}`);
     setDraggedThumbId(null); setDragOverThumbId(null);
   };
 
@@ -1110,6 +1118,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   };
 
   const handleNext = () => {
+    log.pdg(`handleNext | group=${currentGroupIndex + 1}/${groupArray.length}`);
     // Auto-save in background — no waiting, no blocking navigation
     if (hasUnsavedChanges) handleSave();
     if (currentGroupIndex < groupArray.length - 1) {
@@ -1123,6 +1132,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   };
 
   const handlePrevious = () => {
+    log.pdg(`handlePrevious | group=${currentGroupIndex + 1}/${groupArray.length}`);
     // Auto-save in background — no waiting, no blocking navigation
     if (hasUnsavedChanges) handleSave();
     if (currentGroupIndex > 0) {
@@ -1136,6 +1146,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   };
 
   const handleFinish = () => {
+    log.pdg(`handleFinish | items=${processedItems.length}`);
     const allProcessed = processedItems.every(
       item => item.voiceDescription && item.generatedDescription
     );

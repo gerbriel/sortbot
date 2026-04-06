@@ -3,6 +3,7 @@ import { useDropzone } from 'react-dropzone';
 import JSZip from 'jszip';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
+import { log } from '../lib/debugLogger';
 import './ImageUpload.css';
 
 interface ImageUploadProps {
@@ -59,6 +60,8 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId }) =
     setIsUploading(true);
     setUploadProgress({ done: 0, total: imageFiles.length });
 
+    log.upload(`processFiles | files=${imageFiles.length}`);
+
     const CHUNK = 10;
     const items: ClothingItem[] = [];
 
@@ -85,6 +88,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId }) =
 
     setIsUploading(false);
     setUploadProgress(null);
+    log.upload(`upload complete | success=${items.filter(i => i.storagePath).length} fallback=${items.filter(i => !i.storagePath).length} total=${items.length}`);
     onImagesUploaded(items);
   }, [onImagesUploaded, userId]);
   

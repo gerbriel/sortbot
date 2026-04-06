@@ -7,6 +7,7 @@
 import { supabase } from './supabase';
 import { fetchWorkflowBatches, updateWorkflowBatch, deleteWorkflowBatch } from './workflowBatchService';
 import type { WorkflowBatch } from './workflowBatchService';
+import { log } from './debugLogger';
 
 // ============================================================================
 // FETCH SAVED PRODUCTS AND IMAGES FROM DATABASE
@@ -74,6 +75,7 @@ export const fetchSavedProducts = async (_userId: string) => {
     // Log a breakdown by user_id so we can see cross-user data
     const byUser: Record<string, number> = {};
     allProducts.forEach((p: any) => { byUser[p.user_id ?? 'null'] = (byUser[p.user_id ?? 'null'] || 0) + 1; });
+    log.service(`fetchSavedProducts | total=${allProducts.length}`);
     return allProducts;
   } catch (error: any) {
     if (error?.name === 'AbortError') return []; // expected from React 18 Strict Mode cleanup
@@ -130,6 +132,7 @@ export const fetchSavedImages = async (_userId: string) => {
     // Log a breakdown by user_id (on the parent product) so we can spot cross-user rows
     const byUser: Record<string, number> = {};
     allImages.forEach((img: any) => { const uid = img.products?.user_id ?? img.user_id ?? 'null'; byUser[uid] = (byUser[uid] || 0) + 1; });
+    log.service(`fetchSavedImages | total=${allImages.length}`);
     return allImages;
   } catch (error: any) {
     if (error?.name === 'AbortError') return []; // expected from React 18 Strict Mode cleanup

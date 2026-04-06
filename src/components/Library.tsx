@@ -12,6 +12,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { Folder, Calendar, Image, Layers, Tag, ArrowRight, Trash2, X, Grid3x3, Package, Edit2, Copy, Check, Search, Plus, Merge, ChevronDown, ChevronRight } from 'lucide-react';
 import type { ClothingItem } from '../App';
+import { log } from '../lib/debugLogger';
 import './Library.css';
 
 // ── Lazy-loading image with skeleton shimmer placeholder ──────────────────────
@@ -228,10 +229,12 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   const loadAll = async (cancelRef?: { current: boolean }, force = false) => {
     // Guard: skip if already in flight, unless this is a forced mount call
     if (!force && isLoadingRef.current) {
+      log.library('loadAll SKIPPED (already in flight)');
       return;
     }
     // If a prior forced call was cancelled mid-flight, the ref may still be true — reset it
     isLoadingRef.current = true;
+    log.library(`loadAll START | force=${force}`);
     const isCancelled = () => {
       if (cancelRef?.current === true) {
         isLoadingRef.current = false; // release the lock so the next call can proceed
@@ -438,6 +441,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         setBatches(finalBatches);
         setProductGroups(finalGroups);
         setImages(imageList);
+        log.library(`loadAll DONE | batches=${finalBatches.length} groups=${finalGroups.length} images=${imageList.length}`);
 
         // Collapse all batches AND product groups by default on load
         setCollapsedBatches(prev => {
@@ -453,6 +457,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         });
       }
     } catch (error) {
+      log.error(`loadAll ERROR | ${error}`);
       console.error('[Library] loadAll ERROR', error);
     } finally {
       isLoadingRef.current = false;
@@ -469,6 +474,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   const handleCreateNewBatch = async () => {
     const name = await showPrompt('New Batch', 'Enter a batch name (leave blank to auto-name):');
     if (name === null) return;
+    log.library(`handleCreateNewBatch | name="${name}"`);
     const batchNumber = `batch-${Date.now()}`;
     const batchName = name.trim() || `Batch ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     try {
@@ -497,6 +503,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   // Assign selected product-group images to a new batch
   const handleAssignSelectedToNewBatch = async () => {
     if (selectedItems.size === 0) return;
+    log.library(`handleAssignSelectedToNewBatch | selected=${selectedItems.size}`);
     const name = await showPrompt('New Batch from Selection', 'Enter a name for the new batch:');
     if (name === null) return;
     const batchNumber = `batch-${Date.now()}`;
@@ -586,6 +593,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   // Group selected images (from Images view) into a new product group
   const handleGroupSelectedImages = async () => {
     if (selectedItems.size < 2) return;
+    log.library(`handleGroupSelectedImages | selected=${selectedItems.size}`);
     const titleInput = await showPrompt('New Product Group', 'Enter a title (leave blank to auto-name):');
     if (titleInput === null) return;
     const title = titleInput.trim() || `Group ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
@@ -720,6 +728,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   };
 
   const handleDelete = async (batchId: string) => {
+    log.library(`handleDelete batch | batchId=${batchId}`);
     // Start deletion animation
     setDeletingItem({id: batchId, type: 'batch', progress: 0});
     setDeleteConfirm(null);
@@ -747,6 +756,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   };
 
   const handleDeleteGroup = async (groupId: string) => {
+    log.library(`handleDeleteGroup | groupId=${groupId}`);
     // Start deletion animation
     setDeletingItem({id: groupId, type: 'group', progress: 0});
     setDeleteConfirm(null);
@@ -771,6 +781,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   };
 
   const handleDeleteImage = async (imageId: string, storagePath?: string) => {
+    log.library(`handleDeleteImage | imageId=${imageId} storagePath=${storagePath ?? 'none'}`);
     // Start deletion animation
     setDeletingItem({id: imageId, type: 'image', progress: 0});
     setDeleteConfirm(null);
@@ -795,6 +806,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   };
 
   const handleDuplicateBatch = async (batchId: string) => {
+    log.library(`handleDuplicateBatch | batchId=${batchId}`);
     const newBatchId = await duplicateBatch(batchId);
     if (newBatchId) {
       await loadBatches();
@@ -806,6 +818,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       setEditingBatch(null);
       return;
     }
+    log.library(`handleEditBatchName | batchId=${batchId} name="${editBatchName.trim()}"`);
 
     const success = await updateBatchMetadata(batchId, {
       batch_name: editBatchName.trim(),
@@ -838,6 +851,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
   // Selection handlers
   const handleItemClick = (itemId: string, event: React.MouseEvent) => {
+    log.library(`itemClick | id=${itemId} shift=${event.shiftKey}`);
     // Matches ImageGrouper behavior
     const newSelected = new Set(selectedItems);
     
@@ -876,6 +890,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
   // Drag and drop handlers
   const handleDragStart = (itemId: string, event: React.DragEvent) => {
+    log.library(`dragStart | id=${itemId} viewMode=${viewMode} selectedCount=${selectedItems.size}`);
     // Mark native drag as active — prevents rubber-band selection from starting
     isDraggingRef.current = true;
     // Cancel any rubber-band selection that may have started on mousedown
@@ -935,6 +950,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       return;
     }
     const imageIds = new Set(rawIds.split(',').map(id => id.trim()).filter(Boolean));
+    log.library(`dropImageOntoGroup | images=${imageIds.size} → group=${targetGroupId}`);
     setDragOverItem(null);
     setDraggedItem(null);
     setDragType(null);
@@ -1040,6 +1056,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
     if (!groupId || type !== 'group') {
       return;
     }
+    log.library(`dropGroupOntoBatch | group=${groupId} → batch=${targetBatchId}`);
     setDragOverBatch(null);
     setDraggedItem(null);
     setDragType(null);
