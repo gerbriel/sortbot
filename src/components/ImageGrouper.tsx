@@ -6,6 +6,20 @@ import LoadingProgress from './LoadingProgress';
 import { log } from '../lib/debugLogger';
 import './ImageGrouper.css';
 
+/** Retry a failed image load up to 3 times with exponential backoff + cache-bust.
+ *  Stores attempt count on the element itself via data-retry so no React state is needed.
+ *  Called as onError handler on bare <img> tags that can't use LazyImg. */
+function retryImg(e: React.SyntheticEvent<HTMLImageElement>) {
+  const img = e.currentTarget;
+  const attempt = parseInt(img.dataset.retry ?? '0', 10);
+  if (attempt >= 3) return; // give up, show broken placeholder
+  img.dataset.retry = String(attempt + 1);
+  const delay = 500 * Math.pow(3, attempt); // 500ms, 1500ms, 4500ms
+  const originalSrc = img.dataset.src ?? img.src.split('?')[0];
+  if (!img.dataset.src) img.dataset.src = img.src.split('?')[0];
+  setTimeout(() => { img.src = `${originalSrc}?t=${Date.now()}`; }, delay);
+}
+
 export interface ImageGrouperStats {
   multiImageGroups: number;
   singles: number;
@@ -975,6 +989,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       alt="Product" 
                       draggable={false}
                       loading="lazy"
+                      onError={retryImg}
                     />
                   )}
                   {selectedItems.has(item.id) && (
@@ -1139,6 +1154,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                           alt="Product"
                           draggable={false}
                           loading="lazy"
+                          onError={retryImg}
                         />
                       )}
                       {/* Remove-from-group button (ejects photo back to singles) */}
