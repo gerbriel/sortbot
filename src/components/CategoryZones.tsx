@@ -4,6 +4,7 @@ import { getCategories } from '../lib/categoriesService';
 import type { Category } from '../lib/categories';
 import { applyPresetToProductGroup } from '../lib/applyPresetToGroup';
 import LazyImg from './LazyImg';
+import { log } from '../lib/debugLogger';
 import { 
   Shirt, 
   Wind, 
@@ -205,6 +206,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     // If items are selected in ImageGrouper, treat the drop as a "click-to-assign":
     // merge all selected items into one product group and apply the category.
     if (selectedItemIds && selectedItemIds.size > 0) {
+      log.sorter(`handleCategoryDrop | selected-assign | category=${category} selectedCount=${selectedItemIds.size}`);
       setCatDraggedItem(null);
       setDragOverCategory(null);
       await handleCategoryClick(category);
@@ -233,6 +235,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
 
     const groupItems = items.filter(item => (item.productGroup || item.id) === productGroup);
     const itemsWithPreset = await applyPresetToProductGroup(groupItems, category);
+    log.sorter(`handleCategoryDrop | drag-assign | category=${category} productGroup=${productGroup} groupItems=${groupItems.length}`);
 
     const updatedMap = { ...groupsMap };
     updatedMap[productGroup] = (groupsMap[productGroup] || groupItems).map(item => {
@@ -270,6 +273,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
 
     // If items are selected (click path or drop with selection), clear all selected
     if (selectedItemIds && selectedItemIds.size > 0) {
+      log.sorter(`handleClearCategory | selected | count=${selectedItemIds.size}`);
       const updatedMap = { ...groupsMap };
       Object.keys(updatedMap).forEach(gid => {
         updatedMap[gid] = updatedMap[gid].map(item =>
@@ -285,6 +289,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
 
     // Drop path without selection — clear the dragged group
     if (productGroup) {
+      log.sorter(`handleClearCategory | drag | productGroup=${productGroup}`);
       const updatedMap = { ...groupsMap };
       if (updatedMap[productGroup]) {
         updatedMap[productGroup] = updatedMap[productGroup].map(item => ({ ...item, category: undefined }));
@@ -305,6 +310,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
 
     const selected = items.filter(i => selectedItemIds.has(i.id));
     if (selected.length === 0) return;
+    log.sorter(`handleCategoryClick | category=${categoryName} selectedCount=${selected.length}`);
 
     // If all selected items already share one group, reuse that group ID.
     // Otherwise, merge them all into the first selected item's group ID.
@@ -393,6 +399,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     newOrder.splice(fromIdx, 1);
     newOrder.splice(toIdx, 0, sourceGroupId);
 
+    log.sorter(`handleGroupDrop | reorder | from=${fromIdx} to=${toIdx} groupId=${sourceGroupId}`);
     setGroupOrder(newOrder);
     emitReordered(newOrder, groupsMap);
     setDraggedGroupId(null);
@@ -451,6 +458,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     photoList.splice(fromIdx, 1);
     photoList.splice(toIdx, 0, groupsMap[groupId][fromIdx]);
 
+    log.sorter(`handlePhotoDrop | reorder | groupId=${groupId} from=${fromIdx} to=${toIdx}`);
     const newMap = { ...groupsMap, [groupId]: photoList };
     emitReordered(groupOrderRef.current, newMap);
     setDraggedPhotoId(null); setDraggedPhotoGroup(null); setDragOverPhotoId(null);
