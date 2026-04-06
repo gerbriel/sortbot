@@ -12,7 +12,7 @@ import type { GoogleSheetExporterHandle } from './components/GoogleSheetExporter
 import { Library } from './components/Library';
 import CategoryPresetsManager from './components/CategoryPresetsManager';
 import CategoriesManager from './components/CategoriesManager';
-import { saveBatchToDatabase } from './lib/productService';
+import { saveBatchToDatabase, getThumbnailUrl } from './lib/productService';
 import { autoSaveWorkflowBatch, type WorkflowBatch } from './lib/workflowBatchService';
 import type { BrandCategory } from './lib/brandCategorySystem';
 import './App.css';
@@ -21,6 +21,7 @@ export interface ClothingItem {
   id: string;
   file: File;
   preview: string;
+  thumbnailUrl?: string; // CDN URL with Supabase Storage transform (300px). Used for card display. Full-res URL in imageUrls[0].
   capturedAt?: number; // file.lastModified — used to sort by photo date
   category?: string;
   brandCategory?: BrandCategory; // Extended 160+ category system
@@ -290,10 +291,14 @@ function App() {
                 const reconstructed = item.storagePath
                   ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
                   : '';
+                const thumbnailUrl = item.storagePath
+                  ? getThumbnailUrl(item.storagePath, 300)
+                  : (item.imageUrls?.[0] || reconstructed);
                 return {
                   ...item,
                   preview: item.preview || item.imageUrls?.[0] || reconstructed,
                   imageUrls: item.imageUrls?.length ? item.imageUrls : (reconstructed ? [reconstructed] : []),
+                  thumbnailUrl,
                 };
               });
               if (liveItems.length) {
@@ -763,17 +768,32 @@ function App() {
     // Re-hydrate preview — stripped before saving to reduce payload size.
     // imageUrls may also be empty for older items; reconstruct from storagePath
     // (synchronous, no extra DB query) as the final fallback.
+    // thumbnailUrl: Supabase Storage transform (300px) — used by ImageGrouper/PDG card display.
+    // Falls back to full-res URL for legacy items that lack storagePath.
     const workflowItems: ClothingItem[] = rawWorkflowItems.map(item => {
       const reconstructed = item.storagePath
         ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
         : '';
+      const thumbnailUrl = item.storagePath
+        ? getThumbnailUrl(item.storagePath, 300)
+        : (item.imageUrls?.[0] || reconstructed);
       return {
         ...item,
         preview: item.preview || item.imageUrls?.[0] || reconstructed,
         imageUrls: item.imageUrls?.length ? item.imageUrls : (reconstructed ? [reconstructed] : []),
+        thumbnailUrl,
       };
     });
     
+    // Set state immediately from workflow_state so images render right away.
+    // DB product descriptions will merge in after the fetch below.
+    if (workflowItems.length > 0) {
+      setUploadedImages(workflowItems);
+      setGroupedImages(workflowItems);
+      setSortedImages(workflowItems);
+      setProcessedItems(workflowItems);
+    }
+
     // Fetch saved products from database to restore descriptions
     // Hoisted so registerItemsInDB (called after try/catch) can always access the final items.
     let restoredProcessedItems: ClothingItem[] = workflowItems;
@@ -1060,7 +1080,12 @@ function App() {
     // Register items in DB so Library sees them — outside the product-data try/catch so
     // registerItemsInDB errors surface separately and don't get silently swallowed above.
     // restoredProcessedItems is always populated (either merged DB data or workflowItems fallback).
-    await registerItemsInDB(restoredProcessedItems, batch.id);
+    // Skip if this batch is already the active one — avoids wasteful delete-then-insert on re-open.
+    if (batch.id !== currentBatchIdRef.current) {
+      await registerItemsInDB(restoredProcessedItems, batch.id);
+    } else {
+      console.log(`[App] handleOpenBatch | registerItemsInDB SKIPPED — batch already active | batchId=${batch.id}`);
+    }
 
     // Sync product_group values from workflow_state → DB immediately after restore.
     // registerItemsInDB uses ignoreDuplicates:false but doesn't fire if rows already exist
