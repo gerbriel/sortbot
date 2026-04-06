@@ -56,7 +56,6 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId }) =
       .filter(f => f.type.startsWith('image/'))
       .sort((a, b) => a.lastModified - b.lastModified);
 
-    console.log(`[Step1:Upload] processFiles | files=${imageFiles.length}`);
     setIsUploading(true);
     setUploadProgress({ done: 0, total: imageFiles.length });
 
@@ -86,7 +85,6 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId }) =
 
     setIsUploading(false);
     setUploadProgress(null);
-    console.log(`[Step1:Upload] upload complete | success=${items.filter(i => i.storagePath).length} fallback=${items.filter(i => !i.storagePath).length} | total=${items.length}`);
     onImagesUploaded(items);
   }, [onImagesUploaded, userId]);
   

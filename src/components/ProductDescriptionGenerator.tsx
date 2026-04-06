@@ -168,7 +168,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const firstIdChanged = items[0]?.id !== previousItemsRefRef.current[0]?.id;
 
     if (batchChanged || lengthChanged || firstIdChanged) {
-      console.log(`[Step4:PDG] prop sync | items: ${previousItemsLengthRef.current} → ${items.length} | batchChanged=${batchChanged} lengthChanged=${lengthChanged} firstIdChanged=${firstIdChanged}`);
       isResettingRef.current = true;
       setProcessedItems(items);
       setCurrentGroupIndex(0); // Reset to first group
@@ -475,7 +474,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Apply manual preset override
   const handleApplyPreset = async (presetId: string) => {
     if (!presetId) return;
-    console.log(`[Step4:PDG] applyPreset | presetId=${presetId} | groupIndex=${currentGroupIndex}`);
     
     try {
       const preset = availablePresets.find(p => p.id === presetId);
@@ -515,7 +513,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   };
 
   const handleStartRecording = () => {
-    console.log(`[Step4:PDG] startRecording | groupIndex=${currentGroupIndex} item=${currentItem?.id}`);
     if (isTransitioning) {
       return;
     }
@@ -556,7 +553,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   };
 
   const handleStopRecording = async () => {
-    console.log(`[Step4:PDG] stopRecording | groupIndex=${currentGroupIndex} | voiceDesc="${currentItem?.voiceDescription?.slice(0, 60)}…"`);
     if (isTransitioning) {
       return;
     }
@@ -670,7 +666,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Explicit save — pushes all current field values to Supabase immediately.
   // This takes priority over any stale data that might be loaded later.
   const handleSave = async () => {
-    console.log(`[Step4:PDG] save | groupIndex=${currentGroupIndex} | totalItems=${processedItems.length} | batchId=${batchId}`);
     if (isSaving) return;
     setIsSaving(true);
     try {
@@ -701,7 +696,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   };
 
   const handleClearTranscript = () => {
-    console.log(`[Step4:PDG] clearTranscript | groupIndex=${currentGroupIndex}`);
     const updated = [...processedItems];
     
     // Clear voice description for all items in the current group
@@ -1061,7 +1055,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   // ── Thumbnail photo reorder handlers ──────────────────────────────────────
   const handleThumbDragStart = (e: React.DragEvent, photoId: string) => {
-    console.log(`[Step4:PDG] thumbDragStart | photo=${photoId} groupIndex=${currentGroupIndex}`);
     setDraggedThumbId(photoId);
     e.dataTransfer.setData('application/json', JSON.stringify({ action: 'reorder-thumb', photoId }));
     e.dataTransfer.effectAllowed = 'move';
@@ -1076,7 +1069,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const handleThumbDrop = (e: React.DragEvent, targetPhotoId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log(`[Step4:PDG] thumbDrop | from=${draggedThumbId} → to=${targetPhotoId} groupIndex=${currentGroupIndex}`);
 
     let srcPhotoId: string | null = null;
     try {
@@ -1118,7 +1110,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   };
 
   const handleNext = () => {
-    console.log(`[Step4:PDG] next | ${currentGroupIndex} → ${currentGroupIndex + 1} of ${groupArray.length - 1}`);
     // Auto-save in background — no waiting, no blocking navigation
     if (hasUnsavedChanges) handleSave();
     if (currentGroupIndex < groupArray.length - 1) {
@@ -1132,7 +1123,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   };
 
   const handlePrevious = () => {
-    console.log(`[Step4:PDG] previous | ${currentGroupIndex} → ${currentGroupIndex - 1}`);
     // Auto-save in background — no waiting, no blocking navigation
     if (hasUnsavedChanges) handleSave();
     if (currentGroupIndex > 0) {
@@ -1149,7 +1139,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const allProcessed = processedItems.every(
       item => item.voiceDescription && item.generatedDescription
     );
-    console.log(`[Step4:PDG] finish | allProcessed=${allProcessed} | total=${processedItems.length}`);
     
     if (allProcessed) {
       onProcessed(processedItems);

@@ -196,9 +196,6 @@ function App() {
     if (!activeUser || liveItems.length === 0) return;
     // Accept items that have either imageUrls[0] OR storagePath — covers both legacy and new items
     const registerable = liveItems.filter(i => i.imageUrls?.[0] || (i.storagePath && i.storagePath !== ''));
-    const withStoragePath = registerable.filter(i => i.storagePath).length;
-    const withImageUrls = registerable.filter(i => i.imageUrls?.[0]).length;
-    console.log(`[App] registerItemsInDB | total=${liveItems.length} registerable=${registerable.length} withStoragePath=${withStoragePath} withImageUrls=${withImageUrls} | batchId=${batchId}`);
     if (registerable.length === 0) return;
     try {
       await supabase.from('products').upsert(
@@ -252,19 +249,15 @@ function App() {
             console.warn('[App] registerItemsInDB | product_images delete error:', delErr.message);
           }
         }
-        console.log(`[App] registerItemsInDB | deleted old product_images for ${productIds.length} products`);
 
-        const { error: imgErr, count: imgCount } = await supabase.from('product_images').insert(
+        const { error: imgErr } = await supabase.from('product_images').insert(
           productImageRows,
           { count: 'exact' }
         );
         if (imgErr) {
           console.warn('[App] registerItemsInDB | product_images insert error:', imgErr.message, imgErr.code, imgErr.details);
-        } else {
-          console.log(`[App] registerItemsInDB | product_images insert OK | attempted=${productImageRows.length} affected=${imgCount}`);
         }
       }
-      console.log(`[App] registerItemsInDB | registered ${registerable.length} products, ${productImageRows.length} product_images | batchId=${batchId}`);
     } catch (err) {
       console.error('[App] registerItemsInDB failed:', err);
     }
@@ -299,7 +292,6 @@ function App() {
           } else {
             // Batch exists — sync ref+state immediately regardless of workflow_state presence,
             // so any autoSave that fires in the next 2s updates this batch instead of creating a new orphan.
-            console.log(`[App] startup restore | batch FOUND | batchId=${savedBatchId} | hasWorkflowState=${!!batch.workflow_state}`);
             currentBatchIdRef.current = savedBatchId;
             setCurrentBatchId(savedBatchId);
 
@@ -330,7 +322,6 @@ function App() {
                 };
               });
               if (liveItems.length) {
-                console.log(`[App] startup restore | batchId=${savedBatchId} | items=${liveItems.length}`);
                 setUploadedImages(liveItems);
                 setGroupedImages(liveItems);
                 setSortedImages(liveItems);
@@ -406,7 +397,6 @@ function App() {
   };
 
   const handleSaveBatch = async () => {
-    console.log(`[App] handleSaveBatch | processedItems=${processedItems.length} | batchId=${currentBatchId}`);
     if (!user || processedItems.length === 0) {
       alert('No products to save!');
       return;
@@ -426,7 +416,6 @@ function App() {
         });
 
         // products/product_images rows were just written — prune stale rows then refresh Library
-        console.log('[App] setLibraryRefreshTrigger → Save Batch (Step 4)');
         if (currentBatchId) {
           await pruneStaleProducts(currentBatchId, processedItems.map(i => i.id));
         }
@@ -460,7 +449,6 @@ function App() {
   };
 
   const handleClearBatch = () => {
-    console.log(`[App] handleClearBatch | uploadedImages=${uploadedImages.length} | batchId=${currentBatchId}`);
     if (confirm('Are you sure you want to clear this batch? Unsaved products will be lost.')) {
       setProcessedItems([]);
       setGroupedImages([]);
@@ -490,7 +478,6 @@ function App() {
   }
 
   const handleImagesUploaded = async (items: ClothingItem[]) => {
-    console.log(`[App] handleImagesUploaded | newItems=${items.length} | totalAfter=${uploadedImages.length + items.length}`);
     // APPEND new images to existing ones (don't replace)
     const newImages = [...uploadedImages, ...items];
     setUploadedImages(newImages);
@@ -503,7 +490,6 @@ function App() {
       currentBatchIdRef.current = newBatchId;
       setCurrentBatchId(newBatchId);
       localStorage.setItem('sortbot_current_batch_id', newBatchId);
-      console.log(`[App] handleImagesUploaded | no batchId — created new batchId=${newBatchId}`);
     }
     
     // If there are already grouped images, append to those too
@@ -552,13 +538,11 @@ function App() {
         console.warn('[App] upload | product_images upsert error:', imgErr2.message, imgErr2.code);
       }
       // Refresh Library immediately — images are now in the DB
-      console.log('[App] setLibraryRefreshTrigger → upload complete (Step 1)');
       setLibraryRefreshTrigger(prev => prev + 1);
     }
   };
 
   const handleImagesSorted = async (items: ClothingItem[]) => {
-    console.log(`[App] handleImagesSorted | items=${items.length} | categories=${[...new Set(items.map(i => i.category).filter(Boolean))].join(', ')}`);
     setSortedImages(items);
     // Also update groupedImages so Step 2 shows the categories
     setGroupedImages(items);
@@ -648,8 +632,6 @@ function App() {
   };
 
   const handleImagesGrouped = async (items: ClothingItem[]) => {
-    const groups = new Set(items.map(i => i.productGroup).filter(Boolean));
-    console.log(`[App] handleImagesGrouped | items=${items.length} | groups=${groups.size}`);
     // Preserve existing categories when updating groups
     const itemsWithCategories = items.map(item => {
       const existingItem = groupedImages.find(g => g.id === item.id);
@@ -662,7 +644,6 @@ function App() {
     const remainingIds = new Set(itemsWithCategories.map(i => i.id));
     const prunedUploaded = uploadedImages.filter(i => remainingIds.has(i.id));
     if (prunedUploaded.length !== uploadedImages.length) {
-      console.log(`[App] handleImagesGrouped pruned uploadedImages | ${uploadedImages.length} → ${prunedUploaded.length}`);
       setUploadedImages(prunedUploaded);
     }
     
@@ -680,7 +661,6 @@ function App() {
     const newItems = itemsWithCategories.filter(i => !sortedIds.has(i.id));
     const finalSorted = [...updatedSorted, ...newItems];
 
-    console.log(`[App] handleImagesGrouped sortedImages | ${sortedImages.length} → ${finalSorted.length} | deleted=${sortedImages.length - finalSorted.length + newItems.length}`);
     setSortedImages(finalSorted);
     // Reset processedItems to the new grouping so Step 3 nav reflects current groups
     setProcessedItems(finalSorted);
@@ -726,7 +706,6 @@ function App() {
   };
 
   const handleItemsProcessed = (items: ClothingItem[]) => {
-    console.log(`[App] handleItemsProcessed | items=${items.length}`);
     setProcessedItems(items);
     
     // Auto-save workflow state
@@ -759,12 +738,8 @@ function App() {
       // getSession() completes. Safe to skip — the session resolving will trigger another
       // autoSave call with the correct batchId.
       if (!currentBatchIdRef.current) {
-        console.log(`[App] autoSave SKIPPED — session not resolved yet (batchId ref null)`);
         return;
       }
-      console.log(`[App] autoSave fired | batchId=${currentBatchIdRef.current} | items=${
-        workflowState.processedItems.length || workflowState.sortedImages.length || workflowState.groupedImages.length || workflowState.uploadedImages.length
-      }`);
       // Strip only runtime-only fields (File objects, blob URLs, preset cache) before saving.
       // generatedDescription and voiceDescription ARE kept so export works after a page reload
       // without requiring a separate DB fetch.
@@ -820,12 +795,10 @@ function App() {
   const handleOpenBatch = async (batch: WorkflowBatch) => {
     // Guard against double-fire (React Strict Mode, or rapid double-click)
     if (isOpeningBatchRef.current) {
-      console.log(`[App] handleOpenBatch SKIPPED — already in progress | batchId=${batch.id}`);
       return;
     }
     isOpeningBatchRef.current = true;
     try {
-    console.log(`[App] handleOpenBatch | batchId=${batch.id} | batchName="${batch.batch_name}" | step=${batch.current_step}`);
     // ── Clear ALL current state first so nothing from the active session bleeds in ──
     setUploadedImages([]);
     setGroupedImages([]);
@@ -1143,7 +1116,6 @@ function App() {
       }
       
       // Set all 4 arrays from the single restored list so every step stays in sync.
-      console.log(`[App] handleOpenBatch RESTORED | items=${restoredProcessedItems.length} | fromDB=${productsToUse?.length ?? 0} | fromWorkflowState=${workflowItems.length}`);
       setUploadedImages(restoredProcessedItems);
       setGroupedImages(restoredProcessedItems);
       setSortedImages(restoredProcessedItems);
@@ -1164,7 +1136,6 @@ function App() {
     if (batch.id !== currentBatchIdRef.current) {
       await registerItemsInDB(restoredProcessedItems, batch.id);
     } else {
-      console.log(`[App] handleOpenBatch | registerItemsInDB SKIPPED — batch already active | batchId=${batch.id}`);
     }
 
     // Sync product_group values from workflow_state → DB immediately after restore.
@@ -1186,7 +1157,6 @@ function App() {
           { onConflict: 'id', ignoreDuplicates: false }
         );
         if (pgErr) console.warn('[App] handleOpenBatch | product_group sync upsert error:', pgErr.message);
-        else console.log(`[App] handleOpenBatch | synced product_group for ${registerable.length} items`);
       }
     }
     // Set current batch info and persist for reload survival
@@ -1349,7 +1319,6 @@ function App() {
                   onStatsChange={() => {}} // stats now computed directly from processedItems
                   userId={user.id}
                   onImageDeleted={() => {
-                    console.log('[App] setLibraryRefreshTrigger → image deleted (Step 2)');
                     setLibraryRefreshTrigger(prev => prev + 1);
                   }}
                   onSelectionChange={setSelectedGroupItems}
