@@ -57,6 +57,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   groupedItemsRef.current = groupedItems;
 
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  // Guard against double-fire: hardware double-clicks emit two rapid mousedown events
+  // (mousedown→mouseup→mousedown→mouseup→dblclick), causing toggleItemSelection to run
+  // twice within ~15ms and leave the item in the wrong state.  Track the last toggle
+  // timestamp per item; ignore any second call within 200ms of the first.
+  const lastToggleTimeRef = useRef<Map<string, number>>(new Map());
   const [draggedItem, setDraggedItem] = useState<ClothingItem | null>(null);
   const [draggedFromGroup, setDraggedFromGroup] = useState<string | null>(null);
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
@@ -458,6 +463,17 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
   // Toggle a single (ungrouped) item, with Shift+click range and Ctrl/Cmd+click additive
   const toggleItemSelection = (itemId: string, e?: React.MouseEvent) => {
+    // Guard: hardware double-clicks fire two mousedown events ~10–15ms apart.
+    // If the same item was toggled within 200ms, skip this call to prevent
+    // the item bouncing back to its previous state.
+    const now = Date.now();
+    const lastTime = lastToggleTimeRef.current.get(itemId) ?? 0;
+    if (now - lastTime < 200) {
+      log.grouper(`toggleItemSelection | debounced (${now - lastTime}ms) item=${itemId}`);
+      return;
+    }
+    lastToggleTimeRef.current.set(itemId, now);
+
     const newSelected = new Set(selectedItems);
 
     if (e?.shiftKey && lastClickedSingleRef.current && singleItemsRef.current.length > 0) {
