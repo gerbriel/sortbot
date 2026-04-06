@@ -580,6 +580,8 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 
 10. **`productService.ts:saveProductToDatabase` upserts on `id`** — fixed. Calling "Save Batch" multiple times now updates the existing row instead of creating duplicates.
 
+11. **`initializeItems` in `ImageGrouper.tsx` previously had a stale-closure bug** — the `useEffect([items])` captured `groupedItems` at effect-creation time. Every `items` prop change would see stale (often empty) `existingIds`, treating all items as "new" and triggering the loading spinner. Fixed by adding `groupedItemsRef` (commit `fe22a7e`).
+
 ---
 
 ## 15. What's Done
@@ -615,6 +617,7 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 - ✅ Library batches sorted newest-first: `fetchWorkflowBatches` uses `updated_at DESC`, Library client-side also sorts `finalBatches` by `updated_at` descending before `setBatches()`
 - ✅ Cursor-following magnifier lens on main preview image in Step 3 — circular 200×200px `.magnifier-lens` (position fixed, pointer-events none) follows cursor over the `preview-image-wrap` div, showing a 3× zoomed region via CSS `background-image`/`background-position`/`background-size: 300%`
 - ✅ Category preset picker in Step 2 right sidebar — when items are selected, a green pill-button per active preset appears below the grouper action buttons; clicking applies the preset (category, shipping defaults, SEO template) to all selected items via `handleApplyPreset` → `applyPresetToProductGroup` → `handleImagesSorted`; presets loaded from DB on login and refreshed when `CategoryPresetsManager` modal closes (commit `0530e9f`)
+- ✅ `initializeItems` stale-closure fix in `ImageGrouper.tsx` — added `groupedItemsRef` (ref mirror of `groupedItems` state) so the `useEffect([items])` always reads live local state; previously the stale closure caused every group/ungroup action to see `existingIds` as empty, falsely treating all items as "new" and re-triggering the loading spinner (commit `fe22a7e`)
 
 ---
 
