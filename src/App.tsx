@@ -205,6 +205,7 @@ function App() {
     // Accept items that have either imageUrls[0] OR storagePath — covers both legacy and new items
     const registerable = liveItems.filter(i => i.imageUrls?.[0] || (i.storagePath && i.storagePath !== ''));
     if (registerable.length === 0) return;
+    log.db(`registerItemsInDB | start | items=${liveItems.length} registerable=${registerable.length} batchId=${batchId}`);
     try {
       await supabase.from('products').upsert(
         registerable.map(item => ({
@@ -266,6 +267,7 @@ function App() {
           console.warn('[App] registerItemsInDB | product_images insert error:', imgErr.message, imgErr.code, imgErr.details);
         }
       }
+      log.db(`registerItemsInDB | done | registered=${registerable.length}`);
     } catch (err) {
       console.error('[App] registerItemsInDB failed:', err);
     }
@@ -284,6 +286,7 @@ function App() {
 
       // Auto-restore last batch on page load so users don't lose progress on reload
       const savedBatchId = localStorage.getItem('sortbot_current_batch_id');
+      log.auth(`app startup | user=${session?.user?.email ?? 'none'} | savedBatchId=${savedBatchId ?? 'none'}`);
       if (savedBatchId && session?.user) {
         try {
           const { data: batch } = await supabase
@@ -293,6 +296,7 @@ function App() {
             .maybeSingle(); // .single() throws a 406 when the row doesn't exist; .maybeSingle() returns null
           if (!batch) {
             // Batch was deleted — clear stale localStorage so we start fresh
+            log.app(`startup restore | batchId=${savedBatchId} NOT FOUND — clearing localStorage`);
             currentBatchIdRef.current = null;
             setCurrentBatchId(null);
             localStorage.removeItem('sortbot_current_batch_id');
@@ -330,6 +334,8 @@ function App() {
                 };
               });
               if (liveItems.length) {
+                const restoredFrom = processedItems?.length ? 'processedItems' : sortedImages?.length ? 'sortedImages' : groupedImages?.length ? 'groupedImages' : 'uploadedImages';
+                log.app(`startup restore | HYDRATED | batchId=${savedBatchId} | rawItems=${rawItems.length} liveItems=${liveItems.length} | restoredFrom=${restoredFrom}`);
                 setUploadedImages(liveItems);
                 setGroupedImages(liveItems);
                 setSortedImages(liveItems);
@@ -357,6 +363,7 @@ function App() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      log.auth(`onAuthStateChange | user=${session?.user?.email ?? 'signed out'}`);
       setUser(session?.user ?? null);
     });
 
@@ -780,6 +787,7 @@ function App() {
 
       try {
         // Use ref so we always get the latest batchId regardless of closure age
+        log.app(`autoSaveWorkflow | fire | batchId=${currentBatchIdRef.current} | items=${slim(live).length}`);
         const batchId = await autoSaveWorkflowBatch(
           currentBatchIdRef.current,
           currentBatchNumber,
