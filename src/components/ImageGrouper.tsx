@@ -190,11 +190,20 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     };
   }, [isSelecting, selectionStart, selectionBox, selectedItems, groupedItems, selectionThresholdMet]);
 
-  // Click-outside: deselect everything when clicking on neutral canvas area
+  // Click-outside: deselect everything when clicking on neutral canvas area.
+  // IMPORTANT: Do NOT clear selection when the user clicks inside the CategoryZones
+  // panel (category-zone, preset buttons, etc.) — those clicks are meant to consume
+  // the current selection (assign category / apply preset), not discard it.
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       const t = e.target as HTMLElement;
-      if (!t.closest('.single-item-card, .product-group-card, .group-header, .toolbar, button, [role="button"]')) {
+      const isSafeTarget = t.closest(
+        '.single-item-card, .product-group-card, .group-header, .toolbar, button, [role="button"],' +
+        '.category-zone, .category-zones-container, .category-zones, .category-list,' +
+        '.grouper-preset-picker, .grouper-preset-buttons, .button-preset,' +
+        '.grouper-actions-sidebar'
+      );
+      if (!isSafeTarget) {
         if (selectedItems.size > 0) updateSelection(new Set());
       }
     };
