@@ -118,11 +118,10 @@
   margin-bottom: 0.5rem;
   padding: 0.25rem 0.25rem 0.5rem 0.25rem;
   cursor: crosshair;
-}
-
-.groups-section {
-  padding: 0.25rem 0.25rem 0.5rem 0.25rem;
-  cursor: crosshair;
+  /* Skip paint + layout for off-screen sections. The intrinsic-size hint
+     prevents layout shift when sections scroll into view. */
+  content-visibility: auto;
+  contain-intrinsic-size: 0 600px;
 }
 
 .groups-section h3,
@@ -217,11 +216,13 @@
   /* 4 images × 70px + 3 gaps × 4px + 2×0.4rem padding ≈ 304px */
   width: 304px !important;
   min-width: 0 !important;
+  contain: layout style;
 }
 
 .product-group-card:hover {
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
   transform: translateY(-1px);
+  will-change: transform;
 }
 
 .group-header {
@@ -324,12 +325,17 @@
   overflow: hidden;
   cursor: pointer;
   transition: all 0.2s ease;
+  /* Declare intrinsic size so browser can honour loading="lazy" correctly
+     before layout is computed. Height: 110px img + ~28px footer strip. */
+  aspect-ratio: 110 / 138;
+  contain: layout style;
 }
 
 .single-item-card:hover {
   border-color: #667eea;
   transform: translateY(-4px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  will-change: transform;
 }
 
 .single-item-card.selected {
