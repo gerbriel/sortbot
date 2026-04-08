@@ -350,18 +350,48 @@
   justify-content: center;
 }
 
-/* Capture date shown below cards when sorting by date */
+/* Capture date + time shown below single-item cards */
 .capture-date-label {
   text-align: center;
   font-size: 0.65rem;
   color: #888;
   padding: 0.2rem 0.4rem 0.3rem;
-  line-height: 1;
+  line-height: 1.3;
   background: #f8f8f8;
   border-top: 1px solid #eee;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Date filter row */
+.date-filter-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.8rem;
+  font-weight: 600;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.date-filter-select {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #fff;
+  border-radius: 5px;
+  padding: 0.22rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  appearance: auto;
+}
+
+.date-filter-select option {
+  background: #4f46e5;
+  color: #fff;
 }
 
 .grouper-footer {
