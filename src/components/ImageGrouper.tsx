@@ -1104,6 +1104,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       <span className="category-badge">{item.category}</span>
                     </div>
                   )}
+                  {sortOrder.startsWith('date') && item.capturedAt ? (
+                    <div className="capture-date-label">
+                      {new Date(item.capturedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
@@ -1227,6 +1232,14 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     ×
                   </button>
                 </div>
+                {sortOrder.startsWith('date') && (() => {
+                  const earliest = Math.min(...items.map(i => i.capturedAt ?? 0).filter(t => t > 0));
+                  return earliest > 0 ? (
+                    <div className="capture-date-label">
+                      {new Date(earliest).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  ) : null;
+                })()}
                 <div className="group-images">
                   {items.map((item) => (
                     <div
