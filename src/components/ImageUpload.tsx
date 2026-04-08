@@ -133,6 +133,15 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
     alreadyDone: number;
     errors: string[];
   } | null>(null);
+  const [recompressAllState, setRecompressAllState] = useState<{
+    running: boolean;
+    done: number;
+    total: number;
+    savedKB: number;
+    skipped: number;
+    alreadyDone: number;
+    errors: string[];
+  } | null>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
 
@@ -349,6 +358,155 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
       errors: [...errors],
     });
     log.upload(`recompressExisting done | saved=${(totalSavedBytes/1024/1024).toFixed(2)}MB skipped=${skipped} errors=${errors.length} alreadyDone=${alreadyDoneCount}`);
+  };
+
+  /**
+   * Recompress ALL images across ALL batches in Supabase Storage.
+   * Queries the product_images table for every storagePath the current user owns,
+   * then compresses and overwrites each one — same logic as recompressExisting but
+   * not limited to the currently-loaded batch.
+   */
+  const recompressAllBatches = async () => {
+    const alreadyCompressed = getCompressedPaths();
+
+    // Fetch all product_images rows for this user — paginate in case of >1000 rows
+    const PAGE = 1000;
+    let allRows: { storage_path: string; image_url: string }[] = [];
+    let offset = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from('product_images')
+        .select('storage_path, image_url')
+        .eq('user_id', userId)
+        .not('storage_path', 'is', null)
+        .range(offset, offset + PAGE - 1);
+      if (error) {
+        log.upload(`recompressAll DB fetch error | ${error.message}`);
+        break;
+      }
+      if (!data || data.length === 0) break;
+      allRows = allRows.concat(data as { storage_path: string; image_url: string }[]);
+      if (data.length < PAGE) break;
+      offset += PAGE;
+    }
+
+    if (allRows.length === 0) {
+      setRecompressAllState({ running: false, done: 0, total: 0, savedKB: 0, skipped: 0, alreadyDone: 0, errors: ['No images found in database.'] });
+      return;
+    }
+
+    // Deduplicate by storagePath (a path can appear multiple times across batches)
+    const seen = new Set<string>();
+    const unique = allRows.filter(r => {
+      if (!r.storage_path || seen.has(r.storage_path)) return false;
+      seen.add(r.storage_path);
+      return true;
+    });
+
+    const needsWork = unique.filter(r => !alreadyCompressed.has(r.storage_path));
+    const alreadyDoneCount = unique.length - needsWork.length;
+
+    log.upload(`recompressAll | total=${unique.length} needsWork=${needsWork.length} alreadyDone=${alreadyDoneCount}`);
+
+    if (needsWork.length === 0) {
+      setRecompressAllState({ running: false, done: 0, total: 0, savedKB: 0, skipped: 0, alreadyDone: alreadyDoneCount, errors: [] });
+      return;
+    }
+
+    setRecompressAllState({ running: true, done: 0, total: needsWork.length, savedKB: 0, skipped: 0, alreadyDone: alreadyDoneCount, errors: [] });
+
+    let totalSavedBytes = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+    const CHUNK = 5;
+
+    for (let i = 0; i < needsWork.length; i += CHUNK) {
+      const chunk = needsWork.slice(i, i + CHUNK);
+      await Promise.all(chunk.map(async (row) => {
+        const { storage_path: storagePath, image_url: url } = row;
+        if (!url || !storagePath) return;
+
+        try {
+          const resp = await fetch(url);
+          if (!resp.ok) {
+            const msg = `Fetch failed (${resp.status}) — ${storagePath.split('/').pop()}`;
+            log.upload(`recompressAll fetch error | ${storagePath} status=${resp.status}`);
+            errors.push(msg);
+            skipped++;
+            return;
+          }
+          const blob = await resp.blob();
+
+          if (blob.size < RECOMPRESS_SKIP_UNDER_BYTES) {
+            markCompressed(storagePath);
+            skipped++;
+            return;
+          }
+
+          if (blob.type === 'image/avif' && blob.size < 100 * 1024) {
+            markCompressed(storagePath);
+            skipped++;
+            return;
+          }
+
+          const originalSize = blob.size;
+          const originalFile = new File([blob], 'img.jpg', { type: blob.type, lastModified: Date.now() });
+          const compressed = await compressImage(originalFile);
+
+          if (compressed.size >= originalSize * 0.9) {
+            markCompressed(storagePath);
+            skipped++;
+            return;
+          }
+
+          const { error } = await supabase.storage
+            .from('product-images')
+            .upload(storagePath, compressed, {
+              contentType: 'image/jpeg',
+              cacheControl: '3600',
+              upsert: true,
+            });
+
+          if (error) {
+            const msg = `Upload error — ${storagePath.split('/').pop()}: ${error.message}`;
+            log.upload(`recompressAll upload error | ${storagePath} ${error.message}`);
+            errors.push(msg);
+            skipped++;
+            return;
+          }
+
+          markCompressed(storagePath);
+          totalSavedBytes += originalSize - compressed.size;
+          log.upload(`recompressAll OK | ${storagePath} ${(originalSize/1024).toFixed(0)}KB → ${(compressed.size/1024).toFixed(0)}KB`);
+        } catch (err) {
+          const msg = `Error — ${storagePath.split('/').pop()}: ${err instanceof Error ? err.message : String(err)}`;
+          log.upload(`recompressAll exception | ${storagePath} ${msg}`);
+          errors.push(msg);
+          skipped++;
+        }
+      }));
+
+      setRecompressAllState({
+        running: true,
+        done: Math.min(i + CHUNK, needsWork.length),
+        total: needsWork.length,
+        savedKB: Math.round(totalSavedBytes / 1024),
+        skipped,
+        alreadyDone: alreadyDoneCount,
+        errors: [...errors],
+      });
+    }
+
+    setRecompressAllState({
+      running: false,
+      done: needsWork.length,
+      total: needsWork.length,
+      savedKB: Math.round(totalSavedBytes / 1024),
+      skipped,
+      alreadyDone: alreadyDoneCount,
+      errors: [...errors],
+    });
+    log.upload(`recompressAll done | saved=${(totalSavedBytes/1024/1024).toFixed(2)}MB skipped=${skipped} errors=${errors.length} alreadyDone=${alreadyDoneCount}`);
   };
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -624,6 +782,105 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
                       </div>
                       <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.75rem', color: '#7f1d1d', lineHeight: 1.5 }}>
                         {recompressState.errors.map((e, idx) => <li key={idx}>{e}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ── Recompress ALL batches ─────────────────────────────────────────── */}
+        {!isUploading && !extractingZip && (() => {
+          const compressedPaths = getCompressedPaths();
+          // We don't know the full total until the DB query runs, so just show the button
+          // with a note. After the run, show stats like the per-batch button.
+          const runningOrDone = recompressAllState !== null;
+
+          return (
+            <div style={{ marginTop: '0.5rem' }}>
+              {!runningOrDone ? (
+                <button
+                  type="button"
+                  onClick={recompressAllBatches}
+                  disabled={recompressState?.running === true}
+                  title="Query the database for every image you've ever uploaded across ALL batches and compress them all. Safe to run multiple times — already-compressed images are skipped."
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem 1rem',
+                    background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: 600,
+                    fontSize: '0.85rem',
+                    cursor: recompressState?.running ? 'not-allowed' : 'pointer',
+                    opacity: recompressState?.running ? 0.5 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.4rem',
+                  }}
+                >
+                  🗄️ Compress All Batches
+                  {compressedPaths.size > 0 && (
+                    <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>
+                      ({compressedPaths.size} already done)
+                    </span>
+                  )}
+                </button>
+              ) : recompressAllState.running ? (
+                <div style={{
+                  background: 'rgba(99,102,241,0.1)',
+                  border: '1px solid #6366f1',
+                  borderRadius: '8px',
+                  padding: '0.6rem 1rem',
+                  fontSize: '0.85rem',
+                  color: '#3730a3',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                }}>
+                  <div className="spinner" style={{ width: '14px', height: '14px', borderWidth: '2px', borderColor: '#6366f1', borderTopColor: 'transparent' }} />
+                  Compressing all batches… {recompressAllState.done}/{recompressAllState.total}
+                  {recompressAllState.savedKB > 0 && ` · saved ${recompressAllState.savedKB >= 1024
+                    ? `${(recompressAllState.savedKB/1024).toFixed(1)} MB`
+                    : `${recompressAllState.savedKB} KB`} so far`}
+                  {recompressAllState.skipped > 0 && ` · ${recompressAllState.skipped} skipped`}
+                </div>
+              ) : (
+                <div style={{
+                  background: 'rgba(99,102,241,0.1)',
+                  border: '1px solid #6366f1',
+                  borderRadius: '8px',
+                  padding: '0.6rem 1rem',
+                  fontSize: '0.85rem',
+                  color: '#3730a3',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                    <span>
+                      ✅ All batches done! Saved{' '}
+                      <strong>{recompressAllState.savedKB >= 1024
+                        ? `${(recompressAllState.savedKB/1024).toFixed(1)} MB`
+                        : `${recompressAllState.savedKB} KB`}</strong>
+                      {recompressAllState.alreadyDone > 0 && ` · ${recompressAllState.alreadyDone} already compressed`}
+                      {recompressAllState.skipped > 0 && ` · ${recompressAllState.skipped} skipped`}
+                    </span>
+                    <button
+                      onClick={() => setRecompressAllState(null)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: '#3730a3', flexShrink: 0 }}
+                    >
+                      ✕ dismiss
+                    </button>
+                  </div>
+                  {recompressAllState.errors.length > 0 && (
+                    <div style={{ marginTop: '0.5rem', borderTop: '1px solid #a5b4fc', paddingTop: '0.4rem' }}>
+                      <div style={{ color: '#991b1b', fontWeight: 600, fontSize: '0.78rem', marginBottom: '0.2rem' }}>
+                        ⚠️ {recompressAllState.errors.length} error{recompressAllState.errors.length !== 1 ? 's' : ''}:
+                      </div>
+                      <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.75rem', color: '#7f1d1d', lineHeight: 1.5 }}>
+                        {recompressAllState.errors.map((e, idx) => <li key={idx}>{e}</li>)}
                       </ul>
                     </div>
                   )}
