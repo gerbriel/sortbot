@@ -370,6 +370,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
     const alreadyCompressed = getCompressedPaths();
 
     // ── Source 1: product_images DB table (has image_url) ──────────────────
+    // No user_id filter — shared workspace, all batches belong to this app.
     const PAGE = 1000;
     const dbPathToUrl = new Map<string, string>();
     let offset = 0;
@@ -377,7 +378,6 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
       const { data, error } = await supabase
         .from('product_images')
         .select('storage_path, image_url')
-        .eq('user_id', userId)
         .not('storage_path', 'is', null)
         .range(offset, offset + PAGE - 1);
       if (error) { log.upload(`recompressAll DB fetch error | ${error.message}`); break; }
@@ -392,51 +392,77 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
     }
     log.upload(`recompressAll DB source | paths=${dbPathToUrl.size}`);
 
-    // ── Source 2: walk Storage bucket for this user ─────────────────────────
-    // Many old files have no product_images row — we still need to compress them.
-    // Strategy: list userId/ → product subfolders → files within each.
+    // ── Source 2: walk Storage bucket — ALL user folders ───────────────────
+    // Many old files have no product_images row. We walk the entire bucket
+    // (all user-ID prefixes) because this is a shared workspace and the big
+    // data may live under a different user's folder.
+    // NOTE: supabase.storage.list() is capped at 1000 results per call — we
+    // must paginate with increasing offsets.
     const storagePathToUrl = new Map<string, string>(); // storagePath → CDN URL
-    
-    // Fetch product-level subfolders
-    const { data: productFolders } = await supabase.storage
-      .from('product-images')
-      .list(userId, { limit: 10000, offset: 0 });
-    
-    log.upload(`recompressAll storage walk | productFolders=${productFolders?.length ?? 0}`);
+    const LIST_LIMIT = 1000;
 
-    if (productFolders && productFolders.length > 0) {
-      // Process in batches of 50 folder listings to avoid overwhelming the API
-      const FOLDER_CHUNK = 50;
-      for (let fi = 0; fi < productFolders.length; fi += FOLDER_CHUNK) {
-        const folderBatch = productFolders.slice(fi, fi + FOLDER_CHUNK);
-        await Promise.all(folderBatch.map(async (folder) => {
-          if (folder.id !== null) return; // it's a file, not a folder
-          const folderPath = `${userId}/${folder.name}`;
-          const { data: files } = await supabase.storage
+    // Step 2a: list all top-level user-ID folders (root of bucket)
+    const { data: userFolders } = await supabase.storage
+      .from('product-images')
+      .list('', { limit: LIST_LIMIT, offset: 0 });
+
+    log.upload(`recompressAll storage walk | userFolders=${userFolders?.length ?? 0}`);
+
+    if (userFolders && userFolders.length > 0) {
+      // Step 2b: for each user folder, paginate through product subfolders
+      for (const userFolder of userFolders) {
+        if (userFolder.id !== null) continue; // not a folder
+        const userPrefix = userFolder.name;
+
+        // Paginate product subfolders under this user prefix
+        const allProductFolders: { name: string }[] = [];
+        let folderOffset = 0;
+        while (true) {
+          const { data: page } = await supabase.storage
             .from('product-images')
-            .list(folderPath, { limit: 1000, offset: 0 });
-          if (!files) return;
-          for (const file of files) {
-            if (file.id === null) continue; // sub-subfolder, skip
-            const storagePath = `${folderPath}/${file.name}`;
-            if (!storagePathToUrl.has(storagePath)) {
-              const { data: { publicUrl } } = supabase.storage
-                .from('product-images')
-                .getPublicUrl(storagePath);
-              storagePathToUrl.set(storagePath, publicUrl);
-            }
+            .list(userPrefix, { limit: LIST_LIMIT, offset: folderOffset });
+          if (!page || page.length === 0) break;
+          for (const f of page) {
+            if (f.id === null) allProductFolders.push(f); // only folders
           }
-        }));
-        // Update progress indicator while scanning
-        setRecompressAllState(prev => prev ? {
-          ...prev,
-          running: true,
-          total: -1, // signal "still scanning"
-          done: fi + FOLDER_CHUNK,
-        } : { running: true, done: fi + FOLDER_CHUNK, total: -1, savedKB: 0, skipped: 0, alreadyDone: 0, errors: [] });
+          if (page.length < LIST_LIMIT) break;
+          folderOffset += LIST_LIMIT;
+        }
+
+        log.upload(`recompressAll storage walk | user=${userPrefix.slice(0,8)} productFolders=${allProductFolders.length}`);
+
+        // Step 2c: list files inside each product folder (in chunks of 50)
+        const FOLDER_CHUNK = 50;
+        for (let fi = 0; fi < allProductFolders.length; fi += FOLDER_CHUNK) {
+          const folderBatch = allProductFolders.slice(fi, fi + FOLDER_CHUNK);
+          await Promise.all(folderBatch.map(async (folder) => {
+            const folderPath = `${userPrefix}/${folder.name}`;
+            const { data: files } = await supabase.storage
+              .from('product-images')
+              .list(folderPath, { limit: LIST_LIMIT, offset: 0 });
+            if (!files) return;
+            for (const file of files) {
+              if (file.id === null) continue; // sub-subfolder, skip
+              const storagePath = `${folderPath}/${file.name}`;
+              if (!storagePathToUrl.has(storagePath)) {
+                const { data: { publicUrl } } = supabase.storage
+                  .from('product-images')
+                  .getPublicUrl(storagePath);
+                storagePathToUrl.set(storagePath, publicUrl);
+              }
+            }
+          }));
+          // Update scanning progress UI
+          setRecompressAllState(prev => prev ? {
+            ...prev,
+            running: true,
+            total: -1, // sentinel = still scanning
+            done: storagePathToUrl.size,
+          } : { running: true, done: storagePathToUrl.size, total: -1, savedKB: 0, skipped: 0, alreadyDone: 0, errors: [] });
+        }
       }
     }
-    log.upload(`recompressAll storage walk | files=${storagePathToUrl.size}`);
+    log.upload(`recompressAll storage walk | totalFiles=${storagePathToUrl.size}`);
 
     // ── Merge both sources ───────────────────────────────────────────────────
     // DB rows take precedence (they have the authoritative CDN URL);
