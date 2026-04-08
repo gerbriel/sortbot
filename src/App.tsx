@@ -1428,7 +1428,7 @@ function App() {
           <p className="step-description" style={{ fontSize: '14px', color: '#666', marginBottom: '1rem' }}>
             💡 <strong>Tip:</strong> You can upload multiple batches! New images will be added to your current session.
           </p>
-          <ImageUpload onImagesUploaded={handleImagesUploaded} userId={user.id} />
+          <ImageUpload onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} />
           {uploadedImages.length > 0 && (
             <p className="status-text">✓ {uploadedImages.length} images uploaded</p>
           )}
