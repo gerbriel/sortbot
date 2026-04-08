@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
-import { Package, Image, ArrowDown, Check } from 'lucide-react';
+import { Package, Image, ArrowDown, ArrowUp, ArrowUpDown, Check } from 'lucide-react';
 import LoadingProgress from './LoadingProgress';
 import { log } from '../lib/debugLogger';
 import './ImageGrouper.css';
@@ -76,6 +76,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const [isLoading, setIsLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingMessage, setLoadingMessage] = useState('');
+
+  // Sort order for individual items and product groups
+  type SortOrder = 'date-asc' | 'date-desc' | 'name-asc' | 'name-desc';
+  const [sortOrder, setSortOrder] = useState<SortOrder>('date-asc');
 
   // Lightbox state
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -830,12 +834,47 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
   const groups = getGroups();
   const groupEntries = Object.entries(groups);
-  
-  const multiItemGroups = groupEntries.filter(([_, items]) => items.length > 1);
-  const singleItems = groupEntries
-    .filter(([_, items]) => items.length === 1)
-    .flatMap(([_, items]) => items)
-    .sort((a, b) => (a.capturedAt ?? 0) - (b.capturedAt ?? 0));
+
+  // ── Sort helpers ─────────────────────────────────────────────────────────
+  // Name key: use the filename portion of storagePath (e.g. "1234-abc.jpg") or fall back to id
+  const nameKey = (item: ClothingItem) => {
+    if (item.storagePath) return item.storagePath.split('/').pop()?.toLowerCase() ?? item.id;
+    return item.id.toLowerCase();
+  };
+
+  const sortItems = (arr: ClothingItem[]): ClothingItem[] => {
+    const copy = [...arr];
+    switch (sortOrder) {
+      case 'date-asc':  return copy.sort((a, b) => (a.capturedAt ?? 0) - (b.capturedAt ?? 0));
+      case 'date-desc': return copy.sort((a, b) => (b.capturedAt ?? 0) - (a.capturedAt ?? 0));
+      case 'name-asc':  return copy.sort((a, b) => nameKey(a).localeCompare(nameKey(b)));
+      case 'name-desc': return copy.sort((a, b) => nameKey(b).localeCompare(nameKey(a)));
+    }
+  };
+
+  // Sort group entries by the representative item (first item, lowest capturedAt, or name)
+  const sortGroupEntries = (entries: [string, ClothingItem[]][]): [string, ClothingItem[]][] => {
+    const copy = [...entries];
+    switch (sortOrder) {
+      case 'date-asc':
+        return copy.sort(([, a], [, b]) =>
+          Math.min(...a.map(i => i.capturedAt ?? 0)) - Math.min(...b.map(i => i.capturedAt ?? 0)));
+      case 'date-desc':
+        return copy.sort(([, a], [, b]) =>
+          Math.min(...b.map(i => i.capturedAt ?? 0)) - Math.min(...a.map(i => i.capturedAt ?? 0)));
+      case 'name-asc':
+        return copy.sort(([, a], [, b]) => nameKey(a[0]).localeCompare(nameKey(b[0])));
+      case 'name-desc':
+        return copy.sort(([, a], [, b]) => nameKey(b[0]).localeCompare(nameKey(a[0])));
+    }
+  };
+
+  const multiItemGroups = sortGroupEntries(groupEntries.filter(([_, items]) => items.length > 1));
+  const singleItems = sortItems(
+    groupEntries
+      .filter(([_, items]) => items.length === 1)
+      .flatMap(([_, items]) => items)
+  );
 
   // Keep a ref so event-handler closures always see the current singleItems list
   const singleItemsRef = useRef<ClothingItem[]>(singleItems);
@@ -892,6 +931,39 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               <Check size={16} /> {selectedItems.size} Selected
             </span>
           )}
+        </div>
+        {/* Sort control */}
+        <div className="sort-control">
+          <ArrowUpDown size={15} style={{ flexShrink: 0 }} />
+          <span>Sort:</span>
+          <button
+            className={`sort-btn${sortOrder === 'date-asc' ? ' active' : ''}`}
+            onClick={() => setSortOrder('date-asc')}
+            title="Oldest first (capture date)"
+          >
+            <ArrowUp size={13} /> Date
+          </button>
+          <button
+            className={`sort-btn${sortOrder === 'date-desc' ? ' active' : ''}`}
+            onClick={() => setSortOrder('date-desc')}
+            title="Newest first (capture date)"
+          >
+            <ArrowDown size={13} /> Date
+          </button>
+          <button
+            className={`sort-btn${sortOrder === 'name-asc' ? ' active' : ''}`}
+            onClick={() => setSortOrder('name-asc')}
+            title="Sort by filename A → Z"
+          >
+            <ArrowUp size={13} /> Name
+          </button>
+          <button
+            className={`sort-btn${sortOrder === 'name-desc' ? ' active' : ''}`}
+            onClick={() => setSortOrder('name-desc')}
+            title="Sort by filename Z → A"
+          >
+            <ArrowDown size={13} /> Name
+          </button>
         </div>
       </div>
 
