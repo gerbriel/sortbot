@@ -1040,12 +1040,14 @@ function App() {
 
     // Fetch saved products from database to restore descriptions
     // Hoisted so registerItemsInDB (called after try/catch) can always access the final items.
+    // Only select the columns that are actually needed for restoration — skip the 20+ rarely-set
+    // columns to keep the payload small and the query fast.
     let restoredProcessedItems: ClothingItem[] = workflowItems;
+    // Capture whether this is already the active batch BEFORE we update the ref below.
+    const isAlreadyActiveBatch = batch.id === currentBatchIdRef.current;
     try {
-      const fullProductSelect = `
+      const slimProductSelect = `
         id,
-        title,
-        url_handle,
         description,
         vendor,
         product_category,
@@ -1102,7 +1104,7 @@ function App() {
 
       const { data: savedProducts } = await supabase
         .from('products')
-        .select(fullProductSelect)
+        .select(slimProductSelect)
         .eq('batch_id', batch.id)
         .order('created_at', { ascending: true });
       
@@ -1118,7 +1120,7 @@ function App() {
         
         const { data: recentProducts } = await supabase
           .from('products')
-          .select(fullProductSelect)
+          .select(slimProductSelect)
           .gte('created_at', startTime.toISOString())
           .lte('created_at', endTime.toISOString())
           .order('created_at', { ascending: true });
@@ -1320,36 +1322,14 @@ function App() {
       setProcessedItems(workflowItems);
     }
 
-    // Register items in DB so Library sees them — outside the product-data try/catch so
-    // registerItemsInDB errors surface separately and don't get silently swallowed above.
-    // restoredProcessedItems is always populated (either merged DB data or workflowItems fallback).
-    // Skip if this batch is already the active one — avoids wasteful delete-then-insert on re-open.
-    if (batch.id !== currentBatchIdRef.current) {
-      await registerItemsInDB(restoredProcessedItems, batch.id);
-    } else {
+    // Fire registerItemsInDB in the background — don't await it.
+    // The UI is already showing images at this point (set above). registerItemsInDB
+    // only matters for Library consistency, which is non-blocking from the user's perspective.
+    // Skip entirely if this batch was already the active one (checked before updating currentBatchIdRef).
+    if (!isAlreadyActiveBatch) {
+      registerItemsInDB(restoredProcessedItems, batch.id);
     }
 
-    // Sync product_group values from workflow_state → DB immediately after restore.
-    // registerItemsInDB uses ignoreDuplicates:false but doesn't fire if rows already exist
-    // with the same id (it only upserts, not updates-all-fields). This targeted pass
-    // ensures every row's product_group reflects the live session state.
-    if (user) {
-      const registerable = restoredProcessedItems.filter(i => i.imageUrls?.[0] || i.storagePath);
-      if (registerable.length > 0) {
-        const { error: pgErr } = await supabase.from('products').upsert(
-          registerable.map(item => ({
-            id: item.id,
-            user_id: user.id,
-            batch_id: batch.id,
-            product_group: item.productGroup || item.id,
-            title: item.seoTitle || null,
-            status: 'Draft',
-          })),
-          { onConflict: 'id', ignoreDuplicates: false }
-        );
-        if (pgErr) console.warn('[App] handleOpenBatch | product_group sync upsert error:', pgErr.message);
-      }
-    }
     // Set current batch info and persist for reload survival
     currentBatchIdRef.current = batch.id;
     setCurrentBatchId(batch.id);
