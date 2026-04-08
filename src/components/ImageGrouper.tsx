@@ -1127,6 +1127,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       alt="Product" 
                       draggable={false}
                       loading="lazy"
+                      decoding="async"
                       onError={retryImg}
                     />
                   ) : (
@@ -1301,6 +1302,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                           alt="Product"
                           draggable={false}
                           loading="lazy"
+                          decoding="async"
                           onError={retryImg}
                         />
                       ) : (

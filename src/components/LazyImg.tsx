@@ -69,6 +69,7 @@ const LazyImg: React.FC<{
         alt={alt}
         className={`lazy-img${loaded ? ' loaded' : ''}${className ? ` ${className}` : ''}`}
         loading="lazy"
+        decoding="async"
         draggable={draggable}
         style={errored ? { display: 'none' } : style}
         onLoad={() => setLoaded(true)}
