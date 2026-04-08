@@ -369,9 +369,9 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
   const recompressAllBatches = async () => {
     const alreadyCompressed = getCompressedPaths();
 
-    // Fetch all product_images rows for this user — paginate in case of >1000 rows
+    // ── Source 1: product_images DB table (has image_url) ──────────────────
     const PAGE = 1000;
-    let allRows: { storage_path: string; image_url: string }[] = [];
+    const dbPathToUrl = new Map<string, string>();
     let offset = 0;
     while (true) {
       const { data, error } = await supabase
@@ -380,33 +380,78 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
         .eq('user_id', userId)
         .not('storage_path', 'is', null)
         .range(offset, offset + PAGE - 1);
-      if (error) {
-        log.upload(`recompressAll DB fetch error | ${error.message}`);
-        break;
-      }
+      if (error) { log.upload(`recompressAll DB fetch error | ${error.message}`); break; }
       if (!data || data.length === 0) break;
-      allRows = allRows.concat(data as { storage_path: string; image_url: string }[]);
+      for (const row of data as { storage_path: string; image_url: string }[]) {
+        if (row.storage_path && row.image_url && !dbPathToUrl.has(row.storage_path)) {
+          dbPathToUrl.set(row.storage_path, row.image_url);
+        }
+      }
       if (data.length < PAGE) break;
       offset += PAGE;
     }
+    log.upload(`recompressAll DB source | paths=${dbPathToUrl.size}`);
 
-    if (allRows.length === 0) {
-      setRecompressAllState({ running: false, done: 0, total: 0, savedKB: 0, skipped: 0, alreadyDone: 0, errors: ['No images found in database.'] });
-      return;
+    // ── Source 2: walk Storage bucket for this user ─────────────────────────
+    // Many old files have no product_images row — we still need to compress them.
+    // Strategy: list userId/ → product subfolders → files within each.
+    const storagePathToUrl = new Map<string, string>(); // storagePath → CDN URL
+    
+    // Fetch product-level subfolders
+    const { data: productFolders } = await supabase.storage
+      .from('product-images')
+      .list(userId, { limit: 10000, offset: 0 });
+    
+    log.upload(`recompressAll storage walk | productFolders=${productFolders?.length ?? 0}`);
+
+    if (productFolders && productFolders.length > 0) {
+      // Process in batches of 50 folder listings to avoid overwhelming the API
+      const FOLDER_CHUNK = 50;
+      for (let fi = 0; fi < productFolders.length; fi += FOLDER_CHUNK) {
+        const folderBatch = productFolders.slice(fi, fi + FOLDER_CHUNK);
+        await Promise.all(folderBatch.map(async (folder) => {
+          if (folder.id !== null) return; // it's a file, not a folder
+          const folderPath = `${userId}/${folder.name}`;
+          const { data: files } = await supabase.storage
+            .from('product-images')
+            .list(folderPath, { limit: 1000, offset: 0 });
+          if (!files) return;
+          for (const file of files) {
+            if (file.id === null) continue; // sub-subfolder, skip
+            const storagePath = `${folderPath}/${file.name}`;
+            if (!storagePathToUrl.has(storagePath)) {
+              const { data: { publicUrl } } = supabase.storage
+                .from('product-images')
+                .getPublicUrl(storagePath);
+              storagePathToUrl.set(storagePath, publicUrl);
+            }
+          }
+        }));
+        // Update progress indicator while scanning
+        setRecompressAllState(prev => prev ? {
+          ...prev,
+          running: true,
+          total: -1, // signal "still scanning"
+          done: fi + FOLDER_CHUNK,
+        } : { running: true, done: fi + FOLDER_CHUNK, total: -1, savedKB: 0, skipped: 0, alreadyDone: 0, errors: [] });
+      }
+    }
+    log.upload(`recompressAll storage walk | files=${storagePathToUrl.size}`);
+
+    // ── Merge both sources ───────────────────────────────────────────────────
+    // DB rows take precedence (they have the authoritative CDN URL);
+    // storage walk fills in anything missing.
+    const merged = new Map<string, string>(storagePathToUrl);
+    for (const [p, u] of dbPathToUrl) merged.set(p, u); // DB overwrites storage-derived URL
+
+    const needsWork: { storagePath: string; url: string }[] = [];
+    let alreadyDoneCount = 0;
+    for (const [storagePath, url] of merged) {
+      if (alreadyCompressed.has(storagePath)) { alreadyDoneCount++; }
+      else { needsWork.push({ storagePath, url }); }
     }
 
-    // Deduplicate by storagePath (a path can appear multiple times across batches)
-    const seen = new Set<string>();
-    const unique = allRows.filter(r => {
-      if (!r.storage_path || seen.has(r.storage_path)) return false;
-      seen.add(r.storage_path);
-      return true;
-    });
-
-    const needsWork = unique.filter(r => !alreadyCompressed.has(r.storage_path));
-    const alreadyDoneCount = unique.length - needsWork.length;
-
-    log.upload(`recompressAll | total=${unique.length} needsWork=${needsWork.length} alreadyDone=${alreadyDoneCount}`);
+    log.upload(`recompressAll | total=${merged.size} needsWork=${needsWork.length} alreadyDone=${alreadyDoneCount}`);
 
     if (needsWork.length === 0) {
       setRecompressAllState({ running: false, done: 0, total: 0, savedKB: 0, skipped: 0, alreadyDone: alreadyDoneCount, errors: [] });
@@ -422,8 +467,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
 
     for (let i = 0; i < needsWork.length; i += CHUNK) {
       const chunk = needsWork.slice(i, i + CHUNK);
-      await Promise.all(chunk.map(async (row) => {
-        const { storage_path: storagePath, image_url: url } = row;
+      await Promise.all(chunk.map(async ({ storagePath, url }) => {
         if (!url || !storagePath) return;
 
         try {
@@ -843,7 +887,10 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
                   gap: '0.5rem',
                 }}>
                   <div className="spinner" style={{ width: '14px', height: '14px', borderWidth: '2px', borderColor: '#6366f1', borderTopColor: 'transparent' }} />
-                  Compressing all batches… {recompressAllState.done}/{recompressAllState.total}
+                  {recompressAllState.total === -1
+                    ? `Scanning storage… ${recompressAllState.done} folders checked`
+                    : `Compressing all batches… ${recompressAllState.done}/${recompressAllState.total}`
+                  }
                   {recompressAllState.savedKB > 0 && ` · saved ${recompressAllState.savedKB >= 1024
                     ? `${(recompressAllState.savedKB/1024).toFixed(1)} MB`
                     : `${recompressAllState.savedKB} KB`} so far`}
