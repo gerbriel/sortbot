@@ -81,6 +81,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   type SortOrder = 'date-asc' | 'date-desc' | 'name-asc' | 'name-desc';
   const [sortOrder, setSortOrder] = useState<SortOrder>('date-asc');
 
+  // Date filter: '' = show all; otherwise a YYYY-MM-DD string matching capturedAt date
+  const [dateFilter, setDateFilter] = useState<string>('');
+
   // Lightbox state
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
@@ -876,6 +879,26 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       .flatMap(([_, items]) => items)
   );
 
+  // Build a sorted list of unique calendar dates (YYYY-MM-DD) from all items for the filter dropdown
+  const uniqueFilterDates: string[] = (() => {
+    const dateSet = new Set<string>();
+    groupedItems.forEach(item => {
+      if (item.capturedAt) {
+        dateSet.add(new Date(item.capturedAt).toLocaleDateString('en-CA')); // YYYY-MM-DD
+      }
+    });
+    return [...dateSet].sort();
+  })();
+
+  // Apply date filter to both lists
+  const toLocalDate = (ts: number) => new Date(ts).toLocaleDateString('en-CA');
+  const filteredSingleItems = dateFilter
+    ? singleItems.filter(item => item.capturedAt && toLocalDate(item.capturedAt) === dateFilter)
+    : singleItems;
+  const filteredMultiItemGroups = dateFilter
+    ? multiItemGroups.filter(([, items]) => items.some(i => i.capturedAt && toLocalDate(i.capturedAt) === dateFilter))
+    : multiItemGroups;
+
   // Keep a ref so event-handler closures always see the current singleItems list
   const singleItemsRef = useRef<ClothingItem[]>(singleItems);
   singleItemsRef.current = singleItems;
@@ -965,6 +988,29 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             <ArrowDown size={13} /> Name
           </button>
         </div>
+        {/* Date filter dropdown */}
+        {uniqueFilterDates.length > 0 && (
+          <div className="date-filter-control">
+            <span>Filter by date:</span>
+            <select
+              className="date-filter-select"
+              value={dateFilter}
+              onChange={e => setDateFilter(e.target.value)}
+            >
+              <option value="">All dates</option>
+              {uniqueFilterDates.map(d => (
+                <option key={d} value={d}>
+                  {new Date(d + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                </option>
+              ))}
+            </select>
+            {dateFilter && (
+              <button className="sort-btn" onClick={() => setDateFilter('')} title="Clear filter">
+                ✕ Clear
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Individual Items Section - Always Visible Drop Zone */}
@@ -982,7 +1028,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         }}
       >
         <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Image size={20} /> Individual Items ({singleItems.length})
+          <Image size={20} /> Individual Items ({filteredSingleItems.length}{dateFilter ? ` of ${singleItems.length}` : ''})
         </h3>
         
         {/* Drop Zone - Always visible */}
@@ -1038,7 +1084,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               />
             )}
             
-            {singleItems.map((item) => {
+            {filteredSingleItems.map((item) => {
               const itemGroupId = item.productGroup || item.id;
               return (
                 <div
@@ -1104,9 +1150,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       <span className="category-badge">{item.category}</span>
                     </div>
                   )}
-                  {sortOrder.startsWith('date') && item.capturedAt ? (
+                  {item.capturedAt ? (
                     <div className="capture-date-label">
                       {new Date(item.capturedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {' '}
+                      {new Date(item.capturedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
                     </div>
                   ) : null}
                 </div>
@@ -1117,7 +1165,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       </div>
 
       {/* Product Groups */}
-      {multiItemGroups.length > 0 && (
+      {filteredMultiItemGroups.length > 0 && (
         <div 
           className="groups-section"
           onMouseDown={(e) => {
@@ -1131,7 +1179,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           }}
         >
           <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Package size={20} /> Product Groups ({multiItemGroups.length})
+            <Package size={20} /> Product Groups ({filteredMultiItemGroups.length}{dateFilter ? ` of ${multiItemGroups.length}` : ''})
           </h3>
           <div 
             ref={groupsContainerRef}
@@ -1153,7 +1201,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               />
             )}
             
-            {multiItemGroups.map(([groupId, items]) => (
+            {filteredMultiItemGroups.map(([groupId, items]) => (
               <div
                 key={groupId}
                 data-group-id={groupId}
@@ -1232,14 +1280,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     ×
                   </button>
                 </div>
-                {sortOrder.startsWith('date') && (() => {
-                  const earliest = Math.min(...items.map(i => i.capturedAt ?? 0).filter(t => t > 0));
-                  return earliest > 0 ? (
-                    <div className="capture-date-label">
-                      {new Date(earliest).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </div>
-                  ) : null;
-                })()}
                 <div className="group-images">
                   {items.map((item) => (
                     <div
