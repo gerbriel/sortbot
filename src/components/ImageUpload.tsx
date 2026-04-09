@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import JSZip from 'jszip';
 import type { ClothingItem } from '../App';
@@ -142,6 +142,49 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
     alreadyDone: number;
     errors: string[];
   } | null>(null);
+  // ── Storage usage ────────────────────────────────────────────────────────
+  const [storageInfo, setStorageInfo] = useState<{
+    usedBytes: number;
+    fileCount: number;
+    loading: boolean;
+  } | null>(null);
+
+  const fetchStorageUsage = useCallback(async () => {
+    setStorageInfo(prev => ({
+      usedBytes: prev?.usedBytes ?? 0,
+      fileCount: prev?.fileCount ?? 0,
+      loading: true,
+    }));
+    let totalBytes = 0;
+    let totalFiles = 0;
+    // List product folders under userId/
+    const { data: productFolders } = await supabase.storage
+      .from('product-images')
+      .list(userId, { limit: 10000 });
+    for (const folder of (productFolders ?? [])) {
+      if (folder.metadata) {
+        // Leaf file directly under userId/ (shouldn't normally happen but handle it)
+        totalBytes += (folder.metadata as { size?: number }).size ?? 0;
+        totalFiles++;
+      } else {
+        // Product subfolder — list its files
+        const { data: files } = await supabase.storage
+          .from('product-images')
+          .list(`${userId}/${folder.name}`, { limit: 1000 });
+        for (const f of (files ?? [])) {
+          totalBytes += (f.metadata as { size?: number } | null)?.size ?? 0;
+          totalFiles++;
+        }
+      }
+    }
+    setStorageInfo({ usedBytes: totalBytes, fileCount: totalFiles, loading: false });
+  }, [userId]);
+
+  useEffect(() => {
+    fetchStorageUsage();
+  }, [fetchStorageUsage]);
+  // ─────────────────────────────────────────────────────────────────────────
+
   const folderInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
 
@@ -746,6 +789,47 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
             >
               🗜️ Import ZIP
             </button>
+          </div>
+        )}
+
+        {/* ── Storage usage meter ───────────────────────────────────────────── */}
+        {storageInfo !== null && (
+          <div className="storage-meter">
+            <div className="storage-meter-header">
+              <span>☁️ Storage</span>
+              <button
+                className="storage-refresh-btn"
+                onClick={fetchStorageUsage}
+                disabled={storageInfo.loading}
+                title="Refresh storage usage"
+              >
+                {storageInfo.loading ? '…' : '🔄'}
+              </button>
+            </div>
+            {storageInfo.loading && storageInfo.usedBytes === 0 ? (
+              <div className="storage-meter-loading">Calculating…</div>
+            ) : (() => {
+              const STORAGE_LIMIT_BYTES = 1 * 1024 * 1024 * 1024; // 1 GB free tier
+              const pct = storageInfo.usedBytes / STORAGE_LIMIT_BYTES;
+              const barColor = pct > 0.85 ? '#ef4444' : pct > 0.6 ? '#f59e0b' : '#10b981';
+              const gbUsed = (storageInfo.usedBytes / (1024 ** 3)).toFixed(2);
+              const pctDisplay = (pct * 100).toFixed(0);
+              return (
+                <>
+                  <div className="storage-meter-bar-wrap">
+                    <div
+                      className="storage-meter-bar"
+                      style={{ width: `${Math.min(100, pct * 100).toFixed(1)}%`, background: barColor }}
+                    />
+                  </div>
+                  <div className="storage-meter-label">
+                    {gbUsed} GB / 1 GB
+                    <span className="storage-meter-pct">({pctDisplay}%)</span>
+                    <span className="storage-meter-files">{storageInfo.fileCount.toLocaleString()} files</span>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
 
