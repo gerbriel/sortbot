@@ -137,6 +137,9 @@ function App() {
   const [processedItems, setProcessedItems] = useState<ClothingItem[]>([]);
   const [selectedGroupItems, setSelectedGroupItems] = useState<Set<string>>(new Set());
   const [grouperActions, setGrouperActions] = useState<GrouperActions | null>(null);
+  // Ref mirror so onCategoryAssigned / handleApplyPreset closures always call the current clearSelection
+  const grouperActionsRef = useRef<GrouperActions | null>(null);
+  grouperActionsRef.current = grouperActions;
   const [categoryPresets, setCategoryPresets] = useState<CategoryPreset[]>([]);
   const [showLibrary, setShowLibrary] = useState(false);
   // Ref mirror so the autoSave closure (inside setTimeout) can read the live value
@@ -795,6 +798,7 @@ function App() {
     // Route through the normal categorization path so all downstream state updates
     await handleImagesSorted(updatedItems);
     setSelectedGroupItems(new Set());
+    grouperActionsRef.current?.clearSelection();
   };
 
   const handleImagesGrouped = async (items: ClothingItem[]) => {
@@ -1516,7 +1520,7 @@ function App() {
                   onCategorized={handleImagesSorted}
                   compactMode
                   selectedItemIds={selectedGroupItems}
-                  onCategoryAssigned={() => setSelectedGroupItems(new Set())}
+                  onCategoryAssigned={() => { setSelectedGroupItems(new Set()); grouperActionsRef.current?.clearSelection(); }}
                 />
                 {/* Selection action buttons — rendered here so they stay visible while scrolling left panel */}
                 {grouperActions && (
