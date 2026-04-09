@@ -765,37 +765,55 @@ function App() {
     const selected = baseItems.filter(i => selectedGroupItems.has(i.id));
     if (selected.length === 0) return;
 
-    // Use the preset's product_type as the category name (same convention as applyPresetToProductGroup)
     const categoryName = preset.product_type || preset.category_name;
 
-    // Merge all selected items into one group (same as handleCategoryClick in CategoryZones)
-    const mergedGroupId = selected[0].productGroup || selected[0].id;
-    const existingGroups = new Set(selected.map(i => i.productGroup || i.id));
+    // Separate singles (ungrouped) from already-grouped items
+    const singles = selected.filter(i => !i.productGroup || i.productGroup === i.id);
+    const alreadyGrouped = selected.filter(i => i.productGroup && i.productGroup !== i.id);
+
+    // Singles merge together; already-grouped items keep their group and just get the category
+    const mergedSinglesGroupId = singles.length > 0 ? (singles[0].productGroup || singles[0].id) : null;
     const selectedSet = new Set(selected.map(i => i.id));
 
-    // Apply preset to the merged set as one group
-    const itemsWithPreset = await applyPresetToProductGroup(selected, categoryName);
-    const patchedById: Record<string, ClothingItem> = {};
-    itemsWithPreset.forEach(item => { patchedById[item.id] = item; });
+    // Apply preset to singles as one merged group
+    const singlesWithPreset = singles.length > 0
+      ? await applyPresetToProductGroup(singles, categoryName)
+      : [];
+    const singlesById: Record<string, ClothingItem> = {};
+    singlesWithPreset.forEach(i => { singlesById[i.id] = i; });
 
-    // Rebuild the full items list:
-    //  - selected items → use preset-applied version, assign mergedGroupId
-    //  - non-selected items in now-absorbed groups → re-point to mergedGroupId
-    //  - everything else → unchanged
+    // Apply preset independently per existing group
+    const existingGroupIds = [...new Set(alreadyGrouped.map(i => i.productGroup!))];
+    const groupedWithPresetById: Record<string, ClothingItem> = {};
+    for (const gid of existingGroupIds) {
+      const fullGroup = baseItems.filter(i => (i.productGroup || i.id) === gid);
+      const withPreset = await applyPresetToProductGroup(fullGroup, categoryName);
+      withPreset.forEach(i => { groupedWithPresetById[i.id] = i; });
+    }
+
     const updatedItems = baseItems.map(item => {
-      if (selectedSet.has(item.id)) {
-        const patched = patchedById[item.id] || { ...item, category: categoryName };
-        return { ...patched, productGroup: mergedGroupId };
+      // Singles: assign mergedGroupId + preset
+      if (singles.find(s => s.id === item.id)) {
+        const patched = singlesById[item.id] || { ...item, category: categoryName };
+        return { ...patched, productGroup: mergedSinglesGroupId! };
       }
-      // Re-point non-selected members of absorbed groups to the merged group
+      // Already-grouped: update category/preset but keep group id
+      if (groupedWithPresetById[item.id]) {
+        return groupedWithPresetById[item.id];
+      }
+      // Non-selected singles that were in the same "group" as a merged single — re-point
       const itemGid = item.productGroup || item.id;
-      if (existingGroups.has(itemGid) && itemGid !== mergedGroupId) {
-        return { ...item, productGroup: mergedGroupId };
+      if (
+        mergedSinglesGroupId &&
+        !selectedSet.has(item.id) &&
+        singles.some(s => (s.productGroup || s.id) === itemGid) &&
+        itemGid !== mergedSinglesGroupId
+      ) {
+        return { ...item, productGroup: mergedSinglesGroupId };
       }
       return item;
     });
 
-    // Route through the normal categorization path so all downstream state updates
     await handleImagesSorted(updatedItems);
     setSelectedGroupItems(new Set());
     grouperActionsRef.current?.clearSelection();
