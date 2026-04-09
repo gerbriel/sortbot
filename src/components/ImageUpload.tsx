@@ -811,7 +811,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
             ) : (() => {
               const STORAGE_LIMIT_BYTES = 1 * 1024 * 1024 * 1024; // 1 GB free tier
               const pct = storageInfo.usedBytes / STORAGE_LIMIT_BYTES;
-              const barColor = pct > 0.85 ? '#ef4444' : pct > 0.6 ? '#f59e0b' : '#10b981';
+              const barColor = pct > 0.85 ? '#dc2626' : pct > 0.6 ? '#d97706' : '#059669';
               const gbUsed = (storageInfo.usedBytes / (1024 ** 3)).toFixed(2);
               const pctDisplay = (pct * 100).toFixed(0);
               return (
@@ -823,10 +823,25 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
                     />
                   </div>
                   <div className="storage-meter-label">
-                    {gbUsed} GB / 1 GB
+                    {gbUsed} GB / 1 GB free
                     <span className="storage-meter-pct">({pctDisplay}%)</span>
                     <span className="storage-meter-files">{storageInfo.fileCount.toLocaleString()} files</span>
                   </div>
+                  {pct > 0.85 && pct < 1 && (
+                    <div className="storage-meter-danger">
+                      ⚠️ Almost full — exceeding 1 GB requires upgrading to Supabase Pro ($25/mo)
+                    </div>
+                  )}
+                  {pct >= 1 && (
+                    <div className="storage-meter-danger">
+                      🚨 Over limit — new uploads may fail. Upgrade to Pro ($25/mo) or delete old images.
+                    </div>
+                  )}
+                  {pct > 0.6 && pct <= 0.85 && (
+                    <div className="storage-meter-warning">
+                      💡 Over 60% used — free tier limit is 1 GB
+                    </div>
+                  )}
                 </>
               );
             })()}
