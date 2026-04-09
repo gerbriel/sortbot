@@ -16,6 +16,19 @@ function stripUnresolvedTokens(value: string | undefined): string {
     .trim();
 }
 
+/**
+ * Maps short internal category names → full Shopify taxonomy path strings.
+ * Used for "Product category" and "Google Shopping / Google product category" columns.
+ */
+const SHOPIFY_CATEGORY_MAP: Record<string, string> = {
+  tees:        'Apparel & Accessories > Clothing > Tops > T-Shirts',
+  sweatshirts: 'Apparel & Accessories > Clothing > Tops > Sweatshirts & Hoodies',
+  outerwear:   'Apparel & Accessories > Clothing > Outerwear > Jackets & Coats',
+  bottoms:     'Apparel & Accessories > Clothing > Bottoms > Pants',
+  hats:        'Apparel & Accessories > Clothing Accessories > Hats',
+  femme:       'Apparel & Accessories > Clothing > Tops',
+};
+
 interface GoogleSheetExporterProps {
   items: ClothingItem[];
   compactMode?: boolean;
@@ -170,7 +183,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
     
     products.forEach((product, idx) => {
       const vendor = product.brand || '';
-      const productCategory = product.category || '';
+      const productCategory = SHOPIFY_CATEGORY_MAP[product.category?.toLowerCase() ?? ''] ?? product.category ?? '';
       const productType = product.productType || '';
       const tags = product.tags?.join(', ') || '';
       const condition = product.condition || '';
