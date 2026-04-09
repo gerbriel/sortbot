@@ -5,7 +5,7 @@ import { ComprehensiveProductForm } from './ComprehensiveProductForm';
 import { getCategoryPresets } from '../lib/categoryPresetsService';
 import type { CategoryPreset } from '../lib/categoryPresets';
 import { applyPresetToProductGroup } from '../lib/applyPresetToGroup';
-import { generateProductDescription, stripVoiceCommands, formatVoiceTranscript } from '../lib/textAIService';
+import { generateProductDescription, stripVoiceCommands } from '../lib/textAIService';
 import { syncGroupFieldsToDatabase } from '../lib/productService';
 import LazyImg from './LazyImg';
 import { log } from '../lib/debugLogger';
@@ -1459,7 +1459,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 </div>
                 {/* Textarea */}
                 <textarea 
-                  value={formatVoiceTranscript(currentItem.voiceDescription || interimTranscript || '')}
+                  value={currentItem.voiceDescription || interimTranscript || ''}
                   onChange={(e) => {
                     // Clear interimTranscript so user edits aren't overridden by live recognition
                     setInterimTranscript('');
@@ -1507,6 +1507,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 className="info-textarea"
                 rows={6}
                 style={{ width: '100%' }}
+                onKeyDown={(e) => e.stopPropagation()}
               />
               <button
                 className="button button-primary"
