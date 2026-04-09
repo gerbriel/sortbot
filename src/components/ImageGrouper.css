@@ -386,35 +386,17 @@
   white-space: nowrap;
 }
 
-.filter-select {
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  color: #fff;
-  border-radius: 5px;
-  padding: 0.22rem 0.6rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  outline: none;
-  appearance: auto;
-  transition: background 0.15s, border-color 0.15s;
+/* Groups of related filter toggle buttons (e.g. all date buttons together) */
+.filter-btn-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
 }
 
-.filter-select:hover {
-  background: rgba(255, 255, 255, 0.25);
-  border-color: rgba(255, 255, 255, 0.65);
-}
-
-.filter-select option {
-  background: #4f46e5;
-  color: #fff;
-}
-
-/* Active (non-default) filter selects get a bright outline so the user can
-   see at a glance which filters are currently applied. */
-.filter-select:not([data-default="true"]) {
-  border-color: rgba(255, 255, 255, 0.9);
-  background: rgba(255, 255, 255, 0.28);
+.filter-btn-group + .filter-btn-group {
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
+  padding-left: 0.5rem;
 }
 
 .filter-clear-btn {
