@@ -767,50 +767,64 @@ function App() {
 
     const categoryName = preset.product_type || preset.category_name;
 
-    // Separate singles (ungrouped) from already-grouped items
-    const singles = selected.filter(i => !i.productGroup || i.productGroup === i.id);
-    const alreadyGrouped = selected.filter(i => i.productGroup && i.productGroup !== i.id);
+    // Collect unique group IDs touched by the selection.
+    // A group is a "true multi-group" if it has 2+ members in baseItems.
+    // Otherwise it's a single to be merged.
+    const selectedGroupIds = [...new Set(selected.map(i => i.productGroup || i.id))];
+    const trueMultiGroupIds: string[] = [];
+    const trueSingles: ClothingItem[] = [];
 
-    // Singles merge together; already-grouped items keep their group and just get the category
-    const mergedSinglesGroupId = singles.length > 0 ? (singles[0].productGroup || singles[0].id) : null;
+    selectedGroupIds.forEach(gid => {
+      const fullGroup = baseItems.filter(i => (i.productGroup || i.id) === gid);
+      if (fullGroup.length > 1) {
+        trueMultiGroupIds.push(gid);
+      } else {
+        trueSingles.push(...selected.filter(i => (i.productGroup || i.id) === gid));
+      }
+    });
+
+    const mergedSinglesGroupId = trueSingles.length > 0 ? (trueSingles[0].productGroup || trueSingles[0].id) : null;
     const selectedSet = new Set(selected.map(i => i.id));
 
     // Apply preset to singles as one merged group
-    const singlesWithPreset = singles.length > 0
-      ? await applyPresetToProductGroup(singles, categoryName)
+    const singlesWithPreset = trueSingles.length > 0
+      ? await applyPresetToProductGroup(trueSingles, categoryName)
       : [];
     const singlesById: Record<string, ClothingItem> = {};
     singlesWithPreset.forEach(i => { singlesById[i.id] = i; });
 
-    // Apply preset independently per existing group
-    const existingGroupIds = [...new Set(alreadyGrouped.map(i => i.productGroup!))];
+    // Apply preset independently to each true multi-image group (all members)
     const groupedWithPresetById: Record<string, ClothingItem> = {};
-    for (const gid of existingGroupIds) {
+    for (const gid of trueMultiGroupIds) {
       const fullGroup = baseItems.filter(i => (i.productGroup || i.id) === gid);
       const withPreset = await applyPresetToProductGroup(fullGroup, categoryName);
       withPreset.forEach(i => { groupedWithPresetById[i.id] = i; });
     }
 
     const updatedItems = baseItems.map(item => {
-      // Singles: assign mergedGroupId + preset
-      if (singles.find(s => s.id === item.id)) {
+      const itemGid = item.productGroup || item.id;
+
+      // Item belongs to a true multi-group — replace with preset version
+      if (trueMultiGroupIds.includes(itemGid)) {
+        return groupedWithPresetById[item.id] ?? item;
+      }
+
+      // Item is a single being merged
+      if (trueSingles.find(s => s.id === item.id)) {
         const patched = singlesById[item.id] || { ...item, category: categoryName };
         return { ...patched, productGroup: mergedSinglesGroupId! };
       }
-      // Already-grouped: update category/preset but keep group id
-      if (groupedWithPresetById[item.id]) {
-        return groupedWithPresetById[item.id];
-      }
-      // Non-selected singles that were in the same "group" as a merged single — re-point
-      const itemGid = item.productGroup || item.id;
+
+      // Non-selected member of the same base group as a merged single — re-point
       if (
         mergedSinglesGroupId &&
         !selectedSet.has(item.id) &&
-        singles.some(s => (s.productGroup || s.id) === itemGid) &&
+        trueSingles.some(s => (s.productGroup || s.id) === itemGid) &&
         itemGid !== mergedSinglesGroupId
       ) {
         return { ...item, productGroup: mergedSinglesGroupId };
       }
+
       return item;
     });
 

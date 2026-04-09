@@ -312,74 +312,71 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     if (selected.length === 0) return;
     log.sorter(`handleCategoryClick | category=${categoryName} selectedCount=${selected.length}`);
 
-    const singles = selected.filter(i => !i.productGroup || i.productGroup === i.id);
-    const alreadyGrouped = selected.filter(i => i.productGroup && i.productGroup !== i.id);
+    // Collect all unique group IDs touched by the selection.
+    // A group is "already grouped" if it has 2+ members in the full items list.
+    // Singles are items whose group has only 1 member (i.e. ungrouped).
+    const selectedGroupIds = [...new Set(selected.map(i => i.productGroup || i.id))];
 
-    // Singles get merged into one new group (first single's id as leader).
-    // Already-grouped items keep their existing group id — just get the category.
-    const mergedSinglesGroupId = singles.length > 0 ? (singles[0].productGroup || singles[0].id) : null;
+    const trueMultiGroups: string[] = [];
+    const trueSingles: ClothingItem[] = [];
 
+    selectedGroupIds.forEach(gid => {
+      const fullGroup = items.filter(i => (i.productGroup || i.id) === gid);
+      if (fullGroup.length > 1) {
+        trueMultiGroups.push(gid);
+      } else {
+        // Group of 1 — treat as a single to be merged
+        trueSingles.push(...selected.filter(i => (i.productGroup || i.id) === gid));
+      }
+    });
+
+    const mergedSinglesGroupId = trueSingles.length > 0 ? (trueSingles[0].productGroup || trueSingles[0].id) : null;
     const selectedSet = new Set(selected.map(i => i.id));
 
-    // Apply preset per-group:
-    //  - singles → apply as one merged set
-    //  - each existing group → apply independently
-    const singlesWithPreset = singles.length > 0
-      ? await applyPresetToProductGroup(singles, categoryName)
+    // Apply preset to singles as one merged group
+    const singlesWithPreset = trueSingles.length > 0
+      ? await applyPresetToProductGroup(trueSingles, categoryName)
       : [];
     const singlesWithPresetById: Record<string, ClothingItem> = {};
     singlesWithPreset.forEach(i => { singlesWithPresetById[i.id] = i; });
 
-    // For already-grouped items, apply preset per group independently
-    const groupedByGroupId: Record<string, ClothingItem[]> = {};
-    alreadyGrouped.forEach(i => {
-      const gid = i.productGroup!;
-      if (!groupedByGroupId[gid]) groupedByGroupId[gid] = [];
-      groupedByGroupId[gid].push(i);
-    });
+    // Apply preset independently to each true multi-image group (all members, not just selected)
     const groupedWithPresetById: Record<string, ClothingItem> = {};
-    for (const [gid] of Object.entries(groupedByGroupId)) {
-      // Apply preset to ALL items in this group (not just the selected one)
+    for (const gid of trueMultiGroups) {
       const fullGroup = items.filter(i => (i.productGroup || i.id) === gid);
       const withPreset = await applyPresetToProductGroup(fullGroup, categoryName);
       withPreset.forEach(i => { groupedWithPresetById[i.id] = i; });
     }
 
-    // Rebuild the groupsMap:
+    // Rebuild groupsMap
     const updatedMap = { ...groupsMap };
 
     // 1. Merge singles into one group
     if (mergedSinglesGroupId) {
       const singlesInOrder = (groupsMap[mergedSinglesGroupId] || []).filter(i => !selectedSet.has(i.id));
-      const mergedSingleItems: ClothingItem[] = [
-        ...singles.map(item => ({
+      updatedMap[mergedSinglesGroupId] = [
+        ...trueSingles.map(item => ({
           ...(singlesWithPresetById[item.id] || { ...item, category: categoryName }),
           productGroup: mergedSinglesGroupId,
         })),
         ...singlesInOrder.map(i => ({ ...i, productGroup: mergedSinglesGroupId })),
       ];
-      updatedMap[mergedSinglesGroupId] = mergedSingleItems;
-
       // Remove other single-group entries that were merged away
-      singles.forEach(i => {
+      trueSingles.forEach(i => {
         const gid = i.productGroup || i.id;
         if (gid !== mergedSinglesGroupId) delete updatedMap[gid];
       });
     }
 
-    // 2. Update already-grouped items in place — keep their group id, just update category
-    alreadyGrouped.forEach(item => {
-      const gid = item.productGroup!;
-      if (!updatedMap[gid]) updatedMap[gid] = [...(groupsMap[gid] || [])];
-      updatedMap[gid] = updatedMap[gid].map(i => {
-        const patched = groupedWithPresetById[i.id];
-        return patched ? patched : i;
-      });
-    });
+    // 2. Replace multi-group entries wholesale with preset-applied versions
+    for (const gid of trueMultiGroups) {
+      const originalOrder = groupsMap[gid] || [];
+      updatedMap[gid] = originalOrder.map(i => groupedWithPresetById[i.id] ?? i);
+    }
 
     // Rebuild group order
     const removedGroupIds = new Set<string>();
-    singles.forEach(i => {
+    trueSingles.forEach(i => {
       const gid = i.productGroup || i.id;
       if (gid !== mergedSinglesGroupId) removedGroupIds.add(gid);
     });
