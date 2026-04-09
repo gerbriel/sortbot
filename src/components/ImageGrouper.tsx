@@ -1015,53 +1015,71 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             <ArrowDown size={13} /> Name
           </button>
         </div>
-        {/* Filter bar — date, view type, category (all combinable) */}
+        {/* Filter bar — view type, date, category (all combinable, all toggle buttons) */}
         <div className="filter-bar">
           <span className="filter-bar-label">
             🔎 Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}:
           </span>
-          {/* View type */}
-          <select
-            className="filter-select"
-            value={filters.view}
-            onChange={e => setFilter('view', e.target.value as Filters['view'])}
-            title="Show only groups, only singles, or both"
-          >
-            <option value="all">All types</option>
-            <option value="groups">Groups only</option>
-            <option value="singles">Singles only</option>
-          </select>
-          {/* Date */}
+
+          {/* View type toggle buttons */}
+          <div className="filter-btn-group">
+            <button
+              className={`sort-btn${filters.view === 'groups' ? ' active' : ''}`}
+              onClick={() => setFilter('view', filters.view === 'groups' ? 'all' : 'groups')}
+              title="Show only multi-image groups"
+            >
+              Groups
+            </button>
+            <button
+              className={`sort-btn${filters.view === 'singles' ? ' active' : ''}`}
+              onClick={() => setFilter('view', filters.view === 'singles' ? 'all' : 'singles')}
+              title="Show only single items"
+            >
+              Singles
+            </button>
+          </div>
+
+          {/* Date toggle buttons */}
           {uniqueFilterDates.length > 0 && (
-            <select
-              className="filter-select"
-              value={filters.date}
-              onChange={e => setFilter('date', e.target.value)}
-              title="Filter by capture date"
-            >
-              <option value="">All dates</option>
+            <div className="filter-btn-group">
               {uniqueFilterDates.map(d => (
-                <option key={d} value={d}>
-                  {new Date(d + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-                </option>
+                <button
+                  key={d}
+                  className={`sort-btn${filters.date === d ? ' active' : ''}`}
+                  onClick={() => setFilter('date', filters.date === d ? '' : d)}
+                  title={`Filter by ${new Date(d + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`}
+                >
+                  {new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </button>
               ))}
-            </select>
+            </div>
           )}
-          {/* Category */}
+
+          {/* Category toggle buttons */}
           {(uniqueFilterCategories.length > 0 || groupedItems.some(i => !i.category)) && (
-            <select
-              className="filter-select"
-              value={filters.category}
-              onChange={e => setFilter('category', e.target.value)}
-              title="Filter by category"
-            >
-              <option value="">All categories</option>
-              <option value="uncategorized">Uncategorized</option>
+            <div className="filter-btn-group">
+              {groupedItems.some(i => !i.category) && (
+                <button
+                  className={`sort-btn${filters.category === 'uncategorized' ? ' active' : ''}`}
+                  onClick={() => setFilter('category', filters.category === 'uncategorized' ? '' : 'uncategorized')}
+                  title="Show only uncategorized items"
+                >
+                  Uncategorized
+                </button>
+              )}
               {uniqueFilterCategories.map(c => (
-                <option key={c} value={c}>{c}</option>
+                <button
+                  key={c}
+                  className={`sort-btn${filters.category === c ? ' active' : ''}`}
+                  onClick={() => setFilter('category', filters.category === c ? '' : c)}
+                  title={`Filter by category: ${c}`}
+                >
+                  {c}
+                </button>
               ))}
-            </select>
+            </div>
           )}
+
           {activeFilterCount > 0 && (
             <button
               className="sort-btn filter-clear-btn"
