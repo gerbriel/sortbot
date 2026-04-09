@@ -1039,20 +1039,21 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             </button>
           </div>
 
-          {/* Date toggle buttons */}
+          {/* Date dropdown */}
           {uniqueFilterDates.length > 0 && (
-            <div className="filter-btn-group">
+            <select
+              className="filter-select"
+              value={filters.date}
+              onChange={e => setFilter('date', e.target.value)}
+              title="Filter by capture date"
+            >
+              <option value="">All dates</option>
               {uniqueFilterDates.map(d => (
-                <button
-                  key={d}
-                  className={`sort-btn${filters.date === d ? ' active' : ''}`}
-                  onClick={() => setFilter('date', filters.date === d ? '' : d)}
-                  title={`Filter by ${new Date(d + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`}
-                >
-                  {new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                </button>
+                <option key={d} value={d}>
+                  {new Date(d + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                </option>
               ))}
-            </div>
+            </select>
           )}
 
           {/* Category toggle buttons */}
