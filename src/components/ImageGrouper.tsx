@@ -81,8 +81,14 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   type SortOrder = 'date-asc' | 'date-desc' | 'name-asc' | 'name-desc';
   const [sortOrder, setSortOrder] = useState<SortOrder>('date-asc');
 
-  // Date filter: '' = show all; otherwise a YYYY-MM-DD string matching capturedAt date
-  const [dateFilter, setDateFilter] = useState<string>('');
+  // Filters — all combinable (AND logic).
+  // date:     '' = all dates | YYYY-MM-DD = specific day
+  // view:     'all' | 'groups' | 'singles'
+  // category: '' = all | 'uncategorized' | any category string
+  interface Filters { date: string; view: 'all' | 'groups' | 'singles'; category: string; }
+  const [filters, setFilters] = useState<Filters>({ date: '', view: 'all', category: '' });
+  const setFilter = <K extends keyof Filters>(key: K, val: Filters[K]) =>
+    setFilters(prev => ({ ...prev, [key]: val }));
 
   // Lightbox state
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -890,14 +896,35 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     return [...dateSet].sort();
   })();
 
-  // Apply date filter to both lists
+  // Build sorted unique category values across all items
+  const uniqueFilterCategories: string[] = (() => {
+    const cats = new Set<string>();
+    groupedItems.forEach(item => { if (item.category) cats.add(item.category); });
+    return [...cats].sort();
+  })();
+
+  // Apply all filters to both lists (AND logic)
   const toLocalDate = (ts: number) => new Date(ts).toLocaleDateString('en-CA');
-  const filteredSingleItems = dateFilter
-    ? singleItems.filter(item => item.capturedAt && toLocalDate(item.capturedAt) === dateFilter)
-    : singleItems;
-  const filteredMultiItemGroups = dateFilter
-    ? multiItemGroups.filter(([, items]) => items.some(i => i.capturedAt && toLocalDate(i.capturedAt) === dateFilter))
-    : multiItemGroups;
+
+  const itemPassesFilters = (item: ClothingItem): boolean => {
+    if (filters.date && !(item.capturedAt && toLocalDate(item.capturedAt) === filters.date)) return false;
+    if (filters.category === 'uncategorized' && item.category) return false;
+    if (filters.category && filters.category !== 'uncategorized' && item.category !== filters.category) return false;
+    return true;
+  };
+
+  const filteredSingleItems = (() => {
+    if (filters.view === 'groups') return [];
+    return singleItems.filter(item => itemPassesFilters(item));
+  })();
+
+  const filteredMultiItemGroups = (() => {
+    if (filters.view === 'singles') return [];
+    return multiItemGroups.filter(([, items]) => items.some(i => itemPassesFilters(i)));
+  })();
+
+  const activeFilterCount = [filters.date, filters.view !== 'all' ? filters.view : '', filters.category]
+    .filter(Boolean).length;
 
   // Keep a ref so event-handler closures always see the current singleItems list
   const singleItemsRef = useRef<ClothingItem[]>(singleItems);
@@ -988,14 +1015,29 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             <ArrowDown size={13} /> Name
           </button>
         </div>
-        {/* Date filter dropdown */}
-        {uniqueFilterDates.length > 0 && (
-          <div className="date-filter-control">
-            <span>Filter by date:</span>
+        {/* Filter bar — date, view type, category (all combinable) */}
+        <div className="filter-bar">
+          <span className="filter-bar-label">
+            🔎 Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}:
+          </span>
+          {/* View type */}
+          <select
+            className="filter-select"
+            value={filters.view}
+            onChange={e => setFilter('view', e.target.value as Filters['view'])}
+            title="Show only groups, only singles, or both"
+          >
+            <option value="all">All types</option>
+            <option value="groups">Groups only</option>
+            <option value="singles">Singles only</option>
+          </select>
+          {/* Date */}
+          {uniqueFilterDates.length > 0 && (
             <select
-              className="date-filter-select"
-              value={dateFilter}
-              onChange={e => setDateFilter(e.target.value)}
+              className="filter-select"
+              value={filters.date}
+              onChange={e => setFilter('date', e.target.value)}
+              title="Filter by capture date"
             >
               <option value="">All dates</option>
               {uniqueFilterDates.map(d => (
@@ -1004,13 +1046,32 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 </option>
               ))}
             </select>
-            {dateFilter && (
-              <button className="sort-btn" onClick={() => setDateFilter('')} title="Clear filter">
-                ✕ Clear
-              </button>
-            )}
-          </div>
-        )}
+          )}
+          {/* Category */}
+          {(uniqueFilterCategories.length > 0 || groupedItems.some(i => !i.category)) && (
+            <select
+              className="filter-select"
+              value={filters.category}
+              onChange={e => setFilter('category', e.target.value)}
+              title="Filter by category"
+            >
+              <option value="">All categories</option>
+              <option value="uncategorized">Uncategorized</option>
+              {uniqueFilterCategories.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          )}
+          {activeFilterCount > 0 && (
+            <button
+              className="sort-btn filter-clear-btn"
+              onClick={() => setFilters({ date: '', view: 'all', category: '' })}
+              title="Clear all filters"
+            >
+              ✕ Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Individual Items Section - Always Visible Drop Zone */}
@@ -1028,7 +1089,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         }}
       >
         <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Image size={20} /> Individual Items ({filteredSingleItems.length}{dateFilter ? ` of ${singleItems.length}` : ''})
+          <Image size={20} /> Individual Items ({filteredSingleItems.length}{activeFilterCount > 0 ? ` of ${singleItems.length}` : ''})
         </h3>
         
         {/* Drop Zone - Always visible */}
@@ -1180,7 +1241,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           }}
         >
           <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Package size={20} /> Product Groups ({filteredMultiItemGroups.length}{dateFilter ? ` of ${multiItemGroups.length}` : ''})
+            <Package size={20} /> Product Groups ({filteredMultiItemGroups.length}{activeFilterCount > 0 ? ` of ${multiItemGroups.length}` : ''})
           </h3>
           <div 
             ref={groupsContainerRef}
