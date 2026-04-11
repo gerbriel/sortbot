@@ -1479,18 +1479,22 @@ function App() {
           });
           baseItems = [...baseItems, ...missingItems];
         } else if (missing.length > gapFillCap) {
-          log.app(`handleOpenBatch | gap-fill SKIPPED — ${missing.length} DB items exceed cap (${gapFillCap}); likely stolen batch_ids from a previous session. Cleaning up in background.`);
-          // Fire-and-forget cleanup: null out batch_id for stolen products so they
-          // no longer appear in this batch's DB query on next open.
+          log.app(`handleOpenBatch | gap-fill SKIPPED — ${missing.length} DB items exceed cap (${gapFillCap}); likely stolen batch_ids from a previous session. Deleting in background.`);
+          // Fire-and-forget cleanup: DELETE stolen products entirely so they never
+          // reappear. These are duplicate rows cloned by the old ignoreDuplicates:false
+          // bug — the real items already live in workflow_state. Nullifying batch_id
+          // only hides them until someone re-assigns them; deletion is permanent.
           const stolenIds = missing.map((p: any) => p.id);
           const CHUNK = 100;
           (async () => {
             for (let ci = 0; ci < stolenIds.length; ci += CHUNK) {
-              await supabase.from('products')
-                .update({ batch_id: null })
-                .in('id', stolenIds.slice(ci, ci + CHUNK));
+              const chunk = stolenIds.slice(ci, ci + CHUNK);
+              // Delete associated product_images first (FK constraint)
+              await supabase.from('product_images').delete().in('product_id', chunk);
+              // Then delete the product rows
+              await supabase.from('products').delete().in('id', chunk);
             }
-            log.app(`handleOpenBatch | gap-fill cleanup done | reset batch_id=null for ${stolenIds.length} stolen products`);
+            log.app(`handleOpenBatch | gap-fill cleanup done | deleted ${stolenIds.length} stolen products`);
           })();
         }
       }
