@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import JSZip from 'jszip';
+import exifr from 'exifr';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
 import { log } from '../lib/debugLogger';
@@ -41,6 +42,26 @@ interface ImageUploadProps {
   userId: string;
   /** Existing items in the current batch — used to offer the recompress button. */
   existingItems?: ClothingItem[];
+}
+
+/**
+ * Read the EXIF DateTimeOriginal from a JPEG file.
+ * Falls back to file.lastModified if the tag is absent or parsing fails.
+ * This gives a reliable "actual shot time" even when files have been
+ * copied, zipped, or AirDropped (which resets lastModified).
+ */
+async function getCapturedAt(file: File): Promise<number> {
+  if (file.type === 'image/jpeg' || file.type === 'image/jpg') {
+    try {
+      const exif = await exifr.parse(file, ['DateTimeOriginal']);
+      if (exif?.DateTimeOriginal instanceof Date) {
+        return exif.DateTimeOriginal.getTime();
+      }
+    } catch {
+      // EXIF parse failure is non-fatal; fall through to lastModified
+    }
+  }
+  return file.lastModified;
 }
 
 /**
@@ -191,10 +212,13 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
   const processFiles = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
 
-    // Filter to images only and sort by lastModified (capture date) so folder imports stay in photo order
-    const imageFiles = acceptedFiles
-      .filter(f => f.type.startsWith('image/'))
-      .sort((a, b) => a.lastModified - b.lastModified);
+    // Filter to images only, read EXIF DateTimeOriginal (falls back to lastModified),
+    // then sort oldest-first so folder imports stay in photo order.
+    const rawFiles = acceptedFiles.filter(f => f.type.startsWith('image/'));
+    const fileTimestamps = await Promise.all(rawFiles.map(f => getCapturedAt(f)));
+    const imageFiles = rawFiles
+      .map((f, idx) => ({ file: f, capturedAt: fileTimestamps[idx] }))
+      .sort((a, b) => a.capturedAt - b.capturedAt);
 
     setIsUploading(true);
     setUploadProgress({ done: 0, total: imageFiles.length });
@@ -206,18 +230,18 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
 
     for (let i = 0; i < imageFiles.length; i += CHUNK) {
       const chunk = imageFiles.slice(i, i + CHUNK);
-      const results = await Promise.all(chunk.map(async (file) => {
+      const results = await Promise.all(chunk.map(async ({ file, capturedAt }) => {
         const productId = crypto.randomUUID();
         // Compress before upload if enabled
         const fileToUpload = COMPRESS_ON_UPLOAD ? await compressImage(file).catch(() => file) : file;
         const uploaded = await uploadToSupabase(fileToUpload, productId);
         if (!uploaded) {
           console.warn('⚠️ Upload failed for:', file.name, '- using blob URL as fallback');
-          return { id: productId, file, capturedAt: file.lastModified, preview: URL.createObjectURL(file) };
+          return { id: productId, file, capturedAt, preview: URL.createObjectURL(file) };
         }
         return {
           id: productId, file,
-          capturedAt: file.lastModified,
+          capturedAt,
           preview: uploaded.preview,
           imageUrls: uploaded.imageUrls,
           storagePath: uploaded.storagePath,
