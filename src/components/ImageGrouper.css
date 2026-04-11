@@ -370,6 +370,16 @@
   text-overflow: ellipsis;
 }
 
+.original-name-label {
+  font-size: 0.62rem;
+  color: #aaa;
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.1rem;
+}
+
 /* Filter bar (view type + date + category, all combinable) */
 .filter-bar {
   display: flex;
