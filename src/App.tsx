@@ -1322,6 +1322,80 @@ function App() {
         });
       }
 
+      // Gap-fill: if workflow_state existed but was saved when only categorized items
+      // were persisted (pre-dbd5d43 bug), the DB may have products that are missing
+      // from workflowItems. Append any DB product whose id is not already in baseItems.
+      if (workflowItems.length > 0 && productsToUse && productsToUse.length > 0) {
+        const baseIds = new Set(baseItems.map(i => i.id));
+        const missing = productsToUse.filter((p: any) => !baseIds.has(p.id));
+        if (missing.length > 0) {
+          log.app(`handleOpenBatch | gap-fill | adding ${missing.length} DB items missing from workflow_state`);
+          const missingItems: ClothingItem[] = missing.map((p: any): ClothingItem => {
+            const images: string[] = (p.product_images || [])
+              .sort((a: any, b: any) => a.position - b.position)
+              .map((img: any) => img.image_url)
+              .filter(Boolean);
+            const dbOriginalName: string | undefined =
+              (p.product_images || []).find((img: any) => img.original_name)?.original_name ?? undefined;
+            return {
+              id: p.id,
+              preview: images[0] || '',
+              imageUrls: images,
+              file: null as any,
+              storagePath: (p.product_images || [])[0]?.storage_path ?? undefined,
+              productGroup: p.product_group || p.id,
+              voiceDescription:          p.voice_description   || '',
+              generatedDescription:      p.description         || '',
+              seoTitle:                  p.seo_title           || '',
+              seoDescription:            p.seo_description     || '',
+              tags:                      p.tags                || [],
+              brand:                     p.vendor              || '',
+              category:                  p.product_category    || '',
+              productType:               p.product_type        || '',
+              published:                 p.published           ?? true,
+              status:                    p.status              || 'active',
+              size:                      p.size                || '',
+              color:                     p.color               || '',
+              secondaryColor:            p.secondary_color     || '',
+              price:                     p.price               ?? undefined,
+              compareAtPrice:            p.compare_at_price    ?? undefined,
+              costPerItem:               p.cost_per_item       ?? undefined,
+              sku:                       p.sku                 || '',
+              barcode:                   p.barcode             || '',
+              inventoryQuantity:         p.inventory_quantity  ?? undefined,
+              weightValue:               p.weight_value        || '',
+              requiresShipping:          p.requires_shipping   ?? true,
+              continueSellingOutOfStock: p.continue_selling_out_of_stock ?? false,
+              packageDimensions:         p.package_dimensions  || '',
+              parcelSize:                p.parcel_size         || '',
+              shipsFrom:                 p.ships_from          || '',
+              condition:                 p.condition           || '',
+              flaws:                     p.flaws               || '',
+              material:                  p.material            || '',
+              era:                       p.era                 || '',
+              care:                      p.care_instructions   || '',
+              measurements:              p.measurements        || {},
+              modelName:                 p.model_name          || '',
+              modelNumber:               p.model_number        || '',
+              sizeType:                  p.size_type           || '',
+              style:                     p.style               || '',
+              gender:                    (p.gender             || '') as any,
+              ageGroup:                  p.age_group           || '',
+              policies:                  p.policies            || '',
+              renewalOptions:            p.renewal_options     || '',
+              whoMadeIt:                 p.who_made_it         || '',
+              whatIsIt:                  p.what_is_it          || '',
+              listingType:               p.listing_type        || '',
+              discountedShipping:        p.discounted_shipping || '',
+              mpn:                       p.mpn                 || '',
+              customLabel0:              p.custom_label_0      || '',
+              originalName:             dbOriginalName,
+            };
+          });
+          baseItems = [...baseItems, ...missingItems];
+        }
+      }
+
       // Merge saved data back into processedItems
       restoredProcessedItems = baseItems;
       if (baseItems.length > 0 && productsToUse && productsToUse.length > 0) {
