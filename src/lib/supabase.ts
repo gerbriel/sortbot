@@ -90,6 +90,7 @@ export interface Database {
           storage_path: string;
           position: number;
           alt_text: string | null;
+          original_name: string | null;
           created_at: string;
         };
         Insert: Omit<Database['public']['Tables']['product_images']['Row'], 'id' | 'created_at'>;
