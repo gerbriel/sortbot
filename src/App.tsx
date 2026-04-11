@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import exifr from 'exifr';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { Tag, Settings, Package, ShoppingBag, Link2, Scissors, X, Trash2, Bug } from 'lucide-react';
@@ -515,6 +516,52 @@ function App() {
                 // Pass session.user explicitly — React `user` state hasn't been set yet at this point
                 // (setUser(session.user) queues a re-render but doesn't run synchronously)
                 registerItemsInDB(hydratedItems, savedBatchId, session.user);
+
+                // Auto-rescan EXIF for items missing capturedAt (old batches uploaded before ac06e11).
+                // Fire-and-forget — runs after state is set and UI is visible.
+                const missingDate = hydratedItems.filter((i: any) => !i.capturedAt && (i.imageUrls?.[0] || i.thumbnailUrl || i.preview));
+                if (missingDate.length > 0) {
+                  log.app(`startup restore | auto-EXIF rescan | ${missingDate.length} items missing capturedAt`);
+                  (async () => {
+                    const CHUNK = 5;
+                    const updatedMap = new Map<string, number>();
+                    for (let ci = 0; ci < missingDate.length; ci += CHUNK) {
+                      const chunk = missingDate.slice(ci, ci + CHUNK);
+                      await Promise.all(chunk.map(async (item: any) => {
+                        const url = item.imageUrls?.[0] || item.thumbnailUrl || item.preview || '';
+                        if (!url) return;
+                        try {
+                          const resp = await fetch(url);
+                          if (!resp.ok) return;
+                          const blob = await resp.blob();
+                          const f = new File([blob], 'img.jpg', { type: blob.type });
+                          const exif = await exifr.parse(f, ['DateTimeOriginal']);
+                          if (exif?.DateTimeOriginal instanceof Date) {
+                            updatedMap.set(item.id, exif.DateTimeOriginal.getTime());
+                          }
+                        } catch { /* non-fatal */ }
+                      }));
+                    }
+                    if (updatedMap.size > 0) {
+                      log.app(`startup restore | auto-EXIF rescan done | updated=${updatedMap.size}`);
+                      const patch = (arr: ClothingItem[]) =>
+                        arr.map(i => updatedMap.has(i.id) ? { ...i, capturedAt: updatedMap.get(i.id) } : i);
+                      setUploadedImages(prev => patch(prev));
+                      setGroupedImages(prev => patch(prev));
+                      setSortedImages(prev => patch(prev));
+                      setProcessedItems(prev => {
+                        const patched = patch(prev);
+                        autoSaveWorkflow({
+                          uploadedImages: uploadedImagesRef.current,
+                          groupedImages: groupedImagesRef.current,
+                          sortedImages: sortedImagesRef.current,
+                          processedItems: patched,
+                        });
+                        return patched;
+                      });
+                    }
+                  })();
+                }
               }
             }
           }
@@ -1574,6 +1621,55 @@ function App() {
     // Skip entirely if this batch was already the active one (checked before updating currentBatchIdRef).
     if (!isAlreadyActiveBatch) {
       registerItemsInDB(restoredProcessedItems, batch.id);
+    }
+
+    // Auto-rescan EXIF for any items missing capturedAt — fires in background after open.
+    // Old batches (uploaded before ac06e11) never had capturedAt set. This silently
+    // downloads each image and reads DateTimeOriginal so dates appear on Step 2 cards
+    // without the user having to manually click the rescan button in Step 1.
+    const itemsMissingDate = restoredProcessedItems.filter(i => !i.capturedAt && (i.imageUrls?.[0] || i.thumbnailUrl || i.preview));
+    if (itemsMissingDate.length > 0) {
+      log.app(`handleOpenBatch | auto-EXIF rescan | ${itemsMissingDate.length} items missing capturedAt`);
+      (async () => {
+        const CHUNK = 5;
+        const updatedMap = new Map<string, number>();
+        for (let ci = 0; ci < itemsMissingDate.length; ci += CHUNK) {
+          const chunk = itemsMissingDate.slice(ci, ci + CHUNK);
+          await Promise.all(chunk.map(async (item) => {
+            const url = item.imageUrls?.[0] || item.thumbnailUrl || item.preview || '';
+            if (!url) return;
+            try {
+              const resp = await fetch(url);
+              if (!resp.ok) return;
+              const blob = await resp.blob();
+              const file = new File([blob], 'img.jpg', { type: blob.type });
+              const exif = await exifr.parse(file, ['DateTimeOriginal']);
+              if (exif?.DateTimeOriginal instanceof Date) {
+                updatedMap.set(item.id, exif.DateTimeOriginal.getTime());
+              }
+            } catch { /* non-fatal */ }
+          }));
+        }
+        if (updatedMap.size > 0) {
+          log.app(`handleOpenBatch | auto-EXIF rescan done | updated=${updatedMap.size}`);
+          const patch = (arr: ClothingItem[]) =>
+            arr.map(i => updatedMap.has(i.id) ? { ...i, capturedAt: updatedMap.get(i.id) } : i);
+          setUploadedImages(prev => patch(prev));
+          setGroupedImages(prev => patch(prev));
+          setSortedImages(prev => patch(prev));
+          setProcessedItems(prev => {
+            const patched = patch(prev);
+            // Auto-save so corrected dates survive reload
+            autoSaveWorkflow({
+              uploadedImages: uploadedImagesRef.current,
+              groupedImages: groupedImagesRef.current,
+              sortedImages: sortedImagesRef.current,
+              processedItems: patched,
+            });
+            return patched;
+          });
+        }
+      })();
     }
 
     // Set current batch info and persist for reload survival
