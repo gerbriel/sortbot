@@ -845,19 +845,25 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const groupEntries = Object.entries(groups);
 
   // ── Sort helpers ─────────────────────────────────────────────────────────
-  // Name key: use the filename portion of storagePath (e.g. "1234-abc.jpg") or fall back to id
-  const nameKey = (item: ClothingItem) => {
+  // Name key: prefer originalName (e.g. "DSC02175.jpg") so numeric sequence is correct.
+  // Falls back to the filename portion of storagePath, then to id.
+  const nameKey = (item: ClothingItem): string => {
+    if (item.originalName) return item.originalName.toLowerCase();
     if (item.storagePath) return item.storagePath.split('/').pop()?.toLowerCase() ?? item.id;
     return item.id.toLowerCase();
   };
+
+  // Natural (numeric-aware) comparator so DSC02175 < DSC02176 < DSC02177 etc.
+  const naturalCompare = (a: string, b: string) =>
+    a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 
   const sortItems = (arr: ClothingItem[]): ClothingItem[] => {
     const copy = [...arr];
     switch (sortOrder) {
       case 'date-asc':  return copy.sort((a, b) => (a.capturedAt ?? 0) - (b.capturedAt ?? 0));
       case 'date-desc': return copy.sort((a, b) => (b.capturedAt ?? 0) - (a.capturedAt ?? 0));
-      case 'name-asc':  return copy.sort((a, b) => nameKey(a).localeCompare(nameKey(b)));
-      case 'name-desc': return copy.sort((a, b) => nameKey(b).localeCompare(nameKey(a)));
+      case 'name-asc':  return copy.sort((a, b) => naturalCompare(nameKey(a), nameKey(b)));
+      case 'name-desc': return copy.sort((a, b) => naturalCompare(nameKey(b), nameKey(a)));
     }
   };
 
@@ -872,9 +878,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         return copy.sort(([, a], [, b]) =>
           Math.min(...b.map(i => i.capturedAt ?? 0)) - Math.min(...a.map(i => i.capturedAt ?? 0)));
       case 'name-asc':
-        return copy.sort(([, a], [, b]) => nameKey(a[0]).localeCompare(nameKey(b[0])));
+        return copy.sort(([, a], [, b]) => naturalCompare(nameKey(a[0]), nameKey(b[0])));
       case 'name-desc':
-        return copy.sort(([, a], [, b]) => nameKey(b[0]).localeCompare(nameKey(a[0])));
+        return copy.sort(([, a], [, b]) => naturalCompare(nameKey(b[0]), nameKey(a[0])));
     }
   };
 

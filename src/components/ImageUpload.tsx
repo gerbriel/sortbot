@@ -250,11 +250,12 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
         const uploaded = await uploadToSupabase(fileToUpload, productId);
         if (!uploaded) {
           console.warn('⚠️ Upload failed for:', file.name, '- using blob URL as fallback');
-          return { id: productId, file, capturedAt, preview: URL.createObjectURL(file) };
+          return { id: productId, file, capturedAt, originalName: file.name, preview: URL.createObjectURL(file) };
         }
         return {
           id: productId, file,
           capturedAt,
+          originalName: file.name,
           preview: uploaded.preview,
           imageUrls: uploaded.imageUrls,
           storagePath: uploaded.storagePath,
