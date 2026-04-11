@@ -10,36 +10,21 @@
  */
 
 import { getPaletteSync } from 'colorthief';
+import { COLOR_RGB_MAP } from './colorDatabase';
 
 // ─── Color map ────────────────────────────────────────────────────────────────
-// Names should match the vocabulary used in your Shopify store.
-// Euclidean RGB distance is used to find the nearest entry.
+// Derived from COLOR_DNA in colorDatabase.ts — single source of truth.
+// Canonical names are title-cased for display; RGB comes from the first hex code.
 
 interface ColorEntry {
   name: string;
   rgb: [number, number, number];
 }
 
-const COLOR_MAP: ColorEntry[] = [
-  { name: 'Black',    rgb: [20,  20,  20]  },
-  { name: 'White',    rgb: [240, 240, 240] },
-  { name: 'Grey',     rgb: [128, 128, 128] },
-  { name: 'Navy',     rgb: [20,  30,  80]  },
-  { name: 'Blue',     rgb: [50,  100, 200] },
-  { name: 'Denim',    rgb: [90,  130, 175] },
-  { name: 'Red',      rgb: [200, 30,  30]  },
-  { name: 'Pink',     rgb: [220, 130, 150] },
-  { name: 'Orange',   rgb: [220, 110, 30]  },
-  { name: 'Yellow',   rgb: [220, 200, 50]  },
-  { name: 'Green',    rgb: [50,  140, 60]  },
-  { name: 'Olive',    rgb: [100, 110, 50]  },
-  { name: 'Brown',    rgb: [120, 70,  40]  },
-  { name: 'Tan',      rgb: [180, 150, 110] },
-  { name: 'Camel',    rgb: [195, 150, 85]  },
-  { name: 'Cream',    rgb: [240, 230, 200] },
-  { name: 'Burgundy', rgb: [120, 20,  40]  },
-  { name: 'Purple',   rgb: [110, 50,  140] },
-];
+const COLOR_MAP: ColorEntry[] = COLOR_RGB_MAP.map(entry => ({
+  name: entry.name.replace(/\b\w/g, c => c.toUpperCase()), // title case
+  rgb: entry.rgb,
+}));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
