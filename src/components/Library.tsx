@@ -1339,6 +1339,53 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
     }
   }, [isSelecting, selectionStart, selectionThresholdMet, SELECTION_THRESHOLD]);
 
+  // Delete ALL products whose batch_id is null (orphaned by the old gap-fill bug).
+  // Uses a single DB call instead of looping one-by-one so it finishes in seconds.
+  const [deletingUnassigned, setDeletingUnassigned] = useState(false);
+  const handleDeleteUnassigned = async () => {
+    const unassignedImages = images.filter(img => !img.batchId);
+    if (unassignedImages.length === 0) return;
+    const confirmed = window.confirm(
+      `Delete all ${unassignedImages.length} unassigned images? This cannot be undone.`
+    );
+    if (!confirmed) return;
+    setDeletingUnassigned(true);
+    try {
+      // Collect unique product IDs (each image row maps to a product)
+      const productIds = [...new Set(
+        unassignedImages.map(img => img.productGroup).filter(Boolean) as string[]
+      )];
+
+      // For each product: delete storage files + product_images rows + product row
+      const CHUNK = 100;
+      for (let i = 0; i < productIds.length; i += CHUNK) {
+        const chunk = productIds.slice(i, i + CHUNK);
+        // Fetch storage paths
+        const { data: imgRows } = await supabase
+          .from('product_images')
+          .select('id, storage_path')
+          .in('product_id', chunk);
+        const storagePaths = (imgRows ?? []).map((r: any) => r.storage_path).filter(Boolean) as string[];
+        if (storagePaths.length > 0) {
+          await supabase.storage.from('product-images').remove(storagePaths);
+        }
+        const imgIds = (imgRows ?? []).map((r: any) => r.id);
+        if (imgIds.length > 0) {
+          await supabase.from('product_images').delete().in('id', imgIds);
+        }
+        await supabase.from('products').delete().in('id', chunk);
+      }
+
+      // Optimistic update
+      setImages(prev => prev.filter(img => img.batchId));
+      log.library(`handleDeleteUnassigned | deleted ${productIds.length} products`);
+    } catch (err) {
+      console.error('[Library] handleDeleteUnassigned error', err);
+    } finally {
+      setDeletingUnassigned(false);
+    }
+  };
+
   // Bulk delete selected items
   const handleBulkDelete = async () => {
     if (selectedItems.size === 0) return;
@@ -2374,6 +2421,20 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
                 >
                   {allBatchSelected ? 'Deselect' : 'Select all'}
                 </button>
+                {batchKey === 'no-batch' && (
+                  <button
+                    className="section-select-all"
+                    style={{ color: '#ef4444', borderColor: '#ef4444' }}
+                    title="Delete all unassigned images (orphaned duplicates)"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteUnassigned();
+                    }}
+                    disabled={deletingUnassigned}
+                  >
+                    {deletingUnassigned ? 'Deleting…' : '🗑 Delete all unassigned'}
+                  </button>
+                )}
               </div>
 
               {/* Product group sub-sections */}
