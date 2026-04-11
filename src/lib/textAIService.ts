@@ -3,6 +3,8 @@
  * Uses text-only models (no vision) - FREE and working!
  */
 
+import { COLOR_WORDS_LIST } from './colorDatabase';
+
 interface ProductContext {
   voiceDescription?: string;
   brand?: string;
@@ -358,18 +360,16 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
 
   // ── COLOR fallback ────────────────────────────────────────────────────────
   if (!extracted.color) {
-    const COLOR_WORDS = [
-      'black', 'white', 'grey', 'gray', 'navy', 'blue', 'red', 'green', 'yellow',
-      'orange', 'purple', 'pink', 'brown', 'tan', 'khaki', 'cream', 'beige', 'off white',
-      'olive', 'maroon', 'burgundy', 'teal', 'cyan', 'coral', 'salmon', 'lavender',
-      'charcoal', 'heather grey', 'heather gray', 'royal blue', 'forest green',
-    ];
-    const colorFound = COLOR_WORDS.find(c => new RegExp(`\\b${c}\\b`, 'i').test(lower));
+    // COLOR_WORDS_LIST is derived from COLOR_DNA in colorDatabase.ts — includes
+    // canonical names and all aliases (e.g. "army green" → resolves to "olive").
+    // Sorted longest-first so multi-word names like "forest green" match before "green".
+    const sortedColorWords = [...COLOR_WORDS_LIST].sort((a, b) => b.length - a.length);
+    const colorFound = sortedColorWords.find(c => new RegExp(`\\b${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(lower));
     if (colorFound) {
       // Check for a second color immediately after (e.g. "black and white", "navy blue")
-      const secMatch = lower.match(new RegExp(`\\b${colorFound}\\b\\s+(?:and\\s+)?(\\w+(?:\\s+\\w+)?)`, 'i'));
+      const secMatch = lower.match(new RegExp(`\\b${colorFound.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b\\s+(?:and\\s+)?(\\w+(?:\\s+\\w+)?)`, 'i'));
       const potentialSec = secMatch ? secMatch[1].trim() : null;
-      const secColor = potentialSec && COLOR_WORDS.find(c => c === potentialSec) ? potentialSec : null;
+      const secColor = potentialSec && sortedColorWords.find(c => c.toLowerCase() === potentialSec.toLowerCase()) ? potentialSec : null;
       extracted.color = toTitleCase(colorFound);
       if (secColor) extracted.secondaryColor = toTitleCase(secColor);
     }

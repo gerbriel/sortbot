@@ -333,3 +333,42 @@ export const COLOR_DNA: Record<string, ColorContext> = {
 };
 
 export default COLOR_DNA;
+
+// ─── Derived exports for color matching ──────────────────────────────────────
+
+/** Parse a hex string like '#DC143C' into [r, g, b]. Returns null for non-hex values. */
+function hexToRgb(hex: string): [number, number, number] | null {
+  const m = hex.replace('#', '').match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  if (!m) return null;
+  return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
+}
+
+/**
+ * Flat list of every solid color name in COLOR_DNA (excludes pattern entries
+ * like tie dye / camo / plaid whose hexCodes start with '#MULTI').
+ * Used by textAIService.ts for voice/AI color word scanning.
+ * Includes all aliases as well, mapped back to the canonical name.
+ */
+export const COLOR_WORDS_LIST: string[] = [];
+
+/**
+ * Map from canonical color name → average RGB of its first hex code.
+ * Used by colorUtils.ts for pixel-based nearest-neighbor color naming.
+ * Only includes entries with real hex codes (no patterns).
+ */
+export const COLOR_RGB_MAP: Array<{ name: string; rgb: [number, number, number] }> = [];
+
+for (const [name, ctx] of Object.entries(COLOR_DNA)) {
+  const firstHex = ctx.hexCodes[0];
+  const rgb = hexToRgb(firstHex);
+  if (!rgb) continue; // skip #MULTI / #RAINBOW etc.
+
+  // Add canonical name
+  COLOR_WORDS_LIST.push(name);
+  COLOR_RGB_MAP.push({ name, rgb });
+
+  // Add aliases so voice scanning picks up e.g. "army green" → "olive"
+  for (const alias of ctx.aliases) {
+    COLOR_WORDS_LIST.push(alias);
+  }
+}
