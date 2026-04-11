@@ -307,7 +307,15 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
             id: groupId,
             title: cleanTitle((first as ClothingItem).seoTitle),
             category: first.category || 'Uncategorized',
-            images: groupItems.map(i => (i as ClothingItem).preview || i.imageUrls?.[0] || '').filter(Boolean),
+            images: groupItems.map(i => {
+              // preview and imageUrls are stripped by slim() before saving to workflow_state.
+              // Reconstruct the CDN URL from storagePath (always preserved by slim()).
+              const storagePath = (i as ClothingItem).storagePath || i.storagePath;
+              const reconstructed = storagePath
+                ? supabase.storage.from('product-images').getPublicUrl(storagePath).data.publicUrl
+                : '';
+              return (i as ClothingItem).preview || i.imageUrls?.[0] || reconstructed;
+            }).filter(Boolean),
             itemCount: groupItems.length,
             createdAt: batch.created_at,
             batchId: batch.id,
