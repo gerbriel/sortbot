@@ -1237,11 +1237,18 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       <span className="category-badge">{item.category}</span>
                     </div>
                   )}
-                  {item.capturedAt ? (
+                  {(item.originalName || item.capturedAt) ? (
                     <div className="capture-date-label">
-                      {new Date(item.capturedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                      {' '}
-                      {new Date(item.capturedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+                      {item.originalName && (
+                        <div className="original-name-label">{item.originalName}</div>
+                      )}
+                      {item.capturedAt ? (
+                        <>
+                          {new Date(item.capturedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                          {' '}
+                          {new Date(item.capturedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+                        </>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
