@@ -430,11 +430,114 @@ export const COLOR_DNA: Record<string, ColorContext> = {
   // ============ WHITES ============
   'white': {
     hexCodes: ['#FFFFFF', '#FFFAFA', '#F8F8FF'],
-    aliases: ['pure white', 'snow white', 'bright white'],
+    aliases: ['pure white', 'snow white', 'bright white', 'optical white'],
     vibes: ['clean', 'classic', 'versatile', 'fresh', 'timeless'],
     eras: ['1900s', '1920s', '1950s', '1980s', '2000s', '2020s'],
     subcultures: ['minimalist', 'preppy', 'classic', 'clean'],
     commonIn: ['tees', 'sneakers', 'shirts', 'basics', 'summer wear'],
+  },
+
+  'ecru': {
+    hexCodes: ['#C2B280', '#E8DFB8', '#D4C99A'],
+    aliases: ['natural white', 'raw white', 'unbleached', 'parchment'],
+    vibes: ['natural', 'vintage', 'organic', 'minimalist', 'artisanal'],
+    eras: ['1900s', '1970s', '1990s', '2010s', '2020s'],
+    subcultures: ['minimalist', 'organic', 'artisan', 'vintage'],
+    commonIn: ['knits', 'linen shirts', 'basics', 'vintage wear'],
+  },
+
+  // ============ BLUES ============
+  'light blue': {
+    hexCodes: ['#ADD8E6', '#87CEEB', '#A0C4E8'],
+    aliases: ['pale blue', 'soft blue', 'washed blue', 'ice blue'],
+    vibes: ['soft', 'classic', 'preppy', 'fresh', 'clean'],
+    eras: ['1950s', '1960s', '1980s', '1990s', '2000s', '2020s'],
+    subcultures: ['preppy', 'classic', 'casual', 'clean'],
+    commonIn: ['dress shirts', 'tops', 'denim', 'basics'],
+  },
+
+  'sky blue': {
+    hexCodes: ['#87CEEB', '#87CEFA', '#7EC8E3'],
+    aliases: ['light sky blue', 'air blue', 'horizon blue'],
+    vibes: ['soft', 'fresh', 'airy', 'casual', 'summer'],
+    eras: ['1950s', '1970s', '1990s', '2000s', '2020s'],
+    subcultures: ['casual', 'preppy', 'summer', 'vintage'],
+    commonIn: ['tops', 'shirts', 'summer wear', 'tees'],
+  },
+
+  // ============ GREENS ============
+  'mint': {
+    hexCodes: ['#98FF98', '#AAF0D1', '#86E3CE'],
+    aliases: ['mint green', 'spearmint', 'seafoam green', 'pale mint'],
+    vibes: ['fresh', 'retro', 'y2k', 'soft', 'vintage'],
+    eras: ['1950s', '1990s', '2000s', '2010s', '2020s'],
+    subcultures: ['y2k', 'vintage', 'soft', 'streetwear'],
+    commonIn: ['tops', 'windbreakers', 'athletic wear', 'accessories'],
+  },
+
+  // ============ PURPLES/PINKS ============
+  'lilac': {
+    hexCodes: ['#C8A2C8', '#B09FCA', '#C0A0C8'],
+    aliases: ['soft purple', 'pale purple', 'light lilac', 'wisteria'],
+    vibes: ['soft', 'vintage', 'feminine', 'pastel', 'gentle'],
+    eras: ['1950s', '1980s', '1990s', '2020s'],
+    subcultures: ['vintage', 'pastel goth', 'soft grunge', 'cottagecore'],
+    commonIn: ['vintage dresses', 'sweaters', 'tops', 'accessories'],
+  },
+
+  'mauve': {
+    hexCodes: ['#E0B0B0', '#C8A0A8', '#B08090'],
+    aliases: ['dusty rose', 'dusty purple', 'muted pink', 'rose taupe'],
+    vibes: ['soft', 'vintage', 'muted', 'sophisticated', 'feminine'],
+    eras: ['1980s', '1990s', '2010s', '2020s'],
+    subcultures: ['vintage', 'feminine', 'minimalist', 'soft'],
+    commonIn: ['sweaters', 'tops', 'vintage wear', 'accessories'],
+  },
+
+  'peach': {
+    hexCodes: ['#FFCBA4', '#FFBE9F', '#FAC898'],
+    aliases: ['peach cream', 'apricot', 'soft peach', 'light peach'],
+    vibes: ['warm', 'soft', 'feminine', 'summer', 'gentle'],
+    eras: ['1950s', '1980s', '1990s', '2000s', '2020s'],
+    subcultures: ['vintage', 'feminine', 'summer', 'soft'],
+    commonIn: ['summer tops', 'vintage wear', 'dresses', 'accessories'],
+  },
+
+  // ============ EARTH TONES ============
+  'terracotta': {
+    hexCodes: ['#E2725B', '#CC6652', '#C96A50'],
+    aliases: ['clay', 'adobe', 'earthen red', 'burnt sienna'],
+    vibes: ['earthy', 'warm', 'vintage', 'bohemian', 'artisan'],
+    eras: ['1970s', '1990s', '2010s', '2020s'],
+    subcultures: ['bohemian', 'vintage', 'artisan', 'earth tones'],
+    commonIn: ['tops', 'sweaters', 'vintage wear', 'accessories'],
+  },
+
+  'taupe': {
+    hexCodes: ['#8B7B6B', '#9E8E7E', '#B09A8A'],
+    aliases: ['warm gray', 'greige', 'mushroom', 'mole'],
+    vibes: ['neutral', 'sophisticated', 'versatile', 'minimalist', 'modern'],
+    eras: ['1990s', '2000s', '2010s', '2020s'],
+    subcultures: ['minimalist', 'sophisticated', 'modern', 'classic'],
+    commonIn: ['trousers', 'coats', 'basics', 'knitwear'],
+  },
+
+  'camel': {
+    hexCodes: ['#C19A6B', '#C4A265', '#B8935A'],
+    aliases: ['camel brown', 'toffee', 'warm camel', 'light camel'],
+    vibes: ['classic', 'luxurious', 'timeless', 'heritage', 'warm'],
+    eras: ['1950s', '1970s', '1990s', '2000s', '2020s'],
+    subcultures: ['heritage', 'classic', 'preppy', 'luxury'],
+    commonIn: ['coats', 'trousers', 'sweaters', 'accessories'],
+  },
+
+  'stone': {
+    hexCodes: ['#CBBFAD', '#C1B49A', '#B8A898'],
+    aliases: ['pebble', 'cement', 'warm stone', 'light taupe'],
+    vibes: ['neutral', 'clean', 'minimalist', 'versatile', 'modern'],
+    eras: ['1990s', '2000s', '2010s', '2020s'],
+    subcultures: ['minimalist', 'modern', 'classic', 'clean'],
+    commonIn: ['chinos', 'basics', 'knitwear', 'coats'],
   },
 
   // ============ MULTICOLOR/PATTERNS ============
