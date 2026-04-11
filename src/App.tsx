@@ -276,6 +276,42 @@ function App() {
         // that occur when passing hundreds of IDs in a single IN() clause.
         const productIds = registerable.map(i => i.id);
         const DELETE_CHUNK_SIZE = 100;
+
+        // Before deleting, preserve any existing original_name values from the DB
+        // for items whose in-memory originalName is currently absent (e.g. items from
+        // batches saved before the originalName feature was added). Without this, the
+        // delete-then-insert would write original_name=null and erase any previously
+        // backfilled value, making filenames permanently invisible on Step 2 cards.
+        const itemsWithoutName = productImageRows.filter(r => !r.original_name);
+        if (itemsWithoutName.length > 0) {
+          const idsToFetch = itemsWithoutName.map(r => r.product_id);
+          const existingNameMap = new Map<string, string>();
+          for (let i = 0; i < idsToFetch.length; i += DELETE_CHUNK_SIZE) {
+            const chunk = idsToFetch.slice(i, i + DELETE_CHUNK_SIZE);
+            const { data: existingRows } = await supabase
+              .from('product_images')
+              .select('product_id, original_name')
+              .in('product_id', chunk)
+              .not('original_name', 'is', null);
+            if (existingRows) {
+              for (const row of existingRows) {
+                if (row.original_name && !existingNameMap.has(row.product_id)) {
+                  existingNameMap.set(row.product_id, row.original_name);
+                }
+              }
+            }
+          }
+          // Merge preserved names back into rows that are missing them
+          if (existingNameMap.size > 0) {
+            for (const row of productImageRows) {
+              if (!row.original_name && existingNameMap.has(row.product_id)) {
+                row.original_name = existingNameMap.get(row.product_id)!;
+              }
+            }
+            log.db(`registerItemsInDB | preserved original_name for ${existingNameMap.size} items from DB`);
+          }
+        }
+
         for (let i = 0; i < productIds.length; i += DELETE_CHUNK_SIZE) {
           const chunk = productIds.slice(i, i + DELETE_CHUNK_SIZE);
           const { error: delErr } = await supabase
