@@ -715,6 +715,7 @@ function App() {
           user_id: user.id,
           position: idx,
           alt_text: item.seoTitle || 'Uploaded image',
+          original_name: item.originalName ?? null,
         })),
         { onConflict: 'product_id,image_url', ignoreDuplicates: false }
       );
