@@ -126,13 +126,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   const [promptValue, setPromptValue] = useState('');
   const promptInputRef = useRef<HTMLInputElement>(null);
 
-  // Batch-picker modal — shows clickable batch buttons instead of a text prompt
-  const [batchPickerModal, setBatchPickerModal] = useState<{
-    title: string;
-    onPick: (batchId: string, batchName: string) => void;
-    onCancel: () => void;
-  } | null>(null);
-
   // Helper: show inline prompt, returns a Promise<string | null>
   const showPrompt = (title: string, message?: string, defaultValue = ''): Promise<string | null> => {
     return new Promise((resolve) => {
@@ -1346,49 +1339,11 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
     }
   }, [isSelecting, selectionStart, selectionThresholdMet, SELECTION_THRESHOLD]);
 
-  // Assign / delete ALL products whose batch_id is null (orphaned by the old gap-fill bug).
-  // Both operations use chunked DB calls so they finish in seconds even for hundreds of rows.
+  // Delete ALL products whose batch_id is null (orphaned by the old gap-fill bug).
+  // These are duplicate rows — NOT real data. The real items live in workflow_state.
+  // Do NOT try to re-assign them to a batch: the gap-fill cleanup in handleOpenBatch
+  // will immediately delete them again (creating an infinite loop).
   const [workingUnassigned, setWorkingUnassigned] = useState(false);
-
-  const handleAssignUnassignedToBatch = async () => {
-    const unassignedImages = images.filter(img => !img.batchId);
-    if (unassignedImages.length === 0) return;
-
-    const productIds = [...new Set(
-      unassignedImages.map(img => img.productGroup).filter(Boolean) as string[]
-    )];
-
-    // Show the batch-picker modal — resolves when user clicks a batch button or cancels
-    const picked = await new Promise<{ batchId: string; batchName: string } | null>(resolve => {
-      setBatchPickerModal({
-        title: `Assign ${unassignedImages.length} unassigned images to batch`,
-        onPick: (batchId, batchName) => { setBatchPickerModal(null); resolve({ batchId, batchName }); },
-        onCancel: () => { setBatchPickerModal(null); resolve(null); },
-      });
-    });
-    if (!picked) return;
-
-    setWorkingUnassigned(true);
-    try {
-      const CHUNK = 500;
-      for (let i = 0; i < productIds.length; i += CHUNK) {
-        const { error } = await supabase
-          .from('products')
-          .update({ batch_id: picked.batchId })
-          .in('id', productIds.slice(i, i + CHUNK));
-        if (error) throw error;
-      }
-      setImages(prev => prev.map(img =>
-        img.batchId ? img : { ...img, batchId: picked.batchId, batchName: picked.batchName }
-      ));
-      log.library(`handleAssignUnassignedToBatch | assigned ${productIds.length} products → batch ${picked.batchId}`);
-      await loadAll();
-    } catch (err) {
-      console.error('[Library] handleAssignUnassignedToBatch error', err);
-    } finally {
-      setWorkingUnassigned(false);
-    }
-  };
 
   const handleDeleteUnassigned = async () => {
     const unassignedImages = images.filter(img => !img.batchId);
@@ -1650,44 +1605,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
           </div>
         )}
 
-        {/* Batch Picker Modal — clickable batch buttons */}
-        {batchPickerModal && (
-          <div className="prompt-modal-overlay" onClick={batchPickerModal.onCancel}>
-            <div className="prompt-modal" onClick={e => e.stopPropagation()} style={{ minWidth: 320, maxWidth: 420 }}>
-              <h3 className="prompt-modal-title">{batchPickerModal.title}</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', margin: '0.75rem 0' }}>
-                {batches.map(b => {
-                  const name = b.batch_name || `Batch ${new Date(b.created_at).toLocaleDateString()}`;
-                  const step = b.current_step ?? 0;
-                  const stepLabel = ['', 'Upload', 'Group', 'Describe', 'Save'][step] || `Step ${step}`;
-                  return (
-                    <button
-                      key={b.id}
-                      onClick={() => batchPickerModal.onPick(b.id, name)}
-                      style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '0.6rem 0.9rem', borderRadius: '8px',
-                        border: '1px solid #d1d5db', background: '#f9fafb',
-                        cursor: 'pointer', fontSize: '0.9rem', textAlign: 'left',
-                        transition: 'background 0.15s',
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#e0e7ff')}
-                      onMouseLeave={e => (e.currentTarget.style.background = '#f9fafb')}
-                    >
-                      <span style={{ fontWeight: 500 }}>{name}</span>
-                      <span style={{ fontSize: '0.75rem', color: '#888', marginLeft: '0.5rem' }}>
-                        {stepLabel} · {b.total_images ?? 0} imgs
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="prompt-modal-actions">
-                <button className="prompt-btn cancel" onClick={batchPickerModal.onCancel}>Cancel</button>
-              </div>
-            </div>
-          </div>
-        )}
         <div className="view-switcher">
           <button 
             className={`view-tab ${viewMode === 'images' ? 'active' : ''}`}
@@ -2504,29 +2421,20 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
                 </button>
                 {batchKey === 'no-batch' && (
                   <>
-                    <button
-                      className="section-select-all"
-                      style={{ color: '#6366f1', borderColor: '#6366f1' }}
-                      title="Assign all unassigned images to a batch"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAssignUnassignedToBatch();
-                      }}
-                      disabled={workingUnassigned}
-                    >
-                      {workingUnassigned ? 'Working…' : '📁 Assign to batch'}
-                    </button>
+                    <span style={{ fontSize: '0.75rem', color: '#888', marginLeft: '0.25rem' }}>
+                      (orphaned duplicates — safe to delete)
+                    </span>
                     <button
                       className="section-select-all"
                       style={{ color: '#ef4444', borderColor: '#ef4444' }}
-                      title="Delete all unassigned images (orphaned duplicates)"
+                      title="Delete all unassigned images — these are orphaned duplicates, not real data"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDeleteUnassigned();
                       }}
                       disabled={workingUnassigned}
                     >
-                      {workingUnassigned ? 'Working…' : '🗑 Delete all'}
+                      {workingUnassigned ? 'Deleting…' : '🗑 Delete all unassigned'}
                     </button>
                   </>
                 )}
