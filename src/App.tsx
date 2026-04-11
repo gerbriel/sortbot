@@ -255,6 +255,7 @@ function App() {
           user_id: activeUser.id,
           position: idx,
           alt_text: item.seoTitle || 'Uploaded image',
+          original_name: item.originalName ?? null,
         }];
       });
       if (productImageRows.length > 0) {
@@ -352,6 +353,30 @@ function App() {
                   thumbnailUrl,
                 };
               });
+
+              // Backfill originalName from the DB for any item that doesn't already have it.
+              // One query covering all items, then merge in. Covers items saved before
+              // originalName was tracked in workflow_state.
+              const itemsMissingName = liveItems.filter((i: any) => !i.originalName);
+              if (itemsMissingName.length > 0) {
+                const { data: nameRows } = await supabase
+                  .from('product_images')
+                  .select('product_id, original_name')
+                  .in('product_id', itemsMissingName.map((i: any) => i.id))
+                  .not('original_name', 'is', null)
+                  .order('position', { ascending: true });
+                if (nameRows && nameRows.length > 0) {
+                  const nameMap = new Map<string, string>();
+                  for (const row of nameRows) {
+                    if (row.original_name && !nameMap.has(row.product_id)) nameMap.set(row.product_id, row.original_name);
+                  }
+                  for (const item of liveItems) {
+                    if (!item.originalName && nameMap.has(item.id)) {
+                      item.originalName = nameMap.get(item.id);
+                    }
+                  }
+                }
+              }
               let noUrlCount = liveItems.filter((i: any) => !i.thumbnailUrl && !i.preview && !i.imageUrls?.[0]).length;
 
               // For items that still have no URL (storagePath was also absent in slim data),
@@ -373,7 +398,7 @@ function App() {
                 // Primary: look up product_images directly by product_id
                 const { data: dbImages, error: dbImgErr } = await supabase
                   .from('product_images')
-                  .select('product_id, image_url, storage_path, position')
+                  .select('product_id, image_url, storage_path, position, original_name')
                   .in('product_id', missingIds)
                   .order('position', { ascending: true });
                 log.app(`startup restore | DB fallback stage1 | rows=${dbImages?.length ?? 0}${dbImgErr ? ` err=${dbImgErr.message}` : ''}`);
@@ -383,11 +408,13 @@ function App() {
                 // that does have images — use the group leader's first image as the fallback.
                 const imgMap = new Map<string, string[]>();
                 const pathMap = new Map<string, string>();
+                const origNameMap = new Map<string, string>();
                 if (dbImages && dbImages.length > 0) {
                   for (const row of dbImages) {
                     if (!imgMap.has(row.product_id)) imgMap.set(row.product_id, []);
                     if (row.image_url) imgMap.get(row.product_id)!.push(row.image_url);
                     if (row.storage_path && !pathMap.has(row.product_id)) pathMap.set(row.product_id, row.storage_path);
+                    if (row.original_name && !origNameMap.has(row.product_id)) origNameMap.set(row.product_id, row.original_name);
                   }
                 }
                 // Find items still without a hit and try their productGroup
@@ -464,6 +491,7 @@ function App() {
                       preview: urls[0] || reconstructed,
                       imageUrls: urls.length ? urls : (reconstructed ? [reconstructed] : []),
                       thumbnailUrl: thumbUrl || urls[0] || reconstructed,
+                      originalName: item.originalName || origNameMap.get(item.id) || undefined,
                     };
                   });
                   noUrlCount = hydratedItems.filter((i: any) => !i.thumbnailUrl && !i.preview && !i.imageUrls?.[0]).length;
@@ -1167,7 +1195,8 @@ function App() {
         created_at,
         product_images (
           image_url,
-          position
+          position,
+          original_name
         )
       `;
 
@@ -1306,6 +1335,9 @@ function App() {
               .sort((a: any, b: any) => a.position - b.position)
               .map((img: any) => img.image_url)
               .filter(Boolean);
+            const dbOriginalName: string | undefined = (savedProduct.product_images || [])
+              .sort((a: any, b: any) => a.position - b.position)
+              .find((img: any) => img.original_name)?.original_name ?? undefined;
             const resolvedImageUrls = dbImageUrls.length ? dbImageUrls : (item.imageUrls?.length ? item.imageUrls : []);
             const resolvedPreview = resolvedImageUrls[0] || item.preview ||
               (item.storagePath ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl : '');
@@ -1370,6 +1402,8 @@ function App() {
               // Marketing
               mpn:                      savedProduct.mpn                 || item.mpn,
               customLabel0:             savedProduct.custom_label_0      || item.customLabel0,
+              // Original filename — for name-sort in Step 2
+              originalName:             item.originalName                || dbOriginalName,
             };
           }
           
