@@ -361,16 +361,17 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       });
 
       // ── 4. Build imageList ──────────────────────────────────────────────
-      // SOURCE PRIORITY: workflow_state is authoritative for any batch that has one.
-      // DB product_images rows are only used for batches that have NO workflow_state
-      // (e.g. saved/completed batches whose state was cleared). This prevents phantom
-      // duplicate DB rows (from repeated upserts) from inflating the count.
+      // SOURCE PRIORITY: workflow_state items are used first (they have richer in-memory data).
+      // DB product_images rows fill in any gaps — items that exist in the DB but are
+      // absent from workflow_state. This handles batches whose workflow_state was saved
+      // before a bug-fix and is missing loose/uncategorized images that ARE in the DB.
       const imageList: ImageRecord[] = [];
-      // Track which batch IDs are covered by workflow_state so we can skip their DB rows
+
+      // Pass 1: workflow_state items — add all, track IDs and batch coverage
+      const wfItemIds = new Set<string>();
+      // Also track batch IDs that have SOME workflow_state items (for Pass 2 gap detection)
       const batchIdsCoveredByWfState = new Set<string>();
 
-      // Pass 1: workflow_state items (authoritative, deduplicated by item ID)
-      const wfItemIds = new Set<string>();
       wfBatches.forEach(batch => {
         const items: (ClothingItem | SlimItem)[] =
           batch.workflow_state?.processedItems ||
@@ -403,13 +404,22 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         });
       });
 
-      // Pass 2: DB product_images rows — only for batches NOT covered by workflow_state
-      // (dedup by image URL within this pass)
+      // Pass 2: DB product_images rows.
+      // For batches with NO workflow_state at all: include all DB rows (legacy behaviour).
+      // For batches WITH workflow_state: only include DB rows whose product_id was NOT
+      //   already added in Pass 1. This catches loose/uncategorized images that exist in
+      //   the DB (written by registerItemsInDB) but were absent from an old workflow_state
+      //   that was saved before the handleItemsProcessed merge-fix (commit dbd5d43).
       const dbImageUrls = new Set<string>();
       savedImages.forEach((img: any) => {
         const batchId: string | undefined = img.products?.batch_id || undefined;
-        // Skip if this batch already has its images from workflow_state
-        if (batchId && batchIdsCoveredByWfState.has(batchId)) return;
+        const productId: string | undefined = img.products?.id || undefined;
+
+        // For batches fully covered by workflow_state AND whose product is already present
+        // in Pass 1, skip to avoid duplicates. But if the product is missing from Pass 1
+        // (the gap case), fall through and add it from DB.
+        if (batchId && batchIdsCoveredByWfState.has(batchId) && productId && wfItemIds.has(productId)) return;
+
         if (!img.image_url) return;
         if (dbImageUrls.has(img.image_url)) return; // dedup by URL
         dbImageUrls.add(img.image_url);
@@ -1412,16 +1422,33 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
   // Get thumbnail grid (2x2) from workflow state
   const getThumbnails = (batch: WorkflowBatch): string[] => {
-    const items = batch.workflow_state?.uploadedImages || 
-                  batch.workflow_state?.groupedImages || 
-                  batch.workflow_state?.sortedImages || 
-                  batch.workflow_state?.processedItems || 
-                  [];
-    
-    return items
+    // workflow_state only saves processedItems (the others are []). Use it if populated.
+    const items =
+      batch.workflow_state?.processedItems ||
+      batch.workflow_state?.sortedImages ||
+      batch.workflow_state?.groupedImages ||
+      batch.workflow_state?.uploadedImages ||
+      [];
+
+    const fromWf = items
       .slice(0, 4)
-      .map(item => (item as ClothingItem).preview || item.imageUrls?.[0] || '')
+      .map(item => {
+        const storagePath = (item as ClothingItem).storagePath || item.storagePath;
+        const reconstructed = storagePath
+          ? supabase.storage.from('product-images').getPublicUrl(storagePath).data.publicUrl
+          : '';
+        return (item as ClothingItem).preview || item.imageUrls?.[0] || reconstructed;
+      })
       .filter(Boolean);
+
+    if (fromWf.length > 0) return fromWf;
+
+    // Fallback: use thumbnails from productGroups derived from the DB (covers batches
+    // whose workflow_state is empty or only has categorized items).
+    return productGroups
+      .filter(g => g.batchId === batch.id && g.images.length > 0)
+      .flatMap(g => g.images)
+      .slice(0, 4);
   };
 
   if (loading) {
@@ -1776,9 +1803,10 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       const isDragging = draggedItem === batch.id;
       const isDragOver = dragOverItem === batch.id;
 
-      // Compute live counts directly from workflow_state (most accurate source).
-      // workflow_state.processedItems is the single saved list in the new format,
-      // so count unique productGroup IDs = listings, and length = total photos.
+      // Compute live counts. workflow_state.processedItems is the single saved list —
+      // but old batches may have a corrupted processedItems (pre-dbd5d43) that's missing
+      // loose images. Use DB-derived productGroups as a supplemental source to get the
+      // real count when the DB has more items than workflow_state.
       const wfItems: (ClothingItem | SlimItem)[] =
         (batch.workflow_state?.processedItems?.length  ? batch.workflow_state.processedItems  : null) ||
         (batch.workflow_state?.sortedImages?.length    ? batch.workflow_state.sortedImages    : null) ||
@@ -1786,15 +1814,14 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         (batch.workflow_state?.uploadedImages?.length  ? batch.workflow_state.uploadedImages  : null) ||
         [];
       const wfGroupIds = new Set(wfItems.map(i => i.productGroup || i.id));
-      // If workflow_state has items, use those counts directly (live and authoritative).
-      // Otherwise fall back to productGroups derived from the DB, then to the stale DB columns.
       const batchGroups = productGroups.filter(g => g.batchId === batch.id);
-      const liveGroupCount = wfItems.length > 0
-        ? wfGroupIds.size
-        : batchGroups.length || batch.product_groups_count;
-      const liveImageCount = wfItems.length > 0
-        ? wfItems.length
-        : batchGroups.reduce((sum, g) => sum + g.itemCount, 0) || batch.total_images;
+      // Use whichever source reports more items — the DB is authoritative for old batches.
+      const dbGroupCount = batchGroups.length;
+      const dbImageCount = batchGroups.reduce((sum, g) => sum + g.itemCount, 0);
+      const wfGroupCount = wfGroupIds.size;
+      const wfImageCount = wfItems.length;
+      const liveGroupCount = Math.max(wfGroupCount, dbGroupCount) || batch.product_groups_count;
+      const liveImageCount = Math.max(wfImageCount, dbImageCount) || batch.total_images;
       
       return (
         <div 
