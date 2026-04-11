@@ -697,6 +697,38 @@ function App() {
     }
   };
 
+  /**
+   * Called by ImageUpload after an EXIF rescan completes.
+   * `updatedItems` is a full replacement of the current batch's items with
+   * corrected `capturedAt` values. We patch all four workflow arrays (by id)
+   * so the sort order in Step 2 reflects the real shot times, then autosave
+   * so the corrected timestamps survive a page reload.
+   */
+  const handleCapturedAtUpdated = (updatedItems: ClothingItem[]) => {
+    const byId = new Map(updatedItems.map(i => [i.id, i]));
+    const patch = (arr: ClothingItem[]) =>
+      arr.map(item => byId.has(item.id) ? { ...item, capturedAt: byId.get(item.id)!.capturedAt } : item);
+
+    const newUploaded   = patch(uploadedImages);
+    const newGrouped    = patch(groupedImages);
+    const newSorted     = patch(sortedImages);
+    const newProcessed  = patch(processedItems);
+
+    setUploadedImages(newUploaded);
+    setGroupedImages(newGrouped);
+    setSortedImages(newSorted);
+    setProcessedItems(newProcessed);
+
+    autoSaveWorkflow({
+      uploadedImages: newUploaded,
+      groupedImages: newGrouped,
+      sortedImages: newSorted,
+      processedItems: newProcessed,
+    });
+
+    log.upload(`handleCapturedAtUpdated | patched ${updatedItems.length} items across all 4 arrays`);
+  };
+
   const handleImagesSorted = async (items: ClothingItem[]) => {
     log.app(`handleImagesSorted | items=${items.length} categories=${[...new Set(items.map(i => i.category).filter(Boolean))].join(', ')}`);
     setSortedImages(items);
@@ -1464,7 +1496,7 @@ function App() {
           <p className="step-description" style={{ fontSize: '14px', color: '#666', marginBottom: '1rem' }}>
             💡 <strong>Tip:</strong> You can upload multiple batches! New images will be added to your current session.
           </p>
-          <ImageUpload onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} />
+          <ImageUpload onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} />
           {uploadedImages.length > 0 && (
             <p className="status-text">✓ {uploadedImages.length} images uploaded</p>
           )}
