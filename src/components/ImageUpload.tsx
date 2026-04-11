@@ -42,6 +42,11 @@ interface ImageUploadProps {
   userId: string;
   /** Existing items in the current batch — used to offer the recompress button. */
   existingItems?: ClothingItem[];
+  /**
+   * Called after a EXIF rescan with the full updated item array (only capturedAt changed).
+   * Parent should replace its copy of the items with these so the sort order updates live.
+   */
+  onCapturedAtUpdated?: (updatedItems: ClothingItem[]) => void;
 }
 
 /**
@@ -141,7 +146,7 @@ async function extractImagesFromZip(zipFile: File): Promise<File[]> {
   return imageFiles.sort((a, b) => a.lastModified - b.lastModified);
 }
 
-const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, existingItems }) => {
+const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, existingItems, onCapturedAtUpdated }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [extractingZip, setExtractingZip] = useState(false);
@@ -161,6 +166,14 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
     savedKB: number;
     skipped: number;
     alreadyDone: number;
+    errors: string[];
+  } | null>(null);
+  const [rescanExifState, setRescanExifState] = useState<{
+    running: boolean;
+    done: number;
+    total: number;
+    updated: number;   // items where EXIF date differed from stored capturedAt
+    noExif: number;    // items with no EXIF tag (kept lastModified)
     errors: string[];
   } | null>(null);
   // ── Storage usage ────────────────────────────────────────────────────────
@@ -289,6 +302,89 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
     } catch (error) {
       console.error('Upload failed:', error);
       return null;
+    }
+  };
+
+  /**
+   * Re-scan EXIF DateTimeOriginal for all existing items in the current batch.
+   * Downloads each image from its CDN URL, parses EXIF, and updates capturedAt
+   * in-memory. Calls onCapturedAtUpdated with the full updated array so the
+   * parent can replace its state and trigger a re-sort.
+   *
+   * This is a one-time backfill tool — once all items have EXIF-correct capturedAt
+   * values saved to workflow_state, new imports handle this automatically on upload.
+   */
+  const rescanExifCapturedAt = async () => {
+    const items = existingItems ?? [];
+    const candidates = items.filter(i => i.storagePath && (i.imageUrls?.[0] || i.thumbnailUrl || i.preview));
+    if (candidates.length === 0) return;
+
+    setRescanExifState({ running: true, done: 0, total: candidates.length, updated: 0, noExif: 0, errors: [] });
+    log.upload(`rescanExif | candidates=${candidates.length}`);
+
+    let updated = 0;
+    let noExif = 0;
+    const errors: string[] = [];
+    // Build an updated copy of the full items array (non-candidates pass through unchanged)
+    const updatedItems: ClothingItem[] = [...items];
+    const idToIndex = new Map(items.map((item, idx) => [item.id, idx]));
+
+    const CHUNK = 5;
+    for (let i = 0; i < candidates.length; i += CHUNK) {
+      const chunk = candidates.slice(i, i + CHUNK);
+      await Promise.all(chunk.map(async (item) => {
+        const url = item.imageUrls?.[0] || item.thumbnailUrl || item.preview || '';
+        if (!url) return;
+        try {
+          const resp = await fetch(url);
+          if (!resp.ok) {
+            errors.push(`Fetch failed (${resp.status}) — ${item.storagePath?.split('/').pop()}`);
+            return;
+          }
+          const blob = await resp.blob();
+          const file = new File([blob], 'img.jpg', { type: blob.type });
+
+          let newCapturedAt: number | undefined;
+          try {
+            const exif = await exifr.parse(file, ['DateTimeOriginal']);
+            if (exif?.DateTimeOriginal instanceof Date) {
+              newCapturedAt = exif.DateTimeOriginal.getTime();
+            }
+          } catch {
+            // EXIF parse failure — leave capturedAt unchanged
+          }
+
+          const idx = idToIndex.get(item.id);
+          if (idx === undefined) return;
+
+          if (newCapturedAt !== undefined && newCapturedAt !== item.capturedAt) {
+            updatedItems[idx] = { ...updatedItems[idx], capturedAt: newCapturedAt };
+            updated++;
+            log.upload(`rescanExif updated | ${item.storagePath?.split('/').pop()} ${new Date(item.capturedAt ?? 0).toISOString()} → ${new Date(newCapturedAt).toISOString()}`);
+          } else {
+            noExif++;
+          }
+        } catch (err) {
+          errors.push(`Error — ${item.storagePath?.split('/').pop()}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }));
+
+      setRescanExifState({
+        running: true,
+        done: Math.min(i + CHUNK, candidates.length),
+        total: candidates.length,
+        updated,
+        noExif,
+        errors: [...errors],
+      });
+    }
+
+    setRescanExifState({ running: false, done: candidates.length, total: candidates.length, updated, noExif, errors: [...errors] });
+    log.upload(`rescanExif done | updated=${updated} noExif=${noExif} errors=${errors.length}`);
+
+    // Notify parent so it can replace state and trigger re-sort
+    if (updated > 0) {
+      onCapturedAtUpdated?.(updatedItems);
     }
   };
 
@@ -975,6 +1071,94 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
                       </div>
                       <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.75rem', color: '#7f1d1d', lineHeight: 1.5 }}>
                         {recompressState.errors.map((e, idx) => <li key={idx}>{e}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ── EXIF rescan button — backfill capturedAt for already-uploaded items ── */}
+        {!isUploading && !extractingZip && (existingItems?.length ?? 0) > 0 && onCapturedAtUpdated && (() => {
+          const candidates = (existingItems ?? []).filter(i => i.storagePath && (i.imageUrls?.[0] || i.thumbnailUrl || i.preview));
+          if (candidates.length === 0) return null;
+
+          return (
+            <div style={{ marginTop: '0.5rem' }}>
+              {rescanExifState === null ? (
+                <button
+                  type="button"
+                  onClick={rescanExifCapturedAt}
+                  disabled={recompressState?.running === true || recompressAllState?.running === true}
+                  title="Download each image and read its EXIF DateTimeOriginal tag to fix sort order. Run once — new uploads are handled automatically."
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem 1rem',
+                    background: 'linear-gradient(135deg, #f59e0b 0%, #b45309 100%)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: 600,
+                    fontSize: '0.85rem',
+                    cursor: (recompressState?.running || recompressAllState?.running) ? 'not-allowed' : 'pointer',
+                    opacity: (recompressState?.running || recompressAllState?.running) ? 0.5 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.4rem',
+                  }}
+                >
+                  📷 Fix Sort Order (EXIF rescan — {candidates.length} images)
+                </button>
+              ) : rescanExifState.running ? (
+                <div style={{
+                  background: 'rgba(245,158,11,0.1)',
+                  border: '1px solid #f59e0b',
+                  borderRadius: '8px',
+                  padding: '0.6rem 1rem',
+                  fontSize: '0.85rem',
+                  color: '#92400e',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                }}>
+                  <div className="spinner" style={{ width: '14px', height: '14px', borderWidth: '2px' }} />
+                  Reading EXIF… {rescanExifState.done}/{rescanExifState.total}
+                  {rescanExifState.updated > 0 && ` · ${rescanExifState.updated} updated`}
+                  {rescanExifState.noExif > 0 && ` · ${rescanExifState.noExif} no tag`}
+                </div>
+              ) : (
+                <div style={{
+                  background: 'rgba(245,158,11,0.1)',
+                  border: '1px solid #f59e0b',
+                  borderRadius: '8px',
+                  padding: '0.6rem 1rem',
+                  fontSize: '0.85rem',
+                  color: '#92400e',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                    <span>
+                      📷 EXIF rescan done —{' '}
+                      <strong>{rescanExifState.updated} date{rescanExifState.updated !== 1 ? 's' : ''} updated</strong>
+                      {rescanExifState.noExif > 0 && `, ${rescanExifState.noExif} had no EXIF tag`}
+                      {rescanExifState.updated > 0 && ' · sort order refreshed'}
+                    </span>
+                    <button
+                      onClick={() => setRescanExifState(null)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: '#92400e', flexShrink: 0 }}
+                    >
+                      ✕ dismiss
+                    </button>
+                  </div>
+                  {rescanExifState.errors.length > 0 && (
+                    <div style={{ marginTop: '0.5rem', borderTop: '1px solid #fcd34d', paddingTop: '0.4rem' }}>
+                      <div style={{ color: '#991b1b', fontWeight: 600, fontSize: '0.78rem', marginBottom: '0.2rem' }}>
+                        ⚠️ {rescanExifState.errors.length} error{rescanExifState.errors.length !== 1 ? 's' : ''}:
+                      </div>
+                      <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.75rem', color: '#7f1d1d', lineHeight: 1.5 }}>
+                        {rescanExifState.errors.map((e, idx) => <li key={idx}>{e}</li>)}
                       </ul>
                     </div>
                   )}
