@@ -27,7 +27,8 @@ export interface ClothingItem {
   file: File;
   preview: string;
   thumbnailUrl?: string; // CDN URL with Supabase Storage transform (300px). Used for card display. Full-res URL in imageUrls[0].
-  capturedAt?: number; // file.lastModified — used to sort by photo date
+  originalName?: string; // Original filename from the user's device (e.g. "DSC02175.jpg") — used for name-sort in Step 2
+  capturedAt?: number; // EXIF DateTimeOriginal (ms) or file.lastModified — used to sort by photo date
   category?: string;
   brandCategory?: BrandCategory; // Extended 160+ category system
   productGroup?: string; // For grouping multiple images of same product
