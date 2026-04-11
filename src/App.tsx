@@ -1698,36 +1698,55 @@ function App() {
               // Always compute from processedItems — same source PDG uses for navigation.
               // grouperStats (from ImageGrouper) can diverge from processedItems when
               // groupedImages and processedItems are briefly out of sync.
+              // Only count items that qualify for Step 3 (category set OR part of a multi-image group).
+              const allGroupCounts: Record<string, number> = {};
+              processedItems.forEach(i => { const k = i.productGroup || i.id; allGroupCounts[k] = (allGroupCounts[k] || 0) + 1; });
+              const step3Items = processedItems.filter(i => i.category || allGroupCounts[i.productGroup || i.id] > 1);
               const groupMap: Record<string, number> = {};
-              processedItems.forEach(i => { const k = i.productGroup || i.id; groupMap[k] = (groupMap[k] || 0) + 1; });
+              step3Items.forEach(i => { const k = i.productGroup || i.id; groupMap[k] = (groupMap[k] || 0) + 1; });
               const multiGroups = Object.values(groupMap).filter(c => c > 1).length;
               const singles = Object.values(groupMap).filter(c => c === 1).length;
               const totalListings = multiGroups + singles;
-              const imageCount = processedItems.length;
+              const imageCount = step3Items.length;
+              const excluded = processedItems.length - step3Items.length;
 
               if (multiGroups > 0 && singles > 0) {
                 return (
                   <p style={{ color: '#6366f1', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
-                    📦 {totalListings} total listing{totalListings !== 1 ? 's' : ''}: {multiGroups} multi-image group{multiGroups !== 1 ? 's' : ''} + {singles} single{singles !== 1 ? 's' : ''} ({imageCount} images) — use Next/Previous to navigate
+                    📦 {totalListings} total listing{totalListings !== 1 ? 's' : ''}: {multiGroups} multi-image group{multiGroups !== 1 ? 's' : ''} + {singles} single{singles !== 1 ? 's' : ''} ({imageCount} images) — use Next/Previous to navigate{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
                   </p>
                 );
               } else if (multiGroups > 0) {
                 return (
                   <p style={{ color: '#6366f1', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
-                    📦 {multiGroups} product group{multiGroups !== 1 ? 's' : ''} ({imageCount} images grouped) — use Next/Previous to navigate listings
+                    📦 {multiGroups} product group{multiGroups !== 1 ? 's' : ''} ({imageCount} images grouped) — use Next/Previous to navigate listings{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
+                  </p>
+                );
+              } else if (singles > 0) {
+                return (
+                  <p style={{ color: '#6366f1', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+                    📦 {singles} categorized listing{singles !== 1 ? 's' : ''} ({imageCount} image{imageCount !== 1 ? 's' : ''}) — use Next/Previous to navigate{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
                   </p>
                 );
               } else {
                 return (
                   <p style={{ color: '#888', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
-                    ⚠️ {singles} image{singles !== 1 ? 's' : ''} — each is its own listing. Go back to Step 2 to group multi-image products.
+                    ⚠️ No categorized items yet — go back to Step 2 and drag items to a category zone.
                   </p>
                 );
               }
             })()}
             <ProductDescriptionGenerator
               key={currentBatchId ?? 'new'}
-              items={processedItems}
+              items={(() => {
+                // Only pass items that are ready for Step 3:
+                // — items with a category preset applied, OR
+                // — items that are part of a true multi-image group (grouped but not yet categorized)
+                // Singles with no category are excluded — they should go back to Step 2 first.
+                const groupCounts: Record<string, number> = {};
+                processedItems.forEach(i => { const k = i.productGroup || i.id; groupCounts[k] = (groupCounts[k] || 0) + 1; });
+                return processedItems.filter(i => i.category || groupCounts[i.productGroup || i.id] > 1);
+              })()}
               onProcessed={handleItemsProcessed}
               onDownloadCSV={() => exporterRef.current?.downloadCSV()}
               batchId={currentBatchId}
@@ -1764,7 +1783,11 @@ function App() {
 
                 <div className="export-section">
                   <h3>Export Options</h3>
-                  <GoogleSheetExporter ref={exporterRef} items={processedItems} />
+                  <GoogleSheetExporter ref={exporterRef} items={(() => {
+                    const groupCounts: Record<string, number> = {};
+                    processedItems.forEach(i => { const k = i.productGroup || i.id; groupCounts[k] = (groupCounts[k] || 0) + 1; });
+                    return processedItems.filter(i => i.category || groupCounts[i.productGroup || i.id] > 1);
+                  })()} />
                 </div>
               </div>
             </details>
