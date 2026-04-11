@@ -1339,9 +1339,82 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
     }
   }, [isSelecting, selectionStart, selectionThresholdMet, SELECTION_THRESHOLD]);
 
-  // Delete ALL products whose batch_id is null (orphaned by the old gap-fill bug).
-  // Uses a single DB call instead of looping one-by-one so it finishes in seconds.
-  const [deletingUnassigned, setDeletingUnassigned] = useState(false);
+  // Assign / delete ALL products whose batch_id is null (orphaned by the old gap-fill bug).
+  // Both operations use chunked DB calls so they finish in seconds even for hundreds of rows.
+  const [workingUnassigned, setWorkingUnassigned] = useState(false);
+
+  const handleAssignUnassignedToBatch = async () => {
+    const unassignedImages = images.filter(img => !img.batchId);
+    if (unassignedImages.length === 0) return;
+
+    // Build numbered batch picker (same UX as handleAssignGroupsToExistingBatch)
+    const existingOptions = batches.map((b, i) => {
+      const name = b.batch_name || `Batch ${new Date(b.created_at).toLocaleDateString()}`;
+      return `${i + 1}. ${name}`;
+    }).join('\n');
+    const optionsList = `0. ➕ Create new batch\n${existingOptions}`;
+    const input = await showPrompt(
+      `Assign ${unassignedImages.length} unassigned image(s) to batch`,
+      optionsList
+    );
+    if (input === null) return;
+    const idx = parseInt(input.trim(), 10);
+    if (isNaN(idx)) return;
+
+    // Collect unique product IDs
+    const productIds = [...new Set(
+      unassignedImages.map(img => img.productGroup).filter(Boolean) as string[]
+    )];
+
+    setWorkingUnassigned(true);
+    try {
+      let targetBatchId: string;
+      let targetBatchName: string;
+
+      if (idx === 0) {
+        const nameInput = await showPrompt('New Batch Name', 'Leave blank to auto-name:');
+        if (nameInput === null) { setWorkingUnassigned(false); return; }
+        const batchNumber = `batch-${Date.now()}`;
+        const batchName = nameInput.trim() || `Batch ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        const { data: newBatch, error: batchErr } = await supabase
+          .from('workflow_batches')
+          .insert({ user_id: userId, batch_number: batchNumber, batch_name: batchName, current_step: 1, workflow_state: {} })
+          .select()
+          .single();
+        if (batchErr) throw batchErr;
+        if (!newBatch) throw new Error('No batch returned');
+        targetBatchId = newBatch.id;
+        targetBatchName = batchName;
+      } else {
+        const batchIdx = idx - 1;
+        if (batchIdx < 0 || batchIdx >= batches.length) { setWorkingUnassigned(false); return; }
+        targetBatchId = batches[batchIdx].id;
+        targetBatchName = batches[batchIdx].batch_name || `Batch ${new Date(batches[batchIdx].created_at).toLocaleDateString()}`;
+      }
+
+      // Bulk UPDATE products in chunks of 500
+      const CHUNK = 500;
+      for (let i = 0; i < productIds.length; i += CHUNK) {
+        const { error } = await supabase
+          .from('products')
+          .update({ batch_id: targetBatchId })
+          .in('id', productIds.slice(i, i + CHUNK));
+        if (error) throw error;
+      }
+
+      // Optimistic update — move images to the new batch
+      setImages(prev => prev.map(img =>
+        img.batchId ? img : { ...img, batchId: targetBatchId, batchName: targetBatchName }
+      ));
+      log.library(`handleAssignUnassignedToBatch | assigned ${productIds.length} products → batch ${targetBatchId}`);
+      await loadAll();
+    } catch (err) {
+      console.error('[Library] handleAssignUnassignedToBatch error', err);
+    } finally {
+      setWorkingUnassigned(false);
+    }
+  };
+
   const handleDeleteUnassigned = async () => {
     const unassignedImages = images.filter(img => !img.batchId);
     if (unassignedImages.length === 0) return;
@@ -1349,18 +1422,14 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       `Delete all ${unassignedImages.length} unassigned images? This cannot be undone.`
     );
     if (!confirmed) return;
-    setDeletingUnassigned(true);
+    setWorkingUnassigned(true);
     try {
-      // Collect unique product IDs (each image row maps to a product)
       const productIds = [...new Set(
         unassignedImages.map(img => img.productGroup).filter(Boolean) as string[]
       )];
-
-      // For each product: delete storage files + product_images rows + product row
       const CHUNK = 100;
       for (let i = 0; i < productIds.length; i += CHUNK) {
         const chunk = productIds.slice(i, i + CHUNK);
-        // Fetch storage paths
         const { data: imgRows } = await supabase
           .from('product_images')
           .select('id, storage_path')
@@ -1375,14 +1444,12 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         }
         await supabase.from('products').delete().in('id', chunk);
       }
-
-      // Optimistic update
       setImages(prev => prev.filter(img => img.batchId));
       log.library(`handleDeleteUnassigned | deleted ${productIds.length} products`);
     } catch (err) {
       console.error('[Library] handleDeleteUnassigned error', err);
     } finally {
-      setDeletingUnassigned(false);
+      setWorkingUnassigned(false);
     }
   };
 
@@ -2422,18 +2489,32 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
                   {allBatchSelected ? 'Deselect' : 'Select all'}
                 </button>
                 {batchKey === 'no-batch' && (
-                  <button
-                    className="section-select-all"
-                    style={{ color: '#ef4444', borderColor: '#ef4444' }}
-                    title="Delete all unassigned images (orphaned duplicates)"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteUnassigned();
-                    }}
-                    disabled={deletingUnassigned}
-                  >
-                    {deletingUnassigned ? 'Deleting…' : '🗑 Delete all unassigned'}
-                  </button>
+                  <>
+                    <button
+                      className="section-select-all"
+                      style={{ color: '#6366f1', borderColor: '#6366f1' }}
+                      title="Assign all unassigned images to a batch"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAssignUnassignedToBatch();
+                      }}
+                      disabled={workingUnassigned}
+                    >
+                      {workingUnassigned ? 'Working…' : '📁 Assign to batch'}
+                    </button>
+                    <button
+                      className="section-select-all"
+                      style={{ color: '#ef4444', borderColor: '#ef4444' }}
+                      title="Delete all unassigned images (orphaned duplicates)"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteUnassigned();
+                      }}
+                      disabled={workingUnassigned}
+                    >
+                      {workingUnassigned ? 'Working…' : '🗑 Delete all'}
+                    </button>
+                  </>
                 )}
               </div>
 
