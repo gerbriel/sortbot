@@ -126,6 +126,13 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   const [promptValue, setPromptValue] = useState('');
   const promptInputRef = useRef<HTMLInputElement>(null);
 
+  // Batch-picker modal — shows clickable batch buttons instead of a text prompt
+  const [batchPickerModal, setBatchPickerModal] = useState<{
+    title: string;
+    onPick: (batchId: string, batchName: string) => void;
+    onCancel: () => void;
+  } | null>(null);
+
   // Helper: show inline prompt, returns a Promise<string | null>
   const showPrompt = (title: string, message?: string, defaultValue = ''): Promise<string | null> => {
     return new Promise((resolve) => {
@@ -1347,66 +1354,34 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
     const unassignedImages = images.filter(img => !img.batchId);
     if (unassignedImages.length === 0) return;
 
-    // Build numbered batch picker (same UX as handleAssignGroupsToExistingBatch)
-    const existingOptions = batches.map((b, i) => {
-      const name = b.batch_name || `Batch ${new Date(b.created_at).toLocaleDateString()}`;
-      return `${i + 1}. ${name}`;
-    }).join('\n');
-    const optionsList = `0. ➕ Create new batch\n${existingOptions}`;
-    const input = await showPrompt(
-      `Assign ${unassignedImages.length} unassigned image(s) to batch`,
-      optionsList
-    );
-    if (input === null) return;
-    const idx = parseInt(input.trim(), 10);
-    if (isNaN(idx)) return;
-
-    // Collect unique product IDs
     const productIds = [...new Set(
       unassignedImages.map(img => img.productGroup).filter(Boolean) as string[]
     )];
 
+    // Show the batch-picker modal — resolves when user clicks a batch button or cancels
+    const picked = await new Promise<{ batchId: string; batchName: string } | null>(resolve => {
+      setBatchPickerModal({
+        title: `Assign ${unassignedImages.length} unassigned images to batch`,
+        onPick: (batchId, batchName) => { setBatchPickerModal(null); resolve({ batchId, batchName }); },
+        onCancel: () => { setBatchPickerModal(null); resolve(null); },
+      });
+    });
+    if (!picked) return;
+
     setWorkingUnassigned(true);
     try {
-      let targetBatchId: string;
-      let targetBatchName: string;
-
-      if (idx === 0) {
-        const nameInput = await showPrompt('New Batch Name', 'Leave blank to auto-name:');
-        if (nameInput === null) { setWorkingUnassigned(false); return; }
-        const batchNumber = `batch-${Date.now()}`;
-        const batchName = nameInput.trim() || `Batch ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-        const { data: newBatch, error: batchErr } = await supabase
-          .from('workflow_batches')
-          .insert({ user_id: userId, batch_number: batchNumber, batch_name: batchName, current_step: 1, workflow_state: {} })
-          .select()
-          .single();
-        if (batchErr) throw batchErr;
-        if (!newBatch) throw new Error('No batch returned');
-        targetBatchId = newBatch.id;
-        targetBatchName = batchName;
-      } else {
-        const batchIdx = idx - 1;
-        if (batchIdx < 0 || batchIdx >= batches.length) { setWorkingUnassigned(false); return; }
-        targetBatchId = batches[batchIdx].id;
-        targetBatchName = batches[batchIdx].batch_name || `Batch ${new Date(batches[batchIdx].created_at).toLocaleDateString()}`;
-      }
-
-      // Bulk UPDATE products in chunks of 500
       const CHUNK = 500;
       for (let i = 0; i < productIds.length; i += CHUNK) {
         const { error } = await supabase
           .from('products')
-          .update({ batch_id: targetBatchId })
+          .update({ batch_id: picked.batchId })
           .in('id', productIds.slice(i, i + CHUNK));
         if (error) throw error;
       }
-
-      // Optimistic update — move images to the new batch
       setImages(prev => prev.map(img =>
-        img.batchId ? img : { ...img, batchId: targetBatchId, batchName: targetBatchName }
+        img.batchId ? img : { ...img, batchId: picked.batchId, batchName: picked.batchName }
       ));
-      log.library(`handleAssignUnassignedToBatch | assigned ${productIds.length} products → batch ${targetBatchId}`);
+      log.library(`handleAssignUnassignedToBatch | assigned ${productIds.length} products → batch ${picked.batchId}`);
       await loadAll();
     } catch (err) {
       console.error('[Library] handleAssignUnassignedToBatch error', err);
@@ -1670,6 +1645,45 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
               <div className="prompt-modal-actions">
                 <button className="prompt-btn cancel" onClick={promptModal.onCancel}>Cancel</button>
                 <button className="prompt-btn confirm" onClick={() => promptModal.onConfirm(promptValue)}>OK</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Batch Picker Modal — clickable batch buttons */}
+        {batchPickerModal && (
+          <div className="prompt-modal-overlay" onClick={batchPickerModal.onCancel}>
+            <div className="prompt-modal" onClick={e => e.stopPropagation()} style={{ minWidth: 320, maxWidth: 420 }}>
+              <h3 className="prompt-modal-title">{batchPickerModal.title}</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', margin: '0.75rem 0' }}>
+                {batches.map(b => {
+                  const name = b.batch_name || `Batch ${new Date(b.created_at).toLocaleDateString()}`;
+                  const step = b.current_step ?? 0;
+                  const stepLabel = ['', 'Upload', 'Group', 'Describe', 'Save'][step] || `Step ${step}`;
+                  return (
+                    <button
+                      key={b.id}
+                      onClick={() => batchPickerModal.onPick(b.id, name)}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '0.6rem 0.9rem', borderRadius: '8px',
+                        border: '1px solid #d1d5db', background: '#f9fafb',
+                        cursor: 'pointer', fontSize: '0.9rem', textAlign: 'left',
+                        transition: 'background 0.15s',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#e0e7ff')}
+                      onMouseLeave={e => (e.currentTarget.style.background = '#f9fafb')}
+                    >
+                      <span style={{ fontWeight: 500 }}>{name}</span>
+                      <span style={{ fontSize: '0.75rem', color: '#888', marginLeft: '0.5rem' }}>
+                        {stepLabel} · {b.total_images ?? 0} imgs
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="prompt-modal-actions">
+                <button className="prompt-btn cancel" onClick={batchPickerModal.onCancel}>Cancel</button>
               </div>
             </div>
           </div>
