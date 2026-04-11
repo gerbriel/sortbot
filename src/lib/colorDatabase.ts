@@ -14,6 +14,24 @@ type ColorContext = {
 export const COLOR_DNA: Record<string, ColorContext> = {
   
   // ============ REDS ============
+  'black': {
+    hexCodes: ['#111111', '#1a1a1a', '#222222'],
+    aliases: ['black', 'all black'],
+    vibes: ['classic', 'versatile', 'goth', 'minimalist', 'timeless'],
+    eras: ['1900s', '1950s', '1960s', '1980s', '1990s', '2000s', '2020s'],
+    subcultures: ['goth', 'punk', 'minimalist', 'rock', 'streetwear'],
+    commonIn: ['tees', 'jeans', 'leather jackets', 'basics', 'boots'],
+  },
+
+  'red': {
+    hexCodes: ['#CC0000', '#DD0000', '#BB0000'],
+    aliases: ['classic red', 'basic red'],
+    vibes: ['bold', 'classic', 'passionate', 'vibrant'],
+    eras: ['1900s', '1950s', '1970s', '1990s', '2000s', '2020s'],
+    subcultures: ['classic', 'vintage', 'streetwear', 'athletic'],
+    commonIn: ['tees', 'jackets', 'accessories', 'sneakers'],
+  },
+
   'crimson': {
     hexCodes: ['#DC143C', '#A0111C', '#9E1B32'],
     aliases: ['deep red', 'harvard crimson', 'alabama crimson'],
@@ -60,6 +78,24 @@ export const COLOR_DNA: Record<string, ColorContext> = {
   },
 
   // ============ BLUES ============
+  'blue': {
+    hexCodes: ['#2255CC', '#1E6FCC', '#2266BB'],
+    aliases: ['classic blue', 'basic blue', 'medium blue'],
+    vibes: ['classic', 'versatile', 'casual', 'timeless'],
+    eras: ['1900s', '1950s', '1970s', '1990s', '2000s', '2020s'],
+    subcultures: ['classic', 'casual', 'preppy', 'streetwear'],
+    commonIn: ['jeans', 'tees', 'shirts', 'basics'],
+  },
+
+  'denim': {
+    hexCodes: ['#1560BD', '#1C6BA0', '#3B7EC8'],
+    aliases: ['denim blue', 'jean blue', 'chambray', 'stonewash'],
+    vibes: ['casual', 'classic', 'workwear', 'americana', 'timeless'],
+    eras: ['1950s', '1960s', '1970s', '1980s', '1990s', '2000s', '2020s'],
+    subcultures: ['workwear', 'americana', 'vintage', 'casual'],
+    commonIn: ['jeans', 'denim jackets', 'shirts', 'overalls'],
+  },
+
   'navy': {
     hexCodes: ['#000080', '#001F3F', '#1E3A5F'],
     aliases: ['navy blue', 'dark blue', 'midnight blue'],
@@ -96,6 +132,15 @@ export const COLOR_DNA: Record<string, ColorContext> = {
     commonIn: ['windbreakers', 'athletic wear', '90s jerseys', 'swimwear'],
   },
 
+  'cyan': {
+    hexCodes: ['#00BFFF', '#00CED1', '#008B8B'],
+    aliases: ['electric blue', 'neon blue', 'sky cyan', 'bright cyan'],
+    vibes: ['90s', 'rave', 'neon', 'futuristic', 'bold'],
+    eras: ['1990s', '2000s', '2010s', '2020s'],
+    subcultures: ['rave', '90s', 'streetwear', 'y2k'],
+    commonIn: ['athletic wear', 'windbreakers', 'accessories', 'streetwear'],
+  },
+
   'indigo': {
     hexCodes: ['#4B0082', '#2E0854', '#00416A'],
     aliases: ['deep blue', 'denim blue', 'japan blue'],
@@ -106,6 +151,15 @@ export const COLOR_DNA: Record<string, ColorContext> = {
   },
 
   // ============ GREENS ============
+  'green': {
+    hexCodes: ['#228B22', '#2E8B2E', '#339933'],
+    aliases: ['classic green', 'basic green', 'medium green'],
+    vibes: ['classic', 'natural', 'versatile', 'earthy'],
+    eras: ['1900s', '1950s', '1970s', '1990s', '2000s', '2020s'],
+    subcultures: ['classic', 'outdoor', 'casual', 'vintage'],
+    commonIn: ['tees', 'jackets', 'sweaters', 'basics'],
+  },
+
   'forest green': {
     hexCodes: ['#228B22', '#014421', '#0B6623'],
     aliases: ['hunter green', 'dark green', 'pine green'],
@@ -152,6 +206,15 @@ export const COLOR_DNA: Record<string, ColorContext> = {
   },
 
   // ============ YELLOWS/GOLDS ============
+  'yellow': {
+    hexCodes: ['#FFD700', '#FFE033', '#FFCC00'],
+    aliases: ['classic yellow', 'basic yellow', 'bright yellow'],
+    vibes: ['bright', 'bold', 'cheerful', 'vintage', 'athletic'],
+    eras: ['1950s', '1970s', '1980s', '1990s', '2000s', '2020s'],
+    subcultures: ['classic', 'athletic', 'streetwear', 'vintage'],
+    commonIn: ['tees', 'windbreakers', 'athletic wear', 'accessories'],
+  },
+
   'gold': {
     hexCodes: ['#FFD700', '#FFC72C', '#EAAA00'],
     aliases: ['yellow gold', 'maize', 'sun gold'],
@@ -180,6 +243,33 @@ export const COLOR_DNA: Record<string, ColorContext> = {
   },
 
   // ============ ORANGES ============
+  'orange': {
+    hexCodes: ['#FF8C00', '#FF7F00', '#FF6600'],
+    aliases: ['classic orange', 'basic orange', 'medium orange'],
+    vibes: ['bold', 'energetic', 'warm', 'vibrant', 'retro'],
+    eras: ['1970s', '1980s', '1990s', '2000s', '2020s'],
+    subcultures: ['vintage', 'athletic', 'streetwear', 'retro'],
+    commonIn: ['tees', 'windbreakers', 'athletic wear', 'accessories'],
+  },
+
+  'coral': {
+    hexCodes: ['#FF6B6B', '#FF7F6E', '#FA8072'],
+    aliases: ['salmon pink', 'coral red', 'melon'],
+    vibes: ['warm', 'vintage', 'retro', 'feminine', 'tropical'],
+    eras: ['1950s', '1980s', '1990s', '2020s'],
+    subcultures: ['vintage', 'tropical', 'feminine', 'retro'],
+    commonIn: ['summer wear', 'vintage dresses', 'tops', 'swimwear'],
+  },
+
+  'salmon': {
+    hexCodes: ['#FA8072', '#E9967A', '#FF8C7A'],
+    aliases: ['light coral', 'peachy pink', 'soft red'],
+    vibes: ['soft', 'warm', 'vintage', 'feminine', 'gentle'],
+    eras: ['1950s', '1980s', '2000s', '2020s'],
+    subcultures: ['vintage', 'feminine', 'soft', 'preppy'],
+    commonIn: ['tops', 'summer wear', 'vintage wear', 'accessories'],
+  },
+
   'burnt orange': {
     hexCodes: ['#CC5500', '#BF5700', '#C1440E'],
     aliases: ['texas orange', 'autumn orange', 'rust orange'],
@@ -199,6 +289,15 @@ export const COLOR_DNA: Record<string, ColorContext> = {
   },
 
   // ============ PURPLES ============
+  'maroon': {
+    hexCodes: ['#800000', '#8B0000', '#722F37'],
+    aliases: ['dark red', 'dark maroon', 'wine red'],
+    vibes: ['rich', 'collegiate', 'vintage', 'classic', 'bold'],
+    eras: ['1920s', '1950s', '1970s', '1990s', '2000s', '2020s'],
+    subcultures: ['college', 'preppy', 'vintage', 'classic'],
+    commonIn: ['jerseys', 'sweaters', 'jackets', 'team gear'],
+  },
+
   'purple': {
     hexCodes: ['#800080', '#6A0DAD', '#9370DB'],
     aliases: ['violet', 'grape', 'royal purple'],
@@ -218,6 +317,15 @@ export const COLOR_DNA: Record<string, ColorContext> = {
   },
 
   // ============ PINKS ============
+  'pink': {
+    hexCodes: ['#FF69B4', '#FFB6C1', '#FF85A1'],
+    aliases: ['classic pink', 'basic pink', 'medium pink'],
+    vibes: ['feminine', 'soft', 'classic', 'sweet', 'retro'],
+    eras: ['1950s', '1980s', '1990s', '2000s', '2020s'],
+    subcultures: ['classic', 'feminine', 'vintage', 'preppy'],
+    commonIn: ['tees', 'sweaters', 'accessories', 'vintage wear'],
+  },
+
   'hot pink': {
     hexCodes: ['#FF69B4', '#FF1493', '#FC0FC0'],
     aliases: ['fuchsia', 'magenta', 'neon pink'],
@@ -237,6 +345,24 @@ export const COLOR_DNA: Record<string, ColorContext> = {
   },
 
   // ============ BROWNS ============
+  'brown': {
+    hexCodes: ['#8B4513', '#A0522D', '#7B3F00'],
+    aliases: ['classic brown', 'basic brown', 'medium brown'],
+    vibes: ['classic', 'earthy', 'warm', 'natural', 'heritage'],
+    eras: ['1900s', '1950s', '1970s', '1990s', '2000s', '2020s'],
+    subcultures: ['workwear', 'heritage', 'classic', 'vintage'],
+    commonIn: ['leather goods', 'boots', 'jackets', 'workwear'],
+  },
+
+  'beige': {
+    hexCodes: ['#F5F5DC', '#E8DCC8', '#D4C5A9'],
+    aliases: ['off-white', 'nude', 'stone', 'oatmeal', 'linen'],
+    vibes: ['neutral', 'soft', 'minimalist', 'classic', 'versatile'],
+    eras: ['1950s', '1970s', '1990s', '2000s', '2020s'],
+    subcultures: ['minimalist', 'classic', 'preppy', 'soft'],
+    commonIn: ['chinos', 'knits', 'basics', 'trousers', 'coats'],
+  },
+
   'chocolate': {
     hexCodes: ['#7B3F00', '#3D2B1F', '#4B3621'],
     aliases: ['dark brown', 'espresso', 'deep brown'],
@@ -265,6 +391,15 @@ export const COLOR_DNA: Record<string, ColorContext> = {
   },
 
   // ============ BLACKS/GRAYS ============
+  'gray': {
+    hexCodes: ['#888888', '#999999', '#808080'],
+    aliases: ['grey', 'classic gray', 'medium gray', 'mid gray', 'mid grey'],
+    vibes: ['neutral', 'versatile', 'classic', 'understated'],
+    eras: ['1900s', '1950s', '1980s', '1990s', '2000s', '2020s'],
+    subcultures: ['classic', 'minimalist', 'casual', 'basics'],
+    commonIn: ['tees', 'sweatshirts', 'trousers', 'basics'],
+  },
+
   'jet black': {
     hexCodes: ['#000000', '#0A0A0A', '#0C0C0C'],
     aliases: ['true black', 'pitch black', 'pure black'],
