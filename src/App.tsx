@@ -990,15 +990,32 @@ function App() {
 
   const handleItemsProcessed = (items: ClothingItem[]) => {
     log.pdg(`handleItemsProcessed | items=${items.length}`);
-    setProcessedItems(items);
-    
+
+    // PDG only receives a filtered subset of processedItems (categorized/grouped items).
+    // Merge updates back into the FULL processedItems array so uncategorized singles
+    // (which are hidden from Step 3 but still part of the batch) are not lost.
+    const updatedById = new Map(items.map(i => [i.id, i]));
+    const prevItems = processedItemsRef.current;
+    const merged = prevItems.map(existing =>
+      updatedById.has(existing.id) ? updatedById.get(existing.id)! : existing
+    );
+    // Also include any items PDG added that weren't in prev (shouldn't happen, but be safe)
+    const prevIds = new Set(prevItems.map(i => i.id));
+    for (const item of items) {
+      if (!prevIds.has(item.id)) merged.push(item);
+    }
+
+    setProcessedItems(merged);
+
     // Auto-save workflow state — read live arrays from refs, not the closure,
     // so rapid PDG edits always save the latest groupedImages/sortedImages.
+    // Pass the freshly-merged list directly so the auto-save includes all items
+    // (processedItemsRef.current still has the old value until the next render).
     autoSaveWorkflow({
       uploadedImages: uploadedImagesRef.current,
       groupedImages: groupedImagesRef.current,
       sortedImages: sortedImagesRef.current,
-      processedItems: items,
+      processedItems: merged,
     });
 
     // Broadcast action for real-time collaboration
