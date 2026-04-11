@@ -1212,6 +1212,7 @@ function App() {
         created_at,
         product_images (
           image_url,
+          storage_path,
           position,
           original_name
         )
@@ -1263,15 +1264,28 @@ function App() {
       if (baseItems.length === 0 && productsToUse && productsToUse.length > 0) {
         // No workflow_state — build items from the DB products table
         baseItems = productsToUse.map((p: any): ClothingItem => {
-          const images: string[] = (p.product_images || [])
-            .sort((a: any, b: any) => a.position - b.position)
-            .map((img: any) => img.image_url)
-            .filter(Boolean);
+          const sortedImgs = (p.product_images || [])
+            .sort((a: any, b: any) => a.position - b.position);
+          const images: string[] = sortedImgs.map((img: any) => img.image_url).filter(Boolean);
+          const firstStoragePath: string | undefined =
+            sortedImgs.find((img: any) => img.storage_path)?.storage_path ?? undefined;
+          const dbOriginalName: string | undefined =
+            sortedImgs.find((img: any) => img.original_name)?.original_name ?? undefined;
+          const reconstructed = firstStoragePath
+            ? supabase.storage.from('product-images').getPublicUrl(firstStoragePath).data.publicUrl
+            : '';
+          const resolvedPreview = images[0] || reconstructed;
+          const resolvedThumbnail = firstStoragePath
+            ? getThumbnailUrl(firstStoragePath, 300)
+            : resolvedPreview;
           return {
             id: p.id,
-            preview: images[0] || '',
-            imageUrls: images,
+            preview: resolvedPreview,
+            imageUrls: images.length ? images : (reconstructed ? [reconstructed] : []),
+            thumbnailUrl: resolvedThumbnail,
             file: null as any,
+            storagePath: firstStoragePath,
+            originalName: dbOriginalName,
             productGroup: p.product_group || p.id,
             voiceDescription:          p.voice_description   || '',
             generatedDescription:      p.description         || '',
@@ -1331,19 +1345,31 @@ function App() {
         if (missing.length > 0) {
           log.app(`handleOpenBatch | gap-fill | adding ${missing.length} DB items missing from workflow_state`);
           const missingItems: ClothingItem[] = missing.map((p: any): ClothingItem => {
-            const images: string[] = (p.product_images || [])
-              .sort((a: any, b: any) => a.position - b.position)
-              .map((img: any) => img.image_url)
-              .filter(Boolean);
+            const sortedImgs = (p.product_images || [])
+              .sort((a: any, b: any) => a.position - b.position);
+            const images: string[] = sortedImgs.map((img: any) => img.image_url).filter(Boolean);
+            // storagePath: use first image row that has one
+            const firstStoragePath: string | undefined =
+              sortedImgs.find((img: any) => img.storage_path)?.storage_path ?? undefined;
             const dbOriginalName: string | undefined =
-              (p.product_images || []).find((img: any) => img.original_name)?.original_name ?? undefined;
+              sortedImgs.find((img: any) => img.original_name)?.original_name ?? undefined;
+            const reconstructed = firstStoragePath
+              ? supabase.storage.from('product-images').getPublicUrl(firstStoragePath).data.publicUrl
+              : '';
+            const resolvedPreview = images[0] || reconstructed;
+            const resolvedThumbnail = firstStoragePath
+              ? getThumbnailUrl(firstStoragePath, 300)
+              : resolvedPreview;
             return {
               id: p.id,
-              preview: images[0] || '',
-              imageUrls: images,
+              preview: resolvedPreview,
+              imageUrls: images.length ? images : (reconstructed ? [reconstructed] : []),
+              thumbnailUrl: resolvedThumbnail,
               file: null as any,
-              storagePath: (p.product_images || [])[0]?.storage_path ?? undefined,
+              storagePath: firstStoragePath,
               productGroup: p.product_group || p.id,
+              originalName: dbOriginalName,
+              // capturedAt: not stored in DB — will be undefined for gap-filled items
               voiceDescription:          p.voice_description   || '',
               generatedDescription:      p.description         || '',
               seoTitle:                  p.seo_title           || '',
@@ -1389,7 +1415,6 @@ function App() {
               discountedShipping:        p.discounted_shipping || '',
               mpn:                       p.mpn                 || '',
               customLabel0:              p.custom_label_0      || '',
-              originalName:             dbOriginalName,
             };
           });
           baseItems = [...baseItems, ...missingItems];
