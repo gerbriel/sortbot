@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import type { ClothingItem } from '../App';
+import { extractGroupPrimaryColor } from '../lib/colorUtils';
 import './ComprehensiveProductForm.css';
 
 interface ComprehensiveProductFormProps {
@@ -37,6 +38,34 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
   const isFromPreset = (fieldName: string): boolean => {
     return !!(currentItem._presetData && currentItem[fieldName as keyof ClothingItem]);
   };
+
+  // ── Auto color detection ───────────────────────────────────────────────────
+  // Runs once when this group first appears in Step 3 with an empty color field.
+  // Samples all images in the group, votes across them, writes the dominant
+  // color name. AI/voice/manual input all write to the same field afterwards
+  // and naturally overwrite this value. Guard ensures we never re-run if the
+  // field already has a value (from preset, voice, AI, or a prior run).
+  useEffect(() => {
+    if (currentItem.color) return; // already filled — skip
+
+    const urls = currentGroup
+      .map(item => item.imageUrls?.[0] || item.preview)
+      .filter((url): url is string => !!url);
+
+    if (!urls.length) return;
+
+    let cancelled = false;
+    extractGroupPrimaryColor(urls).then(colorName => {
+      if (cancelled || !colorName) return;
+      // Re-check guard in case voice/AI fired while we were sampling
+      if (currentItem.color) return;
+      updateGroupField('color', colorName);
+    }).catch(() => { /* silently ignore — field stays blank */ });
+
+    return () => { cancelled = true; };
+    // Only re-run when the group identity changes (new group rendered)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentItem.id]);
 
   const PresetBadge = ({ show }: { show: boolean }) => {
     if (!show) return null;
