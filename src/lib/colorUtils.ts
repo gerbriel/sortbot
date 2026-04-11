@@ -15,16 +15,34 @@ import { COLOR_RGB_MAP } from './colorDatabase';
 // ─── Color map ────────────────────────────────────────────────────────────────
 // Derived from COLOR_DNA in colorDatabase.ts — single source of truth.
 // Canonical names are title-cased for display; RGB comes from the first hex code.
+//
+// ALLOWED_COLORS controls which names color-thief is permitted to write into
+// Step 3. Voice/AI detection is unaffected (uses COLOR_WORDS_LIST directly).
+// To add a name here it must also exist as a key in COLOR_DNA.
+
+const ALLOWED_COLORS = new Set([
+  'red', 'crimson', 'burgundy',
+  'denim', 'navy', 'royal blue', 'carolina blue', 'teal', 'cyan', 'light blue',
+  'green', 'forest green', 'olive', 'sage', 'neon green', 'mint',
+  'yellow', 'gold', 'mustard', 'cream',
+  'orange', 'coral', 'salmon', 'neon orange',
+  'maroon', 'purple', 'lavender', 'pink', 'hot pink', 'mauve', 'peach',
+  'brown', 'beige', 'tan', 'caramel',
+  'gray', 'black', 'charcoal', 'heather gray', 'taupe',
+  'white',
+]);
 
 interface ColorEntry {
   name: string;
   rgb: [number, number, number];
 }
 
-const COLOR_MAP: ColorEntry[] = COLOR_RGB_MAP.map(entry => ({
-  name: entry.name.replace(/\b\w/g, c => c.toUpperCase()), // title case
-  rgb: entry.rgb,
-}));
+const COLOR_MAP: ColorEntry[] = COLOR_RGB_MAP
+  .filter(entry => ALLOWED_COLORS.has(entry.name))
+  .map(entry => ({
+    name: entry.name.replace(/\b\w/g, c => c.toUpperCase()), // title case
+    rgb: entry.rgb,
+  }));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
