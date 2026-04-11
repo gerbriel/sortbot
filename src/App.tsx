@@ -235,9 +235,16 @@ function App() {
           status: 'Draft',
           product_group: item.productGroup || item.id,
         })),
-        // ignoreDuplicates: false — allows updating batch_id on existing rows so products
-        // are correctly attributed to the current batch when restored from a new session.
-        { onConflict: 'id', ignoreDuplicates: false }
+        // ignoreDuplicates: true — NEVER overwrite batch_id on an existing products row.
+        // Using ignoreDuplicates: false caused batch_id to be silently stolen: when
+        // restoredProcessedItems included gap-filled items from other batches,
+        // registerItemsInDB would re-tag ALL of them with the current batch's id.
+        // On the next open, those items appeared in the DB query (.eq('batch_id', X))
+        // making the gap-fill grow unboundedly (38 items → 1003 items after one open).
+        // batch_id is set authoritatively at upload time (handleImagesUploaded) and must
+        // not be changed here. The purpose of this upsert is to ensure product_group and
+        // title are in sync — NOT to reassign ownership.
+        { onConflict: 'id', ignoreDuplicates: true }
       );
       // Build product_images rows. For image_url: prefer imageUrls[0], fall back to getPublicUrl(storagePath).
       // storage_path may be null for legacy items — that's fine, the column is nullable.
@@ -1340,10 +1347,15 @@ function App() {
       // Gap-fill: if workflow_state existed but was saved when only categorized items
       // were persisted (pre-dbd5d43 bug), the DB may have products that are missing
       // from workflowItems. Append any DB product whose id is not already in baseItems.
+      // Safety cap: if the DB has more than 2× the workflow_state item count as
+      // "missing", those extras are almost certainly stolen from other batches by a
+      // previous registerItemsInDB(ignoreDuplicates:false) call. Skip the gap-fill in
+      // that case to prevent loading hundreds of items that don't belong here.
       if (workflowItems.length > 0 && productsToUse && productsToUse.length > 0) {
         const baseIds = new Set(baseItems.map(i => i.id));
         const missing = productsToUse.filter((p: any) => !baseIds.has(p.id));
-        if (missing.length > 0) {
+        const gapFillCap = Math.max(workflowItems.length * 2, 50); // allow at most 2× or 50, whichever is larger
+        if (missing.length > 0 && missing.length <= gapFillCap) {
           log.app(`handleOpenBatch | gap-fill | adding ${missing.length} DB items missing from workflow_state`);
           const missingItems: ClothingItem[] = missing.map((p: any): ClothingItem => {
             const sortedImgs = (p.product_images || [])
@@ -1419,6 +1431,20 @@ function App() {
             };
           });
           baseItems = [...baseItems, ...missingItems];
+        } else if (missing.length > gapFillCap) {
+          log.app(`handleOpenBatch | gap-fill SKIPPED — ${missing.length} DB items exceed cap (${gapFillCap}); likely stolen batch_ids from a previous session. Cleaning up in background.`);
+          // Fire-and-forget cleanup: null out batch_id for stolen products so they
+          // no longer appear in this batch's DB query on next open.
+          const stolenIds = missing.map((p: any) => p.id);
+          const CHUNK = 100;
+          (async () => {
+            for (let ci = 0; ci < stolenIds.length; ci += CHUNK) {
+              await supabase.from('products')
+                .update({ batch_id: null })
+                .in('id', stolenIds.slice(ci, ci + CHUNK));
+            }
+            log.app(`handleOpenBatch | gap-fill cleanup done | reset batch_id=null for ${stolenIds.length} stolen products`);
+          })();
         }
       }
 
