@@ -443,6 +443,61 @@
   white-space: nowrap;
 }
 
+/* ── Auto-group control ─────────────────────────────────────────────────── */
+.auto-group-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.3);
+  padding-left: 0.6rem;
+  margin-left: 0.1rem;
+}
+
+.auto-group-label {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.auto-group-input {
+  width: 3rem;
+  padding: 0.2rem 0.35rem;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 5px;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.auto-group-input::-webkit-inner-spin-button,
+.auto-group-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+}
+
+.auto-group-input:focus {
+  border-color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.auto-group-btn {
+  background: rgba(16, 185, 129, 0.25) !important;
+  border-color: rgba(16, 185, 129, 0.7) !important;
+  color: #d1fae5 !important;
+  font-weight: 700 !important;
+}
+
+.auto-group-btn:hover {
+  background: rgba(16, 185, 129, 0.45) !important;
+  border-color: #10b981 !important;
+  color: #fff !important;
+}
+
 .grouper-footer {
   display: flex;
   justify-content: center;

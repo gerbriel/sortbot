@@ -90,6 +90,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const setFilter = <K extends keyof Filters>(key: K, val: Filters[K]) =>
     setFilters(prev => ({ ...prev, [key]: val }));
 
+  // Auto-group state — number of photos per product
+  const [autoGroupN, setAutoGroupN] = useState<string>('4');
+
   // Lightbox state
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
@@ -658,6 +661,35 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     onGrouped(updated);
   };
 
+  /**
+   * Auto-group all items by sequential filename order.
+   * Sorts all current items by originalName (natural numeric order),
+   * then chunks them into consecutive groups of `n` — exactly as the user
+   * photographed them (e.g. 4 shots per item → DSC0001–0004 = group 1, etc.).
+   * Existing grouping is completely replaced by this operation.
+   */
+  const applyAutoGrouping = (n: number) => {
+    if (n < 2 || n > 50) return;
+
+    // Sort ALL items by filename in natural (numeric) ascending order
+    const sorted = [...groupedItems].sort((a, b) => naturalCompare(nameKey(a), nameKey(b)));
+
+    log.grouper(`applyAutoGrouping | n=${n} total=${sorted.length} chunks=${Math.ceil(sorted.length / n)}`);
+
+    // Pre-generate a stable group UUID per chunk (one per product)
+    const numChunks = Math.ceil(sorted.length / n);
+    const chunkIds = Array.from({ length: numChunks }, () => crypto.randomUUID());
+
+    const updated: ClothingItem[] = sorted.map((item, i) => ({
+      ...item,
+      productGroup: chunkIds[Math.floor(i / n)],
+    }));
+
+    setGroupedItems(updated);
+    updateSelection(new Set());
+    onGrouped(updated);
+  };
+
 
   // Drag and Drop Handlers for Images
   const handleDragStart = (e: React.DragEvent, item: ClothingItem, fromGroup: string) => {
@@ -1151,6 +1183,41 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               ✕ Clear
             </button>
           )}
+
+          {/* ── Auto-group by N ─────────────────────────────────────────────── */}
+          <div className="auto-group-control" title="Auto-group images by sequential filename order. Type how many photos you took per item, then click Apply.">
+            <span className="auto-group-label">📸 Photos/item:</span>
+            <input
+              type="number"
+              min={2}
+              max={50}
+              value={autoGroupN}
+              onChange={e => setAutoGroupN(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  const n = parseInt(autoGroupN, 10);
+                  if (!isNaN(n) && n >= 2 && n <= 50) applyAutoGrouping(n);
+                }
+              }}
+              className="auto-group-input"
+              title="Number of photos per product"
+            />
+            <button
+              className="sort-btn auto-group-btn"
+              onClick={() => {
+                const n = parseInt(autoGroupN, 10);
+                if (isNaN(n) || n < 2 || n > 50) {
+                  alert('Enter a number between 2 and 50');
+                  return;
+                }
+                if (!confirm(`Auto-group all ${groupedItems.length} images into sets of ${n}?\n\nThis will replace all current grouping. You can undo by refreshing.`)) return;
+                applyAutoGrouping(n);
+              }}
+              title={`Group all images into sets of ${autoGroupN} by filename order`}
+            >
+              Apply
+            </button>
+          </div>
         </div>
       </div>
 
