@@ -1371,9 +1371,11 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         }
         const imgIds = (imgRows ?? []).map((r: any) => r.id);
         if (imgIds.length > 0) {
-          await supabase.from('product_images').delete().in('id', imgIds);
+          const { error: delImgErr } = await supabase.from('product_images').delete().in('id', imgIds);
+          if (delImgErr) console.error('[Library] handleDeleteUnassigned | product_images delete error', delImgErr);
         }
-        await supabase.from('products').delete().in('id', chunk);
+        const { error: delProdErr } = await supabase.from('products').delete().in('id', chunk);
+        if (delProdErr) console.error('[Library] handleDeleteUnassigned | products delete error', delProdErr);
       }
 
       // Scrub deleted items from ALL batches' workflow_state so they don't
