@@ -1357,6 +1357,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       const productIds = [...new Set(
         unassignedImages.map(img => img.productGroup).filter(Boolean) as string[]
       )];
+      const productIdSet = new Set(productIds);
       const CHUNK = 100;
       for (let i = 0; i < productIds.length; i += CHUNK) {
         const chunk = productIds.slice(i, i + CHUNK);
@@ -1374,6 +1375,36 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         }
         await supabase.from('products').delete().in('id', chunk);
       }
+
+      // Scrub deleted items from ALL batches' workflow_state so they don't
+      // resurrect on hard refresh via registerItemsInDB.
+      const { data: allBatches } = await supabase
+        .from('workflow_batches')
+        .select('id, workflow_state');
+      if (allBatches && allBatches.length > 0) {
+        const wfKeys = ['uploadedImages', 'groupedImages', 'sortedImages', 'processedItems'];
+        await Promise.all(allBatches.map(async (batch: any) => {
+          if (!batch.workflow_state) return;
+          const ws = { ...batch.workflow_state };
+          let modified = false;
+          for (const key of wfKeys) {
+            if (Array.isArray(ws[key])) {
+              const before = ws[key].length;
+              ws[key] = ws[key].filter(
+                (item: any) => !productIdSet.has(item.productGroup || item.id)
+              );
+              if (ws[key].length !== before) modified = true;
+            }
+          }
+          if (modified) {
+            await supabase
+              .from('workflow_batches')
+              .update({ workflow_state: ws })
+              .eq('id', batch.id);
+          }
+        }));
+      }
+
       setImages(prev => prev.filter(img => img.batchId));
       log.library(`handleDeleteUnassigned | deleted ${productIds.length} products`);
     } catch (err) {
