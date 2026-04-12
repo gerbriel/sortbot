@@ -278,10 +278,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     return () => document.removeEventListener('mousedown', handler);
   }, [selectedItems]);
 
-  // ⌘G / Ctrl+G — group selected items keyboard shortcut
+  // ⌘Enter / Ctrl+Enter — group selected items keyboard shortcut
+  // (⌘G is intercepted by Chrome/Safari as "Find Next" before JS can prevent it)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'g') {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         e.preventDefault();
         createGroupFromSelected();
       }
