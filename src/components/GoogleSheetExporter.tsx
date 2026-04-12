@@ -405,7 +405,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                   </tr>
                 </thead>
                 <tbody>
-                  {products.slice(0, 10).map((product, idx) => {
+                  {products.map((product, idx) => {
                     const cleanTitle = buildCleanTitle(product, idx);
                     const productCategory = SHOPIFY_CATEGORY_MAP[product.category?.toLowerCase() ?? ''] ?? product.category ?? '';
                     const vendor = product.brand || '';
@@ -497,9 +497,6 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                   })}
                 </tbody>
               </table>
-              {products.length > 10 && (
-                <p className="preview-note" style={{ padding: '8px 12px', margin: 0, fontSize: '0.8rem', color: '#6b7280', borderTop: '1px solid #e5e7eb', background: '#fafafa' }}>Showing 10 of {products.length} items</p>
-              )}
             </div>
           </div>
         </>
