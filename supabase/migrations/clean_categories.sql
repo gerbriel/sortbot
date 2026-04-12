@@ -16,10 +16,14 @@ SET name = 'bags', display_name = 'Bags', emoji = '👜', sort_order = 6
 WHERE name = 'mystery boxes'
   AND user_id = '00000000-0000-0000-0000-000000000000';
 
--- Add Accessories if missing
+-- Add Accessories if missing (no ON CONFLICT — use WHERE NOT EXISTS)
 INSERT INTO categories (user_id, name, display_name, emoji, sort_order)
-VALUES ('00000000-0000-0000-0000-000000000000', 'accessories', 'Accessories', '🕶️', 7)
-ON CONFLICT (user_id, name) DO NOTHING;
+SELECT '00000000-0000-0000-0000-000000000000', 'accessories', 'Accessories', '🕶️', 7
+WHERE NOT EXISTS (
+  SELECT 1 FROM categories
+  WHERE user_id = '00000000-0000-0000-0000-000000000000'
+    AND name = 'accessories'
+);
 
 -- Verify
 SELECT name, display_name, emoji, sort_order
