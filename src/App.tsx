@@ -20,7 +20,7 @@ import { autoSaveWorkflowBatch, type WorkflowBatch } from './lib/workflowBatchSe
 import type { BrandCategory } from './lib/brandCategorySystem';
 import { getCategoryPresets } from './lib/categoryPresetsService';
 import type { CategoryPreset } from './lib/categoryPresets';
-import { applyPresetToProductGroup } from './lib/applyPresetToGroup';
+import { applyPresetDirectly } from './lib/applyPresetToGroup';
 import './App.css';
 
 export interface ClothingItem {
@@ -188,6 +188,8 @@ function App() {
   processedItemsRef.current = processedItems;
   const uploadedImagesRef = useRef<ClothingItem[]>([]);
   uploadedImagesRef.current = uploadedImages;
+  // Guard against concurrent preset applications (e.g. double-click)
+  const isApplyingPresetRef = useRef(false);
   const [currentBatchNumber, setCurrentBatchNumber] = useState<string>(() => {
     return localStorage.getItem('sortbot_current_batch_number') || `batch-${Date.now()}`;
   });
@@ -912,7 +914,11 @@ function App() {
   // a category zone with items selected.
   const handleApplyPreset = async (preset: CategoryPreset) => {
     log.app(`handleApplyPreset | preset="${preset.display_name}" selectedCount=${selectedGroupItems.size}`);
+    // Guard against double-clicks or rapid repeated presses while async work is in flight
+    if (isApplyingPresetRef.current) return;
     if (selectedGroupItems.size === 0) return;
+    isApplyingPresetRef.current = true;
+    try {
     // Use refs so we always read the latest state even if this fires in the same
     // render cycle as a group operation (setGroupedImages hasn't re-rendered yet).
     const liveGrouped = groupedImagesRef.current;
@@ -942,18 +948,19 @@ function App() {
     const mergedSinglesGroupId = trueSingles.length > 0 ? (trueSingles[0].productGroup || trueSingles[0].id) : null;
     const selectedSet = new Set(selected.map(i => i.id));
 
-    // Apply preset to singles as one merged group
+    // Apply preset to singles as one merged group — use applyPresetDirectly (no extra Supabase fetch)
     const singlesWithPreset = trueSingles.length > 0
-      ? await applyPresetToProductGroup(trueSingles, categoryName)
+      ? applyPresetDirectly(trueSingles, categoryName, preset)
       : [];
     const singlesById: Record<string, ClothingItem> = {};
     singlesWithPreset.forEach(i => { singlesById[i.id] = i; });
 
     // Apply preset independently to each true multi-image group (all members)
+    // applyPresetDirectly: no network call, uses the preset object we already have
     const groupedWithPresetById: Record<string, ClothingItem> = {};
     for (const gid of trueMultiGroupIds) {
       const fullGroup = baseItems.filter(i => (i.productGroup || i.id) === gid);
-      const withPreset = await applyPresetToProductGroup(fullGroup, categoryName);
+      const withPreset = applyPresetDirectly(fullGroup, categoryName, preset);
       withPreset.forEach(i => { groupedWithPresetById[i.id] = i; });
     }
 
@@ -987,6 +994,9 @@ function App() {
     await handleImagesSorted(updatedItems);
     setSelectedGroupItems(new Set());
     grouperActionsRef.current?.clearSelection();
+    } finally {
+      isApplyingPresetRef.current = false;
+    }
   };
 
   const handleImagesGrouped = async (items: ClothingItem[]) => {
