@@ -1603,7 +1603,9 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         if (productIds.length > 0) {
           const { data: recheck } = await supabase.from('products').select('id').in('id', [...productIdSet]);
           if ((recheck?.length ?? 0) === 0) {
-            addTrace('ok', 'CONFIRM products', `all ${productIds.length} product rows gone ✓`);
+            // NOTE: SELECT returning 0 could mean "deleted" OR "RLS-blocked SELECT".
+            // If CLAIM and DELETE both returned 0, this is likely RLS-blocked — row may still exist.
+            addTrace('ok', 'CONFIRM products', `SELECT returned 0 rows — either deleted or RLS-blocked SELECT (check ⚠️ warnings above)`);
           } else {
             addTrace('error', 'CONFIRM products', `${recheck?.length} rows STILL EXIST — RLS blocking`);
             (recheck ?? []).forEach((r: any) => addTrace('error', '  ↳ surviving id', r.id.slice(0, 8)));
