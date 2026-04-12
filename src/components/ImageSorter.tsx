@@ -13,11 +13,9 @@ const CATEGORIES = [
   'Outerwear',
   'Tees',
   'Bottoms',
-  'Femme',
   'Hats',
-  'Mystery Boxes',
+  'Bags',
   'Accessories',
-  'Activewear',
   'Other'
 ];
 

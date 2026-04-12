@@ -71,8 +71,11 @@ const getCategoryIcon = (iconNameOrCategory: string, size: number = 24) => {
   if (name.includes('hat') || name.includes('cap') || name.includes('beanie')) {
     return <Glasses size={size} />;
   }
-  if (name.includes('mystery') || name.includes('box')) {
+  if (name.includes('bag') || name.includes('purse') || name.includes('mystery') || name.includes('box')) {
     return <Box size={size} />;
+  }
+  if (name.includes('access') || name.includes('jewelry') || name.includes('watch')) {
+    return <Package size={size} />;
   }
   
   // Default icon
@@ -128,12 +131,12 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
       console.error('Failed to load categories:', error);
       setCategories([
         { id: '1', user_id: '', name: 'sweatshirts', display_name: 'Sweatshirts', emoji: '🧥', color: '#667eea', sort_order: 1, is_active: true, created_at: '', updated_at: '' },
-        { id: '2', user_id: '', name: 'outerwear', display_name: 'Outerwear', emoji: '🧥', color: '#764ba2', sort_order: 2, is_active: true, created_at: '', updated_at: '' },
-        { id: '3', user_id: '', name: 'tees', display_name: 'Tees', emoji: '👕', color: '#f093fb', sort_order: 3, is_active: true, created_at: '', updated_at: '' },
-        { id: '4', user_id: '', name: 'bottoms', display_name: 'Bottoms', emoji: '👖', color: '#4facfe', sort_order: 4, is_active: true, created_at: '', updated_at: '' },
-        { id: '5', user_id: '', name: 'femme', display_name: 'Feminine', emoji: '👗', color: '#fa709a', sort_order: 5, is_active: true, created_at: '', updated_at: '' },
-        { id: '6', user_id: '', name: 'hats', display_name: 'Hats', emoji: '🧢', color: '#30cfd0', sort_order: 6, is_active: true, created_at: '', updated_at: '' },
-        { id: '7', user_id: '', name: 'mystery boxes', display_name: 'Mystery Boxes', emoji: '📦', color: '#a8edea', sort_order: 7, is_active: true, created_at: '', updated_at: '' },
+        { id: '2', user_id: '', name: 'outerwear',   display_name: 'Outerwear',   emoji: '🧥', color: '#764ba2', sort_order: 2, is_active: true, created_at: '', updated_at: '' },
+        { id: '3', user_id: '', name: 'tees',        display_name: 'Tees',        emoji: '👕', color: '#f093fb', sort_order: 3, is_active: true, created_at: '', updated_at: '' },
+        { id: '4', user_id: '', name: 'bottoms',     display_name: 'Bottoms',     emoji: '👖', color: '#4facfe', sort_order: 4, is_active: true, created_at: '', updated_at: '' },
+        { id: '5', user_id: '', name: 'hats',        display_name: 'Hats',        emoji: '🧢', color: '#30cfd0', sort_order: 5, is_active: true, created_at: '', updated_at: '' },
+        { id: '6', user_id: '', name: 'bags',        display_name: 'Bags',        emoji: '👜', color: '#a8edea', sort_order: 6, is_active: true, created_at: '', updated_at: '' },
+        { id: '7', user_id: '', name: 'accessories', display_name: 'Accessories', emoji: '�️', color: '#fccb90', sort_order: 7, is_active: true, created_at: '', updated_at: '' },
       ]);
     } finally {
       setLoading(false);
