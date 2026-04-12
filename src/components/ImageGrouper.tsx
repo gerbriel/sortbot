@@ -291,29 +291,37 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     return () => document.removeEventListener('keydown', handler);
   }, [selectedItems]); // re-bind when selectedItems changes so createGroupFromSelected closure is fresh
 
-  // ⌘A            — select ALL images (singles + every item inside every group)
+  // ⌘A            — select ALL singles (individual images only, not grouped items)
   // ⌘Shift+A      — select ALL multi-image groups only (not singles)
-  // Both are toggles: pressing again when everything targeted is already selected → deselects
+  // ⌘D            — deselect everything
+  // ⌘A / ⌘Shift+A are toggles: pressing again when everything targeted is already selected → deselects
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.key !== 'a') return;
+      if (!(e.metaKey || e.ctrlKey)) return;
       // Only fire when Step 2 (the grouper) is on-screen — skip if an input/textarea has focus
       const active = document.activeElement;
       if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)) return;
-      e.preventDefault();
 
-      if (e.shiftKey) {
-        // ⌘Shift+A — select all multi-image groups
-        const allGroupItemIds = multiItemGroupsRef.current.flatMap(([, items]) => items.map(i => i.id));
-        if (allGroupItemIds.length === 0) return;
-        const alreadyAllSelected = allGroupItemIds.every(id => selectedItemsRef.current.has(id));
-        updateSelection(alreadyAllSelected ? new Set() : new Set(allGroupItemIds));
-      } else {
-        // ⌘A — select every image
-        const allIds = groupedItemsRef.current.map(i => i.id);
-        if (allIds.length === 0) return;
-        const alreadyAllSelected = allIds.every(id => selectedItemsRef.current.has(id));
-        updateSelection(alreadyAllSelected ? new Set() : new Set(allIds));
+      if (e.key === 'd') {
+        // ⌘D — deselect all
+        if (selectedItemsRef.current.size === 0) return;
+        e.preventDefault();
+        updateSelection(new Set());
+      } else if (e.key === 'a') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          // ⌘Shift+A — select all multi-image groups
+          const allGroupItemIds = multiItemGroupsRef.current.flatMap(([, items]) => items.map(i => i.id));
+          if (allGroupItemIds.length === 0) return;
+          const alreadyAllSelected = allGroupItemIds.every(id => selectedItemsRef.current.has(id));
+          updateSelection(alreadyAllSelected ? new Set() : new Set(allGroupItemIds));
+        } else {
+          // ⌘A — select all singles only
+          const allSingleIds = singleItemsRef.current.map(i => i.id);
+          if (allSingleIds.length === 0) return;
+          const alreadyAllSelected = allSingleIds.every(id => selectedItemsRef.current.has(id));
+          updateSelection(alreadyAllSelected ? new Set() : new Set(allSingleIds));
+        }
       }
     };
     document.addEventListener('keydown', handler);
