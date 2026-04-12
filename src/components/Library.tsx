@@ -1386,6 +1386,16 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       )];
       const productIdSet = new Set(productIds);
 
+      // Pre-build a map of productId → known product_images IDs from state.
+      // Used as a fallback when the DB query returns 0 rows (e.g. RLS blocks the lookup).
+      const productToKnownImgIds = new Map<string, string[]>();
+      unassignedImages.forEach(img => {
+        if (!img.productGroup) return;
+        const arr = productToKnownImgIds.get(img.productGroup) ?? [];
+        arr.push(img.id);
+        productToKnownImgIds.set(img.productGroup, arr);
+      });
+
       // ── Bucket 2: orphaned product_images rows (productGroup is undefined) ─
       // These are product_images rows whose parent products row has already been
       // deleted (or was never saved), leaving an orphan that keeps reappearing.
@@ -1429,8 +1439,17 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         }
 
         // ── Step 3: delete product_images rows ────────────────────────────
-        const imgIds = (imgRows ?? []).map((r: any) => r.id);
+        // Prefer the IDs fetched from DB; fall back to the IDs we know from state
+        // (covers the case where RLS blocks the SELECT but allows DELETE by id).
+        const fetchedImgIds = (imgRows ?? []).map((r: any) => r.id);
+        const fallbackImgIds = chunk.flatMap(pid => productToKnownImgIds.get(pid) ?? []);
+        const imgIds = fetchedImgIds.length > 0 ? fetchedImgIds : fallbackImgIds;
+        const imgIdSource = fetchedImgIds.length > 0 ? 'DB fetch' : 'state fallback';
+
         if (imgIds.length > 0) {
+          if (isDebugging && fetchedImgIds.length === 0) {
+            addTrace('warn', 'product_images fallback', `DB fetch returned 0 — using ${fallbackImgIds.length} known IDs from state: ${fallbackImgIds.map(id => id.slice(0, 8)).join(', ')}`);
+          }
           const { data: delImgData, error: delImgErr } = await supabase
             .from('product_images').delete().in('id', imgIds).select('id');
           if (isDebugging) {
@@ -1438,12 +1457,12 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
             else addTrace(
               (delImgData?.length ?? 0) === imgIds.length ? 'ok' : 'warn',
               'DELETE product_images',
-              `attempted ${imgIds.length}, confirmed deleted ${delImgData?.length ?? '?'} rows${(delImgData?.length ?? 0) < imgIds.length ? ' ← RLS may have blocked some' : ''}`
+              `[${imgIdSource}] attempted ${imgIds.length}, confirmed deleted ${delImgData?.length ?? '?'} rows${(delImgData?.length ?? 0) < imgIds.length ? ' ← RLS may have blocked some' : ''}`
             );
           }
           if (delImgErr) console.error('[Library] handleDeleteUnassigned | product_images delete error', delImgErr);
         } else if (isDebugging) {
-          addTrace('warn', 'DELETE product_images', 'no imgIds — step skipped (fetch returned 0 rows)');
+          addTrace('warn', 'DELETE product_images', 'no imgIds from DB or state — step skipped');
         }
 
         // ── Step 4: delete products rows ──────────────────────────────────
