@@ -421,10 +421,13 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         const batchId: string | undefined = img.products?.batch_id || undefined;
         const productId: string | undefined = img.products?.id || undefined;
 
-        // For batches fully covered by workflow_state AND whose product is already present
-        // in Pass 1, skip to avoid duplicates. But if the product is missing from Pass 1
-        // (the gap case), fall through and add it from DB.
-        if (batchId && batchIdsCoveredByWfState.has(batchId) && productId && wfItemIds.has(productId)) return;
+        // If this product's ID was already emitted in Pass 1 (workflow_state), skip it to
+        // avoid duplicates — regardless of which batch_id the DB row claims.  This handles
+        // the case where items were registered under a different batch_id than the one that
+        // holds the workflow_state (e.g. items registered under an old/deleted batch).
+        // For batches with NO workflow_state at all, productId won't be in wfItemIds so
+        // they still fall through and get added here (legacy behaviour preserved).
+        if (productId && wfItemIds.has(productId)) return;
 
         if (!img.image_url) return;
         if (dbImageUrls.has(img.image_url)) return; // dedup by URL
