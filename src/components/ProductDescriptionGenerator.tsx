@@ -1136,15 +1136,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   const handleFinish = () => {
     log.pdg(`handleFinish | items=${processedItems.length}`);
-    const allProcessed = processedItems.every(
-      item => item.voiceDescription && item.generatedDescription
-    );
-    
-    if (allProcessed) {
-      onProcessed(processedItems);
-    } else {
-      alert('Please process all items before continuing');
-    }
+    // Sync state to parent then trigger CSV download
+    onProcessed(processedItems);
+    onDownloadCSV?.();
   };
 
   // Guard: no items ready yet (nothing categorized)
