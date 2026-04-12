@@ -1455,6 +1455,31 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               </div>
             </div>
 
+            {/* Title — editable above the AI description */}
+            <div style={{ marginTop: '0.75rem' }}>
+              <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem' }}>
+                Title:
+              </label>
+              <input
+                type="text"
+                value={currentItem.seoTitle || ''}
+                onChange={(e) => {
+                  const updated = [...processedItems];
+                  currentGroup.forEach(groupItem => {
+                    const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                    if (itemIndex !== -1) {
+                      updated[itemIndex].seoTitle = e.target.value;
+                    }
+                  });
+                  setProcessedItems(updated);
+                }}
+                placeholder="e.g., Vintage Black Rolling Stones Tee"
+                className="info-input"
+                style={{ width: '100%' }}
+                onKeyDown={(e) => e.stopPropagation()}
+              />
+            </div>
+
             {/* AI Description — sits directly below the voice box */}
             <div style={{ marginTop: '0.75rem' }}>
               <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem' }}>
