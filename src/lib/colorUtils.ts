@@ -72,6 +72,53 @@ function rgbToHsb(r: number, g: number, b: number): { h: number; s: number; v: n
   return { h, s, v };
 }
 
+/** Convert HSB back to RGB. */
+function hsbToRgb(h: number, s: number, v: number): [number, number, number] {
+  const sn = s / 100;
+  const c  = v * sn;
+  const x  = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m  = v - c;
+  let r = 0, g = 0, b = 0;
+  if      (h < 60)  { r = c; g = x; b = 0; }
+  else if (h < 120) { r = x; g = c; b = 0; }
+  else if (h < 180) { r = 0; g = c; b = x; }
+  else if (h < 240) { r = 0; g = x; b = c; }
+  else if (h < 300) { r = x; g = 0; b = c; }
+  else              { r = c; g = 0; b = x; }
+  return [
+    Math.round((r + m) * 255),
+    Math.round((g + m) * 255),
+    Math.round((b + m) * 255),
+  ];
+}
+
+/**
+ * Normalize a sampled RGB to account for faded fabric, overexposure, and
+ * underexposure — the three most common accuracy killers in clothing photos.
+ *
+ * Strategy: preserve the hue exactly, then clamp saturation and brightness
+ * into the range where real garment colors live (s: 20–95, v: 35–220).
+ * This maps:
+ *   - Washed-out/faded fabric  (low S)  → boosted back toward the real hue
+ *   - Overexposed bright areas (high V) → pulled back from blown-out white
+ *   - Underexposed dark shots  (low V)  → raised enough to be distinguishable
+ *
+ * Hue is never changed — only saturation and brightness are clamped.
+ * Achromatic pixels (s < 8) are returned unchanged so true blacks/whites/greys
+ * are not falsely tinted.
+ */
+function normalizeExposure(rgb: [number, number, number]): [number, number, number] {
+  const { h, s, v } = rgbToHsb(rgb[0], rgb[1], rgb[2]);
+
+  // Leave true neutrals alone — clamping them would add a false tint
+  if (s < 8) return rgb;
+
+  const sNorm = Math.max(20, Math.min(95, s));      // boost faded, cap oversaturated
+  const vNorm = Math.max(35, Math.min(220, v));     // lift underexposed, cap overexposed
+
+  return hsbToRgb(h, sNorm, vNorm);
+}
+
 /**
  * Returns true if the RGB value is a neutral (near-white, near-black, or grey)
  * that is likely to be a background rather than the garment itself.
@@ -213,8 +260,11 @@ export async function extractGroupPrimaryColor(imageUrls: string[]): Promise<str
           const palette = getPaletteSync(canvas, { colorCount: 8 });
           if (!palette) continue;
           for (const color of palette) {
-            const rgb: [number, number, number] = color.array();
-            if (!isNeutral(rgb)) pool.push(rgb);
+            const raw: [number, number, number] = color.array();
+            if (isNeutral(raw)) continue;
+            // Normalize for faded fabric, overexposure, and underexposure
+            // before adding to the pool so the clustering sees canonical hues.
+            pool.push(normalizeExposure(raw));
           }
         }
       } catch {
