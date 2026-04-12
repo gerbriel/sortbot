@@ -155,6 +155,14 @@ export const deleteProductGroup = async (
   groupId: string
 ): Promise<boolean> => {
   try {
+    // 0. Look up batch_id before deleting anything
+    const { data: productRow } = await supabase
+      .from('products')
+      .select('id, batch_id')
+      .eq('id', groupId)
+      .single();
+    const batchId = productRow?.batch_id as string | undefined;
+
     // 1. Collect storage paths for all images belonging to this product
     const { data: imageRows } = await supabase
       .from('product_images')
@@ -180,9 +188,38 @@ export const deleteProductGroup = async (
       .from('products')
       .delete()
       .eq('id', groupId);
-
     if (productError && productError.code !== 'PGRST116') {
       console.error('Error deleting product:', productError);
+    }
+
+    // 5. Scrub all items in this product_group from the batch's workflow_state
+    //    so a hard-refresh doesn't re-register them via registerItemsInDB.
+    if (batchId) {
+      const { data: batchRow } = await supabase
+        .from('workflow_batches')
+        .select('id, workflow_state')
+        .eq('id', batchId)
+        .single();
+      if (batchRow?.workflow_state) {
+        const ws = batchRow.workflow_state as Record<string, any[]>;
+        const keys = ['uploadedImages', 'groupedImages', 'sortedImages', 'processedItems'];
+        let modified = false;
+        for (const key of keys) {
+          if (Array.isArray(ws[key])) {
+            const before = ws[key].length;
+            ws[key] = ws[key].filter(
+              (item: any) => (item.productGroup || item.id) !== groupId
+            );
+            if (ws[key].length !== before) modified = true;
+          }
+        }
+        if (modified) {
+          await supabase
+            .from('workflow_batches')
+            .update({ workflow_state: ws })
+            .eq('id', batchRow.id);
+        }
+      }
     }
 
     return true;
@@ -367,33 +404,68 @@ export const deleteImage = async (
   storagePath?: string
 ): Promise<boolean> => {
   try {
+    // 0. Look up which product (and batch) owns this image BEFORE deleting anything
+    const { data: imageRow } = await supabase
+      .from('product_images')
+      .select('product_id')
+      .eq('id', imageId)
+      .single();
+    const productId = imageRow?.product_id as string | undefined;
+
     // 1. Delete from Storage if path exists
     if (storagePath) {
       const { error: storageError } = await supabase.storage
         .from('product-images')
         .remove([storagePath]);
-      
       if (storageError) {
         console.error('Storage delete error:', storageError);
-        // Continue anyway - image might already be deleted
       }
     }
-    
+
     // 2. Delete from product_images table
     const { error: dbError } = await supabase
       .from('product_images')
       .delete()
       .eq('id', imageId);
-    
     if (dbError && dbError.code !== 'PGRST116') {
       console.error('Error deleting product image record:', dbError);
     }
 
-    // NOTE: workflow_state scrubbing is intentionally omitted here.
-    // The active session in App.tsx manages its own workflow_state via autoSaveWorkflow.
-    // Trying to scrub all batches here requires fetching every workflow_batch row, which
-    // is slow (multiple paginated requests) and fragile (fails if a batch was deleted).
-    
+    // 3. Scrub the item from its batch's workflow_state so a hard-refresh
+    //    doesn't re-register it via registerItemsInDB.
+    if (productId) {
+      const { data: productRow } = await supabase
+        .from('products')
+        .select('id, batch_id')
+        .eq('id', productId)
+        .single();
+      if (productRow?.batch_id) {
+        const { data: batchRow } = await supabase
+          .from('workflow_batches')
+          .select('id, workflow_state')
+          .eq('id', productRow.batch_id)
+          .single();
+        if (batchRow?.workflow_state) {
+          const ws = batchRow.workflow_state as Record<string, any[]>;
+          const keys = ['uploadedImages', 'groupedImages', 'sortedImages', 'processedItems'];
+          let modified = false;
+          for (const key of keys) {
+            if (Array.isArray(ws[key])) {
+              const before = ws[key].length;
+              ws[key] = ws[key].filter((item: any) => item.id !== productId);
+              if (ws[key].length !== before) modified = true;
+            }
+          }
+          if (modified) {
+            await supabase
+              .from('workflow_batches')
+              .update({ workflow_state: ws })
+              .eq('id', batchRow.id);
+          }
+        }
+      }
+    }
+
     return true;
   } catch (error) {
     console.error('Error deleting image:', error);
