@@ -155,13 +155,13 @@ export const deleteProductGroup = async (
   groupId: string
 ): Promise<boolean> => {
   try {
-    // 0. Look up batch_id before deleting anything
+    // 0. Look up batch_id before deleting anything. maybeSingle() avoids 406 on missing rows.
     const { data: productRow } = await supabase
       .from('products')
       .select('id, batch_id')
       .eq('id', groupId)
-      .single();
-    const batchId = productRow?.batch_id as string | undefined;
+      .maybeSingle();
+    const batchId = productRow?.batch_id as string | null ?? null;
 
     // 1. Collect storage paths for all images belonging to this product
     const { data: imageRows } = await supabase
@@ -192,34 +192,44 @@ export const deleteProductGroup = async (
       console.error('Error deleting product:', productError);
     }
 
-    // 5. Scrub all items in this product_group from the batch's workflow_state
+    // 5. Scrub all items in this product_group from workflow_state
     //    so a hard-refresh doesn't re-register them via registerItemsInDB.
+    const wfKeys = ['uploadedImages', 'groupedImages', 'sortedImages', 'processedItems'];
+    const scrubBatch = async (batchRow: { id: string; workflow_state: any }) => {
+      if (!batchRow?.workflow_state) return;
+      const ws = { ...batchRow.workflow_state } as Record<string, any[]>;
+      let modified = false;
+      for (const key of wfKeys) {
+        if (Array.isArray(ws[key])) {
+          const before = ws[key].length;
+          ws[key] = ws[key].filter(
+            (item: any) => (item.productGroup || item.id) !== groupId
+          );
+          if (ws[key].length !== before) modified = true;
+        }
+      }
+      if (modified) {
+        await supabase
+          .from('workflow_batches')
+          .update({ workflow_state: ws })
+          .eq('id', batchRow.id);
+      }
+    };
+
     if (batchId) {
+      // Fast path: we know exactly which batch to scrub
       const { data: batchRow } = await supabase
         .from('workflow_batches')
         .select('id, workflow_state')
         .eq('id', batchId)
-        .single();
-      if (batchRow?.workflow_state) {
-        const ws = batchRow.workflow_state as Record<string, any[]>;
-        const keys = ['uploadedImages', 'groupedImages', 'sortedImages', 'processedItems'];
-        let modified = false;
-        for (const key of keys) {
-          if (Array.isArray(ws[key])) {
-            const before = ws[key].length;
-            ws[key] = ws[key].filter(
-              (item: any) => (item.productGroup || item.id) !== groupId
-            );
-            if (ws[key].length !== before) modified = true;
-          }
-        }
-        if (modified) {
-          await supabase
-            .from('workflow_batches')
-            .update({ workflow_state: ws })
-            .eq('id', batchRow.id);
-        }
-      }
+        .maybeSingle();
+      if (batchRow) await scrubBatch(batchRow);
+    } else {
+      // Unassigned group — scan all batches
+      const { data: allBatches } = await supabase
+        .from('workflow_batches')
+        .select('id, workflow_state');
+      if (allBatches) await Promise.all(allBatches.map(scrubBatch));
     }
 
     return true;
@@ -404,13 +414,25 @@ export const deleteImage = async (
   storagePath?: string
 ): Promise<boolean> => {
   try {
-    // 0. Look up which product (and batch) owns this image BEFORE deleting anything
+    // 0. Look up which product (and batch) owns this image BEFORE deleting anything.
+    //    Use maybeSingle() so a missing row returns null instead of throwing 406.
     const { data: imageRow } = await supabase
       .from('product_images')
       .select('product_id')
       .eq('id', imageId)
-      .single();
+      .maybeSingle();
     const productId = imageRow?.product_id as string | undefined;
+
+    // Look up batch_id now while the products row still exists
+    let batchId: string | null = null;
+    if (productId) {
+      const { data: productRow } = await supabase
+        .from('products')
+        .select('id, batch_id')
+        .eq('id', productId)
+        .maybeSingle();
+      batchId = productRow?.batch_id ?? null;
+    }
 
     // 1. Delete from Storage if path exists
     if (storagePath) {
@@ -431,37 +453,43 @@ export const deleteImage = async (
       console.error('Error deleting product image record:', dbError);
     }
 
-    // 3. Scrub the item from its batch's workflow_state so a hard-refresh
-    //    doesn't re-register it via registerItemsInDB.
+    // 3. Scrub the item from workflow_state so a hard-refresh doesn't resurrect it.
     if (productId) {
-      const { data: productRow } = await supabase
-        .from('products')
-        .select('id, batch_id')
-        .eq('id', productId)
-        .single();
-      if (productRow?.batch_id) {
+      const wfKeys = ['uploadedImages', 'groupedImages', 'sortedImages', 'processedItems'];
+      const scrubBatch = async (batchRow: { id: string; workflow_state: any }) => {
+        if (!batchRow?.workflow_state) return;
+        const ws = { ...batchRow.workflow_state } as Record<string, any[]>;
+        let modified = false;
+        for (const key of wfKeys) {
+          if (Array.isArray(ws[key])) {
+            const before = ws[key].length;
+            ws[key] = ws[key].filter((item: any) => item.id !== productId);
+            if (ws[key].length !== before) modified = true;
+          }
+        }
+        if (modified) {
+          await supabase
+            .from('workflow_batches')
+            .update({ workflow_state: ws })
+            .eq('id', batchRow.id);
+        }
+      };
+
+      if (batchId) {
+        // Fast path: we know exactly which batch to scrub
         const { data: batchRow } = await supabase
           .from('workflow_batches')
           .select('id, workflow_state')
-          .eq('id', productRow.batch_id)
-          .single();
-        if (batchRow?.workflow_state) {
-          const ws = batchRow.workflow_state as Record<string, any[]>;
-          const keys = ['uploadedImages', 'groupedImages', 'sortedImages', 'processedItems'];
-          let modified = false;
-          for (const key of keys) {
-            if (Array.isArray(ws[key])) {
-              const before = ws[key].length;
-              ws[key] = ws[key].filter((item: any) => item.id !== productId);
-              if (ws[key].length !== before) modified = true;
-            }
-          }
-          if (modified) {
-            await supabase
-              .from('workflow_batches')
-              .update({ workflow_state: ws })
-              .eq('id', batchRow.id);
-          }
+          .eq('id', batchId)
+          .maybeSingle();
+        if (batchRow) await scrubBatch(batchRow);
+      } else {
+        // Unassigned item — scan all batches
+        const { data: allBatches } = await supabase
+          .from('workflow_batches')
+          .select('id, workflow_state');
+        if (allBatches) {
+          await Promise.all(allBatches.map(scrubBatch));
         }
       }
     }
