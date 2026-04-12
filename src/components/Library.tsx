@@ -341,6 +341,12 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         const allImages = members
           .flatMap((p: any) => (p.product_images || []).sort((a: any, b: any) => a.position - b.position).map((img: any) => img.image_url))
           .filter(Boolean);
+        // Skip groups with 0 images — they are products whose product_images were all
+        // deleted but whose products row survived RLS (wrong user_id). Treat them as gone.
+        if (allImages.length === 0 && !canonical.batch_id) {
+          log.library(`loadAll | skipping empty unassigned product id=${groupId.slice(0,8)} — all images deleted, products row is RLS-orphaned`);
+          return;
+        }
         groups.push({
           id: groupId,
           title: cleanTitle(canonical.title || canonical.seo_title),
@@ -1490,6 +1496,21 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
           } else {
             addTrace('info', 'pre-DELETE products check', `found ${existCheck.length} rows; user_ids: ${[...new Set((existCheck as any[]).map(r => (r.user_id ?? 'null').slice(0, 8)))].join(', ')}`);
           }
+        }
+
+        // Claim ownership via UPDATE first — if the products row was created by a different
+        // user, the DELETE policy (user_id = auth.uid()) will block it. UPDATE the user_id
+        // to the current user so the subsequent DELETE succeeds. If RLS also blocks UPDATE,
+        // this is a no-op and we still need the SQL migration.
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (currentUser) {
+          const { data: claimData, error: claimErr } = await supabase
+            .from('products').update({ user_id: currentUser.id }).in('id', chunk).select('id');
+          if (isDebugging) {
+            if (claimErr) addTrace('warn', 'CLAIM products (UPDATE user_id)', `failed — ${claimErr.message}`);
+            else addTrace('info', 'CLAIM products (UPDATE user_id)', `claimed ${claimData?.length ?? 0} of ${chunk.length} rows`);
+          }
+          if (claimErr) log.library(`handleDeleteUnassigned | products claim error: ${claimErr.message}`);
         }
 
         const { data: delProdData, error: delProdErr } = await supabase
