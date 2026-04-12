@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import JSZip from 'jszip';
 import exifr from 'exifr';
@@ -47,6 +47,8 @@ interface ImageUploadProps {
    * Parent should replace its copy of the items with these so the sort order updates live.
    */
   onCapturedAtUpdated?: (updatedItems: ClothingItem[]) => void;
+  /** Optional: fires a toast notification in the parent (App.tsx) */
+  onToast?: (msg: string) => void;
 }
 
 /**
@@ -146,7 +148,7 @@ async function extractImagesFromZip(zipFile: File): Promise<File[]> {
   return imageFiles.sort((a, b) => a.lastModified - b.lastModified);
 }
 
-const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, existingItems }) => {
+const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, existingItems, onCapturedAtUpdated: _onCapturedAtUpdated, onToast }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [extractingZip, setExtractingZip] = useState(false);
@@ -159,48 +161,6 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
     alreadyDone: number;
     errors: string[];
   } | null>(null);
-  // ── Storage usage ────────────────────────────────────────────────────────
-  const [storageInfo, setStorageInfo] = useState<{
-    usedBytes: number;
-    fileCount: number;
-    loading: boolean;
-  } | null>(null);
-
-  const fetchStorageUsage = useCallback(async () => {
-    setStorageInfo(prev => ({
-      usedBytes: prev?.usedBytes ?? 0,
-      fileCount: prev?.fileCount ?? 0,
-      loading: true,
-    }));
-    let totalBytes = 0;
-    let totalFiles = 0;
-    // List product folders under userId/
-    const { data: productFolders } = await supabase.storage
-      .from('product-images')
-      .list(userId, { limit: 10000 });
-    for (const folder of (productFolders ?? [])) {
-      if (folder.metadata) {
-        // Leaf file directly under userId/ (shouldn't normally happen but handle it)
-        totalBytes += (folder.metadata as { size?: number }).size ?? 0;
-        totalFiles++;
-      } else {
-        // Product subfolder — list its files
-        const { data: files } = await supabase.storage
-          .from('product-images')
-          .list(`${userId}/${folder.name}`, { limit: 1000 });
-        for (const f of (files ?? [])) {
-          totalBytes += (f.metadata as { size?: number } | null)?.size ?? 0;
-          totalFiles++;
-        }
-      }
-    }
-    setStorageInfo({ usedBytes: totalBytes, fileCount: totalFiles, loading: false });
-  }, [userId]);
-
-  useEffect(() => {
-    fetchStorageUsage();
-  }, [fetchStorageUsage]);
-  // ─────────────────────────────────────────────────────────────────────────
 
   const folderInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
@@ -402,6 +362,13 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
       errors: [...errors],
     });
     log.upload(`recompressExisting done | saved=${(totalSavedBytes/1024/1024).toFixed(2)}MB skipped=${skipped} errors=${errors.length}`);
+
+    // Fire a toast summarising the result
+    const savedKB = Math.round(totalSavedBytes / 1024);
+    const savedLabel = savedKB >= 1024
+      ? `${(savedKB / 1024).toFixed(1)} MB saved`
+      : `${savedKB} KB saved`;
+    onToast?.(`✅ Compression done · ${savedLabel}${alreadyDoneCount > 0 ? ` · ${alreadyDoneCount} already compressed` : ''}${skipped > 0 ? ` · ${skipped} skipped` : ''}`);
   };
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -574,62 +541,6 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
           </div>
         )}
 
-        {/* ── Storage usage meter ───────────────────────────────────────────── */}
-        {storageInfo !== null && (
-          <div className="storage-meter">
-            <div className="storage-meter-header">
-              <span>☁️ Storage</span>
-              <button
-                className="storage-refresh-btn"
-                onClick={fetchStorageUsage}
-                disabled={storageInfo.loading}
-                title="Refresh storage usage"
-              >
-                {storageInfo.loading ? '…' : '🔄'}
-              </button>
-            </div>
-            {storageInfo.loading && storageInfo.usedBytes === 0 ? (
-              <div className="storage-meter-loading">Calculating…</div>
-            ) : (() => {
-              const STORAGE_LIMIT_BYTES = 1 * 1024 * 1024 * 1024; // 1 GB free tier
-              const pct = storageInfo.usedBytes / STORAGE_LIMIT_BYTES;
-              const barColor = pct > 0.85 ? '#dc2626' : pct > 0.6 ? '#d97706' : '#059669';
-              const gbUsed = (storageInfo.usedBytes / (1024 ** 3)).toFixed(2);
-              const pctDisplay = (pct * 100).toFixed(0);
-              return (
-                <>
-                  <div className="storage-meter-bar-wrap">
-                    <div
-                      className="storage-meter-bar"
-                      style={{ width: `${Math.min(100, pct * 100).toFixed(1)}%`, background: barColor }}
-                    />
-                  </div>
-                  <div className="storage-meter-label">
-                    {gbUsed} GB / 1 GB free
-                    <span className="storage-meter-pct">({pctDisplay}%)</span>
-                    <span className="storage-meter-files">{storageInfo.fileCount.toLocaleString()} files</span>
-                  </div>
-                  {pct > 0.85 && pct < 1 && (
-                    <div className="storage-meter-danger">
-                      ⚠️ Almost full — exceeding 1 GB requires upgrading to Supabase Pro ($25/mo)
-                    </div>
-                  )}
-                  {pct >= 1 && (
-                    <div className="storage-meter-danger">
-                      🚨 Over limit — new uploads may fail. Upgrade to Pro ($25/mo) or delete old images.
-                    </div>
-                  )}
-                  {pct > 0.6 && pct <= 0.85 && (
-                    <div className="storage-meter-warning">
-                      💡 Over 60% used — free tier limit is 1 GB
-                    </div>
-                  )}
-                </>
-              );
-            })()}
-          </div>
-        )}
-
         {/* Recompress existing images button — shown when there are already-uploaded items */}
         {!isUploading && !extractingZip && (existingItems?.length ?? 0) > 0 && (() => {
           const compressedPaths = getCompressedPaths();
@@ -641,14 +552,12 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
             <div style={{ marginTop: '0.75rem' }}>
               {recompressState === null ? (
                 <div>
-                  {/* Status summary row */}
-                  {allCandidates.length > 0 && (
+                  {/* Status summary row — only "needs compression" badge stays; "already compressed" is a toast */}
+                  {needsWorkCount > 0 && (
                     <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.4rem', fontSize: '0.78rem', flexWrap: 'wrap' }}>
-                      {needsWorkCount > 0 && (
-                        <span style={{ background: 'rgba(239,68,68,0.12)', color: '#991b1b', border: '1px solid #fca5a5', borderRadius: '4px', padding: '2px 7px' }}>
-                          ⏳ {needsWorkCount} need compression
-                        </span>
-                      )}
+                      <span style={{ background: 'rgba(239,68,68,0.12)', color: '#991b1b', border: '1px solid #fca5a5', borderRadius: '4px', padding: '2px 7px' }}>
+                        ⏳ {needsWorkCount} need compression
+                      </span>
                       {alreadyDoneCount > 0 && (
                         <span style={{ background: 'rgba(16,185,129,0.12)', color: '#065f46', border: '1px solid #6ee7b7', borderRadius: '4px', padding: '2px 7px' }}>
                           ✅ {alreadyDoneCount} already compressed

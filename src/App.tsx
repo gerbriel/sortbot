@@ -160,6 +160,55 @@ function App() {
     setDebugEnabled(next);
   };
 
+  // ── Storage usage meter (lifted from ImageUpload) ─────────────────────────
+  const [storageInfo, setStorageInfo] = useState<{
+    usedBytes: number;
+    fileCount: number;
+    loading: boolean;
+  } | null>(null);
+
+  const fetchStorageUsage = async (userId: string) => {
+    setStorageInfo(prev => ({
+      usedBytes: prev?.usedBytes ?? 0,
+      fileCount: prev?.fileCount ?? 0,
+      loading: true,
+    }));
+    let totalBytes = 0;
+    let totalFiles = 0;
+    const { data: productFolders } = await supabase.storage
+      .from('product-images')
+      .list(userId, { limit: 10000 });
+    for (const folder of (productFolders ?? [])) {
+      if (folder.metadata) {
+        totalBytes += (folder.metadata as { size?: number }).size ?? 0;
+        totalFiles++;
+      } else {
+        const { data: files } = await supabase.storage
+          .from('product-images')
+          .list(`${userId}/${folder.name}`, { limit: 1000 });
+        for (const f of (files ?? [])) {
+          totalBytes += (f.metadata as { size?: number } | null)?.size ?? 0;
+          totalFiles++;
+        }
+      }
+    }
+    setStorageInfo({ usedBytes: totalBytes, fileCount: totalFiles, loading: false });
+  };
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // ── Toast notifications ───────────────────────────────────────────────────
+  const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
+  const toastCounterRef = useRef(0);
+
+  const addToast = (msg: string) => {
+    const id = ++toastCounterRef.current;
+    setToasts(prev => [...prev, { id, msg }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+  };
+
+  const dismissToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Ref to GoogleSheetExporter so Step 3 sidebar can trigger the download
   const exporterRef = useRef<GoogleSheetExporterHandle>(null);
   const [showStep2Info, setShowStep2Info] = useState(false);
@@ -203,6 +252,13 @@ function App() {
     getCategoryPresets()
       .then(data => setCategoryPresets(data))
       .catch(err => console.warn('[App] getCategoryPresets failed:', err));
+  }, [user]);
+
+  // Fetch storage usage once the user is known
+  useEffect(() => {
+    if (!user) return;
+    fetchStorageUsage(user.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // Re-load presets whenever the CategoryPresetsManager modal closes (presets may have changed)
@@ -816,6 +872,13 @@ function App() {
       }
       // Refresh Library immediately — images are now in the DB
       setLibraryRefreshTrigger(prev => prev + 1);
+
+      // Toast: "N images uploaded"
+      const totalCount = uploadedImages.length + items.length;
+      addToast(`✓ ${totalCount} image${totalCount !== 1 ? 's' : ''} uploaded`);
+
+      // Refresh storage meter after new upload
+      fetchStorageUsage(user.id);
     }
   };
 
@@ -1800,6 +1863,48 @@ function App() {
         </div>
       </header>
 
+      {/* ── Storage usage bar — always visible under the header ────────────── */}
+      {storageInfo !== null && user && (
+        <div className="storage-meter-nav">
+          <div className="storage-meter-nav-inner">
+            <span className="storage-meter-nav-label">☁️ Storage</span>
+            {storageInfo.loading && storageInfo.usedBytes === 0 ? (
+              <span className="storage-meter-nav-calculating">Calculating…</span>
+            ) : (() => {
+              const LIMIT = 1 * 1024 * 1024 * 1024;
+              const pct = storageInfo.usedBytes / LIMIT;
+              const barColor = pct > 0.85 ? '#dc2626' : pct > 0.6 ? '#d97706' : '#059669';
+              const gbUsed = (storageInfo.usedBytes / (1024 ** 3)).toFixed(2);
+              const pctDisplay = (pct * 100).toFixed(0);
+              return (
+                <>
+                  <div className="storage-meter-nav-bar-wrap">
+                    <div className="storage-meter-nav-bar" style={{ width: `${Math.min(100, pct * 100).toFixed(1)}%`, background: barColor }} />
+                  </div>
+                  <span className="storage-meter-nav-text">
+                    {gbUsed} GB / 1 GB
+                    <span style={{ color: barColor, fontWeight: 600, marginLeft: '0.3rem' }}>({pctDisplay}%)</span>
+                    <span style={{ color: '#6b7280', marginLeft: '0.4rem', fontSize: '0.72rem' }}>{storageInfo.fileCount.toLocaleString()} files</span>
+                  </span>
+                  {pct > 0.85 && (
+                    <span className="storage-meter-nav-warn">⚠️ Almost full</span>
+                  )}
+                </>
+              );
+            })()}
+            <button
+              className="storage-refresh-btn"
+              onClick={() => fetchStorageUsage(user.id)}
+              disabled={storageInfo.loading}
+              title="Refresh storage usage"
+              style={{ marginLeft: 'auto' }}
+            >
+              {storageInfo.loading ? '…' : '🔄'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Debug toggle — fixed bottom-left corner */}
       <button
         onClick={toggleDebug}
@@ -1824,10 +1929,8 @@ function App() {
           <p className="step-description" style={{ fontSize: '14px', color: '#666', marginBottom: '1rem' }}>
             💡 <strong>Tip:</strong> You can upload multiple batches! New images will be added to your current session.
           </p>
-          <ImageUpload onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} />
-          {uploadedImages.length > 0 && (
-            <p className="status-text">✓ {uploadedImages.length} images uploaded</p>
-          )}
+          <ImageUpload onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} onToast={addToast} />
+          {/* "N images uploaded" moved to toast — see handleImagesUploaded */}
         </section>
 
         {/* Steps 2 & 3 Combined: Group Images + Drag to Categories */}
@@ -2110,6 +2213,18 @@ function App() {
           onOpenBatch={handleOpenBatch}
           refreshTrigger={libraryRefreshTrigger}
         />
+      )}
+
+      {/* ── Toast notifications ─────────────────────────────────────────────── */}
+      {toasts.length > 0 && (
+        <div className="toast-stack">
+          {toasts.map(t => (
+            <div key={t.id} className="toast-item">
+              <span>{t.msg}</span>
+              <button className="toast-dismiss" onClick={() => dismissToast(t.id)}>✕</button>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
