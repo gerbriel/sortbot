@@ -1351,14 +1351,14 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   // will immediately delete them again (creating an infinite loop).
   const [workingUnassigned, setWorkingUnassigned] = useState(false);
 
-  // ── Delete debug trace ──────────────────────────────────────────────────────
-  type TraceStatus = 'ok' | 'warn' | 'error' | 'info';
-  type TraceEntry = { status: TraceStatus; label: string; detail: string; ts: string };
-  const [deleteTrace, setDeleteTrace] = useState<TraceEntry[]>([]);
-  const [showDeleteTrace, setShowDeleteTrace] = useState(false);
-  const addTrace = (status: TraceStatus, label: string, detail: string) => {
-    const ts = new Date().toISOString().slice(11, 23);
-    setDeleteTrace(prev => [...prev, { status, label, detail, ts }]);
+  // ── Delete debug trace — logs to console when Debug: ON ─────────────────────
+  const addTrace = (status: 'ok' | 'warn' | 'error' | 'info', label: string, detail: string) => {
+    if (!window.__SORTBOT_DEBUG__) return;
+    const icons = { ok: '✓', warn: '⚠', error: '✗', info: '·' };
+    const msg = `[DeleteTrace] ${icons[status]} ${label} — ${detail}`;
+    if (status === 'error') console.error(msg);
+    else if (status === 'warn') console.warn(msg);
+    else log.library(msg);
   };
 
   const handleDeleteUnassigned = async () => {
@@ -1371,8 +1371,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
     const isDebugging = window.__SORTBOT_DEBUG__;
     if (isDebugging) {
-      setDeleteTrace([]);
-      setShowDeleteTrace(true);
       addTrace('info', 'START', `unassignedImages in state: ${unassignedImages.length}`);
       // Show the raw shape of each unassigned image for diagnosis
       unassignedImages.forEach(img => {
@@ -1767,40 +1765,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         )}
 
         {/* View Switcher + Search + New Batch */}
-
-        {/* ── Delete Debug Panel — only shown when Debug: ON ────────────────── */}
-        {showDeleteTrace && window.__SORTBOT_DEBUG__ && deleteTrace.length > 0 && (
-          <div style={{
-            position: 'fixed', bottom: 16, right: 16, zIndex: 9999,
-            background: '#0f172a', color: '#e2e8f0', borderRadius: 10,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.7)', padding: '12px 14px',
-            width: 460, maxHeight: '70vh', overflowY: 'auto',
-            fontFamily: 'monospace', fontSize: 11, lineHeight: 1.6,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ fontWeight: 700, fontSize: 12, color: '#94a3b8' }}>🐛 DELETE TRACE</span>
-              <button
-                onClick={() => setShowDeleteTrace(false)}
-                style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
-              >×</button>
-            </div>
-            {deleteTrace.map((entry, i) => {
-              const colors: Record<string, string> = { ok: '#4ade80', warn: '#fbbf24', error: '#f87171', info: '#60a5fa' };
-              const icons: Record<string, string> = { ok: '✓', warn: '⚠', error: '✗', info: '·' };
-              return (
-                <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
-                  <span style={{ color: '#475569', minWidth: 80, flexShrink: 0 }}>{entry.ts}</span>
-                  <span style={{ color: colors[entry.status], minWidth: 14, flexShrink: 0 }}>{icons[entry.status]}</span>
-                  <span style={{ color: '#94a3b8', minWidth: 180, flexShrink: 0 }}>{entry.label}</span>
-                  <span style={{ color: '#cbd5e1', wordBreak: 'break-all' }}>{entry.detail}</span>
-                </div>
-              );
-            })}
-            {workingUnassigned && (
-              <div style={{ marginTop: 8, color: '#60a5fa', fontStyle: 'italic' }}>⏳ in progress…</div>
-            )}
-          </div>
-        )}
 
         {/* Inline Prompt Modal */}
         {promptModal && (
