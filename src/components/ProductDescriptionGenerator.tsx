@@ -1473,11 +1473,36 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   });
                   setProcessedItems(updated);
                 }}
-                placeholder="e.g., Vintage Black Rolling Stones Tee"
+                placeholder={(() => {
+                  // Build a live preview from current fields as placeholder
+                  const clean = (s?: string) => (s || '').replace(/\bperiod\b/gi, '').replace(/\s{2,}/g, ' ').trim();
+                  const parts = [
+                    clean(currentItem.brand),
+                    clean(currentItem.era),
+                    clean(currentItem.style),
+                    clean(currentItem.color),
+                    clean(currentItem.category),
+                    currentItem.size ? `(${clean(currentItem.size)})` : '',
+                  ].filter(Boolean);
+                  const preview = parts.join(' ');
+                  if (!preview) return 'Will be generated from Brand, Era, Color, Category…';
+                  const trimmed = preview.length > 60
+                    ? preview.split(' ').reduce((acc, w) => {
+                        const next = acc ? `${acc} ${w}` : w;
+                        return next.length > 60 ? acc : next;
+                      }, '')
+                    : preview;
+                  return trimmed || preview.slice(0, 60);
+                })()}
                 className="info-input"
                 style={{ width: '100%' }}
                 onKeyDown={(e) => e.stopPropagation()}
               />
+              {!currentItem.seoTitle && (
+                <p style={{ fontSize: '0.78rem', color: '#6b7280', margin: '0.25rem 0 0' }}>
+                  Preview from current fields — type to override, or hit Generate to lock it in
+                </p>
+              )}
             </div>
 
             {/* AI Description — sits directly below the voice box */}

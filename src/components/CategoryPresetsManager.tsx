@@ -262,6 +262,19 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
     is_active: true,
   });
 
+  // Gender filter toggle — persisted in localStorage
+  const [genderFilter, setGenderFilter] = useState<'Men' | 'Women' | 'Kids'>(() => {
+    return (localStorage.getItem('presets_gender_filter') as 'Men' | 'Women' | 'Kids') || 'Men';
+  });
+
+  const setGender = (g: 'Men' | 'Women' | 'Kids') => {
+    setGenderFilter(g);
+    localStorage.setItem('presets_gender_filter', g);
+  };
+
+  // Filtered presets by active gender
+  const filteredPresets = presets.filter(p => (p as any).gender === genderFilter);
+
   // Custom sections state
   const [customSections, setCustomSections] = useState<CustomSection[]>([]);
 
@@ -1021,14 +1034,38 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
           />
         )}
 
+        {/* ──────────── Gender Toggle ──────────── */}
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+          {(['Men', 'Women', 'Kids'] as const).map(g => (
+            <button
+              key={g}
+              onClick={() => setGender(g)}
+              style={{
+                padding: '0.4rem 1.2rem',
+                borderRadius: '999px',
+                border: '2px solid',
+                borderColor: genderFilter === g ? '#6366f1' : '#d1d5db',
+                background: genderFilter === g ? '#6366f1' : '#fff',
+                color: genderFilter === g ? '#fff' : '#374151',
+                fontWeight: 600,
+                fontSize: '0.9rem',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              {g === 'Men' ? '👔 Men' : g === 'Women' ? '👗 Women' : '🧒 Kids'}
+            </button>
+          ))}
+        </div>
+
         {/* ──────────── Preset Cards ──────────── */}
         <div className="presets-grid">
-          {presets.length === 0 ? (
+          {filteredPresets.length === 0 ? (
             <div className="empty-state">
-              <p>No category presets yet. Create your first preset to get started!</p>
+              <p>No {genderFilter} presets yet. Create one or use the seed SQL to add defaults.</p>
             </div>
           ) : (
-            presets.map(preset => (
+            filteredPresets.map(preset => (
               <div key={preset.id} className="preset-card">
                 <div className="preset-header">
                   <h3>{preset.display_name}</h3>
