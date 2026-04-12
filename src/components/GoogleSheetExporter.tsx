@@ -167,11 +167,11 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       'Gift card',
       'SEO title',
       'SEO description',
-      'Color (product.metafields.shopify.color-pattern)',
+      'Color (variant.metafields.shopify.color-pattern)',
       'Discounted Shipping',
       'Material / Fabric',
       'Policies',
-      'Renewal options \n',
+      'Renewal options',
       'Who Made It',
       'What Is It',
       'Listing Type',
@@ -198,7 +198,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       const productCategory = SHOPIFY_CATEGORY_MAP[product.category?.toLowerCase() ?? ''] ?? product.category ?? '';
       const productType = product.productType || '';
       const tags = product.tags?.join(', ') || '';
-      const condition = product.condition || '';
+      const condition = (product.condition || '').trim();
       const primaryColor = product.color || '';
       const secondaryColor = product.secondaryColor || '';
       
@@ -410,7 +410,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                     const productCategory = SHOPIFY_CATEGORY_MAP[product.category?.toLowerCase() ?? ''] ?? product.category ?? '';
                     const vendor = product.brand || '';
                     const tags = product.tags?.join(', ') || '';
-                    const condition = product.condition || '';
+                    const condition = (product.condition || '').trim();
                     const primaryColor = product.color || '';
                     const secondaryColor = product.secondaryColor || '';
                     const rawWeight = parseFloat(product.weightValue || '');
