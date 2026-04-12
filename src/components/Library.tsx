@@ -1345,6 +1345,16 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   // will immediately delete them again (creating an infinite loop).
   const [workingUnassigned, setWorkingUnassigned] = useState(false);
 
+  // ── Delete debug trace ──────────────────────────────────────────────────────
+  type TraceStatus = 'ok' | 'warn' | 'error' | 'info';
+  type TraceEntry = { status: TraceStatus; label: string; detail: string; ts: string };
+  const [deleteTrace, setDeleteTrace] = useState<TraceEntry[]>([]);
+  const [showDeleteTrace, setShowDeleteTrace] = useState(false);
+  const addTrace = (status: TraceStatus, label: string, detail: string) => {
+    const ts = new Date().toISOString().slice(11, 23);
+    setDeleteTrace(prev => [...prev, { status, label, detail, ts }]);
+  };
+
   const handleDeleteUnassigned = async () => {
     const unassignedImages = images.filter(img => !img.batchId);
     if (unassignedImages.length === 0) return;
@@ -1352,37 +1362,110 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       `Delete all ${unassignedImages.length} unassigned images? This cannot be undone.`
     );
     if (!confirmed) return;
+
+    const isDebugging = window.__SORTBOT_DEBUG__;
+    if (isDebugging) {
+      setDeleteTrace([]);
+      setShowDeleteTrace(true);
+      addTrace('info', 'START', `unassignedImages in state: ${unassignedImages.length}`);
+    }
+
     setWorkingUnassigned(true);
     try {
       const productIds = [...new Set(
         unassignedImages.map(img => img.productGroup).filter(Boolean) as string[]
       )];
       const productIdSet = new Set(productIds);
+
+      if (isDebugging) {
+        addTrace('info', 'productIds', `${productIds.length} unique IDs: ${productIds.map(id => id.slice(0, 8)).join(', ')}`);
+        // Images with no productGroup at all
+        const noGroup = unassignedImages.filter(img => !img.productGroup);
+        if (noGroup.length > 0) {
+          addTrace('warn', 'NO productGroup', `${noGroup.length} images have no productGroup field — they will be SKIPPED`);
+          noGroup.forEach(img => addTrace('warn', '  ↳ img.id', img.id.slice(0, 8)));
+        }
+      }
+
       const CHUNK = 100;
       for (let i = 0; i < productIds.length; i += CHUNK) {
         const chunk = productIds.slice(i, i + CHUNK);
-        const { data: imgRows } = await supabase
+
+        // ── Step 1: fetch product_images rows ──────────────────────────────
+        const { data: imgRows, error: fetchImgErr } = await supabase
           .from('product_images')
           .select('id, storage_path')
           .in('product_id', chunk);
+
+        if (isDebugging) {
+          if (fetchImgErr) addTrace('error', 'fetch product_images', `ERROR: ${fetchImgErr.message} (code ${fetchImgErr.code})`);
+          else addTrace('ok', 'fetch product_images', `found ${imgRows?.length ?? 0} rows for chunk of ${chunk.length} productIds`);
+        }
+
+        // ── Step 2: delete storage files ──────────────────────────────────
         const storagePaths = (imgRows ?? []).map((r: any) => r.storage_path).filter(Boolean) as string[];
         if (storagePaths.length > 0) {
-          await supabase.storage.from('product-images').remove(storagePaths);
+          const { error: storageErr } = await supabase.storage.from('product-images').remove(storagePaths);
+          if (isDebugging) {
+            if (storageErr) addTrace('error', 'storage.remove', `ERROR: ${storageErr.message}`);
+            else addTrace('ok', 'storage.remove', `removed ${storagePaths.length} files`);
+          }
+        } else if (isDebugging) {
+          addTrace('info', 'storage.remove', 'no storage paths — skipped');
         }
+
+        // ── Step 3: delete product_images rows ────────────────────────────
         const imgIds = (imgRows ?? []).map((r: any) => r.id);
         if (imgIds.length > 0) {
-          const { error: delImgErr } = await supabase.from('product_images').delete().in('id', imgIds);
+          const { data: delImgData, error: delImgErr } = await supabase
+            .from('product_images').delete().in('id', imgIds).select('id');
+          if (isDebugging) {
+            if (delImgErr) addTrace('error', 'DELETE product_images', `BLOCKED — ${delImgErr.message} (code ${delImgErr.code}) ← likely RLS`);
+            else addTrace(
+              (delImgData?.length ?? 0) === imgIds.length ? 'ok' : 'warn',
+              'DELETE product_images',
+              `attempted ${imgIds.length}, confirmed deleted ${delImgData?.length ?? '?'} rows${(delImgData?.length ?? 0) < imgIds.length ? ' ← RLS may have blocked some' : ''}`
+            );
+          }
           if (delImgErr) console.error('[Library] handleDeleteUnassigned | product_images delete error', delImgErr);
+        } else if (isDebugging) {
+          addTrace('warn', 'DELETE product_images', 'no imgIds — step skipped (fetch returned 0 rows)');
         }
-        const { error: delProdErr } = await supabase.from('products').delete().in('id', chunk);
+
+        // ── Step 4: delete products rows ──────────────────────────────────
+        // First verify the products exist
+        if (isDebugging) {
+          const { data: existCheck } = await supabase.from('products').select('id, user_id').in('id', chunk);
+          if (!existCheck || existCheck.length === 0) {
+            addTrace('warn', 'pre-DELETE products check', `0 rows found in DB for these IDs — already gone or wrong IDs`);
+          } else {
+            addTrace('info', 'pre-DELETE products check', `found ${existCheck.length} rows; user_ids: ${[...new Set((existCheck as any[]).map(r => (r.user_id ?? 'null').slice(0, 8)))].join(', ')}`);
+          }
+        }
+
+        const { data: delProdData, error: delProdErr } = await supabase
+          .from('products').delete().in('id', chunk).select('id');
+        if (isDebugging) {
+          if (delProdErr) addTrace('error', 'DELETE products', `BLOCKED — ${delProdErr.message} (code ${delProdErr.code}) ← likely RLS`);
+          else addTrace(
+            (delProdData?.length ?? 0) === chunk.length ? 'ok' : 'warn',
+            'DELETE products',
+            `attempted ${chunk.length}, confirmed deleted ${delProdData?.length ?? '?'} rows${(delProdData?.length ?? 0) < chunk.length ? ' ← RLS blocking or rows already gone' : ''}`
+          );
+        }
         if (delProdErr) console.error('[Library] handleDeleteUnassigned | products delete error', delProdErr);
       }
 
-      // Scrub deleted items from ALL batches' workflow_state so they don't
-      // resurrect on hard refresh via registerItemsInDB.
-      const { data: allBatches } = await supabase
+      // ── Step 5: scrub workflow_state ──────────────────────────────────────
+      const { data: allBatches, error: fetchBatchErr } = await supabase
         .from('workflow_batches')
         .select('id, workflow_state');
+
+      if (isDebugging) {
+        if (fetchBatchErr) addTrace('error', 'fetch workflow_batches', `ERROR: ${fetchBatchErr.message}`);
+        else addTrace('info', 'fetch workflow_batches', `found ${allBatches?.length ?? 0} batches to scrub`);
+      }
+
       if (allBatches && allBatches.length > 0) {
         const wfKeys = ['uploadedImages', 'groupedImages', 'sortedImages', 'processedItems'];
         await Promise.all(allBatches.map(async (batch: any) => {
@@ -1399,18 +1482,35 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
             }
           }
           if (modified) {
-            await supabase
+            const { error: scrubErr } = await supabase
               .from('workflow_batches')
               .update({ workflow_state: ws })
               .eq('id', batch.id);
+            if (isDebugging) {
+              if (scrubErr) addTrace('error', `scrub batch ${batch.id.slice(0, 8)}`, `UPDATE failed: ${scrubErr.message}`);
+              else addTrace('ok', `scrub batch ${batch.id.slice(0, 8)}`, 'workflow_state updated');
+            }
           }
         }));
       }
 
+      // ── Step 6: re-fetch to confirm ───────────────────────────────────────
+      if (isDebugging) {
+        const { data: recheck } = await supabase.from('products').select('id').in('id', [...productIdSet]);
+        if ((recheck?.length ?? 0) === 0) {
+          addTrace('ok', 'CONFIRM re-fetch', `all ${productIds.length} product rows gone from DB ✓`);
+        } else {
+          addTrace('error', 'CONFIRM re-fetch', `${recheck?.length} rows STILL EXIST after delete — RLS is blocking`);
+          (recheck ?? []).forEach((r: any) => addTrace('error', '  ↳ surviving id', r.id.slice(0, 8)));
+        }
+      }
+
       setImages(prev => prev.filter(img => img.batchId));
       log.library(`handleDeleteUnassigned | deleted ${productIds.length} products`);
+      if (isDebugging) addTrace('ok', 'DONE', `state updated — images filtered to batchId-only`);
     } catch (err) {
       console.error('[Library] handleDeleteUnassigned error', err);
+      if (isDebugging) addTrace('error', 'EXCEPTION', String(err));
     } finally {
       setWorkingUnassigned(false);
     }
@@ -1608,6 +1708,40 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         )}
 
         {/* View Switcher + Search + New Batch */}
+
+        {/* ── Delete Debug Panel — only shown when Debug: ON ────────────────── */}
+        {showDeleteTrace && window.__SORTBOT_DEBUG__ && deleteTrace.length > 0 && (
+          <div style={{
+            position: 'fixed', bottom: 16, right: 16, zIndex: 9999,
+            background: '#0f172a', color: '#e2e8f0', borderRadius: 10,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.7)', padding: '12px 14px',
+            width: 460, maxHeight: '70vh', overflowY: 'auto',
+            fontFamily: 'monospace', fontSize: 11, lineHeight: 1.6,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span style={{ fontWeight: 700, fontSize: 12, color: '#94a3b8' }}>🐛 DELETE TRACE</span>
+              <button
+                onClick={() => setShowDeleteTrace(false)}
+                style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
+              >×</button>
+            </div>
+            {deleteTrace.map((entry, i) => {
+              const colors: Record<string, string> = { ok: '#4ade80', warn: '#fbbf24', error: '#f87171', info: '#60a5fa' };
+              const icons: Record<string, string> = { ok: '✓', warn: '⚠', error: '✗', info: '·' };
+              return (
+                <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
+                  <span style={{ color: '#475569', minWidth: 80, flexShrink: 0 }}>{entry.ts}</span>
+                  <span style={{ color: colors[entry.status], minWidth: 14, flexShrink: 0 }}>{icons[entry.status]}</span>
+                  <span style={{ color: '#94a3b8', minWidth: 180, flexShrink: 0 }}>{entry.label}</span>
+                  <span style={{ color: '#cbd5e1', wordBreak: 'break-all' }}>{entry.detail}</span>
+                </div>
+              );
+            })}
+            {workingUnassigned && (
+              <div style={{ marginTop: 8, color: '#60a5fa', fontStyle: 'italic' }}>⏳ in progress…</div>
+            )}
+          </div>
+        )}
 
         {/* Inline Prompt Modal */}
         {promptModal && (
