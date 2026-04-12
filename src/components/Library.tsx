@@ -1472,7 +1472,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
           if (fetchedImgIds.length === 0) {
             // DB SELECT returned 0 — RLS is almost certainly blocking it.
             // Fall back to deleting by known state IDs.
-            console.warn(`[Library] ⚠️ RLS WARNING: product_images SELECT returned 0 for product_id=${chunk.map(id=>id.slice(0,8)).join(',')} — falling back to state IDs. Run the Supabase RLS migration at supabase.com/dashboard/project/SUPABASE_PROJECT_ID/sql/new`);
+            console.warn(`[Library] ⚠️ RLS WARNING: product_images SELECT returned 0 for product_id=${chunk.map(id=>id.slice(0,8)).join(',')} — falling back to state IDs. Run the Supabase RLS migration via the Supabase dashboard SQL editor.`);
             addTrace('warn', 'product_images fallback', `DB fetch returned 0 — using ${fallbackImgIds.length} known IDs from state: ${fallbackImgIds.map(id => id.slice(0, 8)).join(', ')}`);
           }
           const { data: delImgData, error: delImgErr } = await supabase
@@ -1519,7 +1519,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         const { data: delProdData, error: delProdErr } = await supabase
           .from('products').delete().in('id', chunk).select('id');
         if (!delProdErr && (delProdData?.length ?? 0) < chunk.length) {
-          console.warn(`[Library] ⚠️ RLS WARNING: products DELETE confirmed 0 rows deleted for ids=${chunk.map(id=>id.slice(0,8)).join(',')} — Supabase RLS DELETE policy is blocking this user. Run the migration at supabase.com/dashboard/project/SUPABASE_PROJECT_ID/sql/new`);
+          console.warn(`[Library] ⚠️ RLS WARNING: products DELETE confirmed 0 rows deleted for ids=${chunk.map(id=>id.slice(0,8)).join(',')} — Supabase RLS DELETE policy is blocking this user. Run the migration via the Supabase dashboard SQL editor.`);
         }
         if (isDebugging) {
           if (delProdErr) addTrace('error', 'DELETE products', `BLOCKED — ${delProdErr.message} (code ${delProdErr.code}) ← likely RLS`);

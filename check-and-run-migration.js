@@ -13,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Load environment variables
-const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://SUPABASE_PROJECT_ID.supabase.co';
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseServiceKey) {
