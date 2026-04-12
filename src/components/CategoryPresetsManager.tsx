@@ -614,6 +614,30 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
           </div>
         </div>
 
+        {/* ──────────── Gender Toggle ──────────── */}
+        <div style={{ display: 'flex', gap: '0.5rem', padding: '0.75rem 1.5rem', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>
+          {(['Men', 'Women', 'Kids'] as const).map(g => (
+            <button
+              key={g}
+              onClick={() => setGender(g)}
+              style={{
+                padding: '0.4rem 1.4rem',
+                borderRadius: '999px',
+                border: '2px solid',
+                borderColor: genderFilter === g ? '#6366f1' : '#d1d5db',
+                background: genderFilter === g ? '#6366f1' : '#fff',
+                color: genderFilter === g ? '#fff' : '#374151',
+                fontWeight: 600,
+                fontSize: '0.9rem',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              {g === 'Men' ? '👔 Men' : g === 'Women' ? '👗 Women' : '🧒 Kids'}
+            </button>
+          ))}
+        </div>
+
         {/* ──────────── Form Modal ──────────── */}
         {showForm && (
           <div className="preset-form-overlay">
@@ -1033,30 +1057,6 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
             onClose={() => setFieldModalOpen(false)}
           />
         )}
-
-        {/* ──────────── Gender Toggle ──────────── */}
-        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-          {(['Men', 'Women', 'Kids'] as const).map(g => (
-            <button
-              key={g}
-              onClick={() => setGender(g)}
-              style={{
-                padding: '0.4rem 1.2rem',
-                borderRadius: '999px',
-                border: '2px solid',
-                borderColor: genderFilter === g ? '#6366f1' : '#d1d5db',
-                background: genderFilter === g ? '#6366f1' : '#fff',
-                color: genderFilter === g ? '#fff' : '#374151',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                transition: 'all 0.15s',
-              }}
-            >
-              {g === 'Men' ? '👔 Men' : g === 'Women' ? '👗 Women' : '🧒 Kids'}
-            </button>
-          ))}
-        </div>
 
         {/* ──────────── Preset Cards ──────────── */}
         <div className="presets-grid">
