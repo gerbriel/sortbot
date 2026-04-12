@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import type { ClothingItem } from '../App';
 import { getCategories } from '../lib/categoriesService';
+import { getCategoryPresets } from '../lib/categoryPresetsService';
 import type { Category } from '../lib/categories';
+import type { CategoryPreset } from '../lib/categoryPresets';
 import { applyPresetToProductGroup } from '../lib/applyPresetToGroup';
 import LazyImg from './LazyImg';
 import { log } from '../lib/debugLogger';
@@ -94,7 +96,11 @@ interface CategoryZonesProps {
 }
 
 const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, compactMode = false, selectedItemIds, onCategoryAssigned }) => {
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [_categories, setCategories] = useState<Category[]>([]);
+  const [presets, setPresets] = useState<CategoryPreset[]>([]);
+  const [genderFilter, setGenderFilter] = useState<'Men' | 'Women' | 'Kids'>(() =>
+    (localStorage.getItem('dropzone_gender_filter') as 'Men' | 'Women' | 'Kids') || 'Men'
+  );
   const [loading, setLoading] = useState(true);
 
   // ── Category-drop drag state ────────────────────────────────────────────
@@ -115,13 +121,30 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
   const groupOrderRef = useRef(groupOrder);
   groupOrderRef.current = groupOrder;
 
+  const setZoneGender = (g: 'Men' | 'Women' | 'Kids') => {
+    setGenderFilter(g);
+    localStorage.setItem('dropzone_gender_filter', g);
+  };
+
   // Load categories from database
   useEffect(() => {
     loadCategories();
+    loadPresets();
     const handleCategoriesUpdated = () => loadCategories();
     window.addEventListener('categoriesUpdated', handleCategoriesUpdated);
     return () => window.removeEventListener('categoriesUpdated', handleCategoriesUpdated);
   }, []);
+
+  const loadPresets = async () => {
+    try {
+      const all = await getCategoryPresets();
+      setPresets(all.filter((p: any) => p.is_active !== false));
+    } catch (e) {
+      console.error('Failed to load presets for drop zones:', e);
+    }
+  };
+
+  const zonePresets = presets.filter(p => (p as any).gender === genderFilter);
 
   const loadCategories = async () => {
     try {
@@ -512,6 +535,30 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     <div className={`category-zones-container${compactMode ? ' compact' : ''}`}>
       {/* Category Zones */}
       <div className="category-zones">
+        {/* Gender filter toggles */}
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', justifyContent: 'center' }}>
+          {(['Men', 'Women', 'Kids'] as const).map(g => (
+            <button
+              key={g}
+              onClick={() => setZoneGender(g)}
+              style={{
+                padding: '0.3rem 1.1rem',
+                borderRadius: '999px',
+                border: '2px solid',
+                borderColor: genderFilter === g ? '#6366f1' : '#d1d5db',
+                background: genderFilter === g ? '#6366f1' : '#fff',
+                color: genderFilter === g ? '#fff' : '#374151',
+                fontWeight: 600,
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              {g === 'Men' ? '👔 Men' : g === 'Women' ? '👗 Women' : '🧒 Kids'}
+            </button>
+          ))}
+        </div>
+
         <h3>{compactMode ? '🏷️ Drop Here to Categorize' : '🏷️ Drag Groups Here to Categorize'}</h3>
         {compactMode && selectedItemIds && selectedItemIds.size > 0 && (
           <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0 0 0.5rem', textAlign: 'center' }}>
@@ -522,20 +569,20 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
           <p>Loading categories...</p>
         ) : (
           <div className={compactMode ? 'category-list' : 'category-grid'}>
-            {categories.map(category => (
+            {(zonePresets.length > 0 ? zonePresets : []).map(preset => (
               <div
-                key={category.id}
-                className={`category-zone ${dragOverCategory === category.name ? 'drag-over' : ''}${selectedItemIds && selectedItemIds.size > 0 ? ' clickable' : ''}`}
-                style={{ borderColor: category.color, '--category-color': category.color, cursor: selectedItemIds && selectedItemIds.size > 0 ? 'pointer' : undefined } as React.CSSProperties}
-                onDragOver={(e) => handleCategoryDragOver(e, category.name)}
-                onDrop={(e) => handleCategoryDrop(e, category.name)}
+                key={preset.id}
+                className={`category-zone ${dragOverCategory === preset.category_name ? 'drag-over' : ''}${selectedItemIds && selectedItemIds.size > 0 ? ' clickable' : ''}`}
+                style={{ borderColor: '#6366f1', '--category-color': '#6366f1', cursor: selectedItemIds && selectedItemIds.size > 0 ? 'pointer' : undefined } as React.CSSProperties}
+                onDragOver={(e) => handleCategoryDragOver(e, preset.category_name)}
+                onDrop={(e) => handleCategoryDrop(e, preset.category_name)}
                 onDragLeave={handleCategoryDragLeave}
-                onClick={() => handleCategoryClick(category.name)}
+                onClick={() => handleCategoryClick(preset.category_name)}
               >
-                <span className="category-icon">{getCategoryIcon(category.emoji || category.name, compactMode ? 20 : 32)}</span>
-                <span className="category-name">{category.display_name}</span>
+                <span className="category-icon">{getCategoryIcon(preset.category_name, compactMode ? 20 : 32)}</span>
+                <span className="category-name">{preset.display_name}</span>
                 <span className="category-count">
-                  ({items.filter(i => i.category === category.name).length})
+                  ({items.filter(i => i.category === preset.category_name).length})
                 </span>
               </div>
             ))}
