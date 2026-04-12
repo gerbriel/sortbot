@@ -35,6 +35,19 @@ function interpolateSeoTemplate(
  * Automatically applies the DEFAULT preset for the category
  * Manual entries take precedence over preset values
  */
+
+/**
+ * Apply a preset object directly to items (no network fetch).
+ * Use this when the caller already has the preset in hand.
+ */
+export function applyPresetDirectly(
+  items: ClothingItem[],
+  categoryName: string,
+  preset: CategoryPreset
+): ClothingItem[] {
+  return applyPresetFields(items, categoryName, preset);
+}
+
 export async function applyPresetToProductGroup(
   items: ClothingItem[],
   categoryName: string
@@ -71,16 +84,30 @@ export async function applyPresetToProductGroup(
       }));
     }
     
-    /**
-     * Apply preset values to items with priority hierarchy:
-     * 1. Voice Dictation (highest priority - already set on item)
-     * 2. Category Preset values
-     * 3. Empty (lowest priority)
-     * 
-     * Use pattern: item.field || preset.field || undefined
-     * This ensures voice/manual entry is never overwritten
-     */
-    return items.map(item => ({
+    return applyPresetFields(items, categoryName, preset);
+  } catch (error) {
+    console.error('Error applying preset to product group:', error);
+    return items;
+  }
+}
+
+/**
+ * Core field-mapping logic — shared by both the async (fetch) and sync (direct) paths.
+ *
+ * Apply preset values to items with priority hierarchy:
+ * 1. Voice Dictation / manual entry (highest priority — already set on item)
+ * 2. Category Preset values
+ * 3. Empty (lowest priority)
+ *
+ * Use pattern: item.field || preset.field || undefined
+ * This ensures voice/manual entry is never overwritten
+ */
+function applyPresetFields(
+  items: ClothingItem[],
+  categoryName: string,
+  preset: CategoryPreset
+): ClothingItem[] {
+  return items.map(item => ({
       ...item,
       
       // ======= CATEGORY (Always Set) =======
@@ -194,10 +221,6 @@ export async function applyPresetToProductGroup(
         requiresShipping: preset.requires_shipping,
       }
     }));
-  } catch (error) {
-    console.error('Error applying preset to product group:', error);
-    return items;
-  }
 }
 
 /**
