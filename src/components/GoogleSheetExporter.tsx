@@ -111,6 +111,18 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
     return { ...p, seoTitle: uniqueTitle };
   });
 
+  // Build a clean, display-ready title for a product — shared by preview table and CSV export
+  const buildCleanTitle = (p: typeof rawProducts[0], idx: number): string => {
+    const rawTitle = p.seoTitle || '';
+    const strippedTitle = /\{[a-z_]+\}/i.test(rawTitle)
+      ? stripUnresolvedTokens(rawTitle) || `product-${idx + 1}`
+      : rawTitle || `product-${idx + 1}`;
+    const brandPrefix = (p.brand || '').trim();
+    return (brandPrefix && !strippedTitle.toLowerCase().includes(brandPrefix.toLowerCase()))
+      ? `${brandPrefix} ${strippedTitle}`
+      : strippedTitle;
+  };
+
   const handleDownloadCSV = () => {
     const headers = [
       'Title',
@@ -210,19 +222,8 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       // Google condition - only if provided
       const googleCondition = condition;
 
-      // Clean the SEO title — strip any unresolved {placeholder} tokens
-      // that may have come through from preset templates.
-      // seoTitle is already deduplicated (e.g. "Nike Tee 2") by the pre-pass above.
-      const rawTitle = product.seoTitle || '';
-      const strippedTitle = /\{[a-z_]+\}/i.test(rawTitle)
-        ? stripUnresolvedTokens(rawTitle) || `product-${idx + 1}`
-        : rawTitle || `product-${idx + 1}`;
-
-      // Prepend brand to title if it's not already present
-      const brandPrefix = (product.brand || '').trim();
-      const cleanTitle = (brandPrefix && !strippedTitle.toLowerCase().includes(brandPrefix.toLowerCase()))
-        ? `${brandPrefix} ${strippedTitle}`
-        : strippedTitle;
+      // Clean the SEO title using shared helper — strips tokens, prepends brand
+      const cleanTitle = buildCleanTitle(product, idx);
 
       // Build a rich image alt text: "Brand Title - Color - Size"
       const altParts = [cleanTitle];
@@ -392,17 +393,24 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                   </tr>
                 </thead>
                 <tbody>
-                  {products.slice(0, 5).map(product => (
-                    <tr key={product.id}>
-                      <td>{product.seoTitle}</td>
-                      <td>{product.category}</td>
-                      <td>${product.price?.toFixed(2)}</td>
-                      <td>{product.tags?.join(', ')}</td>
-                      <td className="description-cell">
-                        {product.generatedDescription?.substring(0, 100)}...
-                      </td>
-                    </tr>
-                  ))}
+                  {products.slice(0, 5).map((product, idx) => {
+                    const cleanTitle = buildCleanTitle(product, idx);
+                    const displayPrice = product.price != null ? `$${Number(product.price).toFixed(2)}` : '—';
+                    const displayCategory = product.category || '—';
+                    const displayTags = product.tags?.filter(Boolean).join(', ') || '—';
+                    const displayDesc = product.generatedDescription
+                      ? product.generatedDescription.substring(0, 80) + (product.generatedDescription.length > 80 ? '…' : '')
+                      : '—';
+                    return (
+                      <tr key={product.id}>
+                        <td>{cleanTitle}</td>
+                        <td>{displayCategory}</td>
+                        <td>{displayPrice}</td>
+                        <td title={product.tags?.join(', ')}>{displayTags.length > 40 ? displayTags.substring(0, 40) + '…' : displayTags}</td>
+                        <td className="description-cell">{displayDesc}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               {products.length > 5 && (
