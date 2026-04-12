@@ -105,45 +105,54 @@ function isLikelyBackground(rgb: [number, number, number]): boolean {
 }
 
 /**
- * Build canvas samples from the FABRIC zones of a hanging shirt photo —
+ * Build canvas samples from the FABRIC zones of a product image —
  * deliberately avoiding the center where large prints/graphics live.
  *
- * Strategy: sample 4 corner-adjacent zones that are almost always solid
- * garment fabric: left shoulder, right shoulder, bottom-left hem,
- * bottom-right hem. Each zone is a narrow strip well inside the frame
- * so background edges are also avoided.
+ * Strategy: sample 6 narrow vertical slices along the LEFT and RIGHT edges
+ * of the garment (3 slices per side, evenly distributed top-to-bottom).
+ * Large center prints essentially never reach the side edges of a garment,
+ * so these zones are almost always solid fabric — regardless of product type
+ * (hanging tee, flat-lay pants, hat, dress, sweatshirt, etc.).
  *
  *  ┌────────────────────────────────┐
- *  │  [L-shoulder]   [R-shoulder]  │  ← y: 12%–32% of height
- *  │         (CENTER PRINT)        │  ← skipped
- *  │  [BL-hem]          [BR-hem]   │  ← y: 70%–90% of height
+ *  │ [L1]                    [R1]  │  ← y: 15%–33%
+ *  │ [L2]   (CENTER PRINT)   [R2]  │  ← y: 42%–60%
+ *  │ [L3]                    [R3]  │  ← y: 68%–86%
  *  └────────────────────────────────┘
  *
- * Horizontal inset: each zone is 15%–35% from the respective side edge,
- * keeping us off the background that bleeds in around the hanging garment.
+ * Each zone is 13% wide and 18% tall.
+ * Left zones start at 10% from the left edge (past background bleed).
+ * Right zones start at 77% (ending at 90%, past background bleed).
+ * Top 12% and bottom 5% are skipped (hanger/hook/table edge).
  */
 function getFabricZoneCanvases(img: HTMLImageElement): HTMLCanvasElement[] {
   const srcW = img.naturalWidth  || img.width;
   const srcH = img.naturalHeight || img.height;
 
-  // Zone dimensions — each patch is ~20% wide × 20% tall
-  const zoneW = Math.floor(srcW * 0.20);
-  const zoneH = Math.floor(srcH * 0.20);
+  // Zone dimensions
+  const zoneW = Math.floor(srcW * 0.13);
+  const zoneH = Math.floor(srcH * 0.18);
 
-  // Horizontal positions: left zone starts at 15% in, right zone ends at 85%
-  const leftX  = Math.floor(srcW * 0.15);
-  const rightX = Math.floor(srcW * 0.65); // starts at 65% so it ends at 85%
+  // Horizontal insets — inside background bleed, outside center print area
+  const leftX  = Math.floor(srcW * 0.10);
+  const rightX = Math.floor(srcW * 0.77);
 
-  // Vertical positions: shoulders at 12–32%, hems at 70–90%
-  const shoulderY = Math.floor(srcH * 0.12);
-  const hemY      = Math.floor(srcH * 0.70);
+  // Vertical positions — 3 rows spanning the usable garment height (12%–91%)
+  const usableTop = Math.floor(srcH * 0.12);
+  const usableH   = Math.floor(srcH * 0.79); // 91% - 12%
+  const rowStep   = Math.floor((usableH - zoneH) / 2); // evenly space 3 rows
 
-  const zones = [
-    { x: leftX,  y: shoulderY }, // left shoulder
-    { x: rightX, y: shoulderY }, // right shoulder
-    { x: leftX,  y: hemY      }, // bottom-left hem
-    { x: rightX, y: hemY      }, // bottom-right hem
+  const rows = [
+    usableTop,
+    usableTop + rowStep,
+    usableTop + rowStep * 2,
   ];
+
+  const zones: { x: number; y: number }[] = [];
+  for (const y of rows) {
+    zones.push({ x: leftX,  y });
+    zones.push({ x: rightX, y });
+  }
 
   return zones.map(({ x, y }) => {
     const canvas = document.createElement('canvas');
