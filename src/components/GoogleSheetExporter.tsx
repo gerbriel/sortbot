@@ -381,40 +381,124 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
 
           <div className="export-preview">
             <h3>Preview (Shopify Format)</h3>
-            <div className="table-container">
-              <table className="preview-table">
+            <div className="table-container" style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '420px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+              <table className="preview-table" style={{ minWidth: '4800px', borderCollapse: 'collapse', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
                 <thead>
-                  <tr>
-                    <th>Title</th>
-                    <th>Category</th>
-                    <th>Price</th>
-                    <th>Tags</th>
-                    <th>Description</th>
+                  <tr style={{ position: 'sticky', top: 0, zIndex: 2, background: '#f8fafc' }}>
+                    {[
+                      'Title','URL handle','Description','Vendor / Brand','Product category','Type','Tags',
+                      'Published','Status','SKU','Barcode','Condition','Size Type','Size','Price','Currency',
+                      'Compare-at price','Cost per item','Primary Color','Secondary Color','Charge tax','Tax code',
+                      'Unit price total measure','Unit price total measure unit','Unit price base measure','Unit price base measure unit',
+                      'Inventory tracker','Inventory quantity','Continue selling OOS','Weight Value (LB)',
+                      'Weight unit','Package Dimensions','Requires shipping','Fulfillment service','Ships From',
+                      'Product image URL','Image position','Image alt text','Variant image URL','Gift card',
+                      'SEO title','SEO description','Color metafield','Discounted Shipping','Material / Fabric',
+                      'Policies','Renewal options','Who Made It','What Is It','Listing Type','Chest','Length',
+                      'Parcel Size','Style','GS / Product category','GS / Gender','GS / Age group','GS / MPN',
+                      'GS / Ad group','GS / Ads labels','GS / Condition','GS / Custom product','GS / Custom label 0'
+                    ].map((col, i) => (
+                      <th key={i} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '2px solid #e5e7eb', background: '#f8fafc', color: '#374151', minWidth: i <= 2 || i === 6 || i === 40 || i === 41 ? '180px' : '110px' }}>
+                        {col}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {products.slice(0, 5).map((product, idx) => {
+                  {products.slice(0, 10).map((product, idx) => {
                     const cleanTitle = buildCleanTitle(product, idx);
-                    const displayPrice = product.price != null ? `$${Number(product.price).toFixed(2)}` : '—';
-                    const displayCategory = product.category || '—';
-                    const displayTags = product.tags?.filter(Boolean).join(', ') || '—';
-                    const displayDesc = product.generatedDescription
-                      ? product.generatedDescription.substring(0, 80) + (product.generatedDescription.length > 80 ? '…' : '')
-                      : '—';
+                    const productCategory = SHOPIFY_CATEGORY_MAP[product.category?.toLowerCase() ?? ''] ?? product.category ?? '';
+                    const vendor = product.brand || '';
+                    const tags = product.tags?.join(', ') || '';
+                    const condition = product.condition || '';
+                    const primaryColor = product.color || '';
+                    const secondaryColor = product.secondaryColor || '';
+                    const rawWeight = parseFloat(product.weightValue || '');
+                    const weightLb = isNaN(rawWeight) ? '' : String(Math.ceil(rawWeight));
+                    const altParts = [cleanTitle];
+                    if (primaryColor && !cleanTitle.toLowerCase().includes(primaryColor.toLowerCase())) altParts.push(primaryColor);
+                    if (product.size) altParts.push(product.size);
+                    const imageAltText = altParts.filter(Boolean).join(' - ');
+                    const tr = (v: string | undefined | null, maxLen = 40) => {
+                      const s = v ?? '—';
+                      return s.length > maxLen ? <span title={s}>{s.substring(0, maxLen)}…</span> : <>{s || '—'}</>;
+                    };
+                    const cols: (string | null | undefined)[] = [
+                      cleanTitle,
+                      cleanTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || `product-${idx + 1}`,
+                      product.generatedDescription || '',
+                      vendor,
+                      productCategory,
+                      product.productType || '',
+                      tags,
+                      product.published === false ? 'FALSE' : 'TRUE',
+                      product.status || 'Active',
+                      product.sku || '',
+                      product.barcode || '',
+                      condition,
+                      product.sizeType || '',
+                      product.size || '',
+                      product.price != null ? `$${Number(product.price).toFixed(2)}` : '',
+                      'USD',
+                      String(product.compareAtPrice || ''),
+                      String(product.costPerItem || ''),
+                      primaryColor,
+                      secondaryColor,
+                      'TRUE',
+                      '',
+                      '', '', '', '',
+                      'shopify',
+                      '1',
+                      'DENY',
+                      weightLb,
+                      'LB / OZ',
+                      product.packageDimensions || '',
+                      product.requiresShipping === false ? 'FALSE' : 'TRUE',
+                      'manual',
+                      product.shipsFrom || '',
+                      product.imageUrls?.[0] || '',
+                      '1',
+                      imageAltText || 'Product',
+                      '',
+                      'FALSE',
+                      cleanTitle,
+                      product.seoDescription || product.generatedDescription?.substring(0, 160) || '',
+                      primaryColor + (secondaryColor ? `; ${secondaryColor}` : ''),
+                      product.discountedShipping || '',
+                      product.material || '',
+                      product.policies || '',
+                      product.renewalOptions || '',
+                      product.whoMadeIt || '',
+                      product.whatIsIt || '',
+                      product.listingType || '',
+                      product.measurements?.width || '',
+                      product.measurements?.length || '',
+                      product.parcelSize || '',
+                      product.style || '',
+                      productCategory,
+                      product.gender || '',
+                      product.ageGroup || '',
+                      product.mpn || '',
+                      cleanTitle,
+                      product.productType || '',
+                      condition,
+                      'FALSE',
+                      product.customLabel0 || '',
+                    ];
                     return (
-                      <tr key={product.id}>
-                        <td>{cleanTitle}</td>
-                        <td>{displayCategory}</td>
-                        <td>{displayPrice}</td>
-                        <td title={product.tags?.join(', ')}>{displayTags.length > 40 ? displayTags.substring(0, 40) + '…' : displayTags}</td>
-                        <td className="description-cell">{displayDesc}</td>
+                      <tr key={product.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                        {cols.map((val, ci) => (
+                          <td key={ci} style={{ padding: '5px 10px', color: val ? '#111827' : '#9ca3af', verticalAlign: 'top' }}>
+                            {tr(val, ci === 0 || ci === 1 || ci === 40 ? 50 : ci === 2 || ci === 41 ? 60 : 35)}
+                          </td>
+                        ))}
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-              {products.length > 5 && (
-                <p className="preview-note">Showing 5 of {products.length} items</p>
+              {products.length > 10 && (
+                <p className="preview-note" style={{ padding: '8px 12px', margin: 0, fontSize: '0.8rem', color: '#6b7280', borderTop: '1px solid #e5e7eb', background: '#fafafa' }}>Showing 10 of {products.length} items</p>
               )}
             </div>
           </div>
