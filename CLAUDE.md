@@ -82,7 +82,7 @@ npm run preview
 ```
 sortingapp/
 ├── src/
-│   ├── App.tsx                    # Root component. Owns ALL global state. 1380 lines. Orchestrates all 4 steps.
+│   ├── App.tsx                    # Root component. Owns ALL global state. ~2235 lines. Orchestrates all 4 steps.
 │   ├── App.css                    # Global app styles.
 │   ├── main.tsx                   # Entry point. Renders <App /> in StrictMode.
 │   ├── index.css                  # Base CSS reset and body styles.
@@ -90,7 +90,7 @@ sortingapp/
 │   ├── components/
 │   │   ├── Auth.tsx               # Email/password sign-in and sign-up form. Uses Supabase auth directly.
 │   │   ├── Auth.css
-│   │   ├── ImageUpload.tsx        # Step 1. Drag-drop, folder, and ZIP import. Uploads to Supabase Storage.
+│   │   ├── ImageUpload.tsx        # Step 1. Drag-drop, folder, and ZIP import. Uploads to Supabase Storage. Uses `forwardRef` — exports `ImageUploadHandle` interface with `triggerFolder()`, `triggerZip()`, `isBusy`. Import Folder / Import ZIP buttons live in App.tsx Step 1 header (not inside this component).
 │   │   ├── ImageUpload.css
 │   │   ├── ImageGrouper.tsx       # Step 2 left panel. Multi-select, rubber-band, group/ungroup, delete.
 │   │   ├── ImageGrouper.css
@@ -699,6 +699,9 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 - ✅ **Finish button exports CSV** (commit `8ad523b`) — `handleFinish` in `ProductDescriptionGenerator.tsx` no longer shows an alert or blocks on `allProcessed`; it always calls `onProcessed(processedItems)` (writes items to App.tsx) then immediately calls `onDownloadCSV?.()` (triggers the `GoogleSheetExporter` ref's `downloadCSV`); navigation to Step 4 still happens via `onProcessed` → App.tsx state update
 - ✅ **Export preview table — real data** (commit `37f44a0`) — preview table in `GoogleSheetExporter.tsx` was showing raw IDs (`product-1`, `product-2`) and empty prices because it read `product.seoTitle` directly; fixed by extracting `buildCleanTitle(product, idx)` shared helper (strips `{tokens}`, prepends brand, falls back to auto-parts) used by both the preview table and `handleDownloadCSV`; preview now shows real titles, `$X.XX` prices, `—` for empty fields, tag truncation with tooltip, 80-char description preview
 - ✅ **Export preview expanded to all 63 CSV columns** (commit `f450e1b`) — preview table in `GoogleSheetExporter.tsx` replaced the 5-column table with a full 63-column horizontally-scrollable table; `overflow-x: auto` on the container, `position: sticky` + `top: 0` on `<thead>` for a frozen header row, `white-space: nowrap` on cells, `min-width: 4800px` on the table; shows up to 10 products; each cell value computed identically to the CSV row builder using the same helpers (`buildCleanTitle`, `SHOPIFY_CATEGORY_MAP`, etc.); long text cells (Description, SEO description) truncated to 60 chars with `…` and full value in the `title` tooltip; other cells truncated at 35 chars
+- ✅ **Storage meter moved under navbar + upload notifications as dismissible toasts** (commit `c7c6538`) — storage meter (previously inside the `<ImageUpload>` component) is now rendered directly in `App.tsx` just below the `<header>` navbar, visible at all times when logged in; upload notifications ("N images uploaded") converted from inline banners to dismissible toast notifications via a new `addToast`/`toasts` state in `App.tsx` and a `<div className="toast-container">` overlay; `onToast` prop added to `ImageUploadProps`; toasts auto-dismiss after 4 s and have an `×` close button; `storageUsed` and `storageTotal` props removed from `ImageUploadProps` and handled by `App.tsx` directly
+- ✅ **Auto-group by N photos per item in Step 2 filter bar** (commit `ade77a7`) — new `📸 Photos/item:` number input + `Apply` button in the `ImageGrouper` filter bar; `applyAutoGrouping(n)` sorts all items by filename (natural order via `localeCompare({ numeric: true })`), then chunks into groups of `n` with fresh UUIDs; previous grouping is discarded; `autoGroupN` state initialized to `'4'`; input accepts 1–99; layout uses a `border-left` divider to visually separate from other filter controls; CSS classes: `.auto-group-control`, `.auto-group-label`, `.auto-group-input`, `.auto-group-btn` in `ImageGrouper.css`
+- ✅ **Import Folder / Import ZIP buttons moved to Step 1 header** (commit `ff85a1f`) — buttons removed from `ImageUpload.tsx` render body; `ImageUpload` now uses `forwardRef<ImageUploadHandle, ImageUploadProps>` and exposes `triggerFolder()`, `triggerZip()`, `isBusy` via `useImperativeHandle`; `ImageUploadHandle` interface is a named export from `ImageUpload.tsx`; `App.tsx` creates `uploadRef = useRef<ImageUploadHandle>(null)` and passes `ref={uploadRef}` to `<ImageUpload>`; Step 1 `<section>` heading row is now a `.step1-header` flex div with the `<h2>` + tip text on the left and two buttons on the right; CSS classes added to `App.css`: `.step1-header`, `.step1-header-actions`, `.step1-import-btn`, `.step1-folder-btn` (indigo gradient), `.step1-zip-btn` (amber gradient); buttons are disabled while `isBusy` is true
 
 ---
 
@@ -721,6 +724,7 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 | AI description prefix "Vintage / y2k" | Pending | Add to start of every AI-generated description in `textAIService.ts`. |
 | Sync Fields from Description | Done | "🔁 Sync Fields from Description" button added in Step 3 below the description textarea — re-parses edited description text back into structured fields (size, brand, color, etc.) via `generateProductDescription`. |
 | Library tally live sync | Partial | Tab counts (images/groups/batches) don't update live when edits happen in Steps 2–4 until Library is re-opened or refreshTrigger fires. |
+| Shopify taxonomy map coverage | Partial | `SHOPIFY_CATEGORY_MAP` in `GoogleSheetExporter.tsx` maps only 6 short category names. System presets now use full Shopify taxonomy paths as `shopify_product_type` (seeded via `seed_gender_category_presets.sql`), but the CSV exporter reads `item.shopifyProductType` from preset-applied data — ensure preset application writes `shopifyProductType` through to items for full coverage. |
 
 ---
 
