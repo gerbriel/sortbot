@@ -252,6 +252,8 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
           console.warn('⚠️ Upload failed for:', file.name, '- using blob URL as fallback');
           return { id: productId, file, capturedAt, originalName: file.name, preview: URL.createObjectURL(file) };
         }
+        // Mark as compressed so the "needs compression" badge never shows for fresh uploads
+        if (COMPRESS_ON_UPLOAD) markCompressed(uploaded.storagePath);
         return {
           id: productId, file,
           capturedAt,
