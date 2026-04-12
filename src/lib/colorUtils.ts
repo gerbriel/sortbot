@@ -46,12 +46,12 @@ const COLOR_MAP: ColorEntry[] = COLOR_RGB_MAP
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Euclidean distance in RGB space. */
+/** Euclidean distance in RGB space, perceptually weighted (green > red > blue). */
 function rgbDistance(a: [number, number, number], b: [number, number, number]): number {
   return Math.sqrt(
-    Math.pow(a[0] - b[0], 2) +
-    Math.pow(a[1] - b[1], 2) +
-    Math.pow(a[2] - b[2], 2)
+    2 * Math.pow(a[0] - b[0], 2) +   // red
+    4 * Math.pow(a[1] - b[1], 2) +   // green — most perceptually significant
+    1 * Math.pow(a[2] - b[2], 2)     // blue
   );
 }
 
@@ -75,11 +75,14 @@ function rgbToHsb(r: number, g: number, b: number): { h: number; s: number; v: n
 /**
  * Returns true if the RGB value is a neutral (near-white, near-black, or grey)
  * that is likely to be a background rather than the garment itself.
+ * Threshold kept tight (s < 12) so desaturated clothing colors like olive,
+ * sage, tan, beige, and charcoal are NOT mistakenly filtered out.
  */
 function isNeutral(rgb: [number, number, number]): boolean {
   const { s, v } = rgbToHsb(rgb[0], rgb[1], rgb[2]);
-  // Low saturation AND extreme brightness = background noise
-  return s < 30 && (v > 200 || v < 40);
+  // Only discard truly achromatic pixels at extreme brightness (white/off-white
+  // backgrounds or near-black shadows) — not muted clothing colors.
+  return s < 12 && (v > 210 || v < 30);
 }
 
 /**
@@ -146,9 +149,10 @@ export async function extractGroupPrimaryColor(imageUrls: string[]): Promise<str
     imageUrls.map(async (url) => {
       try {
         const img    = await loadImage(url);
-        const canvas = getCenterCropCanvas(img, 0.5);
+        const canvas = getCenterCropCanvas(img, 0.6);
         // getPaletteSync is the v3 sync browser API — returns Color[] | null
-        const palette = getPaletteSync(canvas, { colorCount: 5 });
+        // colorCount 8 gives more data points for better color voting
+        const palette = getPaletteSync(canvas, { colorCount: 8 });
         if (!palette) return;
         for (const color of palette) {
           const rgb: [number, number, number] = color.array();
@@ -164,8 +168,10 @@ export async function extractGroupPrimaryColor(imageUrls: string[]): Promise<str
 
   // ── Cluster by proximity ───────────────────────────────────────────────────
   // Simple greedy clustering: each entry joins the nearest existing cluster
-  // centroid if within distance 40, otherwise starts a new cluster.
-  const CLUSTER_RADIUS = 40;
+  // centroid if within distance 55, otherwise starts a new cluster.
+  // Wider radius (55 vs old 40) means perceptually-similar shades (e.g. crimson
+  // vs burgundy, navy vs royal blue) cluster together for a stronger vote.
+  const CLUSTER_RADIUS = 55;
 
   type Cluster = { entries: [number, number, number][]; centroid: [number, number, number] };
   const clusters: Cluster[] = [];

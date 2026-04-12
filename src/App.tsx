@@ -913,7 +913,11 @@ function App() {
   const handleApplyPreset = async (preset: CategoryPreset) => {
     log.app(`handleApplyPreset | preset="${preset.display_name}" selectedCount=${selectedGroupItems.size}`);
     if (selectedGroupItems.size === 0) return;
-    const baseItems = groupedImages.length > 0 ? groupedImages : uploadedImages;
+    // Use refs so we always read the latest state even if this fires in the same
+    // render cycle as a group operation (setGroupedImages hasn't re-rendered yet).
+    const liveGrouped = groupedImagesRef.current;
+    const liveUploaded = uploadedImagesRef.current;
+    const baseItems = liveGrouped.length > 0 ? liveGrouped : liveUploaded;
     const selected = baseItems.filter(i => selectedGroupItems.has(i.id));
     if (selected.length === 0) return;
 
