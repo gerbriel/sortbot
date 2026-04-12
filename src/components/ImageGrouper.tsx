@@ -291,6 +291,36 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     return () => document.removeEventListener('keydown', handler);
   }, [selectedItems]); // re-bind when selectedItems changes so createGroupFromSelected closure is fresh
 
+  // ⌘A            — select ALL images (singles + every item inside every group)
+  // ⌘Shift+A      — select ALL multi-image groups only (not singles)
+  // Both are toggles: pressing again when everything targeted is already selected → deselects
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key !== 'a') return;
+      // Only fire when Step 2 (the grouper) is on-screen — skip if an input/textarea has focus
+      const active = document.activeElement;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)) return;
+      e.preventDefault();
+
+      if (e.shiftKey) {
+        // ⌘Shift+A — select all multi-image groups
+        const allGroupItemIds = multiItemGroupsRef.current.flatMap(([, items]) => items.map(i => i.id));
+        if (allGroupItemIds.length === 0) return;
+        const alreadyAllSelected = allGroupItemIds.every(id => selectedItemsRef.current.has(id));
+        updateSelection(alreadyAllSelected ? new Set() : new Set(allGroupItemIds));
+      } else {
+        // ⌘A — select every image
+        const allIds = groupedItemsRef.current.map(i => i.id);
+        if (allIds.length === 0) return;
+        const alreadyAllSelected = allIds.every(id => selectedItemsRef.current.has(id));
+        updateSelection(alreadyAllSelected ? new Set() : new Set(allIds));
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // stable — reads live values via refs, no closure deps needed
+
   // Initialize items with individual groups and auto-upload.
   // IMPORTANT: Only process items that are genuinely new (not already in groupedItems).
   // This prevents the items prop feedback loop from resetting group state every time
@@ -948,6 +978,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // Keep a ref so event-handler closures always see the current singleItems list
   const singleItemsRef = useRef<ClothingItem[]>(singleItems);
   singleItemsRef.current = singleItems;
+
+  // Ref mirrors for select-all shortcut closures
+  const multiItemGroupsRef = useRef<[string, ClothingItem[]][]>(multiItemGroups);
+  multiItemGroupsRef.current = multiItemGroups;
 
   // Notify parent whenever the group stats change so Step 3 can show matching numbers
   useEffect(() => {
