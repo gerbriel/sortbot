@@ -180,7 +180,8 @@ export const deleteProductGroup = async (
     // 3. Delete product_images rows
     const imageIds = (imageRows ?? []).map((r: any) => r.id);
     if (imageIds.length > 0) {
-      await supabase.from('product_images').delete().in('id', imageIds);
+      const { error: delImgErr } = await supabase.from('product_images').delete().in('id', imageIds);
+      if (delImgErr) console.error('[libraryService] deleteProductGroup | product_images delete blocked (RLS?)', delImgErr);
     }
 
     // 4. Delete the product row
@@ -189,7 +190,7 @@ export const deleteProductGroup = async (
       .delete()
       .eq('id', groupId);
     if (productError && productError.code !== 'PGRST116') {
-      console.error('Error deleting product:', productError);
+      console.error('[libraryService] deleteProductGroup | products delete blocked (RLS?)', productError);
     }
 
     // 5. Scrub all items in this product_group from workflow_state
@@ -450,7 +451,7 @@ export const deleteImage = async (
       .delete()
       .eq('id', imageId);
     if (dbError && dbError.code !== 'PGRST116') {
-      console.error('Error deleting product image record:', dbError);
+      console.error('[libraryService] deleteImage | product_images delete blocked (RLS?)', dbError);
     }
 
     // 3. Scrub the item from workflow_state so a hard-refresh doesn't resurrect it.
