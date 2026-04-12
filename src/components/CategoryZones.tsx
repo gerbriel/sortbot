@@ -23,7 +23,10 @@ import {
   Star,
   Zap,
   GripVertical,
-  X
+  X,
+  Users,
+  UserRound,
+  Baby,
 } from 'lucide-react';
 import './CategoryZones.css';
 
@@ -144,7 +147,54 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     }
   };
 
-  const zonePresets = presets.filter(p => (p as any).gender === genderFilter);
+  const zonePresets = (() => {
+    // Sort order: shared categories first (appear across all 3), gender-unique ones at bottom
+    const SORT_ORDER: Record<string, number> = {
+      // Tops group (shared)
+      'tees': 1, 'mens-tees': 1, 'womens-tees': 1, 'kids-tees': 1,
+      'shirts': 2, 'mens-shirts': 2, 'kids-shirts': 2,
+      'tops': 3, 'womens-tops': 3,
+      // Fleece group (shared)
+      'sweatshirts': 4, 'mens-sweatshirts': 4, 'womens-sweatshirts': 4, 'kids-sweatshirts': 4,
+      'hoodies': 5, 'mens-hoodies': 5, 'womens-hoodies': 5, 'kids-hoodies': 5,
+      // Outerwear (shared)
+      'jackets': 6, 'mens-jackets': 6, 'womens-jackets': 6, 'kids-jackets': 6,
+      // Bottoms (shared)
+      'pants': 7, 'mens-pants': 7, 'womens-pants': 7, 'kids-pants': 7,
+      'jeans': 8, 'mens-jeans': 8, 'womens-jeans': 8,
+      'shorts': 9, 'mens-shorts': 9, 'womens-shorts': 9, 'kids-shorts': 9,
+      // Gender-unique
+      'mens-jerseys': 10,
+      'womens-dresses': 11, 'kids-dresses': 11,
+      'womens-skirts': 12,
+      'womens-bodysuits': 13,
+      // Accessories (shared — always near bottom)
+      'hats': 14, 'mens-hats': 14, 'womens-hats': 14, 'kids-hats': 14,
+      'shoes': 15, 'mens-shoes': 15, 'womens-shoes': 15, 'kids-shoes': 15,
+      'accessories': 16, 'mens-accessories': 16, 'womens-accessories': 16, 'kids-accessories': 16,
+    };
+    const filtered = presets.filter(p => (p as any).gender === genderFilter);
+    return [...filtered].sort((a, b) => {
+      const ao = SORT_ORDER[a.category_name] ?? 99;
+      const bo = SORT_ORDER[b.category_name] ?? 99;
+      return ao !== bo ? ao - bo : a.display_name.localeCompare(b.display_name);
+    });
+  })();
+
+  // Color per product type — consistent across Men/Women/Kids so the same
+  // category type always appears in the same color regardless of gender toggle.
+  const getPresetColor = (categoryName: string): string => {
+    const n = categoryName.toLowerCase();
+    if (n.includes('tee') || n.includes('shirt') || n.includes('top') || n.includes('jersey') || n.includes('bodysuit')) return '#3b82f6'; // blue — tops
+    if (n.includes('sweatshirt') || n.includes('hoodie')) return '#8b5cf6'; // purple — fleece
+    if (n.includes('jacket') || n.includes('coat') || n.includes('outerwear')) return '#06b6d4'; // cyan — outerwear
+    if (n.includes('pant') || n.includes('jean') || n.includes('short') || n.includes('bottom')) return '#10b981'; // green — bottoms
+    if (n.includes('dress') || n.includes('skirt')) return '#ec4899'; // pink — dresses/skirts
+    if (n.includes('hat') || n.includes('cap')) return '#f59e0b'; // amber — hats
+    if (n.includes('shoe') || n.includes('sneaker') || n.includes('boot')) return '#f97316'; // orange — shoes
+    if (n.includes('access') || n.includes('bag') || n.includes('watch') || n.includes('jewel')) return '#6b7280'; // gray — accessories
+    return '#6366f1'; // indigo default
+  };
 
   const loadCategories = async () => {
     try {
@@ -537,12 +587,19 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
       <div className="category-zones">
         {/* Gender filter toggles */}
         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', justifyContent: 'center' }}>
-          {(['Men', 'Women', 'Kids'] as const).map(g => (
+          {([
+            { key: 'Men',   label: 'Men',   Icon: Users },
+            { key: 'Women', label: 'Women', Icon: UserRound },
+            { key: 'Kids',  label: 'Kids',  Icon: Baby },
+          ] as const).map(({ key: g, label, Icon }) => (
             <button
               key={g}
               onClick={() => setZoneGender(g)}
               style={{
-                padding: '0.3rem 1.1rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                padding: '0.3rem 1rem',
                 borderRadius: '999px',
                 border: '2px solid',
                 borderColor: genderFilter === g ? '#6366f1' : '#d1d5db',
@@ -554,7 +611,8 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
                 transition: 'all 0.15s',
               }}
             >
-              {g === 'Men' ? '👔 Men' : g === 'Women' ? '👗 Women' : '🧒 Kids'}
+              <Icon size={14} />
+              {label}
             </button>
           ))}
         </div>
@@ -569,11 +627,13 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
           <p>Loading categories...</p>
         ) : (
           <div className={compactMode ? 'category-list' : 'category-grid'}>
-            {(zonePresets.length > 0 ? zonePresets : []).map(preset => (
+            {(zonePresets.length > 0 ? zonePresets : []).map(preset => {
+              const color = getPresetColor(preset.category_name);
+              return (
               <div
                 key={preset.id}
                 className={`category-zone ${dragOverCategory === preset.category_name ? 'drag-over' : ''}${selectedItemIds && selectedItemIds.size > 0 ? ' clickable' : ''}`}
-                style={{ borderColor: '#6366f1', '--category-color': '#6366f1', cursor: selectedItemIds && selectedItemIds.size > 0 ? 'pointer' : undefined } as React.CSSProperties}
+                style={{ borderColor: color, '--category-color': color, cursor: selectedItemIds && selectedItemIds.size > 0 ? 'pointer' : undefined } as React.CSSProperties}
                 onDragOver={(e) => handleCategoryDragOver(e, preset.category_name)}
                 onDrop={(e) => handleCategoryDrop(e, preset.category_name)}
                 onDragLeave={handleCategoryDragLeave}
@@ -585,7 +645,8 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
                   ({items.filter(i => i.category === preset.category_name).length})
                 </span>
               </div>
-            ))}
+              );
+            })}
             {/* Clear Category zone */}
             <div
               className={`category-zone category-zone-clear ${dragOverClear ? 'drag-over-clear' : ''}${selectedItemIds && selectedItemIds.size > 0 ? ' clickable' : ''}`}
