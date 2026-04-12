@@ -65,8 +65,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const [selectedPresetId, setSelectedPresetId] = useState<string>('');
   const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveConfirmed, setSaveConfirmed] = useState(false);
 
   // Photo reorder drag state (Step 4 thumbnails)
   const [draggedThumbId, setDraggedThumbId] = useState<string | null>(null);
@@ -157,7 +155,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     if (!hasMountedRef.current) return;
     if (isResettingRef.current) return;
     setHasUnsavedChanges(true);
-    setSaveConfirmed(false);
   }, [processedItems]);
 
   // Update local state when items prop changes (e.g., opening a different batch)
@@ -667,12 +664,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     }
   };
 
-  // Explicit save — pushes all current field values to Supabase immediately.
-  // This takes priority over any stale data that might be loaded later.
+  // Background save — pushes current field values to Supabase products table.
+  // Called automatically on Next/Prev navigation and on group index change.
+  // workflow_state blob is always kept in sync separately via onProcessed().
   const handleSave = async () => {
-    if (isSaving) return;
     log.pdg(`handleSave | items=${processedItems.length} batchId=${batchId ?? 'none'}`);
-    setIsSaving(true);
     try {
       // Group items by productGroup
       const groups: Record<string, ClothingItem[]> = {};
@@ -687,16 +683,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           syncGroupFieldsToDatabase(groupItems, batchId ?? null)
         )
       );
-      // Also trigger the parent auto-save so workflow_state blob is updated too
-      onProcessed(processedItems);
       setHasUnsavedChanges(false);
-      setSaveConfirmed(true);
-      // Clear the "Saved ✓" indicator after 3 seconds
-      setTimeout(() => setSaveConfirmed(false), 3000);
     } catch {
-      // Silently fail — user can try again
-    } finally {
-      setIsSaving(false);
+      // Silently fail — workflow_state blob is the source of truth
     }
   };
 
@@ -1337,30 +1326,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               </button>
             )}
           </div>
-
-          {/* Download CSV — quick access below nav */}
-          {/* Save Changes button — explicit Supabase push */}
-          <button
-            className="button"
-            onClick={handleSave}
-            disabled={isSaving || (!hasUnsavedChanges && !saveConfirmed)}
-            style={{
-              marginTop: '0.5rem',
-              width: '100%',
-              justifyContent: 'center',
-              fontSize: '0.8125rem',
-              background: saveConfirmed
-                ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-                : hasUnsavedChanges
-                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
-                  : '#9ca3af',
-              cursor: isSaving || (!hasUnsavedChanges && !saveConfirmed) ? 'default' : 'pointer',
-              opacity: isSaving ? 0.7 : 1,
-              transition: 'background 0.3s',
-            }}
-          >
-            {isSaving ? '⏳ Saving…' : saveConfirmed ? '✅ Saved!' : hasUnsavedChanges ? '💾 Save Changes' : '💾 Save Changes'}
-          </button>
 
           {/* Download CSV — quick access below nav */}
           {onDownloadCSV && (
