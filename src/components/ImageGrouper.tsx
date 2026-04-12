@@ -278,6 +278,18 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     return () => document.removeEventListener('mousedown', handler);
   }, [selectedItems]);
 
+  // ⌘G / Ctrl+G — group selected items keyboard shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'g') {
+        e.preventDefault();
+        createGroupFromSelected();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [selectedItems]); // re-bind when selectedItems changes so createGroupFromSelected closure is fresh
+
   // Initialize items with individual groups and auto-upload.
   // IMPORTANT: Only process items that are genuinely new (not already in groupedItems).
   // This prevents the items prop feedback loop from resetting group state every time
