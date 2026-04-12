@@ -86,24 +86,60 @@ function isNeutral(rgb: [number, number, number]): boolean {
 }
 
 /**
- * Draw the center `cropFraction` of an image onto an off-screen canvas and return it.
- * The original image is never modified. The canvas only lives in memory.
+ * Returns true if the RGB looks like a common busy-background color:
+ * the tan/cream of newspaper print, or the brown/green of wooden/ivy backdrops.
+ * These are filtered ONLY when we have enough non-background colors in the pool
+ * already — so we don't accidentally discard a tan garment.
  */
-function getCenterCropCanvas(img: HTMLImageElement, cropFraction = 0.5): HTMLCanvasElement {
+function isLikelyBackground(rgb: [number, number, number]): boolean {
+  const [r, g, b] = rgb;
+  const { s, v } = rgbToHsb(r, g, b);
+
+  // Newspaper / parchment — warm off-white/beige (high V, low-mid S, warm hue)
+  if (v > 160 && s > 5 && s < 28 && r > g && r > b) return true;
+
+  // Wooden lattice / brown backdrop — mid-dark warm brown
+  if (v > 50 && v < 160 && s > 15 && s < 55 && r > g && r > b && r - b > 20) return true;
+
+  return false;
+}
+
+/**
+ * Build multiple narrow canvas strips from the center column of the image.
+ * Clothing hangs in the center-horizontal band of the frame, so we take
+ * the middle 40% of width but sample across the full usable height in slices.
+ * This captures the garment body without picking up background at the edges.
+ */
+function getCenterStripCanvases(img: HTMLImageElement): HTMLCanvasElement[] {
   const srcW = img.naturalWidth  || img.width;
   const srcH = img.naturalHeight || img.height;
-  const cropW = Math.floor(srcW * cropFraction);
-  const cropH = Math.floor(srcH * cropFraction);
-  const offsetX = Math.floor((srcW - cropW) / 2);
-  const offsetY = Math.floor((srcH - cropH) / 2);
 
-  const canvas = document.createElement('canvas');
-  canvas.width  = cropW;
-  canvas.height = cropH;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return canvas;
-  ctx.drawImage(img, offsetX, offsetY, cropW, cropH, 0, 0, cropW, cropH);
-  return canvas;
+  // Horizontal: center 40% of image width (avoids left/right background)
+  const stripW = Math.floor(srcW * 0.40);
+  const stripX = Math.floor((srcW - stripW) / 2);
+
+  // Vertical: skip top 10% (hanger/hook) and bottom 5% (floor/table edge)
+  // then divide the remaining height into 3 equal slices
+  const usableTop    = Math.floor(srcH * 0.10);
+  const usableBottom = Math.floor(srcH * 0.95);
+  const usableH      = usableBottom - usableTop;
+  const sliceH       = Math.floor(usableH / 3);
+
+  const canvases: HTMLCanvasElement[] = [];
+
+  for (let i = 0; i < 3; i++) {
+    const srcY = usableTop + i * sliceH;
+    const canvas = document.createElement('canvas');
+    canvas.width  = stripW;
+    canvas.height = sliceH;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(img, stripX, srcY, stripW, sliceH, 0, 0, stripW, sliceH);
+      canvases.push(canvas);
+    }
+  }
+
+  return canvases;
 }
 
 /** Nearest-neighbor lookup: map an RGB value to the closest color name. */
@@ -148,15 +184,16 @@ export async function extractGroupPrimaryColor(imageUrls: string[]): Promise<str
   await Promise.allSettled(
     imageUrls.map(async (url) => {
       try {
-        const img    = await loadImage(url);
-        const canvas = getCenterCropCanvas(img, 0.6);
-        // getPaletteSync is the v3 sync browser API — returns Color[] | null
-        // colorCount 8 gives more data points for better color voting
-        const palette = getPaletteSync(canvas, { colorCount: 8 });
-        if (!palette) return;
-        for (const color of palette) {
-          const rgb: [number, number, number] = color.array();
-          if (!isNeutral(rgb)) pool.push(rgb);
+        const img     = await loadImage(url);
+        const strips  = getCenterStripCanvases(img);
+        for (const canvas of strips) {
+          // colorCount 8 gives more data points for better color voting
+          const palette = getPaletteSync(canvas, { colorCount: 8 });
+          if (!palette) continue;
+          for (const color of palette) {
+            const rgb: [number, number, number] = color.array();
+            if (!isNeutral(rgb)) pool.push(rgb);
+          }
         }
       } catch {
         // silently skip failed images — other images in the group still contribute
@@ -165,6 +202,12 @@ export async function extractGroupPrimaryColor(imageUrls: string[]): Promise<str
   );
 
   if (!pool.length) return null;
+
+  // ── Filter likely background colors if we have enough signal ─────────────
+  // Only remove background-looking colors when the pool is large enough that
+  // we won't accidentally discard the only color data we have.
+  const filtered = pool.length >= 6 ? pool.filter(rgb => !isLikelyBackground(rgb)) : pool;
+  const workingPool = filtered.length > 0 ? filtered : pool;
 
   // ── Cluster by proximity ───────────────────────────────────────────────────
   // Simple greedy clustering: each entry joins the nearest existing cluster
@@ -176,7 +219,7 @@ export async function extractGroupPrimaryColor(imageUrls: string[]): Promise<str
   type Cluster = { entries: [number, number, number][]; centroid: [number, number, number] };
   const clusters: Cluster[] = [];
 
-  for (const rgb of pool) {
+  for (const rgb of workingPool) {
     let nearest: Cluster | null = null;
     let nearestDist = Infinity;
 
