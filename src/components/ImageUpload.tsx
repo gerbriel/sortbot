@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import JSZip from 'jszip';
 import exifr from 'exifr';
@@ -49,6 +49,13 @@ interface ImageUploadProps {
   onCapturedAtUpdated?: (updatedItems: ClothingItem[]) => void;
   /** Optional: fires a toast notification in the parent (App.tsx) */
   onToast?: (msg: string) => void;
+}
+
+/** Imperative handle so App.tsx can trigger folder/ZIP dialogs from its own buttons. */
+export interface ImageUploadHandle {
+  triggerFolder: () => void;
+  triggerZip: () => void;
+  isBusy: boolean; // true while uploading or extracting
 }
 
 /**
@@ -148,7 +155,7 @@ async function extractImagesFromZip(zipFile: File): Promise<File[]> {
   return imageFiles.sort((a, b) => a.lastModified - b.lastModified);
 }
 
-const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, existingItems, onCapturedAtUpdated: _onCapturedAtUpdated, onToast }) => {
+const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesUploaded, userId, existingItems, onCapturedAtUpdated: _onCapturedAtUpdated, onToast }, ref) => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [extractingZip, setExtractingZip] = useState(false);
@@ -164,6 +171,13 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
 
   const folderInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
+
+  // Expose trigger methods to App.tsx so it can place the buttons in the section header
+  useImperativeHandle(ref, () => ({
+    triggerFolder: () => folderInputRef.current?.click(),
+    triggerZip:    () => zipInputRef.current?.click(),
+    isBusy: isUploading || extractingZip,
+  }), [isUploading, extractingZip]);
 
   const processFiles = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
@@ -493,54 +507,6 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
           </div>
         </div>
 
-        {/* Folder + ZIP import buttons */}
-        {!isUploading && !extractingZip && (
-          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); folderInputRef.current?.click(); }}
-              style={{
-                flex: 1,
-                padding: '0.6rem 1rem',
-                background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.4rem',
-              }}
-            >
-              📁 Import Folder
-            </button>
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); zipInputRef.current?.click(); }}
-              style={{
-                flex: 1,
-                padding: '0.6rem 1rem',
-                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.4rem',
-              }}
-            >
-              🗜️ Import ZIP
-            </button>
-          </div>
-        )}
-
         {/* Recompress existing images button — shown when there are already-uploaded items */}
         {!isUploading && !extractingZip && (existingItems?.length ?? 0) > 0 && (() => {
           const compressedPaths = getCompressedPaths();
@@ -655,6 +621,6 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
         {/* Button hidden — compression runs automatically on import */}
       </div>
   );
-};
+});
 
 export default ImageUpload;

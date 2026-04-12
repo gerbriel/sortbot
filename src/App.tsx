@@ -5,7 +5,7 @@ import type { User } from '@supabase/supabase-js';
 import { Tag, Settings, Package, ShoppingBag, Link2, Scissors, X, Trash2, Bug } from 'lucide-react';
 import { log, setDebugEnabled, isDebugEnabled } from './lib/debugLogger';
 import Auth from './components/Auth';
-import ImageUpload from './components/ImageUpload';
+import ImageUpload, { type ImageUploadHandle } from './components/ImageUpload';
 import ImageGrouper from './components/ImageGrouper';
 import type { GrouperActions } from './components/ImageGrouper';
 import CategoryZones from './components/CategoryZones';
@@ -211,6 +211,7 @@ function App() {
 
   // Ref to GoogleSheetExporter so Step 3 sidebar can trigger the download
   const exporterRef = useRef<GoogleSheetExporterHandle>(null);
+  const uploadRef = useRef<ImageUploadHandle>(null);
   const [showStep2Info, setShowStep2Info] = useState(false);
   const [currentBatchId, setCurrentBatchId] = useState<string | null>(() => {
     // Restore batch ID from localStorage so reloads don't lose progress
@@ -1925,11 +1926,31 @@ function App() {
 
         {/* Step 1: Upload Images */}
         <section className="step-section">
-          <h2>Step 1: Upload Images</h2>
-          <p className="step-description" style={{ fontSize: '14px', color: '#666', marginBottom: '1rem' }}>
-            💡 <strong>Tip:</strong> You can upload multiple batches! New images will be added to your current session.
-          </p>
-          <ImageUpload onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} onToast={addToast} />
+          <div className="step1-header">
+            <div>
+              <h2>Step 1: Upload Images</h2>
+              <p className="step-description" style={{ fontSize: '14px', color: '#666', margin: 0 }}>
+                💡 <strong>Tip:</strong> You can upload multiple batches! New images will be added to your current session.
+              </p>
+            </div>
+            <div className="step1-header-actions">
+              <button
+                className="step1-import-btn step1-folder-btn"
+                onClick={() => uploadRef.current?.triggerFolder()}
+                disabled={uploadRef.current?.isBusy ?? false}
+              >
+                📁 Import Folder
+              </button>
+              <button
+                className="step1-import-btn step1-zip-btn"
+                onClick={() => uploadRef.current?.triggerZip()}
+                disabled={uploadRef.current?.isBusy ?? false}
+              >
+                🗜️ Import ZIP
+              </button>
+            </div>
+          </div>
+          <ImageUpload ref={uploadRef} onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} onToast={addToast} />
           {/* "N images uploaded" moved to toast — see handleImagesUploaded */}
         </section>
 
