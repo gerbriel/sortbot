@@ -146,7 +146,7 @@ async function extractImagesFromZip(zipFile: File): Promise<File[]> {
   return imageFiles.sort((a, b) => a.lastModified - b.lastModified);
 }
 
-const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, existingItems, onCapturedAtUpdated }) => {
+const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, existingItems }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [extractingZip, setExtractingZip] = useState(false);
@@ -157,23 +157,6 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
     savedKB: number;
     skipped: number;
     alreadyDone: number;
-    errors: string[];
-  } | null>(null);
-  const [recompressAllState, setRecompressAllState] = useState<{
-    running: boolean;
-    done: number;
-    total: number;
-    savedKB: number;
-    skipped: number;
-    alreadyDone: number;
-    errors: string[];
-  } | null>(null);
-  const [rescanExifState, setRescanExifState] = useState<{
-    running: boolean;
-    done: number;
-    total: number;
-    updated: number;   // items where EXIF date differed from stored capturedAt
-    noExif: number;    // items with no EXIF tag (kept lastModified)
     errors: string[];
   } | null>(null);
   // ── Storage usage ────────────────────────────────────────────────────────
@@ -309,89 +292,6 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
   };
 
   /**
-   * Re-scan EXIF DateTimeOriginal for all existing items in the current batch.
-   * Downloads each image from its CDN URL, parses EXIF, and updates capturedAt
-   * in-memory. Calls onCapturedAtUpdated with the full updated array so the
-   * parent can replace its state and trigger a re-sort.
-   *
-   * This is a one-time backfill tool — once all items have EXIF-correct capturedAt
-   * values saved to workflow_state, new imports handle this automatically on upload.
-   */
-  const rescanExifCapturedAt = async () => {
-    const items = existingItems ?? [];
-    const candidates = items.filter(i => i.storagePath && (i.imageUrls?.[0] || i.thumbnailUrl || i.preview));
-    if (candidates.length === 0) return;
-
-    setRescanExifState({ running: true, done: 0, total: candidates.length, updated: 0, noExif: 0, errors: [] });
-    log.upload(`rescanExif | candidates=${candidates.length}`);
-
-    let updated = 0;
-    let noExif = 0;
-    const errors: string[] = [];
-    // Build an updated copy of the full items array (non-candidates pass through unchanged)
-    const updatedItems: ClothingItem[] = [...items];
-    const idToIndex = new Map(items.map((item, idx) => [item.id, idx]));
-
-    const CHUNK = 5;
-    for (let i = 0; i < candidates.length; i += CHUNK) {
-      const chunk = candidates.slice(i, i + CHUNK);
-      await Promise.all(chunk.map(async (item) => {
-        const url = item.imageUrls?.[0] || item.thumbnailUrl || item.preview || '';
-        if (!url) return;
-        try {
-          const resp = await fetch(url);
-          if (!resp.ok) {
-            errors.push(`Fetch failed (${resp.status}) — ${item.storagePath?.split('/').pop()}`);
-            return;
-          }
-          const blob = await resp.blob();
-          const file = new File([blob], 'img.jpg', { type: blob.type });
-
-          let newCapturedAt: number | undefined;
-          try {
-            const exif = await exifr.parse(file, ['DateTimeOriginal']);
-            if (exif?.DateTimeOriginal instanceof Date) {
-              newCapturedAt = exif.DateTimeOriginal.getTime();
-            }
-          } catch {
-            // EXIF parse failure — leave capturedAt unchanged
-          }
-
-          const idx = idToIndex.get(item.id);
-          if (idx === undefined) return;
-
-          if (newCapturedAt !== undefined && newCapturedAt !== item.capturedAt) {
-            updatedItems[idx] = { ...updatedItems[idx], capturedAt: newCapturedAt };
-            updated++;
-            log.upload(`rescanExif updated | ${item.storagePath?.split('/').pop()} ${new Date(item.capturedAt ?? 0).toISOString()} → ${new Date(newCapturedAt).toISOString()}`);
-          } else {
-            noExif++;
-          }
-        } catch (err) {
-          errors.push(`Error — ${item.storagePath?.split('/').pop()}: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }));
-
-      setRescanExifState({
-        running: true,
-        done: Math.min(i + CHUNK, candidates.length),
-        total: candidates.length,
-        updated,
-        noExif,
-        errors: [...errors],
-      });
-    }
-
-    setRescanExifState({ running: false, done: candidates.length, total: candidates.length, updated, noExif, errors: [...errors] });
-    log.upload(`rescanExif done | updated=${updated} noExif=${noExif} errors=${errors.length}`);
-
-    // Notify parent so it can replace state and trigger re-sort
-    if (updated > 0) {
-      onCapturedAtUpdated?.(updatedItems);
-    }
-  };
-
-  /**
    * Recompress all existing images in-place in Supabase Storage.
    * - Skips paths already compressed in a previous run (tracked in localStorage).
    * - Downloads each image from its CDN URL, compresses via canvas, re-uploads
@@ -403,16 +303,13 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
     const items = existingItems ?? [];
     const alreadyCompressed = getCompressedPaths();
 
-    // Candidates: has a storagePath AND a URL to fetch from
     const candidates = items.filter(i => i.storagePath && (i.imageUrls?.[0] || i.thumbnailUrl || i.preview));
     if (candidates.length === 0) return;
 
-    // Split into already-done vs needs-work
     const needsWork = candidates.filter(i => !alreadyCompressed.has(i.storagePath!));
     const alreadyDoneCount = candidates.length - needsWork.length;
 
     if (needsWork.length === 0) {
-      // Everything already compressed — show done state immediately
       setRecompressState({ running: false, done: 0, total: 0, savedKB: 0, skipped: 0, alreadyDone: alreadyDoneCount, errors: [] });
       return;
     }
@@ -432,27 +329,20 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
         if (!url || !item.storagePath) return;
 
         try {
-          // Fetch the existing image as a blob
           const resp = await fetch(url);
           if (!resp.ok) {
-            const msg = `Fetch failed (${resp.status}) — ${item.storagePath.split('/').pop()}`;
-            log.upload(`recompress fetch error | ${item.storagePath} status=${resp.status}`);
-            errors.push(msg);
+            errors.push(`Fetch failed (${resp.status}) — ${item.storagePath.split('/').pop()}`);
             skipped++;
             return;
           }
           const blob = await resp.blob();
 
-          // Skip if already small enough
           if (blob.size < RECOMPRESS_SKIP_UNDER_BYTES) {
-            log.upload(`recompress skip (already small) | ${item.storagePath} ${(blob.size/1024).toFixed(0)}KB`);
-            // Still mark as compressed so it doesn't show as pending next time
             markCompressed(item.storagePath);
             skipped++;
             return;
           }
 
-          // Skip tiny AVIF — already an efficient format
           if (blob.type === 'image/avif' && blob.size < 100 * 1024) {
             markCompressed(item.storagePath);
             skipped++;
@@ -463,15 +353,12 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
           const originalFile = new File([blob], 'img.jpg', { type: blob.type, lastModified: Date.now() });
           const compressed = await compressImage(originalFile);
 
-          // Only replace if we actually saved meaningful space (at least 10%)
           if (compressed.size >= originalSize * 0.9) {
-            log.upload(`recompress skip (no gain) | ${item.storagePath} orig=${(originalSize/1024).toFixed(0)}KB compressed=${(compressed.size/1024).toFixed(0)}KB`);
-            markCompressed(item.storagePath); // already at good size, don't retry
+            markCompressed(item.storagePath);
             skipped++;
             return;
           }
 
-          // Upload compressed blob back to the same path, overwriting the original
           const { error } = await supabase.storage
             .from('product-images')
             .upload(item.storagePath, compressed, {
@@ -481,24 +368,15 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
             });
 
           if (error) {
-            const msg = `Upload error — ${item.storagePath.split('/').pop()}: ${error.message}`;
-            log.upload(`recompress upload error | ${item.storagePath} ${error.message}`);
-            errors.push(msg);
+            errors.push(`Upload error — ${item.storagePath.split('/').pop()}: ${error.message}`);
             skipped++;
             return;
           }
 
-          // Success — record so we never recompress this path again
           markCompressed(item.storagePath);
           totalSavedBytes += originalSize - compressed.size;
-          log.upload(
-            `recompress OK | ${item.storagePath} ` +
-            `${(originalSize/1024).toFixed(0)}KB → ${(compressed.size/1024).toFixed(0)}KB`
-          );
         } catch (err) {
-          const msg = `Error — ${item.storagePath!.split('/').pop()}: ${err instanceof Error ? err.message : String(err)}`;
-          log.upload(`recompress exception | ${item.storagePath} ${msg}`);
-          errors.push(msg);
+          errors.push(`Error — ${item.storagePath!.split('/').pop()}: ${err instanceof Error ? err.message : String(err)}`);
           skipped++;
         }
       }));
@@ -523,226 +401,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
       alreadyDone: alreadyDoneCount,
       errors: [...errors],
     });
-    log.upload(`recompressExisting done | saved=${(totalSavedBytes/1024/1024).toFixed(2)}MB skipped=${skipped} errors=${errors.length} alreadyDone=${alreadyDoneCount}`);
-  };
-
-  /**
-   * Recompress ALL images across ALL batches in Supabase Storage.
-   * Queries the product_images table for every storagePath the current user owns,
-   * then compresses and overwrites each one — same logic as recompressExisting but
-   * not limited to the currently-loaded batch.
-   */
-  const recompressAllBatches = async () => {
-    const alreadyCompressed = getCompressedPaths();
-
-    // ── Source 1: product_images DB table (has image_url) ──────────────────
-    // No user_id filter — shared workspace, all batches belong to this app.
-    const PAGE = 1000;
-    const dbPathToUrl = new Map<string, string>();
-    let offset = 0;
-    while (true) {
-      const { data, error } = await supabase
-        .from('product_images')
-        .select('storage_path, image_url')
-        .not('storage_path', 'is', null)
-        .range(offset, offset + PAGE - 1);
-      if (error) { log.upload(`recompressAll DB fetch error | ${error.message}`); break; }
-      if (!data || data.length === 0) break;
-      for (const row of data as { storage_path: string; image_url: string }[]) {
-        if (row.storage_path && row.image_url && !dbPathToUrl.has(row.storage_path)) {
-          dbPathToUrl.set(row.storage_path, row.image_url);
-        }
-      }
-      if (data.length < PAGE) break;
-      offset += PAGE;
-    }
-    log.upload(`recompressAll DB source | paths=${dbPathToUrl.size}`);
-
-    // ── Source 2: walk Storage bucket — ALL user folders ───────────────────
-    // Many old files have no product_images row. We walk the entire bucket
-    // (all user-ID prefixes) because this is a shared workspace and the big
-    // data may live under a different user's folder.
-    // NOTE: supabase.storage.list() is capped at 1000 results per call — we
-    // must paginate with increasing offsets.
-    const storagePathToUrl = new Map<string, string>(); // storagePath → CDN URL
-    const LIST_LIMIT = 1000;
-
-    // Step 2a: list all top-level user-ID folders (root of bucket)
-    const { data: userFolders } = await supabase.storage
-      .from('product-images')
-      .list('', { limit: LIST_LIMIT, offset: 0 });
-
-    log.upload(`recompressAll storage walk | userFolders=${userFolders?.length ?? 0}`);
-
-    if (userFolders && userFolders.length > 0) {
-      // Step 2b: for each user folder, paginate through product subfolders
-      for (const userFolder of userFolders) {
-        if (userFolder.id !== null) continue; // not a folder
-        const userPrefix = userFolder.name;
-
-        // Paginate product subfolders under this user prefix
-        const allProductFolders: { name: string }[] = [];
-        let folderOffset = 0;
-        while (true) {
-          const { data: page } = await supabase.storage
-            .from('product-images')
-            .list(userPrefix, { limit: LIST_LIMIT, offset: folderOffset });
-          if (!page || page.length === 0) break;
-          for (const f of page) {
-            if (f.id === null) allProductFolders.push(f); // only folders
-          }
-          if (page.length < LIST_LIMIT) break;
-          folderOffset += LIST_LIMIT;
-        }
-
-        log.upload(`recompressAll storage walk | user=${userPrefix.slice(0,8)} productFolders=${allProductFolders.length}`);
-
-        // Step 2c: list files inside each product folder (in chunks of 50)
-        const FOLDER_CHUNK = 50;
-        for (let fi = 0; fi < allProductFolders.length; fi += FOLDER_CHUNK) {
-          const folderBatch = allProductFolders.slice(fi, fi + FOLDER_CHUNK);
-          await Promise.all(folderBatch.map(async (folder) => {
-            const folderPath = `${userPrefix}/${folder.name}`;
-            const { data: files } = await supabase.storage
-              .from('product-images')
-              .list(folderPath, { limit: LIST_LIMIT, offset: 0 });
-            if (!files) return;
-            for (const file of files) {
-              if (file.id === null) continue; // sub-subfolder, skip
-              const storagePath = `${folderPath}/${file.name}`;
-              if (!storagePathToUrl.has(storagePath)) {
-                const { data: { publicUrl } } = supabase.storage
-                  .from('product-images')
-                  .getPublicUrl(storagePath);
-                storagePathToUrl.set(storagePath, publicUrl);
-              }
-            }
-          }));
-          // Update scanning progress UI
-          setRecompressAllState(prev => prev ? {
-            ...prev,
-            running: true,
-            total: -1, // sentinel = still scanning
-            done: storagePathToUrl.size,
-          } : { running: true, done: storagePathToUrl.size, total: -1, savedKB: 0, skipped: 0, alreadyDone: 0, errors: [] });
-        }
-      }
-    }
-    log.upload(`recompressAll storage walk | totalFiles=${storagePathToUrl.size}`);
-
-    // ── Merge both sources ───────────────────────────────────────────────────
-    // DB rows take precedence (they have the authoritative CDN URL);
-    // storage walk fills in anything missing.
-    const merged = new Map<string, string>(storagePathToUrl);
-    for (const [p, u] of dbPathToUrl) merged.set(p, u); // DB overwrites storage-derived URL
-
-    const needsWork: { storagePath: string; url: string }[] = [];
-    let alreadyDoneCount = 0;
-    for (const [storagePath, url] of merged) {
-      if (alreadyCompressed.has(storagePath)) { alreadyDoneCount++; }
-      else { needsWork.push({ storagePath, url }); }
-    }
-
-    log.upload(`recompressAll | total=${merged.size} needsWork=${needsWork.length} alreadyDone=${alreadyDoneCount}`);
-
-    if (needsWork.length === 0) {
-      setRecompressAllState({ running: false, done: 0, total: 0, savedKB: 0, skipped: 0, alreadyDone: alreadyDoneCount, errors: [] });
-      return;
-    }
-
-    setRecompressAllState({ running: true, done: 0, total: needsWork.length, savedKB: 0, skipped: 0, alreadyDone: alreadyDoneCount, errors: [] });
-
-    let totalSavedBytes = 0;
-    let skipped = 0;
-    const errors: string[] = [];
-    const CHUNK = 5;
-
-    for (let i = 0; i < needsWork.length; i += CHUNK) {
-      const chunk = needsWork.slice(i, i + CHUNK);
-      await Promise.all(chunk.map(async ({ storagePath, url }) => {
-        if (!url || !storagePath) return;
-
-        try {
-          const resp = await fetch(url);
-          if (!resp.ok) {
-            const msg = `Fetch failed (${resp.status}) — ${storagePath.split('/').pop()}`;
-            log.upload(`recompressAll fetch error | ${storagePath} status=${resp.status}`);
-            errors.push(msg);
-            skipped++;
-            return;
-          }
-          const blob = await resp.blob();
-
-          if (blob.size < RECOMPRESS_SKIP_UNDER_BYTES) {
-            markCompressed(storagePath);
-            skipped++;
-            return;
-          }
-
-          if (blob.type === 'image/avif' && blob.size < 100 * 1024) {
-            markCompressed(storagePath);
-            skipped++;
-            return;
-          }
-
-          const originalSize = blob.size;
-          const originalFile = new File([blob], 'img.jpg', { type: blob.type, lastModified: Date.now() });
-          const compressed = await compressImage(originalFile);
-
-          if (compressed.size >= originalSize * 0.9) {
-            markCompressed(storagePath);
-            skipped++;
-            return;
-          }
-
-          const { error } = await supabase.storage
-            .from('product-images')
-            .upload(storagePath, compressed, {
-              contentType: 'image/jpeg',
-              cacheControl: '3600',
-              upsert: true,
-            });
-
-          if (error) {
-            const msg = `Upload error — ${storagePath.split('/').pop()}: ${error.message}`;
-            log.upload(`recompressAll upload error | ${storagePath} ${error.message}`);
-            errors.push(msg);
-            skipped++;
-            return;
-          }
-
-          markCompressed(storagePath);
-          totalSavedBytes += originalSize - compressed.size;
-          log.upload(`recompressAll OK | ${storagePath} ${(originalSize/1024).toFixed(0)}KB → ${(compressed.size/1024).toFixed(0)}KB`);
-        } catch (err) {
-          const msg = `Error — ${storagePath.split('/').pop()}: ${err instanceof Error ? err.message : String(err)}`;
-          log.upload(`recompressAll exception | ${storagePath} ${msg}`);
-          errors.push(msg);
-          skipped++;
-        }
-      }));
-
-      setRecompressAllState({
-        running: true,
-        done: Math.min(i + CHUNK, needsWork.length),
-        total: needsWork.length,
-        savedKB: Math.round(totalSavedBytes / 1024),
-        skipped,
-        alreadyDone: alreadyDoneCount,
-        errors: [...errors],
-      });
-    }
-
-    setRecompressAllState({
-      running: false,
-      done: needsWork.length,
-      total: needsWork.length,
-      savedKB: Math.round(totalSavedBytes / 1024),
-      skipped,
-      alreadyDone: alreadyDoneCount,
-      errors: [...errors],
-    });
-    log.upload(`recompressAll done | saved=${(totalSavedBytes/1024/1024).toFixed(2)}MB skipped=${skipped} errors=${errors.length} alreadyDone=${alreadyDoneCount}`);
+    log.upload(`recompressExisting done | saved=${(totalSavedBytes/1024/1024).toFixed(2)}MB skipped=${skipped} errors=${errors.length}`);
   };
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -1083,195 +742,8 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImagesUploaded, userId, exi
           );
         })()}
 
-        {/* ── EXIF rescan button — backfill capturedAt for already-uploaded items ── */}
-        {!isUploading && !extractingZip && (existingItems?.length ?? 0) > 0 && onCapturedAtUpdated && (() => {
-          const candidates = (existingItems ?? []).filter(i => i.storagePath && (i.imageUrls?.[0] || i.thumbnailUrl || i.preview));
-          if (candidates.length === 0) return null;
-
-          return (
-            <div style={{ marginTop: '0.5rem' }}>
-              {rescanExifState === null ? (
-                <button
-                  type="button"
-                  onClick={rescanExifCapturedAt}
-                  disabled={recompressState?.running === true || recompressAllState?.running === true}
-                  title="Download each image and read its EXIF DateTimeOriginal tag to fix sort order. Run once — new uploads are handled automatically."
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem 1rem',
-                    background: 'linear-gradient(135deg, #f59e0b 0%, #b45309 100%)',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontWeight: 600,
-                    fontSize: '0.85rem',
-                    cursor: (recompressState?.running || recompressAllState?.running) ? 'not-allowed' : 'pointer',
-                    opacity: (recompressState?.running || recompressAllState?.running) ? 0.5 : 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.4rem',
-                  }}
-                >
-                  📷 Fix Sort Order (EXIF rescan — {candidates.length} images)
-                </button>
-              ) : rescanExifState.running ? (
-                <div style={{
-                  background: 'rgba(245,158,11,0.1)',
-                  border: '1px solid #f59e0b',
-                  borderRadius: '8px',
-                  padding: '0.6rem 1rem',
-                  fontSize: '0.85rem',
-                  color: '#92400e',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                }}>
-                  <div className="spinner" style={{ width: '14px', height: '14px', borderWidth: '2px' }} />
-                  Reading EXIF… {rescanExifState.done}/{rescanExifState.total}
-                  {rescanExifState.updated > 0 && ` · ${rescanExifState.updated} updated`}
-                  {rescanExifState.noExif > 0 && ` · ${rescanExifState.noExif} no tag`}
-                </div>
-              ) : (
-                <div style={{
-                  background: 'rgba(245,158,11,0.1)',
-                  border: '1px solid #f59e0b',
-                  borderRadius: '8px',
-                  padding: '0.6rem 1rem',
-                  fontSize: '0.85rem',
-                  color: '#92400e',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-                    <span>
-                      📷 EXIF rescan done —{' '}
-                      <strong>{rescanExifState.updated} date{rescanExifState.updated !== 1 ? 's' : ''} updated</strong>
-                      {rescanExifState.noExif > 0 && `, ${rescanExifState.noExif} had no EXIF tag`}
-                      {rescanExifState.updated > 0 && ' · sort order refreshed'}
-                    </span>
-                    <button
-                      onClick={() => setRescanExifState(null)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: '#92400e', flexShrink: 0 }}
-                    >
-                      ✕ dismiss
-                    </button>
-                  </div>
-                  {rescanExifState.errors.length > 0 && (
-                    <div style={{ marginTop: '0.5rem', borderTop: '1px solid #fcd34d', paddingTop: '0.4rem' }}>
-                      <div style={{ color: '#991b1b', fontWeight: 600, fontSize: '0.78rem', marginBottom: '0.2rem' }}>
-                        ⚠️ {rescanExifState.errors.length} error{rescanExifState.errors.length !== 1 ? 's' : ''}:
-                      </div>
-                      <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.75rem', color: '#7f1d1d', lineHeight: 1.5 }}>
-                        {rescanExifState.errors.map((e, idx) => <li key={idx}>{e}</li>)}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })()}
-
         {/* ── Recompress ALL batches ─────────────────────────────────────────── */}
-        {!isUploading && !extractingZip && (() => {
-          const compressedPaths = getCompressedPaths();
-          // We don't know the full total until the DB query runs, so just show the button
-          // with a note. After the run, show stats like the per-batch button.
-          const runningOrDone = recompressAllState !== null;
-
-          return (
-            <div style={{ marginTop: '0.5rem' }}>
-              {!runningOrDone ? (
-                <button
-                  type="button"
-                  onClick={recompressAllBatches}
-                  disabled={recompressState?.running === true}
-                  title="Query the database for every image you've ever uploaded across ALL batches and compress them all. Safe to run multiple times — already-compressed images are skipped."
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem 1rem',
-                    background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontWeight: 600,
-                    fontSize: '0.85rem',
-                    cursor: recompressState?.running ? 'not-allowed' : 'pointer',
-                    opacity: recompressState?.running ? 0.5 : 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.4rem',
-                  }}
-                >
-                  🗄️ Compress All Batches
-                  {compressedPaths.size > 0 && (
-                    <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>
-                      ({compressedPaths.size} already done)
-                    </span>
-                  )}
-                </button>
-              ) : recompressAllState.running ? (
-                <div style={{
-                  background: 'rgba(99,102,241,0.1)',
-                  border: '1px solid #6366f1',
-                  borderRadius: '8px',
-                  padding: '0.6rem 1rem',
-                  fontSize: '0.85rem',
-                  color: '#3730a3',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                }}>
-                  <div className="spinner" style={{ width: '14px', height: '14px', borderWidth: '2px', borderColor: '#6366f1', borderTopColor: 'transparent' }} />
-                  {recompressAllState.total === -1
-                    ? `Scanning storage… ${recompressAllState.done} folders checked`
-                    : `Compressing all batches… ${recompressAllState.done}/${recompressAllState.total}`
-                  }
-                  {recompressAllState.savedKB > 0 && ` · saved ${recompressAllState.savedKB >= 1024
-                    ? `${(recompressAllState.savedKB/1024).toFixed(1)} MB`
-                    : `${recompressAllState.savedKB} KB`} so far`}
-                  {recompressAllState.skipped > 0 && ` · ${recompressAllState.skipped} skipped`}
-                </div>
-              ) : (
-                <div style={{
-                  background: 'rgba(99,102,241,0.1)',
-                  border: '1px solid #6366f1',
-                  borderRadius: '8px',
-                  padding: '0.6rem 1rem',
-                  fontSize: '0.85rem',
-                  color: '#3730a3',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-                    <span>
-                      ✅ All batches done! Saved{' '}
-                      <strong>{recompressAllState.savedKB >= 1024
-                        ? `${(recompressAllState.savedKB/1024).toFixed(1)} MB`
-                        : `${recompressAllState.savedKB} KB`}</strong>
-                      {recompressAllState.alreadyDone > 0 && ` · ${recompressAllState.alreadyDone} already compressed`}
-                      {recompressAllState.skipped > 0 && ` · ${recompressAllState.skipped} skipped`}
-                    </span>
-                    <button
-                      onClick={() => setRecompressAllState(null)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: '#3730a3', flexShrink: 0 }}
-                    >
-                      ✕ dismiss
-                    </button>
-                  </div>
-                  {recompressAllState.errors.length > 0 && (
-                    <div style={{ marginTop: '0.5rem', borderTop: '1px solid #a5b4fc', paddingTop: '0.4rem' }}>
-                      <div style={{ color: '#991b1b', fontWeight: 600, fontSize: '0.78rem', marginBottom: '0.2rem' }}>
-                        ⚠️ {recompressAllState.errors.length} error{recompressAllState.errors.length !== 1 ? 's' : ''}:
-                      </div>
-                      <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.75rem', color: '#7f1d1d', lineHeight: 1.5 }}>
-                        {recompressAllState.errors.map((e, idx) => <li key={idx}>{e}</li>)}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })()}
+        {/* Button hidden — compression runs automatically on import */}
       </div>
   );
 };
