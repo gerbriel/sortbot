@@ -467,6 +467,19 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         setImages(imageList);
         log.library(`loadAll DONE | batches=${finalBatches.length} groups=${finalGroups.length} images=${imageList.length}`);
 
+        // Detailed breakdown when debug is on
+        if (window.__SORTBOT_DEBUG__) {
+          const unassigned = imageList.filter(img => !img.batchId);
+          const assigned = imageList.filter(img => img.batchId);
+          log.library(`loadAll detail | assigned=${assigned.length} unassigned=${unassigned.length}`);
+          unassigned.forEach(img => {
+            log.library(`  unassigned img id=${img.id.slice(0,8)} productGroup=${img.productGroup?.slice(0,8) ?? 'NONE'} isSaved=${img.isSaved}`);
+          });
+          finalGroups.forEach(g => {
+            log.library(`  group id=${g.id.slice(0,8)} title="${g.title}" batchId=${g.batchId?.slice(0,8) ?? 'NONE'} isSaved=${g.isSaved} images=${g.images.length}`);
+          });
+        }
+
         // Collapse all batches AND product groups by default on load
         setCollapsedBatches(prev => {
           const next = new Set(prev);
@@ -1447,7 +1460,10 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         const imgIdSource = fetchedImgIds.length > 0 ? 'DB fetch' : 'state fallback';
 
         if (imgIds.length > 0) {
-          if (isDebugging && fetchedImgIds.length === 0) {
+          if (fetchedImgIds.length === 0) {
+            // DB SELECT returned 0 — RLS is almost certainly blocking it.
+            // Fall back to deleting by known state IDs.
+            console.warn(`[Library] ⚠️ RLS WARNING: product_images SELECT returned 0 for product_id=${chunk.map(id=>id.slice(0,8)).join(',')} — falling back to state IDs. Run the Supabase RLS migration at supabase.com/dashboard/project/SUPABASE_PROJECT_ID/sql/new`);
             addTrace('warn', 'product_images fallback', `DB fetch returned 0 — using ${fallbackImgIds.length} known IDs from state: ${fallbackImgIds.map(id => id.slice(0, 8)).join(', ')}`);
           }
           const { data: delImgData, error: delImgErr } = await supabase
@@ -1478,6 +1494,9 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
         const { data: delProdData, error: delProdErr } = await supabase
           .from('products').delete().in('id', chunk).select('id');
+        if (!delProdErr && (delProdData?.length ?? 0) < chunk.length) {
+          console.warn(`[Library] ⚠️ RLS WARNING: products DELETE confirmed 0 rows deleted for ids=${chunk.map(id=>id.slice(0,8)).join(',')} — Supabase RLS DELETE policy is blocking this user. Run the migration at supabase.com/dashboard/project/SUPABASE_PROJECT_ID/sql/new`);
+        }
         if (isDebugging) {
           if (delProdErr) addTrace('error', 'DELETE products', `BLOCKED — ${delProdErr.message} (code ${delProdErr.code}) ← likely RLS`);
           else addTrace(
