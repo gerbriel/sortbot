@@ -116,6 +116,55 @@
   border-bottom: 1px solid var(--gray-200);
 }
 
+/* Step 1 header row with inline import buttons */
+.step1-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--gray-200);
+}
+.step1-header h2 {
+  color: var(--gray-700);
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.step1-header-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+.step1-import-btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+.step1-import-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.step1-folder-btn {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: #fff;
+}
+.step1-zip-btn {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #fff;
+}
+
 .step-description {
   color: var(--gray-500);
   font-size: 0.9375rem;
