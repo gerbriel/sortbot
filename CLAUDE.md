@@ -96,7 +96,7 @@ sortingapp/
 │   │   ├── ImageGrouper.css
 │   │   ├── CategoryZones.tsx      # Step 2 right panel. Drag groups onto categories. Loads categories from DB.
 │   │   ├── CategoryZones.css
-│   │   ├── ProductDescriptionGenerator.tsx  # Step 3. Voice recording, AI generation, field editing. 1636 lines. Has cursor-following magnifier lens on main preview image.
+│   │   ├── ProductDescriptionGenerator.tsx  # Step 3. Voice recording, AI generation, field editing. No Save button (auto-saved via Next/Prev). Finish button exports CSV. Has cursor-following magnifier lens on main preview image.
 │   │   ├── ProductDescriptionGenerator.css
 │   │   ├── ComprehensiveProductForm.tsx     # Sub-form within Step 3 for all product fields. No local state.
 │   │   ├── ComprehensiveProductForm.css
@@ -695,6 +695,10 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
   - `Cmd+Shift+A` / `Ctrl+Shift+A` — select all **multi-image groups** (every item inside every group; singles excluded); toggle: press again to deselect
   - `Cmd+D` / `Ctrl+D` — deselect everything (hard clear, no toggle)
   - All three are no-ops when an `<input>` or `<textarea>` has focus (prevents accidental fire while typing); `Cmd+D` also skips if selection is already empty
+- ✅ **Save button removed from Step 3** (commit `e249150`) — the manual "Save" button in `ProductDescriptionGenerator.tsx` was redundant: `syncGroupFieldsToDatabase` (products table) is already called by Next/Prev navigation; removed button, `isSaving` state, `saveConfirmed` state; `handleSave()` simplified to just call `syncGroupFieldsToDatabase` + `setHasUnsavedChanges(false)` with no UI feedback — it is still called internally by Next/Prev when `hasUnsavedChanges` is true
+- ✅ **Finish button exports CSV** (commit `8ad523b`) — `handleFinish` in `ProductDescriptionGenerator.tsx` no longer shows an alert or blocks on `allProcessed`; it always calls `onProcessed(processedItems)` (writes items to App.tsx) then immediately calls `onDownloadCSV?.()` (triggers the `GoogleSheetExporter` ref's `downloadCSV`); navigation to Step 4 still happens via `onProcessed` → App.tsx state update
+- ✅ **Export preview table — real data** (commit `37f44a0`) — preview table in `GoogleSheetExporter.tsx` was showing raw IDs (`product-1`, `product-2`) and empty prices because it read `product.seoTitle` directly; fixed by extracting `buildCleanTitle(product, idx)` shared helper (strips `{tokens}`, prepends brand, falls back to auto-parts) used by both the preview table and `handleDownloadCSV`; preview now shows real titles, `$X.XX` prices, `—` for empty fields, tag truncation with tooltip, 80-char description preview
+- ✅ **Export preview expanded to all 63 CSV columns** (commit `f450e1b`) — preview table in `GoogleSheetExporter.tsx` replaced the 5-column table with a full 63-column horizontally-scrollable table; `overflow-x: auto` on the container, `position: sticky` + `top: 0` on `<thead>` for a frozen header row, `white-space: nowrap` on cells, `min-width: 4800px` on the table; shows up to 10 products; each cell value computed identically to the CSV row builder using the same helpers (`buildCleanTitle`, `SHOPIFY_CATEGORY_MAP`, etc.); long text cells (Description, SEO description) truncated to 60 chars with `…` and full value in the `title` tooltip; other cells truncated at 35 chars
 
 ---
 
