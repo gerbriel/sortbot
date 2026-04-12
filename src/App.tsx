@@ -238,8 +238,9 @@ function App() {
   processedItemsRef.current = processedItems;
   const uploadedImagesRef = useRef<ClothingItem[]>([]);
   uploadedImagesRef.current = uploadedImages;
-  // Guard against concurrent preset applications (e.g. double-click)
-  const isApplyingPresetRef = useRef(false);
+  // Guard against rapid double-clicks on preset buttons — timestamp-based (not async lock)
+  // so sequential presses on different groups aren't blocked.
+  const isApplyingPresetRef = useRef<number>(0);
   const [currentBatchNumber, setCurrentBatchNumber] = useState<string>(() => {
     return localStorage.getItem('sortbot_current_batch_number') || `batch-${Date.now()}`;
   });
@@ -922,10 +923,14 @@ function App() {
     setGroupedImages(items);
     
     // Sync categories AND productGroup to processedItems (preserve voice descriptions if they exist)
+    // IMPORTANT: read from processedItemsRef (not the processedItems closure) so we always
+    // merge against the latest state, even when handleImagesSorted is called in rapid succession
+    // (e.g. applying presets to multiple groups back-to-back).
+    const liveProcessed = processedItemsRef.current;
     let finalProcessed: ClothingItem[];
-    if (processedItems.length > 0) {
+    if (liveProcessed.length > 0) {
       // Update existing processedItems with new categories + group assignments
-      finalProcessed = processedItems.map(procItem => {
+      finalProcessed = liveProcessed.map(procItem => {
         const sortedItem = items.find(i => i.id === procItem.id);
         if (sortedItem) {
           return {
@@ -978,11 +983,13 @@ function App() {
   // a category zone with items selected.
   const handleApplyPreset = async (preset: CategoryPreset) => {
     log.app(`handleApplyPreset | preset="${preset.display_name}" selectedCount=${selectedGroupItems.size}`);
-    // Guard against double-clicks or rapid repeated presses while async work is in flight
-    if (isApplyingPresetRef.current) return;
+    // Debounce: ignore if another press just fired within 300ms (double-click guard).
+    // Using a timestamp instead of a boolean lock so sequential presses on different
+    // groups are never blocked — only true rapid double-clicks are dropped.
+    const now = Date.now();
+    if (now - isApplyingPresetRef.current < 300) return;
+    isApplyingPresetRef.current = now;
     if (selectedGroupItems.size === 0) return;
-    isApplyingPresetRef.current = true;
-    try {
     // Use refs so we always read the latest state even if this fires in the same
     // render cycle as a group operation (setGroupedImages hasn't re-rendered yet).
     const liveGrouped = groupedImagesRef.current;
@@ -1058,9 +1065,6 @@ function App() {
     await handleImagesSorted(updatedItems);
     setSelectedGroupItems(new Set());
     grouperActionsRef.current?.clearSelection();
-    } finally {
-      isApplyingPresetRef.current = false;
-    }
   };
 
   const handleImagesGrouped = async (items: ClothingItem[]) => {
