@@ -105,41 +105,54 @@ function isLikelyBackground(rgb: [number, number, number]): boolean {
 }
 
 /**
- * Build multiple narrow canvas strips from the center column of the image.
- * Clothing hangs in the center-horizontal band of the frame, so we take
- * the middle 40% of width but sample across the full usable height in slices.
- * This captures the garment body without picking up background at the edges.
+ * Build canvas samples from the FABRIC zones of a hanging shirt photo —
+ * deliberately avoiding the center where large prints/graphics live.
+ *
+ * Strategy: sample 4 corner-adjacent zones that are almost always solid
+ * garment fabric: left shoulder, right shoulder, bottom-left hem,
+ * bottom-right hem. Each zone is a narrow strip well inside the frame
+ * so background edges are also avoided.
+ *
+ *  ┌────────────────────────────────┐
+ *  │  [L-shoulder]   [R-shoulder]  │  ← y: 12%–32% of height
+ *  │         (CENTER PRINT)        │  ← skipped
+ *  │  [BL-hem]          [BR-hem]   │  ← y: 70%–90% of height
+ *  └────────────────────────────────┘
+ *
+ * Horizontal inset: each zone is 15%–35% from the respective side edge,
+ * keeping us off the background that bleeds in around the hanging garment.
  */
-function getCenterStripCanvases(img: HTMLImageElement): HTMLCanvasElement[] {
+function getFabricZoneCanvases(img: HTMLImageElement): HTMLCanvasElement[] {
   const srcW = img.naturalWidth  || img.width;
   const srcH = img.naturalHeight || img.height;
 
-  // Horizontal: center 40% of image width (avoids left/right background)
-  const stripW = Math.floor(srcW * 0.40);
-  const stripX = Math.floor((srcW - stripW) / 2);
+  // Zone dimensions — each patch is ~20% wide × 20% tall
+  const zoneW = Math.floor(srcW * 0.20);
+  const zoneH = Math.floor(srcH * 0.20);
 
-  // Vertical: skip top 10% (hanger/hook) and bottom 5% (floor/table edge)
-  // then divide the remaining height into 3 equal slices
-  const usableTop    = Math.floor(srcH * 0.10);
-  const usableBottom = Math.floor(srcH * 0.95);
-  const usableH      = usableBottom - usableTop;
-  const sliceH       = Math.floor(usableH / 3);
+  // Horizontal positions: left zone starts at 15% in, right zone ends at 85%
+  const leftX  = Math.floor(srcW * 0.15);
+  const rightX = Math.floor(srcW * 0.65); // starts at 65% so it ends at 85%
 
-  const canvases: HTMLCanvasElement[] = [];
+  // Vertical positions: shoulders at 12–32%, hems at 70–90%
+  const shoulderY = Math.floor(srcH * 0.12);
+  const hemY      = Math.floor(srcH * 0.70);
 
-  for (let i = 0; i < 3; i++) {
-    const srcY = usableTop + i * sliceH;
+  const zones = [
+    { x: leftX,  y: shoulderY }, // left shoulder
+    { x: rightX, y: shoulderY }, // right shoulder
+    { x: leftX,  y: hemY      }, // bottom-left hem
+    { x: rightX, y: hemY      }, // bottom-right hem
+  ];
+
+  return zones.map(({ x, y }) => {
     const canvas = document.createElement('canvas');
-    canvas.width  = stripW;
-    canvas.height = sliceH;
+    canvas.width  = zoneW;
+    canvas.height = zoneH;
     const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.drawImage(img, stripX, srcY, stripW, sliceH, 0, 0, stripW, sliceH);
-      canvases.push(canvas);
-    }
-  }
-
-  return canvases;
+    if (ctx) ctx.drawImage(img, x, y, zoneW, zoneH, 0, 0, zoneW, zoneH);
+    return canvas;
+  });
 }
 
 /** Nearest-neighbor lookup: map an RGB value to the closest color name. */
@@ -185,7 +198,7 @@ export async function extractGroupPrimaryColor(imageUrls: string[]): Promise<str
     imageUrls.map(async (url) => {
       try {
         const img     = await loadImage(url);
-        const strips  = getCenterStripCanvases(img);
+        const strips  = getFabricZoneCanvases(img);
         for (const canvas of strips) {
           // colorCount 8 gives more data points for better color voting
           const palette = getPaletteSync(canvas, { colorCount: 8 });
