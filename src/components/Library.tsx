@@ -427,6 +427,12 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         const batchEntry = batchId ? batchesById.get(batchId) : undefined;
         const batchName = batchEntry ? makeBatchName(batchEntry) : undefined;
         const groupLeaderId = img.products?.product_group || img.products?.id;
+        if (!groupLeaderId) {
+          // Orphaned product_images row — parent products row is missing.
+          // Still show it in the Library (so user can delete it), but productGroup will be
+          // undefined which handleDeleteUnassigned now handles via the orphan path.
+          log.library(`loadAll | orphaned product_images row id=${img.id?.slice(0, 8)} (no parent products row)`);
+        }
         const groupLeaderMembers = dbGroupMap.get(groupLeaderId);
         const groupLeaderTitle = groupLeaderMembers
           ? cleanTitle((groupLeaderMembers.find((p: any) => p.id === groupLeaderId) || groupLeaderMembers[0])?.title)
@@ -1368,22 +1374,32 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       setDeleteTrace([]);
       setShowDeleteTrace(true);
       addTrace('info', 'START', `unassignedImages in state: ${unassignedImages.length}`);
+      // Show the raw shape of each unassigned image for diagnosis
+      unassignedImages.forEach(img => {
+        addTrace('info', `  img ${img.id.slice(0, 8)}`, `productGroup=${img.productGroup?.slice(0, 8) ?? 'undefined'} isSaved=${img.isSaved} createdAt=${img.createdAt?.slice(0, 10)}`);
+      });
     }
 
     setWorkingUnassigned(true);
     try {
+      // ── Bucket 1: images WITH a productGroup (normal path) ────────────────
       const productIds = [...new Set(
         unassignedImages.map(img => img.productGroup).filter(Boolean) as string[]
       )];
       const productIdSet = new Set(productIds);
 
+      // ── Bucket 2: orphaned product_images rows (productGroup is undefined) ─
+      // These are product_images rows whose parent products row has already been
+      // deleted (or was never saved), leaving an orphan that keeps reappearing.
+      const orphanImgIds = unassignedImages
+        .filter(img => !img.productGroup)
+        .map(img => img.id);
+
       if (isDebugging) {
         addTrace('info', 'productIds', `${productIds.length} unique IDs: ${productIds.map(id => id.slice(0, 8)).join(', ')}`);
-        // Images with no productGroup at all
-        const noGroup = unassignedImages.filter(img => !img.productGroup);
-        if (noGroup.length > 0) {
-          addTrace('warn', 'NO productGroup', `${noGroup.length} images have no productGroup field — they will be SKIPPED`);
-          noGroup.forEach(img => addTrace('warn', '  ↳ img.id', img.id.slice(0, 8)));
+        if (orphanImgIds.length > 0) {
+          addTrace('warn', 'ORPHAN product_images', `${orphanImgIds.length} images have no productGroup — treating as orphaned product_images rows, will delete by id directly`);
+          orphanImgIds.forEach(id => addTrace('warn', '  ↳ orphan id', id.slice(0, 8)));
         }
       }
 
@@ -1456,6 +1472,37 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         if (delProdErr) console.error('[Library] handleDeleteUnassigned | products delete error', delProdErr);
       }
 
+      // ── Step 4b: delete orphaned product_images rows directly ─────────────
+      // These are product_images rows with no parent products row — their productGroup
+      // is undefined in state, so they're skipped by the normal productIds loop.
+      if (orphanImgIds.length > 0) {
+        const OCHUNK = 100;
+        for (let i = 0; i < orphanImgIds.length; i += OCHUNK) {
+          const chunk = orphanImgIds.slice(i, i + OCHUNK);
+
+          // Fetch storage paths first so we can clean up storage
+          const { data: orphanRows } = await supabase
+            .from('product_images').select('id, storage_path').in('id', chunk);
+          const orphanPaths = (orphanRows ?? []).map((r: any) => r.storage_path).filter(Boolean) as string[];
+          if (orphanPaths.length > 0) {
+            await supabase.storage.from('product-images').remove(orphanPaths);
+            if (isDebugging) addTrace('ok', 'orphan storage.remove', `removed ${orphanPaths.length} files`);
+          }
+
+          const { data: delOrphanData, error: delOrphanErr } = await supabase
+            .from('product_images').delete().in('id', chunk).select('id');
+          if (isDebugging) {
+            if (delOrphanErr) addTrace('error', 'DELETE orphan product_images', `BLOCKED — ${delOrphanErr.message} (code ${delOrphanErr.code}) ← likely RLS`);
+            else addTrace(
+              (delOrphanData?.length ?? 0) === chunk.length ? 'ok' : 'warn',
+              'DELETE orphan product_images',
+              `attempted ${chunk.length}, confirmed deleted ${delOrphanData?.length ?? '?'} rows`
+            );
+          }
+          if (delOrphanErr) console.error('[Library] handleDeleteUnassigned | orphan product_images delete error', delOrphanErr);
+        }
+      }
+
       // ── Step 5: scrub workflow_state ──────────────────────────────────────
       const { data: allBatches, error: fetchBatchErr } = await supabase
         .from('workflow_batches')
@@ -1496,17 +1543,29 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
       // ── Step 6: re-fetch to confirm ───────────────────────────────────────
       if (isDebugging) {
-        const { data: recheck } = await supabase.from('products').select('id').in('id', [...productIdSet]);
-        if ((recheck?.length ?? 0) === 0) {
-          addTrace('ok', 'CONFIRM re-fetch', `all ${productIds.length} product rows gone from DB ✓`);
-        } else {
-          addTrace('error', 'CONFIRM re-fetch', `${recheck?.length} rows STILL EXIST after delete — RLS is blocking`);
-          (recheck ?? []).forEach((r: any) => addTrace('error', '  ↳ surviving id', r.id.slice(0, 8)));
+        if (productIds.length > 0) {
+          const { data: recheck } = await supabase.from('products').select('id').in('id', [...productIdSet]);
+          if ((recheck?.length ?? 0) === 0) {
+            addTrace('ok', 'CONFIRM products', `all ${productIds.length} product rows gone ✓`);
+          } else {
+            addTrace('error', 'CONFIRM products', `${recheck?.length} rows STILL EXIST — RLS blocking`);
+            (recheck ?? []).forEach((r: any) => addTrace('error', '  ↳ surviving id', r.id.slice(0, 8)));
+          }
+        }
+        if (orphanImgIds.length > 0) {
+          const { data: orphanRecheck } = await supabase.from('product_images').select('id').in('id', orphanImgIds);
+          if ((orphanRecheck?.length ?? 0) === 0) {
+            addTrace('ok', 'CONFIRM orphans', `all ${orphanImgIds.length} orphan product_images rows gone ✓`);
+          } else {
+            addTrace('error', 'CONFIRM orphans', `${orphanRecheck?.length} orphan rows STILL EXIST — RLS blocking`);
+            (orphanRecheck ?? []).forEach((r: any) => addTrace('error', '  ↳ surviving id', r.id.slice(0, 8)));
+          }
         }
       }
 
-      setImages(prev => prev.filter(img => img.batchId));
-      log.library(`handleDeleteUnassigned | deleted ${productIds.length} products`);
+      const orphanIdSet = new Set(orphanImgIds);
+      setImages(prev => prev.filter(img => img.batchId && !orphanIdSet.has(img.id)));
+      log.library(`handleDeleteUnassigned | deleted ${productIds.length} products + ${orphanImgIds.length} orphans`);
       if (isDebugging) addTrace('ok', 'DONE', `state updated — images filtered to batchId-only`);
     } catch (err) {
       console.error('[Library] handleDeleteUnassigned error', err);
