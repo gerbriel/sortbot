@@ -1158,6 +1158,15 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     }
   };
 
+  // Guard: no items ready yet (nothing categorized)
+  if (!currentItem) {
+    return (
+      <div className="product-description-container" style={{ padding: '2rem', textAlign: 'center', color: '#888', fontSize: '0.95rem' }}>
+        ⚠️ No categorized items yet — go back to Step 2 and drag items to a category zone.
+      </div>
+    );
+  }
+
   return (
     <div className="product-description-container">
       <div className="progress-bar">
