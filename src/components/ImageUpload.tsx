@@ -198,12 +198,18 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
   const ballRotRef     = useRef(0);   // spinning angle of the ball graphic
   const ballSizeRef    = useRef(28);  // current rendered radius (shrinks slightly)
 
+  // Cat spring position — lags behind the ball
+  const catPosRef = useRef({ x: -300, y: -300 });
+
   const [yarnCursor, setYarnCursor] = useState<{ x: number; y: number; rot: number; r: number } | null>(null);
+  const [catPos, setCatPos]         = useState<{ x: number; y: number; flip: boolean } | null>(null);
 
   useEffect(() => {
     if (!isUploading) {
       setYarnCursor(null);
+      setCatPos(null);
       trailPointsRef.current = [];
+      catPosRef.current = { x: -300, y: -300 };
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       return;
     }
@@ -317,6 +323,18 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       }
 
       setYarnCursor({ x: mx, y: my, rot: ballRotRef.current, r: ballSizeRef.current });
+
+      // ── Cat spring chase ────────────────────────────────────────────────
+      // The cat position lags behind the yarn ball with a spring constant.
+      // SPRING controls how snappily it catches up (0 = frozen, 1 = instant).
+      const SPRING = 0.055;
+      const prevCat = catPosRef.current;
+      const newCatX = prevCat.x + (mx - prevCat.x) * SPRING;
+      const newCatY = prevCat.y + (my - prevCat.y) * SPRING;
+      const flipped = newCatX > prevCat.x; // cat faces the direction of travel
+      catPosRef.current = { x: newCatX, y: newCatY };
+      setCatPos({ x: newCatX, y: newCatY, flip: flipped });
+
       animFrameRef.current = requestAnimationFrame(tick);
     };
 
@@ -327,6 +345,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       document.body.style.cursor = '';
       trailPointsRef.current = [];
+      catPosRef.current = { x: -300, y: -300 };
     };
   }, [isUploading]);
 
@@ -681,6 +700,51 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
             <ellipse cx="28" cy="28" rx="26" ry="14" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5"/>
             <ellipse cx="28" cy="28" rx="10" ry="26" fill="none" stroke="rgba(120,40,0,0.18)"    strokeWidth="1.5"/>
             <ellipse cx="20" cy="18" rx="6" ry="4" fill="rgba(255,220,160,0.28)" />
+          </svg>
+        </div>
+      )}
+
+      {/* Cat chasing the yarn ball */}
+      {catPos && (
+        <div
+          className="yarn-cat"
+          style={{
+            left: catPos.x,
+            top:  catPos.y,
+            transform: `translate(-50%, -50%) scaleX(${catPos.flip ? 1 : -1})`,
+          } as React.CSSProperties}
+        >
+          {/* SVG cat — side-view silhouette, body crouched in a pounce */}
+          <svg viewBox="0 0 80 60" width="72" height="54" xmlns="http://www.w3.org/2000/svg">
+            {/* Body */}
+            <ellipse cx="38" cy="38" rx="22" ry="14" fill="#2d2d2d"/>
+            {/* Head */}
+            <ellipse cx="62" cy="26" rx="13" ry="12" fill="#2d2d2d"/>
+            {/* Ear left */}
+            <polygon points="53,18 57,8 63,17" fill="#2d2d2d"/>
+            {/* Ear right */}
+            <polygon points="63,17 68,8 72,18" fill="#2d2d2d"/>
+            {/* Inner ear left */}
+            <polygon points="54,18 57,11 62,17" fill="#c97"/>
+            {/* Inner ear right */}
+            <polygon points="64,17 68,11 71,18" fill="#c97"/>
+            {/* Eye */}
+            <ellipse cx="67" cy="25" rx="3" ry="3.5" fill="#eee"/>
+            <ellipse cx="67.5" cy="25" rx="1.5" ry="2.5" fill="#111"/>
+            {/* Nose */}
+            <polygon points="73,29 75,31 71,31" fill="#e87"/>
+            {/* Whiskers */}
+            <line x1="74" y1="30" x2="80" y2="28" stroke="#aaa" strokeWidth="0.8"/>
+            <line x1="74" y1="31" x2="80" y2="31" stroke="#aaa" strokeWidth="0.8"/>
+            <line x1="74" y1="32" x2="80" y2="34" stroke="#aaa" strokeWidth="0.8"/>
+            {/* Front legs (reaching forward in pounce) */}
+            <line x1="56" y1="50" x2="62" y2="55" stroke="#2d2d2d" strokeWidth="5" strokeLinecap="round"/>
+            <line x1="50" y1="50" x2="54" y2="56" stroke="#2d2d2d" strokeWidth="5" strokeLinecap="round"/>
+            {/* Back legs */}
+            <line x1="24" y1="50" x2="18" y2="56" stroke="#2d2d2d" strokeWidth="5" strokeLinecap="round"/>
+            <line x1="30" y1="50" x2="26" y2="57" stroke="#2d2d2d" strokeWidth="4" strokeLinecap="round"/>
+            {/* Tail — curved up */}
+            <path d="M16,40 Q4,28 10,18 Q14,10 20,14" fill="none" stroke="#2d2d2d" strokeWidth="5" strokeLinecap="round"/>
           </svg>
         </div>
       )}

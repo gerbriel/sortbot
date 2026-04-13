@@ -169,6 +169,23 @@
   animation: yarn-pulse 1.1s ease-in-out infinite;
 }
 
+/* ── Cat chasing the yarn ball ───────────────────────────────────────────── */
+@keyframes cat-gallop {
+  0%   { transform: translate(-50%, -50%) scaleX(var(--cat-flip, 1)) translateY(0px); }
+  25%  { transform: translate(-50%, -50%) scaleX(var(--cat-flip, 1)) translateY(-4px); }
+  50%  { transform: translate(-50%, -50%) scaleX(var(--cat-flip, 1)) translateY(0px); }
+  75%  { transform: translate(-50%, -50%) scaleX(var(--cat-flip, 1)) translateY(-2px); }
+  100% { transform: translate(-50%, -50%) scaleX(var(--cat-flip, 1)) translateY(0px); }
+}
+.yarn-cat {
+  position: fixed;
+  pointer-events: none;
+  z-index: 10000;   /* just below the ball (10001) */
+  will-change: left, top, transform;
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,0.5));
+  animation: cat-gallop 0.38s ease-in-out infinite;
+}
+
 /* ── Paused badge ─────────────────────────────────────────────────────────── */
 .yarn-paused-badge {
   position: fixed;
