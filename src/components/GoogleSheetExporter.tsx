@@ -1,6 +1,28 @@
 import { forwardRef, useImperativeHandle } from 'react';
 import type { ClothingItem } from '../App';
+import { supabase } from '../lib/supabase';
 import './GoogleSheetExporter.css';
+
+/**
+ * Returns a full https:// Supabase public URL for an item, or '' if unavailable.
+ * Rejects blob: URLs because Shopify can't fetch those.
+ */
+function resolvePublicUrl(item: ClothingItem): string {
+  // imageUrls[0] is the authoritative full-res URL — use it if it's a real https URL
+  const candidate = item.imageUrls?.[0] || '';
+  if (candidate.startsWith('https://')) return candidate;
+
+  // Fall back to reconstructing from storagePath
+  if (item.storagePath) {
+    return supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl;
+  }
+
+  // preview may be a blob URL (in-session before page reload) — reject it
+  const preview = item.preview || '';
+  if (preview.startsWith('https://')) return preview;
+
+  return '';
+}
 
 /**
  * Strip any unresolved {placeholder} tokens from a string.
@@ -90,8 +112,10 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
     return {
       ...productData,
       seoTitle: bestTitle,
-      // Use Supabase URLs if available, otherwise fall back to preview (blob URLs)
-      imageUrls: group.map(item => item.imageUrls?.[0] || item.preview),
+      // Resolve full https:// Supabase URLs for each item in the group.
+      // Rejects blob: URLs (in-session previews) — Shopify can't fetch those.
+      // Falls back to storagePath reconstruction if imageUrls is missing/blob.
+      imageUrls: group.map(item => resolvePublicUrl(item)).filter(Boolean),
       imageCount: group.length
     };
   });
