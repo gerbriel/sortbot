@@ -363,13 +363,14 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       const productStatus = product.status || 'Active';
       const imageCount = product.imageUrls?.length || 0;
       for (let i = 1; i < imageCount; i++) {
-        // Build a full 62-column row; only handle, status, image URL, position, and alt text are populated
+        // Build a full N-column row; only handle, status, image URL, position, and alt text are populated.
+        // Column indices must match the headers array above — use indexOf to stay resilient to future additions.
         const imageRow = Array(headers.length).fill('') as string[];
-        imageRow[1] = handle;            // URL handle
-        imageRow[8] = productStatus;     // Status
-        imageRow[35] = product.imageUrls[i] || ''; // Product image URL
-        imageRow[36] = String(i + 1);   // Image position
-        imageRow[37] = imageAltText || 'Product'; // Image alt text
+        imageRow[1] = handle;                                          // URL handle
+        imageRow[headers.indexOf('Status')] = productStatus;           // Status
+        imageRow[headers.indexOf('Product image URL')] = product.imageUrls[i] || ''; // Product image URL
+        imageRow[headers.indexOf('Image position')] = String(i + 1);  // Image position
+        imageRow[headers.indexOf('Image alt text')] = imageAltText || 'Product'; // Image alt text
         rows.push(imageRow);
       }
     });
