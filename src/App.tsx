@@ -826,17 +826,31 @@ function App() {
       localStorage.setItem('sortbot_current_batch_id', newBatchId);
     }
     
-    // If there are already grouped images, append to those too
+    // If there are already grouped images, append to those too.
+    // Build the updated array explicitly so we can pass it to autoSaveWorkflow
+    // (setGroupedImages is async — using the stale `groupedImages` closure in the
+    // autoSaveWorkflow call below would leave the new items out of the saved state).
+    let newGrouped = groupedImages;
+    let newSorted = sortedImages;
+    let newProcessed = processedItems;
     if (groupedImages.length > 0) {
-      setGroupedImages(prev => [...prev, ...items]);
+      newGrouped = [...groupedImages, ...items];
+      setGroupedImages(newGrouped);
+      // Also append new items to sortedImages / processedItems so the persisted list
+      // is complete and the new photos survive a page reload even before the user
+      // explicitly assigns them to a group in Step 2.
+      newSorted    = [...sortedImages,    ...items];
+      newProcessed = [...processedItems,  ...items];
+      setSortedImages(newSorted);
+      setProcessedItems(newProcessed);
     }
     
     // Auto-save workflow state (Step 1 complete)
     autoSaveWorkflow({
       uploadedImages: newImages,
-      groupedImages,
-      sortedImages,
-      processedItems,
+      groupedImages:  newGrouped,
+      sortedImages:   newSorted,
+      processedItems: newProcessed,
     });
 
     // Write uploaded images to product_images immediately so Library stays in sync.
