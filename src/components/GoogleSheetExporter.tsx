@@ -19,14 +19,23 @@ function stripUnresolvedTokens(value: string | undefined): string {
 /**
  * Maps short internal category names → full Shopify taxonomy path strings.
  * Used for "Product category" and "Google Shopping / Google product category" columns.
+ * Paths verified against Shopify Standard Product Taxonomy (github.com/Shopify/product-taxonomy).
  */
 const SHOPIFY_CATEGORY_MAP: Record<string, string> = {
-  tees:        'Apparel & Accessories > Clothing > Tops > T-Shirts',
-  sweatshirts: 'Apparel & Accessories > Clothing > Tops > Sweatshirts & Hoodies',
-  outerwear:   'Apparel & Accessories > Clothing > Outerwear > Jackets & Coats',
-  bottoms:     'Apparel & Accessories > Clothing > Bottoms > Pants',
+  tees:        'Apparel & Accessories > Clothing > Clothing Tops > T-Shirts',
+  sweatshirts: 'Apparel & Accessories > Clothing > Clothing Tops > Sweatshirts',
+  hoodies:     'Apparel & Accessories > Clothing > Clothing Tops > Hoodies',
+  outerwear:   'Apparel & Accessories > Clothing > Outerwear > Coats & Jackets',
+  bottoms:     'Apparel & Accessories > Clothing > Pants',
+  pants:       'Apparel & Accessories > Clothing > Pants',
+  jeans:       'Apparel & Accessories > Clothing > Pants > Jeans',
+  shorts:      'Apparel & Accessories > Clothing > Shorts',
+  dresses:     'Apparel & Accessories > Clothing > Dresses',
+  skirts:      'Apparel & Accessories > Clothing > Skirts',
   hats:        'Apparel & Accessories > Clothing Accessories > Hats',
-  femme:       'Apparel & Accessories > Clothing > Tops',
+  shoes:       'Apparel & Accessories > Shoes > Athletic Shoes',
+  accessories: 'Apparel & Accessories > Clothing Accessories',
+  femme:       'Apparel & Accessories > Clothing > Clothing Tops',
 };
 
 interface GoogleSheetExporterProps {
@@ -131,6 +140,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       'Vendor / Brand',
       'Product category',
       'Type',
+      'Standardized Product Type',
       'Tags',
       'Published on online store',
       'Status',
@@ -197,6 +207,9 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       const vendor = product.brand || '';
       const productCategory = SHOPIFY_CATEGORY_MAP[product.category?.toLowerCase() ?? ''] ?? product.category ?? '';
       const productType = product.productType || '';
+      // Standardized Product Type: prefer the preset's full taxonomy path stored on the item,
+      // then fall back to the productCategory lookup (which is also the full taxonomy path).
+      const standardizedProductType = product.shopifyProductType || productCategory;
       const tags = product.tags?.join(', ') || '';
       const condition = (product.condition || '').trim();
       const primaryColor = product.color || '';
@@ -248,6 +261,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         vendor, // Vendor / Brand
         productCategory, // Product category
         productType, // Type
+        standardizedProductType, // Standardized Product Type
         tags, // Tags
         product.published === false ? 'FALSE' : 'TRUE', // Published on online store
         product.status || 'Active', // Status
@@ -386,7 +400,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                 <thead>
                   <tr style={{ position: 'sticky', top: 0, zIndex: 2, background: '#f8fafc' }}>
                     {[
-                      'Title','URL handle','Description','Vendor / Brand','Product category','Type','Tags',
+                      'Title','URL handle','Description','Vendor / Brand','Product category','Type','Standardized Product Type','Tags',
                       'Published','Status','SKU','Barcode','Condition','Size Type','Size','Price','Currency',
                       'Compare-at price','Cost per item','Primary Color','Secondary Color','Charge tax','Tax code',
                       'Unit price total measure','Unit price total measure unit','Unit price base measure','Unit price base measure unit',
@@ -430,6 +444,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       vendor,
                       productCategory,
                       product.productType || '',
+                      product.shopifyProductType || productCategory,
                       tags,
                       product.published === false ? 'FALSE' : 'TRUE',
                       product.status || 'Active',
