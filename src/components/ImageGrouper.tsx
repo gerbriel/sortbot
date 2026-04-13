@@ -270,7 +270,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       const isSafeTarget = t.closest(
         '.single-item-card, .product-group-card, .group-header, .toolbar, button, [role="button"],' +
         '.category-zone, .category-zones-container, .category-zones, .category-list,' +
-        '.grouper-preset-picker, .grouper-preset-buttons, .button-preset,' +
         '.grouper-actions-sidebar'
       );
       if (!isSafeTarget) {

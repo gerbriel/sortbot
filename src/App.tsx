@@ -18,9 +18,6 @@ import CategoriesManager from './components/CategoriesManager';
 import { saveBatchToDatabase, getThumbnailUrl } from './lib/productService';
 import { autoSaveWorkflowBatch, type WorkflowBatch } from './lib/workflowBatchService';
 import type { BrandCategory } from './lib/brandCategorySystem';
-import { getCategoryPresets } from './lib/categoryPresetsService';
-import type { CategoryPreset } from './lib/categoryPresets';
-import { applyPresetDirectly } from './lib/applyPresetToGroup';
 import './App.css';
 
 export interface ClothingItem {
@@ -141,10 +138,9 @@ function App() {
   const [processedItems, setProcessedItems] = useState<ClothingItem[]>([]);
   const [selectedGroupItems, setSelectedGroupItems] = useState<Set<string>>(new Set());
   const [grouperActions, setGrouperActions] = useState<GrouperActions | null>(null);
-  // Ref mirror so onCategoryAssigned / handleApplyPreset closures always call the current clearSelection
+  // Ref mirror so onCategoryAssigned closures always call the current clearSelection
   const grouperActionsRef = useRef<GrouperActions | null>(null);
   grouperActionsRef.current = grouperActions;
-  const [categoryPresets, setCategoryPresets] = useState<CategoryPreset[]>([]);
   const [showLibrary, setShowLibrary] = useState(false);
   // Ref mirror so the autoSave closure (inside setTimeout) can read the live value
   // without capturing a stale boolean from the render where autoSave was scheduled.
@@ -243,9 +239,6 @@ function App() {
   processedItemsRef.current = processedItems;
   const uploadedImagesRef = useRef<ClothingItem[]>([]);
   uploadedImagesRef.current = uploadedImages;
-  // Guard against rapid double-clicks on preset buttons — timestamp-based (not async lock)
-  // so sequential presses on different groups aren't blocked.
-  const isApplyingPresetRef = useRef<number>(0);
   const [currentBatchNumber, setCurrentBatchNumber] = useState<string>(() => {
     return localStorage.getItem('sortbot_current_batch_number') || `batch-${Date.now()}`;
   });
@@ -253,29 +246,12 @@ function App() {
   // Keep showLibraryRef in sync so the autoSave closure always reads the live value
   useEffect(() => { showLibraryRef.current = showLibrary; }, [showLibrary]);
 
-  // Load category presets once the user is known
-  useEffect(() => {
-    if (!user) return;
-    getCategoryPresets()
-      .then(data => setCategoryPresets(data))
-      .catch(err => console.warn('[App] getCategoryPresets failed:', err));
-  }, [user]);
-
   // Fetch storage usage once the user is known
   useEffect(() => {
     if (!user) return;
     fetchStorageUsage(user.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
-
-  // Re-load presets whenever the CategoryPresetsManager modal closes (presets may have changed)
-  useEffect(() => {
-    if (showCategoryPresets || !user) return;
-    getCategoryPresets()
-      .then(data => setCategoryPresets(data))
-      .catch(() => {/* ignore */});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showCategoryPresets]);
 
   // Register restored workflow items in products + product_images so Library sees them.
   // Called after startup restore and handleOpenBatch. No-ops if rows already exist.
@@ -1016,95 +992,6 @@ function App() {
         setLibraryRefreshTrigger(prev => prev + 1);
       }
     }
-  };
-
-  // Apply a category preset to all currently selected items (sidebar preset picker)
-  // This ALSO merges the selected items into a single product group — same as clicking
-  // a category zone with items selected.
-  const handleApplyPreset = async (preset: CategoryPreset) => {
-    log.app(`handleApplyPreset | preset="${preset.display_name}" selectedCount=${selectedGroupItems.size}`);
-    // Debounce: ignore if another press just fired within 300ms (double-click guard).
-    // Using a timestamp instead of a boolean lock so sequential presses on different
-    // groups are never blocked — only true rapid double-clicks are dropped.
-    const now = Date.now();
-    if (now - isApplyingPresetRef.current < 300) return;
-    isApplyingPresetRef.current = now;
-    if (selectedGroupItems.size === 0) return;
-    // Use refs so we always read the latest state even if this fires in the same
-    // render cycle as a group operation (setGroupedImages hasn't re-rendered yet).
-    const liveGrouped = groupedImagesRef.current;
-    const liveUploaded = uploadedImagesRef.current;
-    const baseItems = liveGrouped.length > 0 ? liveGrouped : liveUploaded;
-    const selected = baseItems.filter(i => selectedGroupItems.has(i.id));
-    if (selected.length === 0) return;
-
-    const categoryName = preset.product_type || preset.category_name;
-
-    // Collect unique group IDs touched by the selection.
-    // A group is a "true multi-group" if it has 2+ members in baseItems.
-    // Otherwise it's a single to be merged.
-    const selectedGroupIds = [...new Set(selected.map(i => i.productGroup || i.id))];
-    const trueMultiGroupIds: string[] = [];
-    const trueSingles: ClothingItem[] = [];
-
-    selectedGroupIds.forEach(gid => {
-      const fullGroup = baseItems.filter(i => (i.productGroup || i.id) === gid);
-      if (fullGroup.length > 1) {
-        trueMultiGroupIds.push(gid);
-      } else {
-        trueSingles.push(...selected.filter(i => (i.productGroup || i.id) === gid));
-      }
-    });
-
-    const mergedSinglesGroupId = trueSingles.length > 0 ? (trueSingles[0].productGroup || trueSingles[0].id) : null;
-    const selectedSet = new Set(selected.map(i => i.id));
-
-    // Apply preset to singles as one merged group — use applyPresetDirectly (no extra Supabase fetch)
-    const singlesWithPreset = trueSingles.length > 0
-      ? applyPresetDirectly(trueSingles, categoryName, preset)
-      : [];
-    const singlesById: Record<string, ClothingItem> = {};
-    singlesWithPreset.forEach(i => { singlesById[i.id] = i; });
-
-    // Apply preset independently to each true multi-image group (all members)
-    // applyPresetDirectly: no network call, uses the preset object we already have
-    const groupedWithPresetById: Record<string, ClothingItem> = {};
-    for (const gid of trueMultiGroupIds) {
-      const fullGroup = baseItems.filter(i => (i.productGroup || i.id) === gid);
-      const withPreset = applyPresetDirectly(fullGroup, categoryName, preset);
-      withPreset.forEach(i => { groupedWithPresetById[i.id] = i; });
-    }
-
-    const updatedItems = baseItems.map(item => {
-      const itemGid = item.productGroup || item.id;
-
-      // Item belongs to a true multi-group — replace with preset version
-      if (trueMultiGroupIds.includes(itemGid)) {
-        return groupedWithPresetById[item.id] ?? item;
-      }
-
-      // Item is a single being merged
-      if (trueSingles.find(s => s.id === item.id)) {
-        const patched = singlesById[item.id] || { ...item, category: categoryName };
-        return { ...patched, productGroup: mergedSinglesGroupId! };
-      }
-
-      // Non-selected member of the same base group as a merged single — re-point
-      if (
-        mergedSinglesGroupId &&
-        !selectedSet.has(item.id) &&
-        trueSingles.some(s => (s.productGroup || s.id) === itemGid) &&
-        itemGid !== mergedSinglesGroupId
-      ) {
-        return { ...item, productGroup: mergedSinglesGroupId };
-      }
-
-      return item;
-    });
-
-    await handleImagesSorted(updatedItems);
-    setSelectedGroupItems(new Set());
-    grouperActionsRef.current?.clearSelection();
   };
 
   const handleImagesGrouped = async (items: ClothingItem[]) => {
@@ -2066,7 +1953,7 @@ function App() {
               alignItems: 'start',
             }} className="step2-split">
               {/* Left: Group images — scrollable panel so page doesn't grow tall */}
-              <div style={{ maxHeight: '75vh', overflowY: 'auto', borderRadius: '8px' }}>
+              <div style={{ maxHeight: '75vh', overflowY: 'auto', borderRadius: '8px', paddingBottom: '1rem' }}>
                 <p className="step-description" style={{ marginTop: 0 }}>
                   Select &amp; group your product images, then drag groups to a category on the right.
                 </p>
@@ -2083,7 +1970,7 @@ function App() {
                 />
               </div>
               {/* Right: Category drop zones — sticky so always visible */}
-              <div style={{ position: 'sticky', top: '1rem' }}>
+              <div style={{ position: 'sticky', top: '1rem', maxHeight: '75vh', overflowY: 'auto' }}>
                 <p className="step-description" style={{ marginTop: 0 }}>
                   Drag a group here to assign a category.
                 </p>
@@ -2138,26 +2025,7 @@ function App() {
                     </button>
                   </div>
                 )}
-                {/* Category Preset picker — shown when items are selected */}
-                {selectedGroupItems.size > 0 && categoryPresets.length > 0 && (
-                  <div className="grouper-preset-picker">
-                    <p className="grouper-preset-label">
-                      <Tag size={13} /> Apply preset to {selectedGroupItems.size} selected
-                    </p>
-                    <div className="grouper-preset-buttons">
-                      {categoryPresets.map(preset => (
-                        <button
-                          key={preset.id}
-                          className="button button-preset"
-                          onClick={() => handleApplyPreset(preset)}
-                          title={`Apply "${preset.display_name}" preset — sets category, shipping defaults & SEO template`}
-                        >
-                          {preset.display_name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {/* Category Preset picker removed — presets applied via right-click or category drag */}
               </div>
             </div>
           </section>
