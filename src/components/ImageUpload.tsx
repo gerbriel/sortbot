@@ -176,135 +176,137 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
   const folderInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
 
-  // ── Upload cat (stalks the cursor) ────────────────────────────────────────
-  interface CatState {
-    left: string;
-    top: string;
-    bodyRot: number;      // whole-cat rotation: faces direction of travel (0° = right)
-    headWorldAngle: number; // head angle in WORLD space (absolute, not relative to body)
-    speed: number;        // 0–1 normalised speed, drives walk-cycle class
-  }
+  // ── Yarn ball cursor + string trail ───────────────────────────────────────
+  // The cursor becomes a ball of yarn; moving the mouse unravels a smooth
+  // string trail behind it.  Trail is drawn on a <canvas> using Catmull-Rom
+  // splines so every bend is smooth and round — no sharp corners.
 
-  const cursorPos    = useRef({ x: 50, y: 50 });
-  const animFrameRef = useRef<number | null>(null);
-  const catPos       = useRef({ x: 15, y: 50 });
-  const smoothCurRef = useRef({ x: 50, y: 50 });
-  const prevCatPos   = useRef({ x: 15, y: 50 });
-  const bodyRotRef   = useRef(0);
-  const smoothHeadRef = useRef(0); // smoothed head angle (relative to body, degrees)
+  const yarnCanvasRef  = useRef<HTMLCanvasElement>(null);
+  const animFrameRef   = useRef<number | null>(null);
+  const mousePixelRef  = useRef({ x: -200, y: -200 }); // raw pixel cursor pos
+  const trailPointsRef = useRef<{ x: number; y: number }[]>([]); // ring of positions
+  const ballRotRef     = useRef(0);   // spinning angle of the ball graphic
+  const ballSizeRef    = useRef(28);  // current rendered radius (shrinks slightly)
 
-  const [cat, setCat] = useState<CatState | null>(null);
+  const [yarnCursor, setYarnCursor] = useState<{ x: number; y: number; rot: number; r: number } | null>(null);
 
   useEffect(() => {
     if (!isUploading) {
-      setCat(null);
+      setYarnCursor(null);
+      trailPointsRef.current = [];
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       return;
     }
 
-    // Spawn cat at a random edge position far from center
-    const startX = Math.random() < 0.5 ? 5 : 95;
-    const startY = 20 + Math.random() * 60;
-    catPos.current      = { x: startX, y: startY };
-    prevCatPos.current  = { x: startX, y: startY };
-    smoothCurRef.current = { x: cursorPos.current.x, y: cursorPos.current.y };
-    bodyRotRef.current  = 0;
-    smoothHeadRef.current = 0;
+    // Hide the real OS cursor while uploading
+    document.body.style.cursor = 'none';
 
-    setCat({
-      left: `${startX}vw`, top: `${startY}vh`,
-      bodyRot: 0, headWorldAngle: 0, speed: 0,
-    });
+    const MAX_TRAIL = 220; // max points kept in the ring buffer
+    const SAMPLE_DIST = 6; // minimum px between sampled points (sub-samples the move events)
 
     const handleMouseMove = (e: MouseEvent) => {
-      cursorPos.current = {
-        x: (e.clientX / window.innerWidth)  * 100,
-        y: (e.clientY / window.innerHeight) * 100,
-      };
+      mousePixelRef.current = { x: e.clientX, y: e.clientY };
     };
 
     const tick = () => {
-      // Smoothly interpolate the cursor target (slow = stalking, 3% per frame)
-      const raw = cursorPos.current;
-      smoothCurRef.current.x += (raw.x - smoothCurRef.current.x) * 0.03;
-      smoothCurRef.current.y += (raw.y - smoothCurRef.current.y) * 0.03;
+      const mx = mousePixelRef.current.x;
+      const my = mousePixelRef.current.y;
+      const pts = trailPointsRef.current;
 
-      // Body lags behind the smooth cursor (even slower — prey-stalking feel)
-      const cp = catPos.current;
-      const sc = smoothCurRef.current;
-
-      // Keep cat ~14 vw away from cursor (stalking distance), never on top
-      const dx = sc.x - cp.x;
-      const dy = sc.y - cp.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const stalkDist = 14; // vw — how close it gets before it stops advancing
-
-      if (dist > stalkDist + 0.5) {
-        const speed = Math.min((dist - stalkDist) * 0.018, 0.6);
-        cp.x += (dx / dist) * speed;
-        cp.y += (dy / dist) * speed;
+      // Only add a new point if the cursor has moved far enough from the last one
+      if (pts.length === 0) {
+        pts.push({ x: mx, y: my });
+      } else {
+        const last = pts[pts.length - 1];
+        const d = Math.hypot(mx - last.x, my - last.y);
+        if (d >= SAMPLE_DIST) {
+          pts.push({ x: mx, y: my });
+          if (pts.length > MAX_TRAIL) pts.shift();
+        }
       }
 
-      // Body rotation: direction of travel (how the body is oriented)
-      const mvDx = cp.x - prevCatPos.current.x;
-      const mvDy = cp.y - prevCatPos.current.y;
-      const mvSpeed = Math.sqrt(mvDx * mvDx + mvDy * mvDy);
-      prevCatPos.current = { x: cp.x, y: cp.y };
+      // Spin the ball proportional to how far the cursor moved
+      const last2 = pts.length >= 2 ? pts[pts.length - 2] : { x: mx, y: my };
+      const speed = Math.hypot(mx - last2.x, my - last2.y);
+      ballRotRef.current += speed * 0.04;
 
-      if (mvSpeed > 0.002) {
-        // atan2 gives travel angle; 0° = cat faces right (default CSS orientation)
-        const targetBodyRot = Math.atan2(mvDy, mvDx) * (180 / Math.PI);
-        let delta = targetBodyRot - bodyRotRef.current;
-        while (delta >  180) delta -= 360;
-        while (delta < -180) delta += 360;
-        bodyRotRef.current += delta * 0.12; // smooth body turning
+      // Ball shrinks slightly as trail grows (yarn unravelling)
+      const BASE_R = 28;
+      const MIN_R  = 18;
+      const shrink = Math.min(pts.length / MAX_TRAIL, 1);
+      ballSizeRef.current = BASE_R - (BASE_R - MIN_R) * shrink;
+
+      // Draw the trail on the canvas
+      const canvas = yarnCanvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // Resize canvas to viewport if needed
+          if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
+            canvas.width  = window.innerWidth;
+            canvas.height = window.innerHeight;
+          }
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          if (pts.length >= 2) {
+            // Draw Catmull-Rom spline through all trail points.
+            // We sub-sample each segment into many tiny bezier curves so the
+            // result is perfectly smooth with no sharp corners at all.
+            const n = pts.length;
+
+            // Build one continuous path so the stroke cap/join is always round.
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+
+            for (let i = 1; i < n - 1; i++) {
+              // Catmull-Rom tangent: midpoint between neighbours
+              const mx0 = (pts[i - 1].x + pts[i + 1].x) / 2;
+              const my0 = (pts[i - 1].y + pts[i + 1].y) / 2;
+              // Control point: offset from current point toward neighbour midpoints
+              const cpx = pts[i].x + (mx0 - pts[i].x) * 0.5;
+              const cpy = pts[i].y + (my0 - pts[i].y) * 0.5;
+              ctx.quadraticCurveTo(cpx, cpy, pts[i].x, pts[i].y);
+            }
+            // Connect to the current cursor tip
+            ctx.lineTo(mx, my);
+
+            // Gradient: old end is thin+faded, cursor end is thick+solid
+            const grad = ctx.createLinearGradient(pts[0].x, pts[0].y, mx, my);
+            grad.addColorStop(0,   'rgba(180, 90, 30, 0)');
+            grad.addColorStop(0.15,'rgba(190,100, 40, 0.18)');
+            grad.addColorStop(0.55,'rgba(195,110, 45, 0.55)');
+            grad.addColorStop(1,   'rgba(200,115, 50, 0.85)');
+
+            ctx.strokeStyle = grad;
+            ctx.lineWidth   = 3.5;
+            ctx.lineCap     = 'round';
+            ctx.lineJoin    = 'round';
+            ctx.stroke();
+
+            // Second pass — thin bright highlight to give the string a 3-D twist feel
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+            for (let i = 1; i < n - 1; i++) {
+              const mx0 = (pts[i - 1].x + pts[i + 1].x) / 2;
+              const my0 = (pts[i - 1].y + pts[i + 1].y) / 2;
+              const cpx = pts[i].x + (mx0 - pts[i].x) * 0.5;
+              const cpy = pts[i].y + (my0 - pts[i].y) * 0.5;
+              ctx.quadraticCurveTo(cpx, cpy, pts[i].x, pts[i].y);
+            }
+            ctx.lineTo(mx, my);
+
+            const grad2 = ctx.createLinearGradient(pts[0].x, pts[0].y, mx, my);
+            grad2.addColorStop(0,    'rgba(255,200,120,0)');
+            grad2.addColorStop(0.4,  'rgba(255,210,140,0.1)');
+            grad2.addColorStop(1,    'rgba(255,220,160,0.35)');
+            ctx.strokeStyle = grad2;
+            ctx.lineWidth   = 1.2;
+            ctx.stroke();
+          }
+        }
       }
 
-      // Head angle: always point toward the raw cursor.
-      // We compute and smooth in WORLD SPACE so the head is immune to body rotation.
-      // (If we smoothed in body-relative space, a 180° body turn would invert the
-      // head's apparent rotation direction and cause the glitch when going left.)
-      const headDx = raw.x - cp.x;
-      const headDy = raw.y - cp.y;
-      // Target world-space angle pointing from cat to cursor
-      const targetHeadWorld = Math.atan2(headDy, headDx) * (180 / Math.PI);
-
-      // Smooth it in world space
-      let headDelta = targetHeadWorld - smoothHeadRef.current;
-      while (headDelta >  180) headDelta -= 360;
-      while (headDelta < -180) headDelta += 360;
-      smoothHeadRef.current += headDelta * 0.15;
-
-      // ── Body-turn bleed-through ──────────────────────────────────────────
-      // Convert smoothed world-space head angle to body-relative to check overflow.
-      // When the head is twisted past ±HEAD_SOFT_LIMIT relative to the body, the
-      // excess "pulls" the body to turn so the cat naturally swings round to face
-      // the cursor rather than looking uncomfortably strained.
-      const HEAD_SOFT_LIMIT = 38; // degrees — comfortable look-aside range
-      const HEAD_HARD_LIMIT = 55; // degrees — maximum displayed head twist
-      let relHeadAngle = smoothHeadRef.current - bodyRotRef.current;
-      while (relHeadAngle >  180) relHeadAngle -= 360;
-      while (relHeadAngle < -180) relHeadAngle += 360;
-      const overflow = relHeadAngle - Math.sign(relHeadAngle) * HEAD_SOFT_LIMIT;
-      if (Math.abs(relHeadAngle) > HEAD_SOFT_LIMIT) {
-        bodyRotRef.current += overflow * 0.04;
-      }
-
-      // Clamp: if head is more than HARD_LIMIT from body direction, pin it.
-      // We store the world-space angle clamped to body±HARD_LIMIT.
-      let clampedRelHead = relHeadAngle;
-      if (clampedRelHead >  HEAD_HARD_LIMIT) clampedRelHead =  HEAD_HARD_LIMIT;
-      if (clampedRelHead < -HEAD_HARD_LIMIT) clampedRelHead = -HEAD_HARD_LIMIT;
-      const clampedHeadWorld = bodyRotRef.current + clampedRelHead;
-
-      setCat({
-        left:           `${cp.x}vw`,
-        top:            `${cp.y}vh`,
-        bodyRot:        bodyRotRef.current,
-        headWorldAngle: clampedHeadWorld,
-        speed:          Math.min(mvSpeed * 60, 1),
-      });
-
+      setYarnCursor({ x: mx, y: my, rot: ballRotRef.current, r: ballSizeRef.current });
       animFrameRef.current = requestAnimationFrame(tick);
     };
 
@@ -313,6 +315,8 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      document.body.style.cursor = '';
+      trailPointsRef.current = [];
     };
   }, [isUploading]);
 
@@ -588,45 +592,37 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     disabled: isUploading
   });
 
-  // Full-screen cat overlay — portalled to body so it's truly fullscreen
+  // Full-screen yarn overlay — portalled to body so it's truly fullscreen
   const creatureOverlay = isUploading ? createPortal(
     <div className="upload-overlay">
-      {cat && (
+      {/* Trail canvas — fills the whole viewport */}
+      <canvas ref={yarnCanvasRef} className="yarn-trail-canvas" />
+
+      {/* Yarn ball — sits exactly on the cursor */}
+      {yarnCursor && (
         <div
-          className="upload-creature"
+          className="yarn-ball"
           style={{
-            left: cat.left,
-            top:  cat.top,
-            transform: `translate(-50%, -50%) rotate(${cat.bodyRot}deg)`,
+            left: yarnCursor.x,
+            top:  yarnCursor.y,
+            width:  yarnCursor.r * 2,
+            height: yarnCursor.r * 2,
+            transform: `translate(-50%, -50%) rotate(${yarnCursor.rot}deg)`,
           } as React.CSSProperties}
         >
-          {/* Side-view stalking cat */}
-          <div className={`cat-side${cat.speed > 0.05 ? ' cat-walking' : ''}`}>
-            {/* Tail curves up at the back */}
-            <div className="cat-tail-side" />
-            {/* Body */}
-            <div className="cat-body-side">
-              {/* Back legs */}
-              <div className="cat-leg-side cat-back-leg-far" />
-              <div className="cat-leg-side cat-back-leg-near" />
-              {/* Front legs */}
-              <div className="cat-leg-side cat-front-leg-far" />
-              <div className="cat-leg-side cat-front-leg-near" />
-            </div>
-            {/* Head — counter-rotates out of body space to always face cursor in world space */}
-            <div
-              className="cat-head-side"
-              style={{ transform: `rotate(${cat.headWorldAngle - cat.bodyRot}deg)` } as React.CSSProperties}
-            >
-              <div className="cat-ear-side cat-ear-side-l" />
-              <div className="cat-ear-side cat-ear-side-r" />
-              <div className="cat-eye-side" />
-              <div className="cat-nose-side" />
-              <div className="cat-whiskers-side" />
-            </div>
-          </div>
+          {/* Wound-line grooves drawn as SVG so they rotate with the ball */}
+          <svg viewBox="0 0 56 56" className="yarn-svg">
+            {/* Base colour via circle bg; SVG draws the wound lines on top */}
+            <ellipse cx="28" cy="28" rx="24" ry="22" fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="2.5"/>
+            <ellipse cx="28" cy="28" rx="18" ry="26" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="2"/>
+            <ellipse cx="28" cy="28" rx="26" ry="14" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5"/>
+            <ellipse cx="28" cy="28" rx="10" ry="26" fill="none" stroke="rgba(120,40,0,0.18)"    strokeWidth="1.5"/>
+            {/* Highlight */}
+            <ellipse cx="20" cy="18" rx="6" ry="4" fill="rgba(255,220,160,0.28)" />
+          </svg>
         </div>
       )}
+
       <div className="upload-overlay-label">
         Uploading{uploadProgress ? ` ${uploadProgress.done} / ${uploadProgress.total}` : '…'}
       </div>
