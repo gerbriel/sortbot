@@ -200,12 +200,11 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
 
   // ── Cat walks along the yarn trail, head always aims at the ball ─────────
   interface CatState {
-    x: number;       // px — position on screen
+    x: number;
     y: number;
-    bodyRot: number; // deg — tangent angle of trail at cat's position
-    headRot: number; // deg — relative angle toward the yarn ball
-    flipped: boolean;
-    speed: number;   // 0–1, drives walk-cycle CSS class
+    bodyRot: number;
+    headRot: number;
+    speed: number;
   }
   // catTrailTRef tracks the cat's position as a float index into trailPointsRef.
   // 0 = oldest point (tail of string), pts.length-1 = newest (yarn ball).
@@ -389,21 +388,20 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
         prevCatPxRef.current = { x: catX, y: catY };
 
         const norm = ((bodyRotRef.current % 360) + 360) % 360;
-        const flipped = norm > 90 && norm < 270;
+        void norm; // unused now — no flip logic
 
         setCat({
           x:       catX,
           y:       catY,
           bodyRot: bodyRotRef.current,
           headRot: clampedHead,
-          flipped,
           speed:   Math.min(mvSpeed / CAT_SPEED_PX, 1),
         });
       } else if (n === 1) {
         // Trail just started — sit at the one point
         setCat(prev => prev
           ? { ...prev, x: pts[0].x, y: pts[0].y }
-          : { x: pts[0].x, y: pts[0].y, bodyRot: 0, headRot: 0, flipped: false, speed: 0 }
+          : { x: pts[0].x, y: pts[0].y, bodyRot: 0, headRot: 0, speed: 0 }
         );
       }
 
@@ -782,7 +780,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
           style={{
             left: cat.x,
             top:  cat.y,
-            transform: `translate(-50%, -50%) rotate(${cat.bodyRot}deg) scaleX(${cat.flipped ? -1 : 1})`,
+            transform: `translate(-50%, -50%) rotate(${cat.bodyRot}deg)`,
           } as React.CSSProperties}
         >
           <div className={`cat-side${cat.speed > 0.05 ? ' cat-walking' : ''}`}>
