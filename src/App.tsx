@@ -121,6 +121,8 @@ export interface ClothingItem {
   // SEO & Marketing
   seoDescription?: string;
   productType?: string; // Type (e.g., "Graphic shirt")
+  shopifyProductType?: string; // Full Shopify taxonomy path for "Standardized Product Type" CSV column
+                               // e.g. "Apparel & Accessories > Clothing > Clothing Tops > T-Shirts"
   
   // Status
   status?: 'Active' | 'Draft' | 'Archived';

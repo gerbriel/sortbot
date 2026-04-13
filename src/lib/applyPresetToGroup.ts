@@ -133,7 +133,11 @@ function applyPresetFields(
         return undefined;
       })(),
       brand: item.brand || preset.vendor || undefined,
-      productType: item.productType || preset.shopify_product_type || undefined,
+      // productType = short label used in Shopify "Type" column (e.g. "T-Shirts", "Hoodies")
+      productType: item.productType || preset.product_type || undefined,
+      // shopifyProductType = full taxonomy path for "Standardized Product Type" column
+      // (e.g. "Apparel & Accessories > Clothing > Clothing Tops > T-Shirts")
+      shopifyProductType: item.shopifyProductType || preset.shopify_product_type || undefined,
       
       // ======= PRODUCT DETAILS =======
       material: item.material || preset.default_material || undefined,
