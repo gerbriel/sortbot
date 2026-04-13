@@ -82,7 +82,7 @@ npm run preview
 ```
 sortingapp/
 ├── src/
-│   ├── App.tsx                    # Root component. Owns ALL global state. ~2235 lines. Orchestrates all 4 steps.
+│   ├── App.tsx                    # Root component. Owns ALL global state. ~2310 lines. Orchestrates all 4 steps.
 │   ├── App.css                    # Global app styles.
 │   ├── main.tsx                   # Entry point. Renders <App /> in StrictMode.
 │   ├── index.css                  # Base CSS reset and body styles.
@@ -439,6 +439,7 @@ All state lives in `App.tsx`. There is no global store (no Redux, no Zustand, no
 - Uses `currentBatchIdRef` (not `currentBatchId` state) to avoid stale closure.
 - If batchId is null (session not yet resolved), skips silently.
 - If batch no longer exists in DB, creates a new batch.
+- **`autoSaveInFlightRef` mutex** — if a Supabase round-trip is already in-flight when the debounce fires, the second fire is skipped entirely; `finally` resets the flag. Prevents two concurrent calls from both seeing "0 rows updated → INSERT new batch" → duplicate rows.
 - **Does NOT refresh Library** — auto-save only writes `workflow_state`, not `products/product_images`.
 
 ### Batch Restore (Startup)
@@ -583,8 +584,6 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 
 7. **`autoSaveWorkflow` captures stale closure state** — it receives a `workflowState` parameter that was current at call time, but the 2s debounce means it fires after further state changes. The `slim(live)` picks the most-progressed list, which partially mitigates this, but the passed `workflowState` object may be stale.
 
-8. **Photo reorder in Step 3 (PDG) is not persisted to DB.** Reordering thumbnails changes `imageUrls` array order in `processedItems` but this is only saved to `workflow_state` via auto-save. The `product_images.position` column in the DB is not updated.
-
 9. **`proxy.log` is in `.gitignore`** and never tracked by git. Safe to ignore.
 
 10. **`productService.ts:saveProductToDatabase` upserts on `id`** — fixed. Calling "Save Batch" multiple times now updates the existing row instead of creating duplicates.
@@ -701,7 +700,8 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 - ✅ **Export preview expanded to all 63 CSV columns** (commit `f450e1b`) — preview table in `GoogleSheetExporter.tsx` replaced the 5-column table with a full 63-column horizontally-scrollable table; `overflow-x: auto` on the container, `position: sticky` + `top: 0` on `<thead>` for a frozen header row, `white-space: nowrap` on cells, `min-width: 4800px` on the table; shows up to 10 products; each cell value computed identically to the CSV row builder using the same helpers (`buildCleanTitle`, `SHOPIFY_CATEGORY_MAP`, etc.); long text cells (Description, SEO description) truncated to 60 chars with `…` and full value in the `title` tooltip; other cells truncated at 35 chars
 - ✅ **Storage meter moved under navbar + upload notifications as dismissible toasts** (commit `c7c6538`) — storage meter (previously inside the `<ImageUpload>` component) is now rendered directly in `App.tsx` just below the `<header>` navbar, visible at all times when logged in; upload notifications ("N images uploaded") converted from inline banners to dismissible toast notifications via a new `addToast`/`toasts` state in `App.tsx` and a `<div className="toast-container">` overlay; `onToast` prop added to `ImageUploadProps`; toasts auto-dismiss after 4 s and have an `×` close button; `storageUsed` and `storageTotal` props removed from `ImageUploadProps` and handled by `App.tsx` directly
 - ✅ **Auto-group by N photos per item in Step 2 filter bar** (commit `ade77a7`) — new `📸 Photos/item:` number input + `Apply` button in the `ImageGrouper` filter bar; `applyAutoGrouping(n)` sorts all items by filename (natural order via `localeCompare({ numeric: true })`), then chunks into groups of `n` with fresh UUIDs; previous grouping is discarded; `autoGroupN` state initialized to `'4'`; input accepts 1–99; layout uses a `border-left` divider to visually separate from other filter controls; CSS classes: `.auto-group-control`, `.auto-group-label`, `.auto-group-input`, `.auto-group-btn` in `ImageGrouper.css`
-- ✅ **Import Folder / Import ZIP buttons moved to Step 1 header** (commit `ff85a1f`) — buttons removed from `ImageUpload.tsx` render body; `ImageUpload` now uses `forwardRef<ImageUploadHandle, ImageUploadProps>` and exposes `triggerFolder()`, `triggerZip()`, `isBusy` via `useImperativeHandle`; `ImageUploadHandle` interface is a named export from `ImageUpload.tsx`; `App.tsx` creates `uploadRef = useRef<ImageUploadHandle>(null)` and passes `ref={uploadRef}` to `<ImageUpload>`; Step 1 `<section>` heading row is now a `.step1-header` flex div with the `<h2>` + tip text on the left and two buttons on the right; CSS classes added to `App.css`: `.step1-header`, `.step1-header-actions`, `.step1-import-btn`, `.step1-folder-btn` (indigo gradient), `.step1-zip-btn` (amber gradient); buttons are disabled while `isBusy` is true
+- ✅ **Batch duplication on upload fixed** (commits `4d9d594`) — two concurrent `autoSaveWorkflowBatch` calls could both see 0 rows updated (batch UUID minted in memory by `handleImagesUploaded` but row never inserted yet) and both call `createWorkflowBatch` → two duplicate batch rows; **Fix 1:** `handleImagesUploaded` now immediately `INSERT`s a stub `workflow_batches` row when it mints a new UUID so `autoSaveWorkflowBatch`'s blind UPDATE always finds an existing row; **Fix 2:** `autoSaveInFlightRef` mutex in `autoSaveWorkflow`'s `setTimeout` callback — if a Supabase round-trip is already in-flight the concurrent fire is skipped, `finally` resets the flag
+- ✅ **Upload cat animation — side-view stalking cat** (commits `49dc253`, `11a5ecf`) — replaced top-down aerial multi-cat horde with a single side-view CSS cat that stalks the cursor; always exactly 1 cat; body rotation follows direction of travel (like a shark); `scaleX(-1)` flip when moving leftward so it never moonwalks; head rotates independently each frame via `atan2(cursor - cat) - bodyRot` to always face cursor; **natural head→body bleed-through** (commit `11a5ecf`): `HEAD_SOFT_LIMIT=38°` comfortable free-look zone; past 38° the overflow nudges `bodyRotRef` by `overflow × 0.04` per frame so the body gradually swings toward the cursor; `HEAD_HARD_LIMIT=55°` caps displayed head angle; motion model: cat pursues cursor at 14vw stalking distance, 3% cursor smoothing + 1.8% approach speed; `.cat-walking` class activates walk cycle only when `speed > 0.05`; slow keyframe durations (0.45s body bob, 1.2s tail sway) eliminate jangle; all old aerial/horde CSS removed
 
 ---
 
