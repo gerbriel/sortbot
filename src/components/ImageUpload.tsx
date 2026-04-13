@@ -181,7 +181,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     id: number;
     left: string;
     top: string;
-    flip: boolean; // mirror the cat when moving left
+    rotation: number; // degrees — rotates the whole cat to face direction of travel
   }
 
   // Shared cursor position
@@ -230,7 +230,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       creaturePositions.current[i] = { x: startX, y: startY };
       lagCurrents.current[i] = 0;
       lagTargets.current[i]  = 0;
-      return { id: i, left: `${startX}vw`, top: `${startY}vh`, flip: false };
+      return { id: i, left: `${startX}vw`, top: `${startY}vh`, rotation: 0 };
     });
     setCreatures(initial);
 
@@ -242,8 +242,10 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     };
 
     const smoothCursor = { x: cursorPos.current.x, y: cursorPos.current.y };
-    // Track previous x per cat to determine flip direction
-    const prevX = Array.from({ length: count }, (_, i) => creaturePositions.current[i]?.x ?? 50);
+    // Track previous position per cat to derive travel angle
+    const prevPos = Array.from({ length: count }, (_, i) => ({ ...creaturePositions.current[i] ?? { x: 50, y: 50 } }));
+    // Smoothed rotation per cat (degrees) to avoid jitter
+    const smoothRot = Array.from({ length: count }, () => 0);
 
     let frame = 0;
 
@@ -253,7 +255,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       smoothCursor.x += (raw.x - smoothCursor.x) * 0.07;
       smoothCursor.y += (raw.y - smoothCursor.y) * 0.07;
 
-      const updates: Pick<CreatureAnimState, 'id' | 'left' | 'top' | 'flip'>[] = [];
+      const updates: Pick<CreatureAnimState, 'id' | 'left' | 'top' | 'rotation'>[] = [];
 
       for (let i = 0; i < count; i++) {
         orbitAngles[i] += angleSpeeds[i];
@@ -269,11 +271,22 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
         cp.x += (targetX - cp.x) * 0.06;
         cp.y += (targetY - cp.y) * 0.06;
 
-        // Flip cat to face direction of travel
-        const movingLeft = cp.x < prevX[i];
-        prevX[i] = cp.x;
+        // Derive heading from direction of travel
+        const dx = cp.x - prevPos[i].x;
+        const dy = cp.y - prevPos[i].y;
+        prevPos[i] = { x: cp.x, y: cp.y };
+        if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
+          // atan2 gives angle in radians; convert to degrees. +90 because our cat faces "up" (north) at 0°
+          const targetRot = Math.atan2(dy, dx) * (180 / Math.PI) + 90;
+          // Lerp rotation to smooth it
+          let delta = targetRot - smoothRot[i];
+          // Shortest-path wrap
+          while (delta > 180)  delta -= 360;
+          while (delta < -180) delta += 360;
+          smoothRot[i] += delta * 0.15;
+        }
 
-        updates.push({ id: i, left: `${cp.x}vw`, top: `${cp.y}vh`, flip: movingLeft });
+        updates.push({ id: i, left: `${cp.x}vw`, top: `${cp.y}vh`, rotation: smoothRot[i] });
       }
 
       setCreatures(prev =>
@@ -577,29 +590,29 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
           style={{
             left: c.left,
             top:  c.top,
-            transform: `translate(-50%, -50%) scaleX(${c.flip ? -1 : 1})`,
+            transform: `translate(-50%, -50%) rotate(${c.rotation}deg)`,
           } as React.CSSProperties}
         >
-          {/* Cat: head + ears + face */}
-          <div className="cat-head">
-            <div className="cat-ear cat-ear-l" />
-            <div className="cat-ear cat-ear-r" />
-            <div className="cat-eyes">
-              <div className="cat-eye" />
-              <div className="cat-eye" />
+          {/* Top-down aerial cat */}
+          <div className="cat-aerial">
+            {/* Tail — behind the body (top in top-down = back of cat) */}
+            <div className="cat-tail-top" />
+            {/* Body oval */}
+            <div className="cat-body-top">
+              {/* Back legs */}
+              <div className="cat-leg cat-leg-bl" />
+              <div className="cat-leg cat-leg-br" />
+              {/* Front legs */}
+              <div className="cat-leg cat-leg-fl" />
+              <div className="cat-leg cat-leg-fr" />
             </div>
-            <div className="cat-nose" />
-            <div className="cat-whiskers">
-              <div className="cat-whisker wl1" /><div className="cat-whisker wl2" />
-              <div className="cat-whisker wr1" /><div className="cat-whisker wr2" />
-            </div>
-          </div>
-          {/* Body */}
-          <div className="cat-body">
-            <div className="cat-tail" />
-            <div className="cat-paws">
-              <div className="cat-paw paw-fl" />
-              <div className="cat-paw paw-fr" />
+            {/* Head circle */}
+            <div className="cat-head-top">
+              <div className="cat-ear-top cat-ear-top-l" />
+              <div className="cat-ear-top cat-ear-top-r" />
+              <div className="cat-eye-top cat-eye-top-l" />
+              <div className="cat-eye-top cat-eye-top-r" />
+              <div className="cat-nose-top" />
             </div>
           </div>
         </div>

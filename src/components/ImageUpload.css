@@ -110,27 +110,36 @@
   margin: 0 auto;
 }
 
-/* ── Upload cat ──────────────────────────────────────────────────────────── */
+/* ── Upload cat (top-down aerial, pseudo-3D) ─────────────────────────────── */
 
-/* Body trot — bobs up and down while walking */
-@keyframes cat-trot {
-  0%, 100% { transform: translateY(0px);   }
-  50%       { transform: translateY(-4px); }
+/*
+  Perspective: the whole cat sits on a flat plane tilted slightly toward the
+  viewer with CSS perspective + rotateX, giving that "looking down at a real
+  cat from above" feel.  All dimensions are in the un-transformed plane so the
+  cat looks correct once the tilt is applied.
+
+  Orientation: head = top (north), tail = bottom (south).
+  The JS rotates the whole .upload-creature to face the direction of travel.
+*/
+
+/* Leg stride cycles — opposite pairs move together */
+@keyframes leg-stride-a {
+  0%, 100% { transform: translateX(-3px) rotate(-18deg); }
+  50%       { transform: translateX( 3px) rotate( 18deg); }
 }
-/* Front paw alternation */
-@keyframes paw-fl {
-  0%, 100% { transform: rotate(-20deg) translateY(0px);  }
-  50%       { transform: rotate(15deg)  translateY(-3px); }
+@keyframes leg-stride-b {
+  0%, 100% { transform: translateX( 3px) rotate( 18deg); }
+  50%       { transform: translateX(-3px) rotate(-18deg); }
 }
-@keyframes paw-fr {
-  0%, 100% { transform: rotate(15deg)  translateY(-3px); }
-  50%       { transform: rotate(-20deg) translateY(0px);  }
+/* Tail sway */
+@keyframes tail-sway-top {
+  0%, 100% { transform: rotate(-25deg) scaleX(1);   }
+  50%       { transform: rotate( 25deg) scaleX(0.9); }
 }
-/* Tail swish */
-@keyframes tail-swish {
-  0%   { transform: rotate(-30deg); }
-  50%  { transform: rotate( 30deg); }
-  100% { transform: rotate(-30deg); }
+/* Subtle body stretch while trotting */
+@keyframes body-trot-top {
+  0%, 100% { transform: scaleY(1);    }
+  50%       { transform: scaleY(1.06); }
 }
 
 .upload-creature {
@@ -138,92 +147,188 @@
   pointer-events: none;
   z-index: 10000;
   will-change: transform, left, top;
+}
+
+/* Perspective container — tilts the whole cat so it looks 3D */
+.cat-aerial {
+  perspective: 120px;
+  perspective-origin: 50% 80%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0;
+  /* Tilt the plane toward viewer */
+  transform: rotateX(28deg);
+  transform-style: preserve-3d;
+  filter: drop-shadow(0 6px 8px rgba(0,0,0,0.30));
 }
 
-/* ── Head ── */
-.cat-head {
-  width: 36px;
-  height: 32px;
-  border-radius: 50% 50% 46% 46%;
-  background: #d4a96a;
+/* ── Tail (rendered first = behind body in stacking order) ── */
+.cat-tail-top {
+  width: 7px;
+  height: 20px;
+  background: linear-gradient(to bottom, #c49458, #a87840);
+  border-radius: 3px 3px 6px 6px;
+  margin-bottom: -6px;          /* overlap into body bottom */
+  transform-origin: top center;
+  animation: tail-sway-top 0.85s ease-in-out infinite;
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: inset 0 -3px 6px rgba(0,0,0,0.1);
+  z-index: 0;
 }
-
-/* Pointy ears */
-.cat-ear {
-  position: absolute;
-  top: -10px;
-  width: 0;
-  height: 0;
-  border-left: 7px solid transparent;
-  border-right: 7px solid transparent;
-  border-bottom: 14px solid #d4a96a;
-}
-.cat-ear-l { left: 3px;  transform: rotate(-8deg); }
-.cat-ear-r { right: 3px; transform: rotate( 8deg); }
-/* Inner ear pink */
-.cat-ear-l::after, .cat-ear-r::after {
+/* Fluffy tail tip */
+.cat-tail-top::after {
   content: '';
   position: absolute;
-  top: 3px;
-  left: -4px;
-  width: 0;
-  height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-bottom: 9px solid #f0a8b0;
-}
-
-/* Eyes — narrow slit pupils */
-.cat-eyes {
-  display: flex;
-  gap: 8px;
-  margin-top: -2px;
-}
-.cat-eye {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #5aad6e;   /* green iris */
-  position: relative;
-  box-shadow: 0 0 3px rgba(90,173,110,0.5);
-}
-/* Slit pupil */
-.cat-eye::before {
-  content: '';
-  position: absolute;
-  top: 50%;
+  bottom: -5px;
   left: 50%;
+  transform: translateX(-50%);
+  width: 13px;
+  height: 10px;
+  background: #d4b880;
+  border-radius: 50%;
+}
+
+/* ── Body oval ── */
+.cat-body-top {
+  width: 34px;
+  height: 48px;
+  background: radial-gradient(ellipse at 45% 40%, #dbb978, #b8884a);
+  border-radius: 48% 48% 44% 44% / 55% 55% 45% 45%;
+  position: relative;
+  z-index: 1;
+  animation: body-trot-top 0.32s ease-in-out infinite;
+  box-shadow:
+    inset 0 -6px 10px rgba(0,0,0,0.18),
+    inset 0  2px  6px rgba(255,255,200,0.12);
+}
+/* Spine stripe */
+.cat-body-top::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 32px;
+  background: rgba(120,70,20,0.18);
+  border-radius: 3px;
+}
+
+/* ── Legs ── */
+/* All legs are absolutely positioned on the body */
+.cat-leg {
+  position: absolute;
+  width: 9px;
+  height: 14px;
+  background: linear-gradient(to bottom, #c49458, #a07030);
+  border-radius: 3px 3px 5px 5px;
+}
+/* Paw tip */
+.cat-leg::after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 11px;
+  height: 7px;
+  background: #e8c888;
+  border-radius: 50%;
+}
+
+/* Front legs — upper half of body */
+.cat-leg-fl {
+  top: 6px;
+  left: -10px;
+  transform-origin: top center;
+  animation: leg-stride-a 0.32s ease-in-out infinite;
+}
+.cat-leg-fr {
+  top: 6px;
+  right: -10px;
+  transform-origin: top center;
+  animation: leg-stride-b 0.32s ease-in-out infinite;
+}
+/* Back legs — lower half of body */
+.cat-leg-bl {
+  bottom: 8px;
+  left: -10px;
+  transform-origin: top center;
+  animation: leg-stride-b 0.32s ease-in-out infinite;
+}
+.cat-leg-br {
+  bottom: 8px;
+  right: -10px;
+  transform-origin: top center;
+  animation: leg-stride-a 0.32s ease-in-out infinite;
+}
+
+/* ── Head circle ── */
+.cat-head-top {
+  width: 28px;
+  height: 26px;
+  background: radial-gradient(ellipse at 45% 40%, #e0c07a, #c49458);
+  border-radius: 50%;
+  position: relative;
+  z-index: 2;
+  margin-top: -8px;             /* overlap onto top of body */
+  box-shadow:
+    inset 0 -3px 5px rgba(0,0,0,0.15),
+    inset 0  2px 4px rgba(255,255,200,0.15);
+}
+
+/* ── Ears ── */
+.cat-ear-top {
+  position: absolute;
+  top: -7px;
+  width: 0;
+  height: 0;
+  border-left:  6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 10px solid #c49458;
+}
+.cat-ear-top-l { left: 1px;  transform: rotate(-12deg); }
+.cat-ear-top-r { right: 1px; transform: rotate( 12deg); }
+/* Inner ear */
+.cat-ear-top-l::after,
+.cat-ear-top-r::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: -3px;
+  width: 0;
+  height: 0;
+  border-left:  3px solid transparent;
+  border-right: 3px solid transparent;
+  border-bottom: 6px solid #f0a8b0;
+}
+
+/* ── Eyes ── */
+.cat-eye-top {
+  position: absolute;
+  top: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #5aad6e;
+  box-shadow: 0 0 3px rgba(90,173,110,0.6);
+}
+.cat-eye-top::before {           /* slit pupil */
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
   transform: translate(-50%, -50%);
   width: 2px;
-  height: 7px;
+  height: 6px;
   border-radius: 1px;
   background: #111;
 }
-/* Shine */
-.cat-eye::after {
-  content: '';
-  position: absolute;
-  top: 1px;
-  left: 2px;
-  width: 2px;
-  height: 2px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.8);
-}
+.cat-eye-top-l { left: 3px; }
+.cat-eye-top-r { right: 3px; }
 
-/* Tiny nose */
-.cat-nose {
+/* ── Nose ── */
+.cat-nose-top {
   position: absolute;
-  bottom: 7px;
+  bottom: 5px;
   left: 50%;
   transform: translateX(-50%);
   width: 5px;
@@ -232,82 +337,7 @@
   border-radius: 50% 50% 40% 40%;
 }
 
-/* Whiskers */
-.cat-whiskers {
-  position: absolute;
-  bottom: 9px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 0;
-  height: 0;
-}
-.cat-whisker {
-  position: absolute;
-  height: 1px;
-  background: rgba(80,50,20,0.55);
-  border-radius: 1px;
-  transform-origin: left center;
-}
-/* Left whiskers */
-.wl1 { width: 18px; top: -3px; left: -20px; transform: rotate(-10deg) scaleX(-1); transform-origin: right center; }
-.wl2 { width: 18px; top:  2px; left: -20px; transform: rotate(  8deg) scaleX(-1); transform-origin: right center; }
-/* Right whiskers */
-.wr1 { width: 18px; top: -3px; left:  2px;  transform: rotate(-10deg); }
-.wr2 { width: 18px; top:  2px; left:  2px;  transform: rotate(  8deg); }
 
-/* ── Body ── */
-.cat-body {
-  width: 38px;
-  height: 26px;
-  background: #c49458;
-  border-radius: 45% 45% 40% 40%;
-  position: relative;
-  margin-top: -4px;
-  animation: cat-trot 0.32s ease-in-out infinite;
-  box-shadow: inset 0 -4px 8px rgba(0,0,0,0.1);
-}
-
-/* Tail — curls up from back */
-.cat-tail {
-  position: absolute;
-  right: -12px;
-  bottom: 0;
-  width: 6px;
-  height: 22px;
-  background: #c49458;
-  border-radius: 3px 3px 6px 6px;
-  transform-origin: bottom center;
-  animation: tail-swish 0.9s ease-in-out infinite;
-}
-.cat-tail::after {
-  content: '';
-  position: absolute;
-  top: -5px;
-  left: -2px;
-  width: 10px;
-  height: 10px;
-  background: #d4a96a;
-  border-radius: 50%;
-}
-
-/* Paws */
-.cat-paws {
-  position: absolute;
-  bottom: -6px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 14px;
-}
-.cat-paw {
-  width: 9px;
-  height: 7px;
-  background: #c49458;
-  border-radius: 50% 50% 40% 40%;
-  transform-origin: top center;
-}
-.paw-fl { animation: paw-fl 0.32s ease-in-out infinite; }
-.paw-fr { animation: paw-fr 0.32s ease-in-out infinite; }
 
 
 
