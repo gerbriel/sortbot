@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useDropzone } from 'react-dropzone';
 import JSZip from 'jszip';
 import exifr from 'exifr';
@@ -173,15 +174,17 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
   const zipInputRef = useRef<HTMLInputElement>(null);
 
   // ── Upload creature (mouse-chasing blob) ──────────────────────────────────
-  const dropzoneRef = useRef<HTMLDivElement>(null);
-  const creaturePos = useRef({ x: 50, y: 50 }); // % within dropzone
-  const cursorPos   = useRef({ x: 50, y: 50 });
-  const animFrameRef = useRef<number | null>(null);
+  const creaturePos   = useRef({ x: 50, y: 50 }); // vw/vh %
+  const cursorPos     = useRef({ x: 50, y: 50 });
+  const animFrameRef  = useRef<number | null>(null);
+  // Smoothly-drifting "lag distance" so the creature never quite catches up.
+  // Drifts randomly between MIN and MAX, transitions slowly via a current/target approach.
+  const lagTarget     = useRef(12);   // target lag distance (% of screen)
+  const lagCurrent    = useRef(12);   // current lag (lerps toward target)
   const [creatureStyle, setCreatureStyle] = useState({ left: '50%', top: '50%', rotation: 0 });
 
   useEffect(() => {
     if (!isUploading) {
-      // Reset creature to center when upload finishes
       setCreatureStyle({ left: '50%', top: '50%', rotation: 0 });
       creaturePos.current = { x: 50, y: 50 };
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
@@ -189,32 +192,45 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     }
 
     const handleMouseMove = (e: MouseEvent) => {
-      const el = dropzoneRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
       cursorPos.current = {
-        x: Math.max(5, Math.min(95, ((e.clientX - rect.left) / rect.width)  * 100)),
-        y: Math.max(5, Math.min(90, ((e.clientY - rect.top)  / rect.height) * 100)),
+        x: (e.clientX / window.innerWidth)  * 100,
+        y: (e.clientY / window.innerHeight) * 100,
       };
     };
 
+    // Every ~1.8 s, smoothly shift the target lag distance so the gap feels alive
+    let lagTimer = 0;
+    const LAG_MIN = 8, LAG_MAX = 22;
+    const refreshLag = () => {
+      lagTarget.current = LAG_MIN + Math.random() * (LAG_MAX - LAG_MIN);
+      lagTimer = window.setTimeout(refreshLag, 1200 + Math.random() * 1200);
+    };
+    refreshLag();
+
     const tick = () => {
+      // Lerp lag distance toward its target (very slow drift — feels organic)
+      lagCurrent.current += (lagTarget.current - lagCurrent.current) * 0.008;
+
       const cp = creaturePos.current;
       const tp = cursorPos.current;
       const dx = tp.x - cp.x;
       const dy = tp.y - cp.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
+      const lag  = lagCurrent.current;
 
-      if (dist > 1.5) {
-        const speed = Math.min(dist * 0.07, 3); // ease-in, cap speed
+      // Only move when the creature is farther than the desired lag distance.
+      // Speed scales with how far it exceeds that gap, capped for smoothness.
+      if (dist > lag) {
+        const excess = dist - lag;
+        const speed  = Math.min(excess * 0.09, 2.2);
         cp.x += (dx / dist) * speed;
         cp.y += (dy / dist) * speed;
       }
 
       const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
       setCreatureStyle({
-        left: `${cp.x}%`,
-        top:  `${cp.y}%`,
+        left:     `${cp.x}vw`,
+        top:      `${cp.y}vh`,
         rotation: angleDeg,
       });
       animFrameRef.current = requestAnimationFrame(tick);
@@ -225,6 +241,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      clearTimeout(lagTimer);
     };
   }, [isUploading]);
 
@@ -491,8 +508,38 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     disabled: isUploading
   });
 
+  // Full-screen creature overlay — portalled to body so it's truly fullscreen
+  const creatureOverlay = isUploading ? createPortal(
+    <div className="upload-overlay">
+      <div
+        className="upload-creature"
+        style={{
+          left: creatureStyle.left,
+          top:  creatureStyle.top,
+          '--rotation': `${creatureStyle.rotation}deg`,
+        } as React.CSSProperties}
+      >
+        <div className="creature-body">
+          <div className="creature-eyes">
+            <div className="creature-eye" />
+            <div className="creature-eye" />
+          </div>
+        </div>
+        <div className="creature-legs">
+          <div className="creature-leg leg-l" />
+          <div className="creature-leg leg-r" />
+        </div>
+      </div>
+      <div className="upload-overlay-label">
+        Uploading{uploadProgress ? ` ${uploadProgress.done} / ${uploadProgress.total}` : '…'}
+      </div>
+    </div>,
+    document.body
+  ) : null;
+
   return (
       <div className="image-upload-container">
+        {creatureOverlay}
         {/* Hidden folder input */}
         <input
           ref={folderInputRef}
@@ -517,7 +564,6 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
 
         <div 
           {...getRootProps()} 
-          ref={dropzoneRef}
           className={`dropzone ${isDragActive ? 'active' : ''} ${isUploading || extractingZip ? 'uploading' : ''}`}
         >
           <input {...getInputProps()} />
@@ -529,31 +575,8 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
               </>
             ) : isUploading ? (
               <>
-                {/* Mouse-chasing upload creature */}
-                <div
-                  className="upload-creature"
-                  style={{
-                    left: creatureStyle.left,
-                    top:  creatureStyle.top,
-                    '--rotation': `${creatureStyle.rotation}deg`,
-                  } as React.CSSProperties}
-                >
-                  {/* Body */}
-                  <div className="creature-body">
-                    {/* Eyes */}
-                    <div className="creature-eyes">
-                      <div className="creature-eye" />
-                      <div className="creature-eye" />
-                    </div>
-                  </div>
-                  {/* Legs */}
-                  <div className="creature-legs">
-                    <div className="creature-leg leg-l" />
-                    <div className="creature-leg leg-r" />
-                  </div>
-                </div>
-                {/* Progress label, pinned to bottom of dropzone */}
-                <p className="upload-progress-label">
+                {/* Minimal dropzone content while uploading — creature lives in full-screen overlay */}
+                <p style={{ color: 'var(--gray-500)', fontSize: '0.85rem', margin: 0 }}>
                   Uploading{uploadProgress ? ` ${uploadProgress.done} / ${uploadProgress.total}` : '…'}
                 </p>
               </>
