@@ -198,20 +198,21 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
   const ballRotRef     = useRef(0);   // spinning angle of the ball graphic
   const ballSizeRef    = useRef(28);  // current rendered radius (shrinks slightly)
 
-  // ── Stalking cat (full original behaviour) ────────────────────────────────
+  // ── Cat walks along the yarn trail, head always aims at the ball ─────────
   interface CatState {
-    left: string;
-    top: string;
-    bodyRot: number;
-    headRot: number;
+    x: number;       // px — position on screen
+    y: number;
+    bodyRot: number; // deg — tangent angle of trail at cat's position
+    headRot: number; // deg — relative angle toward the yarn ball
     flipped: boolean;
-    speed: number;
+    speed: number;   // 0–1, drives walk-cycle CSS class
   }
-  const catBodyPosRef  = useRef({ x: 15, y: 50 });
-  const prevCatPosRef  = useRef({ x: 15, y: 50 });
-  const smoothCurRef   = useRef({ x: 50, y: 50 });
-  const bodyRotRef     = useRef(0);
-  const [cat, setCat]  = useState<CatState | null>(null);
+  // catTrailTRef tracks the cat's position as a float index into trailPointsRef.
+  // 0 = oldest point (tail of string), pts.length-1 = newest (yarn ball).
+  const catTrailTRef  = useRef(0);
+  const prevCatPxRef  = useRef({ x: -300, y: -300 });
+  const bodyRotRef    = useRef(0);
+  const [cat, setCat] = useState<CatState | null>(null);
 
   const [yarnCursor, setYarnCursor] = useState<{ x: number; y: number; rot: number; r: number } | null>(null);
 
@@ -227,16 +228,10 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     // Hide the real OS cursor while uploading
     document.body.style.cursor = 'none';
 
-    // Spawn cat at a random edge, far from center
-    const startX = Math.random() < 0.5 ? 5 : 95;
-    const startY = 20 + Math.random() * 60;
-    catBodyPosRef.current  = { x: startX, y: startY };
-    prevCatPosRef.current  = { x: startX, y: startY };
-    smoothCurRef.current   = {
-      x: (mousePixelRef.current.x / window.innerWidth)  * 100,
-      y: (mousePixelRef.current.y / window.innerHeight) * 100,
-    };
-    bodyRotRef.current = 0;
+    // Spawn cat at index 0 of the (currently empty) trail
+    catTrailTRef.current  = 0;
+    prevCatPxRef.current  = { x: mousePixelRef.current.x, y: mousePixelRef.current.y };
+    bodyRotRef.current    = 0;
 
     const MAX_TRAIL   = 220;
     const SAMPLE_DIST = 6;
@@ -325,62 +320,92 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
 
       setYarnCursor({ x: mx, y: my, rot: ballRotRef.current, r: ballSizeRef.current });
 
-      // ── Stalking cat (viewport-percent coords) ──────────────────────────
-      const rawCurPct = {
-        x: (mx / window.innerWidth)  * 100,
-        y: (my / window.innerHeight) * 100,
-      };
-      // Smoothly interpolate the cursor target (3% per frame = slow stalk)
-      smoothCurRef.current.x += (rawCurPct.x - smoothCurRef.current.x) * 0.03;
-      smoothCurRef.current.y += (rawCurPct.y - smoothCurRef.current.y) * 0.03;
+      // ── Cat walks along the yarn trail toward the ball ──────────────────
+      // The trail array pts[0..n-1] is in pixel coords, oldest→newest.
+      // catTrailTRef is a float index: 0 = start of trail, n-1 = at the ball.
+      // Each tick we advance the cat a fixed number of pixels along the trail.
+      const CAT_SPEED_PX = 3.2; // pixels per frame along the trail
+      const n = pts.length;
 
-      const cp = catBodyPosRef.current;
-      const sc = smoothCurRef.current;
-      const dx = sc.x - cp.x;
-      const dy = sc.y - cp.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const STALK_DIST = 14; // vw — how close before it stops advancing
+      if (n >= 2) {
+        let t = catTrailTRef.current;
+        // Clamp to valid range
+        if (t >= n - 1) t = n - 1;
 
-      if (dist > STALK_DIST + 0.5) {
-        const spd = Math.min((dist - STALK_DIST) * 0.018, 0.6);
-        cp.x += (dx / dist) * spd;
-        cp.y += (dy / dist) * spd;
-      }
+        // Advance t by CAT_SPEED_PX pixels along the polyline
+        let remaining = CAT_SPEED_PX;
+        while (remaining > 0 && t < n - 1) {
+          const i0 = Math.floor(t);
+          const i1 = Math.min(i0 + 1, n - 1);
+          const p0 = pts[i0];
+          const p1 = pts[i1];
+          const segLen = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+          if (segLen < 0.001) { t = i1; break; }
+          const frac = t - i0;          // how far through this segment we already are
+          const distLeft = segLen * (1 - frac); // px left in this segment
+          if (remaining <= distLeft) {
+            t += remaining / segLen;
+            remaining = 0;
+          } else {
+            remaining -= distLeft;
+            t = i1;
+          }
+        }
+        // Never overshoot — stay a little behind the ball so it's always chasing
+        const MAX_T = Math.max(0, n - 1 - 8); // 8-point gap = ~48 px behind
+        if (t > MAX_T) t = MAX_T;
+        catTrailTRef.current = t;
 
-      // Body rotation — direction of travel
-      const mvDx = cp.x - prevCatPosRef.current.x;
-      const mvDy = cp.y - prevCatPosRef.current.y;
-      const mvSpeed = Math.sqrt(mvDx * mvDx + mvDy * mvDy);
-      prevCatPosRef.current = { x: cp.x, y: cp.y };
+        // Interpolate pixel position at fractional t
+        const ti = Math.floor(t);
+        const tf = t - ti;
+        const p0 = pts[Math.min(ti,     n - 1)];
+        const p1 = pts[Math.min(ti + 1, n - 1)];
+        const catX = p0.x + (p1.x - p0.x) * tf;
+        const catY = p0.y + (p1.y - p0.y) * tf;
 
-      if (mvSpeed > 0.002) {
-        const targetBodyRot = Math.atan2(mvDy, mvDx) * (180 / Math.PI);
+        // Body rotation = tangent of trail at this point (look 4 points ahead)
+        const lookAhead = pts[Math.min(ti + 4, n - 1)];
+        const tdx = lookAhead.x - catX;
+        const tdy = lookAhead.y - catY;
+        const targetBodyRot = Math.atan2(tdy, tdx) * (180 / Math.PI);
         let delta = targetBodyRot - bodyRotRef.current;
         while (delta >  180) delta -= 360;
         while (delta < -180) delta += 360;
-        bodyRotRef.current += delta * 0.12;
+        bodyRotRef.current += delta * 0.18;
+
+        // Head rotation = angle toward the yarn ball, relative to body
+        const hdx = mx - catX;
+        const hdy = my - catY;
+        const absHead = Math.atan2(hdy, hdx) * (180 / Math.PI);
+        let relHead = absHead - bodyRotRef.current;
+        while (relHead >  180) relHead -= 360;
+        while (relHead < -180) relHead += 360;
+        const clampedHead = Math.max(-75, Math.min(75, relHead));
+
+        const mvDx = catX - prevCatPxRef.current.x;
+        const mvDy = catY - prevCatPxRef.current.y;
+        const mvSpeed = Math.hypot(mvDx, mvDy);
+        prevCatPxRef.current = { x: catX, y: catY };
+
+        const norm = ((bodyRotRef.current % 360) + 360) % 360;
+        const flipped = norm > 90 && norm < 270;
+
+        setCat({
+          x:       catX,
+          y:       catY,
+          bodyRot: bodyRotRef.current,
+          headRot: clampedHead,
+          flipped,
+          speed:   Math.min(mvSpeed / CAT_SPEED_PX, 1),
+        });
+      } else if (n === 1) {
+        // Trail just started — sit at the one point
+        setCat(prev => prev
+          ? { ...prev, x: pts[0].x, y: pts[0].y }
+          : { x: pts[0].x, y: pts[0].y, bodyRot: 0, headRot: 0, flipped: false, speed: 0 }
+        );
       }
-
-      // Head rotation — always aims at raw cursor, relative to body
-      const headDx = rawCurPct.x - cp.x;
-      const headDy = rawCurPct.y - cp.y;
-      const absHeadAngle = Math.atan2(headDy, headDx) * (180 / Math.PI);
-      let relHeadAngle = absHeadAngle - bodyRotRef.current;
-      while (relHeadAngle >  180) relHeadAngle -= 360;
-      while (relHeadAngle < -180) relHeadAngle += 360;
-      const clampedHead = Math.max(-75, Math.min(75, relHeadAngle));
-
-      const norm = ((bodyRotRef.current % 360) + 360) % 360;
-      const flipped = norm > 90 && norm < 270;
-
-      setCat({
-        left:    `${cp.x}vw`,
-        top:     `${cp.y}vh`,
-        bodyRot: bodyRotRef.current,
-        headRot: clampedHead,
-        flipped,
-        speed:   Math.min(mvSpeed * 60, 1),
-      });
 
       animFrameRef.current = requestAnimationFrame(tick);
     };
@@ -755,8 +780,8 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
         <div
           className="upload-creature"
           style={{
-            left: cat.left,
-            top:  cat.top,
+            left: cat.x,
+            top:  cat.y,
             transform: `translate(-50%, -50%) rotate(${cat.bodyRot}deg) scaleX(${cat.flipped ? -1 : 1})`,
           } as React.CSSProperties}
         >
