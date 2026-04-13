@@ -160,6 +160,9 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [extractingZip, setExtractingZip] = useState(false);
+  // Guard against processFiles being called concurrently (React Strict Mode double-invoke,
+  // rapid folder/ZIP input triggers, or simultaneous drop + input events).
+  const isProcessingRef = useRef(false);
   const [recompressState, setRecompressState] = useState<{
     running: boolean;
     done: number;
@@ -301,7 +304,13 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
 
   const processFiles = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
-
+    // Prevent concurrent uploads — drop any call that arrives while one is already running
+    if (isProcessingRef.current) {
+      log.upload('processFiles | SKIPPED — already in progress (double-fire guard)');
+      return;
+    }
+    isProcessingRef.current = true;
+    try {
     // Filter to images only, read EXIF DateTimeOriginal (falls back to lastModified),
     // then sort oldest-first so folder imports stay in photo order.
     const rawFiles = acceptedFiles.filter(f => f.type.startsWith('image/'));
@@ -348,6 +357,9 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     setUploadProgress(null);
     log.upload(`upload complete | success=${items.filter(i => i.storagePath).length} fallback=${items.filter(i => !i.storagePath).length} total=${items.length}`);
     onImagesUploaded(items);
+    } finally {
+      isProcessingRef.current = false;
+    }
   }, [onImagesUploaded, userId]);
   
   const uploadToSupabase = async (file: File, productId: string): Promise<{ preview: string; imageUrls: string[]; storagePath: string } | null> => {
