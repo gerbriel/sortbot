@@ -127,7 +127,8 @@
 .yarn-ball {
   position: fixed;
   border-radius: 50%;
-  pointer-events: none;
+  pointer-events: auto;   /* clicks pass through; overlay itself stays pointer-events: none */
+  cursor: pointer;
   z-index: 10001;
   /* Warm orange-red wool base */
   background: radial-gradient(circle at 38% 35%, #f4a84a, #c85820 60%, #8c3310);
@@ -147,7 +148,101 @@
   overflow: hidden;
 }
 
+/* ── Paused state — radial pulse ─────────────────────────────────────────── */
+@keyframes yarn-pulse {
+  0%, 100% {
+    box-shadow:
+      0 4px 14px rgba(0,0,0,0.45),
+      inset 0 -4px 8px rgba(80,20,0,0.35),
+      inset 0  3px 6px rgba(255,200,120,0.25),
+      0 0 0 0 rgba(220,100,20,0);
+  }
+  50% {
+    box-shadow:
+      0 4px 14px rgba(0,0,0,0.45),
+      inset 0 -4px 8px rgba(80,20,0,0.35),
+      inset 0  3px 6px rgba(255,200,120,0.25),
+      0 0 0 18px rgba(220,100,20,0.22);
+  }
+}
+.yarn-ball-paused {
+  animation: yarn-pulse 1.1s ease-in-out infinite;
+}
 
+/* ── Paused badge ─────────────────────────────────────────────────────────── */
+.yarn-paused-badge {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0,0,0,0.72);
+  color: #fff;
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 0.65rem 1.4rem;
+  border-radius: 2rem;
+  pointer-events: none;
+  z-index: 10002;
+  white-space: nowrap;
+}
+
+/* ── Cancel confirm dialog ────────────────────────────────────────────────── */
+.yarn-cancel-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border-radius: 14px;
+  padding: 1.75rem 2.25rem;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+  z-index: 10002;
+  text-align: center;
+  min-width: 300px;
+  pointer-events: auto;
+}
+.yarn-cancel-dialog p {
+  margin: 0 0 0.4rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #111;
+}
+.yarn-cancel-sub {
+  font-size: 0.85rem !important;
+  font-weight: 400 !important;
+  color: #666 !important;
+}
+.yarn-cancel-buttons {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  justify-content: center;
+}
+.yarn-cancel-btn-yes {
+  padding: 0.55rem 1.4rem;
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.yarn-cancel-btn-yes:hover { background: #b91c1c; }
+.yarn-cancel-btn-no {
+  padding: 0.55rem 1.4rem;
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.yarn-cancel-btn-no:hover { background: #e5e7eb; }
 
 .upload-icon {
   width: 48px;
