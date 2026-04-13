@@ -51,13 +51,40 @@
   background: white;
 }
 
-/* While uploading: taller box so the creature has room to roam */
+/* While uploading: minimal height, just shows the progress text */
 .dropzone.uploading {
-  min-height: 160px;
+  min-height: 80px;
   cursor: default;
   position: relative;
   overflow: hidden;
-  padding: 0;
+  padding: var(--space-6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Full-screen creature overlay ───────────────────────────────────────── */
+.upload-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none; /* let clicks pass through to the page */
+  background: rgba(255,255,255,0.0); /* fully transparent — just a stage */
+}
+
+.upload-overlay-label {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.82rem;
+  color: var(--gray-500);
+  font-weight: 500;
+  white-space: nowrap;
+  background: rgba(255,255,255,0.85);
+  padding: 4px 12px;
+  border-radius: 20px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.08);
 }
 
 .dropzone:hover {
@@ -94,13 +121,16 @@
 }
 
 .upload-creature {
-  position: absolute;
+  position: fixed;
+  /* left/top set inline in vw/vh units */
   transform: translate(-50%, -60%) rotate(var(--rotation, 0deg));
   display: flex;
   flex-direction: column;
   align-items: center;
   pointer-events: none;
-  z-index: 2;
+  z-index: 10000;
+  /* Smooth the position transitions slightly so micro-jitter doesn't show */
+  will-change: transform, left, top;
 }
 
 .creature-body {
@@ -155,18 +185,6 @@
 
 .leg-l { animation: leg-walk 0.42s ease-in-out infinite; }
 .leg-r { animation: leg-walk 0.42s ease-in-out infinite reverse; }
-
-.upload-progress-label {
-  position: absolute;
-  bottom: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.8rem;
-  color: var(--gray-500);
-  font-weight: 500;
-  white-space: nowrap;
-  pointer-events: none;
-}
 
 .upload-icon {
   width: 48px;
