@@ -103,7 +103,14 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       if (src.category) parts.push(src.category);
       if (src.size) parts.push(`(${src.size})`);
       const built = parts.filter(Boolean).join(' ');
-      return built || '';
+      // If we have nothing distinctive, fall back to the filename (minus extension)
+      // so every product gets a unique title/handle even without AI-generated data.
+      if (!built) {
+        const nameSource = group.find(i => i.originalName) || productData;
+        const filename = (nameSource.originalName || '').replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+        return filename || '';
+      }
+      return built;
     })();
 
     // Strip any remaining {tokens} from whichever title we use
@@ -269,7 +276,14 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       const imageAltText = altParts.filter(Boolean).join(' - ');
 
       // Build a URL handle and ensure it's globally unique within this export.
-      let baseHandle = cleanTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || `product-${idx + 1}`;
+      // Steps: lowercase → spaces to dashes → strip non-alphanumeric → collapse multiple dashes → trim dashes
+      let baseHandle = cleanTitle
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9-]/g, '')
+        .replace(/-{2,}/g, '-')   // collapse --- → -
+        .replace(/^-+|-+$/g, '')  // trim leading/trailing dashes
+        || `product-${idx + 1}`;
       let handle = baseHandle;
       let handleSuffix = 2;
       while (usedHandles.has(handle)) {
