@@ -454,15 +454,18 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
 
     const CHUNK = 10;
     const items: ClothingItem[] = [];
+    // Track every storagePath we successfully write to Supabase Storage,
+    // so we can delete them all if the user cancels.
+    const uploadedPaths: string[] = [];
 
     for (let i = 0; i < imageFiles.length; i += CHUNK) {
       // ── Pause: busy-wait (poll every 200ms) until resumed or cancelled ──
       while (pausedRef.current && !cancelledRef.current) {
         await new Promise(resolve => setTimeout(resolve, 200));
       }
-      // ── Cancel: discard everything uploaded so far ──
+      // ── Cancel: delete everything already in Storage, then stop ──
       if (cancelledRef.current) {
-        log.upload('processFiles | CANCELLED by user');
+        log.upload(`processFiles | CANCELLED — deleting ${uploadedPaths.length} already-uploaded files`);
         break;
       }
 
@@ -478,6 +481,8 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
         }
         // Mark as compressed so the "needs compression" badge never shows for fresh uploads
         if (COMPRESS_ON_UPLOAD) markCompressed(uploaded.storagePath);
+        // Track for potential cancel-cleanup
+        uploadedPaths.push(uploaded.storagePath);
         return {
           id: productId, file,
           capturedAt,
@@ -499,7 +504,18 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       log.upload(`upload complete | success=${items.filter(i => i.storagePath).length} fallback=${items.filter(i => !i.storagePath).length} total=${items.length}`);
       onImagesUploaded(items);
     } else {
-      log.upload('upload cancelled — partial items discarded');
+      // Delete every file we already pushed to Supabase Storage
+      if (uploadedPaths.length > 0) {
+        const { error } = await supabase.storage
+          .from('product-images')
+          .remove(uploadedPaths);
+        if (error) {
+          console.error('Cancel cleanup: failed to delete uploaded files', error);
+        } else {
+          log.upload(`cancel cleanup | deleted ${uploadedPaths.length} files from storage`);
+        }
+      }
+      log.upload('upload cancelled — storage cleaned up');
     }
     } finally {
       isProcessingRef.current = false;
