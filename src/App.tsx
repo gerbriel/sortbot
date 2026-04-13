@@ -883,7 +883,10 @@ function App() {
           alt_text: item.seoTitle || 'Uploaded image',
           original_name: item.originalName ?? null,
         })),
-        { onConflict: 'product_id,image_url', ignoreDuplicates: false }
+        // ignoreDuplicates: true — never overwrite/conflict with registerItemsInDB's
+        // delete-then-insert strategy. This write is best-effort to keep the Library
+        // in sync immediately; the authoritative write is in registerItemsInDB.
+        { onConflict: 'product_id,image_url', ignoreDuplicates: true }
       );
       if (imgErr2) {
         console.warn('[App] upload | product_images upsert error:', imgErr2.message, imgErr2.code);

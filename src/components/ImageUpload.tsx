@@ -512,25 +512,13 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
           const compressedPaths = getCompressedPaths();
           const allCandidates = (existingItems ?? []).filter(i => i.storagePath && (i.imageUrls?.[0] || i.thumbnailUrl || i.preview));
           const needsWorkCount = allCandidates.filter(i => !compressedPaths.has(i.storagePath!)).length;
-          const alreadyDoneCount = allCandidates.length - needsWorkCount;
 
           return (
             <div style={{ marginTop: '0.75rem' }}>
               {recompressState === null ? (
                 <div>
-                  {/* Status summary row — only "needs compression" badge stays; "already compressed" is a toast */}
-                  {needsWorkCount > 0 && (
-                    <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.4rem', fontSize: '0.78rem', flexWrap: 'wrap' }}>
-                      <span style={{ background: 'rgba(239,68,68,0.12)', color: '#991b1b', border: '1px solid #fca5a5', borderRadius: '4px', padding: '2px 7px' }}>
-                        ⏳ {needsWorkCount} need compression
-                      </span>
-                      {alreadyDoneCount > 0 && (
-                        <span style={{ background: 'rgba(16,185,129,0.12)', color: '#065f46', border: '1px solid #6ee7b7', borderRadius: '4px', padding: '2px 7px' }}>
-                          ✅ {alreadyDoneCount} already compressed
-                        </span>
-                      )}
-                    </div>
-                  )}
+                  {/* No status badges — compression runs automatically on upload.
+                      Only show the manual re-compress button when genuinely needed. */}
                   {needsWorkCount > 0 && (
                     <button
                       type="button"
