@@ -209,34 +209,44 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       return;
     }
 
-    // Spawn 3–6 creatures with random types, staggered around screen center
+    // Spawn 3–6 creatures evenly spaced around the cursor
     const count = 3 + Math.floor(Math.random() * 4); // 3..6
     const shuffled = [...CREATURE_TYPES].sort(() => Math.random() - 0.5);
+
+    // Per-creature orbit state (separate from position refs so they survive re-renders)
+    // orbitAngle  — current angle around cursor (radians)
+    // orbitRadius — current distance from cursor (vw-units)
+    // angleSpeed  — individual drift speed (rad/frame)
+    // radiusTarget — radius it's slowly closing toward
+    const orbitAngles  = Array.from({ length: count }, (_, i) =>
+      (i / count) * Math.PI * 2 + Math.random() * 0.5   // evenly spread + small jitter
+    );
+    const orbitRadii   = Array.from({ length: count }, () => 28 + Math.random() * 18); // start 28-46 vw units away
+    const radiusTarget = Array.from({ length: count }, () => 6 + Math.random() * 8);   // slowly close to 6-14
+    const angleSpeeds  = Array.from({ length: count }, () =>
+      (0.008 + Math.random() * 0.012) * (Math.random() < 0.5 ? 1 : -1) // CW or CCW
+    );
+    // Wobble: each creature also has a small sinusoidal radius oscillation
+    const wobblePhases  = Array.from({ length: count }, () => Math.random() * Math.PI * 2);
+    const wobbleAmps    = Array.from({ length: count }, () => 1.5 + Math.random() * 2.5);
+    const wobbleSpeeds  = Array.from({ length: count }, () => 0.04 + Math.random() * 0.04);
+
     const initial: CreatureAnimState[] = Array.from({ length: count }, (_, i) => {
-      // Spread start positions loosely around center (40–60 vw/vh)
-      const startX = 35 + Math.random() * 30;
-      const startY = 35 + Math.random() * 30;
+      // Start positions spread all over the screen, not clumped at center
+      const startX = 10 + (i / count) * 80 + (Math.random() - 0.5) * 15;
+      const startY = 10 + Math.random() * 80;
       creaturePositions.current[i] = { x: startX, y: startY };
-      const initLag = 8 + Math.random() * 18;
-      lagTargets.current[i]  = initLag;
-      lagCurrents.current[i] = initLag;
+      lagCurrents.current[i] = 0;
+      lagTargets.current[i]  = 0;
       return {
-        id: i,
-        type: shuffled[i % shuffled.length],
-        left: `${startX}vw`,
-        top:  `${startY}vh`,
+        id:       i,
+        type:     shuffled[i % shuffled.length],
+        left:     `${startX}vw`,
+        top:      `${startY}vh`,
         rotation: 0,
       };
     });
     setCreatures(initial);
-
-    // Per-creature lag drift timers
-    const LAG_MIN = 8, LAG_MAX = 24;
-    const refreshLag = (i: number) => {
-      lagTargets.current[i] = LAG_MIN + Math.random() * (LAG_MAX - LAG_MIN);
-      lagTimers.current[i] = window.setTimeout(() => refreshLag(i), 1200 + Math.random() * 1200);
-    };
-    for (let i = 0; i < count; i++) refreshLag(i);
 
     const handleMouseMove = (e: MouseEvent) => {
       cursorPos.current = {
@@ -245,35 +255,53 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       };
     };
 
-    // Each creature has a tiny individual speed multiplier so they spread out
-    const speedMults = Array.from({ length: count }, () => 0.75 + Math.random() * 0.55);
+    // Smooth cursor target so creatures don't snap when mouse jumps
+    const smoothCursor = { x: cursorPos.current.x, y: cursorPos.current.y };
+
+    let frame = 0;
 
     const tick = () => {
-      const tp = cursorPos.current;
+      frame++;
+      const raw = cursorPos.current;
+
+      // Lerp the smoothed cursor toward real cursor — creatures chase this, not raw pos
+      smoothCursor.x += (raw.x - smoothCursor.x) * 0.07;
+      smoothCursor.y += (raw.y - smoothCursor.y) * 0.07;
+
       const updates: Pick<CreatureAnimState, 'id' | 'left' | 'top' | 'rotation'>[] = [];
 
-      for (let i = 0; i < creaturePositions.current.length; i++) {
-        // Lerp lag toward target
-        lagCurrents.current[i] += (lagTargets.current[i] - lagCurrents.current[i]) * 0.008;
+      for (let i = 0; i < count; i++) {
+        // 1. Drift the orbit angle (always moving — never stops)
+        orbitAngles[i] += angleSpeeds[i];
 
-        const cp   = creaturePositions.current[i];
-        const dx   = tp.x - cp.x;
-        const dy   = tp.y - cp.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const lag  = lagCurrents.current[i];
+        // 2. Slowly close the orbit radius toward its target (creep inward)
+        orbitRadii[i] += (radiusTarget[i] - orbitRadii[i]) * 0.003;
 
-        if (dist > lag) {
-          const excess = dist - lag;
-          const speed  = Math.min(excess * 0.09, 2.2) * speedMults[i];
-          cp.x += (dx / dist) * speed;
-          cp.y += (dy / dist) * speed;
-        }
+        // 3. Add wobble so radius oscillates organically
+        const wobble = Math.sin(wobblePhases[i] + frame * wobbleSpeeds[i]) * wobbleAmps[i];
+        const r = Math.max(3, orbitRadii[i] + wobble);
+
+        // 4. Compute ideal orbit position around smooth cursor
+        // vw/vh aren't square so scale y by aspect ratio to keep circle circular
+        const aspect = window.innerHeight / window.innerWidth;
+        const targetX = smoothCursor.x + Math.cos(orbitAngles[i]) * r;
+        const targetY = smoothCursor.y + Math.sin(orbitAngles[i]) * r * aspect;
+
+        // 5. Lerp actual position toward orbit target — this gives smooth, never-snapping motion
+        const cp = creaturePositions.current[i];
+        cp.x += (targetX - cp.x) * 0.06;
+        cp.y += (targetY - cp.y) * 0.06;
+
+        // Face the cursor
+        const dx = smoothCursor.x - cp.x;
+        const dy = (smoothCursor.y - cp.y) / aspect;
+        const rotation = Math.atan2(dy, dx) * (180 / Math.PI);
 
         updates.push({
           id:       i,
           left:     `${cp.x}vw`,
           top:      `${cp.y}vh`,
-          rotation: Math.atan2(dy, dx) * (180 / Math.PI),
+          rotation,
         });
       }
 
