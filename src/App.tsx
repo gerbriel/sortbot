@@ -225,6 +225,9 @@ function App() {
   const isOpeningBatchRef = useRef(false);
   // Debounce timer for auto-save — prevents a PATCH on every rapid grouping action
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // In-flight guard — prevents two concurrent autoSaveWorkflowBatch calls from both
+  // hitting "0 rows updated → INSERT new batch" when the row doesn't exist yet.
+  const autoSaveInFlightRef = useRef(false);
   // Debounce timer for the products-table upsert in handleImagesGrouped.
   // Separate from autoSaveTimerRef so the workflow_state save and the products upsert
   // can debounce independently. Both fire after 2 s of inactivity.
@@ -826,6 +829,24 @@ function App() {
       currentBatchIdRef.current = newBatchId;
       setCurrentBatchId(newBatchId);
       localStorage.setItem('sortbot_current_batch_id', newBatchId);
+
+      // Pre-insert the batch row NOW so that autoSaveWorkflowBatch's blind UPDATE
+      // always finds an existing row. Without this, the UPDATE hits 0 rows and both
+      // concurrent debounce fires call createWorkflowBatch → duplicate batches.
+      if (user) {
+        await supabase.from('workflow_batches').insert({
+          id: newBatchId,
+          user_id: user.id,
+          batch_number: currentBatchNumber,
+          current_step: 1,
+          total_images: 0,
+          product_groups_count: 0,
+          categorized_count: 0,
+          processed_count: 0,
+          workflow_state: { uploadedImages: [], groupedImages: [], sortedImages: [], processedItems: [] },
+        });
+        log.app(`handleImagesUploaded | pre-inserted batch row | batchId=${newBatchId}`);
+      }
     }
     
     // If there are already grouped images, append to those too.
@@ -1234,6 +1255,16 @@ function App() {
       if (!currentBatchIdRef.current) {
         return;
       }
+
+      // In-flight guard: if a save round-trip is already pending, skip this fire.
+      // Without this, two debounce timers that both fired can both see "0 rows updated"
+      // (row not yet in DB) in autoSaveWorkflowBatch and both INSERT a new batch row.
+      if (autoSaveInFlightRef.current) {
+        log.app('autoSaveWorkflow | skipped — save already in flight');
+        return;
+      }
+      autoSaveInFlightRef.current = true;
+
       // Strip only runtime-only fields (File objects, blob URLs, preset cache) before saving.
       // generatedDescription and voiceDescription ARE kept so export works after a page reload
       // without requiring a separate DB fetch.
@@ -1276,6 +1307,8 @@ function App() {
         // (explicit Save Batch or image delete), preventing the auto-save → loadAll loop.
       } catch (error) {
         console.error('Auto-save failed:', error);
+      } finally {
+        autoSaveInFlightRef.current = false;
       }
     }, 2000); // wait 2 s of inactivity before hitting Supabase
   };
