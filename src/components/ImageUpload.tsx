@@ -180,10 +180,9 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
   interface CatState {
     left: string;
     top: string;
-    bodyRot: number;   // whole-cat rotation: faces direction of travel
-    headRot: number;   // head-only rotation: always aims at cursor
-    flipped: boolean;  // mirror-flip when travelling left
-    speed: number;     // 0–1 normalised speed, drives walk-cycle class
+    bodyRot: number;      // whole-cat rotation: faces direction of travel (0° = right)
+    headWorldAngle: number; // head angle in WORLD space (absolute, not relative to body)
+    speed: number;        // 0–1 normalised speed, drives walk-cycle class
   }
 
   const cursorPos    = useRef({ x: 50, y: 50 });
@@ -214,7 +213,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
 
     setCat({
       left: `${startX}vw`, top: `${startY}vh`,
-      bodyRot: 0, headRot: 0, flipped: false, speed: 0,
+      bodyRot: 0, headWorldAngle: 0, speed: 0,
     });
 
     const handleMouseMove = (e: MouseEvent) => {
@@ -261,51 +260,49 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
         bodyRotRef.current += delta * 0.12; // smooth body turning
       }
 
-      // Head rotation: always point toward the raw cursor, relative to body.
-      // We need the angle from cat to cursor, then subtract body rotation.
+      // Head angle: always point toward the raw cursor.
+      // We compute and smooth in WORLD SPACE so the head is immune to body rotation.
+      // (If we smoothed in body-relative space, a 180° body turn would invert the
+      // head's apparent rotation direction and cause the glitch when going left.)
       const headDx = raw.x - cp.x;
       const headDy = raw.y - cp.y;
-      const absHeadAngle = Math.atan2(headDy, headDx) * (180 / Math.PI);
-      // Relative to body so head looks where cursor is regardless of body direction
-      let relHeadAngle = absHeadAngle - bodyRotRef.current;
-      while (relHeadAngle >  180) relHeadAngle -= 360;
-      while (relHeadAngle < -180) relHeadAngle += 360;
+      // Target world-space angle pointing from cat to cursor
+      const targetHeadWorld = Math.atan2(headDy, headDx) * (180 / Math.PI);
 
-      // Smooth the raw angle so the head turns fluidly rather than snapping
-      let headDelta = relHeadAngle - smoothHeadRef.current;
+      // Smooth it in world space
+      let headDelta = targetHeadWorld - smoothHeadRef.current;
       while (headDelta >  180) headDelta -= 360;
       while (headDelta < -180) headDelta += 360;
       smoothHeadRef.current += headDelta * 0.15;
 
       // ── Body-turn bleed-through ──────────────────────────────────────────
-      // When the head is twisted past ±HEAD_SOFT_LIMIT the excess "pulls" the
-      // body to turn in that direction, so the cat naturally swings round to
-      // face the cursor rather than looking uncomfortably strained.
-      // The bleed rate scales with how far past the soft limit we are, so at
-      // exactly the limit nothing happens; deep into the over-turn it rotates
-      // the body briskly.
+      // Convert smoothed world-space head angle to body-relative to check overflow.
+      // When the head is twisted past ±HEAD_SOFT_LIMIT relative to the body, the
+      // excess "pulls" the body to turn so the cat naturally swings round to face
+      // the cursor rather than looking uncomfortably strained.
       const HEAD_SOFT_LIMIT = 38; // degrees — comfortable look-aside range
       const HEAD_HARD_LIMIT = 55; // degrees — maximum displayed head twist
-      const overflow = smoothHeadRef.current - Math.sign(smoothHeadRef.current) * HEAD_SOFT_LIMIT;
-      if (Math.abs(smoothHeadRef.current) > HEAD_SOFT_LIMIT) {
-        // overflow is positive when head twists right-past-limit, negative for left
-        bodyRotRef.current += overflow * 0.04; // gentle but persistent body pull
+      let relHeadAngle = smoothHeadRef.current - bodyRotRef.current;
+      while (relHeadAngle >  180) relHeadAngle -= 360;
+      while (relHeadAngle < -180) relHeadAngle += 360;
+      const overflow = relHeadAngle - Math.sign(relHeadAngle) * HEAD_SOFT_LIMIT;
+      if (Math.abs(relHeadAngle) > HEAD_SOFT_LIMIT) {
+        bodyRotRef.current += overflow * 0.04;
       }
 
-      // Clamp displayed head angle to the hard limit
-      const clampedHead = Math.max(-HEAD_HARD_LIMIT, Math.min(HEAD_HARD_LIMIT, smoothHeadRef.current));
-
-      // Flip the whole cat when travelling leftward (body rot between 90–270)
-      const norm = ((bodyRotRef.current % 360) + 360) % 360;
-      const flipped = norm > 90 && norm < 270;
+      // Clamp: if head is more than HARD_LIMIT from body direction, pin it.
+      // We store the world-space angle clamped to body±HARD_LIMIT.
+      let clampedRelHead = relHeadAngle;
+      if (clampedRelHead >  HEAD_HARD_LIMIT) clampedRelHead =  HEAD_HARD_LIMIT;
+      if (clampedRelHead < -HEAD_HARD_LIMIT) clampedRelHead = -HEAD_HARD_LIMIT;
+      const clampedHeadWorld = bodyRotRef.current + clampedRelHead;
 
       setCat({
-        left:    `${cp.x}vw`,
-        top:     `${cp.y}vh`,
-        bodyRot: bodyRotRef.current,
-        headRot: clampedHead,
-        flipped,
-        speed:   Math.min(mvSpeed * 60, 1), // normalise to 0–1
+        left:           `${cp.x}vw`,
+        top:            `${cp.y}vh`,
+        bodyRot:        bodyRotRef.current,
+        headWorldAngle: clampedHeadWorld,
+        speed:          Math.min(mvSpeed * 60, 1),
       });
 
       animFrameRef.current = requestAnimationFrame(tick);
@@ -600,7 +597,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
           style={{
             left: cat.left,
             top:  cat.top,
-            transform: `translate(-50%, -50%) rotate(${cat.bodyRot}deg) scaleX(${cat.flipped ? -1 : 1})`,
+            transform: `translate(-50%, -50%) rotate(${cat.bodyRot}deg)`,
           } as React.CSSProperties}
         >
           {/* Side-view stalking cat */}
@@ -616,10 +613,10 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
               <div className="cat-leg-side cat-front-leg-far" />
               <div className="cat-leg-side cat-front-leg-near" />
             </div>
-            {/* Head — rotates independently to always face cursor */}
+            {/* Head — counter-rotates out of body space to always face cursor in world space */}
             <div
               className="cat-head-side"
-              style={{ transform: `rotate(${cat.headRot}deg)` } as React.CSSProperties}
+              style={{ transform: `rotate(${cat.headWorldAngle - cat.bodyRot}deg)` } as React.CSSProperties}
             >
               <div className="cat-ear-side cat-ear-side-l" />
               <div className="cat-ear-side cat-ear-side-r" />
