@@ -173,16 +173,12 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
   const folderInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
 
-  // ── Upload creature horde (mouse-chasing monsters) ───────────────────────
-  const CREATURE_TYPES = ['blob', 'werewolf', 'stone', 'tree', 'vampire', 'frankenstein'] as const;
-  type CreatureType = typeof CREATURE_TYPES[number];
-
+  // ── Upload creature horde (cats circling the cursor) ────────────────────
   interface CreatureAnimState {
     id: number;
-    type: CreatureType;
     left: string;
     top: string;
-    rotation: number;
+    flip: boolean; // mirror the cat when moving left
   }
 
   // Shared cursor position
@@ -209,42 +205,29 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       return;
     }
 
-    // Spawn 3–6 creatures evenly spaced around the cursor
+    // Spawn 3–6 cats evenly spaced around the screen
     const count = 3 + Math.floor(Math.random() * 4); // 3..6
-    const shuffled = [...CREATURE_TYPES].sort(() => Math.random() - 0.5);
 
-    // Per-creature orbit state (separate from position refs so they survive re-renders)
-    // orbitAngle  — current angle around cursor (radians)
-    // orbitRadius — current distance from cursor (vw-units)
-    // angleSpeed  — individual drift speed (rad/frame)
-    // radiusTarget — radius it's slowly closing toward
+    // Per-creature orbit state
     const orbitAngles  = Array.from({ length: count }, (_, i) =>
-      (i / count) * Math.PI * 2 + Math.random() * 0.5   // evenly spread + small jitter
+      (i / count) * Math.PI * 2 + Math.random() * 0.5
     );
-    const orbitRadii   = Array.from({ length: count }, () => 28 + Math.random() * 18); // start 28-46 vw units away
-    const radiusTarget = Array.from({ length: count }, () => 6 + Math.random() * 8);   // slowly close to 6-14
+    const orbitRadii   = Array.from({ length: count }, () => 28 + Math.random() * 18);
+    const radiusTarget = Array.from({ length: count }, () => 6 + Math.random() * 8);
     const angleSpeeds  = Array.from({ length: count }, () =>
-      (0.008 + Math.random() * 0.012) * (Math.random() < 0.5 ? 1 : -1) // CW or CCW
+      (0.008 + Math.random() * 0.012) * (Math.random() < 0.5 ? 1 : -1)
     );
-    // Wobble: each creature also has a small sinusoidal radius oscillation
     const wobblePhases  = Array.from({ length: count }, () => Math.random() * Math.PI * 2);
     const wobbleAmps    = Array.from({ length: count }, () => 1.5 + Math.random() * 2.5);
     const wobbleSpeeds  = Array.from({ length: count }, () => 0.04 + Math.random() * 0.04);
 
     const initial: CreatureAnimState[] = Array.from({ length: count }, (_, i) => {
-      // Start positions spread all over the screen, not clumped at center
       const startX = 10 + (i / count) * 80 + (Math.random() - 0.5) * 15;
       const startY = 10 + Math.random() * 80;
       creaturePositions.current[i] = { x: startX, y: startY };
       lagCurrents.current[i] = 0;
       lagTargets.current[i]  = 0;
-      return {
-        id:       i,
-        type:     shuffled[i % shuffled.length],
-        left:     `${startX}vw`,
-        top:      `${startY}vh`,
-        rotation: 0,
-      };
+      return { id: i, left: `${startX}vw`, top: `${startY}vh`, flip: false };
     });
     setCreatures(initial);
 
@@ -255,54 +238,39 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       };
     };
 
-    // Smooth cursor target so creatures don't snap when mouse jumps
     const smoothCursor = { x: cursorPos.current.x, y: cursorPos.current.y };
+    // Track previous x per cat to determine flip direction
+    const prevX = Array.from({ length: count }, (_, i) => creaturePositions.current[i]?.x ?? 50);
 
     let frame = 0;
 
     const tick = () => {
       frame++;
       const raw = cursorPos.current;
-
-      // Lerp the smoothed cursor toward real cursor — creatures chase this, not raw pos
       smoothCursor.x += (raw.x - smoothCursor.x) * 0.07;
       smoothCursor.y += (raw.y - smoothCursor.y) * 0.07;
 
-      const updates: Pick<CreatureAnimState, 'id' | 'left' | 'top' | 'rotation'>[] = [];
+      const updates: Pick<CreatureAnimState, 'id' | 'left' | 'top' | 'flip'>[] = [];
 
       for (let i = 0; i < count; i++) {
-        // 1. Drift the orbit angle (always moving — never stops)
         orbitAngles[i] += angleSpeeds[i];
-
-        // 2. Slowly close the orbit radius toward its target (creep inward)
-        orbitRadii[i] += (radiusTarget[i] - orbitRadii[i]) * 0.003;
-
-        // 3. Add wobble so radius oscillates organically
+        orbitRadii[i]  += (radiusTarget[i] - orbitRadii[i]) * 0.003;
         const wobble = Math.sin(wobblePhases[i] + frame * wobbleSpeeds[i]) * wobbleAmps[i];
         const r = Math.max(3, orbitRadii[i] + wobble);
 
-        // 4. Compute ideal orbit position around smooth cursor
-        // vw/vh aren't square so scale y by aspect ratio to keep circle circular
-        const aspect = window.innerHeight / window.innerWidth;
+        const aspect  = window.innerHeight / window.innerWidth;
         const targetX = smoothCursor.x + Math.cos(orbitAngles[i]) * r;
         const targetY = smoothCursor.y + Math.sin(orbitAngles[i]) * r * aspect;
 
-        // 5. Lerp actual position toward orbit target — this gives smooth, never-snapping motion
         const cp = creaturePositions.current[i];
         cp.x += (targetX - cp.x) * 0.06;
         cp.y += (targetY - cp.y) * 0.06;
 
-        // Face the cursor
-        const dx = smoothCursor.x - cp.x;
-        const dy = (smoothCursor.y - cp.y) / aspect;
-        const rotation = Math.atan2(dy, dx) * (180 / Math.PI);
+        // Flip cat to face direction of travel
+        const movingLeft = cp.x < prevX[i];
+        prevX[i] = cp.x;
 
-        updates.push({
-          id:       i,
-          left:     `${cp.x}vw`,
-          top:      `${cp.y}vh`,
-          rotation,
-        });
+        updates.push({ id: i, left: `${cp.x}vw`, top: `${cp.y}vh`, flip: movingLeft });
       }
 
       setCreatures(prev =>
@@ -593,22 +561,34 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       {creatures.map(c => (
         <div
           key={c.id}
-          className={`upload-creature creature-${c.type}`}
+          className="upload-creature"
           style={{
             left: c.left,
             top:  c.top,
-            '--rotation': `${c.rotation}deg`,
+            transform: `translate(-50%, -50%) scaleX(${c.flip ? -1 : 1})`,
           } as React.CSSProperties}
         >
-          <div className="creature-body">
-            <div className="creature-eyes">
-              <div className="creature-eye" />
-              <div className="creature-eye" />
+          {/* Cat: head + ears + face */}
+          <div className="cat-head">
+            <div className="cat-ear cat-ear-l" />
+            <div className="cat-ear cat-ear-r" />
+            <div className="cat-eyes">
+              <div className="cat-eye" />
+              <div className="cat-eye" />
+            </div>
+            <div className="cat-nose" />
+            <div className="cat-whiskers">
+              <div className="cat-whisker wl1" /><div className="cat-whisker wl2" />
+              <div className="cat-whisker wr1" /><div className="cat-whisker wr2" />
             </div>
           </div>
-          <div className="creature-legs">
-            <div className="creature-leg leg-l" />
-            <div className="creature-leg leg-r" />
+          {/* Body */}
+          <div className="cat-body">
+            <div className="cat-tail" />
+            <div className="cat-paws">
+              <div className="cat-paw paw-fl" />
+              <div className="cat-paw paw-fr" />
+            </div>
           </div>
         </div>
       ))}
