@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import JSZip from 'jszip';
 import exifr from 'exifr';
@@ -171,6 +171,62 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
 
   const folderInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Upload creature (mouse-chasing blob) ──────────────────────────────────
+  const dropzoneRef = useRef<HTMLDivElement>(null);
+  const creaturePos = useRef({ x: 50, y: 50 }); // % within dropzone
+  const cursorPos   = useRef({ x: 50, y: 50 });
+  const animFrameRef = useRef<number | null>(null);
+  const [creatureStyle, setCreatureStyle] = useState({ left: '50%', top: '50%', rotation: 0 });
+
+  useEffect(() => {
+    if (!isUploading) {
+      // Reset creature to center when upload finishes
+      setCreatureStyle({ left: '50%', top: '50%', rotation: 0 });
+      creaturePos.current = { x: 50, y: 50 };
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      return;
+    }
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const el = dropzoneRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      cursorPos.current = {
+        x: Math.max(5, Math.min(95, ((e.clientX - rect.left) / rect.width)  * 100)),
+        y: Math.max(5, Math.min(90, ((e.clientY - rect.top)  / rect.height) * 100)),
+      };
+    };
+
+    const tick = () => {
+      const cp = creaturePos.current;
+      const tp = cursorPos.current;
+      const dx = tp.x - cp.x;
+      const dy = tp.y - cp.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist > 1.5) {
+        const speed = Math.min(dist * 0.07, 3); // ease-in, cap speed
+        cp.x += (dx / dist) * speed;
+        cp.y += (dy / dist) * speed;
+      }
+
+      const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
+      setCreatureStyle({
+        left: `${cp.x}%`,
+        top:  `${cp.y}%`,
+        rotation: angleDeg,
+      });
+      animFrameRef.current = requestAnimationFrame(tick);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    animFrameRef.current = requestAnimationFrame(tick);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [isUploading]);
 
   // Expose trigger methods to App.tsx so it can place the buttons in the section header
   useImperativeHandle(ref, () => ({
@@ -461,6 +517,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
 
         <div 
           {...getRootProps()} 
+          ref={dropzoneRef}
           className={`dropzone ${isDragActive ? 'active' : ''} ${isUploading || extractingZip ? 'uploading' : ''}`}
         >
           <input {...getInputProps()} />
@@ -472,10 +529,32 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
               </>
             ) : isUploading ? (
               <>
-                <div className="spinner"></div>
-                <p>
-                  Uploading images…
-                  {uploadProgress && ` (${uploadProgress.done} / ${uploadProgress.total})`}
+                {/* Mouse-chasing upload creature */}
+                <div
+                  className="upload-creature"
+                  style={{
+                    left: creatureStyle.left,
+                    top:  creatureStyle.top,
+                    '--rotation': `${creatureStyle.rotation}deg`,
+                  } as React.CSSProperties}
+                >
+                  {/* Body */}
+                  <div className="creature-body">
+                    {/* Eyes */}
+                    <div className="creature-eyes">
+                      <div className="creature-eye" />
+                      <div className="creature-eye" />
+                    </div>
+                  </div>
+                  {/* Legs */}
+                  <div className="creature-legs">
+                    <div className="creature-leg leg-l" />
+                    <div className="creature-leg leg-r" />
+                  </div>
+                </div>
+                {/* Progress label, pinned to bottom of dropzone */}
+                <p className="upload-progress-label">
+                  Uploading{uploadProgress ? ` ${uploadProgress.done} / ${uploadProgress.total}` : '…'}
                 </p>
               </>
             ) : (

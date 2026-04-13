@@ -51,6 +51,15 @@
   background: white;
 }
 
+/* While uploading: taller box so the creature has room to roam */
+.dropzone.uploading {
+  min-height: 160px;
+  cursor: default;
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+}
+
 .dropzone:hover {
   border-color: var(--shopify-blue);
   background: #f7f9fc;
@@ -69,6 +78,94 @@
   gap: var(--space-4);
   max-width: 500px;
   margin: 0 auto;
+}
+
+/* ── Upload creature ─────────────────────────────────────────────────────── */
+
+/* Leg waggle */
+@keyframes leg-walk {
+  0%, 100% { transform: rotate(-25deg); }
+  50%       { transform: rotate( 25deg); }
+}
+/* Subtle body bounce */
+@keyframes body-bounce {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-3px); }
+}
+
+.upload-creature {
+  position: absolute;
+  transform: translate(-50%, -60%) rotate(var(--rotation, 0deg));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.creature-body {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #f9c95e, #f5a623);
+  box-shadow: 0 4px 14px rgba(245,166,35,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: body-bounce 0.42s ease-in-out infinite;
+}
+
+.creature-eyes {
+  display: flex;
+  gap: 7px;
+  margin-top: -4px;
+}
+
+.creature-eye {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #1a1a2e;
+  position: relative;
+}
+.creature-eye::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.7);
+}
+
+.creature-legs {
+  display: flex;
+  gap: 10px;
+  margin-top: -2px;
+}
+
+.creature-leg {
+  width: 6px;
+  height: 14px;
+  border-radius: 3px;
+  background: #f5a623;
+  transform-origin: top center;
+}
+
+.leg-l { animation: leg-walk 0.42s ease-in-out infinite; }
+.leg-r { animation: leg-walk 0.42s ease-in-out infinite reverse; }
+
+.upload-progress-label {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.8rem;
+  color: var(--gray-500);
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .upload-icon {
