@@ -173,23 +173,70 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
   const folderInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
 
-  // ── Upload creature (mouse-chasing blob) ──────────────────────────────────
-  const creaturePos   = useRef({ x: 50, y: 50 }); // vw/vh %
-  const cursorPos     = useRef({ x: 50, y: 50 });
-  const animFrameRef  = useRef<number | null>(null);
-  // Smoothly-drifting "lag distance" so the creature never quite catches up.
-  // Drifts randomly between MIN and MAX, transitions slowly via a current/target approach.
-  const lagTarget     = useRef(12);   // target lag distance (% of screen)
-  const lagCurrent    = useRef(12);   // current lag (lerps toward target)
-  const [creatureStyle, setCreatureStyle] = useState({ left: '50%', top: '50%', rotation: 0 });
+  // ── Upload creature horde (mouse-chasing monsters) ───────────────────────
+  const CREATURE_TYPES = ['blob', 'werewolf', 'stone', 'tree', 'vampire', 'frankenstein'] as const;
+  type CreatureType = typeof CREATURE_TYPES[number];
+
+  interface CreatureAnimState {
+    id: number;
+    type: CreatureType;
+    left: string;
+    top: string;
+    rotation: number;
+  }
+
+  // Shared cursor position
+  const cursorPos    = useRef({ x: 50, y: 50 });
+  const animFrameRef = useRef<number | null>(null);
+
+  // Per-creature refs (arrays, indexed by creature id)
+  const creaturePositions = useRef<Array<{ x: number; y: number }>>([]);
+  const lagTargets        = useRef<number[]>([]);
+  const lagCurrents       = useRef<number[]>([]);
+  const lagTimers         = useRef<number[]>([]);
+
+  const [creatures, setCreatures] = useState<CreatureAnimState[]>([]);
 
   useEffect(() => {
     if (!isUploading) {
-      setCreatureStyle({ left: '50%', top: '50%', rotation: 0 });
-      creaturePos.current = { x: 50, y: 50 };
+      setCreatures([]);
+      creaturePositions.current = [];
+      lagTargets.current = [];
+      lagCurrents.current = [];
+      lagTimers.current.forEach(t => clearTimeout(t));
+      lagTimers.current = [];
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       return;
     }
+
+    // Spawn 3–6 creatures with random types, staggered around screen center
+    const count = 3 + Math.floor(Math.random() * 4); // 3..6
+    const shuffled = [...CREATURE_TYPES].sort(() => Math.random() - 0.5);
+    const initial: CreatureAnimState[] = Array.from({ length: count }, (_, i) => {
+      // Spread start positions loosely around center (40–60 vw/vh)
+      const startX = 35 + Math.random() * 30;
+      const startY = 35 + Math.random() * 30;
+      creaturePositions.current[i] = { x: startX, y: startY };
+      const initLag = 8 + Math.random() * 18;
+      lagTargets.current[i]  = initLag;
+      lagCurrents.current[i] = initLag;
+      return {
+        id: i,
+        type: shuffled[i % shuffled.length],
+        left: `${startX}vw`,
+        top:  `${startY}vh`,
+        rotation: 0,
+      };
+    });
+    setCreatures(initial);
+
+    // Per-creature lag drift timers
+    const LAG_MIN = 8, LAG_MAX = 24;
+    const refreshLag = (i: number) => {
+      lagTargets.current[i] = LAG_MIN + Math.random() * (LAG_MAX - LAG_MIN);
+      lagTimers.current[i] = window.setTimeout(() => refreshLag(i), 1200 + Math.random() * 1200);
+    };
+    for (let i = 0; i < count; i++) refreshLag(i);
 
     const handleMouseMove = (e: MouseEvent) => {
       cursorPos.current = {
@@ -198,41 +245,45 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       };
     };
 
-    // Every ~1.8 s, smoothly shift the target lag distance so the gap feels alive
-    let lagTimer = 0;
-    const LAG_MIN = 8, LAG_MAX = 22;
-    const refreshLag = () => {
-      lagTarget.current = LAG_MIN + Math.random() * (LAG_MAX - LAG_MIN);
-      lagTimer = window.setTimeout(refreshLag, 1200 + Math.random() * 1200);
-    };
-    refreshLag();
+    // Each creature has a tiny individual speed multiplier so they spread out
+    const speedMults = Array.from({ length: count }, () => 0.75 + Math.random() * 0.55);
 
     const tick = () => {
-      // Lerp lag distance toward its target (very slow drift — feels organic)
-      lagCurrent.current += (lagTarget.current - lagCurrent.current) * 0.008;
-
-      const cp = creaturePos.current;
       const tp = cursorPos.current;
-      const dx = tp.x - cp.x;
-      const dy = tp.y - cp.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const lag  = lagCurrent.current;
+      const updates: Pick<CreatureAnimState, 'id' | 'left' | 'top' | 'rotation'>[] = [];
 
-      // Only move when the creature is farther than the desired lag distance.
-      // Speed scales with how far it exceeds that gap, capped for smoothness.
-      if (dist > lag) {
-        const excess = dist - lag;
-        const speed  = Math.min(excess * 0.09, 2.2);
-        cp.x += (dx / dist) * speed;
-        cp.y += (dy / dist) * speed;
+      for (let i = 0; i < creaturePositions.current.length; i++) {
+        // Lerp lag toward target
+        lagCurrents.current[i] += (lagTargets.current[i] - lagCurrents.current[i]) * 0.008;
+
+        const cp   = creaturePositions.current[i];
+        const dx   = tp.x - cp.x;
+        const dy   = tp.y - cp.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const lag  = lagCurrents.current[i];
+
+        if (dist > lag) {
+          const excess = dist - lag;
+          const speed  = Math.min(excess * 0.09, 2.2) * speedMults[i];
+          cp.x += (dx / dist) * speed;
+          cp.y += (dy / dist) * speed;
+        }
+
+        updates.push({
+          id:       i,
+          left:     `${cp.x}vw`,
+          top:      `${cp.y}vh`,
+          rotation: Math.atan2(dy, dx) * (180 / Math.PI),
+        });
       }
 
-      const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
-      setCreatureStyle({
-        left:     `${cp.x}vw`,
-        top:      `${cp.y}vh`,
-        rotation: angleDeg,
-      });
+      setCreatures(prev =>
+        prev.map(c => {
+          const u = updates.find(x => x.id === c.id);
+          return u ? { ...c, ...u } : c;
+        })
+      );
+
       animFrameRef.current = requestAnimationFrame(tick);
     };
 
@@ -241,7 +292,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      clearTimeout(lagTimer);
+      lagTimers.current.forEach(t => clearTimeout(t));
     };
   }, [isUploading]);
 
@@ -511,25 +562,28 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
   // Full-screen creature overlay — portalled to body so it's truly fullscreen
   const creatureOverlay = isUploading ? createPortal(
     <div className="upload-overlay">
-      <div
-        className="upload-creature"
-        style={{
-          left: creatureStyle.left,
-          top:  creatureStyle.top,
-          '--rotation': `${creatureStyle.rotation}deg`,
-        } as React.CSSProperties}
-      >
-        <div className="creature-body">
-          <div className="creature-eyes">
-            <div className="creature-eye" />
-            <div className="creature-eye" />
+      {creatures.map(c => (
+        <div
+          key={c.id}
+          className={`upload-creature creature-${c.type}`}
+          style={{
+            left: c.left,
+            top:  c.top,
+            '--rotation': `${c.rotation}deg`,
+          } as React.CSSProperties}
+        >
+          <div className="creature-body">
+            <div className="creature-eyes">
+              <div className="creature-eye" />
+              <div className="creature-eye" />
+            </div>
+          </div>
+          <div className="creature-legs">
+            <div className="creature-leg leg-l" />
+            <div className="creature-leg leg-r" />
           </div>
         </div>
-        <div className="creature-legs">
-          <div className="creature-leg leg-l" />
-          <div className="creature-leg leg-r" />
-        </div>
-      </div>
+      ))}
       <div className="upload-overlay-label">
         Uploading{uploadProgress ? ` ${uploadProgress.done} / ${uploadProgress.total}` : '…'}
       </div>
