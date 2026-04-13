@@ -119,20 +119,44 @@
   0%, 100% { transform: translateY(0px); }
   50%       { transform: translateY(-3px); }
 }
+/* Stone creature: rumble */
+@keyframes stone-rumble {
+  0%, 100% { transform: translateY(0px) rotate(-1deg); }
+  50%       { transform: translateY(-2px) rotate(1deg); }
+}
+/* Tree creature: sway */
+@keyframes tree-sway {
+  0%, 100% { transform: translateY(0px) rotate(-3deg); }
+  50%       { transform: translateY(-2px) rotate(3deg); }
+}
+/* Vampire: float */
+@keyframes vamp-float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-5px); }
+}
+/* Frankenstein: lurch */
+@keyframes frank-lurch {
+  0%, 100% { transform: translateY(0px) rotate(-2deg); }
+  50%       { transform: translateY(-2px) rotate(2deg); }
+}
+/* Werewolf: prowl */
+@keyframes wolf-prowl {
+  0%, 100% { transform: translateY(0px) scaleX(1); }
+  50%       { transform: translateY(-4px) scaleX(1.05); }
+}
 
 .upload-creature {
   position: fixed;
-  /* left/top set inline in vw/vh units */
   transform: translate(-50%, -60%) rotate(var(--rotation, 0deg));
   display: flex;
   flex-direction: column;
   align-items: center;
   pointer-events: none;
   z-index: 10000;
-  /* Smooth the position transitions slightly so micro-jitter doesn't show */
   will-change: transform, left, top;
 }
 
+/* ── Shared body/eye/leg base ────────────────────────────────────────────── */
 .creature-body {
   width: 44px;
   height: 44px;
@@ -143,6 +167,8 @@
   align-items: center;
   justify-content: center;
   animation: body-bounce 0.42s ease-in-out infinite;
+  position: relative;
+  overflow: visible;
 }
 
 .creature-eyes {
@@ -185,6 +211,263 @@
 
 .leg-l { animation: leg-walk 0.42s ease-in-out infinite; }
 .leg-r { animation: leg-walk 0.42s ease-in-out infinite reverse; }
+
+/* ══ BLOB (original golden) ══════════════════════════════════════════════ */
+/* inherits all defaults above, no overrides needed */
+
+/* ══ WEREWOLF ════════════════════════════════════════════════════════════ */
+.creature-werewolf .creature-body {
+  background: radial-gradient(circle at 38% 30%, #7a5230, #3d2010);
+  box-shadow: 0 4px 14px rgba(61,32,16,0.55);
+  border-radius: 45% 45% 50% 50%;
+  animation: wolf-prowl 0.38s ease-in-out infinite;
+}
+/* Ears */
+.creature-werewolf .creature-body::before {
+  content: '';
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 12px;
+  background: transparent;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 12px solid transparent;
+  /* Two pointy ears via box-shadow trick */
+  box-shadow:
+    -10px -2px 0 0 #3d2010,
+     10px -2px 0 0 #3d2010;
+  border-radius: 0;
+}
+/* Snout / muzzle bump */
+.creature-werewolf .creature-body::after {
+  content: '';
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 18px;
+  height: 10px;
+  background: #5a3820;
+  border-radius: 50%;
+}
+/* Red eyes */
+.creature-werewolf .creature-eye {
+  background: #cc1111;
+  box-shadow: 0 0 4px #ff3333;
+}
+.creature-werewolf .creature-eye::after { background: rgba(255,200,200,0.7); }
+/* Clawed legs */
+.creature-werewolf .creature-leg {
+  background: #5a3820;
+  width: 7px;
+  height: 16px;
+  border-radius: 2px 2px 4px 4px;
+}
+
+/* ══ STONE GOLEM ════════════════════════════════════════════════════════ */
+.creature-stone .creature-body {
+  background: radial-gradient(circle at 40% 35%, #b0aaa0, #6b6560);
+  box-shadow: 0 4px 16px rgba(80,76,70,0.55), inset 0 -3px 6px rgba(0,0,0,0.25);
+  border-radius: 40% 40% 45% 45%;
+  animation: stone-rumble 0.55s ease-in-out infinite;
+}
+/* Cracks */
+.creature-stone .creature-body::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  width: 2px;
+  height: 14px;
+  background: rgba(0,0,0,0.25);
+  border-radius: 1px;
+  transform: rotate(10deg);
+  box-shadow: 8px -4px 0 1px rgba(0,0,0,0.15);
+}
+/* Stone eyes — flat, no shine */
+.creature-stone .creature-eye {
+  background: #2a2520;
+  width: 8px;
+  height: 5px;
+  border-radius: 2px;
+}
+.creature-stone .creature-eye::after { display: none; }
+/* Stone legs — chunky */
+.creature-stone .creature-leg {
+  background: #7a7570;
+  width: 10px;
+  height: 12px;
+  border-radius: 2px;
+}
+.creature-stone .leg-l,
+.creature-stone .leg-r {
+  animation: leg-walk 0.55s ease-in-out infinite;
+}
+.creature-stone .leg-r { animation-direction: reverse; }
+
+/* ══ TREE WITH LEGS ══════════════════════════════════════════════════════ */
+.creature-tree .creature-body {
+  background: radial-gradient(circle at 38% 30%, #5d9e3a, #2d6e18);
+  box-shadow: 0 4px 14px rgba(45,110,24,0.5);
+  border-radius: 50% 50% 40% 40%;
+  animation: tree-sway 0.65s ease-in-out infinite;
+  width: 40px;
+  height: 46px;
+}
+/* Branch arms */
+.creature-tree .creature-body::before {
+  content: '';
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 58px;
+  height: 6px;
+  background: #3d2010;
+  border-radius: 3px;
+  /* Branch ends */
+  box-shadow:
+    -24px -6px 0 3px #3d2010,
+     24px -6px 0 3px #3d2010;
+}
+/* Bark texture patch */
+.creature-tree .creature-body::after {
+  content: '';
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 20px;
+  background: #3d2010;
+  border-radius: 2px 2px 4px 4px;
+  opacity: 0.6;
+}
+/* Leaf-green eyes */
+.creature-tree .creature-eye {
+  background: #ffe066;
+  box-shadow: 0 0 3px #ffe066;
+}
+.creature-tree .creature-eye::after { background: rgba(255,255,200,0.8); }
+/* Woody legs */
+.creature-tree .creature-leg {
+  background: #3d2010;
+  width: 8px;
+  height: 18px;
+  border-radius: 2px;
+}
+.creature-tree .creature-legs { gap: 12px; margin-top: -4px; }
+
+/* ══ VAMPIRE ════════════════════════════════════════════════════════════ */
+.creature-vampire .creature-body {
+  background: radial-gradient(circle at 38% 30%, #4a1a6e, #1a0033);
+  box-shadow: 0 4px 18px rgba(74,26,110,0.7);
+  border-radius: 50%;
+  animation: vamp-float 0.8s ease-in-out infinite;
+}
+/* Cape */
+.creature-vampire .creature-body::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 52px;
+  height: 18px;
+  background: #1a0033;
+  border-radius: 0 0 50% 50%;
+  clip-path: polygon(0 0, 100% 0, 85% 100%, 50% 60%, 15% 100%);
+}
+/* Widow's peak */
+.creature-vampire .creature-body::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 10px solid #1a0033;
+}
+/* Glowing red eyes */
+.creature-vampire .creature-eye {
+  background: #dd0000;
+  box-shadow: 0 0 6px 2px rgba(220,0,0,0.7);
+  width: 8px;
+  height: 8px;
+}
+.creature-vampire .creature-eye::after { background: rgba(255,150,150,0.7); }
+/* Floating legs are subtle */
+.creature-vampire .creature-leg {
+  background: #1a0033;
+  height: 10px;
+  animation: leg-walk 0.8s ease-in-out infinite;
+}
+.creature-vampire .leg-r { animation-direction: reverse; }
+
+/* ══ FRANKENSTEIN ════════════════════════════════════════════════════════ */
+.creature-frankenstein .creature-body {
+  background: radial-gradient(circle at 38% 35%, #6dba6d, #2e6b2e);
+  box-shadow: 0 4px 14px rgba(46,107,46,0.55), inset 0 -3px 6px rgba(0,0,0,0.2);
+  border-radius: 30% 30% 35% 35%; /* flat-top square-ish head */
+  width: 46px;
+  height: 46px;
+  animation: frank-lurch 0.5s ease-in-out infinite;
+}
+/* Bolts on sides */
+.creature-frankenstein .creature-body::before {
+  content: '';
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 8px;
+  background: transparent;
+  box-shadow:
+    -28px 0 0 4px #aaa,  /* left bolt */
+     28px 0 0 4px #aaa;  /* right bolt */
+  border-radius: 50%;
+}
+/* Stitches on forehead */
+.creature-frankenstein .creature-body::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 22px;
+  height: 2px;
+  background: #1a1a1a;
+  border-radius: 1px;
+  box-shadow:
+    -4px 4px 0 0 #1a1a1a,
+     4px 4px 0 0 #1a1a1a;
+}
+/* Flat dull eyes */
+.creature-frankenstein .creature-eye {
+  background: #e8d060;
+  width: 9px;
+  height: 6px;
+  border-radius: 2px;
+}
+.creature-frankenstein .creature-eye::after { background: rgba(255,255,200,0.5); top: 0; left: 0; width: 4px; height: 3px; }
+/* Heavy boots */
+.creature-frankenstein .creature-leg {
+  background: #1a1a1a;
+  width: 11px;
+  height: 16px;
+  border-radius: 2px 2px 5px 5px;
+}
+.creature-frankenstein .creature-legs { gap: 8px; }
+.creature-frankenstein .leg-l,
+.creature-frankenstein .leg-r { animation: leg-walk 0.5s ease-in-out infinite; }
+.creature-frankenstein .leg-r  { animation-direction: reverse; }
 
 .upload-icon {
   width: 48px;
