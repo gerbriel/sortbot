@@ -176,63 +176,44 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
   const folderInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
 
-  // ── Upload creature horde (cats circling the cursor) ────────────────────
-  interface CreatureAnimState {
-    id: number;
+  // ── Upload cat (stalks the cursor) ────────────────────────────────────────
+  interface CatState {
     left: string;
     top: string;
-    rotation: number; // degrees — rotates the whole cat to face direction of travel
+    bodyRot: number;   // whole-cat rotation: faces direction of travel
+    headRot: number;   // head-only rotation: always aims at cursor
+    flipped: boolean;  // mirror-flip when travelling left
+    speed: number;     // 0–1 normalised speed, drives walk-cycle class
   }
 
-  // Shared cursor position
   const cursorPos    = useRef({ x: 50, y: 50 });
   const animFrameRef = useRef<number | null>(null);
+  const catPos       = useRef({ x: 15, y: 50 });
+  const smoothCurRef = useRef({ x: 50, y: 50 });
+  const prevCatPos   = useRef({ x: 15, y: 50 });
+  const bodyRotRef   = useRef(0);
 
-  // Per-creature refs (arrays, indexed by creature id)
-  const creaturePositions = useRef<Array<{ x: number; y: number }>>([]);
-  const lagTargets        = useRef<number[]>([]);
-  const lagCurrents       = useRef<number[]>([]);
-  const lagTimers         = useRef<number[]>([]);
-
-  const [creatures, setCreatures] = useState<CreatureAnimState[]>([]);
+  const [cat, setCat] = useState<CatState | null>(null);
 
   useEffect(() => {
     if (!isUploading) {
-      setCreatures([]);
-      creaturePositions.current = [];
-      lagTargets.current = [];
-      lagCurrents.current = [];
-      lagTimers.current.forEach(t => clearTimeout(t));
-      lagTimers.current = [];
+      setCat(null);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       return;
     }
 
-    // Spawn 3–6 cats evenly spaced around the screen
-    const count = 3 + Math.floor(Math.random() * 4); // 3..6
+    // Spawn cat at a random edge position far from center
+    const startX = Math.random() < 0.5 ? 5 : 95;
+    const startY = 20 + Math.random() * 60;
+    catPos.current      = { x: startX, y: startY };
+    prevCatPos.current  = { x: startX, y: startY };
+    smoothCurRef.current = { x: cursorPos.current.x, y: cursorPos.current.y };
+    bodyRotRef.current  = 0;
 
-    // Per-creature orbit state
-    const orbitAngles  = Array.from({ length: count }, (_, i) =>
-      (i / count) * Math.PI * 2 + Math.random() * 0.5
-    );
-    const orbitRadii   = Array.from({ length: count }, () => 28 + Math.random() * 18);
-    const radiusTarget = Array.from({ length: count }, () => 6 + Math.random() * 8);
-    const angleSpeeds  = Array.from({ length: count }, () =>
-      (0.008 + Math.random() * 0.012) * (Math.random() < 0.5 ? 1 : -1)
-    );
-    const wobblePhases  = Array.from({ length: count }, () => Math.random() * Math.PI * 2);
-    const wobbleAmps    = Array.from({ length: count }, () => 1.5 + Math.random() * 2.5);
-    const wobbleSpeeds  = Array.from({ length: count }, () => 0.04 + Math.random() * 0.04);
-
-    const initial: CreatureAnimState[] = Array.from({ length: count }, (_, i) => {
-      const startX = 10 + (i / count) * 80 + (Math.random() - 0.5) * 15;
-      const startY = 10 + Math.random() * 80;
-      creaturePositions.current[i] = { x: startX, y: startY };
-      lagCurrents.current[i] = 0;
-      lagTargets.current[i]  = 0;
-      return { id: i, left: `${startX}vw`, top: `${startY}vh`, rotation: 0 };
+    setCat({
+      left: `${startX}vw`, top: `${startY}vh`,
+      bodyRot: 0, headRot: 0, flipped: false, speed: 0,
     });
-    setCreatures(initial);
 
     const handleMouseMove = (e: MouseEvent) => {
       cursorPos.current = {
@@ -241,60 +222,67 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       };
     };
 
-    const smoothCursor = { x: cursorPos.current.x, y: cursorPos.current.y };
-    // Track previous position per cat to derive travel angle
-    const prevPos = Array.from({ length: count }, (_, i) => ({ ...creaturePositions.current[i] ?? { x: 50, y: 50 } }));
-    // Smoothed rotation per cat (degrees) to avoid jitter
-    const smoothRot = Array.from({ length: count }, () => 0);
-
-    let frame = 0;
-
     const tick = () => {
-      frame++;
+      // Smoothly interpolate the cursor target (slow = stalking, 3% per frame)
       const raw = cursorPos.current;
-      smoothCursor.x += (raw.x - smoothCursor.x) * 0.07;
-      smoothCursor.y += (raw.y - smoothCursor.y) * 0.07;
+      smoothCurRef.current.x += (raw.x - smoothCurRef.current.x) * 0.03;
+      smoothCurRef.current.y += (raw.y - smoothCurRef.current.y) * 0.03;
 
-      const updates: Pick<CreatureAnimState, 'id' | 'left' | 'top' | 'rotation'>[] = [];
+      // Body lags behind the smooth cursor (even slower — prey-stalking feel)
+      const cp = catPos.current;
+      const sc = smoothCurRef.current;
 
-      for (let i = 0; i < count; i++) {
-        orbitAngles[i] += angleSpeeds[i];
-        orbitRadii[i]  += (radiusTarget[i] - orbitRadii[i]) * 0.003;
-        const wobble = Math.sin(wobblePhases[i] + frame * wobbleSpeeds[i]) * wobbleAmps[i];
-        const r = Math.max(3, orbitRadii[i] + wobble);
+      // Keep cat ~14 vw away from cursor (stalking distance), never on top
+      const dx = sc.x - cp.x;
+      const dy = sc.y - cp.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const stalkDist = 14; // vw — how close it gets before it stops advancing
 
-        const aspect  = window.innerHeight / window.innerWidth;
-        const targetX = smoothCursor.x + Math.cos(orbitAngles[i]) * r;
-        const targetY = smoothCursor.y + Math.sin(orbitAngles[i]) * r * aspect;
-
-        const cp = creaturePositions.current[i];
-        cp.x += (targetX - cp.x) * 0.06;
-        cp.y += (targetY - cp.y) * 0.06;
-
-        // Derive heading from direction of travel
-        const dx = cp.x - prevPos[i].x;
-        const dy = cp.y - prevPos[i].y;
-        prevPos[i] = { x: cp.x, y: cp.y };
-        if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
-          // atan2 gives angle in radians; convert to degrees. +90 because our cat faces "up" (north) at 0°
-          const targetRot = Math.atan2(dy, dx) * (180 / Math.PI) + 90;
-          // Lerp rotation to smooth it
-          let delta = targetRot - smoothRot[i];
-          // Shortest-path wrap
-          while (delta > 180)  delta -= 360;
-          while (delta < -180) delta += 360;
-          smoothRot[i] += delta * 0.15;
-        }
-
-        updates.push({ id: i, left: `${cp.x}vw`, top: `${cp.y}vh`, rotation: smoothRot[i] });
+      if (dist > stalkDist + 0.5) {
+        const speed = Math.min((dist - stalkDist) * 0.018, 0.6);
+        cp.x += (dx / dist) * speed;
+        cp.y += (dy / dist) * speed;
       }
 
-      setCreatures(prev =>
-        prev.map(c => {
-          const u = updates.find(x => x.id === c.id);
-          return u ? { ...c, ...u } : c;
-        })
-      );
+      // Body rotation: direction of travel (how the body is oriented)
+      const mvDx = cp.x - prevCatPos.current.x;
+      const mvDy = cp.y - prevCatPos.current.y;
+      const mvSpeed = Math.sqrt(mvDx * mvDx + mvDy * mvDy);
+      prevCatPos.current = { x: cp.x, y: cp.y };
+
+      if (mvSpeed > 0.002) {
+        // atan2 gives travel angle; 0° = cat faces right (default CSS orientation)
+        const targetBodyRot = Math.atan2(mvDy, mvDx) * (180 / Math.PI);
+        let delta = targetBodyRot - bodyRotRef.current;
+        while (delta >  180) delta -= 360;
+        while (delta < -180) delta += 360;
+        bodyRotRef.current += delta * 0.12; // smooth body turning
+      }
+
+      // Head rotation: always point toward the raw cursor, relative to body
+      // We need the angle from cat to cursor, then subtract body rotation
+      const headDx = raw.x - cp.x;
+      const headDy = raw.y - cp.y;
+      const absHeadAngle = Math.atan2(headDy, headDx) * (180 / Math.PI);
+      // Relative to body so head looks where cursor is regardless of body direction
+      let relHeadAngle = absHeadAngle - bodyRotRef.current;
+      while (relHeadAngle >  180) relHeadAngle -= 360;
+      while (relHeadAngle < -180) relHeadAngle += 360;
+      // Clamp head twist to ±75° (anatomical limit)
+      const clampedHead = Math.max(-75, Math.min(75, relHeadAngle));
+
+      // Flip the whole cat when travelling leftward (body rot between 90–270)
+      const norm = ((bodyRotRef.current % 360) + 360) % 360;
+      const flipped = norm > 90 && norm < 270;
+
+      setCat({
+        left:    `${cp.x}vw`,
+        top:     `${cp.y}vh`,
+        bodyRot: bodyRotRef.current,
+        headRot: clampedHead,
+        flipped,
+        speed:   Math.min(mvSpeed * 60, 1), // normalise to 0–1
+      });
 
       animFrameRef.current = requestAnimationFrame(tick);
     };
@@ -304,7 +292,6 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      lagTimers.current.forEach(t => clearTimeout(t));
     };
   }, [isUploading]);
 
@@ -580,43 +567,45 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     disabled: isUploading
   });
 
-  // Full-screen creature overlay — portalled to body so it's truly fullscreen
+  // Full-screen cat overlay — portalled to body so it's truly fullscreen
   const creatureOverlay = isUploading ? createPortal(
     <div className="upload-overlay">
-      {creatures.map(c => (
+      {cat && (
         <div
-          key={c.id}
           className="upload-creature"
           style={{
-            left: c.left,
-            top:  c.top,
-            transform: `translate(-50%, -50%) rotate(${c.rotation}deg)`,
+            left: cat.left,
+            top:  cat.top,
+            transform: `translate(-50%, -50%) rotate(${cat.bodyRot}deg) scaleX(${cat.flipped ? -1 : 1})`,
           } as React.CSSProperties}
         >
-          {/* Top-down aerial cat */}
-          <div className="cat-aerial">
-            {/* Tail — behind the body (top in top-down = back of cat) */}
-            <div className="cat-tail-top" />
-            {/* Body oval */}
-            <div className="cat-body-top">
+          {/* Side-view stalking cat */}
+          <div className={`cat-side${cat.speed > 0.05 ? ' cat-walking' : ''}`}>
+            {/* Tail curves up at the back */}
+            <div className="cat-tail-side" />
+            {/* Body */}
+            <div className="cat-body-side">
               {/* Back legs */}
-              <div className="cat-leg cat-leg-bl" />
-              <div className="cat-leg cat-leg-br" />
+              <div className="cat-leg-side cat-back-leg-far" />
+              <div className="cat-leg-side cat-back-leg-near" />
               {/* Front legs */}
-              <div className="cat-leg cat-leg-fl" />
-              <div className="cat-leg cat-leg-fr" />
+              <div className="cat-leg-side cat-front-leg-far" />
+              <div className="cat-leg-side cat-front-leg-near" />
             </div>
-            {/* Head circle */}
-            <div className="cat-head-top">
-              <div className="cat-ear-top cat-ear-top-l" />
-              <div className="cat-ear-top cat-ear-top-r" />
-              <div className="cat-eye-top cat-eye-top-l" />
-              <div className="cat-eye-top cat-eye-top-r" />
-              <div className="cat-nose-top" />
+            {/* Head — rotates independently to always face cursor */}
+            <div
+              className="cat-head-side"
+              style={{ transform: `rotate(${cat.headRot}deg)` } as React.CSSProperties}
+            >
+              <div className="cat-ear-side cat-ear-side-l" />
+              <div className="cat-ear-side cat-ear-side-r" />
+              <div className="cat-eye-side" />
+              <div className="cat-nose-side" />
+              <div className="cat-whiskers-side" />
             </div>
           </div>
         </div>
-      ))}
+      )}
       <div className="upload-overlay-label">
         Uploading{uploadProgress ? ` ${uploadProgress.done} / ${uploadProgress.total}` : '…'}
       </div>
