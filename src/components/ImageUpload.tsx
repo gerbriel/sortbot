@@ -163,6 +163,16 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
   // Guard against processFiles being called concurrently (React Strict Mode double-invoke,
   // rapid folder/ZIP input triggers, or simultaneous drop + input events).
   const isProcessingRef = useRef(false);
+
+  // ── Pause / cancel refs ────────────────────────────────────────────────────
+  // pausedRef  — checked between every chunk; upload loop busy-waits when true.
+  // cancelledRef — set on confirmed cancel; loop breaks and discards partial items.
+  // lastClickRef — timestamp of previous yarn-ball click (double-click detection).
+  const pausedRef    = useRef(false);
+  const cancelledRef = useRef(false);
+  const lastClickRef = useRef(0);
+  const [isPaused,   setIsPaused]   = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [recompressState, setRecompressState] = useState<{
     running: boolean;
     done: number;
@@ -335,6 +345,11 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       return;
     }
     isProcessingRef.current = true;
+    // Reset pause/cancel state for this new upload session
+    pausedRef.current    = false;
+    cancelledRef.current = false;
+    setIsPaused(false);
+    setIsCancelling(false);
     try {
     // Filter to images only, read EXIF DateTimeOriginal (falls back to lastModified),
     // then sort oldest-first so folder imports stay in photo order.
@@ -353,6 +368,16 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     const items: ClothingItem[] = [];
 
     for (let i = 0; i < imageFiles.length; i += CHUNK) {
+      // ── Pause: busy-wait (poll every 200ms) until resumed or cancelled ──
+      while (pausedRef.current && !cancelledRef.current) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+      // ── Cancel: discard everything uploaded so far ──
+      if (cancelledRef.current) {
+        log.upload('processFiles | CANCELLED by user');
+        break;
+      }
+
       const chunk = imageFiles.slice(i, i + CHUNK);
       const results = await Promise.all(chunk.map(async ({ file, capturedAt }) => {
         const productId = crypto.randomUUID();
@@ -380,10 +405,18 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
 
     setIsUploading(false);
     setUploadProgress(null);
-    log.upload(`upload complete | success=${items.filter(i => i.storagePath).length} fallback=${items.filter(i => !i.storagePath).length} total=${items.length}`);
-    onImagesUploaded(items);
+    setIsPaused(false);
+    setIsCancelling(false);
+    if (!cancelledRef.current) {
+      log.upload(`upload complete | success=${items.filter(i => i.storagePath).length} fallback=${items.filter(i => !i.storagePath).length} total=${items.length}`);
+      onImagesUploaded(items);
+    } else {
+      log.upload('upload cancelled — partial items discarded');
+    }
     } finally {
       isProcessingRef.current = false;
+      pausedRef.current    = false;
+      cancelledRef.current = false;
     }
   }, [onImagesUploaded, userId]);
   
@@ -592,39 +625,91 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     disabled: isUploading
   });
 
+  // ── Yarn ball click handler: single = pause/resume, double = cancel prompt ──
+  const handleYarnClick = () => {
+    const now = Date.now();
+    const timeSinceLast = now - lastClickRef.current;
+    lastClickRef.current = now;
+
+    if (timeSinceLast < 350) {
+      // Double-click — confirm cancel
+      setIsCancelling(true);
+    } else {
+      // Single click — toggle pause/resume
+      const nextPaused = !pausedRef.current;
+      pausedRef.current = nextPaused;
+      setIsPaused(nextPaused);
+    }
+  };
+
+  const handleConfirmCancel = () => {
+    cancelledRef.current = true;
+    pausedRef.current    = false; // unblock the wait loop so it exits
+    setIsCancelling(false);
+    setIsPaused(false);
+  };
+
+  const handleDismissCancel = () => {
+    setIsCancelling(false);
+    // If we were paused before the cancel prompt, stay paused
+  };
+
   // Full-screen yarn overlay — portalled to body so it's truly fullscreen
   const creatureOverlay = isUploading ? createPortal(
     <div className="upload-overlay">
       {/* Trail canvas — fills the whole viewport */}
       <canvas ref={yarnCanvasRef} className="yarn-trail-canvas" />
 
-      {/* Yarn ball — sits exactly on the cursor */}
+      {/* Yarn ball — sits exactly on the cursor; click to pause/resume, double-click to cancel */}
       {yarnCursor && (
         <div
-          className="yarn-ball"
+          className={`yarn-ball${isPaused ? ' yarn-ball-paused' : ''}`}
           style={{
             left: yarnCursor.x,
             top:  yarnCursor.y,
             width:  yarnCursor.r * 2,
             height: yarnCursor.r * 2,
             transform: `translate(-50%, -50%) rotate(${yarnCursor.rot}deg)`,
+            cursor: 'pointer',
           } as React.CSSProperties}
+          onClick={handleYarnClick}
         >
           {/* Wound-line grooves drawn as SVG so they rotate with the ball */}
           <svg viewBox="0 0 56 56" className="yarn-svg">
-            {/* Base colour via circle bg; SVG draws the wound lines on top */}
             <ellipse cx="28" cy="28" rx="24" ry="22" fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="2.5"/>
             <ellipse cx="28" cy="28" rx="18" ry="26" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="2"/>
             <ellipse cx="28" cy="28" rx="26" ry="14" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5"/>
             <ellipse cx="28" cy="28" rx="10" ry="26" fill="none" stroke="rgba(120,40,0,0.18)"    strokeWidth="1.5"/>
-            {/* Highlight */}
             <ellipse cx="20" cy="18" rx="6" ry="4" fill="rgba(255,220,160,0.28)" />
           </svg>
         </div>
       )}
 
+      {/* Paused indicator */}
+      {isPaused && !isCancelling && (
+        <div className="yarn-paused-badge">
+          ⏸ Paused — click yarn to resume · double-click to cancel
+        </div>
+      )}
+
+      {/* Cancel confirm dialog */}
+      {isCancelling && (
+        <div className="yarn-cancel-dialog">
+          <p>Cancel upload?</p>
+          <p className="yarn-cancel-sub">
+            {uploadProgress
+              ? `${uploadProgress.done} of ${uploadProgress.total} images uploaded so far will be discarded.`
+              : 'All progress will be lost.'}
+          </p>
+          <div className="yarn-cancel-buttons">
+            <button className="yarn-cancel-btn-yes" onClick={handleConfirmCancel}>Yes, cancel</button>
+            <button className="yarn-cancel-btn-no"  onClick={handleDismissCancel}>Keep uploading</button>
+          </div>
+        </div>
+      )}
+
       <div className="upload-overlay-label">
-        Uploading{uploadProgress ? ` ${uploadProgress.done} / ${uploadProgress.total}` : '…'}
+        {isPaused ? 'Paused' : isCancelling ? 'Cancel upload?' : `Uploading${uploadProgress ? ` ${uploadProgress.done} / ${uploadProgress.total}` : '…'}`}
       </div>
     </div>,
     document.body
