@@ -42,7 +42,7 @@
 
 /* File Upload Section */
 .dropzone {
-  border: 2px dashed var(--gray-300);
+  border: 2px dashed var(--shopify-blue);
   border-radius: var(--radius-lg);
   padding: var(--space-10);
   text-align: center;
@@ -68,8 +68,11 @@
   position: fixed;
   inset: 0;
   z-index: 9999;
-  pointer-events: none; /* let clicks pass through to the page */
-  background: rgba(255,255,255,0.0); /* fully transparent — just a stage */
+  pointer-events: none;
+  background: rgba(255,255,255,0.0);
+  /* Dashed border that spans the full screen */
+  outline: 3px dashed var(--shopify-blue);
+  outline-offset: -12px;
 }
 
 .upload-overlay-label {
