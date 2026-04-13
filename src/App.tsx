@@ -945,15 +945,33 @@ function App() {
     const liveProcessed = processedItemsRef.current;
     let finalProcessed: ClothingItem[];
     if (liveProcessed.length > 0) {
-      // Update existing processedItems with new categories + group assignments
+      // Update existing processedItems with the full preset-applied sorted item, but
+      // preserve any user-entered fields (voice descriptions, manually typed values)
+      // by re-overlaying non-nullish values from the existing procItem on top.
+      // This means: preset fields always come through from sortedItem, but anything
+      // the user already typed/spoke takes precedence (same || priority as applyPresetFields).
       finalProcessed = liveProcessed.map(procItem => {
         const sortedItem = items.find(i => i.id === procItem.id);
         if (sortedItem) {
+          // Start from the preset-enriched sortedItem, then re-apply user-entered
+          // overrides from procItem (only if they actually have a value).
+          const userOverrides: Partial<ClothingItem> = {};
+          const userFields: (keyof ClothingItem)[] = [
+            'voiceDescription', 'generatedDescription', 'size', 'brand', 'color',
+            'secondaryColor', 'material', 'condition', 'era', 'modelName',
+            'modelNumber', 'seoTitle', 'seoDescription', 'tags', 'price',
+            'compareAtPrice', 'costPerItem', 'sku', 'measurements', 'style',
+            'care',
+          ];
+          userFields.forEach(field => {
+            const v = procItem[field];
+            if (v !== undefined && v !== null && v !== '') {
+              (userOverrides as any)[field] = v;
+            }
+          });
           return {
-            ...procItem,
-            category: sortedItem.category,
-            productGroup: sortedItem.productGroup,
-            _presetData: sortedItem._presetData,
+            ...sortedItem,
+            ...userOverrides,
           };
         }
         return procItem;
