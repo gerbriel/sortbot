@@ -192,6 +192,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
   const smoothCurRef = useRef({ x: 50, y: 50 });
   const prevCatPos   = useRef({ x: 15, y: 50 });
   const bodyRotRef   = useRef(0);
+  const smoothHeadRef = useRef(0); // smoothed head angle (relative to body, degrees)
 
   const [cat, setCat] = useState<CatState | null>(null);
 
@@ -209,6 +210,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     prevCatPos.current  = { x: startX, y: startY };
     smoothCurRef.current = { x: cursorPos.current.x, y: cursorPos.current.y };
     bodyRotRef.current  = 0;
+    smoothHeadRef.current = 0;
 
     setCat({
       left: `${startX}vw`, top: `${startY}vh`,
@@ -259,8 +261,8 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
         bodyRotRef.current += delta * 0.12; // smooth body turning
       }
 
-      // Head rotation: always point toward the raw cursor, relative to body
-      // We need the angle from cat to cursor, then subtract body rotation
+      // Head rotation: always point toward the raw cursor, relative to body.
+      // We need the angle from cat to cursor, then subtract body rotation.
       const headDx = raw.x - cp.x;
       const headDy = raw.y - cp.y;
       const absHeadAngle = Math.atan2(headDy, headDx) * (180 / Math.PI);
@@ -268,8 +270,30 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       let relHeadAngle = absHeadAngle - bodyRotRef.current;
       while (relHeadAngle >  180) relHeadAngle -= 360;
       while (relHeadAngle < -180) relHeadAngle += 360;
-      // Clamp head twist to ±75° (anatomical limit)
-      const clampedHead = Math.max(-75, Math.min(75, relHeadAngle));
+
+      // Smooth the raw angle so the head turns fluidly rather than snapping
+      let headDelta = relHeadAngle - smoothHeadRef.current;
+      while (headDelta >  180) headDelta -= 360;
+      while (headDelta < -180) headDelta += 360;
+      smoothHeadRef.current += headDelta * 0.15;
+
+      // ── Body-turn bleed-through ──────────────────────────────────────────
+      // When the head is twisted past ±HEAD_SOFT_LIMIT the excess "pulls" the
+      // body to turn in that direction, so the cat naturally swings round to
+      // face the cursor rather than looking uncomfortably strained.
+      // The bleed rate scales with how far past the soft limit we are, so at
+      // exactly the limit nothing happens; deep into the over-turn it rotates
+      // the body briskly.
+      const HEAD_SOFT_LIMIT = 38; // degrees — comfortable look-aside range
+      const HEAD_HARD_LIMIT = 55; // degrees — maximum displayed head twist
+      const overflow = smoothHeadRef.current - Math.sign(smoothHeadRef.current) * HEAD_SOFT_LIMIT;
+      if (Math.abs(smoothHeadRef.current) > HEAD_SOFT_LIMIT) {
+        // overflow is positive when head twists right-past-limit, negative for left
+        bodyRotRef.current += overflow * 0.04; // gentle but persistent body pull
+      }
+
+      // Clamp displayed head angle to the hard limit
+      const clampedHead = Math.max(-HEAD_HARD_LIMIT, Math.min(HEAD_HARD_LIMIT, smoothHeadRef.current));
 
       // Flip the whole cat when travelling leftward (body rot between 90–270)
       const norm = ((bodyRotRef.current % 360) + 360) % 360;
