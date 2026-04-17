@@ -56,6 +56,35 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const groupedItemsRef = useRef<ClothingItem[]>([]);
   groupedItemsRef.current = groupedItems;
 
+  // ── Undo history (Cmd+Z) ──────────────────────────────────────────────────
+  // Keep up to 50 previous groupedItems snapshots.  commitUpdate() is the single
+  // write path for every user-driven grouping action; it pushes the CURRENT state
+  // onto the stack before applying the new one.
+  const MAX_HISTORY = 50;
+  const historyRef = useRef<ClothingItem[][]>([]);
+  const [canUndo, setCanUndo] = useState(false);
+
+  const commitUpdate = (newItems: ClothingItem[], skipHistory = false) => {
+    if (!skipHistory) {
+      historyRef.current = [
+        ...historyRef.current.slice(-MAX_HISTORY + 1),
+        groupedItemsRef.current.map(i => ({ ...i })), // deep-clone snapshot
+      ];
+      setCanUndo(true);
+    }
+    setGroupedItems(newItems);
+    onGrouped(newItems);
+  };
+
+  const handleUndo = () => {
+    if (historyRef.current.length === 0) return;
+    const prev = historyRef.current[historyRef.current.length - 1];
+    historyRef.current = historyRef.current.slice(0, -1);
+    setCanUndo(historyRef.current.length > 0);
+    setGroupedItems(prev);
+    onGrouped(prev);
+  };
+
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   // Guard against double-fire: hardware double-clicks emit two rapid mousedown events
   // (mousedown→mouseup→mousedown→mouseup→dblclick), causing toggleItemSelection to run
@@ -330,6 +359,19 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     return () => document.removeEventListener('keydown', handler);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // stable — reads live values via refs, no closure deps needed
+
+  // ⌘Z — undo last grouping action
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key !== 'z' || e.shiftKey) return;
+      const active = document.activeElement;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)) return;
+      e.preventDefault();
+      handleUndo();
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []); // stable — handleUndo reads historyRef directly
 
   // Initialize items with individual groups and auto-upload.
   // IMPORTANT: Only process items that are genuinely new (not already in groupedItems).
@@ -636,9 +678,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         : item
     );
 
-    setGroupedItems(updated);
+    commitUpdate(updated);
     updateSelection(new Set());
-    onGrouped(updated);
   };
 
   // Ungroup selected items
@@ -655,9 +696,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         : item
     );
 
-    setGroupedItems(updated);
+    commitUpdate(updated);
     updateSelection(new Set());
-    onGrouped(updated);
   };
 
   /**
@@ -684,9 +724,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       productGroup: chunkIds[Math.floor(i / n)],
     }));
 
-    setGroupedItems(updated);
+    commitUpdate(updated);
     updateSelection(new Set());
-    onGrouped(updated);
   };
 
 
@@ -772,8 +811,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         )
       : afterMove;
 
-    setGroupedItems(updated);
-    onGrouped(updated);
+    commitUpdate(updated);
     updateSelection(new Set());
     setDraggedItem(null);
     setDraggedFromGroup(null);
@@ -845,8 +883,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       if ((i.productGroup || i.id) !== groupId) return i;
       return photoList[slot++];
     });
-    setGroupedItems(updated);
-    onGrouped(updated);
+    commitUpdate(updated);
     setDraggedPhotoId(null); setDraggedPhotoGroupId(null); setDragOverPhotoId(null);
   };
 
@@ -878,10 +915,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     // Delete the products row (cleans up orphaned DB entries)
     await supabase.from('products').delete().eq('id', item.id);
 
-    // Remove from UI
+    // Remove from UI — delete doesn't go on undo stack (can't un-delete)
     const updated = groupedItems.filter(i => i.id !== item.id);
-    setGroupedItems(updated);
-    onGrouped(updated);
+    commitUpdate(updated, true); // skipHistory=true — delete is permanent
     setUploadedImages(prev => {
       const next = new Set(prev);
       next.delete(item.id);
@@ -915,9 +951,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     }
 
     const updated = groupedItems.filter(i => !selectedItems.has(i.id));
-    setGroupedItems(updated);
+    commitUpdate(updated, true); // skipHistory=true — delete is permanent
     updateSelection(new Set());
-    onGrouped(updated);
 
     // Notify parent that real DB changes happened — Library should refresh
     onImageDeleted?.();
@@ -1071,6 +1106,18 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           {selectedItems.size > 0 && (
             <span style={{ background: '#10b981', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Check size={16} /> {selectedItems.size} Selected
+            </span>
+          )}
+          {canUndo && (
+            <span
+              onClick={handleUndo}
+              title="Undo last grouping action (⌘Z)"
+              style={{
+                background: '#6b7280', cursor: 'pointer', display: 'flex',
+                alignItems: 'center', gap: '0.4rem', userSelect: 'none',
+              }}
+            >
+              ↩ Undo
             </span>
           )}
         </div>
@@ -1255,8 +1302,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 : item
             );
             
-            setGroupedItems(updated);
-            onGrouped(updated);
+            commitUpdate(updated);
             setDraggedItem(null);
             setDraggedFromGroup(null);
             setDragOverGroup(null);
@@ -1484,9 +1530,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       if (storagePaths.length > 0) await supabase.from('product_images').delete().in('storage_path', storagePaths);
                       if (deletedIds.length > 0) await supabase.from('products').delete().in('id', deletedIds);
                       const updated = groupedItems.filter(i => !deletedIds.includes(i.id));
-                      setGroupedItems(updated);
+                      commitUpdate(updated, true); // delete is permanent — skip history
                       updateSelection(new Set([...selectedItems].filter(id => !deletedIds.includes(id))));
-                      onGrouped(updated);
                       onImageDeleted?.();
                     }}
                     title="Delete this entire group"
