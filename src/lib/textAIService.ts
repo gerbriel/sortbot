@@ -45,6 +45,7 @@ export interface AIGeneratedContent {
     flaws?: string;
     care?: string;
     tags?: string[];
+    seoTitle?: string;
   };
 }
 
@@ -170,6 +171,10 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
   if (tagsRaw) {
     extracted.tags = tagsRaw.split(/[\s,]+/).filter(Boolean).map((t: string) => t.toLowerCase());
   }
+
+  // ── TITLE ─────────────────────────────────────────────────────────────────
+  const titleCmd = extractCommand(/\btitle\s+(.+?)\s+period\b/i);
+  if (titleCmd) extracted.seoTitle = titleCmd;
 
   // ─────────────────────────────────────────────────────────────────────────
   // PASS 2: Contextual fuzzy fallbacks (fire only when explicit command was NOT used)
