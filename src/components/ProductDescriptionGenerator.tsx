@@ -717,6 +717,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   // Sync structured fields from the edited description text
   const [isSyncingFields, setIsSyncingFields] = useState(false);
+  const [isSyncingFromVoice, setIsSyncingFromVoice] = useState(false);
+
   const syncFieldsFromDescription = async () => {
     const descText = currentItem.generatedDescription;
     if (!descText) {
@@ -773,6 +775,72 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       alert('Failed to parse fields from description.');
     } finally {
       setIsSyncingFields(false);
+    }
+  };
+
+  // Sync fields AND regenerate AI description from voice description text.
+  // Use this when the voice transcript was edited manually and you want all
+  // structured fields + the AI description to reflect the corrected text.
+  const syncFieldsFromVoice = async () => {
+    const voiceText = currentItem.voiceDescription;
+    if (!voiceText) {
+      alert('No voice description to parse. Start Recording first.');
+      return;
+    }
+    setIsSyncingFromVoice(true);
+    try {
+      const aiResult = await generateProductDescription({
+        voiceDescription: voiceText,
+        brand: undefined, // Let voice override fields completely
+        color: undefined,
+        size: undefined,
+        material: undefined,
+        condition: undefined,
+        era: undefined,
+        style: undefined,
+        category: currentItem.productType,
+        measurements: undefined,
+        flaws: undefined,
+        care: undefined,
+      });
+      const extractedFields = aiResult.extractedFields || {};
+      const targetIds = new Set(currentGroup.map(g => g.id));
+      setProcessedItems(prev => {
+        const updated = [...prev];
+        updated.forEach((item, idx) => {
+          if (!targetIds.has(item.id)) return;
+          updated[idx] = {
+            ...updated[idx],
+            // Overwrite all extracted fields — voice edits take full priority
+            ...(extractedFields.brand && { brand: extractedFields.brand }),
+            ...(extractedFields.modelName && { modelName: extractedFields.modelName }),
+            ...(extractedFields.color && { color: extractedFields.color }),
+            ...(extractedFields.secondaryColor && { secondaryColor: extractedFields.secondaryColor }),
+            ...(extractedFields.size && { size: extractedFields.size }),
+            ...(extractedFields.material && { material: extractedFields.material }),
+            ...(extractedFields.condition && { condition: extractedFields.condition as 'New' | 'Used' | 'NWT' | 'Excellent' | 'Good' | 'Fair' }),
+            ...(extractedFields.era && { era: extractedFields.era }),
+            ...(extractedFields.style && { style: extractedFields.style }),
+            ...(extractedFields.gender && { gender: extractedFields.gender as 'Men' | 'Women' | 'Unisex' | 'Kids' }),
+            ...(extractedFields.measurements && { measurements: extractedFields.measurements }),
+            ...(extractedFields.price && { price: parseFloat(extractedFields.price) || undefined }),
+            ...(extractedFields.flaws && { flaws: extractedFields.flaws }),
+            ...(extractedFields.care && { care: extractedFields.care }),
+            ...(extractedFields.seoTitle && { seoTitle: extractedFields.seoTitle }),
+            ...(extractedFields.tags && extractedFields.tags.length > 0 && {
+              tags: [...new Set([...(updated[idx].tags || []), ...extractedFields.tags])].slice(0, 5)
+            }),
+            // Re-generate the AI description using the updated context
+            generatedDescription: aiResult.description,
+          };
+        });
+        return updated;
+      });
+    } catch (err) {
+      console.error('Voice sync failed:', err);
+      alert('Failed to sync from voice description.');
+    } finally {
+      setIsSyncingFromVoice(false);
     }
   };
 
@@ -1534,7 +1602,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               <button
                 className="button button-primary"
                 onClick={regenerateDescription}
-                disabled={isGenerating || isSyncingFields}
+                disabled={isGenerating || isSyncingFields || isSyncingFromVoice}
                 style={{
                   marginTop: '0.5rem',
                   width: '100%',
@@ -1544,21 +1612,37 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               >
                 {isGenerating ? '🧠 Generating...' : '✨ Generate AI Description'}
               </button>
-              <button
-                className="button"
-                onClick={syncFieldsFromDescription}
-                disabled={isSyncingFields || isGenerating}
-                style={{
-                  marginTop: '0.5rem',
-                  width: '100%',
-                  background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                  color: '#fff',
-                  border: 'none',
-                }}
-                title="Parse the description text and update all structured fields"
-              >
-                {isSyncingFields ? '🔄 Syncing fields...' : '🔁 Sync Fields from Description'}
-              </button>
+              {/* Sync buttons row — side by side at half width each */}
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <button
+                  className="button"
+                  onClick={syncFieldsFromVoice}
+                  disabled={isSyncingFromVoice || isSyncingFields || isGenerating}
+                  style={{
+                    flex: 1,
+                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                    color: '#fff',
+                    border: 'none',
+                  }}
+                  title="Re-extract all fields AND regenerate the AI description from the voice transcript"
+                >
+                  {isSyncingFromVoice ? '🔄 Syncing...' : '🎙️ Sync from Voice'}
+                </button>
+                <button
+                  className="button"
+                  onClick={syncFieldsFromDescription}
+                  disabled={isSyncingFields || isSyncingFromVoice || isGenerating}
+                  style={{
+                    flex: 1,
+                    background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                    color: '#fff',
+                    border: 'none',
+                  }}
+                  title="Parse the AI description text and update all structured fields"
+                >
+                  {isSyncingFields ? '🔄 Syncing...' : '🔁 Sync from Description'}
+                </button>
+              </div>
               <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem', marginBottom: 0 }}>
                 AI will create a professional description from your voice input and fields
               </p>
