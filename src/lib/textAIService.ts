@@ -149,22 +149,22 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
   const measurements: Record<string, string> = {};
 
   const widthCmd = extractCommand(/\bwidth\s+(.+?)\s+period\b/i);
-  if (widthCmd) measurements['Width'] = widthCmd.replace(/[^0-9.]/g, '');
+  if (widthCmd) measurements['width'] = widthCmd.replace(/[^0-9.]/g, '');
 
   const lengthCmd = extractCommand(/\blength\s+(.+?)\s+period\b/i);
-  if (lengthCmd) measurements['Length'] = lengthCmd.replace(/[^0-9.]/g, '');
+  if (lengthCmd) measurements['length'] = lengthCmd.replace(/[^0-9.]/g, '');
 
   const waistCmd = extractCommand(/\bwaist\s+(.+?)\s+period\b/i);
-  if (waistCmd) measurements['Waist'] = waistCmd.replace(/[^0-9.]/g, '');
+  if (waistCmd) measurements['waist'] = waistCmd.replace(/[^0-9.]/g, '');
 
   const shoulderCmd = extractCommand(/\bshoulder\s+(.+?)\s+period\b/i);
-  if (shoulderCmd) measurements['Shoulder'] = shoulderCmd.replace(/[^0-9.]/g, '');
+  if (shoulderCmd) measurements['shoulder'] = shoulderCmd.replace(/[^0-9.]/g, '');
 
   const sleeveCmd = extractCommand(/\bsleeve\s+(.+?)\s+period\b/i);
-  if (sleeveCmd) measurements['Sleeve'] = sleeveCmd.replace(/[^0-9.]/g, '');
+  if (sleeveCmd) measurements['sleeve'] = sleeveCmd.replace(/[^0-9.]/g, '');
 
   const inseamCmd = extractCommand(/\binseam\s+(.+?)\s+period\b/i);
-  if (inseamCmd) measurements['Inseam'] = inseamCmd.replace(/[^0-9.]/g, '');
+  if (inseamCmd) measurements['inseam'] = inseamCmd.replace(/[^0-9.]/g, '');
 
   // ── TAGS (explicit) ───────────────────────────────────────────────────────
   const tagsRaw = extractCommand(/\btags?\s+(.+?)\s+period\b/i);
@@ -431,27 +431,27 @@ function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<s
   // ── MEASUREMENTS fallback ─────────────────────────────────────────────────
   // Handles: "22 inch pit to pit", "pit to pit 22", "22 pit", "length 28", "28 inches long", "inseam 30"
   const measureFallbacks: Array<{ key: string; patterns: RegExp[] }> = [
-    { key: 'Width', patterns: [
+    { key: 'width', patterns: [
       /(\d+(?:\.\d)?)\s*(?:inch(?:es)?)?\s*(?:pit[\s-]to[\s-]pit|p2p|chest|across\s+chest)/i,
       /(?:pit[\s-]to[\s-]pit|p2p|chest|across\s+chest)\s+(\d+(?:\.\d)?)/i,
     ]},
-    { key: 'Length', patterns: [
+    { key: 'length', patterns: [
       /(\d+(?:\.\d)?)\s*(?:inch(?:es)?)?\s*(?:long|length|top\s+to\s+bottom)/i,
       /(?:length|top\s+to\s+bottom)\s+(\d+(?:\.\d)?)/i,
     ]},
-    { key: 'Waist', patterns: [
+    { key: 'waist', patterns: [
       /(\d+(?:\.\d)?)\s*(?:inch(?:es)?)?\s*waist/i,
       /waist\s+(\d+(?:\.\d)?)/i,
     ]},
-    { key: 'Shoulder', patterns: [
+    { key: 'shoulder', patterns: [
       /(\d+(?:\.\d)?)\s*(?:inch(?:es)?)?\s*shoulder/i,
       /shoulder\s+(?:to\s+shoulder\s+)?(\d+(?:\.\d)?)/i,
     ]},
-    { key: 'Sleeve', patterns: [
+    { key: 'sleeve', patterns: [
       /(\d+(?:\.\d)?)\s*(?:inch(?:es)?)?\s*sleeve/i,
       /sleeve\s+(?:length\s+)?(\d+(?:\.\d)?)/i,
     ]},
-    { key: 'Inseam', patterns: [
+    { key: 'inseam', patterns: [
       /(\d+(?:\.\d)?)\s*(?:inch(?:es)?)?\s*inseam/i,
       /inseam\s+(\d+(?:\.\d)?)/i,
     ]},
@@ -484,7 +484,7 @@ export function formatVoiceTranscript(voiceDesc: string): string {
   const FIELD_TRIGGERS = [
     'brand', 'model', 'size', 'colo(?:u?r)?', 'material', 'fabric',
     'condition', 'era', 'style', 'gender', 'price',
-    'flaws?', 'care', 'width', 'length', 'waist', 'shoulder', 'sleeve', 'inseam', 'tags?',
+    'flaws?', 'care', 'width', 'length', 'waist', 'shoulder', 'sleeve', 'inseam', 'tags?', 'title',
     'secondary colo(?:u?r)?', 'second color', 'second colour',
   ].join('|');
 
@@ -502,7 +502,7 @@ export function stripVoiceCommands(voiceDesc: string): string {
   const FIELD_TRIGGERS = [
     'brand', 'model', 'size', 'colo(?:u?r)?', 'material', 'fabric',
     'condition', 'era', 'style', 'gender', 'price',
-    'flaws?', 'care', 'width', 'length', 'waist', 'shoulder', 'sleeve', 'inseam', 'tags?',
+    'flaws?', 'care', 'width', 'length', 'waist', 'shoulder', 'sleeve', 'inseam', 'tags?', 'title',
     'secondary colo(?:u?r)?', 'second color', 'second colour',
   ].join('|');
 

@@ -5,7 +5,7 @@ import { ComprehensiveProductForm } from './ComprehensiveProductForm';
 import { getCategoryPresets } from '../lib/categoryPresetsService';
 import type { CategoryPreset } from '../lib/categoryPresets';
 import { applyPresetToProductGroup } from '../lib/applyPresetToGroup';
-import { generateProductDescription, stripVoiceCommands } from '../lib/textAIService';
+import { generateProductDescription, stripVoiceCommands, formatVoiceTranscript } from '../lib/textAIService';
 import { syncGroupFieldsToDatabase } from '../lib/productService';
 import LazyImg from './LazyImg';
 import { log } from '../lib/debugLogger';
@@ -242,7 +242,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             if (itemIndex !== -1) {
               updated[itemIndex] = {
                 ...updated[itemIndex],
-                voiceDescription: (currentDescription + final).trim()
+                voiceDescription: formatVoiceTranscript((currentDescription + final).trim())
               };
             }
           });
@@ -437,16 +437,18 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       try {
         const updatedGroup = await applyPresetToProductGroup(currentGroup, currentItem.category);
         
-        // Update processedItems with preset-enriched items
-        const updated = [...processedItems];
-        updatedGroup.forEach((updatedItem) => {
-          const itemIndex = updated.findIndex(item => item.id === updatedItem.id);
-          if (itemIndex !== -1) {
-            updated[itemIndex] = updatedItem;
-          }
+        // Use functional update so we never clobber fields set by voice extraction
+        // in a concurrent async operation (e.g. recording stop happening at the same time).
+        setProcessedItems(prev => {
+          const updated = [...prev];
+          updatedGroup.forEach((updatedItem) => {
+            const itemIndex = updated.findIndex(item => item.id === updatedItem.id);
+            if (itemIndex !== -1) {
+              updated[itemIndex] = updatedItem;
+            }
+          });
+          return updated;
         });
-        
-        setProcessedItems(updated);
         
         // Find and set the default preset ID in the dropdown
         const defaultPreset = availablePresets.find(p => 
