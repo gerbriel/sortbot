@@ -91,9 +91,37 @@ while (true) {
   from += PAGE;
 }
 
-console.log(`   Found ${knownPaths.size} paths in product_images table\n`);
+console.log(`   Found ${knownPaths.size} paths in product_images table`);
 
-// ── 5. Diff: orphans are in Storage but not in DB ─────────────────────────────
+// ── 4b. Also protect images still referenced in workflow_batches ──────────────
+console.log('🗄️  Querying workflow_batches for in-progress image URLs…');
+
+const { data: batches, error: batchErr } = await supabase
+  .from('workflow_batches')
+  .select('workflow_state')
+  .eq('user_id', userId);
+
+if (batchErr) {
+  console.warn('⚠️  Could not query workflow_batches:', batchErr.message);
+} else {
+  const SUPABASE_STORAGE_PREFIX = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`;
+  for (const batch of (batches ?? [])) {
+    const state = batch.workflow_state;
+    const items = state?.processedItems ?? state?.items ?? [];
+    for (const item of items) {
+      for (const url of (item.imageUrls ?? [])) {
+        if (typeof url === 'string' && url.startsWith(SUPABASE_STORAGE_PREFIX)) {
+          // Strip the base URL to get the storage path (without query params)
+          const path = url.replace(SUPABASE_STORAGE_PREFIX, '').split('?')[0];
+          knownPaths.add(path);
+        }
+      }
+    }
+  }
+  console.log(`   Protected ${knownPaths.size} total paths (including in-progress batches)\n`);
+}
+
+// ── 5. Diff: orphans are in Storage but not in DB or active batches ───────────
 const orphans = allPaths.filter(p => !knownPaths.has(p));
 console.log(`🔍 Orphaned files (in Storage, not in DB): ${orphans.length}`);
 
