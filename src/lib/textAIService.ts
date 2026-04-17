@@ -74,8 +74,11 @@ export interface AIGeneratedContent {
  *
  * Anything NOT in a field command stays in the main description text.
  */
-function extractFieldsFromVoice(voiceDesc: string, _category?: string): Record<string, any> {
+function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Record<string, any> {
   const extracted: Record<string, any> = {};
+  // Normalize newlines → spaces so command regexes work even after formatVoiceTranscript
+  // has already inserted \n before each trigger word.
+  const voiceDesc = rawVoiceDesc.replace(/\n/g, ' ').replace(/\s{2,}/g, ' ');
   const lower = voiceDesc.toLowerCase();
 
   // ─────────────────────────────────────────────────────────────────────────

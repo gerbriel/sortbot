@@ -1616,31 +1616,31 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
                 <button
                   className="button"
-                  onClick={syncFieldsFromVoice}
-                  disabled={isSyncingFromVoice || isSyncingFields || isGenerating}
+                  onClick={syncFieldsFromDescription}
+                  disabled={isSyncingFields || isSyncingFromVoice || isGenerating}
                   style={{
                     flex: 1,
                     background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                     color: '#fff',
                     border: 'none',
                   }}
-                  title="Re-extract all fields AND regenerate the AI description from the voice transcript"
+                  title="Parse the AI description text and update all structured fields"
                 >
-                  {isSyncingFromVoice ? '🔄 Syncing...' : '🎙️ Sync from Voice'}
+                  {isSyncingFields ? '🔄 Syncing...' : '🔁 Resync from AI Description'}
                 </button>
                 <button
                   className="button"
-                  onClick={syncFieldsFromDescription}
-                  disabled={isSyncingFields || isSyncingFromVoice || isGenerating}
+                  onClick={syncFieldsFromVoice}
+                  disabled={isSyncingFromVoice || isSyncingFields || isGenerating}
                   style={{
                     flex: 1,
                     background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
                     color: '#fff',
                     border: 'none',
                   }}
-                  title="Parse the AI description text and update all structured fields"
+                  title="Re-extract all fields AND regenerate the AI description from the voice transcript"
                 >
-                  {isSyncingFields ? '🔄 Syncing...' : '🔁 Sync from Description'}
+                  {isSyncingFromVoice ? '🔄 Syncing...' : '🎙️ Resync from Voice'}
                 </button>
               </div>
               <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem', marginBottom: 0 }}>
