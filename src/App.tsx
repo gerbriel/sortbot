@@ -1833,7 +1833,8 @@ function App() {
             {storageInfo.loading && storageInfo.usedBytes === 0 ? (
               <span className="storage-meter-nav-calculating">Calculating…</span>
             ) : (() => {
-              const LIMIT = 1 * 1024 * 1024 * 1024;
+              const STORAGE_LIMIT_GB = parseFloat(import.meta.env.VITE_STORAGE_LIMIT_GB || '100');
+              const LIMIT = STORAGE_LIMIT_GB * 1024 * 1024 * 1024;
               const pct = storageInfo.usedBytes / LIMIT;
               const barColor = pct > 0.85 ? '#dc2626' : pct > 0.6 ? '#d97706' : '#059669';
               const gbUsed = (storageInfo.usedBytes / (1024 ** 3)).toFixed(2);
@@ -1844,7 +1845,7 @@ function App() {
                     <div className="storage-meter-nav-bar" style={{ width: `${Math.min(100, pct * 100).toFixed(1)}%`, background: barColor }} />
                   </div>
                   <span className="storage-meter-nav-text">
-                    {gbUsed} GB / 1 GB
+                    {gbUsed} GB / {STORAGE_LIMIT_GB} GB
                     <span style={{ color: barColor, fontWeight: 600, marginLeft: '0.3rem' }}>({pctDisplay}%)</span>
                     <span style={{ color: '#6b7280', marginLeft: '0.4rem', fontSize: '0.72rem' }}>{storageInfo.fileCount.toLocaleString()} files</span>
                   </span>
