@@ -424,16 +424,19 @@ function App() {
               // Re-hydrate preview — stripped before saving to reduce payload size.
               // imageUrls may also be empty for older items; reconstruct from storagePath
               // (synchronous, no extra DB query) as the final fallback.
+              // IMPORTANT: reject any saved blob: URL — they are only valid for the browser
+              // session in which they were created and will 404 after any page reload.
               const liveItems = rawItems.map((item: any) => {
                 const reconstructed = item.storagePath
                   ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
                   : '';
+                const savedPreview = item.preview?.startsWith('blob:') ? '' : (item.preview || '');
                 const thumbnailUrl = item.storagePath
                   ? getThumbnailUrl(item.storagePath, 300)
                   : (item.imageUrls?.[0] || reconstructed);
                 return {
                   ...item,
-                  preview: item.preview || item.imageUrls?.[0] || reconstructed,
+                  preview: savedPreview || item.imageUrls?.[0] || reconstructed,
                   imageUrls: item.imageUrls?.length ? item.imageUrls : (reconstructed ? [reconstructed] : []),
                   thumbnailUrl,
                 };
@@ -1258,16 +1261,19 @@ function App() {
     // (synchronous, no extra DB query) as the final fallback.
     // thumbnailUrl: Supabase Storage transform (300px) — used by ImageGrouper/PDG card display.
     // Falls back to full-res URL for legacy items that lack storagePath.
+    // IMPORTANT: reject any saved blob: URL — they are only valid for the browser
+    // session in which they were created and will 404 after any page reload.
     const workflowItems: ClothingItem[] = rawWorkflowItems.map(item => {
       const reconstructed = item.storagePath
         ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
         : '';
+      const savedPreview = item.preview?.startsWith('blob:') ? '' : (item.preview || '');
       const thumbnailUrl = item.storagePath
         ? getThumbnailUrl(item.storagePath, 300)
         : (item.imageUrls?.[0] || reconstructed);
       return {
         ...item,
-        preview: item.preview || item.imageUrls?.[0] || reconstructed,
+        preview: savedPreview || item.imageUrls?.[0] || reconstructed,
         imageUrls: item.imageUrls?.length ? item.imageUrls : (reconstructed ? [reconstructed] : []),
         thumbnailUrl,
       };
