@@ -648,6 +648,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               ...(extractedFields.price && { price: parseFloat(extractedFields.price) || undefined }),
               ...(extractedFields.flaws && { flaws: extractedFields.flaws }),
               ...(extractedFields.care && { care: extractedFields.care }),
+              ...(extractedFields.seoTitle && { seoTitle: extractedFields.seoTitle }),
               ...(extractedFields.tags && extractedFields.tags.length > 0 && {
                 tags: [...new Set([...(item.tags || []), ...extractedFields.tags])].slice(0, 5)
               }),
@@ -1415,6 +1416,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     ['care', 'hand wash'],
                     ['width', '18 inches'],
                     ['length', '28 inches'],
+                    ['title', 'vintage tee'],
                   ].map(([field, ex]) => (
                     <div key={field} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.25rem' }}>
                       <span style={{ color: '#6366f1', fontWeight: 600 }}>{field}</span>
