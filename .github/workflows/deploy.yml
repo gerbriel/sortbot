@@ -50,6 +50,8 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           # Optional: Add VITE_OPENAI_API_KEY for AI features
           VITE_OPENAI_API_KEY: ${{ secrets.VITE_OPENAI_API_KEY }}
+          # Storage limit in GB (defaults to 100 for Pro plan if not set)
+          VITE_STORAGE_LIMIT_GB: ${{ secrets.VITE_STORAGE_LIMIT_GB }}
       
       - name: Setup Pages
         uses: actions/configure-pages@v4
