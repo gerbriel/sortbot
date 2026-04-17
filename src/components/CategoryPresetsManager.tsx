@@ -604,8 +604,8 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
   }
 
   return (
-    <div className="presets-manager-overlay">
-      <div className="presets-manager">
+    <div className="presets-manager-overlay" onClick={onClose}>
+      <div className="presets-manager" onClick={e => e.stopPropagation()}>
         <div className="presets-header">
           <h2>Category Presets Manager</h2>
           <div className="header-actions">
@@ -640,11 +640,17 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
 
         {/* ──────────── Form Modal ──────────── */}
         {showForm && (
-          <div className="preset-form-overlay">
-            <div className="preset-form-modal">
-              <h3>{editingPreset ? 'Edit' : 'Create'} Category Preset</h3>
+          <div className="preset-form-overlay" onClick={() => setShowForm(false)}>
+            <div className="preset-form-modal" onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                <h3 style={{ margin: 0 }}>{editingPreset ? 'Edit' : 'Create'} Category Preset</h3>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <button type="button" className="button button-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+                  <button form="preset-form" type="submit" className="button">{editingPreset ? 'Update' : 'Create'} Preset</button>
+                </div>
+              </div>
 
-              <form onSubmit={handleSubmit}>
+              <form id="preset-form" onSubmit={handleSubmit}>
 
                 {/* Basic Info */}
                 <div className="form-section">
@@ -1040,7 +1046,7 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
                   ))}
                 </div>
 
-                <div className="form-actions">
+                <div className="form-actions" style={{ display: 'none' }}>
                   <button type="button" className="button button-secondary" onClick={() => setShowForm(false)}>Cancel</button>
                   <button type="submit" className="button">{editingPreset ? 'Update' : 'Create'} Preset</button>
                 </div>
