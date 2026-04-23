@@ -710,7 +710,7 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
     description += `Vintage / Y2K ${intro || 'Vintage clothing item'}`;
   }
 
-  description += '\n\n\n';
+  description += '\n\n';
 
   // PART 2: Size and measurements with symbols (ONLY if provided in fields)
   if (context.size || (context.measurements && Object.keys(context.measurements).length > 0)) {
