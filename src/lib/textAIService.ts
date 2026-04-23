@@ -576,9 +576,9 @@ function toTitleCase(str: string): string {
 function normalizeSizeValue(raw: string): string {
   const trimmed = raw.trim();
 
-  // OSFA / One Size Fits All → "1 SIZE"
+  // OSFA / One Size Fits All → "OSFA"
   if (/\b(osfa|one[\s-]?size[\s-]?fits[\s-]?all|one[\s-]?size[\s-]?fits[\s-]?most|one[\s-]?size|os)\b/i.test(trimmed)) {
-    return '1 SIZE';
+    return 'OSFA';
   }
 
   // Collapse whitespace/hyphens and lowercase the whole string first so that
@@ -607,8 +607,8 @@ function normalizeSizeValue(raw: string): string {
     '4xlarge': '4XL', '4xl': '4XL', xxxxl: '4XL', quadrupleextralarge: '4XL',
     // 5XL
     '5xlarge': '5XL', '5xl': '5XL', xxxxxl: '5XL',
-    // 1 SIZE
-    '1size': '1 SIZE', onesize: '1 SIZE',
+    // OSFA
+    '1size': 'OSFA', onesize: 'OSFA',
   };
 
   // Try the full collapsed string first (handles "extra large", "extra extra small", etc.)

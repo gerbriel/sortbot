@@ -960,11 +960,21 @@ function App() {
           // overrides from procItem (only if they actually have a value).
           const userOverrides: Partial<ClothingItem> = {};
           const userFields: (keyof ClothingItem)[] = [
+            // User-entered / voice fields
             'voiceDescription', 'generatedDescription', 'size', 'brand', 'color',
             'secondaryColor', 'material', 'condition', 'era', 'modelName',
             'modelNumber', 'seoTitle', 'seoDescription', 'tags', 'price',
             'compareAtPrice', 'costPerItem', 'sku', 'measurements', 'style',
             'care',
+            // Preset-applied fields — must be preserved so re-categorization doesn't wipe them.
+            // applyPresetFields writes all of these; without them in the whitelist,
+            // handleImagesSorted rebuilds processedItems from sortedItem (no preset data)
+            // and the PDG reset effect receives items without preset fields → preset gone.
+            'policies', 'shipsFrom', 'gender', 'whoMadeIt', 'whatIsIt', 'listingType',
+            'discountedShipping', 'renewalOptions', 'productType', 'shopifyProductType',
+            'sizeType', 'ageGroup', 'weightValue', 'packageDimensions', 'parcelSize',
+            'continueSellingOutOfStock', 'requiresShipping', 'barcode', 'inventoryQuantity',
+            'customLabel0', 'mpn', 'taxCode', 'status', 'published', '_presetData',
           ];
           userFields.forEach(field => {
             const v = procItem[field];
@@ -1055,15 +1065,31 @@ function App() {
     const finalSorted = [...updatedSorted, ...newItems];
 
     setSortedImages(finalSorted);
-    // Reset processedItems to the new grouping so Step 3 nav reflects current groups
-    setProcessedItems(finalSorted);
+    // Rebuild processedItems: merge finalSorted (updated grouping/categories) with the
+    // LIVE processedItems so preset fields and user-entered data are not wiped.
+    // processedItemsRef reflects any preset application done in Step 3; finalSorted
+    // is derived from sortedImages which only carries structural fields (no preset data).
+    const liveProcessedForGroup = processedItemsRef.current;
+    const mergedProcessed = finalSorted.map(sortedItem => {
+      const existing = liveProcessedForGroup.find(p => p.id === sortedItem.id);
+      if (existing) {
+        // Keep all user-entered + preset fields from existing; only update structural ones.
+        return {
+          ...existing,
+          productGroup: sortedItem.productGroup || existing.productGroup,
+          category: sortedItem.category || existing.category,
+        };
+      }
+      return sortedItem;
+    });
+    setProcessedItems(mergedProcessed);
     
     // Auto-save workflow state (Step 2 complete - groups created)
     autoSaveWorkflow({
       uploadedImages: prunedUploaded,
       groupedImages: itemsWithCategories,
       sortedImages: finalSorted,
-      processedItems: finalSorted,
+      processedItems: mergedProcessed,
     });
 
     // Broadcast action for real-time collaboration
