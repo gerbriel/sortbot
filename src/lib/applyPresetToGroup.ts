@@ -15,7 +15,7 @@ function interpolateSeoTemplate(
   preset: CategoryPreset
 ): string {
   const replacements: Record<string, string> = {
-    brand:    item.brand    || preset.vendor         || '',
+    brand:    item.brand    || '',
     model:    item.modelName|| preset.model_name     || '',
     color:    item.color    || preset.color          || '',
     size:     item.size     || '',
@@ -132,7 +132,7 @@ function applyPresetFields(
         }
         return undefined;
       })(),
-      brand: item.brand || preset.vendor || undefined,
+      brand: item.brand || undefined,
       // productType = short label used in Shopify "Type" column (e.g. "T-Shirts", "Hoodies")
       productType: item.productType || preset.product_type || undefined,
       // shopifyProductType = full taxonomy path for "Standardized Product Type" column

@@ -110,13 +110,23 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   // Helper: build group array from items with groups-first ordering
   const buildGroupArray = (items: ClothingItem[]): ClothingItem[][] => {
-    const productGroups = items.reduce((groups, item) => {
+    const productGroups = items.reduce((groups, item, idx) => {
       const groupId = item.productGroup || item.id;
-      if (!groups[groupId]) groups[groupId] = [];
-      groups[groupId].push(item);
+      if (!groups[groupId]) groups[groupId] = { items: [], firstIdx: idx };
+      groups[groupId].items.push(item);
       return groups;
-    }, {} as Record<string, ClothingItem[]>);
-    return Object.values(productGroups).sort((a, b) => (a.length > 1 ? 0 : 1) - (b.length > 1 ? 0 : 1));
+    }, {} as Record<string, { items: ClothingItem[]; firstIdx: number }>);
+    // Sort: multi-item groups first, then singles — stable tiebreaker is the index
+    // of the first photo in that group within the original items array, so order
+    // never shuffles when processedItems state updates.
+    return Object.values(productGroups)
+      .sort((a, b) => {
+        const aMulti = a.items.length > 1 ? 0 : 1;
+        const bMulti = b.items.length > 1 ? 0 : 1;
+        if (aMulti !== bMulti) return aMulti - bMulti;
+        return a.firstIdx - b.firstIdx; // stable tiebreaker
+      })
+      .map(g => g.items);
   };
 
   // Memoize group calculation to avoid unnecessary recalculations
