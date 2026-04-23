@@ -2013,6 +2013,7 @@ function App() {
                   onGrouped={handleImagesGrouped}
                   onStatsChange={() => {}} // stats now computed directly from processedItems
                   userId={user.id}
+                  batchId={currentBatchId || undefined}
                   onImageDeleted={() => {
                     setLibraryRefreshTrigger(prev => prev + 1);
                   }}

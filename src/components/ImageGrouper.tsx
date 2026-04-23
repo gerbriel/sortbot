@@ -44,17 +44,38 @@ interface ImageGrouperProps {
   onGrouped: (items: ClothingItem[]) => void;
   onStatsChange?: (stats: ImageGrouperStats) => void;
   userId?: string;
+  batchId?: string; // used to detect batch switches and reset internal state
   onImageDeleted?: () => void; // called after any delete syncs to DB, so Library can refresh
   onSelectionChange?: (selectedIds: Set<string>) => void; // lift selection state so parent can pass to CategoryZones
   onActionsReady?: (actions: GrouperActions) => void; // lift action callbacks so parent can render buttons elsewhere
 }
 
-const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsChange, userId, onImageDeleted, onSelectionChange, onActionsReady }) => {
+const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsChange, userId, batchId, onImageDeleted, onSelectionChange, onActionsReady }) => {
   const [groupedItems, setGroupedItems] = useState<ClothingItem[]>([]);
   // Ref mirror so the initializeItems effect always reads the live groupedItems value
   // without capturing a stale closure (the effect only depends on [items]).
   const groupedItemsRef = useRef<ClothingItem[]>([]);
   groupedItemsRef.current = groupedItems;
+
+  // ── Batch switch reset ────────────────────────────────────────────────────
+  // When batchId changes (user opens a different batch from Library), wipe all
+  // internal state so the old batch's items don't bleed into the new batch.
+  // This runs BEFORE initializeItems so groupedItemsRef is empty when the new
+  // batch items arrive and they are treated as fresh rather than duplicates.
+  const prevBatchIdRef = useRef<string | undefined>(batchId);
+  useEffect(() => {
+    if (batchId && batchId !== prevBatchIdRef.current) {
+      prevBatchIdRef.current = batchId;
+      groupedItemsRef.current = [];
+      setGroupedItems([]);
+      historyRef.current = [];
+      redoStackRef.current = [];
+      setCanUndo(false);
+      setCanRedo(false);
+      updateSelection(new Set());
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchId]);
 
   // ── Undo/Redo history (Cmd+Z / Cmd+Shift+Z) ──────────────────────────────
   // Keep up to 50 previous groupedItems snapshots.  commitUpdate() is the single
