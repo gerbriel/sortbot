@@ -244,7 +244,9 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     return map;
   })();
 
-  // Sync groupOrder when new groups appear (new items added)
+  // Sync groupOrder when new groups appear or when grouping changes
+  // (items.length alone is not enough — creating a group merges items without changing count)
+  const groupIdsKey = Object.keys(groupsMap).sort().join(',');
   useEffect(() => {
     const currentIds = Object.keys(groupsMap);
     setGroupOrder(prev => {
@@ -253,7 +255,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
       return [...existing, ...newIds];
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items.length]);
+  }, [groupIdsKey]);
 
   const orderedGroups: [string, ClothingItem[]][] = groupOrder
     .filter(id => groupsMap[id])
