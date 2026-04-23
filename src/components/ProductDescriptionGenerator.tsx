@@ -164,11 +164,26 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const lengthChanged = items.length !== previousItemsLengthRef.current;
     // Also detect same-length but different content (e.g. re-group same number of items)
     const firstIdChanged = items[0]?.id !== previousItemsRefRef.current[0]?.id;
+    // Detect category or productGroup changes on existing items — e.g. re-categorizing an
+    // item already in the list, or applying a preset to already-categorized items.
+    // Without this, PDG's internal state stays stale (shows old category/preset fields)
+    // until the user navigates away and back, appearing as a "requires refresh" bug.
+    const structureKey = items.map(i => `${i.id}:${i.category ?? ''}:${i.productGroup ?? ''}`).join('|');
+    const prevStructureKey = previousItemsRefRef.current.map(i => `${i.id}:${i.category ?? ''}:${i.productGroup ?? ''}`).join('|');
+    const structureChanged = structureKey !== prevStructureKey;
 
-    if (batchChanged || lengthChanged || firstIdChanged) {
+    // Major changes (batch switch, new items, reordered) reset navigation to group 0.
+    // Structure-only changes (re-categorize, preset apply) silently sync without disrupting
+    // the user's current position in the group list.
+    const shouldReset = batchChanged || lengthChanged || firstIdChanged;
+    const shouldSync = shouldReset || structureChanged;
+
+    if (shouldSync) {
       isResettingRef.current = true;
       setProcessedItems(items);
-      setCurrentGroupIndex(0); // Reset to first group
+      if (shouldReset) {
+        setCurrentGroupIndex(0); // Only reset navigation for major changes
+      }
       previousItemsLengthRef.current = items.length;
       previousBatchIdRef.current = batchId;
       previousItemsRefRef.current = items;
