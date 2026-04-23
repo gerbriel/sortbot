@@ -307,7 +307,7 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
       'Loro Piana', 'Lot 29', 'Lucky Brand', 'Lucky Christine', 'Lululemon',
       'MDK', 'MET', 'MGM', 'MSGM', 'Maddox', 'MLB',
       // ── N–S batch additions ───────────────────────────────────────────────
-      'Nascar', 'Neighborhood', 'New Directions', 'New Wear', 'Next',
+      'Nascar', 'Neighborhood', 'New Directions', 'New Wear',
       'Nicola', 'NHL', 'NBA', 'Noah', 'North Crest', 'North River',
       'NoseDNM', 'Notations', 'Nudie Jeans', 'Number 1', 'Nxt',
       'No Boundaries', 'Ocean Current', 'Ocean Pacific', 'Off-White',
