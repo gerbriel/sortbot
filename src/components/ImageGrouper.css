@@ -522,6 +522,57 @@
   color: #fff !important;
 }
 
+/* ── Keyboard shortcut cheat sheet (bottom of sidebar) ── */
+.keyboard-cheatsheet {
+  margin-top: auto;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(255,255,255,0.15);
+}
+
+.cheatsheet-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.5);
+  margin-bottom: 0.5rem;
+}
+
+.cheatsheet-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.3rem;
+}
+
+.cheatsheet-row kbd {
+  display: inline-block;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.65rem;
+  font-family: ui-monospace, monospace;
+  color: rgba(255,255,255,0.85);
+  white-space: nowrap;
+  min-width: 2.4rem;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.cheatsheet-row span {
+  font-size: 0.68rem;
+  color: rgba(255,255,255,0.55);
+  line-height: 1.3;
+}
+
+/* Hide cheatsheet on mobile (sidebar collapses to horizontal bar) */
+@media (max-width: 768px) {
+  .keyboard-cheatsheet {
+    display: none;
+  }
+}
+
 .grouper-footer {
   display: flex;
   justify-content: center;
