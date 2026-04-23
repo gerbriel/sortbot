@@ -411,7 +411,7 @@ export const BRAND_DNA_EXPANSION_4: Record<string, PatternContext> = {
   },
 
   'next-brand': {
-    keywords: ['next', 'next brand clothing', 'next uk brand', 'next fashion'],
+    keywords: ['next brand clothing', 'next uk brand', 'next fashion', 'next plc'],
     vibes: ['british high street staple', 'classic quality', 'family fashion', 'affordable british'],
     categories: ['tees', 'shirts', 'jeans', 'jackets', 'dresses', 'accessories'],
     eras: ['1980s', '1990s', '2000s', '2010s', '2020s'],
