@@ -157,10 +157,9 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
     const strippedTitle = /\{[a-z_]+\}/i.test(rawTitle)
       ? stripUnresolvedTokens(rawTitle) || `product-${idx + 1}`
       : rawTitle || `product-${idx + 1}`;
-    const brandPrefix = (p.brand || '').trim();
-    return (brandPrefix && !strippedTitle.toLowerCase().includes(brandPrefix.toLowerCase()))
-      ? `${brandPrefix} ${strippedTitle}`
-      : strippedTitle;
+    // Use the title exactly as the user typed it — do NOT prepend brand.
+    // Brand is already its own "Vendor / Brand" column in the CSV.
+    return strippedTitle;
   };
 
   const handleDownloadCSV = () => {
