@@ -1267,6 +1267,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         </div>
       </div>
 
+      {/* ── Image grid — scrollable content to the right of the sidebar ── */}
+      <div className="grouper-scroll-content">
+
       {/* Individual Items Section - Always Visible Drop Zone */}
       <div 
         className="singles-section"
@@ -1586,7 +1589,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           </div>
         </div>
       )}
-      </div>
+      </div>{/* /grouper-scroll-content */}
+      </div>{/* /image-grouper-container */}
 
       {/* Lightbox modal */}
       {lightboxSrc && (

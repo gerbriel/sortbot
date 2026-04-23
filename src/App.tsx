@@ -2003,8 +2003,8 @@ function App() {
               gap: '1.5rem',
               alignItems: 'start',
             }} className="step2-split">
-              {/* Left: Group images — scrollable panel so page doesn't grow tall */}
-              <div style={{ maxHeight: '75vh', overflowY: 'auto', borderRadius: '8px', paddingBottom: '1rem' }}>
+              {/* Left: Group images — ImageGrouper manages its own internal sidebar+scroll */}
+              <div style={{ borderRadius: '8px', paddingBottom: '1rem' }}>
                 <p className="step-description" style={{ marginTop: 0 }}>
                   Select &amp; group your product images, then drag groups to a category on the right.
                 </p>
