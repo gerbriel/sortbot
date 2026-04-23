@@ -210,8 +210,11 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   }
 
   // ── BRAND fallback ────────────────────────────────────────────────────────
-  // Scan for known brand names spoken naturally without the "brand X period" command
-  if (!extracted.brand) {
+  // Scan for known brand names spoken naturally without the "brand X period" command.
+  // Guard: only run this on actual voice transcripts (must contain the word "period" somewhere)
+  // so that re-parsing a generated description doesn't false-match brand names.
+  const looksLikeVoiceTranscript = /\bperiod\b/i.test(voiceDesc);
+  if (!extracted.brand && looksLikeVoiceTranscript) {
     const KNOWN_BRANDS = [
       // ── Athletic / Sportswear ──────────────────────────────────────────────
       'Nike', 'Adidas', 'Puma', 'Reebok', 'Fila', 'Kappa', 'Umbro', 'Russell',
@@ -757,7 +760,7 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
   // PART 7: Standard disclaimers
   description += '* We note major imperfections—minor signs of age or wear may not be listed, adding to the vintage character.\n';
   description += '* High-quality piece, perfect for streetwear.\n';
-  description += '* Next-day shipping.\n';
+  description += '* Ships next day.\n';
   description += '* All sales final.';
 
   return {
