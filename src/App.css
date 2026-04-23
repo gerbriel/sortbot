@@ -386,6 +386,14 @@
   padding: 0.45rem 0.75rem;
 }
 
+/* Step 2 right panel — category zones + action buttons */
+.step2-right-panel {
+  position: sticky;
+  top: 1rem;
+  height: 75vh;
+  overflow-y: auto;
+}
+
 /* Mobile Responsiveness */
 @media (max-width: 1024px) {
   .app-main {
@@ -399,6 +407,13 @@
   /* Stack the split pane (ImageGrouper + CategoryZones) on medium screens */
   .step2-split {
     grid-template-columns: 1fr !important;
+  }
+
+  /* When stacked, right panel no longer needs to be sticky or fixed-height */
+  .step2-right-panel {
+    position: static;
+    height: auto;
+    overflow-y: visible;
   }
 }
 
@@ -480,6 +495,17 @@
   
   .step-description {
     font-size: 0.875rem;
+  }
+
+  /* Hide redundant "drag to category" helper text when panels are stacked */
+  .step2-split .step-description {
+    display: none;
+  }
+
+  /* Action buttons in step2 right panel: smaller text on tiny screens */
+  .grouper-actions-sidebar .button {
+    font-size: 0.78rem;
+    padding: 0.4rem 0.6rem;
   }
 }
 

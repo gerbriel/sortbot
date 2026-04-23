@@ -2021,7 +2021,7 @@ function App() {
                 />
               </div>
               {/* Right: Category drop zones — sticky so always visible */}
-              <div style={{ position: 'sticky', top: '1rem', height: '75vh', overflowY: 'auto' }}>
+              <div className="step2-right-panel">
                 <p className="step-description" style={{ marginTop: 0 }}>
                   Drag a group here to assign a category.
                 </p>
