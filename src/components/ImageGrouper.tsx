@@ -56,13 +56,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const groupedItemsRef = useRef<ClothingItem[]>([]);
   groupedItemsRef.current = groupedItems;
 
-  // ── Undo history (Cmd+Z) ──────────────────────────────────────────────────
+  // ── Undo/Redo history (Cmd+Z / Cmd+Shift+Z) ──────────────────────────────
   // Keep up to 50 previous groupedItems snapshots.  commitUpdate() is the single
   // write path for every user-driven grouping action; it pushes the CURRENT state
-  // onto the stack before applying the new one.
+  // onto the undo stack before applying the new one, and clears the redo stack.
   const MAX_HISTORY = 50;
   const historyRef = useRef<ClothingItem[][]>([]);
+  const redoStackRef = useRef<ClothingItem[][]>([]);
   const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
 
   const commitUpdate = (newItems: ClothingItem[], skipHistory = false) => {
     if (!skipHistory) {
@@ -70,7 +72,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         ...historyRef.current.slice(-MAX_HISTORY + 1),
         groupedItemsRef.current.map(i => ({ ...i })), // deep-clone snapshot
       ];
+      redoStackRef.current = []; // new action clears redo
       setCanUndo(true);
+      setCanRedo(false);
     }
     setGroupedItems(newItems);
     onGrouped(newItems);
@@ -79,10 +83,23 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const handleUndo = () => {
     if (historyRef.current.length === 0) return;
     const prev = historyRef.current[historyRef.current.length - 1];
+    redoStackRef.current = [...redoStackRef.current, groupedItemsRef.current.map(i => ({ ...i }))];
     historyRef.current = historyRef.current.slice(0, -1);
     setCanUndo(historyRef.current.length > 0);
+    setCanRedo(true);
     setGroupedItems(prev);
     onGrouped(prev);
+  };
+
+  const handleRedo = () => {
+    if (redoStackRef.current.length === 0) return;
+    const next = redoStackRef.current[redoStackRef.current.length - 1];
+    historyRef.current = [...historyRef.current, groupedItemsRef.current.map(i => ({ ...i }))];
+    redoStackRef.current = redoStackRef.current.slice(0, -1);
+    setCanUndo(true);
+    setCanRedo(redoStackRef.current.length > 0);
+    setGroupedItems(next);
+    onGrouped(next);
   };
 
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -361,17 +378,43 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   }, []); // stable — reads live values via refs, no closure deps needed
 
   // ⌘Z — undo last grouping action
+  // ⌘Shift+Z — redo
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.key !== 'z' || e.shiftKey) return;
+      if (!(e.metaKey || e.ctrlKey) || e.key !== 'z') return;
       const active = document.activeElement;
       if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)) return;
       e.preventDefault();
-      handleUndo();
+      if (e.shiftKey) {
+        handleRedo();
+      } else {
+        handleUndo();
+      }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, []); // stable — handleUndo reads historyRef directly
+  }, []); // stable — reads historyRef/redoStackRef directly
+
+  // ⌘Backspace — ungroup selected items
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key !== 'Backspace') return;
+      const active = document.activeElement;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)) return;
+      if (selectedItemsRef.current.size === 0) return;
+      e.preventDefault();
+      // Inline ungroup using stable refs — avoids stale closure over selectedItems/groupedItems
+      const updated = groupedItemsRef.current.map(item =>
+        selectedItemsRef.current.has(item.id)
+          ? { ...item, productGroup: item.id, category: undefined }
+          : item
+      );
+      commitUpdate(updated);
+      updateSelection(new Set());
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []); // stable — reads live values via refs
 
   // Initialize items with individual groups and auto-upload.
   // IMPORTANT: Only process items that are genuinely new (not already in groupedItems).
@@ -1120,6 +1163,18 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               ↩ Undo
             </span>
           )}
+          {canRedo && (
+            <span
+              onClick={handleRedo}
+              title="Redo last undone action (⌘Shift+Z)"
+              style={{
+                background: '#6b7280', cursor: 'pointer', display: 'flex',
+                alignItems: 'center', gap: '0.4rem', userSelect: 'none',
+              }}
+            >
+              ↪ Redo
+            </span>
+          )}
         </div>
         {/* Sort control */}
         <div className="sort-control">
@@ -1270,10 +1325,12 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         <div className="keyboard-cheatsheet">
           <div className="cheatsheet-title">⌨ Shortcuts</div>
           <div className="cheatsheet-row"><kbd>⌘ Enter</kbd><span>Group selected</span></div>
+          <div className="cheatsheet-row"><kbd>⌘ ⌫</kbd><span>Ungroup selected</span></div>
           <div className="cheatsheet-row"><kbd>⌘A</kbd><span>Select singles</span></div>
           <div className="cheatsheet-row"><kbd>⌘ Shift A</kbd><span>Select groups</span></div>
           <div className="cheatsheet-row"><kbd>⌘D</kbd><span>Deselect all</span></div>
           <div className="cheatsheet-row"><kbd>⌘Z</kbd><span>Undo</span></div>
+          <div className="cheatsheet-row"><kbd>⌘ Shift Z</kbd><span>Redo</span></div>
         </div>
       </div>
 
