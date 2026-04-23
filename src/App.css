@@ -396,9 +396,18 @@
     padding: var(--space-5);
   }
 
-  /* Stack the split pane on medium screens */
+  /* Stack the split pane (ImageGrouper + CategoryZones) on medium screens */
   .step2-split {
     grid-template-columns: 1fr !important;
+  }
+}
+
+/* Tablet: sidebar inside ImageGrouper shrinks to 160px */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .grouper-header {
+    width: 160px !important;
+    padding: 0.9rem 0.7rem !important;
+    font-size: 0.8rem;
   }
 }
 
