@@ -16,7 +16,7 @@
 }
 
 .header-content {
-  max-width: 1400px;
+  max-width: 1600px;
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -52,7 +52,7 @@
 }
 
 .app-header-content {
-  max-width: 1400px;
+  max-width: 1600px;
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -85,9 +85,9 @@
 
 /* Main Content Area */
 .app-main {
-  max-width: 1280px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: var(--space-4);
+  padding: var(--space-4) var(--space-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -533,7 +533,7 @@
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  max-width: 1400px;
+  max-width: 1600px;
   margin: 0 auto;
   font-size: 0.78rem;
 }
