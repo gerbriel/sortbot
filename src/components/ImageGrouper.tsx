@@ -1265,6 +1265,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             </button>
           </div>
         </div>
+
+        {/* ── Keyboard shortcuts cheat sheet ── */}
+        <div className="keyboard-cheatsheet">
+          <div className="cheatsheet-title">⌨ Shortcuts</div>
+          <div className="cheatsheet-row"><kbd>⌘↵</kbd><span>Group selected</span></div>
+          <div className="cheatsheet-row"><kbd>⌘A</kbd><span>Select singles</span></div>
+          <div className="cheatsheet-row"><kbd>⌘⇧A</kbd><span>Select groups</span></div>
+          <div className="cheatsheet-row"><kbd>⌘D</kbd><span>Deselect all</span></div>
+          <div className="cheatsheet-row"><kbd>⌘Z</kbd><span>Undo</span></div>
+        </div>
       </div>
 
       {/* ── Image grid — scrollable content to the right of the sidebar ── */}
