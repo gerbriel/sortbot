@@ -4,7 +4,7 @@ import { getCategories } from '../lib/categoriesService';
 import { getCategoryPresets } from '../lib/categoryPresetsService';
 import type { Category } from '../lib/categories';
 import type { CategoryPreset } from '../lib/categoryPresets';
-import { applyPresetToProductGroup } from '../lib/applyPresetToGroup';
+import { applyPresetDirectly } from '../lib/applyPresetToGroup';
 import LazyImg from './LazyImg';
 import { log } from '../lib/debugLogger';
 import { 
@@ -145,6 +145,23 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     } catch (e) {
       console.error('Failed to load presets for drop zones:', e);
     }
+  };
+
+  // Find the best matching preset from already-loaded `presets` state — no network fetch needed
+  const findPreset = (categoryName: string): import('../lib/categoryPresets').CategoryPreset | undefined => {
+    const lower = categoryName.toLowerCase();
+    return (
+      presets.find(p => (p.category_name ?? p.product_type ?? '').toLowerCase() === lower) ||
+      presets.find(p => (p.category_name ?? p.product_type ?? '').toLowerCase().includes(lower)) ||
+      presets.find(p => p.is_default)
+    );
+  };
+
+  const applyPreset = (groupItems: ClothingItem[], categoryName: string): ClothingItem[] => {
+    const preset = findPreset(categoryName);
+    return preset
+      ? applyPresetDirectly(groupItems, categoryName, preset)
+      : groupItems.map(i => ({ ...i, category: categoryName }));
   };
 
   const zonePresets = (() => {
@@ -310,7 +327,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     if (!productGroup) { setCatDraggedItem(null); setDragOverCategory(null); return; }
 
     const groupItems = items.filter(item => (item.productGroup || item.id) === productGroup);
-    const itemsWithPreset = await applyPresetToProductGroup(groupItems, category);
+    const itemsWithPreset = applyPreset(groupItems, category);
     log.sorter(`handleCategoryDrop | drag-assign | category=${category} productGroup=${productGroup} groupItems=${groupItems.length}`);
 
     const updatedMap = { ...groupsMap };
@@ -411,7 +428,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
 
     // Apply preset to singles as one merged group
     const singlesWithPreset = trueSingles.length > 0
-      ? await applyPresetToProductGroup(trueSingles, categoryName)
+      ? applyPreset(trueSingles, categoryName)
       : [];
     const singlesWithPresetById: Record<string, ClothingItem> = {};
     singlesWithPreset.forEach(i => { singlesWithPresetById[i.id] = i; });
@@ -420,7 +437,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     const groupedWithPresetById: Record<string, ClothingItem> = {};
     for (const gid of trueMultiGroups) {
       const fullGroup = items.filter(i => (i.productGroup || i.id) === gid);
-      const withPreset = await applyPresetToProductGroup(fullGroup, categoryName);
+      const withPreset = applyPreset(fullGroup, categoryName);
       withPreset.forEach(i => { groupedWithPresetById[i.id] = i; });
     }
 
