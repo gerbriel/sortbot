@@ -1529,8 +1529,15 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
             {/* Title — editable above the AI description */}
             <div style={{ marginTop: '0.75rem' }}>
-              <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem' }}>
-                Title:
+              <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontWeight: 600, marginBottom: '0.4rem' }}>
+                <span>Title:</span>
+                <span style={{
+                  fontSize: '0.75rem',
+                  fontWeight: 400,
+                  color: (currentItem.seoTitle || '').length > 60 ? '#dc2626' : (currentItem.seoTitle || '').length > 50 ? '#d97706' : '#6b7280'
+                }}>
+                  {(currentItem.seoTitle || '').length} / 60
+                </span>
               </label>
               <input
                 type="text"
