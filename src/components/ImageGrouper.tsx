@@ -1941,63 +1941,60 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             {canNav && (
               <div className="lightbox-counter">{lightboxIndex + 1} / {lightboxPool.length}</div>
             )}
-          </div>
-        );
-      })()}
-
-      {/* Full-screen crop UI — same iOS-style as Step 3 */}
-      {cropModal.open && (() => {
-        const cropItem = groupedItemsRef.current.find(i => i.id === cropModal.itemId)
-          ?? singleItemsRef.current.find(i => i.id === cropModal.itemId);
-        const imgSrc = cropItem?.preview || cropItem?.imageUrls?.[0] || '';
-        const rot = cropItem?.imageRotation || 0;
-        return (
-          <div className="crop-fullscreen">
-            <div className="crop-fs-topbar">
-              <button className="crop-fs-btn crop-fs-cancel" onClick={() => { setCropModal({ open: false }); setTempCrop(null); setActivePreset('FREE'); setAspectLock(null); }}>Cancel</button>
-              <span className="crop-fs-title">Crop</span>
-              <button className="crop-fs-btn crop-fs-done" disabled={!tempCrop} onClick={async () => {
-                if (!cropModal.itemId || !tempCrop) return;
-                await applyAndPersistTransformGrouper(cropModal.itemId, tempCrop);
-                setCropModal({ open: false }); setTempCrop(null); setActivePreset('FREE'); setAspectLock(null);
-                setLightboxSrc(null); // close stale lightbox after crop changes the image
-              }}>Done</button>
-            </div>
-            <div
-              className="crop-fs-stage"
-              ref={cropContainerRef}
-              onPointerDown={(e) => handleGCPointerDown(e, 'new')}
-              onPointerMove={handleGCPointerMove}
-              onPointerUp={handleGCPointerUp}
-            >
-              <img ref={cropImgRef} src={imgSrc} alt="Crop target" className="crop-fs-image"
-                style={{ transform: `rotate(${rot}deg)` }} draggable={false} />
-              {tempCrop && (<>
-                <div className="crop-fs-mask" style={{ top: 0, left: 0, right: 0, height: `${tempCrop.y}%` }} />
-                <div className="crop-fs-mask" style={{ top: `${tempCrop.y + tempCrop.h}%`, left: 0, right: 0, bottom: 0 }} />
-                <div className="crop-fs-mask" style={{ top: `${tempCrop.y}%`, left: 0, width: `${tempCrop.x}%`, height: `${tempCrop.h}%` }} />
-                <div className="crop-fs-mask" style={{ top: `${tempCrop.y}%`, left: `${tempCrop.x + tempCrop.w}%`, right: 0, height: `${tempCrop.h}%` }} />
-                <div className="crop-fs-rect" style={{ left: `${tempCrop.x}%`, top: `${tempCrop.y}%`, width: `${tempCrop.w}%`, height: `${tempCrop.h}%` }}>
-                  <div className="crop-fs-move-zone" onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, 'move'); }} />
-                  <div className="crop-fs-grid-h" style={{ top: '33.33%' }} /><div className="crop-fs-grid-h" style={{ top: '66.66%' }} />
-                  <div className="crop-fs-grid-v" style={{ left: '33.33%' }} /><div className="crop-fs-grid-v" style={{ left: '66.66%' }} />
-                  {(['nw','ne','sw','se'] as const).map(h => (
-                    <div key={h} className={`crop-fs-handle crop-fs-corner crop-fs-corner-${h}`}
-                      onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, h); }} />
-                  ))}
-                  {(['n','s','e','w'] as const).map(h => (
-                    <div key={h} className={`crop-fs-handle crop-fs-edge crop-fs-edge-${h}`}
-                      onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, h); }} />
-                  ))}
+            {/* Crop UI — rendered inside lightbox so it's constrained to the lightbox bounds */}
+            {cropModal.open && (() => {
+              const cropItem = groupedItemsRef.current.find(i => i.id === cropModal.itemId)
+                ?? singleItemsRef.current.find(i => i.id === cropModal.itemId);
+              const imgSrc = cropItem?.preview || cropItem?.imageUrls?.[0] || '';
+              const rot = cropItem?.imageRotation || 0;
+              return (
+                <div className="crop-fullscreen" onClick={(e) => e.stopPropagation()}>
+                  <div className="crop-fs-topbar">
+                    <button className="crop-fs-btn crop-fs-cancel" onClick={() => { setCropModal({ open: false }); setTempCrop(null); setActivePreset('FREE'); setAspectLock(null); }}>Cancel</button>
+                    <span className="crop-fs-title">Crop</span>
+                    <button className="crop-fs-btn crop-fs-done" disabled={!tempCrop} onClick={async () => {
+                      if (!cropModal.itemId || !tempCrop) return;
+                      await applyAndPersistTransformGrouper(cropModal.itemId, tempCrop);
+                      setCropModal({ open: false }); setTempCrop(null); setActivePreset('FREE'); setAspectLock(null);
+                      setLightboxSrc(null);
+                    }}>Done</button>
+                  </div>
+                  <div className="crop-fs-stage" ref={cropContainerRef}
+                    onPointerDown={(e) => handleGCPointerDown(e, 'new')}
+                    onPointerMove={handleGCPointerMove}
+                    onPointerUp={handleGCPointerUp}
+                  >
+                    <img ref={cropImgRef} src={imgSrc} alt="Crop target" className="crop-fs-image"
+                      style={{ transform: `rotate(${rot}deg)` }} draggable={false} />
+                    {tempCrop && (<>
+                      <div className="crop-fs-mask" style={{ top: 0, left: 0, right: 0, height: `${tempCrop.y}%` }} />
+                      <div className="crop-fs-mask" style={{ top: `${tempCrop.y + tempCrop.h}%`, left: 0, right: 0, bottom: 0 }} />
+                      <div className="crop-fs-mask" style={{ top: `${tempCrop.y}%`, left: 0, width: `${tempCrop.x}%`, height: `${tempCrop.h}%` }} />
+                      <div className="crop-fs-mask" style={{ top: `${tempCrop.y}%`, left: `${tempCrop.x + tempCrop.w}%`, right: 0, height: `${tempCrop.h}%` }} />
+                      <div className="crop-fs-rect" style={{ left: `${tempCrop.x}%`, top: `${tempCrop.y}%`, width: `${tempCrop.w}%`, height: `${tempCrop.h}%` }}>
+                        <div className="crop-fs-move-zone" onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, 'move'); }} />
+                        <div className="crop-fs-grid-h" style={{ top: '33.33%' }} /><div className="crop-fs-grid-h" style={{ top: '66.66%' }} />
+                        <div className="crop-fs-grid-v" style={{ left: '33.33%' }} /><div className="crop-fs-grid-v" style={{ left: '66.66%' }} />
+                        {(['nw','ne','sw','se'] as const).map(h => (
+                          <div key={h} className={`crop-fs-handle crop-fs-corner crop-fs-corner-${h}`}
+                            onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, h); }} />
+                        ))}
+                        {(['n','s','e','w'] as const).map(h => (
+                          <div key={h} className={`crop-fs-handle crop-fs-edge crop-fs-edge-${h}`}
+                            onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, h); }} />
+                        ))}
+                      </div>
+                    </>)}
+                  </div>
+                  <div className="crop-fs-ratiobar">
+                    {GC_PRESETS.map(({ label, ratio }) => (
+                      <button key={label} className={`crop-fs-pill${activePreset === label ? ' crop-fs-pill--active' : ''}`}
+                        onClick={() => applyGCPreset(label, ratio)}>{label}</button>
+                    ))}
+                  </div>
                 </div>
-              </>)}
-            </div>
-            <div className="crop-fs-ratiobar">
-              {GC_PRESETS.map(({ label, ratio }) => (
-                <button key={label} className={`crop-fs-pill${activePreset === label ? ' crop-fs-pill--active' : ''}`}
-                  onClick={() => applyGCPreset(label, ratio)}>{label}</button>
-              ))}
-            </div>
+              );
+            })()}
           </div>
         );
       })()}
