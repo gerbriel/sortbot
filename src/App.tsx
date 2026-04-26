@@ -367,12 +367,16 @@ function App() {
           }
         }
 
-        const { error: imgErr } = await supabase.from('product_images').insert(
+        // Use upsert with ignoreDuplicates to handle concurrent calls:
+        // DELETE already ran above to clear stale URLs. If a concurrent
+        // registerItemsInDB call already re-inserted the rows (race), the
+        // upsert simply skips them rather than throwing a 409 conflict.
+        const { error: imgErr } = await supabase.from('product_images').upsert(
           productImageRows,
-          { count: 'exact' }
+          { onConflict: 'product_id,image_url', ignoreDuplicates: true }
         );
         if (imgErr) {
-          console.warn('[App] registerItemsInDB | product_images insert error:', imgErr.message, imgErr.code, imgErr.details);
+          console.warn('[App] registerItemsInDB | product_images upsert error:', imgErr.message, imgErr.code, imgErr.details);
         }
       }
       log.db(`registerItemsInDB | done | registered=${registerable.length}`);
