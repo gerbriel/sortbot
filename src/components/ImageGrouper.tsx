@@ -1938,7 +1938,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             {cropping && (() => {
               const cropItem = groupedItemsRef.current.find(i => i.id === cropModal.itemId)
                 ?? singleItemsRef.current.find(i => i.id === cropModal.itemId);
-              const imgSrc = cropItem?.preview || cropItem?.imageUrls?.[0] || '';
+              const imgSrc = lightboxSrc || cropItem?.preview || cropItem?.imageUrls?.[0] || '';
               const rot = cropItem?.imageRotation || 0;
               return (
                 <div className="crop-fullscreen" onClick={(e) => e.stopPropagation()}>
@@ -1953,59 +1953,64 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     }}>Done</button>
                   </div>
                   <div className="crop-fs-stage" ref={cropContainerRef}>
-                    {/* img-wrap tightly hugs the rendered image — % coords are relative to it */}
+                    {/* img-wrap tightly hugs the rendered image — used for coordinate math only */}
                     <div className="crop-fs-img-wrap">
                       <img ref={cropImgRef} src={imgSrc} alt="Crop target" className="crop-fs-image"
-                        style={{ transform: `rotate(${rot}deg)`, maxHeight: 'calc(100vh - 120px)' }} draggable={false} />
-                      {/* SVG overlay: viewBox 0-100 maps 1:1 to % of the image. All pointer events here. */}
-                      <svg
-                        ref={cropSvgRef}
-                        className="crop-fs-svg"
-                        viewBox="0 0 100 100"
-                        preserveAspectRatio="none"
-                        onPointerDown={(e) => handleGCPointerDown(e, 'new')}
-                        onPointerMove={handleGCPointerMove}
-                        onPointerUp={handleGCPointerUp}
-                      >
-                        {tempCrop && (<>
-                          {/* Dimmed mask with transparent crop hole (evenodd) */}
-                          <path
-                            fillRule="evenodd"
-                            fill="rgba(0,0,0,0.55)"
-                            pointerEvents="none"
-                            d={`M0,0 H100 V100 H0 Z M${tempCrop.x},${tempCrop.y} H${tempCrop.x + tempCrop.w} V${tempCrop.y + tempCrop.h} H${tempCrop.x} Z`}
-                          />
-                          {/* Crop border */}
-                          <rect x={tempCrop.x} y={tempCrop.y} width={tempCrop.w} height={tempCrop.h}
-                            fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="0.5" pointerEvents="none" />
-                          {/* Rule-of-thirds grid */}
-                          <line x1={tempCrop.x + tempCrop.w / 3} y1={tempCrop.y} x2={tempCrop.x + tempCrop.w / 3} y2={tempCrop.y + tempCrop.h} stroke="rgba(255,255,255,0.25)" strokeWidth="0.2" pointerEvents="none" />
-                          <line x1={tempCrop.x + tempCrop.w * 2 / 3} y1={tempCrop.y} x2={tempCrop.x + tempCrop.w * 2 / 3} y2={tempCrop.y + tempCrop.h} stroke="rgba(255,255,255,0.25)" strokeWidth="0.2" pointerEvents="none" />
-                          <line x1={tempCrop.x} y1={tempCrop.y + tempCrop.h / 3} x2={tempCrop.x + tempCrop.w} y2={tempCrop.y + tempCrop.h / 3} stroke="rgba(255,255,255,0.25)" strokeWidth="0.2" pointerEvents="none" />
-                          <line x1={tempCrop.x} y1={tempCrop.y + tempCrop.h * 2 / 3} x2={tempCrop.x + tempCrop.w} y2={tempCrop.y + tempCrop.h * 2 / 3} stroke="rgba(255,255,255,0.25)" strokeWidth="0.2" pointerEvents="none" />
-                          {/* Move zone: transparent interior rect */}
-                          <rect x={tempCrop.x} y={tempCrop.y} width={tempCrop.w} height={tempCrop.h}
-                            fill="transparent" style={{ cursor: 'move' }}
-                            onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, 'move'); }} />
-                          {/* Corner handles */}
-                          {([['nw', tempCrop.x, tempCrop.y], ['ne', tempCrop.x + tempCrop.w, tempCrop.y],
-                            ['sw', tempCrop.x, tempCrop.y + tempCrop.h], ['se', tempCrop.x + tempCrop.w, tempCrop.y + tempCrop.h]] as [CropDragMode, number, number][]).map(([id, cx, cy]) => (
-                            <rect key={id} x={cx - 3} y={cy - 3} width={6} height={6}
-                              fill="white" rx={0.5} style={{ cursor: `${id}-resize` }}
-                              onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, id); }} />
-                          ))}
-                          {/* Edge handles */}
-                          {([['n', tempCrop.x + tempCrop.w / 2, tempCrop.y],
-                            ['s', tempCrop.x + tempCrop.w / 2, tempCrop.y + tempCrop.h],
-                            ['e', tempCrop.x + tempCrop.w, tempCrop.y + tempCrop.h / 2],
-                            ['w', tempCrop.x, tempCrop.y + tempCrop.h / 2]] as [CropDragMode, number, number][]).map(([id, hx, hy]) => (
-                            <rect key={id} x={hx - 2} y={hy - 2} width={4} height={4}
-                              fill="white" rx={0.5} style={{ cursor: `${id}-resize` }}
-                              onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, id); }} />
-                          ))}
-                        </>)}
-                      </svg>
+                        style={{ transform: `rotate(${rot}deg)`, maxHeight: 'calc(100vh - 120px)' }} draggable={false}
+                        onLoad={() => setTempCrop(tc => tc ? { ...tc } : tc)} />
                     </div>
+                    {/* SVG overlay sits on the STAGE (always full-size). Coordinates are mapped
+                        from stage-space → image-% via cropImgRef.getBoundingClientRect(). */}
+                    <svg
+                      ref={cropSvgRef}
+                      className="crop-fs-svg"
+                      onPointerDown={(e) => handleGCPointerDown(e, 'new')}
+                      onPointerMove={handleGCPointerMove}
+                      onPointerUp={handleGCPointerUp}
+                    >
+                      {tempCrop && (() => {
+                        const ir = cropImgRef.current?.getBoundingClientRect();
+                        if (!ir || ir.width === 0) return null;
+                        const sr = cropContainerRef.current?.getBoundingClientRect() ?? ir;
+                        const ox = ir.left - sr.left;
+                        const oy = ir.top - sr.top;
+                        const iw = ir.width, ih = ir.height;
+                        const W = sr.width || 1, H = sr.height || 1;
+                        const cx = ox + tempCrop.x / 100 * iw;
+                        const cy = oy + tempCrop.y / 100 * ih;
+                        const cw = tempCrop.w / 100 * iw;
+                        const ch = tempCrop.h / 100 * ih;
+                        return (
+                          <>
+                            <path
+                              fillRule="evenodd"
+                              fill="rgba(0,0,0,0.55)"
+                              pointerEvents="none"
+                              d={`M0,0 H${W} V${H} H0 Z M${cx},${cy} H${cx+cw} V${cy+ch} H${cx} Z`}
+                            />
+                            <rect x={cx} y={cy} width={cw} height={ch}
+                              fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5" pointerEvents="none" />
+                            <line x1={cx+cw/3} y1={cy} x2={cx+cw/3} y2={cy+ch} stroke="rgba(255,255,255,0.3)" strokeWidth="0.5" pointerEvents="none" />
+                            <line x1={cx+cw*2/3} y1={cy} x2={cx+cw*2/3} y2={cy+ch} stroke="rgba(255,255,255,0.3)" strokeWidth="0.5" pointerEvents="none" />
+                            <line x1={cx} y1={cy+ch/3} x2={cx+cw} y2={cy+ch/3} stroke="rgba(255,255,255,0.3)" strokeWidth="0.5" pointerEvents="none" />
+                            <line x1={cx} y1={cy+ch*2/3} x2={cx+cw} y2={cy+ch*2/3} stroke="rgba(255,255,255,0.3)" strokeWidth="0.5" pointerEvents="none" />
+                            <rect x={cx} y={cy} width={cw} height={ch}
+                              fill="transparent" style={{ cursor: 'move' }}
+                              onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, 'move'); }} />
+                            {([['nw', cx, cy], ['ne', cx+cw, cy], ['sw', cx, cy+ch], ['se', cx+cw, cy+ch]] as [CropDragMode, number, number][]).map(([id, hx, hy]) => (
+                              <rect key={id} x={hx-6} y={hy-6} width={12} height={12}
+                                fill="white" rx={1} style={{ cursor: `${id}-resize` }}
+                                onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, id); }} />
+                            ))}
+                            {([['n', cx+cw/2, cy], ['s', cx+cw/2, cy+ch], ['e', cx+cw, cy+ch/2], ['w', cx, cy+ch/2]] as [CropDragMode, number, number][]).map(([id, hx, hy]) => (
+                              <rect key={id} x={hx-4} y={hy-4} width={8} height={8}
+                                fill="white" rx={1} style={{ cursor: `${id}-resize` }}
+                                onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, id); }} />
+                            ))}
+                          </>
+                        );
+                      })()}
+                    </svg>
                   </div>
                   <div className="crop-fs-ratiobar">
                     {GC_PRESETS.map(({ label, ratio }) => (
