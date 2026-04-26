@@ -642,17 +642,22 @@
 .crop-fs-img-wrap {
   position: relative;
   line-height: 0; /* collapse inline gaps */
+  max-width: 100%;   /* prevent overflow in flex row */
+  max-height: 100%;  /* prevent overflow in flex column */
 }
 
-/* SVG overlay — stretches exactly over the image, handles all pointer events */
+/* SVG overlay sits on the STAGE (position:relative), always full-size — never 0×0 */
 .crop-fs-svg {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   cursor: crosshair;
   overflow: visible;
   touch-action: none;
+  display: block;
+  pointer-events: all;
 }
 
 .crop-fs-image {
