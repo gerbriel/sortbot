@@ -603,11 +603,111 @@
 .rotate-btn { background: rgba(0,0,0,0.55); color: white; border: none; padding: 4px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; }
 .rotate-btn:hover { background: rgba(0,0,0,0.75); }
 
-.crop-modal-overlay { position: fixed; left: 0; top: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1200; }
-.crop-modal { background: white; padding: 1rem; border-radius: 8px; max-width: 720px; width: 90%; }
-.crop-image-container { position: relative; width: 100%; padding-top: 56%; background: #111; overflow: hidden; }
-.crop-image-container img.crop-target-image { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: contain; }
-.crop-rect { position: absolute; border: 2px dashed #10b981; background: rgba(16,185,129,0.12); }
+/* ── Full-screen iOS-style crop UI ─────────────────────────────────── */
+.crop-fullscreen {
+  position: fixed; inset: 0; z-index: 1300;
+  background: #000;
+  display: flex; flex-direction: column;
+  user-select: none;
+}
+
+.crop-fs-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px;
+  background: #111;
+  flex-shrink: 0;
+  min-height: 52px;
+}
+.crop-fs-title { color: #fff; font-size: 1rem; font-weight: 600; }
+.crop-fs-btn { background: none; border: none; cursor: pointer; font-size: 1rem; font-weight: 600; padding: 6px 12px; border-radius: 6px; }
+.crop-fs-cancel { color: #aaa; }
+.crop-fs-cancel:hover { color: #fff; background: rgba(255,255,255,0.08); }
+.crop-fs-done { color: #fff; background: #10b981; }
+.crop-fs-done:hover:not(:disabled) { background: #059669; }
+.crop-fs-done:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.crop-fs-stage {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  cursor: crosshair;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.crop-fs-image {
+  max-width: 100%; max-height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+  /* Let the image sit naturally; masks are absolute over the stage */
+  position: relative; z-index: 0;
+}
+
+/* The stage uses absolute positioning for masks relative to itself */
+.crop-fs-stage { position: relative; }
+
+.crop-fs-mask {
+  position: absolute;
+  background: rgba(0,0,0,0.55);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.crop-fs-rect {
+  position: absolute;
+  border: 1.5px solid rgba(255,255,255,0.85);
+  box-sizing: border-box;
+  z-index: 3;
+}
+
+/* Interior drag zone */
+.crop-fs-move-zone {
+  position: absolute; inset: 0;
+  cursor: move;
+  z-index: 4;
+}
+
+/* Grid lines */
+.crop-fs-grid-h, .crop-fs-grid-v {
+  position: absolute;
+  background: rgba(255,255,255,0.25);
+  pointer-events: none;
+  z-index: 5;
+}
+.crop-fs-grid-h { left: 0; right: 0; height: 1px; }
+.crop-fs-grid-v { top: 0; bottom: 0; width: 1px; }
+
+/* Corner handles */
+.crop-fs-handle { position: absolute; z-index: 6; width: 20px; height: 20px; }
+.crop-fs-corner { border-color: #fff; border-style: solid; border-width: 0; }
+.crop-fs-corner-nw { top: -2px; left: -2px; border-top-width: 3px; border-left-width: 3px; cursor: nw-resize; }
+.crop-fs-corner-ne { top: -2px; right: -2px; border-top-width: 3px; border-right-width: 3px; cursor: ne-resize; }
+.crop-fs-corner-sw { bottom: -2px; left: -2px; border-bottom-width: 3px; border-left-width: 3px; cursor: sw-resize; }
+.crop-fs-corner-se { bottom: -2px; right: -2px; border-bottom-width: 3px; border-right-width: 3px; cursor: se-resize; }
+
+/* Edge handles */
+.crop-fs-edge { background: #fff; border-radius: 2px; cursor: default; }
+.crop-fs-edge-n { top: -2px; left: 50%; transform: translateX(-50%); width: 28px; height: 4px; cursor: n-resize; }
+.crop-fs-edge-s { bottom: -2px; left: 50%; transform: translateX(-50%); width: 28px; height: 4px; cursor: s-resize; }
+.crop-fs-edge-w { left: -2px; top: 50%; transform: translateY(-50%); width: 4px; height: 28px; cursor: w-resize; }
+.crop-fs-edge-e { right: -2px; top: 50%; transform: translateY(-50%); width: 4px; height: 28px; cursor: e-resize; }
+
+/* Aspect ratio pill bar */
+.crop-fs-ratiobar {
+  display: flex; gap: 8px; align-items: center; justify-content: center;
+  padding: 14px 16px;
+  background: #111;
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.crop-fs-pill {
+  background: rgba(255,255,255,0.1); color: #ccc;
+  border: 1.5px solid transparent; border-radius: 20px;
+  padding: 6px 16px; font-size: 0.8rem; font-weight: 600;
+  cursor: pointer; white-space: nowrap; transition: all 0.15s;
+}
+.crop-fs-pill:hover { background: rgba(255,255,255,0.18); color: #fff; }
+.crop-fs-pill--active { background: #10b981; color: #fff; border-color: #10b981; }
   border: 1px solid var(--gray-200);
 }
 
@@ -929,23 +1029,26 @@
   background: rgba(255, 255, 255, 0.28);
 }
 
-.lightbox-close {
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+/* Standalone lightbox close — fixed top-right, separate from toolbar */
+.lightbox-close-standalone {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
   color: white;
   font-size: 1rem;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: background 0.2s;
-  margin-left: 4px;
 }
-
-.lightbox-close:hover {
-  background: rgba(255, 255, 255, 0.3);
+.lightbox-close-standalone:hover {
+  background: rgba(255, 255, 255, 0.25);
 }
 
