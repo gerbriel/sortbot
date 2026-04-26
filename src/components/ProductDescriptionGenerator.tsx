@@ -2023,11 +2023,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 <button className="lightbox-tool-btn" title="Rotate right"
                   onClick={() => { const u = processedItems.map(i => i.id === lbItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) + 90) % 360 } : i); setProcessedItems(u); setHasUnsavedChanges(true); }}>⟳ Rotate R</button>
                 <button className="lightbox-tool-btn" title="Crop image"
-                  onClick={() => { closeLightbox(); setCropModal({ open: true, itemId: lbItem.id }); setActivePreset('FREE'); setAspectLock(null); setTempCrop(null); }}>✂ Crop</button>
+                  onClick={() => { closeLightbox(); setCropModal({ open: true, itemId: lbItem.id }); setActivePreset('FREE'); setAspectLock(null); setTempCrop({ x: 5, y: 5, w: 90, h: 90 }); }}>✂ Crop</button>
               </>)}
-              {canNav && (
-                <span className="lightbox-counter">{lightboxPool.indexOf(lightboxItemId!) + 1} / {lightboxPool.length}</span>
-              )}
             </div>
             <img
               src={lightboxSrc}
@@ -2036,6 +2033,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               style={{ transform: lbItem ? `rotate(${lbItem.imageRotation || 0}deg)` : undefined }}
               onClick={(e) => e.stopPropagation()}
             />
+            {canNav && (
+              <span className="lightbox-counter">{lightboxPool.indexOf(lightboxItemId!) + 1} / {lightboxPool.length}</span>
+            )}
           </div>
         );
       })()}
