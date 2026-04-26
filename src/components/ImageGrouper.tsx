@@ -184,20 +184,25 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
       : (item.imageUrls?.[0] || item.preview || '');
 
-  /** Open lightbox by item ID — builds a pool of all images in the same group for navigation. */
+  /** Open lightbox by item ID — builds a pool of all images in the same group for navigation.
+   *  For single (ungrouped) items, builds pool from all current singles for browsing. */
   const openLightboxForItem = (itemId: string) => {
     const live = groupedItemsRef.current.find(i => i.id === itemId);
     if (!live) { console.warn('[ImageGrouper] openLightboxForItem: item not found', itemId); return; }
 
-    // Build pool: all items in the same productGroup, or just this one if ungrouped
-    const groupItems = live.productGroup
+    // Build pool: all items in the same productGroup, or all singles if this is a single
+    const isGrouped = live.productGroup && live.productGroup !== live.id
+      && groupedItemsRef.current.filter(i => i.productGroup === live.productGroup).length > 1;
+
+    const poolItems = isGrouped
       ? groupedItemsRef.current.filter(i => i.productGroup === live.productGroup)
-      : [live];
-    const pool = groupItems.map(getItemUrl).filter(Boolean) as string[];
+      : singleItemsRef.current;
+
+    const pool = poolItems.map(getItemUrl).filter(Boolean) as string[];
     const src = getItemUrl(live);
     const idx = pool.indexOf(src);
 
-    imgDebug('LIGHTBOX OPEN', itemId, { resolvedSrc: src, poolSize: pool.length });
+    imgDebug('LIGHTBOX OPEN', itemId, { resolvedSrc: src, poolSize: pool.length, isGrouped });
     if (src) {
       setLightboxPool(pool);
       setLightboxIndex(idx >= 0 ? idx : 0);

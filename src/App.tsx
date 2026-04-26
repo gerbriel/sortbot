@@ -1096,8 +1096,10 @@ function App() {
       if (existing) {
         return {
           ...existing,
-          productGroup: sortedItem.productGroup || existing.productGroup,
-          category:     sortedItem.category     || existing.category,
+          productGroup:  sortedItem.productGroup || existing.productGroup,
+          category:      sortedItem.category     || existing.category,
+          imageRotation: sortedItem.imageRotation ?? existing.imageRotation,
+          crop:          sortedItem.crop          ?? existing.crop,
           ...imageFields,
         };
       }
