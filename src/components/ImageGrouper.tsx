@@ -173,6 +173,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const [activePreset, setActivePreset] = useState<string>('FREE');
   const cropContainerRef = useRef<HTMLDivElement | null>(null);
   const cropImgRef = useRef<HTMLImageElement | null>(null);
+  const cropSvgRef = useRef<SVGSVGElement | null>(null);       // SVG overlay — always captures pointer
   type CropDragMode = 'new' | 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | 'move';
   const cropDragRef = useRef<{ mode: CropDragMode; startX: number; startY: number; startCrop: { x: number; y: number; w: number; h: number } } | null>(null);
 
@@ -238,7 +239,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     e.preventDefault(); e.stopPropagation();
     if (!cropImgRef.current) return;
     const rect = cropImgRef.current.getBoundingClientRect();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    // Always capture on the SVG so pointermove/up route there regardless of which child fired
+    cropSvgRef.current?.setPointerCapture(e.pointerId);
     cropDragRef.current = {
       mode,
       startX: (e.clientX - rect.left) / rect.width,
@@ -1950,34 +1952,59 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       setLightboxSrc(null);
                     }}>Done</button>
                   </div>
-                  <div className="crop-fs-stage" ref={cropContainerRef}
-                    onPointerDown={(e) => handleGCPointerDown(e, 'new')}
-                    onPointerMove={handleGCPointerMove}
-                    onPointerUp={handleGCPointerUp}
-                  >
+                  <div className="crop-fs-stage" ref={cropContainerRef}>
                     {/* img-wrap tightly hugs the rendered image — % coords are relative to it */}
                     <div className="crop-fs-img-wrap">
                       <img ref={cropImgRef} src={imgSrc} alt="Crop target" className="crop-fs-image"
                         style={{ transform: `rotate(${rot}deg)`, maxHeight: 'calc(100vh - 120px)' }} draggable={false} />
-                      {tempCrop && (<>
-                        <div className="crop-fs-mask" style={{ top: 0, left: 0, right: 0, height: `${tempCrop.y}%` }} />
-                        <div className="crop-fs-mask" style={{ top: `${tempCrop.y + tempCrop.h}%`, left: 0, right: 0, bottom: 0 }} />
-                        <div className="crop-fs-mask" style={{ top: `${tempCrop.y}%`, left: 0, width: `${tempCrop.x}%`, height: `${tempCrop.h}%` }} />
-                        <div className="crop-fs-mask" style={{ top: `${tempCrop.y}%`, left: `${tempCrop.x + tempCrop.w}%`, right: 0, height: `${tempCrop.h}%` }} />
-                        <div className="crop-fs-rect" style={{ left: `${tempCrop.x}%`, top: `${tempCrop.y}%`, width: `${tempCrop.w}%`, height: `${tempCrop.h}%` }}>
-                          <div className="crop-fs-move-zone" onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, 'move'); }} />
-                          <div className="crop-fs-grid-h" style={{ top: '33.33%' }} /><div className="crop-fs-grid-h" style={{ top: '66.66%' }} />
-                          <div className="crop-fs-grid-v" style={{ left: '33.33%' }} /><div className="crop-fs-grid-v" style={{ left: '66.66%' }} />
-                          {(['nw','ne','sw','se'] as const).map(h => (
-                            <div key={h} className={`crop-fs-handle crop-fs-corner crop-fs-corner-${h}`}
-                              onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, h); }} />
+                      {/* SVG overlay: viewBox 0-100 maps 1:1 to % of the image. All pointer events here. */}
+                      <svg
+                        ref={cropSvgRef}
+                        className="crop-fs-svg"
+                        viewBox="0 0 100 100"
+                        preserveAspectRatio="none"
+                        onPointerDown={(e) => handleGCPointerDown(e, 'new')}
+                        onPointerMove={handleGCPointerMove}
+                        onPointerUp={handleGCPointerUp}
+                      >
+                        {tempCrop && (<>
+                          {/* Dimmed mask with transparent crop hole (evenodd) */}
+                          <path
+                            fillRule="evenodd"
+                            fill="rgba(0,0,0,0.55)"
+                            pointerEvents="none"
+                            d={`M0,0 H100 V100 H0 Z M${tempCrop.x},${tempCrop.y} H${tempCrop.x + tempCrop.w} V${tempCrop.y + tempCrop.h} H${tempCrop.x} Z`}
+                          />
+                          {/* Crop border */}
+                          <rect x={tempCrop.x} y={tempCrop.y} width={tempCrop.w} height={tempCrop.h}
+                            fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="0.5" pointerEvents="none" />
+                          {/* Rule-of-thirds grid */}
+                          <line x1={tempCrop.x + tempCrop.w / 3} y1={tempCrop.y} x2={tempCrop.x + tempCrop.w / 3} y2={tempCrop.y + tempCrop.h} stroke="rgba(255,255,255,0.25)" strokeWidth="0.2" pointerEvents="none" />
+                          <line x1={tempCrop.x + tempCrop.w * 2 / 3} y1={tempCrop.y} x2={tempCrop.x + tempCrop.w * 2 / 3} y2={tempCrop.y + tempCrop.h} stroke="rgba(255,255,255,0.25)" strokeWidth="0.2" pointerEvents="none" />
+                          <line x1={tempCrop.x} y1={tempCrop.y + tempCrop.h / 3} x2={tempCrop.x + tempCrop.w} y2={tempCrop.y + tempCrop.h / 3} stroke="rgba(255,255,255,0.25)" strokeWidth="0.2" pointerEvents="none" />
+                          <line x1={tempCrop.x} y1={tempCrop.y + tempCrop.h * 2 / 3} x2={tempCrop.x + tempCrop.w} y2={tempCrop.y + tempCrop.h * 2 / 3} stroke="rgba(255,255,255,0.25)" strokeWidth="0.2" pointerEvents="none" />
+                          {/* Move zone: transparent interior rect */}
+                          <rect x={tempCrop.x} y={tempCrop.y} width={tempCrop.w} height={tempCrop.h}
+                            fill="transparent" style={{ cursor: 'move' }}
+                            onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, 'move'); }} />
+                          {/* Corner handles */}
+                          {([['nw', tempCrop.x, tempCrop.y], ['ne', tempCrop.x + tempCrop.w, tempCrop.y],
+                            ['sw', tempCrop.x, tempCrop.y + tempCrop.h], ['se', tempCrop.x + tempCrop.w, tempCrop.y + tempCrop.h]] as [CropDragMode, number, number][]).map(([id, cx, cy]) => (
+                            <rect key={id} x={cx - 3} y={cy - 3} width={6} height={6}
+                              fill="white" rx={0.5} style={{ cursor: `${id}-resize` }}
+                              onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, id); }} />
                           ))}
-                          {(['n','s','e','w'] as const).map(h => (
-                            <div key={h} className={`crop-fs-handle crop-fs-edge crop-fs-edge-${h}`}
-                              onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, h); }} />
+                          {/* Edge handles */}
+                          {([['n', tempCrop.x + tempCrop.w / 2, tempCrop.y],
+                            ['s', tempCrop.x + tempCrop.w / 2, tempCrop.y + tempCrop.h],
+                            ['e', tempCrop.x + tempCrop.w, tempCrop.y + tempCrop.h / 2],
+                            ['w', tempCrop.x, tempCrop.y + tempCrop.h / 2]] as [CropDragMode, number, number][]).map(([id, hx, hy]) => (
+                            <rect key={id} x={hx - 2} y={hy - 2} width={4} height={4}
+                              fill="white" rx={0.5} style={{ cursor: `${id}-resize` }}
+                              onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, id); }} />
                           ))}
-                        </div>
-                      </>)}
+                        </>)}
+                      </svg>
                     </div>
                   </div>
                   <div className="crop-fs-ratiobar">
