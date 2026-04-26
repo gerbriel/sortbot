@@ -160,10 +160,21 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // Auto-group state — number of photos per product
   const [autoGroupN, setAutoGroupN] = useState<string>('4');
 
-  // Lightbox state
+  // Lightbox state  — pool stores item IDs (not URLs) so we can look up rotation
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
-  const [lightboxPool, setLightboxPool] = useState<string[]>([]);
+  const [lightboxItemId, setLightboxItemId] = useState<string | null>(null);
+  const [lightboxPool, setLightboxPool] = useState<string[]>([]); // array of item IDs
   const [lightboxIndex, setLightboxIndex] = useState<number>(0);
+
+  // Crop UI state (full-screen iOS-style, same as Step 3)
+  const [cropModal, setCropModal] = useState<{ open: boolean; itemId?: string }>({ open: false });
+  const [tempCrop, setTempCrop] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [aspectLock, setAspectLock] = useState<number | null>(null);
+  const [activePreset, setActivePreset] = useState<string>('FREE');
+  const cropContainerRef = useRef<HTMLDivElement | null>(null);
+  const cropImgRef = useRef<HTMLImageElement | null>(null);
+  type CropDragMode = 'new' | 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | 'move';
+  const cropDragRef = useRef<{ mode: CropDragMode; startX: number; startY: number; startCrop: { x: number; y: number; w: number; h: number } } | null>(null);
 
   // ── Debug helper — always-on, readable in DevTools console ──────────────────
   const imgDebug = (event: string, itemId: string, extra?: Record<string, unknown>) => {
@@ -184,13 +195,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
       : (item.imageUrls?.[0] || item.preview || '');
 
-  /** Open lightbox by item ID — builds a pool of all images in the same group for navigation.
-   *  For single (ungrouped) items, builds pool from all current singles for browsing. */
+  /** Open lightbox by item ID — builds a pool of item IDs for navigation. */
   const openLightboxForItem = (itemId: string) => {
     const live = groupedItemsRef.current.find(i => i.id === itemId);
     if (!live) { console.warn('[ImageGrouper] openLightboxForItem: item not found', itemId); return; }
 
-    // Build pool: all items in the same productGroup, or all singles if this is a single
     const isGrouped = live.productGroup && live.productGroup !== live.id
       && groupedItemsRef.current.filter(i => i.productGroup === live.productGroup).length > 1;
 
@@ -198,16 +207,122 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       ? groupedItemsRef.current.filter(i => i.productGroup === live.productGroup)
       : singleItemsRef.current;
 
-    const pool = poolItems.map(getItemUrl).filter(Boolean) as string[];
+    const pool = poolItems.map(i => i.id);
     const src = getItemUrl(live);
-    const idx = pool.indexOf(src);
+    const idx = pool.indexOf(live.id);
 
     imgDebug('LIGHTBOX OPEN', itemId, { resolvedSrc: src, poolSize: pool.length, isGrouped });
     if (src) {
       setLightboxPool(pool);
       setLightboxIndex(idx >= 0 ? idx : 0);
+      setLightboxItemId(live.id);
       setLightboxSrc(src);
     } else console.warn('[ImageGrouper] openLightboxForItem: no URL found for item', itemId);
+  };
+
+  const navigateLightboxGrouper = (dir: 1 | -1) => {
+    setLightboxIndex(prev => {
+      const ni = (prev + dir + lightboxPool.length) % lightboxPool.length;
+      const nextId = lightboxPool[ni];
+      const nextItem = groupedItemsRef.current.find(i => i.id === nextId)
+        ?? singleItemsRef.current.find(i => i.id === nextId);
+      if (nextItem) { setLightboxItemId(nextId); setLightboxSrc(getItemUrl(nextItem)); }
+      return ni;
+    });
+  };
+
+  // ── Crop helpers (mirrors ProductDescriptionGenerator) ────────────────────
+  const gcClamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+  const handleGCPointerDown = (e: React.PointerEvent, mode: CropDragMode) => {
+    e.preventDefault(); e.stopPropagation();
+    if (!cropContainerRef.current) return;
+    const rect = cropContainerRef.current.getBoundingClientRect();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    cropDragRef.current = {
+      mode,
+      startX: (e.clientX - rect.left) / rect.width,
+      startY: (e.clientY - rect.top) / rect.height,
+      startCrop: tempCrop ? { ...tempCrop } : { x: 0, y: 0, w: 100, h: 100 },
+    };
+  };
+
+  const handleGCPointerMove = (e: React.PointerEvent) => {
+    const drag = cropDragRef.current;
+    if (!drag || !cropContainerRef.current) return;
+    const rect = cropContainerRef.current.getBoundingClientRect();
+    const cx = gcClamp((e.clientX - rect.left) / rect.width, 0, 1);
+    const cy = gcClamp((e.clientY - rect.top) / rect.height, 0, 1);
+    const dx = (cx - drag.startX) * 100, dy = (cy - drag.startY) * 100;
+    const sc = drag.startCrop;
+    let { x, y, w, h } = sc;
+    if (drag.mode === 'new') {
+      const nx = gcClamp(cx * 100, 0, 100), ny = gcClamp(cy * 100, 0, 100);
+      const sx = drag.startX * 100, sy = drag.startY * 100;
+      x = Math.min(nx, sx); y = Math.min(ny, sy); w = Math.abs(nx - sx); h = Math.abs(ny - sy);
+      if (aspectLock) { h = w / aspectLock; if (y + h > 100) { h = 100 - y; w = h * aspectLock; } }
+    } else if (drag.mode === 'move') {
+      x = gcClamp(sc.x + dx, 0, 100 - sc.w); y = gcClamp(sc.y + dy, 0, 100 - sc.h);
+    } else {
+      if (drag.mode.includes('e')) { w = gcClamp(sc.w + dx, 5, 100 - sc.x); }
+      if (drag.mode.includes('s')) { h = gcClamp(sc.h + dy, 5, 100 - sc.y); }
+      if (drag.mode.includes('w')) { const nx = gcClamp(sc.x + dx, 0, sc.x + sc.w - 5); w = sc.x + sc.w - nx; x = nx; }
+      if (drag.mode.includes('n')) { const ny = gcClamp(sc.y + dy, 0, sc.y + sc.h - 5); h = sc.y + sc.h - ny; y = ny; }
+      if (aspectLock) {
+        if (Math.abs(dx) >= Math.abs(dy)) { h = w / aspectLock; } else { w = h * aspectLock; }
+        x = gcClamp(x, 0, 100 - w); y = gcClamp(y, 0, 100 - h);
+      }
+    }
+    setTempCrop({ x: gcClamp(x,0,100), y: gcClamp(y,0,100), w: gcClamp(w,1,100-x), h: gcClamp(h,1,100-y) });
+  };
+
+  const handleGCPointerUp = () => { cropDragRef.current = null; };
+
+  const GC_PRESETS: { label: string; ratio: number | null }[] = [
+    { label: 'FREE', ratio: null }, { label: '1:1', ratio: 1 },
+    { label: '9:16', ratio: 9/16 }, { label: '16:9', ratio: 16/9 }, { label: '4:5', ratio: 4/5 }, { label: '3:2', ratio: 3/2 },
+  ];
+
+  const applyGCPreset = (label: string, ratio: number | null) => {
+    setActivePreset(label); setAspectLock(ratio);
+    if (!ratio || !cropContainerRef.current) return;
+    const rect = cropContainerRef.current.getBoundingClientRect();
+    let pw = 1, ph = 1;
+    if (rect.width / rect.height > ratio) { ph = 1; pw = ratio * rect.height / rect.width; }
+    else { pw = 1; ph = (rect.width / rect.height) / ratio; }
+    setTempCrop({ x: (1-pw)/2*100, y: (1-ph)/2*100, w: pw*100, h: ph*100 });
+  };
+
+  const applyAndPersistTransformGrouper = async (itemId: string, cropOverride: { x: number; y: number; w: number; h: number }) => {
+    const baseItem = groupedItemsRef.current.find(i => i.id === itemId);
+    if (!baseItem) return;
+    const item = { ...baseItem, crop: cropOverride };
+    try {
+      const { createTransformedFile } = await import('../lib/imageTransforms');
+      const file = await createTransformedFile(item);
+      if (!file) { console.error('[ImageGrouper] createTransformedFile returned null'); return; }
+      const { uploadFileToPath, uploadTransformedImage } = await import('../lib/productService');
+      let newUrl = '', newPath = '';
+      if (item.storagePath) {
+        const res = await uploadFileToPath(file, item.storagePath, true);
+        if (res) { newUrl = res.url; newPath = res.path; }
+      }
+      if (!newUrl) {
+        const res2 = await uploadTransformedImage(file);
+        if (res2) {
+          if (item.storagePath) {
+            try { await supabase.storage.from('product-images').remove([item.storagePath]); } catch { /* ignore */ }
+          }
+          newUrl = res2.url; newPath = res2.path;
+        }
+      }
+      if (newUrl) {
+        const updated = groupedItemsRef.current.map(i =>
+          i.id === itemId ? { ...i, preview: newUrl, storagePath: newPath, imageRotation: 0, crop: undefined } : i
+        );
+        commitUpdate(updated);
+      }
+    } catch (err) { console.error('[ImageGrouper] applyAndPersistTransformGrouper error:', err); }
   };
 
   // ── Log full item table whenever groupedItems changes ───────────────────────
@@ -1766,60 +1881,126 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       </div>{/* /image-grouper-container */}
 
       {/* Lightbox modal */}
-      {lightboxSrc && (
-        <div
-          className="lightbox-overlay"
-          onClick={() => setLightboxSrc(null)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') setLightboxSrc(null);
-            if (e.key === 'ArrowLeft' && lightboxPool.length > 1) {
-              const ni = (lightboxIndex - 1 + lightboxPool.length) % lightboxPool.length;
-              setLightboxIndex(ni);
-              setLightboxSrc(lightboxPool[ni]);
-            }
-            if (e.key === 'ArrowRight' && lightboxPool.length > 1) {
-              const ni = (lightboxIndex + 1) % lightboxPool.length;
-              setLightboxIndex(ni);
-              setLightboxSrc(lightboxPool[ni]);
-            }
-          }}
-          tabIndex={0}
-          ref={(el) => el?.focus()}
-        >
-          <button className="lightbox-close" onClick={() => setLightboxSrc(null)}>✕</button>
-          {lightboxPool.length > 1 && (
-            <button
-              className="lightbox-nav lightbox-nav--prev"
-              onClick={(e) => {
+      {lightboxSrc && (() => {
+        const lbItem = groupedItemsRef.current.find(i => i.id === lightboxItemId)
+          ?? singleItemsRef.current.find(i => i.id === lightboxItemId)
+          ?? null;
+        const canNav = lightboxPool.length > 1;
+        return (
+          <div
+            className="lightbox-overlay"
+            onClick={() => setLightboxSrc(null)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setLightboxSrc(null);
+              if (e.key === 'ArrowLeft') { e.preventDefault(); navigateLightboxGrouper(-1); }
+              if (e.key === 'ArrowRight') { e.preventDefault(); navigateLightboxGrouper(1); }
+            }}
+            tabIndex={0}
+            ref={(el) => el?.focus()}
+          >
+            {/* Standalone close */}
+            <button className="lightbox-close" onClick={(e) => { e.stopPropagation(); setLightboxSrc(null); }}>✕</button>
+            {/* Toolbar pill */}
+            <div className="lightbox-toolbar" onClick={(e) => e.stopPropagation()}>
+              <button className="lightbox-tool-btn" title="Rotate left" onClick={() => {
+                if (!lbItem) return;
+                const updated = groupedItemsRef.current.map(i =>
+                  i.id === lbItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) - 90) % 360 } : i
+                );
+                commitUpdate(updated);
+              }}>⟲ Rotate L</button>
+              <button className="lightbox-tool-btn" title="Rotate right" onClick={() => {
+                if (!lbItem) return;
+                const updated = groupedItemsRef.current.map(i =>
+                  i.id === lbItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) + 90) % 360 } : i
+                );
+                commitUpdate(updated);
+              }}>⟳ Rotate R</button>
+              <button className="lightbox-tool-btn" title="Crop image" onClick={(e) => {
                 e.stopPropagation();
-                const ni = (lightboxIndex - 1 + lightboxPool.length) % lightboxPool.length;
-                setLightboxIndex(ni);
-                setLightboxSrc(lightboxPool[ni]);
-              }}
-            >‹</button>
-          )}
-          <img
-            src={lightboxSrc}
-            alt="Full size preview"
-            className="lightbox-image"
-            onClick={(e) => e.stopPropagation()}
-          />
-          {lightboxPool.length > 1 && (
-            <button
-              className="lightbox-nav lightbox-nav--next"
-              onClick={(e) => {
-                e.stopPropagation();
-                const ni = (lightboxIndex + 1) % lightboxPool.length;
-                setLightboxIndex(ni);
-                setLightboxSrc(lightboxPool[ni]);
-              }}
-            >›</button>
-          )}
-          {lightboxPool.length > 1 && (
-            <div className="lightbox-counter">{lightboxIndex + 1} / {lightboxPool.length}</div>
-          )}
-        </div>
-      )}
+                if (!lbItem) return;
+                setLightboxSrc(null);
+                setCropModal({ open: true, itemId: lbItem.id });
+                setActivePreset('FREE'); setAspectLock(null);
+                setTempCrop({ x: 5, y: 5, w: 90, h: 90 });
+              }}>✂ Crop</button>
+            </div>
+            {/* Nav arrows */}
+            {canNav && (
+              <button className="lightbox-nav lightbox-nav--prev" onClick={(e) => { e.stopPropagation(); navigateLightboxGrouper(-1); }}>‹</button>
+            )}
+            <img
+              src={lightboxSrc}
+              alt="Full size preview"
+              className="lightbox-image"
+              style={{ transform: `rotate(${lbItem?.imageRotation || 0}deg)` }}
+              onClick={(e) => e.stopPropagation()}
+            />
+            {canNav && (
+              <button className="lightbox-nav lightbox-nav--next" onClick={(e) => { e.stopPropagation(); navigateLightboxGrouper(1); }}>›</button>
+            )}
+            {canNav && (
+              <div className="lightbox-counter">{lightboxIndex + 1} / {lightboxPool.length}</div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Full-screen crop UI — same iOS-style as Step 3 */}
+      {cropModal.open && (() => {
+        const cropItem = groupedItemsRef.current.find(i => i.id === cropModal.itemId)
+          ?? singleItemsRef.current.find(i => i.id === cropModal.itemId);
+        const imgSrc = cropItem?.preview || cropItem?.imageUrls?.[0] || '';
+        const rot = cropItem?.imageRotation || 0;
+        return (
+          <div className="crop-fullscreen">
+            <div className="crop-fs-topbar">
+              <button className="crop-fs-btn crop-fs-cancel" onClick={() => { setCropModal({ open: false }); setTempCrop(null); setActivePreset('FREE'); setAspectLock(null); }}>Cancel</button>
+              <span className="crop-fs-title">Crop</span>
+              <button className="crop-fs-btn crop-fs-done" disabled={!tempCrop} onClick={async () => {
+                if (!cropModal.itemId || !tempCrop) return;
+                await applyAndPersistTransformGrouper(cropModal.itemId, tempCrop);
+                setCropModal({ open: false }); setTempCrop(null); setActivePreset('FREE'); setAspectLock(null);
+              }}>Done</button>
+            </div>
+            <div
+              className="crop-fs-stage"
+              ref={cropContainerRef}
+              onPointerDown={(e) => handleGCPointerDown(e, 'new')}
+              onPointerMove={handleGCPointerMove}
+              onPointerUp={handleGCPointerUp}
+            >
+              <img ref={cropImgRef} src={imgSrc} alt="Crop target" className="crop-fs-image"
+                style={{ transform: `rotate(${rot}deg)` }} draggable={false} />
+              {tempCrop && (<>
+                <div className="crop-fs-mask" style={{ top: 0, left: 0, right: 0, height: `${tempCrop.y}%` }} />
+                <div className="crop-fs-mask" style={{ top: `${tempCrop.y + tempCrop.h}%`, left: 0, right: 0, bottom: 0 }} />
+                <div className="crop-fs-mask" style={{ top: `${tempCrop.y}%`, left: 0, width: `${tempCrop.x}%`, height: `${tempCrop.h}%` }} />
+                <div className="crop-fs-mask" style={{ top: `${tempCrop.y}%`, left: `${tempCrop.x + tempCrop.w}%`, right: 0, height: `${tempCrop.h}%` }} />
+                <div className="crop-fs-rect" style={{ left: `${tempCrop.x}%`, top: `${tempCrop.y}%`, width: `${tempCrop.w}%`, height: `${tempCrop.h}%` }}>
+                  <div className="crop-fs-move-zone" onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, 'move'); }} />
+                  <div className="crop-fs-grid-h" style={{ top: '33.33%' }} /><div className="crop-fs-grid-h" style={{ top: '66.66%' }} />
+                  <div className="crop-fs-grid-v" style={{ left: '33.33%' }} /><div className="crop-fs-grid-v" style={{ left: '66.66%' }} />
+                  {(['nw','ne','sw','se'] as const).map(h => (
+                    <div key={h} className={`crop-fs-handle crop-fs-corner crop-fs-corner-${h}`}
+                      onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, h); }} />
+                  ))}
+                  {(['n','s','e','w'] as const).map(h => (
+                    <div key={h} className={`crop-fs-handle crop-fs-edge crop-fs-edge-${h}`}
+                      onPointerDown={(e) => { e.stopPropagation(); handleGCPointerDown(e, h); }} />
+                  ))}
+                </div>
+              </>)}
+            </div>
+            <div className="crop-fs-ratiobar">
+              {GC_PRESETS.map(({ label, ratio }) => (
+                <button key={label} className={`crop-fs-pill${activePreset === label ? ' crop-fs-pill--active' : ''}`}
+                  onClick={() => applyGCPreset(label, ratio)}>{label}</button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
     </>
   );
 };
