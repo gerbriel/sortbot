@@ -1919,7 +1919,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               <button className="lightbox-tool-btn" title="Crop image" onClick={(e) => {
                 e.stopPropagation();
                 if (!lbItem) return;
-                setLightboxSrc(null);
                 setCropModal({ open: true, itemId: lbItem.id });
                 setActivePreset('FREE'); setAspectLock(null);
                 setTempCrop({ x: 5, y: 5, w: 90, h: 90 });
@@ -1961,6 +1960,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 if (!cropModal.itemId || !tempCrop) return;
                 await applyAndPersistTransformGrouper(cropModal.itemId, tempCrop);
                 setCropModal({ open: false }); setTempCrop(null); setActivePreset('FREE'); setAspectLock(null);
+                setLightboxSrc(null); // close stale lightbox after crop changes the image
               }}>Done</button>
             </div>
             <div
