@@ -638,26 +638,15 @@
   overflow: hidden;
 }
 
-/* Wrapper tightly wraps the rendered image — masks/rect are relative to THIS */
+/* Wrapper tightly wraps the rendered image — masks/rect are % relative to this */
 .crop-fs-img-wrap {
   position: relative;
-  line-height: 0; /* collapse inline gaps */
-  max-width: 100%;   /* prevent overflow in flex row */
-  max-height: 100%;  /* prevent overflow in flex column */
-}
-
-/* SVG overlay sits on the STAGE (position:relative), always full-size — never 0×0 */
-.crop-fs-svg {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  cursor: crosshair;
-  overflow: visible;
-  touch-action: none;
-  display: block;
-  pointer-events: all;
+  line-height: 0;        /* collapse inline gaps */
+  max-width: 100%;       /* prevent overflow in flex row */
+  max-height: 100%;      /* prevent overflow in flex column */
+  cursor: crosshair;     /* shown over the black padding around the image */
+  touch-action: none;    /* prevent browser pan/zoom interfering */
+  user-select: none;
 }
 
 .crop-fs-image {
