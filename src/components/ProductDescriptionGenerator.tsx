@@ -1275,8 +1275,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   // ── Crop UI state ───────────────────────────────────────────────────────────
   const cropImgRef = useRef<HTMLImageElement | null>(null);
-  const cropContainerRef = useRef<HTMLDivElement | null>(null); // stage (layout only)
-  const cropSvgRef = useRef<SVGSVGElement | null>(null);       // SVG overlay — always captures pointer
+  const cropWrapRef = useRef<HTMLDivElement | null>(null);     // img-wrap — owns pointer capture
   // null = free draw, otherwise w/h ratio
   const [aspectLock, setAspectLock] = useState<number | null>(null);
   const [activePreset, setActivePreset] = useState<string>('FREE');
@@ -1292,8 +1291,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     e.stopPropagation();
     if (!cropImgRef.current) return;
     const rect = cropImgRef.current.getBoundingClientRect();
-    // Always capture on the SVG so pointermove/up route there regardless of which child fired
-    cropSvgRef.current?.setPointerCapture(e.pointerId);
+    // Capture on the wrap div — guarantees pointermove/up route here regardless of child
+    cropWrapRef.current?.setPointerCapture(e.pointerId);
     cropDragRef.current = {
       mode,
       startX: (e.clientX - rect.left) / rect.width,
@@ -2046,72 +2045,43 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     }}>Done</button>
                   </div>
                   {/* Stage: fills space, centers the image wrapper */}
-                  <div className="crop-fs-stage" ref={cropContainerRef}>
-                    {/* img-wrap tightly hugs the rendered image — used for coordinate math only */}
-                    <div className="crop-fs-img-wrap">
-                      <img ref={cropImgRef} src={imgSrc} alt="Crop target" className="crop-fs-image"
-                        style={{ transform: `rotate(${rot}deg)`, maxHeight: 'calc(100vh - 120px)' }} draggable={false}
-                        onLoad={() => setTempCrop(tc => tc ? { ...tc } : tc)} />
-                    </div>
-                    {/* SVG overlay sits on the STAGE (always full-size). Coordinates are mapped
-                        from stage-space → image-% via cropImgRef.getBoundingClientRect(). */}
-                    <svg
-                      ref={cropSvgRef}
-                      className="crop-fs-svg"
+                  <div className="crop-fs-stage">
+                    {/* img-wrap owns pointer capture — all crop events live here */}
+                    <div
+                      className="crop-fs-img-wrap"
+                      ref={cropWrapRef}
                       onPointerDown={(e) => handleCropPointerDown(e, 'new')}
                       onPointerMove={handleCropPointerMove}
                       onPointerUp={handleCropPointerUp}
                     >
-                      {tempCrop && (() => {
-                        const ir = cropImgRef.current?.getBoundingClientRect();
-                        if (!ir || ir.width === 0) return null; // image not yet rendered
-                        const sr = cropContainerRef.current?.getBoundingClientRect() ?? ir;
-                        const ox = ir.left - sr.left;
-                        const oy = ir.top - sr.top;
-                        const iw = ir.width, ih = ir.height;
-                        const W = sr.width || 1, H = sr.height || 1;
-                        // Crop box in px (relative to stage)
-                        const cx = ox + tempCrop.x / 100 * iw;
-                        const cy = oy + tempCrop.y / 100 * ih;
-                        const cw = tempCrop.w / 100 * iw;
-                        const ch = tempCrop.h / 100 * ih;
-                        return (
-                          <>
-                            {/* Dimmed mask with transparent crop hole (evenodd) */}
-                            <path
-                              fillRule="evenodd"
-                              fill="rgba(0,0,0,0.55)"
-                              pointerEvents="none"
-                              d={`M0,0 H${W} V${H} H0 Z M${cx},${cy} H${cx+cw} V${cy+ch} H${cx} Z`}
-                            />
-                            {/* Crop border */}
-                            <rect x={cx} y={cy} width={cw} height={ch}
-                              fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5" pointerEvents="none" />
-                            {/* Rule-of-thirds grid */}
-                            <line x1={cx+cw/3} y1={cy} x2={cx+cw/3} y2={cy+ch} stroke="rgba(255,255,255,0.3)" strokeWidth="0.5" pointerEvents="none" />
-                            <line x1={cx+cw*2/3} y1={cy} x2={cx+cw*2/3} y2={cy+ch} stroke="rgba(255,255,255,0.3)" strokeWidth="0.5" pointerEvents="none" />
-                            <line x1={cx} y1={cy+ch/3} x2={cx+cw} y2={cy+ch/3} stroke="rgba(255,255,255,0.3)" strokeWidth="0.5" pointerEvents="none" />
-                            <line x1={cx} y1={cy+ch*2/3} x2={cx+cw} y2={cy+ch*2/3} stroke="rgba(255,255,255,0.3)" strokeWidth="0.5" pointerEvents="none" />
-                            {/* Move zone: transparent interior rect */}
-                            <rect x={cx} y={cy} width={cw} height={ch}
-                              fill="transparent" style={{ cursor: 'move' }}
-                              onPointerDown={(e) => { e.stopPropagation(); handleCropPointerDown(e, 'move'); }} />
-                            {/* Corner handles */}
-                            {([['nw', cx, cy], ['ne', cx+cw, cy], ['sw', cx, cy+ch], ['se', cx+cw, cy+ch]] as [DragMode, number, number][]).map(([id, hx, hy]) => (
-                              <rect key={id} x={hx-6} y={hy-6} width={12} height={12}
-                                fill="white" rx={1} style={{ cursor: `${id}-resize` }}
-                                onPointerDown={(e) => { e.stopPropagation(); handleCropPointerDown(e, id); }} />
-                            ))}
-                            {/* Edge handles */}
-                            {([['n', cx+cw/2, cy], ['s', cx+cw/2, cy+ch], ['e', cx+cw, cy+ch/2], ['w', cx, cy+ch/2]] as [DragMode, number, number][]).map(([id, hx, hy]) => (
-                              <rect key={id} x={hx-4} y={hy-4} width={8} height={8}
-                                fill="white" rx={1} style={{ cursor: `${id}-resize` }}
-                                onPointerDown={(e) => { e.stopPropagation(); handleCropPointerDown(e, id); }} />
-                            ))}
-                          </>
-                        );
-                      })()}
-                    </svg>
+                      <img ref={cropImgRef} src={imgSrc} alt="Crop target" className="crop-fs-image"
+                        style={{ transform: `rotate(${rot}deg)`, maxHeight: 'calc(100vh - 120px)' }} draggable={false} />
+                      {tempCrop && (<>
+                        {/* 4 dimmed panels around the crop box */}
+                        <div className="crop-fs-mask" style={{ top: 0, left: 0, right: 0, height: `${tempCrop.y}%` }} />
+                        <div className="crop-fs-mask" style={{ top: `${tempCrop.y + tempCrop.h}%`, left: 0, right: 0, bottom: 0 }} />
+                        <div className="crop-fs-mask" style={{ top: `${tempCrop.y}%`, left: 0, width: `${tempCrop.x}%`, height: `${tempCrop.h}%` }} />
+                        <div className="crop-fs-mask" style={{ top: `${tempCrop.y}%`, left: `${tempCrop.x + tempCrop.w}%`, right: 0, height: `${tempCrop.h}%` }} />
+                        {/* Crop rect with handles inside */}
+                        <div className="crop-fs-rect" style={{ left: `${tempCrop.x}%`, top: `${tempCrop.y}%`, width: `${tempCrop.w}%`, height: `${tempCrop.h}%` }}>
+                          {/* Move zone — stop propagation so wrap doesn't start a 'new' draw */}
+                          <div className="crop-fs-move-zone"
+                            onPointerDown={(e) => { e.stopPropagation(); handleCropPointerDown(e, 'move'); }} />
+                          <div className="crop-fs-grid-h" style={{ top: '33.33%' }} />
+                          <div className="crop-fs-grid-h" style={{ top: '66.66%' }} />
+                          <div className="crop-fs-grid-v" style={{ left: '33.33%' }} />
+                          <div className="crop-fs-grid-v" style={{ left: '66.66%' }} />
+                          {(['nw','ne','sw','se'] as const).map(h => (
+                            <div key={h} className={`crop-fs-handle crop-fs-corner crop-fs-corner-${h}`}
+                              onPointerDown={(e) => { e.stopPropagation(); handleCropPointerDown(e, h); }} />
+                          ))}
+                          {(['n','s','e','w'] as const).map(h => (
+                            <div key={h} className={`crop-fs-handle crop-fs-edge crop-fs-edge-${h}`}
+                              onPointerDown={(e) => { e.stopPropagation(); handleCropPointerDown(e, h); }} />
+                          ))}
+                        </div>
+                      </>)}
+                    </div>
                   </div>
                   <div className="crop-fs-ratiobar">
                     {CROP_PRESETS.map(({ label, ratio }) => (
