@@ -5,6 +5,7 @@ import { Package, Image, ArrowDown, ArrowUp, ArrowUpDown, Check } from 'lucide-r
 import LoadingProgress from './LoadingProgress';
 import { log } from '../lib/debugLogger';
 import './ImageGrouper.css';
+import './ProductDescriptionGenerator.css'; // crop-fs-* styles shared with PDG
 
 /** Retry a failed image load up to 3 times with exponential backoff + cache-bust.
  *  Stores attempt count on the element itself via data-retry so no React state is needed.
