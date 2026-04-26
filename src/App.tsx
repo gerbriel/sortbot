@@ -127,6 +127,9 @@ export interface ClothingItem {
   
   // Image URLs (for Shopify import)
   imageUrls?: string[];
+  // UI transforms applied locally (not stored in DB yet)
+  imageRotation?: number; // degrees, clockwise
+  crop?: { x: number; y: number; w: number; h: number }; // percentages (0-100) relative to image
 }
 
 function App() {
