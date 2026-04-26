@@ -1273,82 +1273,107 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     );
   }
 
-  // Crop modal handlers
-  const [cropDrawing, setCropDrawing] = useState<{ startX: number; startY: number } | null>(null);
+  // ── Crop UI state ───────────────────────────────────────────────────────────
   const cropImgRef = useRef<HTMLImageElement | null>(null);
   const cropContainerRef = useRef<HTMLDivElement | null>(null);
-  const [aspectLock, setAspectLock] = useState<number | null>(null); // null = free, otherwise ratio w/h (e.g., 1 for 1:1, 4/5 for 4:5)
+  // null = free draw, otherwise w/h ratio
+  const [aspectLock, setAspectLock] = useState<number | null>(null);
+  const [activePreset, setActivePreset] = useState<string>('FREE');
 
-  const handleCropMouseDown = (e: React.MouseEvent) => {
+  // Drag state: 'new' = drawing fresh rect; handle = which edge/corner being dragged
+  type DragMode = 'new' | 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | 'move';
+  const cropDragRef = useRef<{ mode: DragMode; startX: number; startY: number; startCrop: { x: number; y: number; w: number; h: number } } | null>(null);
+
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+  const handleCropPointerDown = (e: React.PointerEvent, mode: DragMode) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (!cropContainerRef.current) return;
     const rect = cropContainerRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-    setCropDrawing({ startX: x, startY: y });
-    setTempCrop({ x: x * 100, y: y * 100, w: 0, h: 0 });
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    cropDragRef.current = {
+      mode,
+      startX: (e.clientX - rect.left) / rect.width,
+      startY: (e.clientY - rect.top) / rect.height,
+      startCrop: tempCrop ? { ...tempCrop } : { x: 0, y: 0, w: 100, h: 100 },
+    };
   };
 
-  const handleCropMouseMove = (e: React.MouseEvent) => {
-    if (!cropDrawing || !cropContainerRef.current) return;
+  const handleCropPointerMove = (e: React.PointerEvent) => {
+    const drag = cropDragRef.current;
+    if (!drag || !cropContainerRef.current) return;
     const rect = cropContainerRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-    const startX = cropDrawing.startX, startY = cropDrawing.startY;
-    let left = Math.min(startX, x);
-    let top = Math.min(startY, y);
-    let w = Math.abs(x - startX);
-    let h = Math.abs(y - startY);
-    if (aspectLock && w > 0 && h > 0) {
-      const targetH = w / aspectLock;
-      if (targetH <= h) {
-        // limit height
-        h = targetH;
-        if (y < startY) top = startY - h;
-      } else {
-        // limit width to match aspect
-        const targetW = h * aspectLock;
-        w = targetW;
-        if (x < startX) left = startX - w;
+    const cx = clamp((e.clientX - rect.left) / rect.width, 0, 1);
+    const cy = clamp((e.clientY - rect.top) / rect.height, 0, 1);
+    const dx = (cx - drag.startX) * 100;
+    const dy = (cy - drag.startY) * 100;
+    const sc = drag.startCrop;
+
+    let { x, y, w, h } = sc;
+
+    if (drag.mode === 'new') {
+      const nx = clamp(cx * 100, 0, 100), ny = clamp(cy * 100, 0, 100);
+      const sx = drag.startX * 100, sy = drag.startY * 100;
+      x = Math.min(nx, sx); y = Math.min(ny, sy);
+      w = Math.abs(nx - sx); h = Math.abs(ny - sy);
+      if (aspectLock) {
+        h = w / aspectLock;
+        if (y + h > 100) { h = 100 - y; w = h * aspectLock; }
       }
-      // clamp to [0,1]
-      left = Math.max(0, Math.min(1, left));
-      top = Math.max(0, Math.min(1, top));
-      w = Math.max(0, Math.min(1 - left, w));
-      h = Math.max(0, Math.min(1 - top, h));
-    }
-    setTempCrop({ x: left * 100, y: top * 100, w: w * 100, h: h * 100 });
-  };
-
-  const handleCropMouseUp = () => {
-    setCropDrawing(null);
-  };
-
-  // Preset crop helpers (aspect ratios)
-  const setPresetCrop = (ratio: number) => {
-    if (!cropContainerRef.current) return;
-    const rect = cropContainerRef.current.getBoundingClientRect();
-    const containerW = rect.width;
-    const containerH = rect.height;
-    // compute maximum centered box with the given ratio
-    let w = 1, h = 1;
-    if (containerW / containerH > ratio) {
-      // container is wider than ratio -> height fills, width smaller
-      h = 1; w = ratio * (containerH / containerW);
+    } else if (drag.mode === 'move') {
+      x = clamp(sc.x + dx, 0, 100 - sc.w);
+      y = clamp(sc.y + dy, 0, 100 - sc.h);
     } else {
-      w = 1; h = (containerW / containerH) / ratio;
+      // Edge/corner handles
+      if (drag.mode.includes('e')) { w = clamp(sc.w + dx, 5, 100 - sc.x); }
+      if (drag.mode.includes('s')) { h = clamp(sc.h + dy, 5, 100 - sc.y); }
+      if (drag.mode.includes('w')) { const nx = clamp(sc.x + dx, 0, sc.x + sc.w - 5); w = sc.x + sc.w - nx; x = nx; }
+      if (drag.mode.includes('n')) { const ny = clamp(sc.y + dy, 0, sc.y + sc.h - 5); h = sc.y + sc.h - ny; y = ny; }
+      if (aspectLock) {
+        // Anchor to whichever axis changed more
+        if (Math.abs(dx) >= Math.abs(dy)) { h = w / aspectLock; }
+        else { w = h * aspectLock; }
+        x = clamp(x, 0, 100 - w); y = clamp(y, 0, 100 - h);
+      }
     }
-    const left = (1 - w) / 2;
-    const top = (1 - h) / 2;
-    setTempCrop({ x: left * 100, y: top * 100, w: w * 100, h: h * 100 });
+    x = clamp(x, 0, 100); y = clamp(y, 0, 100);
+    w = clamp(w, 1, 100 - x); h = clamp(h, 1, 100 - y);
+    setTempCrop({ x, y, w, h });
+  };
+
+  const handleCropPointerUp = () => { cropDragRef.current = null; };
+
+  const CROP_PRESETS: { label: string; ratio: number | null }[] = [
+    { label: 'FREE',  ratio: null },
+    { label: '1:1',  ratio: 1 },
+    { label: '9:16', ratio: 9 / 16 },
+    { label: '16:9', ratio: 16 / 9 },
+    { label: '4:5',  ratio: 4 / 5 },
+    { label: '3:2',  ratio: 3 / 2 },
+  ];
+
+  const applyPreset = (label: string, ratio: number | null) => {
+    setActivePreset(label);
     setAspectLock(ratio);
+    if (!cropContainerRef.current) return;
+    if (!ratio) { return; } // free — keep existing rect
+    // Center a max-size rect for the chosen ratio
+    const rect = cropContainerRef.current.getBoundingClientRect();
+    const cw = rect.width, ch = rect.height;
+    let pw = 1, ph = 1;
+    if (cw / ch > ratio) { ph = 1; pw = ratio * ch / cw; }
+    else { pw = 1; ph = (cw / ch) / ratio; }
+    const left = (1 - pw) / 2, top = (1 - ph) / 2;
+    setTempCrop({ x: left * 100, y: top * 100, w: pw * 100, h: ph * 100 });
   };
 
   // Keyboard: close lightbox or crop modal on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (cropModal.open) { setCropModal({ open: false }); setTempCrop(null); return; }
         if (lightboxSrc) closeLightbox();
-        if (cropModal.open) { setCropModal({ open: false }); setTempCrop(null); }
       }
       if (lightboxSrc && !cropModal.open) {
         if (e.key === 'ArrowLeft') { e.preventDefault(); navigateLightbox(-1); }
@@ -1975,20 +2000,22 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         />
       )}
 
-      {/* Image edit modal — opens on double-click; rotate, crop, save controls live here */}
+      {/* Lightbox — double-click opens; rotate + crop toolbar; nav arrows */}
       {lightboxSrc && (() => {
         const lbItem = processedItems.find(i => i.id === lightboxItemId) ?? null;
         const canNav = lightboxPool.length > 1;
         return (
           <div className="lightbox-overlay" onClick={closeLightbox}>
-            {/* Left arrow */}
+            {/* Standalone close — top-right, never near toolbar */}
+            <button className="lightbox-close-standalone" onClick={closeLightbox} title="Close">✕</button>
+            {/* Left/right nav */}
             {canNav && (
               <button className="lightbox-nav lightbox-nav-left" onClick={(e) => { e.stopPropagation(); navigateLightbox(-1); }}>‹</button>
             )}
-            {/* Right arrow */}
             {canNav && (
               <button className="lightbox-nav lightbox-nav-right" onClick={(e) => { e.stopPropagation(); navigateLightbox(1); }}>›</button>
             )}
+            {/* Centered toolbar pill — no ✕ inside */}
             <div className="lightbox-toolbar" onClick={(e) => e.stopPropagation()}>
               {lbItem && (<>
                 <button className="lightbox-tool-btn" title="Rotate left"
@@ -1996,12 +2023,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 <button className="lightbox-tool-btn" title="Rotate right"
                   onClick={() => { const u = processedItems.map(i => i.id === lbItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) + 90) % 360 } : i); setProcessedItems(u); setHasUnsavedChanges(true); }}>⟳ Rotate R</button>
                 <button className="lightbox-tool-btn" title="Crop image"
-                  onClick={() => { closeLightbox(); setCropModal({ open: true, itemId: lbItem.id }); }}>✂ Crop</button>
+                  onClick={() => { closeLightbox(); setCropModal({ open: true, itemId: lbItem.id }); setActivePreset('FREE'); setAspectLock(null); setTempCrop(null); }}>✂ Crop</button>
               </>)}
               {canNav && (
                 <span className="lightbox-counter">{lightboxPool.indexOf(lightboxItemId!) + 1} / {lightboxPool.length}</span>
               )}
-              <button className="lightbox-close" onClick={closeLightbox}>✕</button>
             </div>
             <img
               src={lightboxSrc}
@@ -2013,52 +2039,85 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           </div>
         );
       })()}
-      {/* Crop modal */}
-      {cropModal.open && (
-        <div className="crop-modal-overlay" onClick={() => { setCropModal({ open: false }); setTempCrop(null); }}>
-          <div className="crop-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Crop Image</h3>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button className="button" onClick={() => setPresetCrop(1)}>1:1</button>
-                <button className="button" onClick={() => setPresetCrop(4/5)}>4:5</button>
-                <button className="button" onClick={() => setPresetCrop(16/9)}>16:9</button>
-                <button className="button" onClick={() => setPresetCrop(3/2)}>3:2</button>
-              </div>
-              <label style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <input type="checkbox" checked={!!aspectLock} onChange={(e) => setAspectLock(e.target.checked ? (aspectLock || 1) : null)} />
-                <span style={{ fontSize: '0.9rem' }}>Lock aspect</span>
-              </label>
+
+      {/* Full-screen iOS-style crop UI */}
+      {cropModal.open && (() => {
+        const cropItem = processedItems.find(i => i.id === cropModal.itemId);
+        const imgSrc = cropItem?.preview || cropItem?.imageUrls?.[0] || '';
+        const rot = cropItem?.imageRotation || 0;
+        return (
+          <div className="crop-fullscreen">
+            {/* Top bar */}
+            <div className="crop-fs-topbar">
+              <button className="crop-fs-btn crop-fs-cancel" onClick={() => { setCropModal({ open: false }); setTempCrop(null); setActivePreset('FREE'); setAspectLock(null); }}>Cancel</button>
+              <span className="crop-fs-title">Crop</span>
+              <button className="crop-fs-btn crop-fs-done" disabled={!tempCrop} onClick={async () => {
+                if (!cropModal.itemId || !tempCrop) return;
+                await applyAndPersistTransform(cropModal.itemId, true, { crop: tempCrop });
+                setCropModal({ open: false }); setTempCrop(null); setActivePreset('FREE'); setAspectLock(null);
+              }}>Done</button>
             </div>
+
+            {/* Stage: image + mask + handles */}
             <div
-              className="crop-image-container"
+              className="crop-fs-stage"
               ref={cropContainerRef}
-              onMouseDown={handleCropMouseDown}
-              onMouseMove={handleCropMouseMove}
-              onMouseUp={handleCropMouseUp}
+              onPointerDown={(e) => handleCropPointerDown(e, 'new')}
+              onPointerMove={handleCropPointerMove}
+              onPointerUp={handleCropPointerUp}
             >
               <img
                 ref={cropImgRef}
-                src={(processedItems.find(i => i.id === cropModal.itemId)?.preview) || (processedItems.find(i => i.id === cropModal.itemId)?.imageUrls?.[0]) || ''}
+                src={imgSrc}
                 alt="Crop target"
-                className="crop-target-image"
+                className="crop-fs-image"
+                style={{ transform: `rotate(${rot}deg)` }}
+                draggable={false}
               />
-              {tempCrop && (
-                <div className="crop-rect" style={{ left: `${tempCrop.x}%`, top: `${tempCrop.y}%`, width: `${tempCrop.w}%`, height: `${tempCrop.h}%` }} />
-              )}
+              {/* Dimmed mask panels */}
+              {tempCrop && (<>
+                <div className="crop-fs-mask" style={{ top: 0, left: 0, right: 0, height: `${tempCrop.y}%` }} />
+                <div className="crop-fs-mask" style={{ top: `${tempCrop.y + tempCrop.h}%`, left: 0, right: 0, bottom: 0 }} />
+                <div className="crop-fs-mask" style={{ top: `${tempCrop.y}%`, left: 0, width: `${tempCrop.x}%`, height: `${tempCrop.h}%` }} />
+                <div className="crop-fs-mask" style={{ top: `${tempCrop.y}%`, left: `${tempCrop.x + tempCrop.w}%`, right: 0, height: `${tempCrop.h}%` }} />
+
+                {/* Crop rect frame + handles */}
+                <div
+                  className="crop-fs-rect"
+                  style={{ left: `${tempCrop.x}%`, top: `${tempCrop.y}%`, width: `${tempCrop.w}%`, height: `${tempCrop.h}%` }}
+                >
+                  {/* Move handle (interior drag) */}
+                  <div className="crop-fs-move-zone" onPointerDown={(e) => { e.stopPropagation(); handleCropPointerDown(e, 'move'); }} />
+                  {/* Grid lines */}
+                  <div className="crop-fs-grid-h" style={{ top: '33.33%' }} /><div className="crop-fs-grid-h" style={{ top: '66.66%' }} />
+                  <div className="crop-fs-grid-v" style={{ left: '33.33%' }} /><div className="crop-fs-grid-v" style={{ left: '66.66%' }} />
+                  {/* Corner handles */}
+                  {(['nw','ne','sw','se'] as const).map(h => (
+                    <div key={h} className={`crop-fs-handle crop-fs-corner crop-fs-corner-${h}`}
+                      onPointerDown={(e) => { e.stopPropagation(); handleCropPointerDown(e, h); }} />
+                  ))}
+                  {/* Edge handles */}
+                  {(['n','s','e','w'] as const).map(h => (
+                    <div key={h} className={`crop-fs-handle crop-fs-edge crop-fs-edge-${h}`}
+                      onPointerDown={(e) => { e.stopPropagation(); handleCropPointerDown(e, h); }} />
+                  ))}
+                </div>
+              </>)}
             </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
-              <button className="button" onClick={() => { setCropModal({ open: false }); setTempCrop(null); }}>Cancel</button>
-              <button className="button button-primary" disabled={!tempCrop} onClick={async () => {
-                if (!cropModal.itemId || !tempCrop) return;
-                await applyAndPersistTransform(cropModal.itemId, true, { crop: tempCrop });
-                setCropModal({ open: false });
-                setTempCrop(null);
-              }}>Apply Crop</button>
+
+            {/* Aspect ratio pills */}
+            <div className="crop-fs-ratiobar">
+              {CROP_PRESETS.map(({ label, ratio }) => (
+                <button
+                  key={label}
+                  className={`crop-fs-pill${activePreset === label ? ' crop-fs-pill--active' : ''}`}
+                  onClick={() => applyPreset(label, ratio)}
+                >{label}</button>
+              ))}
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
