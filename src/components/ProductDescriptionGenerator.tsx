@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import type { ClothingItem } from '../App';
 import { Target } from 'lucide-react';
 import { ComprehensiveProductForm } from './ComprehensiveProductForm';
@@ -1274,8 +1274,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   }
 
   // ── Crop UI state ───────────────────────────────────────────────────────────
-  const cropImgRef = useRef<HTMLImageElement | null>(null);
-  const cropWrapRef = useRef<HTMLDivElement | null>(null);     // img-wrap — owns pointer capture
+  const cropImgRef  = useRef<HTMLImageElement | null>(null);
+  const cropStageRef = useRef<HTMLDivElement | null>(null);
+  // Measured after image loads — px offsets of the image from the stage top-left
+  const [cropImgBounds, setCropImgBounds] = useState<{ l: number; t: number; w: number; h: number } | null>(null);
+  // Set by handle/move-zone onPointerDown before event bubbles to stage
+  const pendingCropModeRef = useRef<DragMode | null>(null);
   // null = free draw, otherwise w/h ratio
   const [aspectLock, setAspectLock] = useState<number | null>(null);
   const [activePreset, setActivePreset] = useState<string>('FREE');
@@ -1286,27 +1290,46 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
-  const handleCropPointerDown = (e: React.PointerEvent, mode: DragMode) => {
+  // Measure the rendered image position relative to the stage and store in state.
+  // Called via useEffect (rAF) so we always get post-paint values.
+  const measureCropImg = useCallback(() => {
+    if (!cropImgRef.current || !cropStageRef.current) return;
+    const ir = cropImgRef.current.getBoundingClientRect();
+    const sr = cropStageRef.current.getBoundingClientRect();
+    if (ir.width > 0) {
+      setCropImgBounds({ l: ir.left - sr.left, t: ir.top - sr.top, w: ir.width, h: ir.height });
+    }
+  }, []);
+
+  // All pointer events on the stage. Mode is determined by pendingCropModeRef
+  // (set by handle/move-zone before event bubbles) or defaults to 'new'.
+  const handleCropPointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!cropImgRef.current) return;
-    const rect = cropImgRef.current.getBoundingClientRect();
-    // Capture on the wrap div — guarantees pointermove/up route here regardless of child
-    cropWrapRef.current?.setPointerCapture(e.pointerId);
+    const mode: DragMode = pendingCropModeRef.current ?? 'new';
+    pendingCropModeRef.current = null;
+    if (!cropImgBounds || !cropStageRef.current) return;
+    // Capture on the stage — pointermove/up always route here
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    const sr = cropStageRef.current.getBoundingClientRect();
+    const rx = (e.clientX - sr.left - cropImgBounds.l) / cropImgBounds.w;
+    const ry = (e.clientY - sr.top - cropImgBounds.t) / cropImgBounds.h;
+    // Don't start a 'new' draw if clicking outside the image
+    if (mode === 'new' && (rx < 0 || rx > 1 || ry < 0 || ry > 1)) return;
     cropDragRef.current = {
       mode,
-      startX: (e.clientX - rect.left) / rect.width,
-      startY: (e.clientY - rect.top) / rect.height,
+      startX: rx,
+      startY: ry,
       startCrop: tempCrop ? { ...tempCrop } : { x: 0, y: 0, w: 100, h: 100 },
     };
   };
 
   const handleCropPointerMove = (e: React.PointerEvent) => {
     const drag = cropDragRef.current;
-    if (!drag || !cropImgRef.current) return;
-    const rect = cropImgRef.current.getBoundingClientRect();
-    const cx = clamp((e.clientX - rect.left) / rect.width, 0, 1);
-    const cy = clamp((e.clientY - rect.top) / rect.height, 0, 1);
+    if (!drag || !cropImgBounds || !cropStageRef.current) return;
+    const sr = cropStageRef.current.getBoundingClientRect();
+    const cx = clamp((e.clientX - sr.left - cropImgBounds.l) / cropImgBounds.w, 0, 1);
+    const cy = clamp((e.clientY - sr.top - cropImgBounds.t) / cropImgBounds.h, 0, 1);
     const dx = (cx - drag.startX) * 100;
     const dy = (cy - drag.startY) * 100;
     const sc = drag.startCrop;
@@ -1326,13 +1349,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       x = clamp(sc.x + dx, 0, 100 - sc.w);
       y = clamp(sc.y + dy, 0, 100 - sc.h);
     } else {
-      // Edge/corner handles
       if (drag.mode.includes('e')) { w = clamp(sc.w + dx, 5, 100 - sc.x); }
       if (drag.mode.includes('s')) { h = clamp(sc.h + dy, 5, 100 - sc.y); }
       if (drag.mode.includes('w')) { const nx = clamp(sc.x + dx, 0, sc.x + sc.w - 5); w = sc.x + sc.w - nx; x = nx; }
       if (drag.mode.includes('n')) { const ny = clamp(sc.y + dy, 0, sc.y + sc.h - 5); h = sc.y + sc.h - ny; y = ny; }
       if (aspectLock) {
-        // Anchor to whichever axis changed more
         if (Math.abs(dx) >= Math.abs(dy)) { h = w / aspectLock; }
         else { w = h * aspectLock; }
         x = clamp(x, 0, 100 - w); y = clamp(y, 0, 100 - h);
@@ -1357,15 +1378,23 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const applyPreset = (label: string, ratio: number | null) => {
     setActivePreset(label);
     setAspectLock(ratio);
-    if (!ratio || !cropImgRef.current) return;
-    const rect = cropImgRef.current.getBoundingClientRect();
-    const cw = rect.width, ch = rect.height;
+    if (!ratio || !cropImgBounds) return;
+    const { w: cw, h: ch } = cropImgBounds;
     let pw = 1, ph = 1;
     if (cw / ch > ratio) { ph = 1; pw = ratio * ch / cw; }
     else { pw = 1; ph = (cw / ch) / ratio; }
     const left = (1 - pw) / 2, top = (1 - ph) / 2;
     setTempCrop({ x: left * 100, y: top * 100, w: pw * 100, h: ph * 100 });
   };
+
+  // Measure the crop image after the crop UI opens (double-rAF = after paint)
+  useEffect(() => {
+    if (!cropModal.open) { setCropImgBounds(null); return; }
+    let id = requestAnimationFrame(() => {
+      id = requestAnimationFrame(measureCropImg);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [cropModal.open, lightboxSrc, measureCropImg]);
 
   // Keyboard: close lightbox or crop modal on Escape
   useEffect(() => {
@@ -2044,44 +2073,50 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       closeLightbox();
                     }}>Done</button>
                   </div>
-                  {/* Stage: fills space, centers the image wrapper */}
-                  <div className="crop-fs-stage">
-                    {/* img-wrap owns pointer capture — all crop events live here */}
-                    <div
-                      className="crop-fs-img-wrap"
-                      ref={cropWrapRef}
-                      onPointerDown={(e) => handleCropPointerDown(e, 'new')}
-                      onPointerMove={handleCropPointerMove}
-                      onPointerUp={handleCropPointerUp}
-                    >
+                  {/* Stage: position:relative, owns the coordinate space for all overlay elements */}
+                  <div className="crop-fs-stage" ref={cropStageRef}
+                    onPointerDown={handleCropPointerDown}
+                    onPointerMove={handleCropPointerMove}
+                    onPointerUp={handleCropPointerUp}
+                  >
+                    {/* Image — centered by flex, passive (no pointer events) */}
+                    <div className="crop-fs-img-wrap">
                       <img ref={cropImgRef} src={imgSrc} alt="Crop target" className="crop-fs-image"
                         style={{ transform: `rotate(${rot}deg)`, maxHeight: 'calc(100vh - 120px)' }} draggable={false} />
-                      {tempCrop && (<>
-                        {/* 4 dimmed panels around the crop box */}
-                        <div className="crop-fs-mask" style={{ top: 0, left: 0, right: 0, height: `${tempCrop.y}%` }} />
-                        <div className="crop-fs-mask" style={{ top: `${tempCrop.y + tempCrop.h}%`, left: 0, right: 0, bottom: 0 }} />
-                        <div className="crop-fs-mask" style={{ top: `${tempCrop.y}%`, left: 0, width: `${tempCrop.x}%`, height: `${tempCrop.h}%` }} />
-                        <div className="crop-fs-mask" style={{ top: `${tempCrop.y}%`, left: `${tempCrop.x + tempCrop.w}%`, right: 0, height: `${tempCrop.h}%` }} />
-                        {/* Crop rect with handles inside */}
-                        <div className="crop-fs-rect" style={{ left: `${tempCrop.x}%`, top: `${tempCrop.y}%`, width: `${tempCrop.w}%`, height: `${tempCrop.h}%` }}>
-                          {/* Move zone — stop propagation so wrap doesn't start a 'new' draw */}
+                    </div>
+                    {/* Overlay elements — absolutely positioned on stage in real px (never %) */}
+                    {tempCrop && cropImgBounds && (() => {
+                      const { l: iL, t: iT, w: iW, h: iH } = cropImgBounds;
+                      const rx = iL + tempCrop.x / 100 * iW;
+                      const ry = iT + tempCrop.y / 100 * iH;
+                      const rw = tempCrop.w / 100 * iW;
+                      const rh = tempCrop.h / 100 * iH;
+                      return (<>
+                        {/* 4 dark panels surrounding the crop box */}
+                        <div className="crop-fs-mask" style={{ top: iT, left: iL, width: iW, height: tempCrop.y / 100 * iH }} />
+                        <div className="crop-fs-mask" style={{ top: ry + rh, left: iL, width: iW, height: iH - (tempCrop.y + tempCrop.h) / 100 * iH }} />
+                        <div className="crop-fs-mask" style={{ top: ry, left: iL, width: tempCrop.x / 100 * iW, height: rh }} />
+                        <div className="crop-fs-mask" style={{ top: ry, left: rx + rw, width: iW - (tempCrop.x + tempCrop.w) / 100 * iW, height: rh }} />
+                        {/* Crop selection box — dashed border, with grid + handles inside */}
+                        <div className="crop-fs-rect" style={{ left: rx, top: ry, width: rw, height: rh }}>
+                          {/* Move zone: covers interior, sets pending mode before bubbling to stage */}
                           <div className="crop-fs-move-zone"
-                            onPointerDown={(e) => { e.stopPropagation(); handleCropPointerDown(e, 'move'); }} />
+                            onPointerDown={() => { pendingCropModeRef.current = 'move'; }} />
                           <div className="crop-fs-grid-h" style={{ top: '33.33%' }} />
                           <div className="crop-fs-grid-h" style={{ top: '66.66%' }} />
                           <div className="crop-fs-grid-v" style={{ left: '33.33%' }} />
                           <div className="crop-fs-grid-v" style={{ left: '66.66%' }} />
-                          {(['nw','ne','sw','se'] as const).map(h => (
-                            <div key={h} className={`crop-fs-handle crop-fs-corner crop-fs-corner-${h}`}
-                              onPointerDown={(e) => { e.stopPropagation(); handleCropPointerDown(e, h); }} />
+                          {(['nw','ne','sw','se'] as const).map(hh => (
+                            <div key={hh} className={`crop-fs-handle crop-fs-corner crop-fs-corner-${hh}`}
+                              onPointerDown={() => { pendingCropModeRef.current = hh; }} />
                           ))}
-                          {(['n','s','e','w'] as const).map(h => (
-                            <div key={h} className={`crop-fs-handle crop-fs-edge crop-fs-edge-${h}`}
-                              onPointerDown={(e) => { e.stopPropagation(); handleCropPointerDown(e, h); }} />
+                          {(['n','s','e','w'] as const).map(hh => (
+                            <div key={hh} className={`crop-fs-handle crop-fs-edge crop-fs-edge-${hh}`}
+                              onPointerDown={() => { pendingCropModeRef.current = hh; }} />
                           ))}
                         </div>
-                      </>)}
-                    </div>
+                      </>);
+                    })()}
                   </div>
                   <div className="crop-fs-ratiobar">
                     {CROP_PRESETS.map(({ label, ratio }) => (
