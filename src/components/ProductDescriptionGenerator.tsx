@@ -72,6 +72,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   // Lightbox state
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [cropModal, setCropModal] = useState<{ open: boolean; itemId?: string }>(() => ({ open: false }));
+  const [tempCrop, setTempCrop] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
 
   // Magnifier state — cursor-following zoom lens on main preview image
   const [magnifier, setMagnifier] = useState<{ src: string; x: number; y: number; bgX: number; bgY: number } | null>(null);
@@ -1246,6 +1248,145 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     );
   }
 
+  // Crop modal handlers
+  const [cropDrawing, setCropDrawing] = useState<{ startX: number; startY: number } | null>(null);
+  const cropImgRef = useRef<HTMLImageElement | null>(null);
+  const cropContainerRef = useRef<HTMLDivElement | null>(null);
+  const [aspectLock, setAspectLock] = useState<number | null>(null); // null = free, otherwise ratio w/h (e.g., 1 for 1:1, 4/5 for 4:5)
+
+  const handleCropMouseDown = (e: React.MouseEvent) => {
+    if (!cropContainerRef.current) return;
+    const rect = cropContainerRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+    setCropDrawing({ startX: x, startY: y });
+    setTempCrop({ x: x * 100, y: y * 100, w: 0, h: 0 });
+  };
+
+  const handleCropMouseMove = (e: React.MouseEvent) => {
+    if (!cropDrawing || !cropContainerRef.current) return;
+    const rect = cropContainerRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+    const startX = cropDrawing.startX, startY = cropDrawing.startY;
+    let left = Math.min(startX, x);
+    let top = Math.min(startY, y);
+    let w = Math.abs(x - startX);
+    let h = Math.abs(y - startY);
+    if (aspectLock && w > 0 && h > 0) {
+      const targetH = w / aspectLock;
+      if (targetH <= h) {
+        // limit height
+        h = targetH;
+        if (y < startY) top = startY - h;
+      } else {
+        // limit width to match aspect
+        const targetW = h * aspectLock;
+        w = targetW;
+        if (x < startX) left = startX - w;
+      }
+      // clamp to [0,1]
+      left = Math.max(0, Math.min(1, left));
+      top = Math.max(0, Math.min(1, top));
+      w = Math.max(0, Math.min(1 - left, w));
+      h = Math.max(0, Math.min(1 - top, h));
+    }
+    setTempCrop({ x: left * 100, y: top * 100, w: w * 100, h: h * 100 });
+  };
+
+  const handleCropMouseUp = () => {
+    setCropDrawing(null);
+  };
+
+  const handleCropSave = () => {
+    if (!cropModal.open || !cropModal.itemId || !tempCrop) { setCropModal({ open: false }); setTempCrop(null); return; }
+    const updated = processedItems.map(i => i.id === cropModal.itemId ? { ...i, crop: tempCrop } : i);
+    setProcessedItems(updated);
+    setHasUnsavedChanges(true);
+    setCropModal({ open: false });
+    setTempCrop(null);
+  };
+
+  // Preset crop helpers (aspect ratios)
+  const setPresetCrop = (ratio: number) => {
+    if (!cropContainerRef.current) return;
+    const rect = cropContainerRef.current.getBoundingClientRect();
+    const containerW = rect.width;
+    const containerH = rect.height;
+    // compute maximum centered box with the given ratio
+    let w = 1, h = 1;
+    if (containerW / containerH > ratio) {
+      // container is wider than ratio -> height fills, width smaller
+      h = 1; w = ratio * (containerH / containerW);
+    } else {
+      w = 1; h = (containerW / containerH) / ratio;
+    }
+    const left = (1 - w) / 2;
+    const top = (1 - h) / 2;
+    setTempCrop({ x: left * 100, y: top * 100, w: w * 100, h: h * 100 });
+    setAspectLock(ratio);
+  };
+
+  // Keyboard: close lightbox or crop modal on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (lightboxSrc) setLightboxSrc(null);
+        if (cropModal.open) { setCropModal({ open: false }); setTempCrop(null); }
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [lightboxSrc, cropModal.open]);
+  // Use shared helper to create transformed file
+  // helper createTransformedFile will be dynamically imported where needed
+
+  // Upload transformed image and optionally overwrite the existing storage path
+  const applyAndPersistTransform = async (itemId: string, replaceExisting = true) => {
+    const item = processedItems.find(i => i.id === itemId);
+    if (!item) return;
+
+    const { createTransformedFile } = await import('../lib/imageTransforms');
+    const file = await createTransformedFile(item);
+    if (!file) { alert('Failed to create transformed image'); return; }
+
+    // Use productService helpers to upload. Import dynamically to avoid circular imports
+    try {
+      const { uploadFileToPath, uploadTransformedImage } = await import('../lib/productService');
+      // If replaceExisting and storagePath exists, overwrite same path
+      if (replaceExisting && item.storagePath) {
+        const res = await uploadFileToPath(file, item.storagePath, true);
+        if (res) {
+          const updated = processedItems.map(i => i.id === itemId ? { ...i, preview: res.url, storagePath: res.path } : i);
+          setProcessedItems(updated);
+          setHasUnsavedChanges(true);
+          alert('Image transformed and replaced in storage');
+          return;
+        }
+      }
+
+      // Otherwise upload to a new generated path
+      const res2 = await uploadTransformedImage(file);
+      if (res2) {
+        // Optionally remove old storage object
+        if (replaceExisting && item.storagePath) {
+          try { await (await import('../lib/supabase')).supabase.storage.from('product-images').remove([item.storagePath]); } catch { /* ignore */ }
+        }
+        const updated = processedItems.map(i => i.id === itemId ? { ...i, preview: res2.url, storagePath: res2.path } : i);
+        setProcessedItems(updated);
+        setHasUnsavedChanges(true);
+        alert('Image transformed and uploaded');
+        return;
+      }
+
+      alert('Upload failed');
+    } catch (err) {
+      console.error(err);
+      alert('Error while uploading transformed image');
+    }
+  };
+
+
   return (
     <div className="product-description-container">
       <div className="progress-bar">
@@ -1303,13 +1444,44 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             }}
             onMouseLeave={() => setMagnifier(null)}
           >
-            <LazyImg
-              src={currentItem.preview || currentItem.imageUrls?.[0] || ''}
-              alt="Product"
-              className="preview-image"
-              style={{ cursor: 'zoom-in' }}
-              onDoubleClick={() => setLightboxSrc(currentItem.preview || currentItem.imageUrls?.[0] || '')}
-            />
+            <div style={{ position: 'relative' }}>
+              <LazyImg
+                src={currentItem.preview || currentItem.imageUrls?.[0] || ''}
+                alt="Product"
+                className="preview-image"
+                style={{ cursor: 'zoom-in', transform: `rotate(${currentItem.imageRotation || 0}deg)`, clipPath: currentItem.crop ? `inset(${currentItem.crop.y}% ${100 - (currentItem.crop.x + currentItem.crop.w)}% ${100 - (currentItem.crop.y + currentItem.crop.h)}% ${currentItem.crop.x}%)` : undefined }}
+                onDoubleClick={() => setLightboxSrc(currentItem.preview || currentItem.imageUrls?.[0] || '')}
+              />
+              <div style={{ position: 'absolute', right: 8, top: 8, display: 'flex', gap: 8 }}>
+                <button
+                  className="button"
+                  onClick={() => {
+                    // rotate left
+                    const updated = processedItems.map(i => i.id === currentItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) - 90) % 360 } : i);
+                    setProcessedItems(updated);
+                    setHasUnsavedChanges(true);
+                  }}
+                >⟲</button>
+                <button
+                  className="button"
+                  onClick={() => {
+                    // rotate right
+                    const updated = processedItems.map(i => i.id === currentItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) + 90) % 360 } : i);
+                    setProcessedItems(updated);
+                    setHasUnsavedChanges(true);
+                  }}
+                >⟳</button>
+                <button
+                  className="button"
+                  onClick={() => setCropModal({ open: true, itemId: currentItem.id })}
+                >✂ Crop</button>
+                <button
+                  className="button"
+                  onClick={async () => { await applyAndPersistTransform(currentItem.id, true); }}
+                  title="Apply rotation/crop to image and replace stored file"
+                >💾 Save Transform</button>
+              </div>
+            </div>
           </div>
           <div className="product-info">
           </div>
@@ -1348,7 +1520,25 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       src={groupItem.preview || groupItem.imageUrls?.[0] || ''}
                       alt={`Image ${idx + 1}`}
                       className="group-thumbnail"
+                      style={{ transform: `rotate(${groupItem.imageRotation || 0}deg)`, clipPath: groupItem.crop ? `inset(${groupItem.crop.y}% ${100 - (groupItem.crop.x + groupItem.crop.w)}% ${100 - (groupItem.crop.y + groupItem.crop.h)}% ${groupItem.crop.x}%)` : undefined }}
                     />
+                    <div style={{ position: 'absolute', right: 6, bottom: 6, display: 'flex', gap: 6 }}>
+                      <button
+                        className="rotate-btn"
+                        onClick={(e) => { e.stopPropagation(); const updated = processedItems.map(i => i.id === groupItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) - 90) % 360 } : i); setProcessedItems(updated); setHasUnsavedChanges(true); }}
+                        title="Rotate left"
+                      >⟲</button>
+                      <button
+                        className="rotate-btn"
+                        onClick={(e) => { e.stopPropagation(); const updated = processedItems.map(i => i.id === groupItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) + 90) % 360 } : i); setProcessedItems(updated); setHasUnsavedChanges(true); }}
+                        title="Rotate right"
+                      >⟳</button>
+                      <button
+                        className="rotate-btn"
+                        onClick={(e) => { e.stopPropagation(); setCropModal({ open: true, itemId: groupItem.id }); }}
+                        title="Crop"
+                      >✂</button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1838,6 +2028,49 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             className="lightbox-image"
             onClick={(e) => e.stopPropagation()}
           />
+        </div>
+      )}
+      {/* Crop modal */}
+      {cropModal.open && (
+        <div className="crop-modal-overlay" onClick={() => { setCropModal({ open: false }); setTempCrop(null); }}>
+          <div className="crop-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Crop Image</h3>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="button" onClick={() => setPresetCrop(1)}>1:1</button>
+                <button className="button" onClick={() => setPresetCrop(4/5)}>4:5</button>
+                <button className="button" onClick={() => setPresetCrop(16/9)}>16:9</button>
+                <button className="button" onClick={() => setPresetCrop(3/2)}>3:2</button>
+              </div>
+              <label style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input type="checkbox" checked={!!aspectLock} onChange={(e) => setAspectLock(e.target.checked ? (aspectLock || 1) : null)} />
+                <span style={{ fontSize: '0.9rem' }}>Lock aspect</span>
+              </label>
+            </div>
+            <div
+              className="crop-image-container"
+              ref={cropContainerRef}
+              onMouseDown={handleCropMouseDown}
+              onMouseMove={handleCropMouseMove}
+              onMouseUp={handleCropMouseUp}
+            >
+              <img
+                ref={cropImgRef}
+                src={(processedItems.find(i => i.id === cropModal.itemId)?.preview) || (processedItems.find(i => i.id === cropModal.itemId)?.imageUrls?.[0]) || ''}
+                alt="Crop target"
+                className="crop-target-image"
+              />
+              {tempCrop && (
+                <div className="crop-rect" style={{ left: `${tempCrop.x}%`, top: `${tempCrop.y}%`, width: `${tempCrop.w}%`, height: `${tempCrop.h}%` }} />
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+              <button className="button" onClick={() => { setCropModal({ open: false }); setTempCrop(null); }}>Cancel</button>
+              <button className="button" onClick={() => { handleCropSave(); }}>Save Crop</button>
+              <button className="button" onClick={async () => { if (cropModal.itemId) await applyAndPersistTransform(cropModal.itemId, true); setCropModal({ open: false }); setTempCrop(null); }}>Save & Replace Image</button>
+              <button className="button button-primary" onClick={() => { handleCropSave(); }}>Apply (keep path)</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { ClothingItem } from '../App';
+import { createTransformedFile } from './imageTransforms';
 
 /**
  * Return the public CDN URL for a storage path.
@@ -51,6 +52,61 @@ export const uploadImageToStorage = async (
       path: data.path,
     };
   } catch (error) {
+    return null;
+  }
+};
+
+/**
+ * Upload a File to an explicit storage path. If upsert=true, overwrite existing file.
+ */
+export const uploadFileToPath = async (
+  file: File,
+  path: string,
+  upsert = false
+): Promise<{ url: string; path: string } | null> => {
+  try {
+    const { data, error } = await supabase.storage
+      .from('product-images')
+      .upload(path, file, { cacheControl: '3600', upsert });
+
+    if (error) {
+      console.error('uploadFileToPath error', error.message);
+      return null;
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('product-images')
+      .getPublicUrl(data.path);
+
+    return { url: publicUrl, path: data.path };
+  } catch (err) {
+    console.error('uploadFileToPath exception', err);
+    return null;
+  }
+};
+
+/**
+ * Upload a transformed image to a generated path under the user's folder.
+ */
+export const uploadTransformedImage = async (
+  file: File,
+  userId?: string,
+  itemId?: string
+): Promise<{ url: string; path: string } | null> => {
+  try {
+    let resolvedUserId = userId;
+    if (!resolvedUserId) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      resolvedUserId = user.id;
+    }
+
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${itemId || 'transformed'}-${Date.now()}.${fileExt}`;
+    const filePath = `${resolvedUserId}/${itemId || 'unassigned'}/${fileName}`;
+
+    return await uploadFileToPath(file, filePath, false);
+  } catch (err) {
     return null;
   }
 };
@@ -192,24 +248,36 @@ export const saveProductToDatabase = async (
       let imageUrl = '';
       let storagePath = '';
       
-      // Check if image was already uploaded
-      if (item.storagePath && item.preview) {
-        // Image already uploaded - reuse existing URL and path
-        // No need to move/copy, just use what's already there
-        imageUrl = item.preview;
-        storagePath = item.storagePath;
-      } else {
-        // Image not uploaded yet - upload now
-        const uploadResult = await uploadImageToStorage(
-          item.file,
-          resolvedUserId,
-          productData.id,
-          i
-        );
-        
-        if (uploadResult) {
-          imageUrl = uploadResult.url;
-          storagePath = uploadResult.path;
+      // If the item has transforms (rotation/crop), create transformed file client-side and upload that.
+      if ((item.imageRotation || item.crop) && item.preview) {
+        // Create transformed file from the preview
+        const transformedFile = await createTransformedFile(item);
+        if (transformedFile) {
+          const uploadResult = await uploadImageToStorage(
+            transformedFile as unknown as File,
+            resolvedUserId,
+            productData.id,
+            i
+          );
+          if (uploadResult) {
+            imageUrl = uploadResult.url;
+            storagePath = uploadResult.path;
+          }
+        }
+      }
+
+      // If no transformed upload happened, fall back to existing storagePath or upload original file
+      if (!imageUrl) {
+        // Check if image was already uploaded
+        if (item.storagePath && item.preview) {
+          imageUrl = item.preview;
+          storagePath = item.storagePath;
+        } else {
+          const uploadResult = await uploadImageToStorage(item.file, resolvedUserId, productData.id, i);
+          if (uploadResult) {
+            imageUrl = uploadResult.url;
+            storagePath = uploadResult.path;
+          }
         }
       }
 
@@ -217,6 +285,7 @@ export const saveProductToDatabase = async (
       // (written in handleImagesUploaded) are updated with the real product_id
       // rather than creating a duplicate row.
       if (imageUrl && storagePath) {
+        const transforms = item.crop || item.imageRotation ? { rotation: item.imageRotation || 0, crop: item.crop || null } : null;
         const { error: imageError } = await supabase
           .from('product_images')
           .upsert(
@@ -227,6 +296,7 @@ export const saveProductToDatabase = async (
               storage_path: storagePath,
               position: i,
               alt_text: `${product.seoTitle || 'Product'} - Image ${i + 1}`,
+              transforms: transforms,
             },
             { onConflict: 'storage_path', ignoreDuplicates: false }
           );

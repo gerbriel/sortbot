@@ -1466,14 +1466,39 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     </div>
                   )}
                   {(item.thumbnailUrl || item.preview || item.imageUrls?.[0]) ? (
-                    <img 
-                      src={item.thumbnailUrl || item.preview || item.imageUrls?.[0]} 
-                      alt="Product" 
-                      draggable={false}
-                      loading="lazy"
-                      decoding="async"
-                      onError={retryImg}
-                    />
+                    <div className="image-with-controls">
+                      <img 
+                        src={item.thumbnailUrl || item.preview || item.imageUrls?.[0]} 
+                        alt="Product" 
+                        draggable={false}
+                        loading="lazy"
+                        decoding="async"
+                        onError={retryImg}
+                        style={{ transform: `rotate(${item.imageRotation || 0}deg)` }}
+                      />
+                      <div className="image-controls">
+                        <button
+                          className="rotate-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const updated = groupedItems.map(i => i.id === item.id ? { ...i, imageRotation: ((i.imageRotation || 0) - 90) % 360 } : i);
+                            setGroupedItems(updated);
+                            onGrouped(updated);
+                          }}
+                          title="Rotate left"
+                        >⟲</button>
+                        <button
+                          className="rotate-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const updated = groupedItems.map(i => i.id === item.id ? { ...i, imageRotation: ((i.imageRotation || 0) + 90) % 360 } : i);
+                            setGroupedItems(updated);
+                            onGrouped(updated);
+                          }}
+                          title="Rotate right"
+                        >⟳</button>
+                      </div>
+                    </div>
                   ) : (
                     <div className="lazy-skeleton lazy-skeleton--error" aria-hidden="true" />
                   )}
@@ -1654,6 +1679,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                           loading="lazy"
                           decoding="async"
                           onError={retryImg}
+                          style={{ transform: `rotate(${item.imageRotation || 0}deg)` }}
                         />
                       ) : (
                         <div className="lazy-skeleton lazy-skeleton--error" aria-hidden="true" />
