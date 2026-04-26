@@ -429,18 +429,22 @@ function App() {
               // (synchronous, no extra DB query) as the final fallback.
               // IMPORTANT: reject any saved blob: URL — they are only valid for the browser
               // session in which they were created and will 404 after any page reload.
+              // ALSO: imageUrls[0] can end up pointing to a different item's path due to
+              // merge bugs — storagePath is always authoritative, so always rebuild from it.
               const liveItems = rawItems.map((item: any) => {
-                const reconstructed = item.storagePath
+                const canonical = item.storagePath
                   ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
                   : '';
-                const savedPreview = item.preview?.startsWith('blob:') ? '' : (item.preview || '');
+                // If we have a storagePath, rebuild imageUrls entirely from it (ignore saved value)
+                const imageUrls = canonical ? [canonical] : (item.imageUrls?.length ? item.imageUrls : []);
+                const preview = canonical || (item.preview?.startsWith('blob:') ? '' : (item.preview || ''));
                 const thumbnailUrl = item.storagePath
                   ? getThumbnailUrl(item.storagePath, 300)
-                  : (item.imageUrls?.[0] || reconstructed);
+                  : (imageUrls[0] || '');
                 return {
                   ...item,
-                  preview: savedPreview || item.imageUrls?.[0] || reconstructed,
-                  imageUrls: item.imageUrls?.length ? item.imageUrls : (reconstructed ? [reconstructed] : []),
+                  preview,
+                  imageUrls,
                   thumbnailUrl,
                 };
               });
@@ -1075,22 +1079,29 @@ function App() {
     const liveProcessedForGroup = processedItemsRef.current;
     const mergedProcessed = finalSorted.map(sortedItem => {
       const existing = liveProcessedForGroup.find(p => p.id === sortedItem.id);
+      // For image URL fields, storagePath is always the authoritative source.
+      // Rebuild canonical URL and thumbnailUrl from storagePath to avoid using
+      // imageUrls[0] values that may have been corrupted by earlier merges.
+      const sp = sortedItem.storagePath || existing?.storagePath || '';
+      const canonicalUrl = sp
+        ? supabase.storage.from('product-images').getPublicUrl(sp).data.publicUrl
+        : (sortedItem.imageUrls?.[0] || existing?.imageUrls?.[0] || '');
+      const canonicalThumb = sp ? getThumbnailUrl(sp, 300) : canonicalUrl;
+      const imageFields = {
+        storagePath: sp || undefined,
+        imageUrls:   canonicalUrl ? [canonicalUrl] : [],
+        preview:     canonicalUrl,
+        thumbnailUrl: canonicalThumb,
+      };
       if (existing) {
-        // Keep all user-entered + preset fields from existing; update structural/image fields
-        // from sortedItem so uploaded URLs always win over stale blob:// previews.
         return {
           ...existing,
           productGroup: sortedItem.productGroup || existing.productGroup,
-          category: sortedItem.category || existing.category,
-          // Always take the latest image URLs from the grouper — prevents stale blob URLs
-          // in processedItems when uploads complete after initial mount.
-          preview: sortedItem.preview || existing.preview,
-          imageUrls: sortedItem.imageUrls?.length ? sortedItem.imageUrls : existing.imageUrls,
-          storagePath: sortedItem.storagePath || existing.storagePath,
-          thumbnailUrl: sortedItem.thumbnailUrl || existing.thumbnailUrl,
+          category:     sortedItem.category     || existing.category,
+          ...imageFields,
         };
       }
-      return sortedItem;
+      return { ...sortedItem, ...imageFields };
     });
     setProcessedItems(mergedProcessed);
     
