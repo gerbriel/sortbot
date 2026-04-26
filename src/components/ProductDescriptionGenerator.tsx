@@ -2023,7 +2023,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 <button className="lightbox-tool-btn" title="Rotate right"
                   onClick={() => { const u = processedItems.map(i => i.id === lbItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) + 90) % 360 } : i); setProcessedItems(u); setHasUnsavedChanges(true); }}>⟳ Rotate R</button>
                 <button className="lightbox-tool-btn" title="Crop image"
-                  onClick={() => { closeLightbox(); setCropModal({ open: true, itemId: lbItem.id }); setActivePreset('FREE'); setAspectLock(null); setTempCrop({ x: 5, y: 5, w: 90, h: 90 }); }}>✂ Crop</button>
+                  onClick={() => { setCropModal({ open: true, itemId: lbItem.id }); setActivePreset('FREE'); setAspectLock(null); setTempCrop({ x: 5, y: 5, w: 90, h: 90 }); }}>✂ Crop</button>
               </>)}
             </div>
             <img
@@ -2055,6 +2055,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 if (!cropModal.itemId || !tempCrop) return;
                 await applyAndPersistTransform(cropModal.itemId, true, { crop: tempCrop });
                 setCropModal({ open: false }); setTempCrop(null); setActivePreset('FREE'); setAspectLock(null);
+                closeLightbox(); // close stale lightbox after crop changes the image
               }}>Done</button>
             </div>
 
