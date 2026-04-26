@@ -729,15 +729,19 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
   // Create group from selected items — requires at least 2 items to be meaningful
   const createGroupFromSelected = () => {
-    if (selectedItems.size < 2) {
+    // Read live values via refs so this function never has a stale closure
+    // regardless of how/when it was captured (onActionsReady, keyboard handler, etc.)
+    const selected = selectedItemsRef.current;
+    const items = groupedItemsRef.current;
+    if (selected.size < 2) {
       alert('Please select at least 2 items to group together');
       return;
     }
-    log.grouper(`createGroup | selected=${selectedItems.size}`);
+    log.grouper(`createGroup | selected=${selected.size}`);
 
     const groupId = crypto.randomUUID();
-    const updated = groupedItems.map(item =>
-      selectedItems.has(item.id)
+    const updated = items.map(item =>
+      selected.has(item.id)
         ? { ...item, productGroup: groupId }
         : item
     );
@@ -1140,8 +1144,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       deleteSelected: handleDeleteSelected,
       selectedCount: selectedItems.size,
     });
+  // createGroupFromSelected now reads via refs so it's safe to keep a stable dep here;
+  // selectedItems is still needed so selectedCount stays up-to-date.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedItems.size, onActionsReady]);
+  }, [selectedItems, onActionsReady]);
 
   return (
     <>
@@ -1458,7 +1464,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     }
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  onDoubleClick={() => setLightboxSrc(item.preview || item.imageUrls?.[0] || '')}
+                  onDoubleClick={() => setLightboxSrc(item.imageUrls?.[0] || item.preview || '')}
                 >
                   {item.category && (
                     <div className="category-indicator-small" style={{ display: 'none' }}>
@@ -1668,7 +1674,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       onDrop={(e) => handlePhotoDrop(e, item.id, groupId)}
                       onDragEnd={handlePhotoDragEnd}
                       onDragLeave={() => setDragOverPhotoId(null)}
-                      onDoubleClick={(e) => { e.stopPropagation(); setLightboxSrc(item.preview || item.imageUrls?.[0] || ''); }}
+                      onDoubleClick={(e) => { e.stopPropagation(); setLightboxSrc(item.imageUrls?.[0] || item.preview || ''); }}
                       onClick={(e) => e.stopPropagation()} // don't bubble to group-level toggle
                     >
                       {(item.thumbnailUrl || item.preview || item.imageUrls?.[0]) ? (

@@ -1076,11 +1076,18 @@ function App() {
     const mergedProcessed = finalSorted.map(sortedItem => {
       const existing = liveProcessedForGroup.find(p => p.id === sortedItem.id);
       if (existing) {
-        // Keep all user-entered + preset fields from existing; only update structural ones.
+        // Keep all user-entered + preset fields from existing; update structural/image fields
+        // from sortedItem so uploaded URLs always win over stale blob:// previews.
         return {
           ...existing,
           productGroup: sortedItem.productGroup || existing.productGroup,
           category: sortedItem.category || existing.category,
+          // Always take the latest image URLs from the grouper — prevents stale blob URLs
+          // in processedItems when uploads complete after initial mount.
+          preview: sortedItem.preview || existing.preview,
+          imageUrls: sortedItem.imageUrls?.length ? sortedItem.imageUrls : existing.imageUrls,
+          storagePath: sortedItem.storagePath || existing.storagePath,
+          thumbnailUrl: sortedItem.thumbnailUrl || existing.thumbnailUrl,
         };
       }
       return sortedItem;
