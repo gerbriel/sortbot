@@ -1289,8 +1289,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const handleCropPointerDown = (e: React.PointerEvent, mode: DragMode) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!cropContainerRef.current) return;
-    const rect = cropContainerRef.current.getBoundingClientRect();
+    if (!cropImgRef.current) return;
+    const rect = cropImgRef.current.getBoundingClientRect();
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     cropDragRef.current = {
       mode,
@@ -1302,8 +1302,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   const handleCropPointerMove = (e: React.PointerEvent) => {
     const drag = cropDragRef.current;
-    if (!drag || !cropContainerRef.current) return;
-    const rect = cropContainerRef.current.getBoundingClientRect();
+    if (!drag || !cropImgRef.current) return;
+    const rect = cropImgRef.current.getBoundingClientRect();
     const cx = clamp((e.clientX - rect.left) / rect.width, 0, 1);
     const cy = clamp((e.clientY - rect.top) / rect.height, 0, 1);
     const dx = (cx - drag.startX) * 100;
@@ -1356,10 +1356,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const applyPreset = (label: string, ratio: number | null) => {
     setActivePreset(label);
     setAspectLock(ratio);
-    if (!cropContainerRef.current) return;
-    if (!ratio) { return; } // free — keep existing rect
-    // Center a max-size rect for the chosen ratio
-    const rect = cropContainerRef.current.getBoundingClientRect();
+    if (!ratio || !cropImgRef.current) return;
+    const rect = cropImgRef.current.getBoundingClientRect();
     const cw = rect.width, ch = rect.height;
     let pw = 1, ph = 1;
     if (cw / ch > ratio) { ph = 1; pw = ratio * ch / cw; }
@@ -2004,40 +2002,32 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       {lightboxSrc && (() => {
         const lbItem = processedItems.find(i => i.id === lightboxItemId) ?? null;
         const canNav = lightboxPool.length > 1;
+        const cropping = cropModal.open;
         return (
-          <div className="lightbox-overlay" onClick={closeLightbox}>
-            {/* Standalone close — top-right, never near toolbar */}
-            <button className="lightbox-close-standalone" onClick={closeLightbox} title="Close">✕</button>
-            {/* Left/right nav */}
-            {canNav && (
-              <button className="lightbox-nav lightbox-nav-left" onClick={(e) => { e.stopPropagation(); navigateLightbox(-1); }}>‹</button>
-            )}
-            {canNav && (
-              <button className="lightbox-nav lightbox-nav-right" onClick={(e) => { e.stopPropagation(); navigateLightbox(1); }}>›</button>
-            )}
-            {/* Centered toolbar pill — no ✕ inside */}
-            <div className="lightbox-toolbar" onClick={(e) => e.stopPropagation()}>
-              {lbItem && (<>
-                <button className="lightbox-tool-btn" title="Rotate left"
-                  onClick={() => { const u = processedItems.map(i => i.id === lbItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) - 90) % 360 } : i); setProcessedItems(u); setHasUnsavedChanges(true); }}>⟲ Rotate L</button>
-                <button className="lightbox-tool-btn" title="Rotate right"
-                  onClick={() => { const u = processedItems.map(i => i.id === lbItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) + 90) % 360 } : i); setProcessedItems(u); setHasUnsavedChanges(true); }}>⟳ Rotate R</button>
-                <button className="lightbox-tool-btn" title="Crop image"
-                  onClick={() => { setCropModal({ open: true, itemId: lbItem.id }); setActivePreset('FREE'); setAspectLock(null); setTempCrop({ x: 5, y: 5, w: 90, h: 90 }); }}>✂ Crop</button>
-              </>)}
-            </div>
-            <img
-              src={lightboxSrc}
-              alt="Full size preview"
-              className="lightbox-image"
-              style={{ transform: lbItem ? `rotate(${lbItem.imageRotation || 0}deg)` : undefined }}
-              onClick={(e) => e.stopPropagation()}
-            />
-            {canNav && (
-              <span className="lightbox-counter">{lightboxPool.indexOf(lightboxItemId!) + 1} / {lightboxPool.length}</span>
-            )}
-            {/* Crop UI — rendered inside the lightbox so it's constrained to the lightbox bounds */}
-            {cropModal.open && (() => {
+          <div className="lightbox-overlay" onClick={!cropping ? closeLightbox : undefined}>
+            {/* Everything below is hidden while crop is active */}
+            {!cropping && <>
+              <button className="lightbox-close-standalone" onClick={closeLightbox} title="Close">✕</button>
+              {canNav && <button className="lightbox-nav lightbox-nav-left" onClick={(e) => { e.stopPropagation(); navigateLightbox(-1); }}>‹</button>}
+              {canNav && <button className="lightbox-nav lightbox-nav-right" onClick={(e) => { e.stopPropagation(); navigateLightbox(1); }}>›</button>}
+              <div className="lightbox-toolbar" onClick={(e) => e.stopPropagation()}>
+                {lbItem && (<>
+                  <button className="lightbox-tool-btn" title="Rotate left"
+                    onClick={() => { const u = processedItems.map(i => i.id === lbItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) - 90) % 360 } : i); setProcessedItems(u); setHasUnsavedChanges(true); }}>⟲ Rotate L</button>
+                  <button className="lightbox-tool-btn" title="Rotate right"
+                    onClick={() => { const u = processedItems.map(i => i.id === lbItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) + 90) % 360 } : i); setProcessedItems(u); setHasUnsavedChanges(true); }}>⟳ Rotate R</button>
+                  <button className="lightbox-tool-btn" title="Crop image"
+                    onClick={() => { setCropModal({ open: true, itemId: lbItem.id }); setActivePreset('FREE'); setAspectLock(null); setTempCrop({ x: 5, y: 5, w: 90, h: 90 }); }}>✂ Crop</button>
+                </>)}
+              </div>
+              <img src={lightboxSrc} alt="Full size preview" className="lightbox-image"
+                style={{ transform: lbItem ? `rotate(${lbItem.imageRotation || 0}deg)` : undefined }}
+                onClick={(e) => e.stopPropagation()} />
+              {canNav && <span className="lightbox-counter">{lightboxPool.indexOf(lightboxItemId!) + 1} / {lightboxPool.length}</span>}
+            </>}
+
+            {/* Crop UI — absolutely fills the lightbox overlay */}
+            {cropping && (() => {
               const cropItem = processedItems.find(i => i.id === cropModal.itemId);
               const imgSrc = cropItem?.preview || cropItem?.imageUrls?.[0] || '';
               const rot = cropItem?.imageRotation || 0;
@@ -2053,32 +2043,36 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       closeLightbox();
                     }}>Done</button>
                   </div>
+                  {/* Stage: fills space, centers the image wrapper */}
                   <div className="crop-fs-stage" ref={cropContainerRef}
                     onPointerDown={(e) => handleCropPointerDown(e, 'new')}
                     onPointerMove={handleCropPointerMove}
                     onPointerUp={handleCropPointerUp}
                   >
-                    <img ref={cropImgRef} src={imgSrc} alt="Crop target" className="crop-fs-image"
-                      style={{ transform: `rotate(${rot}deg)` }} draggable={false} />
-                    {tempCrop && (<>
-                      <div className="crop-fs-mask" style={{ top: 0, left: 0, right: 0, height: `${tempCrop.y}%` }} />
-                      <div className="crop-fs-mask" style={{ top: `${tempCrop.y + tempCrop.h}%`, left: 0, right: 0, bottom: 0 }} />
-                      <div className="crop-fs-mask" style={{ top: `${tempCrop.y}%`, left: 0, width: `${tempCrop.x}%`, height: `${tempCrop.h}%` }} />
-                      <div className="crop-fs-mask" style={{ top: `${tempCrop.y}%`, left: `${tempCrop.x + tempCrop.w}%`, right: 0, height: `${tempCrop.h}%` }} />
-                      <div className="crop-fs-rect" style={{ left: `${tempCrop.x}%`, top: `${tempCrop.y}%`, width: `${tempCrop.w}%`, height: `${tempCrop.h}%` }}>
-                        <div className="crop-fs-move-zone" onPointerDown={(e) => { e.stopPropagation(); handleCropPointerDown(e, 'move'); }} />
-                        <div className="crop-fs-grid-h" style={{ top: '33.33%' }} /><div className="crop-fs-grid-h" style={{ top: '66.66%' }} />
-                        <div className="crop-fs-grid-v" style={{ left: '33.33%' }} /><div className="crop-fs-grid-v" style={{ left: '66.66%' }} />
-                        {(['nw','ne','sw','se'] as const).map(h => (
-                          <div key={h} className={`crop-fs-handle crop-fs-corner crop-fs-corner-${h}`}
-                            onPointerDown={(e) => { e.stopPropagation(); handleCropPointerDown(e, h); }} />
-                        ))}
-                        {(['n','s','e','w'] as const).map(h => (
-                          <div key={h} className={`crop-fs-handle crop-fs-edge crop-fs-edge-${h}`}
-                            onPointerDown={(e) => { e.stopPropagation(); handleCropPointerDown(e, h); }} />
-                        ))}
-                      </div>
-                    </>)}
+                    {/* img-wrap tightly hugs the rendered image — % coords are relative to it */}
+                    <div className="crop-fs-img-wrap">
+                      <img ref={cropImgRef} src={imgSrc} alt="Crop target" className="crop-fs-image"
+                        style={{ transform: `rotate(${rot}deg)`, maxHeight: 'calc(100vh - 120px)' }} draggable={false} />
+                      {tempCrop && (<>
+                        <div className="crop-fs-mask" style={{ top: 0, left: 0, right: 0, height: `${tempCrop.y}%` }} />
+                        <div className="crop-fs-mask" style={{ top: `${tempCrop.y + tempCrop.h}%`, left: 0, right: 0, bottom: 0 }} />
+                        <div className="crop-fs-mask" style={{ top: `${tempCrop.y}%`, left: 0, width: `${tempCrop.x}%`, height: `${tempCrop.h}%` }} />
+                        <div className="crop-fs-mask" style={{ top: `${tempCrop.y}%`, left: `${tempCrop.x + tempCrop.w}%`, right: 0, height: `${tempCrop.h}%` }} />
+                        <div className="crop-fs-rect" style={{ left: `${tempCrop.x}%`, top: `${tempCrop.y}%`, width: `${tempCrop.w}%`, height: `${tempCrop.h}%` }}>
+                          <div className="crop-fs-move-zone" onPointerDown={(e) => { e.stopPropagation(); handleCropPointerDown(e, 'move'); }} />
+                          <div className="crop-fs-grid-h" style={{ top: '33.33%' }} /><div className="crop-fs-grid-h" style={{ top: '66.66%' }} />
+                          <div className="crop-fs-grid-v" style={{ left: '33.33%' }} /><div className="crop-fs-grid-v" style={{ left: '66.66%' }} />
+                          {(['nw','ne','sw','se'] as const).map(h => (
+                            <div key={h} className={`crop-fs-handle crop-fs-corner crop-fs-corner-${h}`}
+                              onPointerDown={(e) => { e.stopPropagation(); handleCropPointerDown(e, h); }} />
+                          ))}
+                          {(['n','s','e','w'] as const).map(h => (
+                            <div key={h} className={`crop-fs-handle crop-fs-edge crop-fs-edge-${h}`}
+                              onPointerDown={(e) => { e.stopPropagation(); handleCropPointerDown(e, h); }} />
+                          ))}
+                        </div>
+                      </>)}
+                    </div>
                   </div>
                   <div className="crop-fs-ratiobar">
                     {CROP_PRESETS.map(({ label, ratio }) => (
