@@ -163,6 +163,14 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // Lightbox state
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
+  /** Open lightbox by item ID — reads URL from live groupedItemsRef to bypass stale closures */
+  const openLightboxForItem = (itemId: string) => {
+    const live = groupedItemsRef.current.find(i => i.id === itemId);
+    if (!live) return;
+    const src = live.imageUrls?.[0] || live.preview || '';
+    if (src) setLightboxSrc(src);
+  };
+
   // Selection box state
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null);
@@ -1464,7 +1472,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     }
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  onDoubleClick={() => setLightboxSrc(item.imageUrls?.[0] || item.preview || '')}
+                  onDoubleClick={(e) => openLightboxForItem((e.currentTarget as HTMLElement).dataset.itemId!)}
                 >
                   {item.category && (
                     <div className="category-indicator-small" style={{ display: 'none' }}>
@@ -1674,7 +1682,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       onDrop={(e) => handlePhotoDrop(e, item.id, groupId)}
                       onDragEnd={handlePhotoDragEnd}
                       onDragLeave={() => setDragOverPhotoId(null)}
-                      onDoubleClick={(e) => { e.stopPropagation(); setLightboxSrc(item.imageUrls?.[0] || item.preview || ''); }}
+                      onDoubleClick={(e) => { e.stopPropagation(); openLightboxForItem((e.currentTarget as HTMLElement).dataset.itemId!); }}
                       onClick={(e) => e.stopPropagation()} // don't bubble to group-level toggle
                     >
                       {(item.thumbnailUrl || item.preview || item.imageUrls?.[0]) ? (
