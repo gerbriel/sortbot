@@ -1308,15 +1308,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     setCropDrawing(null);
   };
 
-  const handleCropSave = () => {
-    if (!cropModal.open || !cropModal.itemId || !tempCrop) { setCropModal({ open: false }); setTempCrop(null); return; }
-    const updated = processedItems.map(i => i.id === cropModal.itemId ? { ...i, crop: tempCrop } : i);
-    setProcessedItems(updated);
-    setHasUnsavedChanges(true);
-    setCropModal({ open: false });
-    setTempCrop(null);
-  };
-
   // Preset crop helpers (aspect ratios)
   const setPresetCrop = (ratio: number) => {
     if (!cropContainerRef.current) return;
@@ -1352,47 +1343,35 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // helper createTransformedFile will be dynamically imported where needed
 
   // Upload transformed image and optionally overwrite the existing storage path
-  const applyAndPersistTransform = async (itemId: string, replaceExisting = true) => {
-    const item = processedItems.find(i => i.id === itemId);
-    if (!item) return;
+  const applyAndPersistTransform = async (itemId: string, replaceExisting = true, itemOverride?: Partial<ClothingItem>) => {
+    const baseItem = processedItems.find(i => i.id === itemId);
+    if (!baseItem) return;
+    const item = itemOverride ? { ...baseItem, ...itemOverride } : baseItem;
 
     const { createTransformedFile } = await import('../lib/imageTransforms');
     const file = await createTransformedFile(item);
-    if (!file) { alert('Failed to create transformed image'); return; }
+    if (!file) { console.error('createTransformedFile returned null for item', itemId); return; }
 
-    // Use productService helpers to upload. Import dynamically to avoid circular imports
     try {
       const { uploadFileToPath, uploadTransformedImage } = await import('../lib/productService');
-      // If replaceExisting and storagePath exists, overwrite same path
       if (replaceExisting && item.storagePath) {
         const res = await uploadFileToPath(file, item.storagePath, true);
         if (res) {
-          const updated = processedItems.map(i => i.id === itemId ? { ...i, preview: res.url, storagePath: res.path } : i);
-          setProcessedItems(updated);
+          setProcessedItems(prev => prev.map(i => i.id === itemId ? { ...i, preview: res.url, storagePath: res.path, imageRotation: 0, crop: undefined } : i));
           setHasUnsavedChanges(true);
-          alert('Image transformed and replaced in storage');
           return;
         }
       }
-
-      // Otherwise upload to a new generated path
       const res2 = await uploadTransformedImage(file);
       if (res2) {
-        // Optionally remove old storage object
         if (replaceExisting && item.storagePath) {
           try { await (await import('../lib/supabase')).supabase.storage.from('product-images').remove([item.storagePath]); } catch { /* ignore */ }
         }
-        const updated = processedItems.map(i => i.id === itemId ? { ...i, preview: res2.url, storagePath: res2.path } : i);
-        setProcessedItems(updated);
+        setProcessedItems(prev => prev.map(i => i.id === itemId ? { ...i, preview: res2.url, storagePath: res2.path, imageRotation: 0, crop: undefined } : i));
         setHasUnsavedChanges(true);
-        alert('Image transformed and uploaded');
-        return;
       }
-
-      alert('Upload failed');
     } catch (err) {
-      console.error(err);
-      alert('Error while uploading transformed image');
+      console.error('applyAndPersistTransform error:', err);
     }
   };
 
@@ -1990,8 +1969,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   onClick={() => { const u = processedItems.map(i => i.id === lbItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) + 90) % 360 } : i); setProcessedItems(u); setHasUnsavedChanges(true); }}>⟳ Rotate R</button>
                 <button className="lightbox-tool-btn" title="Crop image"
                   onClick={() => { closeLightbox(); setCropModal({ open: true, itemId: lbItem.id }); }}>✂ Crop</button>
-                <button className="lightbox-tool-btn" title="Apply transforms and replace stored image"
-                  onClick={async () => { await applyAndPersistTransform(lbItem.id, true); closeLightbox(); }}>💾 Save Transform</button>
               </>)}
               <button className="lightbox-close" onClick={closeLightbox}>✕</button>
             </div>
@@ -2041,9 +2018,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
               <button className="button" onClick={() => { setCropModal({ open: false }); setTempCrop(null); }}>Cancel</button>
-              <button className="button" onClick={() => { handleCropSave(); }}>Save Crop</button>
-              <button className="button" onClick={async () => { if (cropModal.itemId) await applyAndPersistTransform(cropModal.itemId, true); setCropModal({ open: false }); setTempCrop(null); }}>Save & Replace Image</button>
-              <button className="button button-primary" onClick={() => { handleCropSave(); }}>Apply (keep path)</button>
+              <button className="button button-primary" disabled={!tempCrop} onClick={async () => {
+                if (!cropModal.itemId || !tempCrop) return;
+                await applyAndPersistTransform(cropModal.itemId, true, { crop: tempCrop });
+                setCropModal({ open: false });
+                setTempCrop(null);
+              }}>Apply Crop</button>
             </div>
           </div>
         </div>
