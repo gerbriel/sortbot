@@ -163,13 +163,44 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // Lightbox state
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
+  // ── Debug helper — always-on, readable in DevTools console ──────────────────
+  const imgDebug = (event: string, itemId: string, extra?: Record<string, unknown>) => {
+    const live = groupedItemsRef.current.find(i => i.id === itemId);
+    console.group(`%c[ImageGrouper] ${event}`, 'color:#f59e0b;font-weight:bold');
+    console.log('item id      :', itemId);
+    console.log('imageUrls[0] :', live?.imageUrls?.[0] ?? '—');
+    console.log('preview      :', live?.preview ?? '—');
+    console.log('thumbnailUrl :', live?.thumbnailUrl ?? '—');
+    console.log('storagePath  :', live?.storagePath ?? '—');
+    console.log('productGroup :', live?.productGroup ?? '—');
+    if (extra) console.log('extra        :', extra);
+    console.groupEnd();
+  };
+
   /** Open lightbox by item ID — reads URL from live groupedItemsRef to bypass stale closures */
   const openLightboxForItem = (itemId: string) => {
     const live = groupedItemsRef.current.find(i => i.id === itemId);
-    if (!live) return;
-    const src = live.imageUrls?.[0] || live.preview || '';
+    const src = live?.imageUrls?.[0] || live?.preview || '';
+    imgDebug('LIGHTBOX OPEN', itemId, { resolvedSrc: src });
+    if (!live) { console.warn('[ImageGrouper] openLightboxForItem: item not found in groupedItemsRef', itemId); return; }
     if (src) setLightboxSrc(src);
+    else console.warn('[ImageGrouper] openLightboxForItem: no URL found for item', itemId);
   };
+
+  // ── Log full item table whenever groupedItems changes ───────────────────────
+  useEffect(() => {
+    if (groupedItems.length === 0) return;
+    console.group(`%c[ImageGrouper] ITEMS STATE (${groupedItems.length} total)`, 'color:#f59e0b;font-weight:bold');
+    console.table(groupedItems.map(i => ({
+      id:          i.id.slice(0, 8),
+      name:        i.originalName ?? '—',
+      group:       i.productGroup ? i.productGroup.slice(0, 8) : '—',
+      imageUrl0:   i.imageUrls?.[0] ? '✓ ' + i.imageUrls[0].split('/').pop()?.split('?')[0].slice(0, 30) : '✗',
+      preview:     i.preview ? (i.preview.startsWith('blob:') ? '⚠ blob' : '✓ ' + i.preview.split('/').pop()?.slice(0,30)) : '✗',
+      storagePath: i.storagePath ? '✓' : '✗',
+    })));
+    console.groupEnd();
+  }, [groupedItems]);
 
   // Selection box state
   const [isSelecting, setIsSelecting] = useState(false);
@@ -679,6 +710,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       lastClickedSingleRef.current = itemId;
     }
     log.grouper(`toggleItemSelection | ${wasSelected ? 'deselect' : 'select'} item=${itemId} | totalSelected=${newSelected.size}`);
+    imgDebug(`SELECT ${wasSelected ? 'OFF' : 'ON'}`, itemId, { totalSelected: newSelected.size });
     updateSelection(newSelected);
   };
 
@@ -748,6 +780,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     log.grouper(`createGroup | selected=${selected.size}`);
 
     const groupId = crypto.randomUUID();
+    const grouped = items.filter(i => selected.has(i.id));
+    console.group(`%c[ImageGrouper] GROUP CREATED (${grouped.length} items → group ${groupId.slice(0,8)})`, 'color:#f59e0b;font-weight:bold');
+    console.table(grouped.map(i => ({
+      id:       i.id.slice(0,8),
+      name:     i.originalName ?? '—',
+      imageUrl: i.imageUrls?.[0] ? '✓ ' + i.imageUrls[0].split('/').pop()?.slice(0,40) : '✗',
+      preview:  i.preview ? (i.preview.startsWith('blob:') ? '⚠ blob' : '✓') : '✗',
+    })));
+    console.groupEnd();
+
     const updated = items.map(item =>
       selected.has(item.id)
         ? { ...item, productGroup: groupId }
