@@ -70,8 +70,18 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const [draggedThumbId, setDraggedThumbId] = useState<string | null>(null);
   const [dragOverThumbId, setDragOverThumbId] = useState<string | null>(null);
 
-  // Lightbox state
+  // Lightbox / edit-modal state
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [lightboxItemId, setLightboxItemId] = useState<string | null>(null);
+
+  const openLightbox = (src: string, itemId: string) => {
+    setLightboxSrc(src);
+    setLightboxItemId(itemId);
+  };
+  const closeLightbox = () => {
+    setLightboxSrc(null);
+    setLightboxItemId(null);
+  };
   const [cropModal, setCropModal] = useState<{ open: boolean; itemId?: string }>(() => ({ open: false }));
   const [tempCrop, setTempCrop] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
 
@@ -1331,7 +1341,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (lightboxSrc) setLightboxSrc(null);
+        if (lightboxSrc) closeLightbox();
         if (cropModal.open) { setCropModal({ open: false }); setTempCrop(null); }
       }
     };
@@ -1444,44 +1454,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             }}
             onMouseLeave={() => setMagnifier(null)}
           >
-            <div style={{ position: 'relative' }}>
-              <LazyImg
-                src={currentItem.preview || currentItem.imageUrls?.[0] || ''}
-                alt="Product"
-                className="preview-image"
-                style={{ cursor: 'zoom-in', transform: `rotate(${currentItem.imageRotation || 0}deg)`, clipPath: currentItem.crop ? `inset(${currentItem.crop.y}% ${100 - (currentItem.crop.x + currentItem.crop.w)}% ${100 - (currentItem.crop.y + currentItem.crop.h)}% ${currentItem.crop.x}%)` : undefined }}
-                onDoubleClick={() => setLightboxSrc(currentItem.preview || currentItem.imageUrls?.[0] || '')}
-              />
-              <div style={{ position: 'absolute', right: 8, top: 8, display: 'flex', gap: 8 }}>
-                <button
-                  className="button"
-                  onClick={() => {
-                    // rotate left
-                    const updated = processedItems.map(i => i.id === currentItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) - 90) % 360 } : i);
-                    setProcessedItems(updated);
-                    setHasUnsavedChanges(true);
-                  }}
-                >⟲</button>
-                <button
-                  className="button"
-                  onClick={() => {
-                    // rotate right
-                    const updated = processedItems.map(i => i.id === currentItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) + 90) % 360 } : i);
-                    setProcessedItems(updated);
-                    setHasUnsavedChanges(true);
-                  }}
-                >⟳</button>
-                <button
-                  className="button"
-                  onClick={() => setCropModal({ open: true, itemId: currentItem.id })}
-                >✂ Crop</button>
-                <button
-                  className="button"
-                  onClick={async () => { await applyAndPersistTransform(currentItem.id, true); }}
-                  title="Apply rotation/crop to image and replace stored file"
-                >💾 Save Transform</button>
-              </div>
-            </div>
+            <LazyImg
+              src={currentItem.preview || currentItem.imageUrls?.[0] || ''}
+              alt="Product"
+              className="preview-image"
+              style={{ cursor: 'zoom-in', transform: `rotate(${currentItem.imageRotation || 0}deg)`, clipPath: currentItem.crop ? `inset(${currentItem.crop.y}% ${100 - (currentItem.crop.x + currentItem.crop.w)}% ${100 - (currentItem.crop.y + currentItem.crop.h)}% ${currentItem.crop.x}%)` : undefined }}
+              onDoubleClick={() => openLightbox(currentItem.preview || currentItem.imageUrls?.[0] || '', currentItem.id)}
+            />
           </div>
           <div className="product-info">
           </div>
@@ -1499,7 +1478,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     onDrop={(e) => handleThumbDrop(e, groupItem.id)}
                     onDragEnd={handleThumbDragEnd}
                     onDragLeave={() => setDragOverThumbId(null)}
-                    onDoubleClick={() => setLightboxSrc(groupItem.preview || groupItem.imageUrls?.[0] || '')}
+                    onDoubleClick={() => openLightbox(groupItem.preview || groupItem.imageUrls?.[0] || '', groupItem.id)}
                     onMouseMove={(e) => {
                       if (!magnifierSettings.enabled) return;
                       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -1522,23 +1501,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       className="group-thumbnail"
                       style={{ transform: `rotate(${groupItem.imageRotation || 0}deg)`, clipPath: groupItem.crop ? `inset(${groupItem.crop.y}% ${100 - (groupItem.crop.x + groupItem.crop.w)}% ${100 - (groupItem.crop.y + groupItem.crop.h)}% ${groupItem.crop.x}%)` : undefined }}
                     />
-                    <div style={{ position: 'absolute', right: 6, bottom: 6, display: 'flex', gap: 6 }}>
-                      <button
-                        className="rotate-btn"
-                        onClick={(e) => { e.stopPropagation(); const updated = processedItems.map(i => i.id === groupItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) - 90) % 360 } : i); setProcessedItems(updated); setHasUnsavedChanges(true); }}
-                        title="Rotate left"
-                      >⟲</button>
-                      <button
-                        className="rotate-btn"
-                        onClick={(e) => { e.stopPropagation(); const updated = processedItems.map(i => i.id === groupItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) + 90) % 360 } : i); setProcessedItems(updated); setHasUnsavedChanges(true); }}
-                        title="Rotate right"
-                      >⟳</button>
-                      <button
-                        className="rotate-btn"
-                        onClick={(e) => { e.stopPropagation(); setCropModal({ open: true, itemId: groupItem.id }); }}
-                        title="Crop"
-                      >✂</button>
-                    </div>
                   </div>
                 ))}
               </div>
@@ -2015,21 +1977,34 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         />
       )}
 
-      {/* Lightbox modal */}
-      {lightboxSrc && (
-        <div
-          className="lightbox-overlay"
-          onClick={() => setLightboxSrc(null)}
-        >
-          <button className="lightbox-close" onClick={() => setLightboxSrc(null)}>✕</button>
-          <img
-            src={lightboxSrc}
-            alt="Full size preview"
-            className="lightbox-image"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
+      {/* Image edit modal — opens on double-click; rotate, crop, save controls live here */}
+      {lightboxSrc && (() => {
+        const lbItem = processedItems.find(i => i.id === lightboxItemId) ?? null;
+        return (
+          <div className="lightbox-overlay" onClick={closeLightbox}>
+            <div className="lightbox-toolbar" onClick={(e) => e.stopPropagation()}>
+              {lbItem && (<>
+                <button className="lightbox-tool-btn" title="Rotate left"
+                  onClick={() => { const u = processedItems.map(i => i.id === lbItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) - 90) % 360 } : i); setProcessedItems(u); setHasUnsavedChanges(true); }}>⟲ Rotate L</button>
+                <button className="lightbox-tool-btn" title="Rotate right"
+                  onClick={() => { const u = processedItems.map(i => i.id === lbItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) + 90) % 360 } : i); setProcessedItems(u); setHasUnsavedChanges(true); }}>⟳ Rotate R</button>
+                <button className="lightbox-tool-btn" title="Crop image"
+                  onClick={() => { closeLightbox(); setCropModal({ open: true, itemId: lbItem.id }); }}>✂ Crop</button>
+                <button className="lightbox-tool-btn" title="Apply transforms and replace stored image"
+                  onClick={async () => { await applyAndPersistTransform(lbItem.id, true); closeLightbox(); }}>💾 Save Transform</button>
+              </>)}
+              <button className="lightbox-close" onClick={closeLightbox}>✕</button>
+            </div>
+            <img
+              src={lightboxSrc}
+              alt="Full size preview"
+              className="lightbox-image"
+              style={{ transform: lbItem ? `rotate(${lbItem.imageRotation || 0}deg)` : undefined }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        );
+      })()}
       {/* Crop modal */}
       {cropModal.open && (
         <div className="crop-modal-overlay" onClick={() => { setCropModal({ open: false }); setTempCrop(null); }}>
