@@ -177,12 +177,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     console.groupEnd();
   };
 
-  /** Open lightbox by item ID — reads URL from live groupedItemsRef to bypass stale closures */
+  /** Open lightbox by item ID — derives URL from storagePath (always correct) to bypass
+   *  imageUrls[0] corruption that can occur during App.tsx merge operations. */
   const openLightboxForItem = (itemId: string) => {
     const live = groupedItemsRef.current.find(i => i.id === itemId);
-    const src = live?.imageUrls?.[0] || live?.preview || '';
-    imgDebug('LIGHTBOX OPEN', itemId, { resolvedSrc: src });
-    if (!live) { console.warn('[ImageGrouper] openLightboxForItem: item not found in groupedItemsRef', itemId); return; }
+    if (!live) { console.warn('[ImageGrouper] openLightboxForItem: item not found', itemId); return; }
+    // storagePath → canonical URL is always correct; imageUrls[0] can be a different item's URL
+    const src = live.storagePath
+      ? supabase.storage.from('product-images').getPublicUrl(live.storagePath).data.publicUrl
+      : (live.imageUrls?.[0] || live.preview || '');
+    imgDebug('LIGHTBOX OPEN', itemId, { resolvedSrc: src, usedStoragePath: !!live.storagePath });
     if (src) setLightboxSrc(src);
     else console.warn('[ImageGrouper] openLightboxForItem: no URL found for item', itemId);
   };
@@ -499,12 +503,22 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             const updated = items.find(i => i.id === existing.id);
             if (!updated) return existing;
             // Allow productGroup to update from props ONLY when the incoming value differs
-            // from the item's own id — meaning an external merge/group was applied
-            // (e.g. category click in CategoryZones merged items into one group).
-            // Keep local productGroup when the prop still shows the item's own id (default singleton).
+            // from the item's own id — meaning an external merge/group was applied.
             const incomingGroup = updated.productGroup || updated.id;
             const newGroup = incomingGroup !== updated.id ? incomingGroup : existing.productGroup;
-            return { ...updated, productGroup: newGroup };
+            // IMPORTANT: keep existing image URL fields — do NOT overwrite with incoming
+            // imageUrls from props, which may be corrupted by App.tsx merge operations.
+            // storagePath, imageUrls, preview, thumbnailUrl from `existing` are always correct
+            // because they were set during upload or derived from storagePath at upload time.
+            return {
+              ...updated,
+              productGroup: newGroup,
+              // Keep authoritative image fields from existing
+              storagePath:  existing.storagePath  || updated.storagePath,
+              imageUrls:    existing.imageUrls?.length    ? existing.imageUrls    : (updated.imageUrls    ?? []),
+              preview:      existing.preview      || updated.preview,
+              thumbnailUrl: existing.thumbnailUrl || updated.thumbnailUrl,
+            };
           })
         );
         return;
