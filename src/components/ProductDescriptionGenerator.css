@@ -644,6 +644,17 @@
   line-height: 0; /* collapse inline gaps */
 }
 
+/* SVG overlay — stretches exactly over the image, handles all pointer events */
+.crop-fs-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  overflow: visible;
+  touch-action: none;
+}
+
 .crop-fs-image {
   display: block;
   max-width: 100%;
