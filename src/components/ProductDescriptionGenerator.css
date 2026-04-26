@@ -627,10 +627,10 @@
 .crop-fs-done:hover:not(:disabled) { background: #059669; }
 .crop-fs-done:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* Stage: fills remaining space, centers the image wrapper */
+/* Stage: position:relative is the coordinate space for all overlay px positioning */
 .crop-fs-stage {
   flex: 1;
-  min-height: 0; /* prevent flex overflow */
+  min-height: 0;
   position: relative;
   cursor: crosshair;
   display: flex; align-items: center; justify-content: center;
@@ -638,14 +638,10 @@
   overflow: hidden;
 }
 
-/* Wrapper tightly wraps the rendered image — masks/rect are % relative to this */
+/* img-wrap: passive container, no pointer events needed */
 .crop-fs-img-wrap {
-  position: relative;
-  line-height: 0;        /* collapse inline gaps */
-  max-width: 100%;       /* prevent overflow in flex row */
-  max-height: 100%;      /* prevent overflow in flex column */
-  cursor: crosshair;     /* shown over the black padding around the image */
-  touch-action: none;    /* prevent browser pan/zoom interfering */
+  line-height: 0;
+  pointer-events: none;
   user-select: none;
 }
 
@@ -658,51 +654,50 @@
   user-select: none;
 }
 
+/* All overlay elements are absolutely positioned on the STAGE in real px */
 .crop-fs-mask {
   position: absolute;
-  background: rgba(0,0,0,0.6);
+  background: rgba(0,0,0,0.5);
   pointer-events: none;
-  z-index: 2;
 }
 
+/* Dashed selection rect — Photoshop marquee style */
 .crop-fs-rect {
   position: absolute;
-  border: 1.5px solid rgba(255,255,255,0.85);
+  border: 2px dashed rgba(255,255,255,0.95);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.6); /* dark outline for light images */
   box-sizing: border-box;
-  z-index: 3;
 }
 
 /* Interior drag zone */
 .crop-fs-move-zone {
   position: absolute; inset: 0;
   cursor: move;
-  z-index: 4;
 }
 
-/* Grid lines */
+/* Grid lines — rule of thirds */
 .crop-fs-grid-h, .crop-fs-grid-v {
   position: absolute;
-  background: rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.3);
   pointer-events: none;
-  z-index: 5;
 }
 .crop-fs-grid-h { left: 0; right: 0; height: 1px; }
 .crop-fs-grid-v { top: 0; bottom: 0; width: 1px; }
 
-/* Corner handles */
-.crop-fs-handle { position: absolute; z-index: 6; width: 20px; height: 20px; }
-.crop-fs-corner { border-color: #fff; border-style: solid; border-width: 0; }
+/* Corner handles — L-shaped white bars */
+.crop-fs-handle { position: absolute; }
+.crop-fs-corner { border-color: #fff; border-style: solid; border-width: 0; width: 22px; height: 22px; }
 .crop-fs-corner-nw { top: -2px; left: -2px; border-top-width: 3px; border-left-width: 3px; cursor: nw-resize; }
 .crop-fs-corner-ne { top: -2px; right: -2px; border-top-width: 3px; border-right-width: 3px; cursor: ne-resize; }
 .crop-fs-corner-sw { bottom: -2px; left: -2px; border-bottom-width: 3px; border-left-width: 3px; cursor: sw-resize; }
 .crop-fs-corner-se { bottom: -2px; right: -2px; border-bottom-width: 3px; border-right-width: 3px; cursor: se-resize; }
 
 /* Edge handles */
-.crop-fs-edge { background: #fff; border-radius: 2px; cursor: default; }
-.crop-fs-edge-n { top: -2px; left: 50%; transform: translateX(-50%); width: 28px; height: 4px; cursor: n-resize; }
-.crop-fs-edge-s { bottom: -2px; left: 50%; transform: translateX(-50%); width: 28px; height: 4px; cursor: s-resize; }
-.crop-fs-edge-w { left: -2px; top: 50%; transform: translateY(-50%); width: 4px; height: 28px; cursor: w-resize; }
-.crop-fs-edge-e { right: -2px; top: 50%; transform: translateY(-50%); width: 4px; height: 28px; cursor: e-resize; }
+.crop-fs-edge { background: #fff; border-radius: 2px; }
+.crop-fs-edge-n { top: -3px; left: 50%; transform: translateX(-50%); width: 32px; height: 5px; cursor: n-resize; }
+.crop-fs-edge-s { bottom: -3px; left: 50%; transform: translateX(-50%); width: 32px; height: 5px; cursor: s-resize; }
+.crop-fs-edge-w { left: -3px; top: 50%; transform: translateY(-50%); width: 5px; height: 32px; cursor: w-resize; }
+.crop-fs-edge-e { right: -3px; top: 50%; transform: translateY(-50%); width: 5px; height: 32px; cursor: e-resize; }
 
 /* Aspect ratio pill bar */
 .crop-fs-ratiobar {
