@@ -162,6 +162,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
   // Lightbox state
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [lightboxPool, setLightboxPool] = useState<string[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState<number>(0);
 
   // ── Debug helper — always-on, readable in DevTools console ──────────────────
   const imgDebug = (event: string, itemId: string, extra?: Record<string, unknown>) => {
@@ -177,18 +179,30 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     console.groupEnd();
   };
 
-  /** Open lightbox by item ID — derives URL from storagePath (always correct) to bypass
-   *  imageUrls[0] corruption that can occur during App.tsx merge operations. */
+  const getItemUrl = (item: ClothingItem) =>
+    item.storagePath
+      ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
+      : (item.imageUrls?.[0] || item.preview || '');
+
+  /** Open lightbox by item ID — builds a pool of all images in the same group for navigation. */
   const openLightboxForItem = (itemId: string) => {
     const live = groupedItemsRef.current.find(i => i.id === itemId);
     if (!live) { console.warn('[ImageGrouper] openLightboxForItem: item not found', itemId); return; }
-    // storagePath → canonical URL is always correct; imageUrls[0] can be a different item's URL
-    const src = live.storagePath
-      ? supabase.storage.from('product-images').getPublicUrl(live.storagePath).data.publicUrl
-      : (live.imageUrls?.[0] || live.preview || '');
-    imgDebug('LIGHTBOX OPEN', itemId, { resolvedSrc: src, usedStoragePath: !!live.storagePath });
-    if (src) setLightboxSrc(src);
-    else console.warn('[ImageGrouper] openLightboxForItem: no URL found for item', itemId);
+
+    // Build pool: all items in the same productGroup, or just this one if ungrouped
+    const groupItems = live.productGroup
+      ? groupedItemsRef.current.filter(i => i.productGroup === live.productGroup)
+      : [live];
+    const pool = groupItems.map(getItemUrl).filter(Boolean) as string[];
+    const src = getItemUrl(live);
+    const idx = pool.indexOf(src);
+
+    imgDebug('LIGHTBOX OPEN', itemId, { resolvedSrc: src, poolSize: pool.length });
+    if (src) {
+      setLightboxPool(pool);
+      setLightboxIndex(idx >= 0 ? idx : 0);
+      setLightboxSrc(src);
+    } else console.warn('[ImageGrouper] openLightboxForItem: no URL found for item', itemId);
   };
 
   // ── Log full item table whenever groupedItems changes ───────────────────────
@@ -729,25 +743,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   };
 
   // Eject a single photo from its group back to the singles section
-  const removePhotoFromGroup = (item: ClothingItem) => {
-    log.grouper(`removePhotoFromGroup | item=${item.id} fromGroup=${item.productGroup || item.id}`);
-    const updated = groupedItems.map(i =>
-      i.id === item.id ? { ...i, productGroup: i.id } : i
-    );
-    // If source group now has only 1 member, dissolve it too
-    const srcGroup = item.productGroup || item.id;
-    const remaining = updated.filter(i => (i.productGroup || i.id) === srcGroup && i.id !== item.id);
-    const final = remaining.length === 1
-      ? updated.map(i =>
-          (i.productGroup || i.id) === srcGroup && i.id !== item.id
-            ? { ...i, productGroup: i.id }
-            : i
-        )
-      : updated;
-    setGroupedItems(final);
-    onGrouped(final);
-  };
-
   // Rectangle selection box handlers
   const handleMouseDown = (e: React.MouseEvent, containerRef: HTMLElement | null, containerType: 'singles' | 'groups') => {
     const target = e.target as HTMLElement;
@@ -1754,17 +1749,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       ) : (
                         <div className="lazy-skeleton lazy-skeleton--error" aria-hidden="true" />
                       )}
-                      {/* Remove-from-group button (ejects photo back to singles) */}
-                      <button
-                        className="remove-from-group-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removePhotoFromGroup(item);
-                        }}
-                        title="Remove from group (move back to singles)"
-                      >
-                        ↩
-                      </button>
                     </div>
                   ))}
                 </div>
@@ -1781,14 +1765,54 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         <div
           className="lightbox-overlay"
           onClick={() => setLightboxSrc(null)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setLightboxSrc(null);
+            if (e.key === 'ArrowLeft' && lightboxPool.length > 1) {
+              const ni = (lightboxIndex - 1 + lightboxPool.length) % lightboxPool.length;
+              setLightboxIndex(ni);
+              setLightboxSrc(lightboxPool[ni]);
+            }
+            if (e.key === 'ArrowRight' && lightboxPool.length > 1) {
+              const ni = (lightboxIndex + 1) % lightboxPool.length;
+              setLightboxIndex(ni);
+              setLightboxSrc(lightboxPool[ni]);
+            }
+          }}
+          tabIndex={0}
+          ref={(el) => el?.focus()}
         >
           <button className="lightbox-close" onClick={() => setLightboxSrc(null)}>✕</button>
+          {lightboxPool.length > 1 && (
+            <button
+              className="lightbox-nav lightbox-nav--prev"
+              onClick={(e) => {
+                e.stopPropagation();
+                const ni = (lightboxIndex - 1 + lightboxPool.length) % lightboxPool.length;
+                setLightboxIndex(ni);
+                setLightboxSrc(lightboxPool[ni]);
+              }}
+            >‹</button>
+          )}
           <img
             src={lightboxSrc}
             alt="Full size preview"
             className="lightbox-image"
             onClick={(e) => e.stopPropagation()}
           />
+          {lightboxPool.length > 1 && (
+            <button
+              className="lightbox-nav lightbox-nav--next"
+              onClick={(e) => {
+                e.stopPropagation();
+                const ni = (lightboxIndex + 1) % lightboxPool.length;
+                setLightboxIndex(ni);
+                setLightboxSrc(lightboxPool[ni]);
+              }}
+            >›</button>
+          )}
+          {lightboxPool.length > 1 && (
+            <div className="lightbox-counter">{lightboxIndex + 1} / {lightboxPool.length}</div>
+          )}
         </div>
       )}
     </>
