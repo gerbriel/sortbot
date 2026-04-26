@@ -73,14 +73,29 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Lightbox / edit-modal state
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [lightboxItemId, setLightboxItemId] = useState<string | null>(null);
+  // ordered list of item ids the user can arrow through in the current lightbox session
+  const [lightboxPool, setLightboxPool] = useState<string[]>([]);
 
-  const openLightbox = (src: string, itemId: string) => {
+  const openLightbox = (src: string, itemId: string, pool: string[]) => {
     setLightboxSrc(src);
     setLightboxItemId(itemId);
+    setLightboxPool(pool);
   };
   const closeLightbox = () => {
     setLightboxSrc(null);
     setLightboxItemId(null);
+    setLightboxPool([]);
+  };
+  const navigateLightbox = (dir: 1 | -1) => {
+    if (!lightboxItemId || lightboxPool.length < 2) return;
+    const idx = lightboxPool.indexOf(lightboxItemId);
+    const nextIdx = (idx + dir + lightboxPool.length) % lightboxPool.length;
+    const nextId = lightboxPool[nextIdx];
+    const nextItem = processedItems.find(i => i.id === nextId);
+    if (!nextItem) return;
+    const src = nextItem.preview || nextItem.imageUrls?.[0] || '';
+    setLightboxSrc(src);
+    setLightboxItemId(nextId);
   };
   const [cropModal, setCropModal] = useState<{ open: boolean; itemId?: string }>(() => ({ open: false }));
   const [tempCrop, setTempCrop] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -1335,10 +1350,14 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         if (lightboxSrc) closeLightbox();
         if (cropModal.open) { setCropModal({ open: false }); setTempCrop(null); }
       }
+      if (lightboxSrc && !cropModal.open) {
+        if (e.key === 'ArrowLeft') { e.preventDefault(); navigateLightbox(-1); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); navigateLightbox(1); }
+      }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [lightboxSrc, cropModal.open]);
+  }, [lightboxSrc, lightboxItemId, lightboxPool, cropModal.open]);
   // Use shared helper to create transformed file
   // helper createTransformedFile will be dynamically imported where needed
 
@@ -1438,7 +1457,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               alt="Product"
               className="preview-image"
               style={{ cursor: 'zoom-in', transform: `rotate(${currentItem.imageRotation || 0}deg)`, clipPath: currentItem.crop ? `inset(${currentItem.crop.y}% ${100 - (currentItem.crop.x + currentItem.crop.w)}% ${100 - (currentItem.crop.y + currentItem.crop.h)}% ${currentItem.crop.x}%)` : undefined }}
-              onDoubleClick={() => openLightbox(currentItem.preview || currentItem.imageUrls?.[0] || '', currentItem.id)}
+              onDoubleClick={() => openLightbox(currentItem.preview || currentItem.imageUrls?.[0] || '', currentItem.id, currentGroup.map(i => i.id))}
             />
           </div>
           <div className="product-info">
@@ -1457,7 +1476,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     onDrop={(e) => handleThumbDrop(e, groupItem.id)}
                     onDragEnd={handleThumbDragEnd}
                     onDragLeave={() => setDragOverThumbId(null)}
-                    onDoubleClick={() => openLightbox(groupItem.preview || groupItem.imageUrls?.[0] || '', groupItem.id)}
+                    onDoubleClick={() => openLightbox(groupItem.preview || groupItem.imageUrls?.[0] || '', groupItem.id, currentGroup.map(i => i.id))}
                     onMouseMove={(e) => {
                       if (!magnifierSettings.enabled) return;
                       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -1959,8 +1978,17 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       {/* Image edit modal — opens on double-click; rotate, crop, save controls live here */}
       {lightboxSrc && (() => {
         const lbItem = processedItems.find(i => i.id === lightboxItemId) ?? null;
+        const canNav = lightboxPool.length > 1;
         return (
           <div className="lightbox-overlay" onClick={closeLightbox}>
+            {/* Left arrow */}
+            {canNav && (
+              <button className="lightbox-nav lightbox-nav-left" onClick={(e) => { e.stopPropagation(); navigateLightbox(-1); }}>‹</button>
+            )}
+            {/* Right arrow */}
+            {canNav && (
+              <button className="lightbox-nav lightbox-nav-right" onClick={(e) => { e.stopPropagation(); navigateLightbox(1); }}>›</button>
+            )}
             <div className="lightbox-toolbar" onClick={(e) => e.stopPropagation()}>
               {lbItem && (<>
                 <button className="lightbox-tool-btn" title="Rotate left"
@@ -1970,6 +1998,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 <button className="lightbox-tool-btn" title="Crop image"
                   onClick={() => { closeLightbox(); setCropModal({ open: true, itemId: lbItem.id }); }}>✂ Crop</button>
               </>)}
+              {canNav && (
+                <span className="lightbox-counter">{lightboxPool.indexOf(lightboxItemId!) + 1} / {lightboxPool.length}</span>
+              )}
               <button className="lightbox-close" onClick={closeLightbox}>✕</button>
             </div>
             <img
