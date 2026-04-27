@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
 import { Package, Image, ArrowDown, ArrowUp, ArrowUpDown, Check } from 'lucide-react';
@@ -241,11 +241,22 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     e.preventDefault(); e.stopPropagation();
     const mode: CropDragMode = pendingCropModeRef.current ?? 'new';
     pendingCropModeRef.current = null;
-    if (!cropImgBounds || !cropStageRef.current) return;
+    // If bounds haven't been measured yet (can happen if image was memory-cached),
+    // compute them synchronously right now rather than bailing.
+    let bounds = cropImgBounds;
+    if (!bounds && cropImgRef.current && cropStageRef.current) {
+      const ir = cropImgRef.current.getBoundingClientRect();
+      const sr = cropStageRef.current.getBoundingClientRect();
+      if (ir.width > 0) {
+        bounds = { l: ir.left - sr.left, t: ir.top - sr.top, w: ir.width, h: ir.height };
+        setCropImgBounds(bounds);
+      }
+    }
+    if (!bounds || !cropStageRef.current) return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     const sr = cropStageRef.current.getBoundingClientRect();
-    const rx = (e.clientX - sr.left - cropImgBounds.l) / cropImgBounds.w;
-    const ry = (e.clientY - sr.top - cropImgBounds.t) / cropImgBounds.h;
+    const rx = (e.clientX - sr.left - bounds.l) / bounds.w;
+    const ry = (e.clientY - sr.top - bounds.t) / bounds.h;
     if (mode === 'new' && (rx < 0 || rx > 1 || ry < 0 || ry > 1)) return;
     cropDragRef.current = {
       mode,
@@ -308,6 +319,14 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     let id = requestAnimationFrame(() => { id = requestAnimationFrame(measureGCImg); });
     return () => cancelAnimationFrame(id);
   }, [cropModal.open, lightboxSrc, measureGCImg]);
+
+  // Measure immediately after the crop UI commits to the DOM (handles memory-cached images
+  // that don't fire onLoad). useLayoutEffect runs after DOM commit, before paint, so
+  // getBoundingClientRect returns real layout values.
+  useLayoutEffect(() => {
+    if (!cropModal.open) return;
+    measureGCImg();
+  }, [cropModal.open, measureGCImg]);
 
   const applyAndPersistTransformGrouper = async (itemId: string, cropOverride: { x: number; y: number; w: number; h: number }) => {
     const baseItem = groupedItemsRef.current.find(i => i.id === itemId);
