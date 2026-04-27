@@ -187,20 +187,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   type CropDragMode = 'new' | 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | 'move';
   const cropDragRef = useRef<{ mode: CropDragMode; startX: number; startY: number; startCrop: { x: number; y: number; w: number; h: number } } | null>(null);
 
-  // ── Debug helper — always-on, readable in DevTools console ──────────────────
-  const imgDebug = (event: string, itemId: string, extra?: Record<string, unknown>) => {
-    const live = groupedItemsRef.current.find(i => i.id === itemId);
-    console.group(`%c[ImageGrouper] ${event}`, 'color:#f59e0b;font-weight:bold');
-    console.log('item id      :', itemId);
-    console.log('imageUrls[0] :', live?.imageUrls?.[0] ?? '—');
-    console.log('preview      :', live?.preview ?? '—');
-    console.log('thumbnailUrl :', live?.thumbnailUrl ?? '—');
-    console.log('storagePath  :', live?.storagePath ?? '—');
-    console.log('productGroup :', live?.productGroup ?? '—');
-    if (extra) console.log('extra        :', extra);
-    console.groupEnd();
-  };
-
   const getItemUrl = (item: ClothingItem) =>
     item.storagePath
       ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
@@ -222,7 +208,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     const src = getItemUrl(live);
     const idx = pool.indexOf(live.id);
 
-    imgDebug('LIGHTBOX OPEN', itemId, { resolvedSrc: src, poolSize: pool.length, isGrouped });
     if (src) {
       setLightboxPool(pool);
       setLightboxIndex(idx >= 0 ? idx : 0);
@@ -355,21 +340,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       }
     } catch (err) { console.error('[ImageGrouper] applyAndPersistTransformGrouper error:', err); }
   };
-
-  // ── Log full item table whenever groupedItems changes ───────────────────────
-  useEffect(() => {
-    if (groupedItems.length === 0) return;
-    console.group(`%c[ImageGrouper] ITEMS STATE (${groupedItems.length} total)`, 'color:#f59e0b;font-weight:bold');
-    console.table(groupedItems.map(i => ({
-      id:          i.id.slice(0, 8),
-      name:        i.originalName ?? '—',
-      group:       i.productGroup ? i.productGroup.slice(0, 8) : '—',
-      imageUrl0:   i.imageUrls?.[0] ? '✓ ' + i.imageUrls[0].split('/').pop()?.split('?')[0].slice(0, 30) : '✗',
-      preview:     i.preview ? (i.preview.startsWith('blob:') ? '⚠ blob' : '✓ ' + i.preview.split('/').pop()?.slice(0,30)) : '✗',
-      storagePath: i.storagePath ? '✓' : '✗',
-    })));
-    console.groupEnd();
-  }, [groupedItems]);
 
   // Selection box state
   const [isSelecting, setIsSelecting] = useState(false);
@@ -889,7 +859,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       lastClickedSingleRef.current = itemId;
     }
     log.grouper(`toggleItemSelection | ${wasSelected ? 'deselect' : 'select'} item=${itemId} | totalSelected=${newSelected.size}`);
-    imgDebug(`SELECT ${wasSelected ? 'OFF' : 'ON'}`, itemId, { totalSelected: newSelected.size });
     updateSelection(newSelected);
   };
 
