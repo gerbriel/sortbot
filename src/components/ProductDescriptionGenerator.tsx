@@ -2082,7 +2082,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     {/* Image — centered by flex, passive (no pointer events) */}
                     <div className="crop-fs-img-wrap">
                       <img ref={cropImgRef} src={imgSrc} alt="Crop target" className="crop-fs-image"
-                        style={{ transform: `rotate(${rot}deg)`, maxHeight: 'calc(100vh - 120px)' }} draggable={false} />
+                        style={{ transform: `rotate(${rot}deg)`, maxHeight: 'calc(100vh - 120px)' }} draggable={false}
+                        onLoad={measureCropImg} />
                     </div>
                     {/* Overlay elements — absolutely positioned on stage in real px (never %) */}
                     {tempCrop && cropImgBounds && (() => {

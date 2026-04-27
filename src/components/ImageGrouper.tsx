@@ -1978,7 +1978,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   >
                     <div className="crop-fs-img-wrap">
                       <img ref={cropImgRef} src={imgSrc} alt="Crop target" className="crop-fs-image"
-                        style={{ transform: `rotate(${rot}deg)`, maxHeight: 'calc(100vh - 120px)' }} draggable={false} />
+                        style={{ transform: `rotate(${rot}deg)`, maxHeight: 'calc(100vh - 120px)' }} draggable={false}
+                        onLoad={measureGCImg} />
                     </div>
                     {tempCrop && cropImgBounds && (() => {
                       const { l: iL, t: iT, w: iW, h: iH } = cropImgBounds;
