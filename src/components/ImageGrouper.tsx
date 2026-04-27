@@ -169,6 +169,14 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
   // Crop UI state (full-screen iOS-style, same as Step 3)
   const [cropModal, setCropModal] = useState<{ open: boolean; itemId?: string }>({ open: false });
+  // Ref mirror — lets the overlay onClick/onKeyDown always read the LIVE crop state
+  // without depending on a potentially-stale render-time closure.
+  const cropModalRef = useRef<{ open: boolean; itemId?: string }>({ open: false });
+  cropModalRef.current = cropModal;
+  // Synchronous guard: set to true IMMEDIATELY when the ✂ Crop button fires,
+  // before any re-render, so the overlay onClick can't slip through the window
+  // between setState and the re-render committing cropModalRef.current.open = true.
+  const cropRequestedRef = useRef(false);
   const [tempCrop, setTempCrop] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [aspectLock, setAspectLock] = useState<number | null>(null);
   const [activePreset, setActivePreset] = useState<string>('FREE');
@@ -310,6 +318,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
   useEffect(() => {
     if (!cropModal.open) { setCropImgBounds(null); return; }
+    // Crop is now open — clear the synchronous guard so overlay onClick works normally again
+    cropRequestedRef.current = false;
     let id = requestAnimationFrame(() => { id = requestAnimationFrame(measureGCImg); });
     return () => cancelAnimationFrame(id);
   }, [cropModal.open, lightboxSrc, measureGCImg]);
@@ -1911,15 +1921,18 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         return (
           <div
             className="lightbox-overlay"
-            onClick={!cropping ? () => setLightboxSrc(null) : undefined}
+            onClick={() => {
+              if (cropModalRef.current.open || cropRequestedRef.current) return;
+              setLightboxSrc(null);
+            }}
             onKeyDown={(e) => {
-              if (cropping) return;
-              if (e.key === 'Escape') setLightboxSrc(null);
+              if (cropModalRef.current.open || cropRequestedRef.current) return;
+              if (e.key === 'Escape') { setLightboxSrc(null); }
               if (e.key === 'ArrowLeft') { e.preventDefault(); navigateLightboxGrouper(-1); }
               if (e.key === 'ArrowRight') { e.preventDefault(); navigateLightboxGrouper(1); }
             }}
             tabIndex={0}
-            ref={(el) => el?.focus()}
+            ref={(el) => { if (el && !cropModalRef.current.open) el.focus(); }}
           >
             {/* Lightbox content — hidden while crop is active */}
             {!cropping && <>
@@ -1938,8 +1951,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   ));
                 }}>⟳ Rotate R</button>
                 <button className="lightbox-tool-btn" title="Crop image" onClick={(e) => {
+                  cropRequestedRef.current = true; // synchronous guard — set before any re-render
                   e.stopPropagation();
-                  if (!lbItem) return;
+                  if (!lbItem) { cropRequestedRef.current = false; return; }
                   setCropModal({ open: true, itemId: lbItem.id });
                   setActivePreset('FREE'); setAspectLock(null);
                   setTempCrop({ x: 5, y: 5, w: 90, h: 90 });
