@@ -161,6 +161,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // Auto-group state — number of photos per product
   const [autoGroupN, setAutoGroupN] = useState<string>('4');
 
+  // Grid columns per row (2–12)
+  const [columnsPerRow, setColumnsPerRow] = useState<number>(8);
+
   // Lightbox state  — pool stores item IDs (not URLs) so we can look up rotation
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [lightboxItemId, setLightboxItemId] = useState<string | null>(null);
@@ -330,34 +333,75 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
   const applyAndPersistTransformGrouper = async (itemId: string, cropOverride: { x: number; y: number; w: number; h: number }) => {
     const baseItem = groupedItemsRef.current.find(i => i.id === itemId);
-    if (!baseItem) return;
+    if (!baseItem) { console.error('[crop] baseItem not found', itemId); return; }
     const item = { ...baseItem, crop: cropOverride };
+    console.log('[crop] starting — item:', itemId, 'storagePath:', item.storagePath, 'crop:', cropOverride);
     try {
       const { createTransformedFile } = await import('../lib/imageTransforms');
       const file = await createTransformedFile(item);
-      if (!file) { console.error('[ImageGrouper] createTransformedFile returned null'); return; }
-      const { uploadFileToPath, uploadTransformedImage } = await import('../lib/productService');
-      let newUrl = '', newPath = '';
-      if (item.storagePath) {
-        const res = await uploadFileToPath(file, item.storagePath, true);
-        if (res) { newUrl = res.url; newPath = res.path; }
-      }
-      if (!newUrl) {
-        const res2 = await uploadTransformedImage(file);
-        if (res2) {
-          if (item.storagePath) {
-            try { await supabase.storage.from('product-images').remove([item.storagePath]); } catch { /* ignore */ }
-          }
-          newUrl = res2.url; newPath = res2.path;
+      if (!file) { console.error('[crop] createTransformedFile returned null — check CORS or image src'); return; }
+      console.log('[crop] transformed file ok, size:', file.size);
+
+      // Always upload to a NEW path so the CDN URL changes and caches are busted.
+      // Old path is deleted after the new one is confirmed.
+      const oldPath = item.storagePath;
+      let newUrl = '';
+      let newPath = '';
+
+      // Derive a fresh path from the old one, replacing the filename with a timestamp.
+      if (oldPath) {
+        const dir = oldPath.substring(0, oldPath.lastIndexOf('/') + 1);
+        const ext = oldPath.split('.').pop() || 'jpg';
+        const freshPath = `${dir}cropped-${Date.now()}.${ext}`;
+        console.log('[crop] uploading to new path:', freshPath);
+        const { data, error } = await supabase.storage
+          .from('product-images')
+          .upload(freshPath, file, { cacheControl: '3600', upsert: false });
+        if (error) {
+          console.error('[crop] storage upload error:', error.message);
+        } else {
+          newPath = data.path;
+          newUrl = supabase.storage.from('product-images').getPublicUrl(data.path).data.publicUrl;
+          console.log('[crop] upload ok — newPath:', newPath, 'newUrl:', newUrl);
         }
       }
-      if (newUrl) {
-        const updated = groupedItemsRef.current.map(i =>
-          i.id === itemId ? { ...i, preview: newUrl, storagePath: newPath, imageRotation: 0, crop: undefined } : i
-        );
-        commitUpdate(updated);
+
+      // Fallback: use uploadTransformedImage with explicit itemId
+      if (!newUrl) {
+        console.log('[crop] falling back to uploadTransformedImage');
+        const { uploadTransformedImage } = await import('../lib/productService');
+        const res = await uploadTransformedImage(file, userId, itemId);
+        if (res) { newUrl = res.url; newPath = res.path; }
+        else { console.error('[crop] uploadTransformedImage also failed'); return; }
       }
-    } catch (err) { console.error('[ImageGrouper] applyAndPersistTransformGrouper error:', err); }
+
+      console.log('[crop] writing to DB — product_id:', itemId, 'newPath:', newPath);
+      // Update product_images: upsert the new row, then delete the old path row
+      const { error: upsertErr } = await supabase.from('product_images').upsert(
+        { product_id: itemId, image_url: newUrl, storage_path: newPath },
+        { onConflict: 'storage_path', ignoreDuplicates: false }
+      );
+      if (upsertErr) console.error('[crop] product_images upsert error:', upsertErr.message);
+      else console.log('[crop] product_images upsert ok');
+
+      if (oldPath && oldPath !== newPath) {
+        // Delete old storage file
+        const { error: storageDelErr } = await supabase.storage.from('product-images').remove([oldPath]);
+        if (storageDelErr) console.warn('[crop] old storage delete error:', storageDelErr.message);
+        // Delete old DB row
+        const { error: dbDelErr } = await supabase.from('product_images').delete().eq('storage_path', oldPath);
+        if (dbDelErr) console.warn('[crop] old product_images row delete error:', dbDelErr.message);
+      }
+
+      // Update React state with the new URL/path — bake out rotation and crop
+      const updated = groupedItemsRef.current.map(i =>
+        i.id === itemId
+          ? { ...i, preview: newUrl, thumbnailUrl: newUrl, imageUrls: [newUrl], storagePath: newPath, imageRotation: 0, crop: undefined }
+          : i
+      );
+      commitUpdate(updated);
+      console.log('[crop] done ✅');
+    } catch (err) { console.error('[crop] unexpected error:', err); }
   };
 
   // Selection box state
@@ -662,16 +706,18 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             const newGroup = incomingGroup !== updated.id ? incomingGroup : existing.productGroup;
             // IMPORTANT: keep existing image URL fields — do NOT overwrite with incoming
             // imageUrls from props, which may be corrupted by App.tsx merge operations.
-            // storagePath, imageUrls, preview, thumbnailUrl from `existing` are always correct
-            // because they were set during upload or derived from storagePath at upload time.
+            // EXCEPTION: if storagePath changed (e.g. after a crop), the incoming item
+            // is authoritative and its image fields should win.
+            const pathChanged = updated.storagePath && updated.storagePath !== existing.storagePath;
             return {
               ...updated,
               productGroup: newGroup,
-              // Keep authoritative image fields from existing
-              storagePath:  existing.storagePath  || updated.storagePath,
-              imageUrls:    existing.imageUrls?.length    ? existing.imageUrls    : (updated.imageUrls    ?? []),
-              preview:      existing.preview      || updated.preview,
-              thumbnailUrl: existing.thumbnailUrl || updated.thumbnailUrl,
+              // If storagePath changed (crop applied), trust incoming fields entirely.
+              // Otherwise keep existing fields which are authoritative from upload time.
+              storagePath:  pathChanged ? updated.storagePath  : (existing.storagePath  || updated.storagePath),
+              imageUrls:    pathChanged ? (updated.imageUrls ?? []) : (existing.imageUrls?.length ? existing.imageUrls : (updated.imageUrls ?? [])),
+              preview:      pathChanged ? updated.preview      : (existing.preview      || updated.preview),
+              thumbnailUrl: pathChanged ? updated.thumbnailUrl : (existing.thumbnailUrl || updated.thumbnailUrl),
             };
           })
         );
@@ -1544,6 +1590,20 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               Apply
             </button>
           </div>
+
+          {/* ── Columns per row slider ──────────────────────────────────────── */}
+          <div className="auto-group-control" title="Adjust how many images appear per row">
+            <span className="auto-group-label">⊞ Columns: {columnsPerRow}</span>
+            <input
+              type="range"
+              min={2}
+              max={12}
+              value={columnsPerRow}
+              onChange={e => setColumnsPerRow(Number(e.target.value))}
+              className="columns-slider"
+              title="Drag to change columns per row"
+            />
+          </div>
         </div>
 
         {/* ── Keyboard shortcuts cheat sheet ── */}
@@ -1615,6 +1675,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           <div 
             ref={singlesContainerRef}
             className="items-grid selection-container"
+            style={{ gridTemplateColumns: `repeat(${columnsPerRow}, 1fr)` }}
             onMouseDown={(e) => handleMouseDown(e, singlesContainerRef.current, 'singles')}
           >
             {/* Selection Box Visualization */}
@@ -1657,7 +1718,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     // Handle selection on mousedown so dragging a card still registers the selection
                     // even if the drag cancels the subsequent click event.
                     e.stopPropagation();
-                    if (!(e.target as HTMLElement).closest('.delete-image-btn')) {
+                    if (!(e.target as HTMLElement).closest('.delete-image-btn') && !(e.target as HTMLElement).closest('.rotate-btn')) {
                       toggleItemSelection(item.id, e);
                     }
                   }}
@@ -1949,6 +2010,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               </div>
               {canNav && <button className="lightbox-nav lightbox-nav--prev" onClick={(e) => { e.stopPropagation(); navigateLightboxGrouper(-1); }}>‹</button>}
               <img src={lightboxSrc} alt="Full size preview" className="lightbox-image"
+                crossOrigin="anonymous"
                 style={{ transform: `rotate(${lbItem?.imageRotation || 0}deg)` }}
                 onClick={(e) => e.stopPropagation()} />
               {canNav && <button className="lightbox-nav lightbox-nav--next" onClick={(e) => { e.stopPropagation(); navigateLightboxGrouper(1); }}>›</button>}
@@ -1980,6 +2042,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   >
                     <div className="crop-fs-img-wrap">
                       <img ref={cropImgRef} src={imgSrc} alt="Crop target" className="crop-fs-image"
+                        crossOrigin="anonymous"
                         style={{ transform: `rotate(${rot}deg)`, maxHeight: 'calc(100vh - 120px)' }} draggable={false}
                         onLoad={measureGCImg} />
                     </div>

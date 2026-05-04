@@ -599,6 +599,8 @@
   padding: var(--space-4);
   background: var(--gray-50);
   border-radius: var(--radius-md);
+  border: 1px solid var(--gray-200);
+}
 
 .rotate-btn { background: rgba(0,0,0,0.55); color: white; border: none; padding: 4px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; }
 .rotate-btn:hover { background: rgba(0,0,0,0.75); }
@@ -715,8 +717,6 @@
 }
 .crop-fs-pill:hover { background: rgba(255,255,255,0.18); color: #fff; }
 .crop-fs-pill--active { background: #10b981; color: #fff; border-color: #10b981; }
-  border: 1px solid var(--gray-200);
-}
 
 .group-thumbnails p {
   margin: 0 0 var(--space-3) 0;
