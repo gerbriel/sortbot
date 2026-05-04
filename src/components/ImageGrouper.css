@@ -335,6 +335,14 @@
   min-height: 100px;
 }
 
+/* columns-slider — inline range input in the toolbar */
+.columns-slider {
+  width: 90px;
+  accent-color: #667eea;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
 .single-item-card {
   position: relative;
   background: white;
