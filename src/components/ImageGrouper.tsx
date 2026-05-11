@@ -165,7 +165,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const [columnsPerRow, setColumnsPerRow] = useState<number>(8);
 
   // Format painter — copy crop/rotation style from one image and paste to others
-  const [copiedImageStyle, setCopiedImageStyle] = useState<{ imageRotation: number; crop?: { x: number; y: number; w: number; h: number } } | null>(null);
+  const [copiedRotation, setCopiedRotation] = useState<number | null>(null);
+  const [copiedCrop, setCopiedCrop] = useState<{ x: number; y: number; w: number; h: number } | null | undefined>(undefined);
 
   // Lightbox state  — pool stores item IDs (not URLs) so we can look up rotation
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -1610,16 +1611,24 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         </div>
 
         {/* ── Format painter active banner ── */}
-        {copiedImageStyle && (
+        {(copiedRotation !== null || copiedCrop !== undefined) && (
           <div style={{
             display: 'flex', alignItems: 'center', gap: '0.75rem',
             padding: '0.4rem 0.8rem',
             background: '#ede9fe', borderBottom: '2px solid #6366f1',
             fontSize: '0.82rem', color: '#4f46e5', fontWeight: 600,
           }}>
-            <span>🖌️ Format painter active — click 📋 on any card to paste rotation{copiedImageStyle.crop ? ' + crop' : ''}</span>
+            <span>
+              Format painter active —{' '}
+              {copiedRotation !== null && copiedCrop !== undefined
+                ? 'rotation + crop copied'
+                : copiedRotation !== null
+                ? 'rotation copied'
+                : 'crop copied'}
+              {' '}· click Paste on any card
+            </span>
             <button
-              onClick={() => setCopiedImageStyle(null)}
+              onClick={() => { setCopiedRotation(null); setCopiedCrop(undefined); }}
               style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '1rem' }}
               title="Cancel format painter"
             >✕</button>
@@ -1784,27 +1793,72 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                         >⟳</button>
                         <button
                           className="rotate-btn"
-                          title="Copy rotation &amp; crop style (format painter)"
+                          title="Copy rotation"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setCopiedImageStyle({ imageRotation: item.imageRotation || 0, crop: item.crop });
+                            setCopiedRotation(item.imageRotation || 0);
                           }}
-                        >🖌️</button>
-                        {copiedImageStyle && (
+                        >
+                          {/* Copy rotation icon */}
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.27"/>
+                          </svg>
+                        </button>
+                        {copiedRotation !== null && (
                           <button
                             className="rotate-btn"
-                            title="Paste rotation &amp; crop style"
+                            title="Paste rotation"
                             style={{ background: '#6366f1', color: '#fff' }}
                             onClick={(e) => {
                               e.stopPropagation();
                               const updated = groupedItems.map(i => i.id === item.id
-                                ? { ...i, imageRotation: copiedImageStyle.imageRotation, crop: copiedImageStyle.crop }
+                                ? { ...i, imageRotation: copiedRotation }
                                 : i
                               );
                               setGroupedItems(updated);
                               onGrouped(updated);
                             }}
-                          >📋</button>
+                          >
+                            {/* Paste rotation icon */}
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-3.27"/>
+                            </svg>
+                          </button>
+                        )}
+                        <button
+                          className="rotate-btn"
+                          title="Copy crop"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCopiedCrop(item.crop ?? null);
+                          }}
+                        >
+                          {/* Copy crop icon */}
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="6 2 6 6 2 6"/><polyline points="18 22 18 18 22 18"/>
+                            <path d="M6 6h12v12H6z" strokeDasharray="2 2"/>
+                          </svg>
+                        </button>
+                        {copiedCrop !== undefined && (
+                          <button
+                            className="rotate-btn"
+                            title="Paste crop"
+                            style={{ background: '#6366f1', color: '#fff' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const updated = groupedItems.map(i => i.id === item.id
+                                ? { ...i, crop: copiedCrop ?? undefined }
+                                : i
+                              );
+                              setGroupedItems(updated);
+                              onGrouped(updated);
+                            }}
+                          >
+                            {/* Paste crop icon */}
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                            </svg>
+                          </button>
                         )}
                       </div>
                     </div>
@@ -2052,9 +2106,22 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   setTempCrop({ x: 5, y: 5, w: 90, h: 90 });
                 }}>✂ Crop</button>
                 {lbItem && (
-                  <button className="lightbox-tool-btn" title="Copy rotation &amp; crop style (format painter)"
-                    onClick={(e) => { e.stopPropagation(); setCopiedImageStyle({ imageRotation: lbItem.imageRotation || 0, crop: lbItem.crop }); }}>
-                    🖌️ Copy Style
+                  <button className="lightbox-tool-btn" title="Copy rotation"
+                    onClick={(e) => { e.stopPropagation(); setCopiedRotation(lbItem.imageRotation || 0); }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:'middle'}}>
+                      <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.27"/>
+                    </svg>
+                    {' '}Copy Rotation
+                  </button>
+                )}
+                {lbItem && (
+                  <button className="lightbox-tool-btn" title="Copy crop"
+                    onClick={(e) => { e.stopPropagation(); setCopiedCrop(lbItem.crop ?? null); }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:'middle'}}>
+                      <polyline points="6 2 6 6 2 6"/><polyline points="18 22 18 18 22 18"/>
+                      <path d="M6 6h12v12H6z" strokeDasharray="2 2"/>
+                    </svg>
+                    {' '}Copy Crop
                   </button>
                 )}
               </div>
