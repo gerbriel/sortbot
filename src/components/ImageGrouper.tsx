@@ -335,10 +335,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     measureGCImg();
   }, [cropModal.open, measureGCImg]);
 
-  const applyAndPersistTransformGrouper = async (itemId: string, cropOverride: { x: number; y: number; w: number; h: number }) => {
+  const applyAndPersistTransformGrouper = async (itemId: string, cropOverride: { x: number; y: number; w: number; h: number }, rotationOverride?: number) => {
     const baseItem = groupedItemsRef.current.find(i => i.id === itemId);
     if (!baseItem) { console.error('[crop] baseItem not found', itemId); return; }
-    const item = { ...baseItem, crop: cropOverride };
+    const rot = rotationOverride !== undefined ? rotationOverride : (baseItem.imageRotation || 0);
+    const item = { ...baseItem, imageRotation: rot, crop: cropOverride };
     console.log('[crop] starting — item:', itemId, 'storagePath:', item.storagePath, 'crop:', cropOverride);
     try {
       const { createTransformedFile } = await import('../lib/imageTransforms');
@@ -397,10 +398,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         if (dbDelErr) console.warn('[crop] old product_images row delete error:', dbDelErr.message);
       }
 
-      // Update React state with the new URL/path — bake out rotation and crop
+      // Update React state with the new URL/path — bake out rotation; keep crop so Copy Crop can read it
       const updated = groupedItemsRef.current.map(i =>
         i.id === itemId
-          ? { ...i, preview: newUrl, thumbnailUrl: newUrl, imageUrls: [newUrl], storagePath: newPath, imageRotation: 0, crop: undefined }
+          ? { ...i, preview: newUrl, thumbnailUrl: newUrl, imageUrls: [newUrl], storagePath: newPath, imageRotation: 0, crop: cropOverride }
           : i
       );
       commitUpdate(updated);
@@ -1685,7 +1686,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       height: 'auto', background: '#6366f1', color: '#fff', width: '100%',
                       justifyContent: 'center',
                     }}
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.stopPropagation();
                       const targetIds = [...selectedItems];
                       const what = copiedRotation !== null && copiedCrop !== undefined
@@ -1695,17 +1696,21 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                         `Apply copied ${what} to ${targetIds.length} selected image${targetIds.length > 1 ? 's' : ''}?`
                       );
                       if (!confirmed) return;
-                      const updated = groupedItems.map(i => {
-                        if (!targetIds.includes(i.id)) return i;
-                        return {
-                          ...i,
-                          ...(copiedRotation !== null ? { imageRotation: copiedRotation } : {}),
-                          ...(copiedCrop !== undefined ? { crop: copiedCrop ?? undefined } : {}),
-                        };
-                      });
-                      setGroupedItems(updated);
-                      onGrouped(updated);
                       setSelectedItems(new Set());
+                      if (copiedCrop !== undefined && copiedCrop !== null) {
+                        // Bake the crop (+ optional rotation) into each target image
+                        await Promise.all(targetIds.map(id =>
+                          applyAndPersistTransformGrouper(id, copiedCrop, copiedRotation !== null ? copiedRotation : undefined)
+                        ));
+                      } else {
+                        // Rotation only — just update state
+                        const updated = groupedItems.map(i => {
+                          if (!targetIds.includes(i.id)) return i;
+                          return { ...i, ...(copiedRotation !== null ? { imageRotation: copiedRotation } : {}) };
+                        });
+                        setGroupedItems(updated);
+                        onGrouped(updated);
+                      }
                     }}
                   >
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
