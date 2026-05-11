@@ -445,6 +445,10 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
     try {
       if (editingPreset) {
         await updateCategoryPreset(editingPreset.id, dataToSave);
+        // Notify the rest of the app so items already in state get the updated preset fields
+        window.dispatchEvent(new CustomEvent('presetsUpdated', {
+          detail: { categoryName: editingPreset.category_name }
+        }));
         alert('Preset updated ✅');
       } else {
         const suffix = uid();

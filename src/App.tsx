@@ -17,6 +17,8 @@ import CategoryPresetsManager from './components/CategoryPresetsManager';
 import CategoriesManager from './components/CategoriesManager';
 import { saveBatchToDatabase, getThumbnailUrl } from './lib/productService';
 import { autoSaveWorkflowBatch, type WorkflowBatch } from './lib/workflowBatchService';
+import { getCategoryPresets } from './lib/categoryPresetsService';
+import { applyPresetDirectly } from './lib/applyPresetToGroup';
 import type { BrandCategory } from './lib/brandCategorySystem';
 import './App.css';
 
@@ -248,6 +250,40 @@ function App() {
 
   // Keep showLibraryRef in sync so the autoSave closure always reads the live value
   useEffect(() => { showLibraryRef.current = showLibrary; }, [showLibrary]);
+
+  // When a category preset is updated in CategoryPresetsManager, re-apply the new
+  // preset values to all processedItems that already belong to that category.
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const categoryName = (e as CustomEvent).detail?.categoryName as string | undefined;
+      const current = processedItemsRef.current;
+      if (!current.length) return;
+      try {
+        const allPresets = await getCategoryPresets();
+        const updated = current.map(item => {
+          const itemCat = item.category?.toLowerCase();
+          if (!itemCat) return item;
+          // Match the preset that was just updated
+          const preset = allPresets.find(p =>
+            (p.category_name?.toLowerCase() === itemCat ||
+             p.product_type?.toLowerCase() === itemCat) &&
+            p.is_active !== false &&
+            // If we know which category was updated, only re-apply that one
+            (!categoryName || p.category_name === categoryName)
+          );
+          if (!preset) return item;
+          // Re-apply preset — but only overwrite fields the user hasn't manually set
+          return applyPresetDirectly([item], item.category!, preset)[0];
+        });
+        setProcessedItems(updated);
+      } catch (err) {
+        console.error('[presetsUpdated] failed to re-apply presets:', err);
+      }
+    };
+    window.addEventListener('presetsUpdated', handler);
+    return () => window.removeEventListener('presetsUpdated', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fetch storage usage once the user is known
   useEffect(() => {
