@@ -42,22 +42,80 @@ function stripUnresolvedTokens(value: string | undefined): string {
  * Maps short internal category names → full Shopify taxonomy path strings.
  * Used for "Product category" and "Google Shopping / Google product category" columns.
  * Paths verified against Shopify Standard Product Taxonomy (github.com/Shopify/product-taxonomy).
+ * When no mapping is found the column is left blank — Shopify accepts blank; it rejects free-form text.
  */
 const SHOPIFY_CATEGORY_MAP: Record<string, string> = {
+  // Tops
   tees:        'Apparel & Accessories > Clothing > Clothing Tops > T-Shirts',
+  tee:         'Apparel & Accessories > Clothing > Clothing Tops > T-Shirts',
+  't-shirt':   'Apparel & Accessories > Clothing > Clothing Tops > T-Shirts',
+  't-shirts':  'Apparel & Accessories > Clothing > Clothing Tops > T-Shirts',
+  tshirt:      'Apparel & Accessories > Clothing > Clothing Tops > T-Shirts',
+  tshirts:     'Apparel & Accessories > Clothing > Clothing Tops > T-Shirts',
+  tops:        'Apparel & Accessories > Clothing > Clothing Tops',
+  top:         'Apparel & Accessories > Clothing > Clothing Tops',
+  shirts:      'Apparel & Accessories > Clothing > Clothing Tops > Shirts',
+  shirt:       'Apparel & Accessories > Clothing > Clothing Tops > Shirts',
+  polo:        'Apparel & Accessories > Clothing > Clothing Tops > Polos',
+  polos:       'Apparel & Accessories > Clothing > Clothing Tops > Polos',
+  sweater:     'Apparel & Accessories > Clothing > Clothing Tops > Sweaters',
+  sweaters:    'Apparel & Accessories > Clothing > Clothing Tops > Sweaters',
+  cardigan:    'Apparel & Accessories > Clothing > Clothing Tops > Cardigans',
+  cardigans:   'Apparel & Accessories > Clothing > Clothing Tops > Cardigans',
+  // Sweatshirts & hoodies
   sweatshirts: 'Apparel & Accessories > Clothing > Clothing Tops > Sweatshirts',
+  sweatshirt:  'Apparel & Accessories > Clothing > Clothing Tops > Sweatshirts',
   hoodies:     'Apparel & Accessories > Clothing > Clothing Tops > Hoodies',
+  hoodie:      'Apparel & Accessories > Clothing > Clothing Tops > Hoodies',
+  // Outerwear
   outerwear:   'Apparel & Accessories > Clothing > Outerwear > Coats & Jackets',
+  jacket:      'Apparel & Accessories > Clothing > Outerwear > Coats & Jackets',
+  jackets:     'Apparel & Accessories > Clothing > Outerwear > Coats & Jackets',
+  coat:        'Apparel & Accessories > Clothing > Outerwear > Coats & Jackets',
+  coats:       'Apparel & Accessories > Clothing > Outerwear > Coats & Jackets',
+  // Bottoms / pants
   bottoms:     'Apparel & Accessories > Clothing > Pants',
   pants:       'Apparel & Accessories > Clothing > Pants',
+  pant:        'Apparel & Accessories > Clothing > Pants',
+  trousers:    'Apparel & Accessories > Clothing > Pants > Trousers',
+  chinos:      'Apparel & Accessories > Clothing > Pants > Chinos',
+  joggers:     'Apparel & Accessories > Clothing > Pants > Joggers',
+  leggings:    'Apparel & Accessories > Clothing > Pants > Leggings',
   jeans:       'Apparel & Accessories > Clothing > Pants > Jeans',
+  jean:        'Apparel & Accessories > Clothing > Pants > Jeans',
+  denim:       'Apparel & Accessories > Clothing > Pants > Jeans',
   shorts:      'Apparel & Accessories > Clothing > Shorts',
+  short:       'Apparel & Accessories > Clothing > Shorts',
+  // Dresses & skirts
   dresses:     'Apparel & Accessories > Clothing > Dresses',
+  dress:       'Apparel & Accessories > Clothing > Dresses',
   skirts:      'Apparel & Accessories > Clothing > Skirts',
+  skirt:       'Apparel & Accessories > Clothing > Skirts',
+  // Femme / feminine (broad catch-all)
+  femme:       'Apparel & Accessories > Clothing > Dresses',
+  feminine:    'Apparel & Accessories > Clothing > Dresses',
+  // Hats
   hats:        'Apparel & Accessories > Clothing Accessories > Hats',
-  shoes:       'Apparel & Accessories > Shoes > Athletic Shoes',
+  hat:         'Apparel & Accessories > Clothing Accessories > Hats',
+  cap:         'Apparel & Accessories > Clothing Accessories > Hats > Baseball Caps',
+  caps:        'Apparel & Accessories > Clothing Accessories > Hats > Baseball Caps',
+  beanie:      'Apparel & Accessories > Clothing Accessories > Hats > Beanies',
+  beanies:     'Apparel & Accessories > Clothing Accessories > Hats > Beanies',
+  // Shoes
+  shoes:       'Apparel & Accessories > Shoes',
+  shoe:        'Apparel & Accessories > Shoes',
+  sneakers:    'Apparel & Accessories > Shoes > Athletic Shoes',
+  sneaker:     'Apparel & Accessories > Shoes > Athletic Shoes',
+  boots:       'Apparel & Accessories > Shoes > Boots',
+  boot:        'Apparel & Accessories > Shoes > Boots',
+  // Accessories
   accessories: 'Apparel & Accessories > Clothing Accessories',
-  femme:       'Apparel & Accessories > Clothing > Clothing Tops',
+  accessory:   'Apparel & Accessories > Clothing Accessories',
+  // Mystery boxes / bundles → no valid Shopify taxonomy; leave blank
+  'mystery boxes': '',
+  'mystery box':   '',
+  bundle:          '',
+  bundles:         '',
 };
 
 interface GoogleSheetExporterProps {
@@ -231,7 +289,9 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
     
     products.forEach((product, idx) => {
       const vendor = product.brand || '';
-      const productCategory = SHOPIFY_CATEGORY_MAP[product.category?.toLowerCase() ?? ''] ?? product.category ?? '';
+      const catKey = product.category?.toLowerCase() ?? '';
+      // Only use taxonomy paths from the map — never pass raw category names to Shopify (they'll fail validation)
+      const productCategory = catKey in SHOPIFY_CATEGORY_MAP ? SHOPIFY_CATEGORY_MAP[catKey] : '';
       const productType = product.productType || '';
       // Standard Product Type: prefer the preset's full taxonomy path, then the category map value
       const standardizedProductType = product.shopifyProductType || productCategory;
@@ -434,7 +494,8 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                 <tbody>
                   {products.map((product, idx) => {
                     const cleanTitle = buildCleanTitle(product, idx);
-                    const productCategory = SHOPIFY_CATEGORY_MAP[product.category?.toLowerCase() ?? ''] ?? product.category ?? '';
+                    const catKey = product.category?.toLowerCase() ?? '';
+                    const productCategory = catKey in SHOPIFY_CATEGORY_MAP ? SHOPIFY_CATEGORY_MAP[catKey] : '';
                     const vendor = product.brand || '';
                     const tags = product.tags?.join(', ') || '';
                     const condition = (product.condition || '').trim();
