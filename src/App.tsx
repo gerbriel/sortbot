@@ -272,8 +272,21 @@ function App() {
             (!categoryName || p.category_name === categoryName)
           );
           if (!preset) return item;
-          // Re-apply preset — but only overwrite fields the user hasn't manually set
-          return applyPresetDirectly([item], item.category!, preset)[0];
+          // Strip preset-owned fields before re-applying so the fresh preset values
+          // always win (these fields use `item.field || preset.field` internally,
+          // meaning the old baked-in value would otherwise block the update).
+          const PRESET_OWNED: (keyof typeof item)[] = [
+            'productType', 'shopifyProductType', 'policies', 'shipsFrom',
+            'gender', 'whoMadeIt', 'whatIsIt', 'listingType', 'discountedShipping',
+            'renewalOptions', 'sizeType', 'style', 'ageGroup', 'customLabel0',
+            'mpn', 'taxCode', 'weightValue', 'packageDimensions', 'parcelSize',
+            'continueSellingOutOfStock', 'requiresShipping', 'status', 'published',
+            '_presetData',
+          ];
+          const stripped = { ...item } as typeof item;
+          PRESET_OWNED.forEach(f => { (stripped as any)[f] = undefined; });
+          // Re-apply preset — preset-owned fields now come fresh from the updated preset
+          return applyPresetDirectly([stripped], item.category!, preset)[0];
         });
         setProcessedItems(updated);
       } catch (err) {
