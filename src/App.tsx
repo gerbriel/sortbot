@@ -255,23 +255,28 @@ function App() {
   // preset values to all processedItems that already belong to that category.
   useEffect(() => {
     const handler = async (e: Event) => {
-      const categoryName = (e as CustomEvent).detail?.categoryName as string | undefined;
+      const updatedCategoryName = (e as CustomEvent).detail?.categoryName as string | undefined;
       const current = processedItemsRef.current;
       if (!current.length) return;
       try {
         const allPresets = await getCategoryPresets();
+        // Build a lookup by preset id for fast matching
+        const presetsById = Object.fromEntries(allPresets.map(p => [p.id, p]));
         const updated = current.map(item => {
-          const itemCat = item.category?.toLowerCase();
-          if (!itemCat) return item;
-          // Match the preset that was just updated
-          const preset = allPresets.find(p =>
-            (p.category_name?.toLowerCase() === itemCat ||
-             p.product_type?.toLowerCase() === itemCat) &&
-            p.is_active !== false &&
-            // If we know which category was updated, only re-apply that one
-            (!categoryName || p.category_name === categoryName)
-          );
+          // Primary match: use the presetId stored on the item when the preset was applied
+          const presetId = (item._presetData as any)?.presetId as string | undefined;
+          let preset = presetId ? presetsById[presetId] : undefined;
+
+          // Secondary match: fall back to matching by category_name from the event
+          if (!preset && updatedCategoryName) {
+            preset = allPresets.find(p => p.category_name === updatedCategoryName && p.is_active !== false);
+          }
+
+          // Skip items not belonging to the updated preset
           if (!preset) return item;
+          // Skip if this item's preset wasn't the one that was just updated
+          if (updatedCategoryName && preset.category_name !== updatedCategoryName) return item;
+
           // Strip preset-owned fields before re-applying so the fresh preset values
           // always win (these fields use `item.field || preset.field` internally,
           // meaning the old baked-in value would otherwise block the update).

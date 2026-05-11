@@ -293,8 +293,22 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       // Only use taxonomy paths from the map — never pass raw category names to Shopify (they'll fail validation)
       const productCategory = catKey in SHOPIFY_CATEGORY_MAP ? SHOPIFY_CATEGORY_MAP[catKey] : '';
       const productType = product.productType || '';
-      // Standard Product Type: prefer the preset's full taxonomy path, then the category map value
-      const standardizedProductType = product.shopifyProductType || productCategory;
+      // Standard Product Type: use preset's full taxonomy path only if it looks valid
+      // (starts with "Apparel &" or another known top-level taxonomy root).
+      // If it's blank, a short label, or a legacy wrong value, fall back to the category map.
+      const isValidTaxonomyPath = (s?: string) =>
+        !!s && (
+          s.startsWith('Apparel & Accessories') ||
+          s.startsWith('Home & Garden') ||
+          s.startsWith('Sporting Goods') ||
+          s.startsWith('Electronics') ||
+          s.startsWith('Health & Beauty') ||
+          s.startsWith('Animals & Pet')
+        ) && s.includes(' > ');
+      const standardizedProductType =
+        (isValidTaxonomyPath(product.shopifyProductType) ? product.shopifyProductType : null) ||
+        productCategory ||
+        '';
       const tags = product.tags?.join(', ') || '';
       const condition = (product.condition || '').trim();
       const primaryColor = product.color || '';
@@ -507,7 +521,19 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                     if (primaryColor && !cleanTitle.toLowerCase().includes(primaryColor.toLowerCase())) altParts.push(primaryColor);
                     if (product.size) altParts.push(product.size);
                     const imageAltText = altParts.filter(Boolean).join(' - ');
-                    const standardizedProductType = product.shopifyProductType || productCategory;
+                    const isValidTaxonomyPath = (s?: string) =>
+                      !!s && (
+                        s.startsWith('Apparel & Accessories') ||
+                        s.startsWith('Home & Garden') ||
+                        s.startsWith('Sporting Goods') ||
+                        s.startsWith('Electronics') ||
+                        s.startsWith('Health & Beauty') ||
+                        s.startsWith('Animals & Pet')
+                      ) && s.includes(' > ');
+                    const standardizedProductType =
+                      (isValidTaxonomyPath(product.shopifyProductType) ? product.shopifyProductType : null) ||
+                      productCategory ||
+                      '';
                     const tr = (v: string | undefined | null, maxLen = 40) => {
                       const s = v ?? '—';
                       return s.length > maxLen ? <span title={s}>{s.substring(0, maxLen)}…</span> : <>{s || '—'}</>;
