@@ -674,6 +674,22 @@
   transform: scale(1.05);
 }
 
+/* Reorder drag: dim the card being moved */
+.single-item-card.reorder-dragging {
+  opacity: 0.35;
+  cursor: grabbing;
+}
+
+/* Reorder drop indicator: thin colored bar on left or right edge */
+.single-item-card.reorder-over-left {
+  box-shadow: -3px 0 0 0 #667eea;
+  border-radius: 6px;
+}
+.single-item-card.reorder-over-right {
+  box-shadow: 3px 0 0 0 #667eea;
+  border-radius: 6px;
+}
+
 .group-image-item {
   position: relative;
   width: 70px !important;
