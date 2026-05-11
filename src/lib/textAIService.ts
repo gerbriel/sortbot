@@ -169,6 +169,12 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   const inseamCmd = extractCommand(/\binseam\s+(.+?)\s+period\b/i);
   if (inseamCmd) measurements['inseam'] = inseamCmd.replace(/[^0-9.]/g, '');
 
+  const outseamCmd = extractCommand(/\boutseam\s+(.+?)\s+period\b/i);
+  if (outseamCmd) measurements['outseam'] = outseamCmd.replace(/[^0-9.]/g, '');
+
+  const legOpeningCmd = extractCommand(/\bleg\s+opening\s+(.+?)\s+period\b/i);
+  if (legOpeningCmd) measurements['leg_opening'] = legOpeningCmd.replace(/[^0-9.]/g, '');
+
   // ── TAGS (explicit) ───────────────────────────────────────────────────────
   const tagsRaw = extractCommand(/\btags?\s+(.+?)\s+period\b/i);
   if (tagsRaw) {
@@ -461,6 +467,14 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
       /(\d+(?:\.\d)?)\s*(?:inch(?:es)?)?\s*inseam/i,
       /inseam\s+(\d+(?:\.\d)?)/i,
     ]},
+    { key: 'outseam', patterns: [
+      /(\d+(?:\.\d)?)\s*(?:inch(?:es)?)?\s*outseam/i,
+      /outseam\s+(\d+(?:\.\d)?)/i,
+    ]},
+    { key: 'leg_opening', patterns: [
+      /(\d+(?:\.\d)?)\s*(?:inch(?:es)?)?\s*leg[\s-]opening/i,
+      /leg[\s-]opening\s+(\d+(?:\.\d)?)/i,
+    ]},
   ];
   for (const { key, patterns } of measureFallbacks) {
     if (!measurements[key]) {
@@ -490,7 +504,8 @@ export function formatVoiceTranscript(voiceDesc: string): string {
   const FIELD_TRIGGERS = [
     'brand', 'model', 'size', 'colo(?:u?r)?', 'material', 'fabric',
     'condition', 'era', 'style', 'gender', 'price',
-    'flaws?', 'care', 'width', 'length', 'waist', 'shoulder', 'sleeve', 'inseam', 'tags?', 'title',
+    'flaws?', 'care', 'width', 'length', 'waist', 'shoulder', 'sleeve',
+    'inseam', 'outseam', 'leg\\s+opening', 'tags?', 'title',
     'secondary colo(?:u?r)?', 'second color', 'second colour',
   ].join('|');
 
@@ -508,7 +523,8 @@ export function stripVoiceCommands(voiceDesc: string): string {
   const FIELD_TRIGGERS = [
     'brand', 'model', 'size', 'colo(?:u?r)?', 'material', 'fabric',
     'condition', 'era', 'style', 'gender', 'price',
-    'flaws?', 'care', 'width', 'length', 'waist', 'shoulder', 'sleeve', 'inseam', 'tags?', 'title',
+    'flaws?', 'care', 'width', 'length', 'waist', 'shoulder', 'sleeve',
+    'inseam', 'outseam', 'leg\\s+opening', 'tags?', 'title',
     'secondary colo(?:u?r)?', 'second color', 'second colour',
   ].join('|');
 

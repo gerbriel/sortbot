@@ -771,6 +771,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const [isSyncingFields, setIsSyncingFields] = useState(false);
   const [isSyncingFromVoice, setIsSyncingFromVoice] = useState(false);
 
+  // Format painter — copy structured fields from one group and paste to another
+  const [copiedFields, setCopiedFields] = useState<Record<string, any> | null>(null);
+
   const syncFieldsFromDescription = async () => {
     const descText = currentItem.generatedDescription;
     if (!descText) {
@@ -939,6 +942,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         
         // Use generated description
         const finalDescription = aiResult.description;
+        const extractedFields = aiResult.extractedFields || {};
         
         // Capture the target item IDs before any async-caused state drift.
         // Use functional update so we always write into the latest processedItems
@@ -947,9 +951,30 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         setProcessedItems(prev => {
           const updated = [...prev];
           updated.forEach((item, idx) => {
-            if (targetIds.has(item.id)) {
-              updated[idx] = { ...updated[idx], generatedDescription: finalDescription };
-            }
+            if (!targetIds.has(item.id)) return;
+            updated[idx] = {
+              ...updated[idx],
+              generatedDescription: finalDescription,
+              // Also update structured fields so the form reflects the generated content
+              ...(extractedFields.brand && { brand: extractedFields.brand }),
+              ...(extractedFields.modelName && { modelName: extractedFields.modelName }),
+              ...(extractedFields.color && { color: extractedFields.color }),
+              ...(extractedFields.secondaryColor && { secondaryColor: extractedFields.secondaryColor }),
+              ...(extractedFields.size && { size: extractedFields.size }),
+              ...(extractedFields.material && { material: extractedFields.material }),
+              ...(extractedFields.condition && { condition: extractedFields.condition as 'New' | 'Used' | 'NWT' | 'Excellent' | 'Good' | 'Fair' }),
+              ...(extractedFields.era && { era: extractedFields.era }),
+              ...(extractedFields.style && { style: extractedFields.style }),
+              ...(extractedFields.gender && { gender: extractedFields.gender as 'Men' | 'Women' | 'Unisex' | 'Kids' }),
+              ...(extractedFields.measurements && { measurements: extractedFields.measurements }),
+              ...(extractedFields.price && { price: parseFloat(extractedFields.price) || undefined }),
+              ...(extractedFields.flaws && { flaws: extractedFields.flaws }),
+              ...(extractedFields.care && { care: extractedFields.care }),
+              ...(extractedFields.seoTitle && !updated[idx].seoTitle && { seoTitle: extractedFields.seoTitle }),
+              ...(extractedFields.tags && extractedFields.tags.length > 0 && {
+                tags: [...new Set([...(updated[idx].tags || []), ...extractedFields.tags])].slice(0, 5)
+              }),
+            };
           });
           return updated;
         });
@@ -1673,6 +1698,47 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   🗑️ Clear
                 </button>
               )}
+              {/* Format painter — copy/paste structured fields */}
+              <button
+                className="button button-secondary"
+                title="Copy all structured fields (brand, size, color…) from this item"
+                onClick={() => {
+                  setCopiedFields({
+                    brand: currentItem.brand,
+                    color: currentItem.color,
+                    secondaryColor: currentItem.secondaryColor,
+                    size: currentItem.size,
+                    material: currentItem.material,
+                    condition: currentItem.condition,
+                    era: currentItem.era,
+                    style: currentItem.style,
+                    gender: currentItem.gender,
+                    price: currentItem.price,
+                    flaws: currentItem.flaws,
+                    care: currentItem.care,
+                    measurements: currentItem.measurements,
+                    tags: currentItem.tags,
+                  });
+                }}
+                style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
+              >
+                🖌️ Copy Fields
+              </button>
+              {copiedFields && (
+                <button
+                  className="button"
+                  title="Paste copied fields onto this item"
+                  onClick={() => {
+                    const targetIds = new Set(currentGroup.map(g => g.id));
+                    setProcessedItems(prev => prev.map(item =>
+                      targetIds.has(item.id) ? { ...item, ...copiedFields } : item
+                    ));
+                  }}
+                  style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem', background: '#6366f1' }}
+                >
+                  📋 Paste Fields
+                </button>
+              )}
             </div>
             {isRecording && (
               <div className="recording-indicator">
@@ -1712,8 +1778,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     ['gender', 'women'],
                     ['flaws', 'small hole'],
                     ['care', 'hand wash'],
-                    ['width', '18 inches'],
-                    ['length', '28 inches'],
+                    ['width', '18"'],
+                    ['length', '28"'],
+                    ['waist', '32"'],
+                    ['inseam', '30"'],
+                    ['outseam', '40"'],
+                    ['leg opening', '18"'],
                     ['title', 'vintage tee'],
                   ].map(([field, ex]) => (
                     <div key={field} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.25rem' }}>
