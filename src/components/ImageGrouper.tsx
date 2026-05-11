@@ -164,6 +164,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // Grid columns per row (2–12)
   const [columnsPerRow, setColumnsPerRow] = useState<number>(8);
 
+  // Format painter — copy crop/rotation style from one image and paste to others
+  const [copiedImageStyle, setCopiedImageStyle] = useState<{ imageRotation: number; crop?: { x: number; y: number; w: number; h: number } } | null>(null);
+
   // Lightbox state  — pool stores item IDs (not URLs) so we can look up rotation
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [lightboxItemId, setLightboxItemId] = useState<string | null>(null);
@@ -1606,6 +1609,23 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           </div>
         </div>
 
+        {/* ── Format painter active banner ── */}
+        {copiedImageStyle && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '0.75rem',
+            padding: '0.4rem 0.8rem',
+            background: '#ede9fe', borderBottom: '2px solid #6366f1',
+            fontSize: '0.82rem', color: '#4f46e5', fontWeight: 600,
+          }}>
+            <span>🖌️ Format painter active — click 📋 on any card to paste rotation{copiedImageStyle.crop ? ' + crop' : ''}</span>
+            <button
+              onClick={() => setCopiedImageStyle(null)}
+              style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '1rem' }}
+              title="Cancel format painter"
+            >✕</button>
+          </div>
+        )}
+
         {/* ── Keyboard shortcuts cheat sheet ── */}
         <div className="keyboard-cheatsheet">
           <div className="cheatsheet-title">⌨ Shortcuts</div>
@@ -1762,6 +1782,30 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                           }}
                           title="Rotate right"
                         >⟳</button>
+                        <button
+                          className="rotate-btn"
+                          title="Copy rotation &amp; crop style (format painter)"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCopiedImageStyle({ imageRotation: item.imageRotation || 0, crop: item.crop });
+                          }}
+                        >🖌️</button>
+                        {copiedImageStyle && (
+                          <button
+                            className="rotate-btn"
+                            title="Paste rotation &amp; crop style"
+                            style={{ background: '#6366f1', color: '#fff' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const updated = groupedItems.map(i => i.id === item.id
+                                ? { ...i, imageRotation: copiedImageStyle.imageRotation, crop: copiedImageStyle.crop }
+                                : i
+                              );
+                              setGroupedItems(updated);
+                              onGrouped(updated);
+                            }}
+                          >📋</button>
+                        )}
                       </div>
                     </div>
                   ) : (
@@ -2007,6 +2051,12 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   setActivePreset('FREE'); setAspectLock(null);
                   setTempCrop({ x: 5, y: 5, w: 90, h: 90 });
                 }}>✂ Crop</button>
+                {lbItem && (
+                  <button className="lightbox-tool-btn" title="Copy rotation &amp; crop style (format painter)"
+                    onClick={(e) => { e.stopPropagation(); setCopiedImageStyle({ imageRotation: lbItem.imageRotation || 0, crop: lbItem.crop }); }}>
+                    🖌️ Copy Style
+                  </button>
+                )}
               </div>
               {canNav && <button className="lightbox-nav lightbox-nav--prev" onClick={(e) => { e.stopPropagation(); navigateLightboxGrouper(-1); }}>‹</button>}
               <img src={lightboxSrc} alt="Full size preview" className="lightbox-image"
