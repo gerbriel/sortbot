@@ -1608,32 +1608,59 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               title="Drag to change columns per row"
             />
           </div>
-        </div>
 
-        {/* ── Format painter active banner ── */}
-        {(copiedRotation !== null || copiedCrop !== undefined) && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '0.75rem',
-            padding: '0.4rem 0.8rem',
-            background: '#ede9fe', borderBottom: '2px solid #6366f1',
-            fontSize: '0.82rem', color: '#4f46e5', fontWeight: 600,
-          }}>
-            <span>
-              Format painter active —{' '}
-              {copiedRotation !== null && copiedCrop !== undefined
-                ? 'rotation + crop copied'
-                : copiedRotation !== null
-                ? 'rotation copied'
-                : 'crop copied'}
-              {' '}· click Paste on any card
-            </span>
-            <button
-              onClick={() => { setCopiedRotation(null); setCopiedCrop(undefined); }}
-              style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '1rem' }}
-              title="Cancel format painter"
-            >✕</button>
+          {/* ── Format painter copy buttons ──────────────────────────────────── */}
+          <div className="auto-group-control" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.35rem' }}>
+            <span className="auto-group-label" style={{ marginBottom: '0.1rem' }}>Format Painter</span>
+            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+              <button
+                className="rotate-btn"
+                title="Copy rotation from selected image"
+                style={{ fontSize: '0.72rem', padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem', height: 'auto', background: copiedRotation !== null ? '#6366f1' : undefined, color: copiedRotation !== null ? '#fff' : undefined }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const firstId = [...selectedItems][0];
+                  const source = firstId ? groupedItems.find(i => i.id === firstId) : null;
+                  setCopiedRotation(source ? (source.imageRotation || 0) : 0);
+                }}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.27"/>
+                </svg>
+                Copy Rot
+              </button>
+              <button
+                className="rotate-btn"
+                title="Copy crop from selected image"
+                style={{ fontSize: '0.72rem', padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem', height: 'auto', background: copiedCrop !== undefined ? '#6366f1' : undefined, color: copiedCrop !== undefined ? '#fff' : undefined }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const firstId = [...selectedItems][0];
+                  const source = firstId ? groupedItems.find(i => i.id === firstId) : null;
+                  setCopiedCrop(source ? (source.crop ?? null) : null);
+                }}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 2 6 6 2 6"/><polyline points="18 22 18 18 22 18"/>
+                  <path d="M6 6h12v12H6z" strokeDasharray="2 2"/>
+                </svg>
+                Copy Crop
+              </button>
+            </div>
+            {(copiedRotation !== null || copiedCrop !== undefined) && (
+              <div style={{ fontSize: '0.67rem', color: '#6366f1', lineHeight: 1.3 }}>
+                {copiedRotation !== null && copiedCrop !== undefined
+                  ? 'Rot + crop ready'
+                  : copiedRotation !== null
+                  ? 'Rotation ready'
+                  : 'Crop ready'}
+                {' · '}
+                <button onClick={() => { setCopiedRotation(null); setCopiedCrop(undefined); }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '0.72rem', padding: 0 }}>clear</button>
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
         {/* ── Keyboard shortcuts cheat sheet ── */}
         <div className="keyboard-cheatsheet">
@@ -1791,19 +1818,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                           }}
                           title="Rotate right"
                         >⟳</button>
-                        <button
-                          className="rotate-btn"
-                          title="Copy rotation"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setCopiedRotation(item.imageRotation || 0);
-                          }}
-                        >
-                          {/* Copy rotation icon */}
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.27"/>
-                          </svg>
-                        </button>
                         {copiedRotation !== null && (
                           <button
                             className="rotate-btn"
@@ -1819,26 +1833,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                               onGrouped(updated);
                             }}
                           >
-                            {/* Paste rotation icon */}
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                               <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-3.27"/>
                             </svg>
                           </button>
                         )}
-                        <button
-                          className="rotate-btn"
-                          title="Copy crop"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setCopiedCrop(item.crop ?? null);
-                          }}
-                        >
-                          {/* Copy crop icon */}
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="6 2 6 6 2 6"/><polyline points="18 22 18 18 22 18"/>
-                            <path d="M6 6h12v12H6z" strokeDasharray="2 2"/>
-                          </svg>
-                        </button>
                         {copiedCrop !== undefined && (
                           <button
                             className="rotate-btn"
@@ -1854,7 +1853,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                               onGrouped(updated);
                             }}
                           >
-                            {/* Paste crop icon */}
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                               <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
                             </svg>
