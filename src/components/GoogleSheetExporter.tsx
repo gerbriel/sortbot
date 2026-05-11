@@ -290,9 +290,30 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
     products.forEach((product, idx) => {
       const vendor = product.brand || '';
       const catKey = product.category?.toLowerCase() ?? '';
+
+      // Resolve the Shopify taxonomy path from the category.
+      // Categories are often compound like "mens-tees", "womens-shirts", "kids-hoodies".
+      // Strategy: try the full key first, then each hyphen/space segment from last → first.
+      const resolveCategoryPath = (key: string): string => {
+        if (!key) return '';
+        if (key in SHOPIFY_CATEGORY_MAP) return SHOPIFY_CATEGORY_MAP[key];
+        // Split on hyphens and spaces, try segments from last to first
+        const segments = key.split(/[-\s]+/).filter(Boolean);
+        for (let i = segments.length - 1; i >= 0; i--) {
+          const seg = segments[i];
+          if (seg in SHOPIFY_CATEGORY_MAP) return SHOPIFY_CATEGORY_MAP[seg];
+        }
+        return '';
+      };
+
       // Only use taxonomy paths from the map — never pass raw category names to Shopify (they'll fail validation)
-      const productCategory = catKey in SHOPIFY_CATEGORY_MAP ? SHOPIFY_CATEGORY_MAP[catKey] : '';
-      const productType = product.productType || '';
+      const productCategory = resolveCategoryPath(catKey);
+
+      // Type column: derive from the last segment of the taxonomy path (e.g. "T-Shirts", "Shirts")
+      // so it's always consistent with the category. Fall back to preset's productType if no path.
+      const productType = productCategory
+        ? productCategory.split(' > ').pop() || product.productType || ''
+        : product.productType || '';
       // Standard Product Type: use preset's full taxonomy path only if it looks valid
       // (starts with "Apparel &" or another known top-level taxonomy root).
       // If it's blank, a short label, or a legacy wrong value, fall back to the category map.
@@ -509,7 +530,20 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                   {products.map((product, idx) => {
                     const cleanTitle = buildCleanTitle(product, idx);
                     const catKey = product.category?.toLowerCase() ?? '';
-                    const productCategory = catKey in SHOPIFY_CATEGORY_MAP ? SHOPIFY_CATEGORY_MAP[catKey] : '';
+                    const resolveCategoryPathPreview = (key: string): string => {
+                      if (!key) return '';
+                      if (key in SHOPIFY_CATEGORY_MAP) return SHOPIFY_CATEGORY_MAP[key];
+                      const segments = key.split(/[-\s]+/).filter(Boolean);
+                      for (let i = segments.length - 1; i >= 0; i--) {
+                        const seg = segments[i];
+                        if (seg in SHOPIFY_CATEGORY_MAP) return SHOPIFY_CATEGORY_MAP[seg];
+                      }
+                      return '';
+                    };
+                    const productCategory = resolveCategoryPathPreview(catKey);
+                    const previewProductType = productCategory
+                      ? productCategory.split(' > ').pop() || product.productType || ''
+                      : product.productType || '';
                     const vendor = product.brand || '';
                     const tags = product.tags?.join(', ') || '';
                     const condition = (product.condition || '').trim();
@@ -544,7 +578,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       product.generatedDescription || '',                            // Body (HTML)
                       vendor,                                                        // Vendor
                       productCategory,                                               // Product Category
-                      product.productType || '',                                     // Type
+                      previewProductType,                                            // Type
                       tags,                                                          // Tags
                       product.published === false ? 'false' : 'true',               // Published
                       product.size ? 'Size' : '',                                   // Option1 Name
