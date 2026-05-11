@@ -138,6 +138,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const [draggedPhotoId, setDraggedPhotoId] = useState<string | null>(null);
   const [draggedPhotoGroupId, setDraggedPhotoGroupId] = useState<string | null>(null);
   const [dragOverPhotoId, setDragOverPhotoId] = useState<string | null>(null);
+
+  // Reorder drag state for the singles grid
+  const [reorderDragId, setReorderDragId] = useState<string | null>(null);
+  const [reorderOverId, setReorderOverId] = useState<string | null>(null);
+  const [reorderOverSide, setReorderOverSide] = useState<'left' | 'right'>('left');
+  // Manual order: array of item IDs. Empty = use default sort.
+  const [manualOrder, setManualOrder] = useState<string[]>([]);
+  const scrollContentRef = useRef<HTMLDivElement | null>(null);
+  const autoScrollRafRef = useRef<number | null>(null);
   const [uploadedImages, setUploadedImages] = useState<Set<string>>(new Set());
   
   // Loading progress state
@@ -1144,6 +1153,83 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     setDragOverGroup(null);
   };
 
+  // ── Singles grid reorder drag ──────────────────────────────────────────────
+  // Separate from the existing handleDragStart/Drop which move items INTO groups.
+  // These fire only when dragging within the singles grid.
+
+  const startAutoScroll = (clientY: number) => {
+    const el = scrollContentRef.current;
+    if (!el) return;
+    const ZONE = 80; // px from edge that triggers scrolling
+    const MAX_SPEED = 14;
+    const { top, bottom } = el.getBoundingClientRect();
+    const distTop = clientY - top;
+    const distBottom = bottom - clientY;
+    let speed = 0;
+    if (distTop < ZONE) speed = -MAX_SPEED * (1 - distTop / ZONE);
+    else if (distBottom < ZONE) speed = MAX_SPEED * (1 - distBottom / ZONE);
+    if (speed !== 0) el.scrollTop += speed;
+  };
+
+  const handleReorderDragStart = (e: React.DragEvent, itemId: string) => {
+    e.stopPropagation();
+    setReorderDragId(itemId);
+    e.dataTransfer.setData('application/reorder-single', itemId);
+    e.dataTransfer.effectAllowed = 'move';
+    // Ghost image: use a small semi-transparent clone
+    const el = e.currentTarget as HTMLElement;
+    e.dataTransfer.setDragImage(el, el.offsetWidth / 2, el.offsetHeight / 2);
+    // Kick off auto-scroll RAF loop
+    const loop = () => {
+      // clientY is tracked via mousemove; store in ref for use here
+      startAutoScroll(reorderMouseYRef.current);
+      autoScrollRafRef.current = requestAnimationFrame(loop);
+    };
+    autoScrollRafRef.current = requestAnimationFrame(loop);
+  };
+
+  const reorderMouseYRef = useRef(0);
+
+  const handleReorderDragOver = (e: React.DragEvent, overId: string) => {
+    if (!e.dataTransfer.types.includes('application/reorder-single')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    reorderMouseYRef.current = e.clientY;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const side = e.clientX < rect.left + rect.width / 2 ? 'left' : 'right';
+    setReorderOverId(overId);
+    setReorderOverSide(side);
+  };
+
+  const handleReorderDrop = (e: React.DragEvent, overId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const dragId = e.dataTransfer.getData('application/reorder-single');
+    if (!dragId || dragId === overId) {
+      setReorderDragId(null); setReorderOverId(null); return;
+    }
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const dropBefore = e.clientX < rect.left + rect.width / 2;
+    // Build base order from current singleItems if manualOrder not yet set
+    const base = singleItemsRef.current.map(i => i.id);
+    const order = manualOrder.length > 0 ? [...manualOrder] : base;
+    const from = order.indexOf(dragId);
+    let to = order.indexOf(overId);
+    if (from === -1 || to === -1) { setReorderDragId(null); setReorderOverId(null); return; }
+    order.splice(from, 1);
+    to = order.indexOf(overId);
+    order.splice(dropBefore ? to : to + 1, 0, dragId);
+    setManualOrder(order);
+    setReorderDragId(null);
+    setReorderOverId(null);
+  };
+
+  const handleReorderDragEnd = () => {
+    setReorderDragId(null);
+    setReorderOverId(null);
+    if (autoScrollRafRef.current) { cancelAnimationFrame(autoScrollRafRef.current); autoScrollRafRef.current = null; }
+  };
+
   // ── Photo reorder handlers (drag photos within a group) ──────────────────
   const handlePhotoDragStart = (e: React.DragEvent, item: ClothingItem, groupId: string) => {
     e.stopPropagation();
@@ -1319,11 +1405,22 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   };
 
   const multiItemGroups = sortGroupEntries(groupEntries.filter(([_, items]) => items.length > 1));
-  const singleItems = sortItems(
+  const baseSingleItems = sortItems(
     groupEntries
       .filter(([_, items]) => items.length === 1)
       .flatMap(([_, items]) => items)
   );
+  // Apply manual order if one has been set (drag-to-reorder)
+  const singleItems = manualOrder.length > 0
+    ? (() => {
+        const byId = Object.fromEntries(baseSingleItems.map(i => [i.id, i]));
+        const ordered = manualOrder.map(id => byId[id]).filter(Boolean) as typeof baseSingleItems;
+        // Append any new items not yet in manualOrder at the end
+        const inOrder = new Set(manualOrder);
+        const tail = baseSingleItems.filter(i => !inOrder.has(i.id));
+        return [...ordered, ...tail];
+      })()
+    : baseSingleItems;
 
   // Build a sorted list of unique calendar dates (YYYY-MM-DD) from all items for the filter dropdown
   const uniqueFilterDates: string[] = (() => {
@@ -1738,7 +1835,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       </div>
 
       {/* ── Image grid — scrollable content to the right of the sidebar ── */}
-      <div className="grouper-scroll-content">
+      <div className="grouper-scroll-content" ref={scrollContentRef}>
 
       {/* Individual Items Section - Always Visible Drop Zone */}
       <div 
@@ -1813,28 +1910,38 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             
             {filteredSingleItems.map((item) => {
               const itemGroupId = item.productGroup || item.id;
+              const isReorderTarget = reorderOverId === item.id;
               return (
                 <div
                   key={item.id}
                   data-item-id={item.id}
-                  className={`single-item-card ${dragOverGroup === itemGroupId ? 'drag-over' : ''} ${item.category ? 'has-category' : ''} ${selectedItems.has(item.id) ? 'selected' : ''}`}
+                  className={`single-item-card ${dragOverGroup === itemGroupId ? 'drag-over' : ''} ${item.category ? 'has-category' : ''} ${selectedItems.has(item.id) ? 'selected' : ''} ${reorderDragId === item.id ? 'reorder-dragging' : ''} ${isReorderTarget ? (reorderOverSide === 'left' ? 'reorder-over-left' : 'reorder-over-right') : ''}`}
                   draggable={!selectionThresholdMet}
                   onDragStart={(e) => {
-                    // If selection threshold is met, don't allow dragging
-                    if (selectionThresholdMet) {
-                      e.preventDefault();
-                      return;
-                    }
+                    if (selectionThresholdMet) { e.preventDefault(); return; }
+                    // Use reorder drag (within singles grid)
+                    handleReorderDragStart(e, item.id);
+                    // Also set up group-drag so dropping ON a group card still works
                     handleDragStart(e, item, itemGroupId);
                   }}
-                  onDragEnd={handleDragEnd}
-                  onDragOver={(e) => handleDragOver(e, itemGroupId)}
-                  onDrop={(e) => handleDrop(e, itemGroupId)}
+                  onDragEnd={() => { handleDragEnd(); handleReorderDragEnd(); }}
+                  onDragOver={(e) => {
+                    // If this is a reorder drag, handle reorder hover
+                    if (e.dataTransfer.types.includes('application/reorder-single')) {
+                      handleReorderDragOver(e, item.id);
+                    } else {
+                      handleDragOver(e, itemGroupId);
+                    }
+                  }}
+                  onDrop={(e) => {
+                    if (e.dataTransfer.types.includes('application/reorder-single')) {
+                      handleReorderDrop(e, item.id);
+                    } else {
+                      handleDrop(e, itemGroupId);
+                    }
+                  }}
                   onDragLeave={handleDragLeave}
                   onMouseDown={(e) => {
-                    // Stop propagation so the container's rubber-band handler doesn't fire.
-                    // Handle selection on mousedown so dragging a card still registers the selection
-                    // even if the drag cancels the subsequent click event.
                     e.stopPropagation();
                     if (!(e.target as HTMLElement).closest('.delete-image-btn') && !(e.target as HTMLElement).closest('.rotate-btn')) {
                       toggleItemSelection(item.id, e);
