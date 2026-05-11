@@ -1880,6 +1880,32 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                           }}
                           title="Rotate right"
                         >⟳</button>
+                        {selectedItems.has(item.id) && selectedItems.size > 1 && (<>
+                          <button
+                            className="rotate-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const ids = [...selectedItems];
+                              const updated = groupedItems.map(i => ids.includes(i.id) ? { ...i, imageRotation: ((i.imageRotation || 0) - 90) % 360 } : i);
+                              setGroupedItems(updated);
+                              onGrouped(updated);
+                            }}
+                            title={`Rotate all ${selectedItems.size} selected left`}
+                            style={{ fontSize: '0.6rem', padding: '0 0.25rem' }}
+                          >⟲ All</button>
+                          <button
+                            className="rotate-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const ids = [...selectedItems];
+                              const updated = groupedItems.map(i => ids.includes(i.id) ? { ...i, imageRotation: ((i.imageRotation || 0) + 90) % 360 } : i);
+                              setGroupedItems(updated);
+                              onGrouped(updated);
+                            }}
+                            title={`Rotate all ${selectedItems.size} selected right`}
+                            style={{ fontSize: '0.6rem', padding: '0 0.25rem' }}
+                          >⟳ All</button>
+                        </>)}
                       </div>
                     </div>
                   ) : (
