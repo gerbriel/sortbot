@@ -1173,11 +1173,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
   const handleReorderDragStart = (e: React.DragEvent, itemId: string) => {
     e.stopPropagation();
-    // If the dragged card is part of the selection, move the whole selection.
-    // Otherwise just move the single card (deselect the rest implicitly).
-    const selected = selectedItemsRef.current;
-    const idsToMove: string[] = selected.has(itemId) && selected.size > 1
-      ? singleItemsRef.current.filter(i => selected.has(i.id)).map(i => i.id)
+    // Use the pre-drag snapshot (captured on mousedown, before toggle fires).
+    // selectedItemsRef.current may have already deselected the dragged card by this point.
+    const preDragSelection = reorderPreDragSelectionRef.current;
+    const idsToMove: string[] = preDragSelection.has(itemId) && preDragSelection.size > 1
+      ? singleItemsRef.current.filter(i => preDragSelection.has(i.id)).map(i => i.id)
       : [itemId];
     setReorderDragId(itemId);
     e.dataTransfer.setData('application/reorder-single', JSON.stringify(idsToMove));
@@ -1203,6 +1203,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   };
 
   const reorderMouseYRef = useRef(0);
+  // Snapshot of selected IDs taken on mousedown — before toggleItemSelection fires.
+  // By the time dragstart runs, the dragged card may already be deselected.
+  const reorderPreDragSelectionRef = useRef<Set<string>>(new Set());
 
   const handleReorderDragOver = (e: React.DragEvent, overId: string) => {
     if (!e.dataTransfer.types.includes('application/reorder-single')) return;
@@ -1945,7 +1948,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 <div
                   key={item.id}
                   data-item-id={item.id}
-                  className={`single-item-card ${dragOverGroup === itemGroupId ? 'drag-over' : ''} ${item.category ? 'has-category' : ''} ${selectedItems.has(item.id) ? 'selected' : ''} ${reorderDragId !== null && (reorderDragId === item.id || (selectedItems.has(reorderDragId) && selectedItems.has(item.id))) ? 'reorder-dragging' : ''} ${isReorderTarget ? (reorderOverSide === 'left' ? 'reorder-over-left' : 'reorder-over-right') : ''}`}
+                  className={`single-item-card ${dragOverGroup === itemGroupId ? 'drag-over' : ''} ${item.category ? 'has-category' : ''} ${selectedItems.has(item.id) ? 'selected' : ''} ${reorderDragId !== null && (reorderDragId === item.id || selectedItems.has(item.id)) ? 'reorder-dragging' : ''} ${isReorderTarget ? (reorderOverSide === 'left' ? 'reorder-over-left' : 'reorder-over-right') : ''}`}
                   draggable={!selectionThresholdMet}
                   onDragStart={(e) => {
                     if (selectionThresholdMet) { e.preventDefault(); return; }
@@ -1973,6 +1976,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   onDragLeave={handleDragLeave}
                   onMouseDown={(e) => {
                     e.stopPropagation();
+                    // Snapshot selection BEFORE toggleItemSelection fires — used by
+                    // handleReorderDragStart so multi-select drags work correctly.
+                    reorderPreDragSelectionRef.current = new Set(selectedItemsRef.current);
                     if (!(e.target as HTMLElement).closest('.delete-image-btn') && !(e.target as HTMLElement).closest('.rotate-btn')) {
                       toggleItemSelection(item.id, e);
                     }
