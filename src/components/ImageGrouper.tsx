@@ -1173,15 +1173,29 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
   const handleReorderDragStart = (e: React.DragEvent, itemId: string) => {
     e.stopPropagation();
+    // If the dragged card is part of the selection, move the whole selection.
+    // Otherwise just move the single card (deselect the rest implicitly).
+    const selected = selectedItemsRef.current;
+    const idsToMove: string[] = selected.has(itemId) && selected.size > 1
+      ? singleItemsRef.current.filter(i => selected.has(i.id)).map(i => i.id)
+      : [itemId];
     setReorderDragId(itemId);
-    e.dataTransfer.setData('application/reorder-single', itemId);
+    e.dataTransfer.setData('application/reorder-single', JSON.stringify(idsToMove));
     e.dataTransfer.effectAllowed = 'move';
-    // Ghost image: use a small semi-transparent clone
-    const el = e.currentTarget as HTMLElement;
-    e.dataTransfer.setDragImage(el, el.offsetWidth / 2, el.offsetHeight / 2);
+    // Custom ghost: show count badge when moving multiple
+    if (idsToMove.length > 1) {
+      const ghost = document.createElement('div');
+      ghost.style.cssText = 'position:fixed;top:-999px;left:-999px;background:#667eea;color:#fff;padding:6px 12px;border-radius:20px;font:600 13px/1 sans-serif;pointer-events:none;';
+      ghost.textContent = `Moving ${idsToMove.length} photos`;
+      document.body.appendChild(ghost);
+      e.dataTransfer.setDragImage(ghost, 60, 16);
+      setTimeout(() => ghost.remove(), 0);
+    } else {
+      const el = e.currentTarget as HTMLElement;
+      e.dataTransfer.setDragImage(el, el.offsetWidth / 2, el.offsetHeight / 2);
+    }
     // Kick off auto-scroll RAF loop
     const loop = () => {
-      // clientY is tracked via mousemove; store in ref for use here
       startAutoScroll(reorderMouseYRef.current);
       autoScrollRafRef.current = requestAnimationFrame(loop);
     };
@@ -1204,22 +1218,38 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const handleReorderDrop = (e: React.DragEvent, overId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    const dragId = e.dataTransfer.getData('application/reorder-single');
-    if (!dragId || dragId === overId) {
-      setReorderDragId(null); setReorderOverId(null); return;
-    }
+    let idsToMove: string[];
+    try { idsToMove = JSON.parse(e.dataTransfer.getData('application/reorder-single')); }
+    catch { setReorderDragId(null); setReorderOverId(null); return; }
+    if (!idsToMove.length) { setReorderDragId(null); setReorderOverId(null); return; }
+
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const dropBefore = e.clientX < rect.left + rect.width / 2;
-    // Build base order from current singleItems if manualOrder not yet set
+
+    // Build the base order
     const base = singleItemsRef.current.map(i => i.id);
     const order = manualOrder.length > 0 ? [...manualOrder] : base;
-    const from = order.indexOf(dragId);
-    let to = order.indexOf(overId);
-    if (from === -1 || to === -1) { setReorderDragId(null); setReorderOverId(null); return; }
-    order.splice(from, 1);
-    to = order.indexOf(overId);
-    order.splice(dropBefore ? to : to + 1, 0, dragId);
-    setManualOrder(order);
+
+    // Skip if dropping the entire selection onto itself
+    if (idsToMove.includes(overId) && idsToMove.length === 1) {
+      setReorderDragId(null); setReorderOverId(null); return;
+    }
+
+    // Remove all moving items from order, preserving their relative order
+    const moveSet = new Set(idsToMove);
+    const filtered = order.filter(id => !moveSet.has(id));
+
+    // Find insertion point relative to overId in the filtered array
+    let insertAt = filtered.indexOf(overId);
+    if (insertAt === -1) insertAt = filtered.length;
+    else if (!dropBefore) insertAt += 1;
+
+    // Reinsert moving items as a block, preserving their original relative order
+    // (sort them by their position in the current order)
+    const orderedMoved = idsToMove.slice().sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    filtered.splice(insertAt, 0, ...orderedMoved);
+
+    setManualOrder(filtered);
     setReorderDragId(null);
     setReorderOverId(null);
   };
@@ -1915,7 +1945,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 <div
                   key={item.id}
                   data-item-id={item.id}
-                  className={`single-item-card ${dragOverGroup === itemGroupId ? 'drag-over' : ''} ${item.category ? 'has-category' : ''} ${selectedItems.has(item.id) ? 'selected' : ''} ${reorderDragId === item.id ? 'reorder-dragging' : ''} ${isReorderTarget ? (reorderOverSide === 'left' ? 'reorder-over-left' : 'reorder-over-right') : ''}`}
+                  className={`single-item-card ${dragOverGroup === itemGroupId ? 'drag-over' : ''} ${item.category ? 'has-category' : ''} ${selectedItems.has(item.id) ? 'selected' : ''} ${reorderDragId !== null && (reorderDragId === item.id || (selectedItems.has(reorderDragId) && selectedItems.has(item.id))) ? 'reorder-dragging' : ''} ${isReorderTarget ? (reorderOverSide === 'left' ? 'reorder-over-left' : 'reorder-over-right') : ''}`}
                   draggable={!selectionThresholdMet}
                   onDragStart={(e) => {
                     if (selectionThresholdMet) { e.preventDefault(); return; }
