@@ -376,7 +376,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       ]);
       
       // Additional image rows — only Handle, Image Src, Image Position, Image Alt Text, Status
-      const productStatus = product.status || 'active';
+      const productStatus = product.status || 'draft';
       const imageCount = product.imageUrls?.length || 0;
       for (let i = 1; i < imageCount; i++) {
         const imageRow = Array(headers.length).fill('') as string[];
