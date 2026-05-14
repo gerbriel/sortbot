@@ -88,6 +88,12 @@ const SHOPIFY_CATEGORY_MAP: Record<string, string> = {
   denim:       'Apparel & Accessories > Clothing > Pants > Jeans',
   shorts:      'Apparel & Accessories > Clothing > Shorts',
   short:       'Apparel & Accessories > Clothing > Shorts',
+  // Jerseys
+  jerseys:     'Apparel & Accessories > Clothing > Clothing Tops > Jerseys',
+  jersey:      'Apparel & Accessories > Clothing > Clothing Tops > Jerseys',
+  // Bodysuits
+  bodysuits:   'Apparel & Accessories > Clothing > Bodysuits',
+  bodysuit:    'Apparel & Accessories > Clothing > Bodysuits',
   // Dresses & skirts
   dresses:     'Apparel & Accessories > Clothing > Dresses',
   dress:       'Apparel & Accessories > Clothing > Dresses',
