@@ -229,48 +229,58 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
   };
 
   const handleDownloadCSV = () => {
+    // Column order matches Shopify's own product export format exactly
     const headers = [
-      'Handle',                   // Shopify: unique URL slug
+      'Handle',
       'Title',
-      'Body (HTML)',               // Shopify: product description
-      'Vendor',                   // Shopify: brand/vendor
-      'Product Category',         // Shopify: full taxonomy path
-      'Type',                     // Shopify: product type (short)
+      'Body (HTML)',
+      'Vendor',
+      'Product Category',
+      'Type',
       'Tags',
       'Published',
-      'Option1 Name',             // Shopify: variant option name (e.g. "Size")
-      'Option1 Value',            // Shopify: variant option value (e.g. "L")
+      'Option1 Name',
+      'Option1 Value',
+      'Option1 Linked To',
+      'Option2 Name',
+      'Option2 Value',
+      'Option2 Linked To',
+      'Option3 Name',
+      'Option3 Value',
+      'Option3 Linked To',
       'Variant SKU',
-      'Variant Grams',            // Shopify: weight in grams
+      'Variant Grams',
       'Variant Inventory Tracker',
       'Variant Inventory Qty',
-      'Variant Inventory Policy', // Shopify: 'deny' or 'continue'
+      'Variant Inventory Policy',
       'Variant Fulfillment Service',
       'Variant Price',
       'Variant Compare At Price',
       'Variant Requires Shipping',
       'Variant Taxable',
+      'Unit Price Total Measure',
+      'Unit Price Total Measure Unit',
+      'Unit Price Base Measure',
+      'Unit Price Base Measure Unit',
       'Variant Barcode',
-      'Image Src',                // Shopify: product image URL
+      'Image Src',
       'Image Position',
       'Image Alt Text',
-      'Variant Image',
       'Gift Card',
       'SEO Title',
       'SEO Description',
-      'Standard Product Type',    // Shopify: standardised taxonomy path
+      'Color (product.metafields.shopify.color-pattern)',
+      'Fabric (product.metafields.shopify.fabric)',
+      'Target gender (product.metafields.shopify.target-gender)',
+      'Complementary products (product.metafields.shopify--discovery--product_recommendation.complementary_products)',
+      'Related products (product.metafields.shopify--discovery--product_recommendation.related_products)',
+      'Related products settings (product.metafields.shopify--discovery--product_recommendation.related_products_display)',
+      'Search product boosts (product.metafields.shopify--discovery--product_search_boost.queries)',
+      'Variant Image',
+      'Variant Weight Unit',
+      'Variant Tax Code',
       'Cost per item',
       'Status',
-      // Google Shopping columns (exact Shopify names)
-      'Google Shopping / Google Product Category',
-      'Google Shopping / Gender',
-      'Google Shopping / Age Group',
-      'Google Shopping / MPN',
-      'Google Shopping / AdWords Grouping',
-      'Google Shopping / AdWords Labels',
-      'Google Shopping / Condition',
-      'Google Shopping / Custom Product',
-      'Google Shopping / Custom Label 0',
     ];
 
     const rows: string[][] = [];
@@ -307,12 +317,8 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       // only guaranteed-valid Shopify taxonomy path. The stale shopifyProductType from the DB
       // (e.g. "Apparel & Accessories > Clothing > Jeans") can contain invalid paths that cause
       // Shopify to silently reject the whole product row on import. Leave blank if no map entry.
-      const standardizedProductType = productCategory;
       const tags = product.tags?.join(', ') || '';
-      const condition = (product.condition || '').trim();
       const primaryColor = product.color || '';
-      
-      // Weight — convert lbs to grams (Shopify's Variant Grams column expects grams)
       const rawWeight = parseFloat(product.weightValue || '');
       const variantGrams = isNaN(rawWeight) ? '' : String(Math.round(rawWeight * 453.592));
       
@@ -350,6 +356,13 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         product.published === false ? 'false' : 'true',                 // Published
         product.size ? 'Size' : '',                                      // Option1 Name
         product.size || '',                                              // Option1 Value
+        '',                                                              // Option1 Linked To
+        '',                                                              // Option2 Name
+        '',                                                              // Option2 Value
+        '',                                                              // Option2 Linked To
+        '',                                                              // Option3 Name
+        '',                                                              // Option3 Value
+        '',                                                              // Option3 Linked To
         product.sku || '',                                               // Variant SKU
         variantGrams,                                                    // Variant Grams
         'shopify',                                                       // Variant Inventory Tracker
@@ -357,30 +370,32 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         product.continueSellingOutOfStock ? 'continue' : 'deny',        // Variant Inventory Policy
         'manual',                                                        // Variant Fulfillment Service
         String(product.price || ''),                                     // Variant Price
-        String(product.compareAtPrice || ''),                            // Variant Compare At Price
+        String(product.compareAtPrice || '0.00'),                       // Variant Compare At Price
         product.requiresShipping === false ? 'false' : 'true',          // Variant Requires Shipping
         'true',                                                          // Variant Taxable
+        '',                                                              // Unit Price Total Measure
+        '',                                                              // Unit Price Total Measure Unit
+        '',                                                              // Unit Price Base Measure
+        '',                                                              // Unit Price Base Measure Unit
         product.barcode || '',                                           // Variant Barcode
         product.imageUrls?.[0] || '',                                    // Image Src
         '1',                                                             // Image Position
         imageAltText || cleanTitle,                                      // Image Alt Text
-        '',                                                              // Variant Image
         'false',                                                         // Gift Card
         cleanTitle,                                                      // SEO Title
         product.seoDescription || product.generatedDescription?.substring(0, 320) || '', // SEO Description
-        standardizedProductType,                                         // Standard Product Type
-        String(product.costPerItem || ''),                               // Cost per item
+        primaryColor,                                                    // Color (product.metafields.shopify.color-pattern)
+        product.material || '',                                          // Fabric (product.metafields.shopify.fabric)
+        product.gender || '',                                            // Target gender (product.metafields.shopify.target-gender)
+        '',                                                              // Complementary products
+        '',                                                              // Related products
+        '',                                                              // Related products settings
+        '',                                                              // Search product boosts
+        '',                                                              // Variant Image
+        'lb',                                                            // Variant Weight Unit
+        '',                                                              // Variant Tax Code
+        String(product.costPerItem || '0.00'),                          // Cost per item
         product.status || 'draft',                                       // Status
-        // Google Shopping
-        productCategory,                                                 // Google Shopping / Google Product Category
-        product.gender || '',                                            // Google Shopping / Gender
-        product.ageGroup || '',                                          // Google Shopping / Age Group
-        product.mpn || '',                                               // Google Shopping / MPN
-        cleanTitle,                                                      // Google Shopping / AdWords Grouping
-        productType,                                                     // Google Shopping / AdWords Labels
-        condition,                                                       // Google Shopping / Condition
-        'false',                                                         // Google Shopping / Custom Product
-        product.customLabel0 || '',                                      // Google Shopping / Custom Label 0
       ]);
       
       // Additional image rows — only Handle, Image Src, Image Position, Image Alt Text, Status
@@ -462,13 +477,19 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                   <tr style={{ position: 'sticky', top: 0, zIndex: 2, background: '#f8fafc' }}>
                     {[
                       'Handle','Title','Body (HTML)','Vendor','Product Category','Type','Tags','Published',
-                      'Option1 Name','Option1 Value','Variant SKU','Variant Grams','Variant Inventory Tracker',
+                      'Option1 Name','Option1 Value','Option1 Linked To',
+                      'Option2 Name','Option2 Value','Option2 Linked To',
+                      'Option3 Name','Option3 Value','Option3 Linked To',
+                      'Variant SKU','Variant Grams','Variant Inventory Tracker',
                       'Variant Inventory Qty','Variant Inventory Policy','Variant Fulfillment Service',
                       'Variant Price','Variant Compare At Price','Variant Requires Shipping','Variant Taxable',
-                      'Variant Barcode','Image Src','Image Position','Image Alt Text','Variant Image','Gift Card',
-                      'SEO Title','SEO Description','Standard Product Type','Cost per item','Status',
-                      'GS / Product Category','GS / Gender','GS / Age Group','GS / MPN',
-                      'GS / AdWords Grouping','GS / AdWords Labels','GS / Condition','GS / Custom Product','GS / Custom Label 0'
+                      'Unit Price Total Measure','Unit Price Total Measure Unit','Unit Price Base Measure','Unit Price Base Measure Unit',
+                      'Variant Barcode','Image Src','Image Position','Image Alt Text','Gift Card',
+                      'SEO Title','SEO Description',
+                      'Color (metafield)','Fabric (metafield)','Target gender (metafield)',
+                      'Complementary products','Related products','Related products settings','Search product boosts',
+                      'Variant Image','Variant Weight Unit','Variant Tax Code',
+                      'Cost per item','Status',
                     ].map((col, i) => (
                       <th key={i} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '2px solid #e5e7eb', background: '#f8fafc', color: '#374151', minWidth: i <= 2 ? '180px' : '110px' }}>
                         {col}
@@ -496,7 +517,6 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       : product.productType || '';
                     const vendor = product.brand || '';
                     const tags = product.tags?.join(', ') || '';
-                    const condition = (product.condition || '').trim();
                     const primaryColor = product.color || '';
                     const rawWeight = parseFloat(product.weightValue || '');
                     const variantGrams = isNaN(rawWeight) ? '' : String(Math.round(rawWeight * 453.592));
@@ -504,8 +524,6 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                     if (primaryColor && !cleanTitle.toLowerCase().includes(primaryColor.toLowerCase())) altParts.push(primaryColor);
                     if (product.size) altParts.push(product.size);
                     const imageAltText = altParts.filter(Boolean).join(' - ');
-                    // Standard Product Type: always from SHOPIFY_CATEGORY_MAP (always valid).
-                    const standardizedProductType = productCategory;
                     const tr = (v: string | undefined | null, maxLen = 40) => {
                       const s = v ?? '—';
                       return s.length > maxLen ? <span title={s}>{s.substring(0, maxLen)}…</span> : <>{s || '—'}</>;
@@ -521,6 +539,9 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       product.published === false ? 'false' : 'true',               // Published
                       product.size ? 'Size' : '',                                   // Option1 Name
                       product.size || '',                                            // Option1 Value
+                      '',                                                            // Option1 Linked To
+                      '','','',                                                      // Option2 Name/Value/Linked To
+                      '','','',                                                      // Option3 Name/Value/Linked To
                       product.sku || '',                                             // Variant SKU
                       variantGrams,                                                  // Variant Grams
                       'shopify',                                                     // Variant Inventory Tracker
@@ -528,29 +549,26 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       product.continueSellingOutOfStock ? 'continue' : 'deny',      // Variant Inventory Policy
                       'manual',                                                      // Variant Fulfillment Service
                       product.price != null ? `$${Number(product.price).toFixed(2)}` : '', // Variant Price
-                      String(product.compareAtPrice || ''),                          // Variant Compare At Price
+                      String(product.compareAtPrice || '0.00'),                     // Variant Compare At Price
                       product.requiresShipping === false ? 'false' : 'true',        // Variant Requires Shipping
                       'true',                                                        // Variant Taxable
+                      '','','','',                                                   // Unit Price columns
                       product.barcode || '',                                         // Variant Barcode
                       product.imageUrls?.[0] || '',                                 // Image Src
                       '1',                                                           // Image Position
                       imageAltText || cleanTitle,                                   // Image Alt Text
-                      '',                                                            // Variant Image
                       'false',                                                       // Gift Card
                       cleanTitle,                                                    // SEO Title
                       product.seoDescription || product.generatedDescription?.substring(0, 320) || '', // SEO Description
-                      standardizedProductType,                                       // Standard Product Type
-                      String(product.costPerItem || ''),                            // Cost per item
+                      primaryColor,                                                  // Color metafield
+                      product.material || '',                                        // Fabric metafield
+                      product.gender || '',                                          // Target gender metafield
+                      '','','','',                                                   // Recommendation metafields
+                      '',                                                            // Variant Image
+                      'lb',                                                          // Variant Weight Unit
+                      '',                                                            // Variant Tax Code
+                      String(product.costPerItem || '0.00'),                       // Cost per item
                       product.status || 'draft',                                    // Status
-                      productCategory,                                               // Google Shopping / Google Product Category
-                      product.gender || '',                                          // Google Shopping / Gender
-                      product.ageGroup || '',                                        // Google Shopping / Age Group
-                      product.mpn || '',                                             // Google Shopping / MPN
-                      cleanTitle,                                                    // Google Shopping / AdWords Grouping
-                      previewProductType,                                            // Google Shopping / AdWords Labels
-                      condition,                                                     // Google Shopping / Condition
-                      'false',                                                       // Google Shopping / Custom Product
-                      product.customLabel0 || '',                                    // Google Shopping / Custom Label 0
                     ];
                     return (
                       <tr key={product.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
