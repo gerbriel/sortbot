@@ -253,25 +253,6 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       'Standard Product Type',    // Shopify: standardised taxonomy path
       'Cost per item',
       'Status',
-      // Custom / Vendoo metafield columns
-      'Primary Color',
-      'Secondary Color',
-      'Color (variant.metafields.shopify.color-pattern)',
-      'Material / Fabric',
-      'Condition',
-      'Size Type',
-      'Ships From',
-      'Package Dimensions',
-      'Parcel Size',
-      'Chest',
-      'Length',
-      'Discounted Shipping',
-      'Policies',
-      'Renewal options',
-      'Who Made It',
-      'What Is It',
-      'Listing Type',
-      'Describe your listing\'s style',
       // Google Shopping columns (exact Shopify names)
       'Google Shopping / Google Product Category',
       'Google Shopping / Gender',
@@ -322,15 +303,10 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       const tags = product.tags?.join(', ') || '';
       const condition = (product.condition || '').trim();
       const primaryColor = product.color || '';
-      const secondaryColor = product.secondaryColor || '';
       
       // Weight — convert lbs to grams (Shopify's Variant Grams column expects grams)
       const rawWeight = parseFloat(product.weightValue || '');
       const variantGrams = isNaN(rawWeight) ? '' : String(Math.round(rawWeight * 453.592));
-      
-      // Measurements
-      const chest = product.measurements?.width || '';
-      const length = product.measurements?.length || '';
       
       const cleanTitle = buildCleanTitle(product, idx);
 
@@ -386,26 +362,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         product.seoDescription || product.generatedDescription?.substring(0, 320) || '', // SEO Description
         standardizedProductType,                                         // Standard Product Type
         String(product.costPerItem || ''),                               // Cost per item
-        product.status || 'active',                                      // Status
-        // Custom / Vendoo columns
-        primaryColor,                                                    // Primary Color
-        secondaryColor,                                                  // Secondary Color
-        primaryColor + (secondaryColor ? `; ${secondaryColor}` : ''),   // Color metafield
-        product.material || '',                                          // Material / Fabric
-        condition,                                                       // Condition
-        product.sizeType || '',                                          // Size Type
-        product.shipsFrom || '',                                         // Ships From
-        product.packageDimensions || '',                                 // Package Dimensions
-        product.parcelSize || '',                                        // Parcel Size
-        chest,                                                           // Chest
-        length,                                                          // Length
-        product.discountedShipping || '',                                // Discounted Shipping
-        product.policies || '',                                          // Policies
-        product.renewalOptions || '',                                    // Renewal options
-        product.whoMadeIt || '',                                         // Who Made It
-        product.whatIsIt || '',                                          // What Is It
-        product.listingType || '',                                       // Listing Type
-        product.style || '',                                             // Describe your listing's style
+        product.status || 'draft',                                       // Status
         // Google Shopping
         productCategory,                                                 // Google Shopping / Google Product Category
         product.gender || '',                                            // Google Shopping / Gender
@@ -502,14 +459,10 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       'Variant Price','Variant Compare At Price','Variant Requires Shipping','Variant Taxable',
                       'Variant Barcode','Image Src','Image Position','Image Alt Text','Variant Image','Gift Card',
                       'SEO Title','SEO Description','Standard Product Type','Cost per item','Status',
-                      'Primary Color','Secondary Color','Color metafield','Material / Fabric','Condition',
-                      'Size Type','Ships From','Package Dimensions','Parcel Size','Chest','Length',
-                      'Discounted Shipping','Policies','Renewal options','Who Made It','What Is It',
-                      'Listing Type','Style',
                       'GS / Product Category','GS / Gender','GS / Age Group','GS / MPN',
                       'GS / AdWords Grouping','GS / AdWords Labels','GS / Condition','GS / Custom Product','GS / Custom Label 0'
                     ].map((col, i) => (
-                      <th key={i} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '2px solid #e5e7eb', background: '#f8fafc', color: '#374151', minWidth: i <= 2 || i === 27 || i === 28 ? '180px' : '110px' }}>
+                      <th key={i} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '2px solid #e5e7eb', background: '#f8fafc', color: '#374151', minWidth: i <= 2 ? '180px' : '110px' }}>
                         {col}
                       </th>
                     ))}
@@ -537,7 +490,6 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                     const tags = product.tags?.join(', ') || '';
                     const condition = (product.condition || '').trim();
                     const primaryColor = product.color || '';
-                    const secondaryColor = product.secondaryColor || '';
                     const rawWeight = parseFloat(product.weightValue || '');
                     const variantGrams = isNaN(rawWeight) ? '' : String(Math.round(rawWeight * 453.592));
                     const altParts = [cleanTitle];
@@ -581,31 +533,13 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       product.seoDescription || product.generatedDescription?.substring(0, 320) || '', // SEO Description
                       standardizedProductType,                                       // Standard Product Type
                       String(product.costPerItem || ''),                            // Cost per item
-                      product.status || 'active',                                   // Status
-                      primaryColor,                                                  // Primary Color
-                      secondaryColor,                                                // Secondary Color
-                      primaryColor + (secondaryColor ? `; ${secondaryColor}` : ''), // Color metafield
-                      product.material || '',                                        // Material / Fabric
-                      condition,                                                     // Condition
-                      product.sizeType || '',                                        // Size Type
-                      product.shipsFrom || '',                                       // Ships From
-                      product.packageDimensions || '',                               // Package Dimensions
-                      product.parcelSize || '',                                      // Parcel Size
-                      product.measurements?.width || '',                             // Chest
-                      product.measurements?.length || '',                            // Length
-                      product.discountedShipping || '',                              // Discounted Shipping
-                      product.policies || '',                                        // Policies
-                      product.renewalOptions || '',                                  // Renewal options
-                      product.whoMadeIt || '',                                       // Who Made It
-                      product.whatIsIt || '',                                        // What Is It
-                      product.listingType || '',                                     // Listing Type
-                      product.style || '',                                           // Style
+                      product.status || 'draft',                                    // Status
                       productCategory,                                               // Google Shopping / Google Product Category
                       product.gender || '',                                          // Google Shopping / Gender
                       product.ageGroup || '',                                        // Google Shopping / Age Group
                       product.mpn || '',                                             // Google Shopping / MPN
                       cleanTitle,                                                    // Google Shopping / AdWords Grouping
-                      product.productType || '',                                     // Google Shopping / AdWords Labels
+                      previewProductType,                                            // Google Shopping / AdWords Labels
                       condition,                                                     // Google Shopping / Condition
                       'false',                                                       // Google Shopping / Custom Product
                       product.customLabel0 || '',                                    // Google Shopping / Custom Label 0
