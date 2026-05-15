@@ -734,12 +734,12 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
     description += `Vintage / Y2K ${intro || 'Vintage clothing item'}`;
   }
 
-  description += '<br><br>';
+  description += '\n\n';
 
   // PART 2: Size and measurements with symbols (ONLY if provided in fields)
   if (context.size || (context.measurements && Object.keys(context.measurements).length > 0)) {
     if (context.size) {
-      description += `✠ SIZE- ${context.size}<br>`;
+      description += `✠ SIZE- ${context.size}\n`;
     }
     
     // Add width and length if available
@@ -748,38 +748,38 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
       const length = context.measurements['Length'] || context.measurements['length'];
       
       if (width) {
-        description += `✠ Width- ${width}<br>`;
+        description += `✠ Width- ${width}\n`;
       }
       if (length) {
-        description += `✠ Length- ${length}<br>`;
+        description += `✠ Length- ${length}\n`;
       }
       
       // Add other measurements
       Object.entries(context.measurements).forEach(([key, value]) => {
         const lowerKey = key.toLowerCase();
         if (value && lowerKey !== 'width' && lowerKey !== 'length') {
-          description += `✠ ${key}- ${value}<br>`;
+          description += `✠ ${key}- ${value}\n`;
         }
       });
     }
     
-    description += '<br>';
+    description += '\n';
   }
 
   // PART 5: Call to action
-  description += 'BUNDLE AND SAVE!!!!!!<br><br>';
+  description += 'BUNDLE AND SAVE!!!!!!\n\n';
 
   // PART 6: Tags — prefer hashtags found in voice description, fall back to field-based tags
   const tags = generateTagsFromFields(context);
   if (tags.length > 0) {
     description += tags.map(tag => `#${tag.toLowerCase().replace(/\s+/g, '')}`).join(' ');
-    description += '<br><br>';
+    description += '\n\n';
   }
 
   // PART 7: Standard disclaimers
-  description += '* We note major imperfections—minor signs of age or wear may not be listed, adding to the vintage character.<br>';
-  description += '* High-quality piece, perfect for streetwear.<br>';
-  description += '* Ships next day.<br>';
+  description += '* We note major imperfections—minor signs of age or wear may not be listed, adding to the vintage character.\n';
+  description += '* High-quality piece, perfect for streetwear.\n';
+  description += '* Ships next day.\n';
   description += '* All sales final.';
 
   return {
