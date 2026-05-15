@@ -315,7 +315,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       const tags = product.tags?.join(', ') || '';
       const primaryColor = product.color || '';
       const rawWeight = parseFloat(product.weightValue || '');
-      const variantGrams = isNaN(rawWeight) ? '' : String(Math.round(rawWeight * 453.592));
+      const variantGrams = isNaN(rawWeight) ? '' : String(rawWeight * 453.59237);
       
       const cleanTitle = buildCleanTitle(product, idx);
 
@@ -349,8 +349,8 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         '',                                                              // Type
         tags,                                                            // Tags
         product.published === false ? 'false' : 'true',                 // Published
-        product.size ? 'Size' : '',                                      // Option1 Name
-        product.size || '',                                              // Option1 Value
+        'Title',                                                         // Option1 Name
+        'Default Title',                                                 // Option1 Value
         '',                                                              // Option1 Linked To
         '',                                                              // Option2 Name
         '',                                                              // Option2 Value
@@ -364,8 +364,8 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         String(product.inventoryQuantity ?? 1),                         // Variant Inventory Qty
         product.continueSellingOutOfStock ? 'continue' : 'deny',        // Variant Inventory Policy
         'manual',                                                        // Variant Fulfillment Service
-        String(product.price || ''),                                     // Variant Price
-        String(product.compareAtPrice || '0.00'),                       // Variant Compare At Price
+        product.price != null ? parseFloat(String(product.price)).toFixed(2) : '', // Variant Price
+        product.compareAtPrice != null ? parseFloat(String(product.compareAtPrice)).toFixed(2) : '0.00', // Variant Compare At Price
         product.requiresShipping === false ? 'false' : 'true',          // Variant Requires Shipping
         'true',                                                          // Variant Taxable
         '',                                                              // Unit Price Total Measure
@@ -390,7 +390,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         'lb',                                                            // Variant Weight Unit
         '',                                                              // Variant Tax Code
         String(product.costPerItem || '0.00'),                          // Cost per item
-        product.status || 'draft',                                       // Status
+        (product.status || 'draft').toLowerCase(),                       // Status
       ]);
       
       // Additional image rows — only Handle, Image Src, Image Position, Image Alt Text, Status
@@ -511,7 +511,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                     const tags = product.tags?.join(', ') || '';
                     const primaryColor = product.color || '';
                     const rawWeight = parseFloat(product.weightValue || '');
-                    const variantGrams = isNaN(rawWeight) ? '' : String(Math.round(rawWeight * 453.592));
+                    const variantGrams = isNaN(rawWeight) ? '' : String(rawWeight * 453.59237);
                     const altParts = [cleanTitle];
                     if (primaryColor && !cleanTitle.toLowerCase().includes(primaryColor.toLowerCase())) altParts.push(primaryColor);
                     if (product.size) altParts.push(product.size);
@@ -529,8 +529,8 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       '',                                                            // Type
                       tags,                                                          // Tags
                       product.published === false ? 'false' : 'true',               // Published
-                      product.size ? 'Size' : '',                                   // Option1 Name
-                      product.size || '',                                            // Option1 Value
+                      'Title',                                                       // Option1 Name
+                      'Default Title',                                               // Option1 Value
                       '',                                                            // Option1 Linked To
                       '','','',                                                      // Option2 Name/Value/Linked To
                       '','','',                                                      // Option3 Name/Value/Linked To
@@ -540,8 +540,8 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       String(product.inventoryQuantity ?? 1),                       // Variant Inventory Qty
                       product.continueSellingOutOfStock ? 'continue' : 'deny',      // Variant Inventory Policy
                       'manual',                                                      // Variant Fulfillment Service
-                      product.price != null ? `$${Number(product.price).toFixed(2)}` : '', // Variant Price
-                      String(product.compareAtPrice || '0.00'),                     // Variant Compare At Price
+                      product.price != null ? parseFloat(String(product.price)).toFixed(2) : '', // Variant Price
+                      product.compareAtPrice != null ? parseFloat(String(product.compareAtPrice)).toFixed(2) : '0.00', // Variant Compare At Price
                       product.requiresShipping === false ? 'false' : 'true',        // Variant Requires Shipping
                       'true',                                                        // Variant Taxable
                       '','','','',                                                   // Unit Price columns
@@ -560,7 +560,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       'lb',                                                          // Variant Weight Unit
                       '',                                                            // Variant Tax Code
                       String(product.costPerItem || '0.00'),                       // Cost per item
-                      product.status || 'draft',                                    // Status
+                      (product.status || 'draft').toLowerCase(),                    // Status
                     ];
                     return (
                       <tr key={product.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
