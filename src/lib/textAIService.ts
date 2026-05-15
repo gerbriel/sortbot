@@ -176,9 +176,14 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   if (legOpeningCmd) measurements['leg_opening'] = legOpeningCmd.replace(/[^0-9.]/g, '');
 
   // ── TAGS (explicit) ───────────────────────────────────────────────────────
+  // Support: "tags silvertab baggy wideleg period" OR "#silvertab #baggy #wideleg period"
   const tagsRaw = extractCommand(/\btags?\s+(.+?)\s+period\b/i);
   if (tagsRaw) {
-    extracted.tags = tagsRaw.split(/[\s,]+/).filter(Boolean).map((t: string) => t.toLowerCase());
+    extracted.tags = tagsRaw
+      .replace(/#/g, ' ')
+      .split(/[\s,]+/)
+      .filter(Boolean)
+      .map((t: string) => t.toLowerCase());
   }
 
   // ── TITLE ─────────────────────────────────────────────────────────────────
@@ -701,7 +706,7 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
     const fieldPrefixes = [
       'brand', 'model', 'size', 'color', 'colour', 'secondary color', 'secondary colour',
       'material', 'fabric', 'condition', 'era', 'style', 'gender', 'price',
-      'flaws?', 'damage', 'care', 'tags?',
+      'flaws?', 'damage', 'care', 'tags?', 'title',
       'width', 'length', 'waist', 'shoulder', 'sleeve', 'inseam'
     ].join('|');
     mainDesc = mainDesc.replace(new RegExp(`\\b(?:${fieldPrefixes})\\s+.+?\\s+period\\b`, 'gi'), '');
@@ -729,12 +734,12 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
     description += `Vintage / Y2K ${intro || 'Vintage clothing item'}`;
   }
 
-  description += '\n\n';
+  description += '<br><br>';
 
   // PART 2: Size and measurements with symbols (ONLY if provided in fields)
   if (context.size || (context.measurements && Object.keys(context.measurements).length > 0)) {
     if (context.size) {
-      description += `✠ SIZE- ${context.size}\n`;
+      description += `✠ SIZE- ${context.size}<br>`;
     }
     
     // Add width and length if available
@@ -743,40 +748,38 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
       const length = context.measurements['Length'] || context.measurements['length'];
       
       if (width) {
-        description += `✠ Width- ${width}\n`;
+        description += `✠ Width- ${width}<br>`;
       }
       if (length) {
-        description += `✠ length- ${length}\n`;
+        description += `✠ Length- ${length}<br>`;
       }
       
       // Add other measurements
       Object.entries(context.measurements).forEach(([key, value]) => {
         const lowerKey = key.toLowerCase();
-        if (value && 
-            lowerKey !== 'width' && 
-            lowerKey !== 'length') {
-          description += `✠ ${key}- ${value}\n`;
+        if (value && lowerKey !== 'width' && lowerKey !== 'length') {
+          description += `✠ ${key}- ${value}<br>`;
         }
       });
     }
     
-    description += '\n';
+    description += '<br>';
   }
 
   // PART 5: Call to action
-  description += 'BUNDLE AND SAVE!!!!!!\n\n';
+  description += 'BUNDLE AND SAVE!!!!!!<br><br>';
 
-  // PART 6: Tags (ONLY from explicitly filled fields, no assumptions)
+  // PART 6: Tags — prefer hashtags found in voice description, fall back to field-based tags
   const tags = generateTagsFromFields(context);
   if (tags.length > 0) {
     description += tags.map(tag => `#${tag.toLowerCase().replace(/\s+/g, '')}`).join(' ');
-    description += '\n\n';
+    description += '<br><br>';
   }
 
   // PART 7: Standard disclaimers
-  description += '* We note major imperfections—minor signs of age or wear may not be listed, adding to the vintage character.\n';
-  description += '* High-quality piece, perfect for streetwear.\n';
-  description += '* Ships next day.\n';
+  description += '* We note major imperfections—minor signs of age or wear may not be listed, adding to the vintage character.<br>';
+  description += '* High-quality piece, perfect for streetwear.<br>';
+  description += '* Ships next day.<br>';
   description += '* All sales final.';
 
   return {
@@ -839,29 +842,38 @@ function generateTitleFromFields(context: ProductContext): string {
 }
 
 /**
- * Generate tags ONLY from filled fields
- * No assumptions about brand, style, etc.
+ * Generate tags — primary source is #hashtags in voice description,
+ * then explicit tags array, then field-based fallback.
  */
 function generateTagsFromFields(context: ProductContext): string[] {
+  // Primary: extract #hashtags from voice description
+  const hashtagsFromVoice = (context.voiceDescription || '')
+    .match(/#(\w+)/g)
+    ?.map((t: string) => t.slice(1).toLowerCase()) || [];
+  if (hashtagsFromVoice.length > 0) {
+    return Array.from(new Set(hashtagsFromVoice)).slice(0, 8);
+  }
+
+  // Secondary: explicit tags array (from voice "tags ... period" command)
+  if (context.tags && context.tags.length > 0) {
+    return Array.from(new Set(context.tags.map((t: string) => t.toLowerCase()))).slice(0, 8);
+  }
+
+  // Last resort: build from filled fields
   const tags: string[] = [];
-  
-  // ONLY add tags for explicitly filled fields
   if (context.era) {
-    // Split era if it contains multiple words (e.g., "Vintage / Y2K")
     const eraParts = context.era.split(/[\s\/]+/).filter(Boolean);
     tags.push(...eraParts);
   }
   if (context.brand) tags.push(context.brand);
   if (context.category) tags.push(context.category);
   if (context.color) {
-    // Split color if multiple (e.g., "Black/White")
     const colorParts = context.color.split(/[\s\/]+/).filter(Boolean);
     tags.push(...colorParts);
   }
   if (context.size) tags.push(context.size);
   if (context.style) tags.push(context.style);
   if (context.material) tags.push(context.material);
-  
-  // Remove duplicates and cap at 5 hashtags
-  return Array.from(new Set(tags)).slice(0, 5);
+
+  return Array.from(new Set(tags)).slice(0, 8);
 }
