@@ -312,7 +312,12 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       // only guaranteed-valid Shopify taxonomy path. The stale shopifyProductType from the DB
       // (e.g. "Apparel & Accessories > Clothing > Jeans") can contain invalid paths that cause
       // Shopify to silently reject the whole product row on import. Leave blank if no map entry.
-      const tags = product.tags?.join(', ') || '';
+      // Tags: extract #hashtags from generated description first, fall back to product.tags array
+      const hashtagsFromDesc = (product.generatedDescription || '')
+        .match(/#(\w+)/g)?.map((t: string) => t.slice(1)) || [];
+      const tags = hashtagsFromDesc.length > 0
+        ? hashtagsFromDesc.join(', ')
+        : (product.tags?.join(', ') || '');
       const primaryColor = product.color || '';
       const rawWeight = parseFloat(product.weightValue || '');
       const variantGrams = isNaN(rawWeight) ? '' : String(rawWeight * 453.59237);
@@ -394,7 +399,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       ]);
       
       // Additional image rows — only Handle, Image Src, Image Position, Image Alt Text, Status
-      const productStatus = product.status || 'draft';
+      const productStatus = (product.status || 'draft').toLowerCase();
       const imageCount = product.imageUrls?.length || 0;
       for (let i = 1; i < imageCount; i++) {
         const imageRow = Array(headers.length).fill('') as string[];
@@ -508,7 +513,11 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                     };
                     const productCategory = resolveCategoryPathPreview(catKey);
                     const vendor = product.brand || '';
-                    const tags = product.tags?.join(', ') || '';
+                    const previewHashtags = (product.generatedDescription || '')
+                      .match(/#(\w+)/g)?.map((t: string) => t.slice(1)) || [];
+                    const tags = previewHashtags.length > 0
+                      ? previewHashtags.join(', ')
+                      : (product.tags?.join(', ') || '');
                     const primaryColor = product.color || '';
                     const rawWeight = parseFloat(product.weightValue || '');
                     const variantGrams = isNaN(rawWeight) ? '' : String(rawWeight * 453.59237);
