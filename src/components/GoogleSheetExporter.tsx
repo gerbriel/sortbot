@@ -308,11 +308,6 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       // Only use taxonomy paths from the map — never pass raw category names to Shopify (they'll fail validation)
       const productCategory = resolveCategoryPath(catKey);
 
-      // Type column: derive from the last segment of the taxonomy path (e.g. "T-Shirts", "Shirts")
-      // so it's always consistent with the category. Fall back to preset's productType if no path.
-      const productType = productCategory
-        ? productCategory.split(' > ').pop() || product.productType || ''
-        : product.productType || '';
       // Standard Product Type: always use productCategory from SHOPIFY_CATEGORY_MAP — it's the
       // only guaranteed-valid Shopify taxonomy path. The stale shopifyProductType from the DB
       // (e.g. "Apparel & Accessories > Clothing > Jeans") can contain invalid paths that cause
@@ -348,10 +343,10 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       rows.push([
         handle,                                                          // Handle
         cleanTitle,                                                      // Title
-        product.generatedDescription || '',                              // Body (HTML)
+        (product.generatedDescription || '').replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>'), // Body (HTML)
         vendor,                                                          // Vendor
         productCategory,                                                 // Product Category
-        productType,                                                     // Type
+        '',                                                              // Type
         tags,                                                            // Tags
         product.published === false ? 'false' : 'true',                 // Published
         product.size ? 'Size' : '',                                      // Option1 Name
@@ -512,9 +507,6 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       return '';
                     };
                     const productCategory = resolveCategoryPathPreview(catKey);
-                    const previewProductType = productCategory
-                      ? productCategory.split(' > ').pop() || product.productType || ''
-                      : product.productType || '';
                     const vendor = product.brand || '';
                     const tags = product.tags?.join(', ') || '';
                     const primaryColor = product.color || '';
@@ -531,10 +523,10 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                     const cols: (string | null | undefined)[] = [
                       cleanTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || `product-${idx + 1}`, // Handle
                       cleanTitle,                                                    // Title
-                      product.generatedDescription || '',                            // Body (HTML)
+                      product.generatedDescription?.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>') || '', // Body (HTML)
                       vendor,                                                        // Vendor
                       productCategory,                                               // Product Category
-                      previewProductType,                                            // Type
+                      '',                                                            // Type
                       tags,                                                          // Tags
                       product.published === false ? 'false' : 'true',               // Published
                       product.size ? 'Size' : '',                                   // Option1 Name

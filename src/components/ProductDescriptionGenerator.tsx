@@ -265,6 +265,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       // Correct common speech-to-text misrecognitions for clothing measurements
       const fixTranscript = (t: string) =>
         t
+          // "wits 18" / "what's 18" / "whats 18" before a number → "width 18"
+          .replace(/\b(wits|what's|whats|wit's)\b(?=\s+\d)/gi, 'width')
           .replace(/\bwith\b(?=\s+\d)/gi, 'width')   // "with 18 inches" → "width 18 inches"
           .replace(/\bwidth\b(?=\s+(a|an|the)\b)/gi, 'with') // "width a great" → "with a great"
           .replace(/\bwidth\b(?=\s+[a-z]{3,}(?!\s*\d))/gi, 'with'); // "width nice" → "with nice"
