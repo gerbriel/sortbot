@@ -107,6 +107,20 @@ function resolveGenderGid(gender: string | undefined): string {
  * Paths verified against Shopify Standard Product Taxonomy (github.com/Shopify/product-taxonomy).
  * When no mapping is found the column is left blank — Shopify accepts blank; it rejects free-form text.
  */
+// ─── Shopify Taxonomy Notes ──────────────────────────────────────────────────
+// Men's vs Women's: Shopify's taxonomy does NOT have gender-specific paths for
+// clothing (no "Men's T-Shirts" category). Gender differentiation is handled
+// entirely by the "Target gender" metafield. So mens-tees and womens-tees both
+// correctly map to the same taxonomy path. The resolver strips the gender prefix
+// ("mens"/"womens") and matches the category type segment.
+//
+// Kids: Shopify uses the Baby & Toddler root for children's clothing.
+// Kids items must be explicitly routed — otherwise the resolver would strip
+// "kids" and fall through to the adult path. We handle this by checking for the
+// "kids" prefix FIRST in resolveCategoryPath, before the general segment lookup.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Adult / unisex taxonomy paths (also used for mens- and womens- prefixed categories)
 const SHOPIFY_CATEGORY_MAP: Record<string, string> = {
   // Tops
   tees:        'Apparel & Accessories > Clothing > Clothing Tops > T-Shirts',
@@ -187,6 +201,100 @@ const SHOPIFY_CATEGORY_MAP: Record<string, string> = {
   'mystery box':   '',
   bundle:          '',
   bundles:         '',
+};
+
+// Kids-specific taxonomy paths (Baby & Toddler root in Shopify taxonomy)
+// Keyed by the TYPE segment only (e.g. "tees", "hoodies") — looked up after
+// confirming the full category key starts with "kids"
+const SHOPIFY_KIDS_CATEGORY_MAP: Record<string, string> = {
+  tees:        'Baby & Toddler > Clothing > Tops & T-Shirts',
+  tee:         'Baby & Toddler > Clothing > Tops & T-Shirts',
+  't-shirt':   'Baby & Toddler > Clothing > Tops & T-Shirts',
+  tshirt:      'Baby & Toddler > Clothing > Tops & T-Shirts',
+  shirts:      'Baby & Toddler > Clothing > Tops & T-Shirts',
+  shirt:       'Baby & Toddler > Clothing > Tops & T-Shirts',
+  tops:        'Baby & Toddler > Clothing > Tops & T-Shirts',
+  top:         'Baby & Toddler > Clothing > Tops & T-Shirts',
+  sweatshirts: 'Baby & Toddler > Clothing > Tops & T-Shirts',
+  sweatshirt:  'Baby & Toddler > Clothing > Tops & T-Shirts',
+  hoodies:     'Baby & Toddler > Clothing > Tops & T-Shirts',
+  hoodie:      'Baby & Toddler > Clothing > Tops & T-Shirts',
+  jackets:     'Baby & Toddler > Clothing > Outerwear',
+  jacket:      'Baby & Toddler > Clothing > Outerwear',
+  coats:       'Baby & Toddler > Clothing > Outerwear',
+  coat:        'Baby & Toddler > Clothing > Outerwear',
+  outerwear:   'Baby & Toddler > Clothing > Outerwear',
+  pants:       'Baby & Toddler > Clothing > Bottoms',
+  pant:        'Baby & Toddler > Clothing > Bottoms',
+  bottoms:     'Baby & Toddler > Clothing > Bottoms',
+  jeans:       'Baby & Toddler > Clothing > Bottoms',
+  jean:        'Baby & Toddler > Clothing > Bottoms',
+  leggings:    'Baby & Toddler > Clothing > Bottoms',
+  shorts:      'Baby & Toddler > Clothing > Bottoms',
+  short:       'Baby & Toddler > Clothing > Bottoms',
+  dresses:     'Baby & Toddler > Clothing > Dresses',
+  dress:       'Baby & Toddler > Clothing > Dresses',
+  hats:        'Baby & Toddler > Clothing > Accessories',
+  hat:         'Baby & Toddler > Clothing > Accessories',
+  cap:         'Baby & Toddler > Clothing > Accessories',
+  caps:        'Baby & Toddler > Clothing > Accessories',
+  shoes:       'Apparel & Accessories > Shoes',
+  shoe:        'Apparel & Accessories > Shoes',
+  sneakers:    'Apparel & Accessories > Shoes > Athletic Shoes',
+  sneaker:     'Apparel & Accessories > Shoes > Athletic Shoes',
+  boots:       'Apparel & Accessories > Shoes > Boots',
+  boot:        'Apparel & Accessories > Shoes > Boots',
+  accessories: 'Baby & Toddler > Clothing > Accessories',
+  accessory:   'Baby & Toddler > Clothing > Accessories',
+};
+
+// Maps the stored category key (or its type segment) to your store's custom Product Type.
+// These values must match what's already in Shopify (case-sensitive) or they'll create
+// a new type on import. Existing store types: Clothing, Hats, Hats & Caps,
+// Outerwear & Coats, Pants, Sweatshirts.
+// New types (Dresses, Shoes, Accessories, etc.) will be created in Shopify on first import.
+const SHOPIFY_TYPE_MAP: Record<string, string> = {
+  // Tops → Clothing
+  tee: 'Clothing', tees: 'Clothing',
+  't-shirt': 'Clothing', tshirt: 'Clothing',
+  shirt: 'Clothing', shirts: 'Clothing',
+  top: 'Clothing', tops: 'Clothing',
+  polo: 'Clothing', polos: 'Clothing',
+  jersey: 'Clothing', jerseys: 'Clothing',
+  bodysuit: 'Clothing', bodysuits: 'Clothing',
+  sweater: 'Clothing', sweaters: 'Clothing',
+  cardigan: 'Clothing', cardigans: 'Clothing',
+  // Sweatshirts & hoodies
+  sweatshirt: 'Sweatshirts', sweatshirts: 'Sweatshirts',
+  hoodie: 'Sweatshirts', hoodies: 'Sweatshirts',
+  // Outerwear
+  jacket: 'Outerwear & Coats', jackets: 'Outerwear & Coats',
+  coat: 'Outerwear & Coats', coats: 'Outerwear & Coats',
+  outerwear: 'Outerwear & Coats',
+  // Bottoms
+  pant: 'Pants', pants: 'Pants',
+  bottom: 'Pants', bottoms: 'Pants',
+  jean: 'Pants', jeans: 'Pants', denim: 'Pants',
+  short: 'Pants', shorts: 'Pants',
+  legging: 'Pants', leggings: 'Pants',
+  jogger: 'Pants', joggers: 'Pants',
+  sweatpant: 'Pants', sweatpants: 'Pants',
+  trouser: 'Pants', trousers: 'Pants',
+  chino: 'Pants', chinos: 'Pants',
+  // Hats
+  hat: 'Hats', hats: 'Hats',
+  beanie: 'Hats', beanies: 'Hats',
+  cap: 'Hats & Caps', caps: 'Hats & Caps',
+  // Dresses & skirts (new type — will be created on import)
+  dress: 'Dresses', dresses: 'Dresses',
+  skirt: 'Dresses', skirts: 'Dresses',
+  femme: 'Dresses', feminine: 'Dresses',
+  // Shoes (new type — will be created on import)
+  shoe: 'Shoes', shoes: 'Shoes',
+  sneaker: 'Shoes', sneakers: 'Shoes',
+  boot: 'Shoes', boots: 'Shoes',
+  // Accessories (new type — will be created on import)
+  accessory: 'Accessories', accessories: 'Accessories',
 };
 
 interface GoogleSheetExporterProps {
@@ -344,6 +452,8 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       'Variant Tax Code',
       'Cost per item',
       'Status',
+      'Size (product.metafields.custom.size)',
+      'Condition (product.metafields.custom.condition)',
     ];
 
     const rows: string[][] = [];
@@ -355,11 +465,23 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
 
       // Resolve the Shopify taxonomy path from the category.
       // Categories are often compound like "mens-tees", "womens-shirts", "kids-hoodies".
-      // Strategy: try the full key first, then each hyphen/space segment from last → first.
+      // Strategy:
+      //  1. If the key starts with "kids", look up the type segment in the Kids map.
+      //     (Shopify uses Baby & Toddler root for children's clothing.)
+      //  2. Otherwise try the full key in the adult map, then each segment last→first.
+      //     "mens"/"womens" prefixes are intentionally ignored — Shopify taxonomy has no
+      //     gender-specific clothing paths; gender lives in the Target Gender metafield.
       const resolveCategoryPath = (key: string): string => {
         if (!key) return '';
+        const isKids = /^kids[\s-]/.test(key);
+        if (isKids) {
+          // Extract the type segment (everything after "kids-" / "kids ")
+          const typeSegment = key.replace(/^kids[\s-]+/, '').split(/[-\s]+/).pop() ?? '';
+          return SHOPIFY_KIDS_CATEGORY_MAP[typeSegment] ?? 'Baby & Toddler > Clothing';
+        }
         if (key in SHOPIFY_CATEGORY_MAP) return SHOPIFY_CATEGORY_MAP[key];
         // Split on hyphens and spaces, try segments from last to first
+        // (strips gender prefixes like "mens", "womens" automatically)
         const segments = key.split(/[-\s]+/).filter(Boolean);
         for (let i = segments.length - 1; i >= 0; i--) {
           const seg = segments[i];
@@ -371,10 +493,22 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       // Only use taxonomy paths from the map — never pass raw category names to Shopify (they'll fail validation)
       const productCategory = resolveCategoryPath(catKey);
 
-      // Standard Product Type: always use productCategory from SHOPIFY_CATEGORY_MAP — it's the
-      // only guaranteed-valid Shopify taxonomy path. The stale shopifyProductType from the DB
-      // (e.g. "Apparel & Accessories > Clothing > Jeans") can contain invalid paths that cause
-      // Shopify to silently reject the whole product row on import. Leave blank if no map entry.
+      // Resolve the store Product Type from the category key.
+      // Uses the same segment-stripping strategy as the category resolver so
+      // "mens-sweatshirts" → type segment "sweatshirts" → "Sweatshirts".
+      const resolveProductType = (key: string): string => {
+        if (!key) return '';
+        // For kids, strip prefix then look up type segment
+        const cleanKey = key.replace(/^(kids|mens|womens)[\s-]+/, '');
+        const segments = cleanKey.split(/[-\s]+/).filter(Boolean);
+        // Try full clean key first, then last segment
+        if (cleanKey in SHOPIFY_TYPE_MAP) return SHOPIFY_TYPE_MAP[cleanKey];
+        for (let i = segments.length - 1; i >= 0; i--) {
+          if (segments[i] in SHOPIFY_TYPE_MAP) return SHOPIFY_TYPE_MAP[segments[i]];
+        }
+        return '';
+      };
+      const productType = resolveProductType(catKey);
       // Tags: extract #hashtags from generated description first, fall back to product.tags array
       const hashtagsFromDesc = (product.generatedDescription || '')
         .match(/#(\w+)/g)?.map((t: string) => t.slice(1)) || [];
@@ -414,7 +548,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         (product.generatedDescription || '').replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>'), // Body (HTML)
         vendor,                                                          // Vendor
         productCategory,                                                 // Product Category
-        '',                                                              // Type
+        productType,                                                     // Type
         tags,                                                            // Tags
         product.published === false ? 'false' : 'true',                 // Published
         'Title',                                                         // Option1 Name
@@ -459,6 +593,8 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         '',                                                              // Variant Tax Code
         String(product.costPerItem || '0.00'),                          // Cost per item
         (product.status || 'draft').toLowerCase(),                       // Status
+        product.size || '',                                              // Size (product.metafields.custom.size)
+        product.condition || '',                                         // Condition (product.metafields.custom.condition)
       ]);
       
       // Additional image rows — only Handle, Image Src, Image Position, Image Alt Text, Status
@@ -552,7 +688,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       'Color (metafield)','Fabric (metafield)','Target gender (metafield)',
                       'Complementary products','Related products','Related products settings','Search product boosts',
                       'Variant Image','Variant Weight Unit','Variant Tax Code',
-                      'Cost per item','Status',
+                      'Cost per item','Status','Size','Condition',
                     ].map((col, i) => (
                       <th key={i} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '2px solid #e5e7eb', background: '#f8fafc', color: '#374151', minWidth: i <= 2 ? '180px' : '110px' }}>
                         {col}
@@ -566,6 +702,11 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                     const catKey = product.category?.toLowerCase() ?? '';
                     const resolveCategoryPathPreview = (key: string): string => {
                       if (!key) return '';
+                      const isKids = /^kids[\s-]/.test(key);
+                      if (isKids) {
+                        const typeSegment = key.replace(/^kids[\s-]+/, '').split(/[-\s]+/).pop() ?? '';
+                        return SHOPIFY_KIDS_CATEGORY_MAP[typeSegment] ?? 'Baby & Toddler > Clothing';
+                      }
                       if (key in SHOPIFY_CATEGORY_MAP) return SHOPIFY_CATEGORY_MAP[key];
                       const segments = key.split(/[-\s]+/).filter(Boolean);
                       for (let i = segments.length - 1; i >= 0; i--) {
@@ -575,6 +716,17 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       return '';
                     };
                     const productCategory = resolveCategoryPathPreview(catKey);
+                    const resolveProductTypePreview = (key: string): string => {
+                      if (!key) return '';
+                      const cleanKey = key.replace(/^(kids|mens|womens)[\s-]+/, '');
+                      const segments = cleanKey.split(/[-\s]+/).filter(Boolean);
+                      if (cleanKey in SHOPIFY_TYPE_MAP) return SHOPIFY_TYPE_MAP[cleanKey];
+                      for (let i = segments.length - 1; i >= 0; i--) {
+                        if (segments[i] in SHOPIFY_TYPE_MAP) return SHOPIFY_TYPE_MAP[segments[i]];
+                      }
+                      return '';
+                    };
+                    const productType = resolveProductTypePreview(catKey);
                     const vendor = product.brand || '';
                     const previewHashtags = (product.generatedDescription || '')
                       .match(/#(\w+)/g)?.map((t: string) => t.slice(1)) || [];
@@ -598,7 +750,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       product.generatedDescription?.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>') || '', // Body (HTML)
                       vendor,                                                        // Vendor
                       productCategory,                                               // Product Category
-                      '',                                                            // Type
+                      productType,                                                   // Type
                       tags,                                                          // Tags
                       product.published === false ? 'false' : 'true',               // Published
                       'Title',                                                       // Option1 Name
@@ -633,6 +785,8 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       '',                                                            // Variant Tax Code
                       String(product.costPerItem || '0.00'),                       // Cost per item
                       (product.status || 'draft').toLowerCase(),                    // Status
+                      product.size || '',                                            // Size (custom.size)
+                      product.condition || '',                                       // Condition (custom.condition)
                     ];
                     return (
                       <tr key={product.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
