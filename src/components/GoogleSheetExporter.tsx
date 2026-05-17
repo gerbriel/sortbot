@@ -516,8 +516,9 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         ? hashtagsFromDesc.join(', ')
         : (product.tags?.join(', ') || '');
       const primaryColor = product.color || '';
+      // weightValue is stored in grams — use directly, no conversion needed.
       const rawWeight = parseFloat(product.weightValue || '');
-      const variantGrams = isNaN(rawWeight) ? '' : String(rawWeight * 453.59237);
+      const variantGrams = isNaN(rawWeight) ? '' : String(rawWeight);
       
       const cleanTitle = buildCleanTitle(product, idx);
 
@@ -567,7 +568,11 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         product.continueSellingOutOfStock ? 'continue' : 'deny',        // Variant Inventory Policy
         'manual',                                                        // Variant Fulfillment Service
         product.price != null ? parseFloat(String(product.price)).toFixed(2) : '', // Variant Price
-        product.compareAtPrice != null ? parseFloat(String(product.compareAtPrice)).toFixed(2) : '0.00', // Variant Compare At Price
+        (() => { // Variant Compare At Price — only output if strictly greater than sale price
+          const sale = parseFloat(String(product.price ?? 0));
+          const compare = parseFloat(String(product.compareAtPrice ?? 0));
+          return (compare > sale && compare > 0) ? compare.toFixed(2) : '';
+        })(),
         product.requiresShipping === false ? 'false' : 'true',          // Variant Requires Shipping
         'true',                                                          // Variant Taxable
         '',                                                              // Unit Price Total Measure
@@ -589,7 +594,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         '',                                                              // Related products settings
         '',                                                              // Search product boosts
         '',                                                              // Variant Image
-        'lb',                                                            // Variant Weight Unit
+        'g',                                                             // Variant Weight Unit
         '',                                                              // Variant Tax Code
         String(product.costPerItem || '0.00'),                          // Cost per item
         (product.status || 'draft').toLowerCase(),                       // Status
@@ -734,8 +739,9 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       ? previewHashtags.join(', ')
                       : (product.tags?.join(', ') || '');
                     const primaryColor = product.color || '';
+                    // weightValue is stored in grams — use directly, no conversion needed.
                     const rawWeight = parseFloat(product.weightValue || '');
-                    const variantGrams = isNaN(rawWeight) ? '' : String(rawWeight * 453.59237);
+                    const variantGrams = isNaN(rawWeight) ? '' : String(rawWeight);
                     const altParts = [cleanTitle];
                     if (primaryColor && !cleanTitle.toLowerCase().includes(primaryColor.toLowerCase())) altParts.push(primaryColor);
                     if (product.size) altParts.push(product.size);
@@ -765,7 +771,11 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       product.continueSellingOutOfStock ? 'continue' : 'deny',      // Variant Inventory Policy
                       'manual',                                                      // Variant Fulfillment Service
                       product.price != null ? parseFloat(String(product.price)).toFixed(2) : '', // Variant Price
-                      product.compareAtPrice != null ? parseFloat(String(product.compareAtPrice)).toFixed(2) : '0.00', // Variant Compare At Price
+                      (() => { // Variant Compare At Price — only if strictly greater than sale price
+                        const sale = parseFloat(String(product.price ?? 0));
+                        const compare = parseFloat(String(product.compareAtPrice ?? 0));
+                        return (compare > sale && compare > 0) ? compare.toFixed(2) : '';
+                      })(),
                       product.requiresShipping === false ? 'false' : 'true',        // Variant Requires Shipping
                       'true',                                                        // Variant Taxable
                       '','','','',                                                   // Unit Price columns
@@ -781,7 +791,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       resolveGenderGid(product.gender),                              // Target gender metafield (GID)
                       '','','','',                                                   // Recommendation metafields
                       '',                                                            // Variant Image
-                      'lb',                                                          // Variant Weight Unit
+                      'g',                                                           // Variant Weight Unit
                       '',                                                            // Variant Tax Code
                       String(product.costPerItem || '0.00'),                       // Cost per item
                       (product.status || 'draft').toLowerCase(),                    // Status
