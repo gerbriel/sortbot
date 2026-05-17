@@ -39,6 +39,69 @@ function stripUnresolvedTokens(value: string | undefined): string {
 }
 
 /**
+ * Shopify metaobject GIDs — fetched once from the store via Admin API.
+ * These are stable permanent IDs; they never change.
+ */
+const COLOR_GID_MAP: Record<string, string> = {
+  'brown':       'gid://shopify/Metaobject/128362479801',
+  'gold':        'gid://shopify/Metaobject/128362545337',
+  'navy':        'gid://shopify/Metaobject/128362643641',
+  'black':       'gid://shopify/Metaobject/155011809465',
+  'blue':        'gid://shopify/Metaobject/155011842233',
+  'white':       'gid://shopify/Metaobject/155011875001',
+  'yellow':      'gid://shopify/Metaobject/155011907769',
+  'beige':       'gid://shopify/Metaobject/161892204729',
+  'cream':       'gid://shopify/Metaobject/161892204729', // map to Beige
+  'tan':         'gid://shopify/Metaobject/161892204729', // map to Beige
+  'green':       'gid://shopify/Metaobject/161892237497',
+  'olive':       'gid://shopify/Metaobject/161892237497', // map to Green
+  'orange':      'gid://shopify/Metaobject/166265684153',
+  'red':         'gid://shopify/Metaobject/166265716921',
+  'maroon':      'gid://shopify/Metaobject/166265716921', // map to Red
+  'burgundy':    'gid://shopify/Metaobject/166265716921', // map to Red
+  'gray':        'gid://shopify/Metaobject/166878085305',
+  'grey':        'gid://shopify/Metaobject/166878085305',
+  'silver':      'gid://shopify/Metaobject/166878085305', // map to Gray
+  // Colors not yet in the store — add GIDs when Shopify adds them:
+  // 'pink', 'purple', 'multicolor', 'plaid', 'striped', 'camouflage', 'tie-dye'
+};
+
+const FABRIC_GID_MAP: Record<string, string> = {
+  'corduroy':    'gid://shopify/Metaobject/128362610873',
+  'cashmere':    'gid://shopify/Metaobject/128362676409',
+  'vinyl':       'gid://shopify/Metaobject/128362709177',
+  'denim':       'gid://shopify/Metaobject/178561745081',
+  'nylon':       'gid://shopify/Metaobject/178698911929',
+  'polyester':   'gid://shopify/Metaobject/178700255417',
+};
+
+const GENDER_GID_MAP: Record<string, string> = {
+  'male':    'gid://shopify/Metaobject/128362447033',
+  'men':     'gid://shopify/Metaobject/128362447033',
+  'mens':    'gid://shopify/Metaobject/128362447033',
+  'other':   'gid://shopify/Metaobject/128362512569',
+  'unisex':  'gid://shopify/Metaobject/128362512569',
+  'female':  'gid://shopify/Metaobject/128362578105',
+  'women':   'gid://shopify/Metaobject/128362578105',
+  'womens':  'gid://shopify/Metaobject/128362578105',
+};
+
+function resolveColorGid(color: string | undefined): string {
+  if (!color) return '';
+  return COLOR_GID_MAP[color.toLowerCase().trim()] || '';
+}
+
+function resolveFabricGid(material: string | undefined): string {
+  if (!material) return '';
+  return FABRIC_GID_MAP[material.toLowerCase().trim()] || '';
+}
+
+function resolveGenderGid(gender: string | undefined): string {
+  if (!gender) return '';
+  return GENDER_GID_MAP[gender.toLowerCase().trim()] || '';
+}
+
+/**
  * Maps short internal category names → full Shopify taxonomy path strings.
  * Used for "Product category" and "Google Shopping / Google product category" columns.
  * Paths verified against Shopify Standard Product Taxonomy (github.com/Shopify/product-taxonomy).
@@ -384,9 +447,9 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         'false',                                                         // Gift Card
         cleanTitle,                                                      // SEO Title
         product.seoDescription || product.generatedDescription?.substring(0, 320) || '', // SEO Description
-        primaryColor,                                                    // Color (product.metafields.shopify.color-pattern)
-        product.material || '',                                          // Fabric (product.metafields.shopify.fabric)
-        product.gender || '',                                            // Target gender (product.metafields.shopify.target-gender)
+        resolveColorGid(primaryColor),                                   // Color (product.metafields.shopify.color-pattern)
+        resolveFabricGid(product.material),                              // Fabric (product.metafields.shopify.fabric)
+        resolveGenderGid(product.gender),                                // Target gender (product.metafields.shopify.target-gender)
         '',                                                              // Complementary products
         '',                                                              // Related products
         '',                                                              // Related products settings
@@ -561,9 +624,9 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       'false',                                                       // Gift Card
                       cleanTitle,                                                    // SEO Title
                       product.seoDescription || product.generatedDescription?.substring(0, 320) || '', // SEO Description
-                      primaryColor,                                                  // Color metafield
-                      product.material || '',                                        // Fabric metafield
-                      product.gender || '',                                          // Target gender metafield
+                      resolveColorGid(primaryColor),                                 // Color metafield (GID)
+                      resolveFabricGid(product.material),                            // Fabric metafield (GID)
+                      resolveGenderGid(product.gender),                              // Target gender metafield (GID)
                       '','','','',                                                   // Recommendation metafields
                       '',                                                            // Variant Image
                       'lb',                                                          // Variant Weight Unit
