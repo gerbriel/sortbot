@@ -595,7 +595,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         '',                                                              // Search product boosts
         '',                                                              // Variant Image
         'g',                                                             // Variant Weight Unit
-        '',                                                              // Variant Tax Code
+        product.taxCode || '',                                           // Variant Tax Code
         String(product.costPerItem || '0.00'),                          // Cost per item
         (product.status || 'draft').toLowerCase(),                       // Status
         product.size || '',                                              // Size (product.metafields.custom.size)
@@ -792,7 +792,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       '','','','',                                                   // Recommendation metafields
                       '',                                                            // Variant Image
                       'g',                                                           // Variant Weight Unit
-                      '',                                                            // Variant Tax Code
+                      product.taxCode || '',                                         // Variant Tax Code
                       String(product.costPerItem || '0.00'),                       // Cost per item
                       (product.status || 'draft').toLowerCase(),                    // Status
                       product.size || '',                                            // Size (custom.size)
