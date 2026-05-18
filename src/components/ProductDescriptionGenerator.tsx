@@ -645,66 +645,73 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     setInterimTranscript('');
 
     // AUTO-EXTRACT FIELDS FROM VOICE DESCRIPTION WHEN RECORDING STOPS
-    // Read from the ref for a best-effort snapshot to build the AI request.
-    // The actual state write uses setProcessedItems(prev=>) so it always
-    // merges into the true latest state regardless of render timing.
-    const latestItems = processedItemsRef.current;
-    const latestGroupArray = buildGroupArray(latestItems);
-    const latestGroup = latestGroupArray[currentGroupIndex] || [];
-    const latestItem = latestGroup[0];
+    // We wait a short tick so the final onresult setState flush has time to
+    // propagate into processedItemsRef before we read it.  150 ms is plenty —
+    // the browser fires onresult synchronously before onend, but the React
+    // setState batching means the ref useEffect runs one render later.
+    setTimeout(async () => {
+      const latestItems = processedItemsRef.current;
+      const latestGroupArray = buildGroupArray(latestItems);
+      const latestGroup = latestGroupArray[currentGroupIndex] || [];
+      const latestItem = latestGroup[0];
 
-    // Capture target IDs now — before any async gap
-    const targetIds = new Set(latestGroup.map(g => g.id));
+      // Capture target IDs before the async gap
+      const targetIds = new Set(latestGroup.map(g => g.id));
 
-    if (latestItem?.voiceDescription) {
+      if (!latestItem?.voiceDescription) return;
+
       try {
         setIsGenerating(true);
-        
-        // Use AI to extract fields from voice description
+
+        // Run the pure-JS field extractor directly — no network call needed.
+        // extractFieldsFromVoice parses "brand Hanes period", "price 40 period",
+        // "size L period", etc. and returns them as structured fields.
         const aiResult = await generateProductDescription({
           voiceDescription: latestItem.voiceDescription,
-          brand: latestItem.brand,
-          color: latestItem.color,
-          size: latestItem.size,
-          material: latestItem.material,
-          condition: latestItem.condition as any,
-          era: latestItem.era,
-          style: latestItem.style,
+          // Pass empty strings for all existing fields so voice ALWAYS wins —
+          // the extractor returns only what was explicitly spoken, so if a field
+          // wasn't mentioned it comes back undefined and the spread is a no-op.
+          brand: '',
+          color: '',
+          size: '',
+          material: '',
+          condition: undefined,
+          era: '',
+          style: '',
+          gender: '',
           category: latestItem.productType,
-          measurements: latestItem.measurements,
-          flaws: latestItem.flaws,
-          care: latestItem.care
+          measurements: undefined,
+          flaws: '',
+          care: '',
         });
 
-        // Extract fields from AI result (only fields with supporting info)
         const extractedFields = aiResult.extractedFields || {};
-        
-        // Use functional update so we always write into the true latest state —
-        // not the stale ref snapshot that was captured before the await resolved.
-        // voiceDescription is intentionally LEFT AS-IS — the textarea always shows
-        // the full formatted transcript (field commands + any prose) so the user
-        // can review everything that was spoken. Strip only happens at AI call sites.
+
+        // Apply all extracted fields. Use functional update so we always write
+        // into the true latest state, not the snapshot captured above.
+        // voiceDescription is left untouched — the textarea shows the full
+        // transcript so the user can review what was dictated.
         setProcessedItems(prev => {
           const updated = [...prev];
           updated.forEach((item, idx) => {
             if (!targetIds.has(item.id)) return;
             updated[idx] = {
               ...item,
-              ...(extractedFields.brand && { brand: extractedFields.brand }),
-              ...(extractedFields.modelName && { modelName: extractedFields.modelName }),
-              ...(extractedFields.color && { color: extractedFields.color }),
+              ...(extractedFields.brand     && { brand:          extractedFields.brand }),
+              ...(extractedFields.modelName  && { modelName:      extractedFields.modelName }),
+              ...(extractedFields.color      && { color:          extractedFields.color }),
               ...(extractedFields.secondaryColor && { secondaryColor: extractedFields.secondaryColor }),
-              ...(extractedFields.size && { size: extractedFields.size }),
-              ...(extractedFields.material && { material: extractedFields.material }),
-              ...(extractedFields.condition && { condition: extractedFields.condition as 'New' | 'Used' | 'NWT' | 'Excellent' | 'Good' | 'Fair' }),
-              ...(extractedFields.era && { era: extractedFields.era }),
-              ...(extractedFields.style && { style: extractedFields.style }),
-              ...(extractedFields.gender && { gender: extractedFields.gender as 'Men' | 'Women' | 'Unisex' | 'Kids' }),
+              ...(extractedFields.size       && { size:           extractedFields.size }),
+              ...(extractedFields.material   && { material:       extractedFields.material }),
+              ...(extractedFields.condition  && { condition:      extractedFields.condition as 'New' | 'Used' | 'NWT' | 'Excellent' | 'Good' | 'Fair' }),
+              ...(extractedFields.era        && { era:            extractedFields.era }),
+              ...(extractedFields.style      && { style:          extractedFields.style }),
+              ...(extractedFields.gender     && { gender:         extractedFields.gender as 'Men' | 'Women' | 'Unisex' | 'Kids' }),
               ...(extractedFields.measurements && { measurements: extractedFields.measurements }),
-              ...(extractedFields.price && { price: parseFloat(extractedFields.price) || undefined }),
-              ...(extractedFields.flaws && { flaws: extractedFields.flaws }),
-              ...(extractedFields.care && { care: extractedFields.care }),
-              ...(extractedFields.seoTitle && { seoTitle: extractedFields.seoTitle }),
+              ...(extractedFields.price      && { price:          parseFloat(extractedFields.price) || undefined }),
+              ...(extractedFields.flaws      && { flaws:          extractedFields.flaws }),
+              ...(extractedFields.care       && { care:           extractedFields.care }),
+              ...(extractedFields.seoTitle   && { seoTitle:       extractedFields.seoTitle }),
               ...(extractedFields.tags && extractedFields.tags.length > 0 && {
                 tags: [...new Set([...(item.tags || []), ...extractedFields.tags])].slice(0, 5)
               }),
@@ -712,13 +719,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           });
           return updated;
         });
-        
+
       } catch (error) {
         console.error('Error extracting fields from voice:', error);
       } finally {
         setIsGenerating(false);
       }
-    }
+    }, 150);
   };
 
   // Background save — pushes current field values to Supabase products table.
