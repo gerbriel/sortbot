@@ -454,6 +454,8 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       'Status',
       'Size (product.metafields.custom.size)',
       'Condition (product.metafields.custom.condition)',
+      'Parcel Size (product.metafields.custom.parcel_size)',
+      'Package Dimensions (product.metafields.custom.package_dimensions)',
     ];
 
     const rows: string[][] = [];
@@ -600,6 +602,8 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         (product.status || 'draft').toLowerCase(),                       // Status
         product.size || '',                                              // Size (product.metafields.custom.size)
         product.condition || '',                                         // Condition (product.metafields.custom.condition)
+        product.parcelSize || '',                                        // Parcel Size (product.metafields.custom.parcel_size)
+        product.packageDimensions || '',                                 // Package Dimensions (product.metafields.custom.package_dimensions)
       ]);
       
       // Additional image rows — only Handle, Image Src, Image Position, Image Alt Text, Status
@@ -797,6 +801,8 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       (product.status || 'draft').toLowerCase(),                    // Status
                       product.size || '',                                            // Size (custom.size)
                       product.condition || '',                                       // Condition (custom.condition)
+                      product.parcelSize || '',                                      // Parcel Size (custom.parcel_size)
+                      product.packageDimensions || '',                               // Package Dimensions (custom.package_dimensions)
                     ];
                     return (
                       <tr key={product.id} style={{ borderBottom: '1px solid #f0f0f0' }}>

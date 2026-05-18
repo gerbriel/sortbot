@@ -236,6 +236,10 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
             </select>
           </div>
           <div className="info-item">
+            <label>Package Dimensions: <PresetBadge show={isFromPreset('packageDimensions')} /></label>
+            <input type="text" value={currentItem.packageDimensions || ''} onChange={(e) => updateGroupField('packageDimensions', e.target.value)} placeholder="e.g., 14 x 10 x 1 in" className={`info-input${req(currentItem.packageDimensions)}`} />
+          </div>
+          <div className="info-item">
             <label>Requires Shipping: <PresetBadge show={isFromPreset('requiresShipping')} /></label>
             <select value={currentItem.requiresShipping === undefined ? '' : currentItem.requiresShipping ? 'true' : 'false'} onChange={(e) => updateGroupField('requiresShipping', e.target.value === 'true')} className="info-input">
               <option value="">Select...</option>
