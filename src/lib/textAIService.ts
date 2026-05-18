@@ -30,6 +30,7 @@ export function smartSeoTruncate(text: string, target = 320, flex = 40): string 
 
 interface ProductContext {
   voiceDescription?: string;
+  title?: string;  // Pre-existing product title to use as the description opener
   brand?: string;
   color?: string;
   secondaryColor?: string;
@@ -701,46 +702,12 @@ export const generateProductDescription = async (
 function createFallbackDescription(context: ProductContext): AIGeneratedContent {
   let description = '';
 
-  // PART 1: Main voice description (use EXACTLY as provided, minus condition/care)
-  if (context.voiceDescription && context.voiceDescription.length > 5) {
-    let mainDesc = context.voiceDescription.trim();
+  // Generate the clean title — used as the description opener line
+  const suggestedTitle = context.title || generateTitleFromFields(context);
+  const sizePrefix = context.size ? `${context.size} - ` : '';
 
-    // Strip "field <value> period" voice commands from the display description
-    // Handles both the old "period" word form and the new "." display form
-    const fieldPrefixes = [
-      'brand', 'model', 'size', 'color', 'colour', 'secondary color', 'secondary colour',
-      'material', 'fabric', 'condition', 'era', 'style', 'gender', 'price',
-      'flaws?', 'damage', 'care', 'tags?', 'title',
-      'width', 'length', 'waist', 'shoulder', 'sleeve', 'inseam'
-    ].join('|');
-    // Match "field value period" (old) OR "field value." (new dot format) — on any line
-    mainDesc = mainDesc.replace(new RegExp(`\\b(?:${fieldPrefixes})\\s+.+?(?:\\s+period\\b|\\.)`, 'gi'), '');
-
-    // Strip any remaining standalone "period" words or orphaned dots at line boundaries
-    mainDesc = mainDesc.replace(/\bperiod\b/gi, '').replace(/(^|[\n ])\./gm, '$1').replace(/\.\.+/g, '').replace(/\s+\./g, '');
-
-    // Strip condition phrases from description
-    mainDesc = mainDesc.replace(/\b(nwt|new with tags|like[\s-]new|mint|pristine|excellent[\s-]condition|great[\s-]condition|good[\s-]condition|gently[\s-]used|fair[\s-]condition|worn[\s-]condition|brand[\s-]new|in[\s-]good[\s-]condition|in[\s-]great[\s-]condition|in[\s-]excellent[\s-]condition|very[\s-]good[\s-]condition|pre[\s-]owned)\b[,.]?\s*/gi, '');
-
-    // Strip care instruction phrases from description
-    mainDesc = mainDesc.replace(/\b(machine[\s-]wash(?:[\s-]cold|[\s-]warm|[\s-]hot)?|hand[\s-]wash(?:[\s-]only)?|dry[\s-]clean(?:[\s-]only)?|wash[\s-]cold|wash[\s-]warm|wash[\s-]hot|tumble[\s-]dry(?:[\s-]low|[\s-]high|[\s-]no[\s-]heat)?|hang[\s-]dry|air[\s-]dry(?:[\s-]only)?|do[\s-]not[\s-]bleach|do[\s-]not[\s-]tumble[\s-]dry|iron(?:[\s-]low|[\s-]medium|[\s-]high)?|dry[\s-]flat|lay[\s-]flat[\s-]to[\s-]dry|line[\s-]dry)[^.]*[.]?\s*/gi, '');
-
-    // Clean up any double spaces or leading/trailing commas left behind
-    mainDesc = mainDesc.replace(/\s{2,}/g, ' ').replace(/^[,.\s]+|[,.\s]+$/g, '').trim();
-
-    // Capitalize first letter only
-    mainDesc = mainDesc.charAt(0).toUpperCase() + mainDesc.slice(1);
-
-    // Prepend "Vintage / Y2K" inline at the start of the paragraph
-    // If size is known, prefix it: "OSFA - Vintage / Y2K ..."
-    const sizePrefix = context.size ? `${context.size} - ` : '';
-    description += `${sizePrefix}Vintage / Y2K ${mainDesc}`;
-  } else {
-    // Fallback: build ONLY from filled fields (no assumptions)
-    const intro = buildIntroFromFields(context);
-    const sizePrefix = context.size ? `${context.size} - ` : '';
-    description += `${sizePrefix}Vintage / Y2K ${intro || 'Vintage clothing item'}`;
-  }
+  // PART 1: Opener line: "[size] - Vintage / Y2K [title]"
+  description += `${sizePrefix}Vintage / Y2K ${suggestedTitle || 'Vintage clothing item'}`;
 
   description += '\n\n';
 
@@ -792,28 +759,9 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
 
   return {
     description,
-    suggestedTitle: generateTitleFromFields(context),
+    suggestedTitle,
     suggestedTags: tags
   };
-}
-
-/**
- * Build intro ONLY from explicitly filled fields
- * No assumptions, no AI guessing
- */
-function buildIntroFromFields(context: ProductContext): string {
-  const { brand, category, color, era, style } = context;
-  
-  const parts: string[] = [];
-  
-  // ONLY add if explicitly provided in fields
-  if (era) parts.push(era.toLowerCase());
-  if (style) parts.push(style.toLowerCase());
-  if (brand) parts.push(brand); // Keep brand case as entered
-  if (color) parts.push(color.toLowerCase());
-  if (category) parts.push(category.toLowerCase());
-  
-  return parts.join(' ');
 }
 
 /**
