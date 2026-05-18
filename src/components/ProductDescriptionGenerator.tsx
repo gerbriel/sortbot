@@ -584,6 +584,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         
         if (defaultPreset) {
           setSelectedPresetId(defaultPreset.id);
+          setAppliedPresetLabel(defaultPreset.display_name);
         }
       } catch (error) {
         // Silently fail auto-apply
@@ -594,6 +595,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       autoApplyDefaultPreset();
     }
   }, [currentGroupIndex, currentItem?.category, availablePresets]); // Watch category changes too!
+
+  // Keep the preset search label in sync when the user navigates to a different group
+  useEffect(() => {
+    setAppliedPresetLabel(currentItem?._presetData?.displayName || '');
+    setPresetSearchQuery('');
+    setPresetSearchOpen(false);
+  }, [currentGroupIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Apply manual preset override
   const handleApplyPreset = async (presetId: string) => {
@@ -630,7 +638,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         return updated;
       });
       setSelectedPresetId(presetId);
-      // Clear selection after applying
+      setAppliedPresetLabel(preset.display_name);
       if (selectedGroupIds.size > 0) setSelectedGroupIds(new Set());
     } catch (error) {
       alert('Failed to apply preset. Please try again.');
