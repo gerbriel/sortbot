@@ -9,6 +9,7 @@ import { generateProductDescription, formatVoiceTranscript, smartSeoTruncate } f
 import { syncGroupFieldsToDatabase } from '../lib/productService';
 import LazyImg from './LazyImg';
 import { log } from '../lib/debugLogger';
+import VoiceCommandTable, { VOICE_KEYWORD_TO_FIELD } from './VoiceCommandTable';
 import './ProductDescriptionGenerator.css';
 
 interface ProductDescriptionGeneratorProps {
@@ -65,6 +66,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const [selectedPresetId, setSelectedPresetId] = useState<string>('');
   const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Voice command table
+  const [voiceMode, setVoiceMode] = useState<'table' | 'text'>('table');
+  const [activeVoiceField, setActiveVoiceField] = useState<string | null>(null);
 
   // Photo reorder drag state (Step 4 thumbnails)
   const [draggedThumbId, setDraggedThumbId] = useState<string | null>(null);
@@ -305,10 +310,33 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         });
         
         setInterimTranscript('');
-        
+
+        // Detect active column from final chunk — clear on period/dot, set on keyword
+        const finalLower = final.toLowerCase();
+        if (/\bperiod\b|\./.test(finalLower)) {
+          setActiveVoiceField(null);
+        } else {
+          let lastPos = -1;
+          let lastKey: string | null = null;
+          for (const [keyword, fieldKey] of Object.entries(VOICE_KEYWORD_TO_FIELD)) {
+            const idx = finalLower.lastIndexOf(keyword);
+            if (idx > lastPos) { lastPos = idx; lastKey = fieldKey; }
+          }
+          if (lastKey) setActiveVoiceField(lastKey);
+        }
+
         // Don't restart automatically - continuous mode handles this
       } else {
         setInterimTranscript(interim);
+        // Real-time column highlighting from interim text
+        const interimLower = interim.toLowerCase();
+        let lastPos = -1;
+        let lastKey: string | null = null;
+        for (const [keyword, fieldKey] of Object.entries(VOICE_KEYWORD_TO_FIELD)) {
+          const idx = interimLower.lastIndexOf(keyword);
+          if (idx > lastPos) { lastPos = idx; lastKey = fieldKey; }
+        }
+        if (lastKey) setActiveVoiceField(lastKey);
       }
     };
 
@@ -775,6 +803,21 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     
     setProcessedItems(updated);
     setInterimTranscript('');
+  };
+
+  /** Handle a cell edit from the VoiceCommandTable — updates the current group's item fields */
+  const handleTableFieldChange = (fieldKey: string, value: string) => {
+    const targetIds = new Set(currentGroup.map(g => g.id));
+    setProcessedItems(prev => prev.map(item => {
+      if (!targetIds.has(item.id)) return item;
+      if (fieldKey.startsWith('meas_')) {
+        const measKey = fieldKey.slice(5); // strip 'meas_'
+        return { ...item, measurements: { ...(item.measurements || {}), [measKey]: value } };
+      }
+      if (fieldKey === 'price') return { ...item, price: parseFloat(value) || undefined };
+      if (fieldKey === 'tags')  return { ...item, tags: value.split(/,\s*/).filter(Boolean) };
+      return { ...item, [fieldKey]: value };
+    }));
   };
 
   // Banned phrases to filter from AI descriptions
@@ -1620,77 +1663,111 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               </div>
             )}
             <div className="voice-result">
-              <label><strong>Voice Description (edit as needed):</strong></label>
-              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
-                {/* Command key reference table */}
-                <div style={{
-                  flexShrink: 0,
-                  width: '150px',
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '6px',
-                  padding: '0.5rem 0.6rem',
-                  fontSize: '0.7rem',
-                  lineHeight: '1.6',
-                }}>
-                  <div style={{ fontWeight: 700, marginBottom: '0.3rem', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.65rem' }}>Voice Commands</div>
-                  {[
-                    ['color', 'red'],
-                    ['brand', 'Nike'],
-                    ['size', 'large'],
-                    ['material', 'cotton'],
-                    ['condition', 'good'],
-                    ['price', '$20'],
-                    ['era', '90s'],
-                    ['style', 'casual'],
-                    ['gender', 'women'],
-                    ['flaws', 'small hole'],
-                    ['care', 'hand wash'],
-                    ['width', '18"'],
-                    ['length', '28"'],
-                    ['waist', '32"'],
-                    ['inseam', '30"'],
-                    ['outseam', '40"'],
-                    ['leg opening', '18"'],
-                    ['title', 'vintage tee'],
-                  ].map(([field, ex]) => (
-                    <div key={field} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.25rem' }}>
-                      <span style={{ color: '#6366f1', fontWeight: 600 }}>{field}</span>
-                      <span style={{ color: '#94a3b8', fontStyle: 'italic', textAlign: 'right' }}>{ex} <span style={{ color: '#cbd5e1' }}>•</span></span>
-                    </div>
+              {/* Mode toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <label><strong>Voice Description (edit as needed):</strong></label>
+                <div style={{ display: 'flex', gap: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid #d1d5db' }}>
+                  {(['table', 'text'] as const).map(mode => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setVoiceMode(mode)}
+                      style={{
+                        padding: '0.2rem 0.7rem',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: voiceMode === mode ? '#6366f1' : '#f9fafb',
+                        color: voiceMode === mode ? '#fff' : '#374151',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {mode === 'table' ? '⊞ Table' : '≡ Text'}
+                    </button>
                   ))}
-                  <div style={{ marginTop: '0.4rem', paddingTop: '0.4rem', borderTop: '1px solid #e2e8f0', color: '#94a3b8', fontSize: '0.63rem' }}>
-                    Say <strong style={{ color: '#6366f1' }}>period</strong> to end each field
-                  </div>
                 </div>
-                {/* Textarea */}
-                <textarea 
-                  value={currentItem.voiceDescription || interimTranscript || ''}
-                  onChange={(e) => {
-                    // Clear interimTranscript so user edits aren't overridden by live recognition
-                    setInterimTranscript('');
-                    const updated = [...processedItems];
-                    currentGroup.forEach(groupItem => {
-                      const itemIndex = updated.findIndex(item => item.id === groupItem.id);
-                      if (itemIndex !== -1) {
-                        updated[itemIndex] = {
-                          ...updated[itemIndex],
-                          voiceDescription: e.target.value,
-                          generatedDescription: updated[itemIndex].generatedDescription
-                            ? `[Voice updated — click Generate to refresh]\n\n${updated[itemIndex].generatedDescription}`
-                            : updated[itemIndex].generatedDescription,
-                        };
-                      }
-                    });
-                    setProcessedItems(updated);
-                  }}
-                  placeholder={"Start Recording and speak...\n\nExample:\n  color black period\n  brand Nike period\n  size large period"}
-                  rows={8}
-                  className="description-textarea"
-                  style={{ flex: 1, minWidth: 0 }}
-                  onKeyDown={(e) => e.stopPropagation()}
-                />
               </div>
+
+              {voiceMode === 'table' ? (
+                <VoiceCommandTable
+                  currentItem={currentItem}
+                  isRecording={isRecording}
+                  activeField={activeVoiceField}
+                  interimValue={interimTranscript}
+                  onChange={handleTableFieldChange}
+                />
+              ) : (
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                  {/* Command key reference table */}
+                  <div style={{
+                    flexShrink: 0,
+                    width: '150px',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '6px',
+                    padding: '0.5rem 0.6rem',
+                    fontSize: '0.7rem',
+                    lineHeight: '1.6',
+                  }}>
+                    <div style={{ fontWeight: 700, marginBottom: '0.3rem', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.65rem' }}>Voice Commands</div>
+                    {[
+                      ['color', 'red'],
+                      ['brand', 'Nike'],
+                      ['size', 'large'],
+                      ['material', 'cotton'],
+                      ['condition', 'good'],
+                      ['price', '$20'],
+                      ['era', '90s'],
+                      ['style', 'casual'],
+                      ['gender', 'women'],
+                      ['flaws', 'small hole'],
+                      ['care', 'hand wash'],
+                      ['width', '18"'],
+                      ['length', '28"'],
+                      ['waist', '32"'],
+                      ['inseam', '30"'],
+                      ['outseam', '40"'],
+                      ['leg opening', '18"'],
+                      ['title', 'vintage tee'],
+                    ].map(([field, ex]) => (
+                      <div key={field} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.25rem' }}>
+                        <span style={{ color: '#6366f1', fontWeight: 600 }}>{field}</span>
+                        <span style={{ color: '#94a3b8', fontStyle: 'italic', textAlign: 'right' }}>{ex} <span style={{ color: '#cbd5e1' }}>•</span></span>
+                      </div>
+                    ))}
+                    <div style={{ marginTop: '0.4rem', paddingTop: '0.4rem', borderTop: '1px solid #e2e8f0', color: '#94a3b8', fontSize: '0.63rem' }}>
+                      Say <strong style={{ color: '#6366f1' }}>period</strong> to end each field
+                    </div>
+                  </div>
+                  {/* Textarea */}
+                  <textarea 
+                    value={currentItem.voiceDescription || interimTranscript || ''}
+                    onChange={(e) => {
+                      setInterimTranscript('');
+                      const updated = [...processedItems];
+                      currentGroup.forEach(groupItem => {
+                        const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                        if (itemIndex !== -1) {
+                          updated[itemIndex] = {
+                            ...updated[itemIndex],
+                            voiceDescription: e.target.value,
+                            generatedDescription: updated[itemIndex].generatedDescription
+                              ? `[Voice updated — click Generate to refresh]\n\n${updated[itemIndex].generatedDescription}`
+                              : updated[itemIndex].generatedDescription,
+                          };
+                        }
+                      });
+                      setProcessedItems(updated);
+                    }}
+                    placeholder={"Start Recording and speak...\n\nExample:\n  color black period\n  brand Nike period\n  size large period"}
+                    rows={8}
+                    className="description-textarea"
+                    style={{ flex: 1, minWidth: 0 }}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Title — editable above the AI description */}
