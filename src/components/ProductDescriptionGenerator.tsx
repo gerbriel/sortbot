@@ -70,6 +70,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Voice command table
   const [voiceMode, setVoiceMode] = useState<'table' | 'text'>('table');
   const [activeVoiceField, setActiveVoiceField] = useState<string | null>(null);
+  const activeVoiceFieldRef = useRef<string | null>(null);
+  const pendingFieldValueRef = useRef<string>(''); // accumulates spoken value for active field
+  // Always-current handleTableFieldChange so onresult closure never goes stale
+  const applyTableFieldRef = useRef<(field: string, value: string) => void>(() => {});
 
   // Photo reorder drag state (Step 4 thumbnails)
   const [draggedThumbId, setDraggedThumbId] = useState<string | null>(null);
@@ -313,16 +317,48 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
         // Detect active column from final chunk — clear on period/dot, set on keyword
         const finalLower = final.toLowerCase();
-        if (/\bperiod\b|\./.test(finalLower)) {
-          setActiveVoiceField(null);
-        } else {
-          let lastPos = -1;
-          let lastKey: string | null = null;
-          for (const [keyword, fieldKey] of Object.entries(VOICE_KEYWORD_TO_FIELD)) {
-            const idx = finalLower.lastIndexOf(keyword);
-            if (idx > lastPos) { lastPos = idx; lastKey = fieldKey; }
+        const periodMatch = finalLower.search(/\bperiod\b/);
+        const hasPeriod = periodMatch >= 0;
+
+        // Find last keyword in this chunk
+        let lastPos = -1;
+        let lastKey: string | null = null;
+        let lastKeyword = '';
+        for (const [keyword, fieldKey] of Object.entries(VOICE_KEYWORD_TO_FIELD)) {
+          const idx = finalLower.lastIndexOf(keyword);
+          if (idx > lastPos) { lastPos = idx; lastKey = fieldKey; lastKeyword = keyword; }
+        }
+
+        if (hasPeriod) {
+          // Text before "period" in this chunk
+          const beforePeriod = final.slice(0, periodMatch).trim();
+          if (lastKey && lastPos < periodMatch) {
+            // keyword + value + period all in same chunk: "brand Nike period"
+            const valueInChunk = final.slice(lastPos + lastKeyword.length, periodMatch).trim();
+            pendingFieldValueRef.current = valueInChunk;
+            activeVoiceFieldRef.current = lastKey;
+          } else if (activeVoiceFieldRef.current) {
+            // Ongoing field terminated by period
+            pendingFieldValueRef.current = (pendingFieldValueRef.current + ' ' + beforePeriod).trim();
           }
-          if (lastKey) setActiveVoiceField(lastKey);
+          // Apply accumulated value immediately
+          const fieldToApply = activeVoiceFieldRef.current;
+          const valueToApply = pendingFieldValueRef.current.trim();
+          if (fieldToApply && valueToApply) {
+            applyTableFieldRef.current(fieldToApply, valueToApply);
+          }
+          pendingFieldValueRef.current = '';
+          activeVoiceFieldRef.current = null;
+          setActiveVoiceField(null);
+        } else if (lastKey) {
+          // New keyword detected — start accumulating value after keyword
+          const afterKeyword = final.slice(lastPos + lastKeyword.length).trim();
+          pendingFieldValueRef.current = afterKeyword;
+          activeVoiceFieldRef.current = lastKey;
+          setActiveVoiceField(lastKey);
+        } else if (activeVoiceFieldRef.current) {
+          // More text for the current active field
+          pendingFieldValueRef.current = (pendingFieldValueRef.current + ' ' + final.trim()).trim();
         }
 
         // Don't restart automatically - continuous mode handles this
@@ -336,7 +372,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           const idx = interimLower.lastIndexOf(keyword);
           if (idx > lastPos) { lastPos = idx; lastKey = fieldKey; }
         }
-        if (lastKey) setActiveVoiceField(lastKey);
+        if (lastKey) {
+          activeVoiceFieldRef.current = lastKey;
+          setActiveVoiceField(lastKey);
+        }
       }
     };
 
@@ -662,6 +701,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     isRecordingRef.current = false;
     isStartingRef.current = false;
     setIsRecording(false);
+    activeVoiceFieldRef.current = null;
+    pendingFieldValueRef.current = '';
+    setActiveVoiceField(null);
     
     if (recognitionRef.current) {
       try {
@@ -807,7 +849,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   /** Handle a cell edit from the VoiceCommandTable — updates the current group's item fields */
   const handleTableFieldChange = (fieldKey: string, value: string) => {
-    const targetIds = new Set(currentGroup.map(g => g.id));
+    const latestItems = processedItemsRef.current;
+    const latestGroupArray = buildGroupArray(latestItems);
+    const latestGroup = latestGroupArray[currentGroupIndex] || [];
+    const targetIds = new Set(latestGroup.map(g => g.id));
     setProcessedItems(prev => prev.map(item => {
       if (!targetIds.has(item.id)) return item;
       if (fieldKey.startsWith('meas_')) {
@@ -819,6 +864,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       return { ...item, [fieldKey]: value };
     }));
   };
+
+  // Keep applyTableFieldRef current every render
+  applyTableFieldRef.current = handleTableFieldChange;
 
   // Banned phrases to filter from AI descriptions
 
