@@ -101,7 +101,12 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   const extracted: Record<string, any> = {};
   // Normalize newlines → spaces so command regexes work even after formatVoiceTranscript
   // has already inserted \n before each trigger word.
-  const voiceDesc = rawVoiceDesc.replace(/\n/g, ' ').replace(/\s{2,}/g, ' ');
+  // Also normalize "." back to " period" so that transcripts where the period
+  // delimiter was already converted to a dot (display format) still parse correctly.
+  const voiceDesc = rawVoiceDesc
+    .replace(/\n/g, ' ')
+    .replace(/\.(?=\s|$)/g, ' period')
+    .replace(/\s{2,}/g, ' ');
   const lower = voiceDesc.toLowerCase();
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -245,9 +250,11 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
 
   // ── BRAND fallback ────────────────────────────────────────────────────────
   // Scan for known brand names spoken naturally without the "brand X period" command.
-  // Guard: only run this on actual voice transcripts (must contain the word "period" somewhere)
-  // so that re-parsing a generated description doesn't false-match brand names.
-  const looksLikeVoiceTranscript = /\bperiod\b/i.test(voiceDesc);
+  // Guard: only run this on actual voice transcripts (must contain the word "period" somewhere,
+  // OR a field trigger pattern like "brand X period" / "brand X.") so that re-parsing a
+  // generated description doesn't false-match brand names.
+  const looksLikeVoiceTranscript = /\bperiod\b/i.test(voiceDesc) ||
+    /\b(?:brand|size|colou?r|material|condition|era|style|gender|price)\s+\S.*?\s+period\b/i.test(voiceDesc);
   if (!extracted.brand && looksLikeVoiceTranscript) {
     const KNOWN_BRANDS = [
       // ── Numbers / Symbols ─────────────────────────────────────────────────
@@ -511,11 +518,13 @@ export function formatVoiceTranscript(voiceDesc: string): string {
 
   // Insert a newline before each trigger word that starts a new command block,
   // so each "trigger value period" chunk lands on its own line.
+  // Then replace the spoken word "period" with a literal "." for cleaner display.
   return voiceDesc
     .replace(
       new RegExp(`\\s*\\b(${FIELD_TRIGGERS})\\b`, 'gi'),
       '\n$1'
     )
+    .replace(/\s+period\b/gi, '.')
     .trim();
 }
 
