@@ -166,12 +166,12 @@ const SHOPIFY_CATEGORY_MAP: Record<string, string> = {
   denim:       'Apparel & Accessories > Clothing > Pants > Jeans',
   shorts:      'Apparel & Accessories > Clothing > Shorts',
   short:       'Apparel & Accessories > Clothing > Shorts',
-  // Jerseys
-  jerseys:     'Apparel & Accessories > Clothing > Clothing Tops > Jerseys',
-  jersey:      'Apparel & Accessories > Clothing > Clothing Tops > Jerseys',
+  // Jerseys (no specific Jerseys subcategory in Shopify taxonomy — use parent Clothing Tops)
+  jerseys:     'Apparel & Accessories > Clothing > Clothing Tops',
+  jersey:      'Apparel & Accessories > Clothing > Clothing Tops',
   // Bodysuits
-  bodysuits:   'Apparel & Accessories > Clothing > Bodysuits',
-  bodysuit:    'Apparel & Accessories > Clothing > Bodysuits',
+  bodysuits:   'Apparel & Accessories > Clothing > Clothing Tops > Bodysuits',
+  bodysuit:    'Apparel & Accessories > Clothing > Clothing Tops > Bodysuits',
   // Dresses & skirts
   dresses:     'Apparel & Accessories > Clothing > Dresses',
   dress:       'Apparel & Accessories > Clothing > Dresses',
@@ -190,8 +190,8 @@ const SHOPIFY_CATEGORY_MAP: Record<string, string> = {
   // Shoes
   shoes:       'Apparel & Accessories > Shoes',
   shoe:        'Apparel & Accessories > Shoes',
-  sneakers:    'Apparel & Accessories > Shoes > Athletic Shoes',
-  sneaker:     'Apparel & Accessories > Shoes > Athletic Shoes',
+  sneakers:    'Apparel & Accessories > Shoes > Sneakers',
+  sneaker:     'Apparel & Accessories > Shoes > Sneakers',
   boots:       'Apparel & Accessories > Shoes > Boots',
   boot:        'Apparel & Accessories > Shoes > Boots',
   // Accessories
@@ -204,49 +204,58 @@ const SHOPIFY_CATEGORY_MAP: Record<string, string> = {
   bundles:         '',
 };
 
-// Kids-specific taxonomy paths (Baby & Toddler root in Shopify taxonomy)
+// Kids-specific taxonomy paths
+// Shopify taxonomy: kids clothing lives under Apparel & Accessories > Clothing > Baby & Children's Clothing
+// (NOT under Baby & Toddler — that root is for strollers, car seats, etc.)
 // Keyed by the TYPE segment only (e.g. "tees", "hoodies") — looked up after
 // confirming the full category key starts with "kids"
 const SHOPIFY_KIDS_CATEGORY_MAP: Record<string, string> = {
-  tees:        'Baby & Toddler > Clothing > Tops & T-Shirts',
-  tee:         'Baby & Toddler > Clothing > Tops & T-Shirts',
-  't-shirt':   'Baby & Toddler > Clothing > Tops & T-Shirts',
-  tshirt:      'Baby & Toddler > Clothing > Tops & T-Shirts',
-  shirts:      'Baby & Toddler > Clothing > Tops & T-Shirts',
-  shirt:       'Baby & Toddler > Clothing > Tops & T-Shirts',
-  tops:        'Baby & Toddler > Clothing > Tops & T-Shirts',
-  top:         'Baby & Toddler > Clothing > Tops & T-Shirts',
-  sweatshirts: 'Baby & Toddler > Clothing > Tops & T-Shirts',
-  sweatshirt:  'Baby & Toddler > Clothing > Tops & T-Shirts',
-  hoodies:     'Baby & Toddler > Clothing > Tops & T-Shirts',
-  hoodie:      'Baby & Toddler > Clothing > Tops & T-Shirts',
-  jackets:     'Baby & Toddler > Clothing > Outerwear',
-  jacket:      'Baby & Toddler > Clothing > Outerwear',
-  coats:       'Baby & Toddler > Clothing > Outerwear',
-  coat:        'Baby & Toddler > Clothing > Outerwear',
-  outerwear:   'Baby & Toddler > Clothing > Outerwear',
-  pants:       'Baby & Toddler > Clothing > Bottoms',
-  pant:        'Baby & Toddler > Clothing > Bottoms',
-  bottoms:     'Baby & Toddler > Clothing > Bottoms',
-  jeans:       'Baby & Toddler > Clothing > Bottoms',
-  jean:        'Baby & Toddler > Clothing > Bottoms',
-  leggings:    'Baby & Toddler > Clothing > Bottoms',
-  shorts:      'Baby & Toddler > Clothing > Bottoms',
-  short:       'Baby & Toddler > Clothing > Bottoms',
-  dresses:     'Baby & Toddler > Clothing > Dresses',
-  dress:       'Baby & Toddler > Clothing > Dresses',
-  hats:        'Baby & Toddler > Clothing > Accessories',
-  hat:         'Baby & Toddler > Clothing > Accessories',
-  cap:         'Baby & Toddler > Clothing > Accessories',
-  caps:        'Baby & Toddler > Clothing > Accessories',
-  shoes:       'Apparel & Accessories > Shoes',
-  shoe:        'Apparel & Accessories > Shoes',
-  sneakers:    'Apparel & Accessories > Shoes > Athletic Shoes',
-  sneaker:     'Apparel & Accessories > Shoes > Athletic Shoes',
-  boots:       'Apparel & Accessories > Shoes > Boots',
-  boot:        'Apparel & Accessories > Shoes > Boots',
-  accessories: 'Baby & Toddler > Clothing > Accessories',
-  accessory:   'Baby & Toddler > Clothing > Accessories',
+  // Tops
+  tees:        "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Tops > T-Shirts",
+  tee:         "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Tops > T-Shirts",
+  't-shirt':   "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Tops > T-Shirts",
+  tshirt:      "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Tops > T-Shirts",
+  shirts:      "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Tops > Shirts",
+  shirt:       "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Tops > Shirts",
+  tops:        "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Tops",
+  top:         "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Tops",
+  sweatshirts: "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Tops > Sweatshirts",
+  sweatshirt:  "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Tops > Sweatshirts",
+  hoodies:     "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Tops > Hoodies",
+  hoodie:      "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Tops > Hoodies",
+  // Outerwear
+  jackets:     "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Outerwear > Baby & Children's Coats & Jackets",
+  jacket:      "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Outerwear > Baby & Children's Coats & Jackets",
+  coats:       "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Outerwear > Baby & Children's Coats & Jackets",
+  coat:        "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Outerwear > Baby & Children's Coats & Jackets",
+  outerwear:   "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Outerwear",
+  // Bottoms
+  pants:       "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Bottoms",
+  pant:        "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Bottoms",
+  bottoms:     "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Bottoms",
+  jeans:       "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Bottoms > Jeans",
+  jean:        "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Bottoms > Jeans",
+  leggings:    "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Bottoms > Leggings",
+  joggers:     "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Bottoms > Joggers",
+  shorts:      "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Bottoms",
+  short:       "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Bottoms",
+  // Dresses
+  dresses:     "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Dresses",
+  dress:       "Apparel & Accessories > Clothing > Baby & Children's Clothing > Baby & Children's Dresses",
+  // Hats / accessories
+  hats:        "Apparel & Accessories > Clothing Accessories > Baby & Children's Clothing Accessories > Baby & Children's Hats",
+  hat:         "Apparel & Accessories > Clothing Accessories > Baby & Children's Clothing Accessories > Baby & Children's Hats",
+  cap:         "Apparel & Accessories > Clothing Accessories > Baby & Children's Clothing Accessories > Baby & Children's Hats",
+  caps:        "Apparel & Accessories > Clothing Accessories > Baby & Children's Clothing Accessories > Baby & Children's Hats",
+  accessories: "Apparel & Accessories > Clothing Accessories > Baby & Children's Clothing Accessories",
+  accessory:   "Apparel & Accessories > Clothing Accessories > Baby & Children's Clothing Accessories",
+  // Shoes (same as adult — taxonomy doesn't split kids shoes differently at top level)
+  shoes:       'Apparel & Accessories > Shoes > Baby & Children\'s Shoes',
+  shoe:        'Apparel & Accessories > Shoes > Baby & Children\'s Shoes',
+  sneakers:    'Apparel & Accessories > Shoes > Baby & Children\'s Shoes > Baby & Children\'s Sneakers',
+  sneaker:     'Apparel & Accessories > Shoes > Baby & Children\'s Shoes > Baby & Children\'s Sneakers',
+  boots:       'Apparel & Accessories > Shoes > Baby & Children\'s Shoes > Baby & Children\'s Boots',
+  boot:        'Apparel & Accessories > Shoes > Baby & Children\'s Shoes > Baby & Children\'s Boots',
 };
 
 // Maps the stored category key (or its type segment) to your store's custom Product Type.
@@ -480,7 +489,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         if (isKids) {
           // Extract the type segment (everything after "kids-" / "kids ")
           const typeSegment = key.replace(/^kids[\s-]+/, '').split(/[-\s]+/).pop() ?? '';
-          return SHOPIFY_KIDS_CATEGORY_MAP[typeSegment] ?? 'Baby & Toddler > Clothing';
+          return SHOPIFY_KIDS_CATEGORY_MAP[typeSegment] ?? "Apparel & Accessories > Clothing > Baby & Children's Clothing";
         }
         if (key in SHOPIFY_CATEGORY_MAP) return SHOPIFY_CATEGORY_MAP[key];
         // Split on hyphens and spaces, try segments from last to first
@@ -715,7 +724,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       const isKids = /^kids[\s-]/.test(key);
                       if (isKids) {
                         const typeSegment = key.replace(/^kids[\s-]+/, '').split(/[-\s]+/).pop() ?? '';
-                        return SHOPIFY_KIDS_CATEGORY_MAP[typeSegment] ?? 'Baby & Toddler > Clothing';
+                        return SHOPIFY_KIDS_CATEGORY_MAP[typeSegment] ?? "Apparel & Accessories > Clothing > Baby & Children's Clothing";
                       }
                       if (key in SHOPIFY_CATEGORY_MAP) return SHOPIFY_CATEGORY_MAP[key];
                       const segments = key.split(/[-\s]+/).filter(Boolean);
