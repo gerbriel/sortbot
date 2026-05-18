@@ -799,10 +799,184 @@ function generateTitleFromFields(context: ProductContext): string {
 }
 
 /**
+ * Scan a title (or any text) for specific item-type keywords and return
+ * precise tags for that item — e.g. "beanie" instead of generic "hats",
+ * "backpack" instead of "bags", "crewneck" instead of "sweatshirts".
+ *
+ * Rules are grouped by category. Multiple matches within a category are
+ * all returned so the tags are additive (e.g. "cargo shorts" → ["cargo","shorts"]).
+ */
+function deriveSpecificTagsFromTitle(text: string): string[] {
+  if (!text) return [];
+  const t = text.toLowerCase();
+  const found = new Set<string>();
+  const check = (pattern: RegExp, ...tags: string[]) => {
+    if (pattern.test(t)) tags.forEach(tag => found.add(tag));
+  };
+
+  // ── HEADWEAR ──────────────────────────────────────────────────────────────
+  check(/\bbeanie\b|\bskull\s*cap\b|\bknit\s*hat\b|\bwinter\s*hat\b/, 'beanie', 'knit hat');
+  check(/\bsnapback\b/, 'snapback', 'cap');
+  check(/\bfitted\s*cap\b|\bfitted\b(?=.*\bcap\b)|\bnew\s*era\b/, 'fitted cap', 'cap');
+  check(/\bdad\s*hat\b|\bunstructured\s*cap\b/, 'dad hat', 'cap');
+  check(/\btrucker\b/, 'trucker hat', 'cap');
+  check(/\bbucket\s*hat\b|\bbucket\b(?=.*\bhat\b)/, 'bucket hat');
+  check(/\bvisor\b/, 'visor');
+  check(/\bberet\b/, 'beret');
+  check(/\bboonie\b|\bbush\s*hat\b/, 'boonie hat');
+  check(/\bpanama\s*hat\b/, 'panama hat');
+  check(/\bcowboy\s*hat\b|\bwestern\s*hat\b|\bstraw\s*hat\b/, 'cowboy hat');
+  check(/\bbaseball\s*cap\b|\bball\s*cap\b/, 'baseball cap', 'cap');
+  check(/\bfive[\s-]panel\b/, 'five panel cap', 'cap');
+  check(/\bfleece\s*hat\b/, 'fleece hat');
+  // Generic fallback — only if nothing specific matched yet
+  if (t.match(/\bhat\b|\bcap\b|\bheadwear\b/) && found.size === 0) found.add('hat');
+
+  // ── BAGS ──────────────────────────────────────────────────────────────────
+  check(/\bbackpack\b|\bday\s*pack\b|\brucksack\b/, 'backpack');
+  check(/\btote\s*bag\b|\btote\b/, 'tote bag', 'tote');
+  check(/\bcross[\s-]?body\b/, 'crossbody bag', 'crossbody');
+  check(/\bmessenger\s*bag\b|\bmessenger\b(?=.*\bbag\b)/, 'messenger bag');
+  check(/\bduffel\b|\bduffle\b|\bgym\s*bag\b/, 'duffel bag');
+  check(/\bfanny\s*pack\b|\bbelt\s*bag\b|\bwaist\s*bag\b|\bbum\s*bag\b/, 'fanny pack', 'belt bag');
+  check(/\bpurse\b|\bhandbag\b|\bshoulder\s*bag\b/, 'purse', 'handbag');
+  check(/\bclutch\b(?=.*\bbag\b|\bpurse\b)?/, 'clutch');
+  check(/\bsatchel\b/, 'satchel');
+  check(/\bhobo\s*bag\b|\bhobo\b(?=.*\bbag\b)/, 'hobo bag');
+  check(/\bwristlet\b/, 'wristlet');
+  check(/\bbriefcase\b|\blaptop\s*bag\b/, 'briefcase');
+  check(/\bdrawstring\s*bag\b|\bcinch\s*bag\b/, 'drawstring bag');
+  check(/\bmini\s*bag\b|\bmicro\s*bag\b/, 'mini bag');
+  if (t.match(/\bbag\b|\bpurse\b|\bpouch\b/) && found.size === 0) found.add('bag');
+
+  // ── TOPS / SHIRTS ──────────────────────────────────────────────────────────
+  check(/\bgraphic\s*tee\b|\bgraphic\s*t[\s-]?shirt\b/, 'graphic tee');
+  check(/\bt[\s-]?shirt\b|\btee\b(?!\s*ball|\s*pee)/, 'tshirt');
+  check(/\bpolo\b(?!\s*ralph)/, 'polo');
+  check(/\bbutton[\s-]?(?:up|down)\b|\bbuttonup\b/, 'button up');
+  check(/\bflannel\b/, 'flannel');
+  check(/\bhenley\b/, 'henley');
+  check(/\bdress\s*shirt\b|\boxford\s*shirt\b/, 'dress shirt');
+  check(/\bcamp\s*collar\b|\bcubana\b|\bbowling\s*shirt\b/, 'camp collar shirt');
+  check(/\bhawaiian\s*shirt\b|\baloha\s*shirt\b/, 'hawaiian shirt');
+  check(/\bjersey\b(?!\s*shore)/, 'jersey');
+  check(/\btank\s*top\b|\bsleeveless\b|\bmuscle\s*tee\b|\bmuscle\s*shirt\b/, 'tank top');
+  check(/\bcrop\s*top\b|\bcropped\s*(?:tee|shirt|top)\b/, 'crop top');
+  check(/\bringer\s*tee\b|\bringer\s*t[\s-]?shirt\b/, 'ringer tee');
+  check(/\blong[\s-]?sleeve\s*(?:shirt|tee)\b/, 'long sleeve');
+  check(/\btube\s*top\b|\bstrapless\s*top\b/, 'tube top');
+  check(/\bcami\b|\bcamisole\b/, 'camisole');
+
+  // ── SWEATSHIRTS / HOODIES ─────────────────────────────────────────────────
+  check(/\bhoodie\b|\bhooded\s*sweatshirt\b/, 'hoodie');
+  check(/\bzip[\s-]?up\s*hoodie\b|\bhalf[\s-]?zip\b|\bquarter[\s-]?zip\b/, 'zip-up', 'hoodie');
+  check(/\bcrewneck\b|\bcrew[\s-]?neck\b(?!\s*shirt)|\bsweatshirt\b(?!\s*hoodie)/, 'crewneck');
+  check(/\bpullover\b/, 'pullover');
+
+  // ── OUTERWEAR ─────────────────────────────────────────────────────────────
+  check(/\bbomber\s*jacket\b|\bbomber\b(?=.*\bjacket\b)/, 'bomber jacket', 'jacket');
+  check(/\bwindbreaker\b/, 'windbreaker', 'jacket');
+  check(/\bparka\b/, 'parka', 'jacket');
+  check(/\bpuffer\b|\bdown\s*jacket\b|\bpuffer\s*jacket\b/, 'puffer jacket', 'jacket');
+  check(/\bcoach\s*jacket\b/, 'coach jacket', 'jacket');
+  check(/\btrack\s*jacket\b/, 'track jacket', 'jacket');
+  check(/\bvarsity\s*jacket\b|\bletterman\b/, 'varsity jacket', 'jacket');
+  check(/\bdenim\s*jacket\b|\bjean\s*jacket\b/, 'denim jacket', 'jacket');
+  check(/\bleather\s*jacket\b|\bmoto\s*jacket\b/, 'leather jacket', 'jacket');
+  check(/\btrench\s*coat\b/, 'trench coat', 'coat');
+  check(/\bpea\s*coat\b|\bpeacoat\b/, 'peacoat', 'coat');
+  check(/\bblaz[eo]r\b/, 'blazer', 'jacket');
+  check(/\brain\s*jacket\b|\brain\s*coat\b|\banorak\b/, 'rain jacket');
+  check(/\bvest\b(?!\s*pocket)/, 'vest');
+  check(/\bfleece\s*jacket\b|\bfleece\b(?=.*\bjacket\b)/, 'fleece jacket', 'jacket');
+  if (t.match(/\bjacket\b/) && found.size === 0) found.add('jacket');
+  if (t.match(/\bcoat\b/) && found.size === 0) found.add('coat');
+
+  // ── PANTS / BOTTOMS ────────────────────────────────────────────────────────
+  check(/\bcargo\s*pants\b|\bcargo\s*trousers\b/, 'cargo pants', 'cargo');
+  check(/\bjoggers\b|\bsweatpants\b|\bjogger\s*pants\b/, 'joggers', 'sweatpants');
+  check(/\bwide[\s-]?leg\s*(?:jeans|pants|denim)\b/, 'wide leg', 'jeans');
+  check(/\bbaggy\s*jeans\b|\bbaggies\b(?=.*\bjean)/, 'baggy jeans', 'jeans');
+  check(/\bslim\s*(?:jeans|fit\s*jeans)\b|\bskinny\s*jeans\b/, 'slim jeans', 'jeans');
+  check(/\bstraight[\s-]?leg\s*jeans\b/, 'straight leg jeans', 'jeans');
+  check(/\bdenim\b|\bjeans\b/, 'jeans');
+  check(/\bchinos\b|\bkhakis\b/, 'chinos');
+  check(/\bcorduroy\b|\bcords\b(?=.*\bpant)/, 'corduroy');
+  check(/\bdress\s*pants\b|\btrousers\b/, 'trousers');
+  check(/\bleggings\b/, 'leggings');
+
+  // ── SHORTS ─────────────────────────────────────────────────────────────────
+  check(/\bcargo\s*shorts\b/, 'cargo shorts', 'shorts');
+  check(/\bjean\s*shorts\b|\bdenim\s*shorts\b|\bcutoffs\b/, 'jean shorts', 'shorts');
+  check(/\bbasketball\s*shorts\b|\bbasketball\b(?=.*\bshorts)/, 'basketball shorts', 'shorts');
+  check(/\bboard\s*shorts\b|\bswim\s*shorts\b|\bswim\s*trunks\b/, 'board shorts', 'shorts');
+  check(/\bathletic\s*shorts\b|\bgyM\s*shorts\b/, 'athletic shorts', 'shorts');
+  if (t.match(/\bshorts\b/) && !Array.from(found).some(f => f.includes('short'))) found.add('shorts');
+
+  // ── DRESSES / SKIRTS ───────────────────────────────────────────────────────
+  check(/\bmidi\s*dress\b/, 'midi dress', 'dress');
+  check(/\bmaxi\s*dress\b/, 'maxi dress', 'dress');
+  check(/\bmini\s*dress\b/, 'mini dress', 'dress');
+  check(/\bwrap\s*dress\b/, 'wrap dress', 'dress');
+  check(/\bshirt\s*dress\b/, 'shirt dress', 'dress');
+  if (t.match(/\bdress\b/) && !Array.from(found).some(f => f.includes('dress'))) found.add('dress');
+  check(/\bmaxi\s*skirt\b/, 'maxi skirt', 'skirt');
+  check(/\bmini\s*skirt\b/, 'mini skirt', 'skirt');
+  check(/\bpencil\s*skirt\b/, 'pencil skirt', 'skirt');
+  if (t.match(/\bskirt\b/) && !Array.from(found).some(f => f.includes('skirt'))) found.add('skirt');
+
+  // ── FOOTWEAR ───────────────────────────────────────────────────────────────
+  check(/\bsneakers?\b|\btrainers?\b|\bkicks\b/, 'sneakers');
+  check(/\bboots?\b(?!\s*leg)/, 'boots');
+  check(/\bloafers?\b/, 'loafers');
+  check(/\bsandals?\b/, 'sandals');
+  check(/\bslides?\b(?!\s*deck|\s*show)/, 'slides');
+  check(/\bcrocs?\b/, 'crocs');
+  check(/\bclogs?\b/, 'clogs');
+  check(/\bheels?\b|\bpumps?\b|\bstiletto\b/, 'heels');
+  check(/\bflats?\b(?=\s*shoe|\s*sandal)?/, 'flats');
+  check(/\bwedges?\b/, 'wedges');
+  check(/\bconverse\b|\bchuck\s*taylors?\b|\ball\s*stars?\b/, 'converse', 'sneakers');
+  check(/\bvans\b(?!\s*gogh)/, 'vans', 'sneakers');
+
+  // ── ACCESSORIES ───────────────────────────────────────────────────────────
+  check(/\bbelt\b(?!\s*bag)/, 'belt');
+  check(/\bwallet\b/, 'wallet');
+  check(/\bsunglasses\b|\bshades\b|\beyewear\b/, 'sunglasses');
+  check(/\bwatch\b/, 'watch');
+  check(/\bscarf\b|\bwrap\b(?=\s*scarf)/, 'scarf');
+  check(/\bgloves?\b/, 'gloves');
+  check(/\bsocks?\b/, 'socks');
+  check(/\bbandana\b|\bbandanna\b/, 'bandana');
+  check(/\bnecklace\b|\bchain\b(?=.*\bjewel|\s*necklace)/, 'necklace');
+  check(/\bbracelet\b|\bcuff\b(?=.*\bjewel)/, 'bracelet');
+  check(/\bpin\b(?=.*\bbadge|\s*button)|\blapel\s*pin\b/, 'pin');
+  check(/\bpatch\b/, 'patch');
+  check(/\btie\b(?!\s*dye)/, 'tie');
+  check(/\btie[\s-]?dye\b|\bhandkerchief\b/, 'tie dye');
+  check(/\bkeychain\b|\bkey\s*ring\b/, 'keychain');
+
+  // ── SWIMWEAR ──────────────────────────────────────────────────────────────
+  check(/\bbikini\b/, 'bikini');
+  check(/\bone[\s-]piece\b(?=.*\bswim)|\bswimsuit\b/, 'swimsuit');
+
+  // ── SETS / TRACKSUITS ─────────────────────────────────────────────────────
+  check(/\btracksuit\b|\btrack\s*suit\b/, 'tracksuit');
+  check(/\bmatching\s*set\b|\bco[\s-]?ord\b|\bsweat\s*set\b/, 'matching set');
+
+  return Array.from(found);
+}
+
+/**
  * Generate tags — primary source is #hashtags in voice description,
  * then explicit tags array, then field-based fallback.
  */
 function generateTagsFromFields(context: ProductContext): string[] {
+  // Derive specific item-type tags from the title (e.g. "beanie", "backpack")
+  const titleSpecific = deriveSpecificTagsFromTitle(
+    [context.title, context.voiceDescription].filter(Boolean).join(' ')
+  );
+
   const presetTagsNorm = (context.presetTags || []).map((t: string) => t.toLowerCase().replace(/\s+/g, ''));
 
   // Primary: extract #hashtags from voice description
@@ -810,19 +984,19 @@ function generateTagsFromFields(context: ProductContext): string[] {
     .match(/#(\w+)/g)
     ?.map((t: string) => t.slice(1).toLowerCase()) || [];
   if (hashtagsFromVoice.length > 0) {
-    return Array.from(new Set([...hashtagsFromVoice, ...presetTagsNorm])).slice(0, 8);
+    return Array.from(new Set([...titleSpecific, ...hashtagsFromVoice, ...presetTagsNorm])).slice(0, 8);
   }
 
   // Secondary: explicit tags array (from voice "tags ... period" command),
   // always merged with preset tags so the product type stays accurate.
   if (context.tags && context.tags.length > 0) {
     const userTags = context.tags.map((t: string) => t.toLowerCase());
-    return Array.from(new Set([...presetTagsNorm, ...userTags])).slice(0, 8);
+    return Array.from(new Set([...titleSpecific, ...presetTagsNorm, ...userTags])).slice(0, 8);
   }
 
-  // If we have preset tags, prefer those over a stale context.category
-  if (presetTagsNorm.length > 0) {
-    const tags: string[] = [...presetTagsNorm];
+  // If we have preset tags or title-specific tags, build from those
+  if (titleSpecific.length > 0 || presetTagsNorm.length > 0) {
+    const tags: string[] = [...titleSpecific, ...presetTagsNorm];
     if (context.era) tags.push(...context.era.split(/[\s\/]+/).filter(Boolean));
     if (context.brand) tags.push(context.brand);
     if (context.color) tags.push(...context.color.split(/[\s\/]+/).filter(Boolean));
