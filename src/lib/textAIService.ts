@@ -706,17 +706,18 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
     let mainDesc = context.voiceDescription.trim();
 
     // Strip "field <value> period" voice commands from the display description
-    // These are handled separately via extractFieldsFromVoice; don't show them in the text
+    // Handles both the old "period" word form and the new "." display form
     const fieldPrefixes = [
       'brand', 'model', 'size', 'color', 'colour', 'secondary color', 'secondary colour',
       'material', 'fabric', 'condition', 'era', 'style', 'gender', 'price',
       'flaws?', 'damage', 'care', 'tags?', 'title',
       'width', 'length', 'waist', 'shoulder', 'sleeve', 'inseam'
     ].join('|');
-    mainDesc = mainDesc.replace(new RegExp(`\\b(?:${fieldPrefixes})\\s+.+?\\s+period\\b`, 'gi'), '');
+    // Match "field value period" (old) OR "field value." (new dot format) — on any line
+    mainDesc = mainDesc.replace(new RegExp(`\\b(?:${fieldPrefixes})\\s+.+?(?:\\s+period\\b|\\.)`, 'gi'), '');
 
-    // Any remaining standalone spoken "period" → "." (sentence end)
-    mainDesc = mainDesc.replace(/\bperiod\b/gi, '.').replace(/\.\.+/g, '.').replace(/\s+\./g, '.');
+    // Strip any remaining standalone "period" words or orphaned dots at line boundaries
+    mainDesc = mainDesc.replace(/\bperiod\b/gi, '').replace(/(^|[\n ])\./gm, '$1').replace(/\.\.+/g, '').replace(/\s+\./g, '');
 
     // Strip condition phrases from description
     mainDesc = mainDesc.replace(/\b(nwt|new with tags|like[\s-]new|mint|pristine|excellent[\s-]condition|great[\s-]condition|good[\s-]condition|gently[\s-]used|fair[\s-]condition|worn[\s-]condition|brand[\s-]new|in[\s-]good[\s-]condition|in[\s-]great[\s-]condition|in[\s-]excellent[\s-]condition|very[\s-]good[\s-]condition|pre[\s-]owned)\b[,.]?\s*/gi, '');
