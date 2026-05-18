@@ -10,11 +10,12 @@ interface VoiceCommandTableProps {
 }
 
 // ── Field definitions ──────────────────────────────────────────────────────
+const TITLE_FIELD = { label: 'title', key: 'seoTitle', placeholder: 'Vintage Nike Tee…', getValue: (i: ClothingItem) => i.seoTitle || '' };
+
 // Three rows of columns, grouped by category
 const ROWS: { label: string; key: string; placeholder: string; getValue: (item: ClothingItem) => string }[][] = [
-  // Row 1 — Core info
+  // Row 1 — Core info (title moved to its own row above)
   [
-    { label: 'title',     key: 'seoTitle',       placeholder: 'Vintage Nike Tee…', getValue: i => i.seoTitle || '' },
     { label: 'brand',     key: 'brand',           placeholder: 'Nike',              getValue: i => i.brand || '' },
     { label: 'size',      key: 'size',            placeholder: 'XL',                getValue: i => i.size || '' },
     { label: 'color',     key: 'color',           placeholder: 'Blue',              getValue: i => i.color || '' },
@@ -90,6 +91,34 @@ const VoiceCommandTable: React.FC<VoiceCommandTableProps> = ({
 }) => {
   return (
     <div className="vct-wrapper">
+      {/* Title — full-width row */}
+      <div className="vct-row-group vct-row-group--title">
+        <div className="vct-row-label">Title</div>
+        <div className="vct-grid vct-grid--full">
+          {(() => {
+            const col = TITLE_FIELD;
+            const isActive = activeField === col.key;
+            const rawValue = col.getValue(currentItem);
+            const displayValue = isActive && isRecording && interimValue ? interimValue : rawValue;
+            return (
+              <div className={`vct-col${isActive ? ' vct-col--active' : ''}${rawValue ? ' vct-col--filled' : ''}`}>
+                <div className="vct-header">
+                  {isActive && isRecording && <span className="vct-listening-dot" />}
+                  {col.label}
+                </div>
+                <input
+                  className={`vct-cell${isActive && isRecording ? ' vct-cell--listening' : ''}`}
+                  value={displayValue}
+                  placeholder={col.placeholder}
+                  onChange={e => onChange(col.key, e.target.value)}
+                  onKeyDown={e => e.stopPropagation()}
+                />
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+
       {ROWS.map((cols, rowIdx) => (
         <div key={rowIdx} className="vct-row-group">
           <div className="vct-row-label">{ROW_LABELS[rowIdx]}</div>
