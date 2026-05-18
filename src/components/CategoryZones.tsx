@@ -143,6 +143,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
   const [genderFilter, setGenderFilter] = useState<'Men' | 'Women' | 'Kids'>(() =>
     (localStorage.getItem('dropzone_gender_filter') as 'Men' | 'Women' | 'Kids') || 'Men'
   );
+  const [categorySearch, setCategorySearch] = useState('');
   const [loading, setLoading] = useState(true);
 
   // ── Category-drop drag state ────────────────────────────────────────────
@@ -230,7 +231,10 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
       'accessories': 16, 'mens-accessories': 16, 'womens-accessories': 16, 'kids-accessories': 16,
     };
     const filtered = presets.filter(p => (p as any).gender === genderFilter);
-    return [...filtered].sort((a, b) => {
+    const searched = categorySearch.trim()
+      ? filtered.filter(p => p.display_name.toLowerCase().includes(categorySearch.toLowerCase()))
+      : filtered;
+    return [...searched].sort((a, b) => {
       const ao = SORT_ORDER[a.category_name] ?? 99;
       const bo = SORT_ORDER[b.category_name] ?? 99;
       return ao !== bo ? ao - bo : a.display_name.localeCompare(b.display_name);
@@ -673,6 +677,45 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
               {label}
             </button>
           ))}
+        </div>
+
+        {/* Category search */}
+        <div style={{ position: 'relative', marginBottom: '0.5rem' }}>
+          <input
+            type="text"
+            value={categorySearch}
+            onChange={e => setCategorySearch(e.target.value)}
+            placeholder="Search categories…"
+            style={{
+              width: '100%',
+              padding: '0.4rem 2rem 0.4rem 0.75rem',
+              borderRadius: '8px',
+              border: '1.5px solid #d1d5db',
+              fontSize: '0.8rem',
+              outline: 'none',
+              boxSizing: 'border-box',
+              background: '#fff',
+            }}
+          />
+          {categorySearch && (
+            <button
+              onClick={() => setCategorySearch('')}
+              style={{
+                position: 'absolute',
+                right: '0.5rem',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#9ca3af',
+                padding: 0,
+                lineHeight: 1,
+                fontSize: '1rem',
+              }}
+              aria-label="Clear search"
+            >×</button>
+          )}
         </div>
 
         <h3>{compactMode ? '🏷️ Drop Here to Categorize' : '🏷️ Drag Groups Here to Categorize'}</h3>
