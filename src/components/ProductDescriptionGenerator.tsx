@@ -872,6 +872,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           updated[idx] = {
             ...it,
             generatedDescription: finalDescription,
+            ...(!it.seoDescription && finalDescription && { seoDescription: finalDescription.slice(0, 320) }),
             ...(extractedFields.brand        && { brand:           extractedFields.brand }),
             ...(extractedFields.modelName    && { modelName:       extractedFields.modelName }),
             ...(extractedFields.color        && { color:           extractedFields.color }),
