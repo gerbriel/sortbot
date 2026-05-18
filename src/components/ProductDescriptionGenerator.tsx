@@ -4,7 +4,7 @@ import { Target } from 'lucide-react';
 import { ComprehensiveProductForm } from './ComprehensiveProductForm';
 import { getCategoryPresets } from '../lib/categoryPresetsService';
 import type { CategoryPreset } from '../lib/categoryPresets';
-import { applyPresetToProductGroup } from '../lib/applyPresetToGroup';
+import { applyPresetToProductGroup, applyPresetDirectly } from '../lib/applyPresetToGroup';
 import { generateProductDescription, formatVoiceTranscript } from '../lib/textAIService';
 import { syncGroupFieldsToDatabase } from '../lib/productService';
 import LazyImg from './LazyImg';
@@ -802,12 +802,46 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const targetIds = new Set(group.map(g => g.id));
 
     try {
-      // Step 1 — re-extract from voice (if any), then merge with description text
-      const voiceText = item.voiceDescription || '';
-      const descText = item.generatedDescription || '';
+      // ── Step 0: Re-apply the category preset (fresh from DB) so any changes
+      //   made in Step 3 (Presets Manager) are picked up before AI generation.
+      //   Only fills fields that are still empty — won't overwrite manual entries.
+      let latestGroup = group;
+      if (item.category) {
+        const freshPresets = await getCategoryPresets();
+        const matchingPreset =
+          freshPresets.find(p =>
+            p.is_active && p.is_default &&
+            (p.product_type?.toLowerCase() === item.category!.toLowerCase() ||
+             p.category_name.toLowerCase() === item.category!.toLowerCase())
+          ) ||
+          freshPresets.find(p =>
+            p.is_active &&
+            (p.product_type?.toLowerCase() === item.category!.toLowerCase() ||
+             p.category_name.toLowerCase() === item.category!.toLowerCase())
+          );
+        if (matchingPreset) {
+          latestGroup = applyPresetDirectly(group, item.category, matchingPreset);
+          // Flush the preset-refreshed items back into state so the form reflects them
+          setProcessedItems(prev => {
+            const updated = [...prev];
+            latestGroup.forEach(refreshed => {
+              const idx = updated.findIndex(x => x.id === refreshed.id);
+              if (idx !== -1) updated[idx] = refreshed;
+            });
+            return updated;
+          });
+        }
+      }
+
+      // Use the preset-refreshed item as source of truth for the AI call
+      const refreshedItem = latestGroup[0];
+
+      // ── Step 1: Re-extract from voice + description text, then regenerate AI description
+      const voiceText = refreshedItem.voiceDescription || '';
+      const descText = refreshedItem.generatedDescription || '';
       const combinedInput = [voiceText, descText].filter(Boolean).join('\n\n');
 
-      if (!combinedInput && !item.brand && !item.color && !item.size) {
+      if (!combinedInput && !refreshedItem.brand && !refreshedItem.color && !refreshedItem.size) {
         return; // Nothing to work with
       }
 
@@ -822,7 +856,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         era: '',
         style: '',
         gender: '',
-        category: item.productType,
+        category: refreshedItem.productType,
         measurements: undefined,
         flaws: '',
         care: '',
