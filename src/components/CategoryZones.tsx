@@ -31,6 +31,11 @@ import {
   Layers,
   Columns2,
   Dumbbell,
+  Gem,
+  Medal,
+  PersonStanding,
+  Ribbon,
+  Sparkles,
 } from 'lucide-react';
 import './CategoryZones.css';
 
@@ -49,6 +54,11 @@ const getCategoryIcon = (iconNameOrCategory: string, size: number = 24) => {
     'crown': <Crown size={size} />,
     'columns2': <Columns2 size={size} />,
     'dumbbell': <Dumbbell size={size} />,
+    'medal': <Medal size={size} />,
+    'gem': <Gem size={size} />,
+    'person-standing': <PersonStanding size={size} />,
+    'ribbon': <Ribbon size={size} />,
+    'sparkles': <Sparkles size={size} />,
     'box': <Box size={size} />,
     'package': <Package size={size} />,
     'shopping-bag': <ShoppingBag size={size} />,
@@ -76,7 +86,19 @@ const getCategoryIcon = (iconNameOrCategory: string, size: number = 24) => {
     return <Layers size={size} />;
   }
   if (name.includes('jersey')) {
-    return <Dumbbell size={size} />;
+    return <Medal size={size} />;
+  }
+  if (name.includes('bodysuit')) {
+    return <PersonStanding size={size} />;
+  }
+  if (name.includes('dress')) {
+    return <PersonStanding size={size} />;
+  }
+  if (name.includes('skirt')) {
+    return <Ribbon size={size} />;
+  }
+  if (name.includes('top') && !name.includes('bottom')) {
+    return <Shirt size={size} />;
   }
   if (name.includes('tee') || name.includes('t-shirt') || name.includes('shirt')) {
     return <Shirt size={size} />;
@@ -84,8 +106,8 @@ const getCategoryIcon = (iconNameOrCategory: string, size: number = 24) => {
   if (name.includes('pant') || name.includes('jean') || name.includes('short') || name.includes('bottom') || name.includes('trouser') || name.includes('chino') || name.includes('cargo')) {
     return <Columns2 size={size} />;
   }
-  if (name.includes('femme') || name.includes('feminine') || name.includes('dress') || name.includes('skirt')) {
-    return <User size={size} />;
+  if (name.includes('femme') || name.includes('feminine')) {
+    return <Sparkles size={size} />;
   }
   if (name.includes('hat') || name.includes('cap') || name.includes('beanie') || name.includes('headwear')) {
     return <Crown size={size} />;
@@ -93,11 +115,11 @@ const getCategoryIcon = (iconNameOrCategory: string, size: number = 24) => {
   if (name.includes('shoe') || name.includes('sneaker') || name.includes('boot') || name.includes('footwear')) {
     return <Footprints size={size} />;
   }
+  if (name.includes('access') || name.includes('jewelry') || name.includes('jewel') || name.includes('gem')) {
+    return <Gem size={size} />;
+  }
   if (name.includes('bag') || name.includes('purse') || name.includes('mystery') || name.includes('box')) {
     return <Box size={size} />;
-  }
-  if (name.includes('access') || name.includes('jewelry') || name.includes('watch')) {
-    return <Package size={size} />;
   }
   
   // Default icon
