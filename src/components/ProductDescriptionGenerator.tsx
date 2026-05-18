@@ -61,6 +61,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const [interimTranscript, setInterimTranscript] = useState('');
   const [speechSupported, setSpeechSupported] = useState(true);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  // True after voice auto-apply fires — highlights empty required fields in red
+  const [showFieldValidation, setShowFieldValidation] = useState(false);
   const [availablePresets, setAvailablePresets] = useState<CategoryPreset[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<string>('');
   const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
@@ -597,6 +599,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     setIsTransitioning(true);
     isRecordingRef.current = true;
     isStartingRef.current = true;
+    // Clear validation highlights when a new recording starts
+    setShowFieldValidation(false);
     
     try {
       recognitionRef.current.start();
@@ -724,6 +728,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         console.error('Error extracting fields from voice:', error);
       } finally {
         setIsGenerating(false);
+        // Show red outlines on any required fields still empty
+        setShowFieldValidation(true);
       }
     }, 150);
   };
@@ -1267,6 +1273,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     log.pdg(`handleNext | group=${currentGroupIndex + 1}/${groupArray.length}`);
     // Auto-save in background — no waiting, no blocking navigation
     if (hasUnsavedChanges) handleSave();
+    setShowFieldValidation(false);
     if (currentGroupIndex < groupArray.length - 1) {
       setCurrentGroupIndex(currentGroupIndex + 1);
       // Scroll to top of Step 4 section
@@ -1281,6 +1288,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     log.pdg(`handlePrevious | group=${currentGroupIndex + 1}/${groupArray.length}`);
     // Auto-save in background — no waiting, no blocking navigation
     if (hasUnsavedChanges) handleSave();
+    setShowFieldValidation(false);
     if (currentGroupIndex > 0) {
       setCurrentGroupIndex(currentGroupIndex - 1);
       // Scroll to top of Step 4 section
@@ -2086,6 +2094,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               currentGroup={currentGroup}
               processedItems={processedItems}
               setProcessedItems={setProcessedItems}
+              showValidation={showFieldValidation}
             />
           </div>
         </div>
