@@ -5,7 +5,7 @@ import { ComprehensiveProductForm } from './ComprehensiveProductForm';
 import { getCategoryPresets } from '../lib/categoryPresetsService';
 import type { CategoryPreset } from '../lib/categoryPresets';
 import { applyPresetToProductGroup } from '../lib/applyPresetToGroup';
-import { generateProductDescription, stripVoiceCommands, formatVoiceTranscript } from '../lib/textAIService';
+import { generateProductDescription, formatVoiceTranscript } from '../lib/textAIService';
 import { syncGroupFieldsToDatabase } from '../lib/productService';
 import LazyImg from './LazyImg';
 import { log } from '../lib/debugLogger';
@@ -720,6 +720,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           return updated;
         });
 
+        // Auto-generate AI description from the just-extracted fields + voice text.
+        // Pass the updated items directly so handleRegenerateAll doesn't read stale state.
+        await handleRegenerateAll();
+
       } catch (error) {
         console.error('Error extracting fields from voice:', error);
       } finally {
@@ -777,271 +781,90 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Filter function to remove banned phrases
 
   // Sync structured fields from the edited description text
-  const [isSyncingFields, setIsSyncingFields] = useState(false);
-  const [isSyncingFromVoice, setIsSyncingFromVoice] = useState(false);
+  const isSyncingFields = false;
+  const isSyncingFromVoice = false;
 
   // Format painter — copy structured fields from one group and paste to another
   const [copiedFields, setCopiedFields] = useState<Record<string, any> | null>(null);
 
-  const syncFieldsFromDescription = async () => {
-    const descText = currentItem.generatedDescription;
-    if (!descText) {
-      alert('No description to parse. Generate or type a description first.');
-      return;
-    }
-    setIsSyncingFields(true);
-    try {
-      const aiResult = await generateProductDescription({
-        voiceDescription: descText,
-        brand: currentItem.brand,
-        color: currentItem.color,
-        size: currentItem.size,
-        material: currentItem.material,
-        condition: currentItem.condition as any,
-        era: currentItem.era,
-        style: currentItem.style,
-        category: currentItem.productType,
-        measurements: currentItem.measurements,
-        flaws: currentItem.flaws,
-        care: currentItem.care,
-      });
-      const extractedFields = aiResult.extractedFields || {};
-      const updated = [...processedItems];
-      currentGroup.forEach(groupItem => {
-        const itemIndex = updated.findIndex(item => item.id === groupItem.id);
-        if (itemIndex !== -1) {
-          updated[itemIndex] = {
-            ...updated[itemIndex],
-            ...(extractedFields.brand && { brand: extractedFields.brand }),
-            ...(extractedFields.modelName && { modelName: extractedFields.modelName }),
-            ...(extractedFields.color && { color: extractedFields.color }),
-            ...(extractedFields.secondaryColor && { secondaryColor: extractedFields.secondaryColor }),
-            ...(extractedFields.size && { size: extractedFields.size }),
-            ...(extractedFields.material && { material: extractedFields.material }),
-            ...(extractedFields.condition && { condition: extractedFields.condition as 'New' | 'Used' | 'NWT' | 'Excellent' | 'Good' | 'Fair' }),
-            ...(extractedFields.era && { era: extractedFields.era }),
-            ...(extractedFields.style && { style: extractedFields.style }),
-            ...(extractedFields.gender && { gender: extractedFields.gender as 'Men' | 'Women' | 'Unisex' | 'Kids' }),
-            ...(extractedFields.measurements && { measurements: extractedFields.measurements }),
-            ...(extractedFields.price && { price: parseFloat(extractedFields.price) || undefined }),
-            ...(extractedFields.flaws && { flaws: extractedFields.flaws }),
-            ...(extractedFields.care && { care: extractedFields.care }),
-            ...(extractedFields.tags && extractedFields.tags.length > 0 && {
-              tags: [...new Set([...(updated[itemIndex].tags || []), ...extractedFields.tags])].slice(0, 5)
-            }),
-          };
-        }
-      });
-      setProcessedItems(updated);
-      alert('✅ Fields updated from description!');
-    } catch (err) {
-      console.error('Field sync failed:', err);
-      alert('Failed to parse fields from description.');
-    } finally {
-      setIsSyncingFields(false);
-    }
-  };
+  // Combined: re-extract fields from voice + description, then regenerate AI description.
+  // This is the single "Regenerate All" action used both from the button and auto-triggered
+  // after stop-recording.  Accepts an optional snapshot of items (from the stop-recording
+  // setTimeout path where processedItems state hasn't flushed yet).
+  const handleRegenerateAll = async (itemsSnapshot?: typeof processedItems) => {
+    const snap = itemsSnapshot ?? processedItems;
+    const groupArray = buildGroupArray(snap);
+    const group = groupArray[currentGroupIndex] || [];
+    const item = group[0];
+    if (!item) return;
 
-  // Sync fields AND regenerate AI description from voice description text.
-  // Use this when the voice transcript was edited manually and you want all
-  // structured fields + the AI description to reflect the corrected text.
-  const syncFieldsFromVoice = async () => {
-    const voiceText = currentItem.voiceDescription;
-    if (!voiceText) {
-      alert('No voice description to parse. Start Recording first.');
-      return;
-    }
-    setIsSyncingFromVoice(true);
+    setIsGenerating(true);
+    const targetIds = new Set(group.map(g => g.id));
+
     try {
+      // Step 1 — re-extract from voice (if any), then merge with description text
+      const voiceText = item.voiceDescription || '';
+      const descText = item.generatedDescription || '';
+      const combinedInput = [voiceText, descText].filter(Boolean).join('\n\n');
+
+      if (!combinedInput && !item.brand && !item.color && !item.size) {
+        return; // Nothing to work with
+      }
+
       const aiResult = await generateProductDescription({
-        voiceDescription: voiceText,
-        brand: undefined, // Let voice override fields completely
-        color: undefined,
-        size: undefined,
-        material: undefined,
+        voiceDescription: combinedInput || undefined,
+        // Pass empty strings for all fields so voice/desc always wins
+        brand: '',
+        color: '',
+        size: '',
+        material: '',
         condition: undefined,
-        era: undefined,
-        style: undefined,
-        category: currentItem.productType,
+        era: '',
+        style: '',
+        gender: '',
+        category: item.productType,
         measurements: undefined,
-        flaws: undefined,
-        care: undefined,
+        flaws: '',
+        care: '',
       });
+
       const extractedFields = aiResult.extractedFields || {};
-      const targetIds = new Set(currentGroup.map(g => g.id));
+      const finalDescription = aiResult.description;
+
       setProcessedItems(prev => {
         const updated = [...prev];
-        updated.forEach((item, idx) => {
-          if (!targetIds.has(item.id)) return;
+        updated.forEach((it, idx) => {
+          if (!targetIds.has(it.id)) return;
           updated[idx] = {
-            ...updated[idx],
-            // Overwrite all extracted fields — voice edits take full priority
-            ...(extractedFields.brand && { brand: extractedFields.brand }),
-            ...(extractedFields.modelName && { modelName: extractedFields.modelName }),
-            ...(extractedFields.color && { color: extractedFields.color }),
+            ...it,
+            generatedDescription: finalDescription,
+            ...(extractedFields.brand        && { brand:           extractedFields.brand }),
+            ...(extractedFields.modelName    && { modelName:       extractedFields.modelName }),
+            ...(extractedFields.color        && { color:           extractedFields.color }),
             ...(extractedFields.secondaryColor && { secondaryColor: extractedFields.secondaryColor }),
-            ...(extractedFields.size && { size: extractedFields.size }),
-            ...(extractedFields.material && { material: extractedFields.material }),
-            ...(extractedFields.condition && { condition: extractedFields.condition as 'New' | 'Used' | 'NWT' | 'Excellent' | 'Good' | 'Fair' }),
-            ...(extractedFields.era && { era: extractedFields.era }),
-            ...(extractedFields.style && { style: extractedFields.style }),
-            ...(extractedFields.gender && { gender: extractedFields.gender as 'Men' | 'Women' | 'Unisex' | 'Kids' }),
-            ...(extractedFields.measurements && { measurements: extractedFields.measurements }),
-            ...(extractedFields.price && { price: parseFloat(extractedFields.price) || undefined }),
-            ...(extractedFields.flaws && { flaws: extractedFields.flaws }),
-            ...(extractedFields.care && { care: extractedFields.care }),
-            ...(extractedFields.seoTitle && { seoTitle: extractedFields.seoTitle }),
+            ...(extractedFields.size         && { size:            extractedFields.size }),
+            ...(extractedFields.material     && { material:        extractedFields.material }),
+            ...(extractedFields.condition    && { condition:       extractedFields.condition as 'New' | 'Used' | 'NWT' | 'Excellent' | 'Good' | 'Fair' }),
+            ...(extractedFields.era          && { era:             extractedFields.era }),
+            ...(extractedFields.style        && { style:           extractedFields.style }),
+            ...(extractedFields.gender       && { gender:          extractedFields.gender as 'Men' | 'Women' | 'Unisex' | 'Kids' }),
+            ...(extractedFields.measurements && { measurements:    extractedFields.measurements }),
+            ...(extractedFields.price        && { price:           parseFloat(extractedFields.price) || undefined }),
+            ...(extractedFields.flaws        && { flaws:           extractedFields.flaws }),
+            ...(extractedFields.care         && { care:            extractedFields.care }),
+            ...(extractedFields.seoTitle     && !it.seoTitle && { seoTitle: extractedFields.seoTitle }),
             ...(extractedFields.tags && extractedFields.tags.length > 0 && {
-              tags: [...new Set([...(updated[idx].tags || []), ...extractedFields.tags])].slice(0, 5)
+              tags: [...new Set([...(it.tags || []), ...extractedFields.tags])].slice(0, 5),
             }),
-            // Re-generate the AI description using the updated context
-            generatedDescription: aiResult.description,
           };
         });
         return updated;
       });
-    } catch (err) {
-      console.error('Voice sync failed:', err);
-      alert('Failed to sync from voice description.');
-    } finally {
-      setIsSyncingFromVoice(false);
-    }
-  };
-
-  // Individual regenerate functions
-  const regenerateDescription = async () => {
-    const hasAnyData = !!(currentItem.voiceDescription || currentItem.file ||
-      currentItem.brand || currentItem.color || currentItem.size ||
-      currentItem.material || currentItem.condition || currentItem.productType);
-    if (!hasAnyData) {
-      alert('Please add a voice description or image first');
-      return;
-    }
-    
-    setIsGenerating(true);
-    
-    try {
-      // Check AI provider - force Google Vision if Llama is selected (Hugging Face API deprecated)
-      const savedProvider = localStorage.getItem('ai_provider') as 'google-vision' | 'llama-vision' | null;
-      const aiProvider = savedProvider === 'llama-vision' ? 'google-vision' : (savedProvider || 'google-vision');
-      
-      // Run the real AI generator if we have an image file OR any populated fields.
-      // (File objects are lost on page reload/restore, but extracted fields persist.)
-      const hasFields = !!(currentItem.brand || currentItem.color || currentItem.size ||
-        currentItem.material || currentItem.condition || currentItem.era ||
-        currentItem.style || currentItem.productType);
-      if (aiProvider === 'google-vision' && (currentItem.file || hasFields)) {
-        // Use intelligent template system (Hugging Face is down)
-        
-        // Build context from everything we know
-        const aiResult = await generateProductDescription({
-          voiceDescription: stripVoiceCommands(currentItem.voiceDescription || ''),
-          brand: currentItem.brand,
-          color: currentItem.color,
-          size: currentItem.size,
-          material: currentItem.material,
-          condition: currentItem.condition as any,
-          era: currentItem.era,
-          style: currentItem.style,
-          category: currentItem.productType,
-          measurements: currentItem.measurements,
-          flaws: currentItem.flaws, // NEW: Include flaws in description
-          care: currentItem.care // NEW: Include care instructions
-        });
-        
-        // Use generated description
-        const finalDescription = aiResult.description;
-        const extractedFields = aiResult.extractedFields || {};
-        
-        // Capture the target item IDs before any async-caused state drift.
-        // Use functional update so we always write into the latest processedItems
-        // rather than the stale closure snapshot.
-        const targetIds = new Set(currentGroup.map(g => g.id));
-        setProcessedItems(prev => {
-          const updated = [...prev];
-          updated.forEach((item, idx) => {
-            if (!targetIds.has(item.id)) return;
-            updated[idx] = {
-              ...updated[idx],
-              generatedDescription: finalDescription,
-              // Also update structured fields so the form reflects the generated content
-              ...(extractedFields.brand && { brand: extractedFields.brand }),
-              ...(extractedFields.modelName && { modelName: extractedFields.modelName }),
-              ...(extractedFields.color && { color: extractedFields.color }),
-              ...(extractedFields.secondaryColor && { secondaryColor: extractedFields.secondaryColor }),
-              ...(extractedFields.size && { size: extractedFields.size }),
-              ...(extractedFields.material && { material: extractedFields.material }),
-              ...(extractedFields.condition && { condition: extractedFields.condition as 'New' | 'Used' | 'NWT' | 'Excellent' | 'Good' | 'Fair' }),
-              ...(extractedFields.era && { era: extractedFields.era }),
-              ...(extractedFields.style && { style: extractedFields.style }),
-              ...(extractedFields.gender && { gender: extractedFields.gender as 'Men' | 'Women' | 'Unisex' | 'Kids' }),
-              ...(extractedFields.measurements && { measurements: extractedFields.measurements }),
-              ...(extractedFields.price && { price: parseFloat(extractedFields.price) || undefined }),
-              ...(extractedFields.flaws && { flaws: extractedFields.flaws }),
-              ...(extractedFields.care && { care: extractedFields.care }),
-              ...(extractedFields.seoTitle && !updated[idx].seoTitle && { seoTitle: extractedFields.seoTitle }),
-              ...(extractedFields.tags && extractedFields.tags.length > 0 && {
-                tags: [...new Set([...(updated[idx].tags || []), ...extractedFields.tags])].slice(0, 5)
-              }),
-            };
-          });
-          return updated;
-        });
-        setIsGenerating(false);
-        return;
-      }
     } catch (error) {
-      console.error('AI generation failed:', error);
-      alert(`AI analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please check that the proxy server is running.`);
+      console.error('Regenerate all failed:', error);
+    } finally {
       setIsGenerating(false);
-      return;
     }
-    
-    // Fallback: Use basic generation if Llama 3 not enabled
-    const voiceDesc = stripVoiceCommands(currentItem.voiceDescription || '');
-    const lowerDesc = voiceDesc.toLowerCase();
-    
-    // Detect colors and materials
-    const colorPatterns = {
-      black: /black/i,
-      white: /white|cream|ivory|off-white/i,
-      red: /red|crimson|burgundy|maroon/i,
-      blue: /blue|navy|cobalt|azure/i,
-      green: /green|olive|forest|emerald/i,
-      yellow: /yellow|gold|mustard/i,
-      pink: /pink|rose|blush/i,
-      purple: /purple|violet|lavender/i,
-      gray: /gray|grey|charcoal|slate/i,
-      brown: /brown|tan|beige|khaki|camel/i,
-      orange: /orange|rust|copper/i,
-    };
-    
-    const detectedColors = Object.entries(colorPatterns)
-      .filter(([_, pattern]) => pattern.test(lowerDesc))
-      .map(([color]) => color);
-    
-    const isVintage = /vintage|retro|throwback|90s|80s|old school/i.test(lowerDesc);
-    const isNew = /new|unworn|nwt|new with tags|mint|brand new/i.test(lowerDesc);
-    
-    const category = currentItem.category || 'item';
-    const colorDesc = detectedColors.length > 0 ? ` ${detectedColors[0]}` : '';
-    
-    let desc = `Discover this ${isNew ? 'brand new' : isVintage ? 'vintage' : 'quality'}${colorDesc} ${category.toLowerCase()} piece. `;
-    desc += voiceDesc.charAt(0).toUpperCase() + voiceDesc.slice(1);
-    if (!voiceDesc.endsWith('.')) desc += '.';
-    desc += ' Perfect for any wardrobe. Don\'t miss out on this quality piece.';
-    
-    const targetIds = new Set(currentGroup.map(g => g.id));
-    setProcessedItems(prev => {
-      const updated = [...prev];
-      updated.forEach((item, idx) => {
-        if (targetIds.has(item.id)) {
-          updated[idx] = { ...updated[idx], generatedDescription: desc };
-        }
-      });
-      return updated;
-    });
-    setIsGenerating(false);
   };
 
   // Regenerate functions - currently unused but kept for future reference
@@ -1915,50 +1738,21 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               />
               <button
                 className="button button-primary"
-                onClick={regenerateDescription}
+                onClick={() => handleRegenerateAll()}
                 disabled={isGenerating || isSyncingFields || isSyncingFromVoice}
                 style={{
                   marginTop: '0.5rem',
                   width: '100%',
-                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                  background: isGenerating
+                    ? 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)'
+                    : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
                 }}
-                title="Generate professional description from your voice + fields"
+                title="Re-extract all fields from voice + description, then regenerate AI description"
               >
-                {isGenerating ? '🧠 Generating...' : '✨ Generate AI Description'}
+                {isGenerating ? '🧠 Regenerating…' : '🔄 Regenerate AI Description'}
               </button>
-              {/* Sync buttons row — side by side at half width each */}
-              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                <button
-                  className="button"
-                  onClick={syncFieldsFromDescription}
-                  disabled={isSyncingFields || isSyncingFromVoice || isGenerating}
-                  style={{
-                    flex: 1,
-                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                    color: '#fff',
-                    border: 'none',
-                  }}
-                  title="Parse the AI description text and update all structured fields"
-                >
-                  {isSyncingFields ? '🔄 Syncing...' : '🔁 Resync from AI Description'}
-                </button>
-                <button
-                  className="button"
-                  onClick={syncFieldsFromVoice}
-                  disabled={isSyncingFromVoice || isSyncingFields || isGenerating}
-                  style={{
-                    flex: 1,
-                    background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                    color: '#fff',
-                    border: 'none',
-                  }}
-                  title="Re-extract all fields AND regenerate the AI description from the voice transcript"
-                >
-                  {isSyncingFromVoice ? '🔄 Syncing...' : '🎙️ Resync from Voice'}
-                </button>
-              </div>
-              <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem', marginBottom: 0 }}>
-                AI will create a professional description from your voice input and fields
+              <p style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: '0.35rem', marginBottom: 0 }}>
+                Reads voice &amp; description → updates all fields → writes new AI description
               </p>
             </div>
             
