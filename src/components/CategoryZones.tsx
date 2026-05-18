@@ -27,6 +27,10 @@ import {
   Users,
   UserRound,
   Baby,
+  Crown,
+  Layers,
+  Columns2,
+  Dumbbell,
 } from 'lucide-react';
 import './CategoryZones.css';
 
@@ -38,9 +42,13 @@ const getCategoryIcon = (iconNameOrCategory: string, size: number = 24) => {
   const iconMap: Record<string, React.ReactNode> = {
     'shirt': <Shirt size={size} />,
     'wind': <Wind size={size} />,
+    'layers': <Layers size={size} />,
     'footprints': <Footprints size={size} />,
     'user': <User size={size} />,
     'glasses': <Glasses size={size} />,
+    'crown': <Crown size={size} />,
+    'columns2': <Columns2 size={size} />,
+    'dumbbell': <Dumbbell size={size} />,
     'box': <Box size={size} />,
     'package': <Package size={size} />,
     'shopping-bag': <ShoppingBag size={size} />,
@@ -58,23 +66,32 @@ const getCategoryIcon = (iconNameOrCategory: string, size: number = 24) => {
   }
   
   // Fallback to category name matching (for backward compatibility)
-  if (name.includes('sweatshirt') || name.includes('hoodie')) {
+  if (name.includes('sweatshirt') || name.includes('crewneck')) {
     return <Shirt size={size} />;
   }
-  if (name.includes('outerwear') || name.includes('jacket') || name.includes('coat')) {
-    return <Wind size={size} />;
+  if (name.includes('hoodie')) {
+    return <Shirt size={size} />;
+  }
+  if (name.includes('outerwear') || name.includes('jacket') || name.includes('coat') || name.includes('blazer')) {
+    return <Layers size={size} />;
+  }
+  if (name.includes('jersey')) {
+    return <Dumbbell size={size} />;
   }
   if (name.includes('tee') || name.includes('t-shirt') || name.includes('shirt')) {
     return <Shirt size={size} />;
   }
-  if (name.includes('bottom') || name.includes('pant') || name.includes('jean') || name.includes('short')) {
-    return <Footprints size={size} />;
+  if (name.includes('pant') || name.includes('jean') || name.includes('short') || name.includes('bottom') || name.includes('trouser') || name.includes('chino') || name.includes('cargo')) {
+    return <Columns2 size={size} />;
   }
   if (name.includes('femme') || name.includes('feminine') || name.includes('dress') || name.includes('skirt')) {
     return <User size={size} />;
   }
-  if (name.includes('hat') || name.includes('cap') || name.includes('beanie')) {
-    return <Glasses size={size} />;
+  if (name.includes('hat') || name.includes('cap') || name.includes('beanie') || name.includes('headwear')) {
+    return <Crown size={size} />;
+  }
+  if (name.includes('shoe') || name.includes('sneaker') || name.includes('boot') || name.includes('footwear')) {
+    return <Footprints size={size} />;
   }
   if (name.includes('bag') || name.includes('purse') || name.includes('mystery') || name.includes('box')) {
     return <Box size={size} />;
