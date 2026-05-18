@@ -668,6 +668,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         // "size L period", etc. and returns them as structured fields.
         const aiResult = await generateProductDescription({
           voiceDescription: latestItem.voiceDescription,
+          title: latestItem.seoTitle || '',
           // Pass empty strings for all existing fields so voice ALWAYS wins —
           // the extractor returns only what was explicitly spoken, so if a field
           // wasn't mentioned it comes back undefined and the spread is a no-op.
@@ -846,6 +847,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
       const aiResult = await generateProductDescription({
         voiceDescription: voiceText || undefined,
+        title: refreshedItem.seoTitle || '',
         // Pass empty strings for all fields so voice/desc always wins
         brand: '',
         color: '',
