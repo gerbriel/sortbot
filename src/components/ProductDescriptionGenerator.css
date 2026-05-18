@@ -1091,6 +1091,32 @@
   overflow-x: auto;
 }
 
+.vct-grid--full {
+  grid-template-columns: 1fr;
+}
+
+.vct-row-group--title .vct-col {
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+}
+
+.vct-row-group--title .vct-header {
+  min-width: 52px;
+  border-right: 1px solid #e2e8f0;
+  border-bottom: none;
+  padding: 0.3rem 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.vct-row-group--title .vct-cell {
+  flex: 1;
+  border-top: none;
+}
+
 .vct-col {
   display: flex;
   flex-direction: column;
