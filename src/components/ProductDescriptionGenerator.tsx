@@ -750,7 +750,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           era: '',
           style: '',
           gender: '',
-          category: latestItem.productType,
+          // Prefer the preset's product_type over a potentially stale item.productType
+          category: (latestItem as any)._presetData?.productType || latestItem.productType,
+          presetTags: (latestItem as any)._presetData?.default_tags || [],
           measurements: undefined,
           flaws: '',
           care: '',
@@ -989,7 +991,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         era: '',
         style: '',
         gender: '',
-        category: refreshedItem.productType,
+        // Prefer the preset's product_type over a potentially stale item.productType
+        category: (refreshedItem as any)._presetData?.productType || refreshedItem.productType,
+        presetTags: (refreshedItem as any)._presetData?.default_tags || [],
         measurements: undefined,
         flaws: '',
         care: '',

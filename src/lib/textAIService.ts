@@ -47,6 +47,7 @@ interface ProductContext {
   gender?: string;
   price?: number;
   tags?: string[];
+  presetTags?: string[];  // default_tags from the matched category preset
 }
 
 export interface AIGeneratedContent {
@@ -802,17 +803,31 @@ function generateTitleFromFields(context: ProductContext): string {
  * then explicit tags array, then field-based fallback.
  */
 function generateTagsFromFields(context: ProductContext): string[] {
+  const presetTagsNorm = (context.presetTags || []).map((t: string) => t.toLowerCase().replace(/\s+/g, ''));
+
   // Primary: extract #hashtags from voice description
   const hashtagsFromVoice = (context.voiceDescription || '')
     .match(/#(\w+)/g)
     ?.map((t: string) => t.slice(1).toLowerCase()) || [];
   if (hashtagsFromVoice.length > 0) {
-    return Array.from(new Set(hashtagsFromVoice)).slice(0, 8);
+    return Array.from(new Set([...hashtagsFromVoice, ...presetTagsNorm])).slice(0, 8);
   }
 
-  // Secondary: explicit tags array (from voice "tags ... period" command)
+  // Secondary: explicit tags array (from voice "tags ... period" command),
+  // always merged with preset tags so the product type stays accurate.
   if (context.tags && context.tags.length > 0) {
-    return Array.from(new Set(context.tags.map((t: string) => t.toLowerCase()))).slice(0, 8);
+    const userTags = context.tags.map((t: string) => t.toLowerCase());
+    return Array.from(new Set([...presetTagsNorm, ...userTags])).slice(0, 8);
+  }
+
+  // If we have preset tags, prefer those over a stale context.category
+  if (presetTagsNorm.length > 0) {
+    const tags: string[] = [...presetTagsNorm];
+    if (context.era) tags.push(...context.era.split(/[\s\/]+/).filter(Boolean));
+    if (context.brand) tags.push(context.brand);
+    if (context.color) tags.push(...context.color.split(/[\s\/]+/).filter(Boolean));
+    if (context.style) tags.push(context.style);
+    return Array.from(new Set(tags)).slice(0, 8);
   }
 
   // Last resort: build from filled fields
