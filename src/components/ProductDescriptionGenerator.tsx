@@ -847,7 +847,41 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     setInterimTranscript('');
   };
 
-  /** Handle a cell edit from the VoiceCommandTable — updates the current group's item fields */
+  /** Serialize item fields into voice-description "field value period" lines */
+  const buildVoiceTextFromItem = (item: ClothingItem): string => {
+    const lines: string[] = [];
+    const add = (label: string, val: string | number | undefined | null) => {
+      if (val !== undefined && val !== null && String(val).trim()) lines.push(`${label} ${String(val).trim()} period`);
+    };
+    add('title',    item.seoTitle);
+    add('brand',    item.brand);
+    add('size',     item.size);
+    add('color',    item.color);
+    if (item.secondaryColor) add('second color', item.secondaryColor);
+    add('condition', item.condition);
+    add('price',    item.price);
+    add('era',      item.era);
+    add('style',    item.style);
+    add('gender',   item.gender);
+    add('material', item.material);
+    if (item.tags?.length) add('tags', item.tags.join(', '));
+    add('flaws',    item.flaws);
+    add('care',     item.care);
+    const m = item.measurements as any;
+    if (m) {
+      add('width',       m.width);
+      add('length',      m.length);
+      add('waist',       m.waist);
+      add('inseam',      m.inseam);
+      add('outseam',     m.outseam);
+      add('leg opening', m.leg_opening);
+      add('sleeve',      m.sleeve);
+      add('shoulder',    m.shoulder);
+    }
+    return lines.join('\n');
+  };
+
+  /** Handle a cell edit from the VoiceCommandTable — updates fields AND rebuilds voiceDescription */
   const handleTableFieldChange = (fieldKey: string, value: string) => {
     const latestItems = processedItemsRef.current;
     const latestGroupArray = buildGroupArray(latestItems);
@@ -855,13 +889,20 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const targetIds = new Set(latestGroup.map(g => g.id));
     setProcessedItems(prev => prev.map(item => {
       if (!targetIds.has(item.id)) return item;
+      let updated: ClothingItem;
       if (fieldKey.startsWith('meas_')) {
-        const measKey = fieldKey.slice(5); // strip 'meas_'
-        return { ...item, measurements: { ...(item.measurements || {}), [measKey]: value } };
+        const measKey = fieldKey.slice(5);
+        updated = { ...item, measurements: { ...(item.measurements || {}), [measKey]: value } };
+      } else if (fieldKey === 'price') {
+        updated = { ...item, price: parseFloat(value) || undefined };
+      } else if (fieldKey === 'tags') {
+        updated = { ...item, tags: value.split(/,\s*/).filter(Boolean) };
+      } else {
+        updated = { ...item, [fieldKey]: value };
       }
-      if (fieldKey === 'price') return { ...item, price: parseFloat(value) || undefined };
-      if (fieldKey === 'tags')  return { ...item, tags: value.split(/,\s*/).filter(Boolean) };
-      return { ...item, [fieldKey]: value };
+      // Sync back to voiceDescription text
+      updated = { ...updated, voiceDescription: buildVoiceTextFromItem(updated) };
+      return updated;
     }));
   };
 
@@ -1793,16 +1834,55 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     value={currentItem.voiceDescription || interimTranscript || ''}
                     onChange={(e) => {
                       setInterimTranscript('');
+                      const newText = e.target.value;
                       const updated = [...processedItems];
+
+                      // Parse "field value period" commands from the text and apply to item fields
+                      const parseVoiceTextToFields = (text: string): Partial<ClothingItem> & { measurements?: any } => {
+                        const fields: any = {};
+                        const normalized = text.replace(/\.(?=\s|$)/g, ' period').replace(/\n/g, ' ');
+                        const grab = (pattern: RegExp) => { const m = normalized.match(pattern); return m ? m[1].trim() : null; };
+                        const v = (label: string) => grab(new RegExp(`\\b${label}\\s+(.+?)\\s+period\\b`, 'i'));
+                        const b = v('brand');      if (b) fields.brand = b;
+                        const s = v('size');       if (s) fields.size = s;
+                        const col = v('colou?r');  if (col) { const p = col.split(/\s+and\s+|\s*\/\s*/i); fields.color = p[0]; if (p[1]) fields.secondaryColor = p[1]; }
+                        const sc = v('second(?:\\s+colou?r|ary\\s+colou?r)'); if (sc) fields.secondaryColor = sc;
+                        const cond = v('condition'); if (cond) fields.condition = cond;
+                        const pr = v('price');     if (pr) { const n = pr.replace(/[^0-9.]/g,''); if (n) fields.price = parseFloat(n); }
+                        const er = v('era');       if (er) fields.era = er;
+                        const st = v('style');     if (st) fields.style = st;
+                        const ge = v('gender');    if (ge) fields.gender = ge;
+                        const ma = v('(?:material|fabric)'); if (ma) fields.material = ma;
+                        const ta = v('tags?');     if (ta) fields.tags = ta.split(/,\s*/).filter(Boolean);
+                        const fl = v('flaws?');    if (fl) fields.flaws = fl;
+                        const ca = v('care');      if (ca) fields.care = ca;
+                        const ti = v('title');     if (ti) fields.seoTitle = ti;
+                        const meas: any = {};
+                        const mw = v('width');           if (mw) meas.width = mw.replace(/[^0-9.]/g,'');
+                        const ml = v('length');          if (ml) meas.length = ml.replace(/[^0-9.]/g,'');
+                        const mwa = v('waist');          if (mwa) meas.waist = mwa.replace(/[^0-9.]/g,'');
+                        const mi = v('inseam');          if (mi) meas.inseam = mi.replace(/[^0-9.]/g,'');
+                        const mo = v('outseam');         if (mo) meas.outseam = mo.replace(/[^0-9.]/g,'');
+                        const mleg = v('leg\\s+opening'); if (mleg) meas.leg_opening = mleg.replace(/[^0-9.]/g,'');
+                        const msl = v('sleeve');         if (msl) meas.sleeve = msl.replace(/[^0-9.]/g,'');
+                        const msh = v('shoulder');       if (msh) meas.shoulder = msh.replace(/[^0-9.]/g,'');
+                        if (Object.keys(meas).length) fields.measurements = meas;
+                        return fields;
+                      };
+
+                      const parsedFields = parseVoiceTextToFields(newText);
+
                       currentGroup.forEach(groupItem => {
                         const itemIndex = updated.findIndex(item => item.id === groupItem.id);
                         if (itemIndex !== -1) {
+                          const { measurements: parsedMeas, ...flatFields } = parsedFields;
                           updated[itemIndex] = {
                             ...updated[itemIndex],
-                            voiceDescription: e.target.value,
-                            generatedDescription: updated[itemIndex].generatedDescription
-                              ? `[Voice updated — click Generate to refresh]\n\n${updated[itemIndex].generatedDescription}`
-                              : updated[itemIndex].generatedDescription,
+                            ...flatFields,
+                            measurements: parsedMeas
+                              ? { ...(updated[itemIndex].measurements || {}), ...parsedMeas }
+                              : updated[itemIndex].measurements,
+                            voiceDescription: newText,
                           };
                         }
                       });
