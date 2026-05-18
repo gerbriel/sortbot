@@ -1,6 +1,7 @@
 import { forwardRef, useImperativeHandle } from 'react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
+import { smartSeoTruncate } from '../lib/textAIService';
 import './GoogleSheetExporter.css';
 
 /**
@@ -85,33 +86,6 @@ const GENDER_GID_MAP: Record<string, string> = {
   'women':   'gid://shopify/Metaobject/128362578105',
   'womens':  'gid://shopify/Metaobject/128362578105',
 };
-
-/**
- * Truncate a string for SEO description without cutting mid-word or mid-sentence.
- * Tries to end at a sentence boundary within the target range, then a word boundary,
- * or returns the full string if it's already short enough.
- */
-function smartSeoTruncate(text: string, target = 320, flex = 40): string {
-  if (text.length <= target + flex) return text;
-  const max = target + flex;
-  const min = target - flex;
-  // Prefer ending at a sentence boundary (. ! ?) within the range
-  const sentenceEnd = /[.!?](?:\s|$)/g;
-  let lastSentence = -1;
-  let m: RegExpExecArray | null;
-  while ((m = sentenceEnd.exec(text)) !== null) {
-    const pos = m.index + 1;
-    if (pos >= min && pos <= max) return text.slice(0, pos).trimEnd();
-    if (pos > max) break;
-    if (pos >= min) lastSentence = pos;
-  }
-  if (lastSentence > 0) return text.slice(0, lastSentence).trimEnd();
-  // Fall back to word boundary
-  const wordEnd = text.lastIndexOf(' ', max);
-  if (wordEnd >= min) return text.slice(0, wordEnd).trimEnd();
-  // Last resort
-  return text.slice(0, target).trimEnd();
-}
 
 function resolveColorGid(color: string | undefined): string {
   if (!color) return '';

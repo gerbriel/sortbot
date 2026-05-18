@@ -5,7 +5,7 @@ import { ComprehensiveProductForm } from './ComprehensiveProductForm';
 import { getCategoryPresets } from '../lib/categoryPresetsService';
 import type { CategoryPreset } from '../lib/categoryPresets';
 import { applyPresetToProductGroup, applyPresetDirectly } from '../lib/applyPresetToGroup';
-import { generateProductDescription, formatVoiceTranscript } from '../lib/textAIService';
+import { generateProductDescription, formatVoiceTranscript, smartSeoTruncate } from '../lib/textAIService';
 import { syncGroupFieldsToDatabase } from '../lib/productService';
 import LazyImg from './LazyImg';
 import { log } from '../lib/debugLogger';
@@ -872,7 +872,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           updated[idx] = {
             ...it,
             generatedDescription: finalDescription,
-            ...(!it.seoDescription && finalDescription && { seoDescription: finalDescription.slice(0, 320) }),
+            ...(!it.seoDescription && finalDescription && { seoDescription: smartSeoTruncate(finalDescription) }),
             ...(extractedFields.brand        && { brand:           extractedFields.brand }),
             ...(extractedFields.modelName    && { modelName:       extractedFields.modelName }),
             ...(extractedFields.color        && { color:           extractedFields.color }),
