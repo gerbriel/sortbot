@@ -64,6 +64,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [availablePresets, setAvailablePresets] = useState<CategoryPreset[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<string>('');
+  const [presetSearchQuery, setPresetSearchQuery] = useState('');
+  const [presetSearchOpen, setPresetSearchOpen] = useState(false);
   const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
@@ -2075,32 +2077,92 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     </span>
                   )}
                 </div>
-                <select
-                  value={selectedPresetId}
-                  onChange={(e) => handleApplyPreset(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem',
-                    border: '1px solid #ced4da',
-                    borderRadius: '4px',
-                    fontSize: '0.95rem',
-                    background: 'white',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <option value="">
-                    {currentItem._presetData 
-                      ? `Keep Current: ${currentItem._presetData.displayName}` 
-                      : 'Select a preset to apply...'}
-                  </option>
-                  {availablePresets.map(preset => (
-                    <option key={preset.id} value={preset.id}>
-                      {preset.display_name}
-                      {preset.is_default && ' (Default)'}
-                      {preset.product_type && ` - ${preset.product_type}`}
-                    </option>
-                  ))}
-                </select>
+                {/* Searchable preset combobox */}
+                <div style={{ position: 'relative' }}>
+                  <div
+                    style={{
+                      display: 'flex', alignItems: 'center',
+                      border: `1px solid ${presetSearchOpen ? '#6366f1' : '#ced4da'}`,
+                      borderRadius: '4px', background: 'white',
+                      boxShadow: presetSearchOpen ? '0 0 0 2px #e0e7ff' : 'none',
+                      transition: 'border-color 0.15s, box-shadow 0.15s',
+                    }}
+                  >
+                    <span style={{ padding: '0 0.5rem', color: '#9ca3af', fontSize: '0.9rem' }}>🔍</span>
+                    <input
+                      type="text"
+                      placeholder={
+                        currentItem._presetData
+                          ? `Keep Current: ${currentItem._presetData.displayName}`
+                          : 'Search presets…'
+                      }
+                      value={presetSearchQuery}
+                      onChange={e => { setPresetSearchQuery(e.target.value); setPresetSearchOpen(true); }}
+                      onFocus={() => setPresetSearchOpen(true)}
+                      onBlur={() => setTimeout(() => setPresetSearchOpen(false), 150)}
+                      onKeyDown={e => e.stopPropagation()}
+                      style={{
+                        flex: 1, border: 'none', outline: 'none',
+                        padding: '0.5rem 0.25rem', fontSize: '0.95rem', background: 'transparent',
+                      }}
+                    />
+                    {presetSearchQuery && (
+                      <button
+                        onMouseDown={e => { e.preventDefault(); setPresetSearchQuery(''); setPresetSearchOpen(true); }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 0.5rem', color: '#9ca3af', fontSize: '1rem', lineHeight: 1 }}
+                      >✕</button>
+                    )}
+                  </div>
+
+                  {presetSearchOpen && (() => {
+                    const q = presetSearchQuery.toLowerCase();
+                    const filtered = [
+                      ...(currentItem._presetData ? [{ id: '', label: `Keep Current: ${currentItem._presetData.displayName}`, sub: '' }] : [{ id: '', label: 'Keep current / no change', sub: '' }]),
+                      ...availablePresets
+                        .filter(p =>
+                          !q ||
+                          p.display_name.toLowerCase().includes(q) ||
+                          (p.product_type || '').toLowerCase().includes(q) ||
+                          (p.category_name || '').toLowerCase().includes(q)
+                        )
+                        .map(p => ({ id: p.id, label: p.display_name + (p.is_default ? ' ✓' : ''), sub: p.product_type || '' }))
+                    ];
+                    return (
+                      <div style={{
+                        position: 'absolute', top: 'calc(100% + 2px)', left: 0, right: 0,
+                        background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px',
+                        boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 200,
+                        maxHeight: '240px', overflowY: 'auto',
+                      }}>
+                        {filtered.length === 0 && (
+                          <div style={{ padding: '0.6rem 0.9rem', color: '#9ca3af', fontSize: '0.85rem' }}>No presets match</div>
+                        )}
+                        {filtered.map(opt => (
+                          <div
+                            key={opt.id}
+                            onMouseDown={e => {
+                              e.preventDefault();
+                              setPresetSearchQuery('');
+                              setPresetSearchOpen(false);
+                              handleApplyPreset(opt.id);
+                            }}
+                            style={{
+                              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                              padding: '0.45rem 0.9rem', cursor: 'pointer', fontSize: '0.9rem',
+                              background: opt.id === selectedPresetId ? '#eef2ff' : 'white',
+                              color: opt.id === selectedPresetId ? '#4f46e5' : '#1f2937',
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.background = '#f5f7ff')}
+                            onMouseLeave={e => (e.currentTarget.style.background = opt.id === selectedPresetId ? '#eef2ff' : 'white')}
+                          >
+                            <span>{opt.label}</span>
+                            {opt.sub && <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{opt.sub}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
                 <p style={{ 
                   fontSize: '0.85rem', 
                   color: '#6c757d', 
