@@ -119,7 +119,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
           </div>
           <div className="info-item">
             <label>Style: <PresetBadge show={isFromPreset('style')} /></label>
-            <input type="text" value={currentItem.style || ''} onChange={(e) => updateGroupField('style', e.target.value)} placeholder="e.g., Streetwear, Preppy" className="info-input" />
+            <input type="text" value={currentItem.style || ''} onChange={(e) => updateGroupField('style', e.target.value)} placeholder="e.g., Streetwear, Preppy" className={`info-input${req(currentItem.style)}`} />
           </div>
           <div className="info-item">
             <label>Gender: <PresetBadge show={isFromPreset('gender')} /></label>
@@ -139,11 +139,11 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
           </div>
           <div className="info-item">
             <label>Model Name:</label>
-            <input type="text" value={currentItem.modelName || ''} onChange={(e) => updateGroupField('modelName', e.target.value)} placeholder="e.g., Air Force 1, 501" className="info-input" />
+            <input type="text" value={currentItem.modelName || ''} onChange={(e) => updateGroupField('modelName', e.target.value)} placeholder="e.g., Air Force 1, 501" className={`info-input${req(currentItem.modelName)}`} />
           </div>
           <div className="info-item">
             <label>Flaws (if any):</label>
-            <input type="text" value={currentItem.flaws || ''} onChange={(e) => updateGroupField('flaws', e.target.value)} placeholder="e.g., minor pilling" className="info-input" />
+            <input type="text" value={currentItem.flaws || ''} onChange={(e) => updateGroupField('flaws', e.target.value)} placeholder="e.g., minor pilling" className={`info-input${req(currentItem.flaws)}`} />
           </div>
         </div>
         <div className="fields-row">
@@ -157,7 +157,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
           </div>
           <div className="info-item">
             <label>Care Instructions: <PresetBadge show={isFromPreset('care')} /></label>
-            <input type="text" value={currentItem.care || ''} onChange={(e) => updateGroupField('care', e.target.value)} placeholder="e.g., Machine wash cold" className="info-input" />
+            <input type="text" value={currentItem.care || ''} onChange={(e) => updateGroupField('care', e.target.value)} placeholder="e.g., Machine wash cold" className={`info-input${req(currentItem.care)}`} />
           </div>
         </div>
       </div>
@@ -176,27 +176,27 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
           </div>
           <div className="info-item">
             <label>Sleeve ("):</label>
-            <input type="text" value={currentItem.measurements?.sleeve || ''} onChange={(e) => updateGroupField('measurements.sleeve', e.target.value)} placeholder="e.g., 24" className="info-input" />
+            <input type="text" value={currentItem.measurements?.sleeve || ''} onChange={(e) => updateGroupField('measurements.sleeve', e.target.value)} placeholder="e.g., 24" className={`info-input${req(currentItem.measurements?.sleeve)}`} />
           </div>
         </div>
         <div className="fields-row">
           <div className="info-item">
             <label>Shoulder ("):</label>
-            <input type="text" value={currentItem.measurements?.shoulder || ''} onChange={(e) => updateGroupField('measurements.shoulder', e.target.value)} placeholder="e.g., 18" className="info-input" />
+            <input type="text" value={currentItem.measurements?.shoulder || ''} onChange={(e) => updateGroupField('measurements.shoulder', e.target.value)} placeholder="e.g., 18" className={`info-input${req(currentItem.measurements?.shoulder)}`} />
           </div>
           <div className="info-item">
             <label>Waist ("):</label>
-            <input type="text" value={currentItem.measurements?.waist || ''} onChange={(e) => updateGroupField('measurements.waist', e.target.value)} placeholder="e.g., 32" className="info-input" />
+            <input type="text" value={currentItem.measurements?.waist || ''} onChange={(e) => updateGroupField('measurements.waist', e.target.value)} placeholder="e.g., 32" className={`info-input${req(currentItem.measurements?.waist)}`} />
           </div>
           <div className="info-item">
             <label>Inseam ("):</label>
-            <input type="text" value={currentItem.measurements?.inseam || ''} onChange={(e) => updateGroupField('measurements.inseam', e.target.value)} placeholder="e.g., 30" className="info-input" />
+            <input type="text" value={currentItem.measurements?.inseam || ''} onChange={(e) => updateGroupField('measurements.inseam', e.target.value)} placeholder="e.g., 30" className={`info-input${req(currentItem.measurements?.inseam)}`} />
           </div>
         </div>
         <div className="fields-row">
           <div className="info-item">
             <label>Rise ("):</label>
-            <input type="text" value={currentItem.measurements?.rise || ''} onChange={(e) => updateGroupField('measurements.rise', e.target.value)} placeholder="e.g., 11" className="info-input" />
+            <input type="text" value={currentItem.measurements?.rise || ''} onChange={(e) => updateGroupField('measurements.rise', e.target.value)} placeholder="e.g., 11" className={`info-input${req(currentItem.measurements?.rise)}`} />
           </div>
           <div className="info-item">{/* spacer */}</div>
           <div className="info-item">{/* spacer */}</div>
@@ -209,7 +209,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
         <div className="fields-row">
           <div className="info-item">
             <label>SKU:</label>
-            <input type="text" value={currentItem.sku || ''} onChange={(e) => updateGroupField('sku', e.target.value)} placeholder="Stock keeping unit" className="info-input" />
+            <input type="text" value={currentItem.sku || ''} onChange={(e) => updateGroupField('sku', e.target.value)} placeholder="Stock keeping unit" className={`info-input${req(currentItem.sku)}`} />
           </div>
           <div className="info-item">
             <label>Inventory Quantity:</label>
@@ -223,11 +223,11 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
         <div className="fields-row">
           <div className="info-item">
             <label>Ships From: <PresetBadge show={isFromPreset('shipsFrom')} /></label>
-            <input type="text" value={currentItem.shipsFrom || ''} onChange={(e) => updateGroupField('shipsFrom', e.target.value)} placeholder="Shipping location" className="info-input" />
+            <input type="text" value={currentItem.shipsFrom || ''} onChange={(e) => updateGroupField('shipsFrom', e.target.value)} placeholder="Shipping location" className={`info-input${req(currentItem.shipsFrom)}`} />
           </div>
           <div className="info-item">
             <label>Parcel Size: <PresetBadge show={isFromPreset('parcelSize')} /></label>
-            <select value={currentItem.parcelSize || ''} onChange={(e) => updateGroupField('parcelSize', e.target.value)} className="info-input">
+            <select value={currentItem.parcelSize || ''} onChange={(e) => updateGroupField('parcelSize', e.target.value)} className={`info-input${req(currentItem.parcelSize)}`}>
               <option value="">Select size...</option>
               <option value="Small">Small</option>
               <option value="Medium">Medium</option>
@@ -267,13 +267,13 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
           </div>
           <div className="info-item">
             <label>Age Group: <PresetBadge show={isFromPreset('ageGroup')} /></label>
-            <input type="text" value={currentItem.ageGroup || ''} onChange={(e) => updateGroupField('ageGroup', e.target.value)} placeholder="e.g., Adult (13+ years)" className="info-input" />
+            <input type="text" value={currentItem.ageGroup || ''} onChange={(e) => updateGroupField('ageGroup', e.target.value)} placeholder="e.g., Adult (13+ years)" className={`info-input${req(currentItem.ageGroup)}`} />
           </div>
         </div>
         <div className="fields-row">
           <div className="info-item fields-row--span2">
             <label>SEO Description:</label>
-            <textarea value={currentItem.seoDescription || ''} onChange={(e) => updateGroupField('seoDescription', e.target.value)} placeholder="Meta description for search engines" className="info-input" rows={2} />
+            <textarea value={currentItem.seoDescription || ''} onChange={(e) => updateGroupField('seoDescription', e.target.value)} placeholder="Meta description for search engines" className={`info-input${req(currentItem.seoDescription)}`} rows={2} />
           </div>
           <div className="info-item">
             <label>Size Type: <PresetBadge show={isFromPreset('sizeType')} /></label>
