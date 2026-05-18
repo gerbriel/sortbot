@@ -370,6 +370,7 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
       discounted_shipping: (preset as any).discounted_shipping,
       custom_label_0: (preset as any).custom_label_0,
       default_status: (preset as any).default_status ?? 'Active',
+      seo_description: (preset as any).seo_description,
     });
     setCustomSections(mergeAllSections(preset.custom_sections ?? []));
     setShowForm(true);
@@ -1002,6 +1003,16 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
                     <label>SEO Title Template</label>
                     <input type="text" value={formData.seo_title_template || ''} onChange={e => setFormData(prev => ({ ...prev, seo_title_template: e.target.value }))} placeholder="{size} {brand} {category} {color}" />
                     <small>Placeholders: {'{size}'}, {'{brand}'}, {'{category}'}, {'{color}'}, {'{era}'}</small>
+                  </div>
+                  <div className="form-group">
+                    <label>SEO Description (default)</label>
+                    <textarea
+                      value={(formData as any).seo_description || ''}
+                      onChange={e => setFormData(prev => ({ ...prev, seo_description: e.target.value } as any))}
+                      rows={3}
+                      placeholder="Default meta description applied to every product in this category…"
+                    />
+                    <small>Applied to new products when this preset is used. Overridden by any value already on the item.</small>
                   </div>
                   <CustomFieldsBlock
                     fields={customSections.find(s => s.id === '__tags__')?.fields ?? []}
