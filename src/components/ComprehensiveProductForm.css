@@ -173,3 +173,24 @@ input[type="number"].info-input::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
+
+/* ── Required-field validation highlight ─────────────────────────────
+   Applied when showValidation=true and the field has no value.
+   A pulsing red border draws attention without being too aggressive.   */
+.field-required-empty {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25) !important;
+  animation: fieldRequiredPulse 1.8s ease-in-out 2;
+}
+
+@keyframes fieldRequiredPulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25); }
+  50%       { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.45); }
+}
+
+/* Once the user fills in the field, transition smoothly back to normal */
+.field-required-empty:focus {
+  border-color: var(--shopify-blue, #5c6ac4) !important;
+  box-shadow: 0 0 0 2px rgba(92, 106, 196, 0.3) !important;
+  animation: none;
+}

@@ -7,6 +7,7 @@ interface ComprehensiveProductFormProps {
   currentGroup: ClothingItem[];
   processedItems: ClothingItem[];
   setProcessedItems: (items: ClothingItem[]) => void;
+  showValidation?: boolean;
 }
 
 export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> = ({
@@ -14,7 +15,12 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
   currentGroup,
   processedItems,
   setProcessedItems,
+  showValidation = false,
 }) => {
+  // Returns extra CSS class when validation is active and the field has no value
+  const req = (value: any): string =>
+    showValidation && !value ? ' field-required-empty' : '';
+
   const updateGroupField = (fieldPath: string, value: any) => {
     const updated = [...processedItems];
     currentGroup.forEach(groupItem => {
@@ -56,7 +62,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
         <div className="fields-row">
           <div className="info-item">
             <label>Price ($):</label>
-            <input type="number" value={currentItem.price || ''} onChange={(e) => updateGroupField('price', e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="e.g., 49.99" className="info-input" step="0.01" min="0" />
+            <input type="number" value={currentItem.price || ''} onChange={(e) => updateGroupField('price', e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="e.g., 49.99" className={`info-input${req(currentItem.price)}`} step="0.01" min="0" />
           </div>
           <div className="info-item">
             <label>Compare-at Price ($):</label>
@@ -75,15 +81,15 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
         <div className="fields-row">
           <div className="info-item">
             <label>Brand: <PresetBadge show={isFromPreset('brand')} /></label>
-            <input type="text" value={currentItem.brand || ''} onChange={(e) => updateGroupField('brand', e.target.value)} placeholder="e.g., Nike, Levi's" className="info-input" />
+            <input type="text" value={currentItem.brand || ''} onChange={(e) => updateGroupField('brand', e.target.value)} placeholder="e.g., Nike, Levi's" className={`info-input${req(currentItem.brand)}`} />
           </div>
           <div className="info-item">
             <label>Size:</label>
-            <input type="text" value={currentItem.size || ''} onChange={(e) => updateGroupField('size', e.target.value)} placeholder="e.g., M, L, XL" className="info-input" />
+            <input type="text" value={currentItem.size || ''} onChange={(e) => updateGroupField('size', e.target.value)} placeholder="e.g., M, L, XL" className={`info-input${req(currentItem.size)}`} />
           </div>
           <div className="info-item">
             <label>Condition:</label>
-            <select value={currentItem.condition || ''} onChange={(e) => updateGroupField('condition', e.target.value)} className="info-input">
+            <select value={currentItem.condition || ''} onChange={(e) => updateGroupField('condition', e.target.value)} className={`info-input${req(currentItem.condition)}`}>
               <option value="">Select condition...</option>
               <option value="New">New</option>
               <option value="NWT">NWT (New With Tags)</option>
@@ -97,7 +103,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
         <div className="fields-row">
           <div className="info-item">
             <label>Color:</label>
-            <input type="text" value={currentItem.color || ''} onChange={(e) => updateGroupField('color', e.target.value)} placeholder="e.g., Black, Blue" className="info-input" />
+            <input type="text" value={currentItem.color || ''} onChange={(e) => updateGroupField('color', e.target.value)} placeholder="e.g., Black, Blue" className={`info-input${req(currentItem.color)}`} />
           </div>
           <div className="info-item">
             <label>Secondary Color:</label>
