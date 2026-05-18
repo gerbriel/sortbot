@@ -22,6 +22,20 @@ import { applyPresetDirectly } from './lib/applyPresetToGroup';
 import type { BrandCategory } from './lib/brandCategorySystem';
 import './App.css';
 
+/** Strip HTML <br> tags (from Shopify-formatted descriptions) back to plain-text newlines for the dashboard editor. */
+function htmlDescToPlain(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export interface ClothingItem {
   id: string;
   file: File;
@@ -1531,7 +1545,7 @@ function App() {
             originalName: dbOriginalName,
             productGroup: p.product_group || p.id,
             voiceDescription:          p.voice_description   || '',
-            generatedDescription:      p.description         || '',
+            generatedDescription:      htmlDescToPlain(p.description || ''),
             seoTitle:                  p.seo_title           || '',
             seoDescription:            p.seo_description     || '',
             tags:                      p.tags                || [],
@@ -1619,7 +1633,7 @@ function App() {
               originalName: dbOriginalName,
               // capturedAt: not stored in DB — will be undefined for gap-filled items
               voiceDescription:          p.voice_description   || '',
-              generatedDescription:      p.description         || '',
+              generatedDescription:      htmlDescToPlain(p.description || ''),
               seoTitle:                  p.seo_title           || '',
               seoDescription:            p.seo_description     || '',
               tags:                      p.tags                || [],
@@ -1731,7 +1745,7 @@ function App() {
               // Core
               productGroup:             savedProduct.product_group       || item.productGroup       || item.id,
               voiceDescription:         savedProduct.voice_description   ?? item.voiceDescription   ?? '',
-              generatedDescription:     savedProduct.description         ?? item.generatedDescription ?? '',
+              generatedDescription:     htmlDescToPlain(savedProduct.description ?? item.generatedDescription ?? ''),
               seoTitle:                 savedProduct.seo_title           || item.seoTitle,
               seoDescription:           savedProduct.seo_description     || item.seoDescription,
               tags:                     savedProduct.tags?.length        ? savedProduct.tags        : (item.tags || []),
