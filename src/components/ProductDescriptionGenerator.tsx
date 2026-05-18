@@ -836,17 +836,16 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       // Use the preset-refreshed item as source of truth for the AI call
       const refreshedItem = latestGroup[0];
 
-      // ── Step 1: Re-extract from voice + description text, then regenerate AI description
+      // ── Step 1: Re-extract from voice text only, then regenerate AI description
+      // NOTE: never feed generatedDescription back in — it causes the content to repeat/loop
       const voiceText = refreshedItem.voiceDescription || '';
-      const descText = refreshedItem.generatedDescription || '';
-      const combinedInput = [voiceText, descText].filter(Boolean).join('\n\n');
 
-      if (!combinedInput && !refreshedItem.brand && !refreshedItem.color && !refreshedItem.size) {
+      if (!voiceText && !refreshedItem.brand && !refreshedItem.color && !refreshedItem.size) {
         return; // Nothing to work with
       }
 
       const aiResult = await generateProductDescription({
-        voiceDescription: combinedInput || undefined,
+        voiceDescription: voiceText || undefined,
         // Pass empty strings for all fields so voice/desc always wins
         brand: '',
         color: '',
