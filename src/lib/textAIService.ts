@@ -5,6 +5,29 @@
 
 import { COLOR_WORDS_LIST } from './colorDatabase';
 
+/**
+ * Truncate a string for SEO description without cutting mid-word or mid-sentence.
+ * Tries to end at a sentence boundary within the target range, then a word boundary.
+ */
+export function smartSeoTruncate(text: string, target = 320, flex = 40): string {
+  if (text.length <= target + flex) return text;
+  const max = target + flex;
+  const min = target - flex;
+  const sentenceEnd = /[.!?](?:\s|$)/g;
+  let lastSentence = -1;
+  let m: RegExpExecArray | null;
+  while ((m = sentenceEnd.exec(text)) !== null) {
+    const pos = m.index + 1;
+    if (pos >= min && pos <= max) return text.slice(0, pos).trimEnd();
+    if (pos > max) break;
+    if (pos >= min) lastSentence = pos;
+  }
+  if (lastSentence > 0) return text.slice(0, lastSentence).trimEnd();
+  const wordEnd = text.lastIndexOf(' ', max);
+  if (wordEnd >= min) return text.slice(0, wordEnd).trimEnd();
+  return text.slice(0, target).trimEnd();
+}
+
 interface ProductContext {
   voiceDescription?: string;
   brand?: string;

@@ -24,8 +24,9 @@ import './App.css';
 
 /** Strip HTML <br> tags (from Shopify-formatted descriptions) back to plain-text newlines for the dashboard editor. */
 function htmlDescToPlain(html: string): string {
-  return html
-    .replace(/<br\s*\/?>/gi, '\n')
+  let text = html
+    .replace(/<br\s*\/?>\s*<br\s*\/?>/gi, '\n\n')  // double <br> → paragraph break
+    .replace(/<br\s*\/?>/gi, '\n')                   // single <br> → line break
     .replace(/<\/p>/gi, '\n\n')
     .replace(/<[^>]+>/g, '')
     .replace(/&amp;/g, '&')
@@ -34,6 +35,20 @@ function htmlDescToPlain(html: string): string {
     .replace(/&nbsp;/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+
+  // Ensure proper paragraph breaks before structural sections
+  // (handles cases where Shopify collapses them to single \n or no break)
+  text = text
+    .replace(/([^\n])\n(BUNDLE AND SAVE)/g, '$1\n\n$2')
+    .replace(/(BUNDLE AND SAVE[!]*)\n([^\n])/g, '$1\n\n$2')
+    .replace(/([^\n])\n(#\w)/g, '$1\n\n$2')
+    .replace(/(#\w[^\n]*)\n(\*\s)/g, '$1\n\n$2')
+    .replace(/([^\n])\n(\*\s)/g, (_, before, star) =>
+      /[.!?]$/.test(before) || before.startsWith('*') ? `${before}\n${star}` : `${before}\n\n${star}`
+    )
+    .replace(/\n{3,}/g, '\n\n');
+
+  return text;
 }
 
 export interface ClothingItem {
