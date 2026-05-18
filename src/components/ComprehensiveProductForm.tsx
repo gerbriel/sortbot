@@ -7,7 +7,6 @@ interface ComprehensiveProductFormProps {
   currentGroup: ClothingItem[];
   processedItems: ClothingItem[];
   setProcessedItems: (items: ClothingItem[]) => void;
-  showValidation?: boolean;
 }
 
 export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> = ({
@@ -15,11 +14,10 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
   currentGroup,
   processedItems,
   setProcessedItems,
-  showValidation = false,
 }) => {
-  // Returns extra CSS class when validation is active and the field has no value
+  // Always highlight empty fields — visible on load, after voice, after reload
   const req = (value: any): string =>
-    showValidation && !value ? ' field-required-empty' : '';
+    !value ? ' field-required-empty' : '';
 
   const updateGroupField = (fieldPath: string, value: any) => {
     const updated = [...processedItems];

@@ -699,11 +699,14 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
     mainDesc = mainDesc.charAt(0).toUpperCase() + mainDesc.slice(1);
 
     // Prepend "Vintage / Y2K" inline at the start of the paragraph
-    description += `Vintage / Y2K ${mainDesc}`;
+    // If size is known, prefix it: "OSFA - Vintage / Y2K ..."
+    const sizePrefix = context.size ? `${context.size} - ` : '';
+    description += `${sizePrefix}Vintage / Y2K ${mainDesc}`;
   } else {
     // Fallback: build ONLY from filled fields (no assumptions)
     const intro = buildIntroFromFields(context);
-    description += `Vintage / Y2K ${intro || 'Vintage clothing item'}`;
+    const sizePrefix = context.size ? `${context.size} - ` : '';
+    description += `${sizePrefix}Vintage / Y2K ${intro || 'Vintage clothing item'}`;
   }
 
   description += '\n\n';
