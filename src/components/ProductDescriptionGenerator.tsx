@@ -1713,7 +1713,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             <div className="voice-result">
               {/* Mode toggle */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <label><strong>Voice Description (edit as needed):</strong></label>
+                <label><strong>Voice Description</strong> <span style={{ fontWeight: 400, color: '#64748b', fontSize: '0.85em' }}>— say <em>field name → value → "period"</em> to apply (e.g. <em>"brand Nike period"</em>)</span></label>
                 <div style={{ display: 'flex', gap: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid #d1d5db' }}>
                   {(['table', 'text'] as const).map(mode => (
                     <button
