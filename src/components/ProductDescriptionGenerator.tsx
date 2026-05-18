@@ -66,6 +66,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const [selectedPresetId, setSelectedPresetId] = useState<string>('');
   const [presetSearchQuery, setPresetSearchQuery] = useState('');
   const [presetSearchOpen, setPresetSearchOpen] = useState(false);
+  const [appliedPresetLabel, setAppliedPresetLabel] = useState('');
   const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
@@ -2092,23 +2093,23 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     <input
                       type="text"
                       placeholder={
-                        currentItem._presetData
-                          ? `Keep Current: ${currentItem._presetData.displayName}`
-                          : 'Search presets…'
+                        currentItem._presetData ? `Keep Current: ${currentItem._presetData.displayName}` : 'Search presets…'
                       }
-                      value={presetSearchQuery}
+                      value={presetSearchOpen ? presetSearchQuery : appliedPresetLabel}
+                      onFocus={() => { setPresetSearchQuery(''); setPresetSearchOpen(true); }}
                       onChange={e => { setPresetSearchQuery(e.target.value); setPresetSearchOpen(true); }}
-                      onFocus={() => setPresetSearchOpen(true)}
                       onBlur={() => setTimeout(() => setPresetSearchOpen(false), 150)}
                       onKeyDown={e => e.stopPropagation()}
                       style={{
                         flex: 1, border: 'none', outline: 'none',
                         padding: '0.5rem 0.25rem', fontSize: '0.95rem', background: 'transparent',
+                        color: !presetSearchOpen && appliedPresetLabel ? '#4f46e5' : '#1f2937',
+                        fontWeight: !presetSearchOpen && appliedPresetLabel ? 600 : 400,
                       }}
                     />
-                    {presetSearchQuery && (
+                    {(presetSearchQuery || appliedPresetLabel) && (
                       <button
-                        onMouseDown={e => { e.preventDefault(); setPresetSearchQuery(''); setPresetSearchOpen(true); }}
+                        onMouseDown={e => { e.preventDefault(); setPresetSearchQuery(''); setAppliedPresetLabel(''); setPresetSearchOpen(true); }}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 0.5rem', color: '#9ca3af', fontSize: '1rem', lineHeight: 1 }}
                       >✕</button>
                     )}
@@ -2142,6 +2143,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                             key={opt.id}
                             onMouseDown={e => {
                               e.preventDefault();
+                              setAppliedPresetLabel(opt.label);
                               setPresetSearchQuery('');
                               setPresetSearchOpen(false);
                               handleApplyPreset(opt.id);
