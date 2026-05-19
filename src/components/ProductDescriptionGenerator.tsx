@@ -111,6 +111,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   };
   const [cropModal, setCropModal] = useState<{ open: boolean; itemId?: string }>(() => ({ open: false }));
   const [tempCrop, setTempCrop] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  // Clipboard for crop — holds {x,y,w,h} percentages so user can paste to many items
+  const [copiedCrop, setCopiedCrop] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [cropPasteProgress, setCropPasteProgress] = useState<{ done: number; total: number } | null>(null);
 
   // Magnifier state — cursor-following zoom lens on main preview image
   const [magnifier, setMagnifier] = useState<{ src: string; x: number; y: number; bgX: number; bgY: number } | null>(null);
@@ -1487,6 +1490,47 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     }
   };
 
+  // ── Bulk crop paste ──────────────────────────────────────────────────────────
+  // Applies copiedCrop to every item across all selected groups (or all groups if
+  // none selected), batched 4 at a time so Supabase isn't overwhelmed.
+  const handlePasteCrop = async (crop: { x: number; y: number; w: number; h: number }) => {
+    const groupArray = buildGroupArray(processedItems);
+    // Determine target groups
+    let targetGroups: typeof groupArray;
+    if (selectedGroupIds.size > 0) {
+      targetGroups = groupArray.filter(g => g[0] && selectedGroupIds.has(g[0].id));
+    } else {
+      targetGroups = groupArray;
+    }
+    const targetItems = targetGroups.flat();
+    if (targetItems.length === 0) return;
+
+    // First: instantly set crop coordinates on all target items in state so
+    // thumbnails update via CSS clip-path immediately while uploads run in bg.
+    const targetIdSet = new Set(targetItems.map(i => i.id));
+    setProcessedItems(prev => prev.map(i =>
+      targetIdSet.has(i.id) ? { ...i, crop } : i
+    ));
+    setHasUnsavedChanges(true);
+
+    // Then: bake + upload in batches of 4 so Supabase isn't overloaded
+    const CONCURRENCY = 4;
+    setCropPasteProgress({ done: 0, total: targetItems.length });
+    let done = 0;
+    for (let i = 0; i < targetItems.length; i += CONCURRENCY) {
+      const batch = targetItems.slice(i, i + CONCURRENCY);
+      await Promise.all(batch.map(item => applyAndPersistTransform(item.id, true, { crop })));
+      done += batch.length;
+      setCropPasteProgress({ done, total: targetItems.length });
+      // Small breathing room between batches to avoid rate-limit
+      if (i + CONCURRENCY < targetItems.length) {
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
+    }
+    setCropPasteProgress(null);
+    if (selectedGroupIds.size > 0) setSelectedGroupIds(new Set());
+  };
+
 
   return (
     <div className="product-description-container">
@@ -1753,6 +1797,33 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 >
                   📋 Paste Fields
                 </button>
+              )}
+              {copiedCrop && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  {cropPasteProgress ? (
+                    <span style={{ fontSize: '0.75rem', color: '#6366f1', fontWeight: 600 }}>
+                      ⏳ {cropPasteProgress.done}/{cropPasteProgress.total} cropping…
+                    </span>
+                  ) : (
+                    <>
+                      <button
+                        className="button"
+                        title={selectedGroupIds.size > 0
+                          ? `Paste crop to ${selectedGroupIds.size} selected group(s)`
+                          : 'Paste crop to ALL groups — select groups first to limit scope'}
+                        onClick={() => handlePasteCrop(copiedCrop)}
+                        style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem', background: '#0ea5e9' }}
+                      >
+                        📐 Paste Crop{selectedGroupIds.size > 0 ? ` (${selectedGroupIds.size})` : ' (All)'}
+                      </button>
+                      <button
+                        title="Clear copied crop"
+                        onClick={() => setCopiedCrop(null)}
+                        style={{ fontSize: '0.8rem', background: 'none', border: 'none', cursor: 'pointer', color: '#888', padding: '0.1rem 0.3rem' }}
+                      >✕</button>
+                    </>
+                  )}
+                </div>
               )}
             </div>
             {isRecording && (
@@ -2256,6 +2327,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   <div className="crop-fs-topbar">
                     <button className="crop-fs-btn crop-fs-cancel" onClick={() => { setCropModal({ open: false }); setTempCrop(null); setActivePreset('FREE'); setAspectLock(null); }}>Cancel</button>
                     <span className="crop-fs-title">Crop</span>
+                    <button className="crop-fs-btn" disabled={!tempCrop}
+                      title="Copy crop coordinates so you can paste to other items"
+                      style={{ background: tempCrop ? '#6366f1' : undefined, color: '#fff', opacity: tempCrop ? 1 : 0.4 }}
+                      onClick={() => { if (tempCrop) { setCopiedCrop(tempCrop); } }}>
+                      📐 Copy Crop
+                    </button>
                     <button className="crop-fs-btn crop-fs-done" disabled={!tempCrop} onClick={async () => {
                       if (!cropModal.itemId || !tempCrop) return;
                       await applyAndPersistTransform(cropModal.itemId, true, { crop: tempCrop });
