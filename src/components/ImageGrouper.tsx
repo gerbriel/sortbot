@@ -451,6 +451,12 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // groupedItemsRef already mirrors groupedItems on every render (defined at line ~38)
 
   const SELECTION_THRESHOLD = 5; // pixels - must move this much to activate selection
+  const AUTO_SCROLL_ZONE = 60;   // px from edge that triggers auto-scroll
+  const AUTO_SCROLL_MAX  = 18;   // max px per frame at full edge
+
+  // Stores latest mouse position so the RAF scroll loop always has fresh coords
+  // without adding to the effect's dep array.
+  const lastMouseClientRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Global mouse handlers for rubber-band selection.
   //
@@ -462,7 +468,51 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   useEffect(() => {
     if (!isSelecting) return;
 
+    // ── Auto-scroll RAF loop ──────────────────────────────────────────────────
+    // Runs every animation frame while drag is active. When the mouse is within
+    // AUTO_SCROLL_ZONE px of the container's top or bottom visible edge, scrolls
+    // the container and re-fires the selection-box update so items below/above the
+    // fold get included as the user drags.
+    let rafId: number;
+    const scrollLoop = () => {
+      const container = currentContainerRef.current;
+      if (container) {
+        const rect   = container.getBoundingClientRect();
+        const mouseY = lastMouseClientRef.current.y;
+        const distFromBottom = rect.bottom - mouseY;
+        const distFromTop    = mouseY - rect.top;
+
+        let scrollDelta = 0;
+        if (distFromBottom < AUTO_SCROLL_ZONE && distFromBottom > 0) {
+          // Near bottom — scroll down, faster the closer to the edge
+          scrollDelta = Math.round(AUTO_SCROLL_MAX * (1 - distFromBottom / AUTO_SCROLL_ZONE));
+        } else if (distFromTop < AUTO_SCROLL_ZONE && distFromTop > 0) {
+          // Near top — scroll up
+          scrollDelta = -Math.round(AUTO_SCROLL_MAX * (1 - distFromTop / AUTO_SCROLL_ZONE));
+        }
+
+        if (scrollDelta !== 0) {
+          container.scrollTop += scrollDelta;
+          // Re-trigger the move handler with the synthetic current mouse position
+          // so the selection box grows to cover newly revealed items.
+          const start = selectionStartRef.current;
+          if (start && selectionThresholdMetRef.current) {
+            const newRect   = container.getBoundingClientRect();
+            const currentX  = lastMouseClientRef.current.x - newRect.left + container.scrollLeft;
+            const currentY  = lastMouseClientRef.current.y - newRect.top  + container.scrollTop;
+            const x = Math.min(start.x, currentX);
+            const y = Math.min(start.y, currentY);
+            setSelectionBox({ x, y, width: Math.abs(currentX - start.x), height: Math.abs(currentY - start.y) });
+          }
+        }
+      }
+      rafId = requestAnimationFrame(scrollLoop);
+    };
+    rafId = requestAnimationFrame(scrollLoop);
+    // ─────────────────────────────────────────────────────────────────────────
+
     const handleGlobalMouseMove = (e: MouseEvent) => {
+      lastMouseClientRef.current = { x: e.clientX, y: e.clientY };
       const start = selectionStartRef.current;
       if (!start || !currentContainerRef.current) return;
 
@@ -576,6 +626,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     document.addEventListener('mouseup', handleGlobalMouseUp);
 
     return () => {
+      cancelAnimationFrame(rafId);
       document.removeEventListener('mousemove', handleGlobalMouseMove);
       document.removeEventListener('mouseup', handleGlobalMouseUp);
     };
