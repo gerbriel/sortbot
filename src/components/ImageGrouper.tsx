@@ -483,10 +483,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         const distFromTop    = mouseY - rect.top;
 
         let scrollDelta = 0;
-        if (distFromBottom < AUTO_SCROLL_ZONE && distFromBottom > 0) {
+        if (distFromBottom <= 0) {
+          // Cursor is past the bottom edge — scroll at full speed
+          scrollDelta = AUTO_SCROLL_MAX;
+        } else if (distFromBottom < AUTO_SCROLL_ZONE) {
           // Near bottom — scroll down, faster the closer to the edge
           scrollDelta = Math.round(AUTO_SCROLL_MAX * (1 - distFromBottom / AUTO_SCROLL_ZONE));
-        } else if (distFromTop < AUTO_SCROLL_ZONE && distFromTop > 0) {
+        } else if (distFromTop <= 0) {
+          // Cursor is past the top edge — scroll up at full speed
+          scrollDelta = -AUTO_SCROLL_MAX;
+        } else if (distFromTop < AUTO_SCROLL_ZONE) {
           // Near top — scroll up
           scrollDelta = -Math.round(AUTO_SCROLL_MAX * (1 - distFromTop / AUTO_SCROLL_ZONE));
         }
