@@ -1787,7 +1787,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
             {/* Status + Paste — shown once something is in clipboard */}
             {(copiedRotation !== null || copiedCrop !== undefined) && (
-              <div style={{ fontSize: '0.67rem', color: '#4f46e5', lineHeight: 1.4, marginTop: '0.1rem' }}>
+              <div style={{ fontSize: '0.67rem', color: '#e0e7ff', lineHeight: 1.4, marginTop: '0.1rem' }}>
                 <div>
                   {copiedRotation !== null && copiedCrop !== undefined
                     ? 'Rot + crop copied'
@@ -1796,11 +1796,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     : 'Crop copied'}
                   {' · '}
                   <button onClick={() => { setCopiedRotation(null); setCopiedCrop(undefined); }}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '0.72rem', padding: 0 }}>
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c4b5fd', fontSize: '0.72rem', padding: 0 }}>
                     clear
                   </button>
                 </div>
-                <div style={{ color: '#64748b', marginTop: '0.15rem' }}>
+                <div style={{ color: '#c4b5fd', marginTop: '0.15rem' }}>
                   {selectedItems.size > 0
                     ? `${selectedItems.size} image${selectedItems.size > 1 ? 's' : ''} selected`
                     : 'Now select target images →'}
