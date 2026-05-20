@@ -475,9 +475,12 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     // fold get included as the user drags.
     let rafId: number;
     const scrollLoop = () => {
-      const container = currentContainerRef.current;
-      if (container) {
-        const rect   = container.getBoundingClientRect();
+      // scrollEl is the actual scrollable outer wrapper (grouper-scroll-content).
+      // gridContainer is the inner items grid used for selection-box coordinate math.
+      const scrollEl       = scrollContentRef.current;
+      const gridContainer  = currentContainerRef.current;
+      if (scrollEl && gridContainer) {
+        const rect   = scrollEl.getBoundingClientRect();
         const mouseY = lastMouseClientRef.current.y;
         const distFromBottom = rect.bottom - mouseY;
         const distFromTop    = mouseY - rect.top;
@@ -498,14 +501,14 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         }
 
         if (scrollDelta !== 0) {
-          container.scrollTop += scrollDelta;
+          scrollEl.scrollTop += scrollDelta;
           // Re-trigger the move handler with the synthetic current mouse position
           // so the selection box grows to cover newly revealed items.
           const start = selectionStartRef.current;
           if (start && selectionThresholdMetRef.current) {
-            const newRect   = container.getBoundingClientRect();
-            const currentX  = lastMouseClientRef.current.x - newRect.left + container.scrollLeft;
-            const currentY  = lastMouseClientRef.current.y - newRect.top  + container.scrollTop;
+            const gridRect  = gridContainer.getBoundingClientRect();
+            const currentX  = lastMouseClientRef.current.x - gridRect.left + gridContainer.scrollLeft;
+            const currentY  = lastMouseClientRef.current.y - gridRect.top  + gridContainer.scrollTop;
             const x = Math.min(start.x, currentX);
             const y = Math.min(start.y, currentY);
             setSelectionBox({ x, y, width: Math.abs(currentX - start.x), height: Math.abs(currentY - start.y) });
