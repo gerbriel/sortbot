@@ -176,6 +176,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // Format painter — copy crop/rotation style from one image and paste to others
   const [copiedRotation, setCopiedRotation] = useState<number | null>(null);
   const [copiedCrop, setCopiedCrop] = useState<{ x: number; y: number; w: number; h: number } | null | undefined>(undefined);
+  const [cropPasteProgress, setCropPasteProgress] = useState<{ done: number; total: number; status: 'running' | 'done' } | null>(null);
 
   // Lightbox state  — pool stores item IDs (not URLs) so we can look up rotation
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -1596,6 +1597,47 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           message={loadingMessage} 
         />
       )}
+
+      {/* ── Crop paste progress overlay ── */}
+      {cropPasteProgress && (
+        <div style={{
+          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 99999, background: 'rgba(20,16,40,0.97)',
+          border: '1.5px solid #6366f1', borderRadius: 14,
+          padding: '14px 22px 12px', minWidth: 320, maxWidth: 420,
+          boxShadow: '0 8px 32px rgba(99,102,241,0.25)',
+          display: 'flex', flexDirection: 'column', gap: 8, fontFamily: 'inherit',
+        }}>
+          <div style={{ color: '#e0e7ff', fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 7 }}>
+            {cropPasteProgress.status === 'running' ? (
+              <span style={{
+                display: 'inline-block', width: 13, height: 13,
+                border: '2px solid #6366f1', borderTopColor: '#a78bfa',
+                borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0,
+              }} />
+            ) : (
+              <span style={{ color: '#4ade80', fontSize: 15 }}>✓</span>
+            )}
+            {cropPasteProgress.status === 'running'
+              ? `Applying crop to ${cropPasteProgress.total} image${cropPasteProgress.total > 1 ? 's' : ''}…`
+              : 'Crop applied successfully!'}
+          </div>
+          <div style={{ color: '#a5b4fc', fontSize: '0.78rem', marginTop: 1 }}>
+            {cropPasteProgress.status === 'running'
+              ? `${cropPasteProgress.done} / ${cropPasteProgress.total} complete (${Math.round((cropPasteProgress.done / cropPasteProgress.total) * 100)}%)`
+              : `All ${cropPasteProgress.total} image${cropPasteProgress.total > 1 ? 's' : ''} processed.`}
+          </div>
+          <div style={{ background: 'rgba(99,102,241,0.18)', borderRadius: 8, height: 10, width: '100%', overflow: 'hidden', marginTop: 2 }}>
+            <div style={{
+              height: '100%',
+              background: 'linear-gradient(90deg,#6366f1 0%,#a78bfa 100%)',
+              borderRadius: 8,
+              width: `${Math.round((cropPasteProgress.done / cropPasteProgress.total) * 100)}%`,
+              transition: 'width 0.25s ease',
+            }} />
+          </div>
+        </div>
+      )}
       
       <div className="image-grouper-container">
       <div className="grouper-header">
@@ -1888,10 +1930,21 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       if (!confirmed) return;
                       setSelectedItems(new Set());
                       if (copiedCrop !== undefined && copiedCrop !== null) {
-                        // Bake the crop (+ optional rotation) into each target image
-                        await Promise.all(targetIds.map(id =>
-                          applyAndPersistTransformGrouper(id, copiedCrop, copiedRotation !== null ? copiedRotation : undefined)
-                        ));
+                        // Bake the crop (+ optional rotation) into each target image — batched with progress
+                        const total = targetIds.length;
+                        setCropPasteProgress({ done: 0, total, status: 'running' });
+                        const BATCH = 4;
+                        let done = 0;
+                        for (let i = 0; i < targetIds.length; i += BATCH) {
+                          const batch = targetIds.slice(i, i + BATCH);
+                          await Promise.all(batch.map(id =>
+                            applyAndPersistTransformGrouper(id, copiedCrop, copiedRotation !== null ? copiedRotation : undefined)
+                              .then(() => { done++; setCropPasteProgress({ done, total, status: 'running' }); })
+                              .catch(() => { done++; setCropPasteProgress({ done, total, status: 'running' }); })
+                          ));
+                        }
+                        setCropPasteProgress({ done: total, total, status: 'done' });
+                        setTimeout(() => setCropPasteProgress(null), 3500);
                       } else {
                         // Rotation only — just update state
                         const updated = groupedItems.map(i => {
