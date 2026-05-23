@@ -893,11 +893,20 @@ function generateTitleFromFields(context: ProductContext): string {
     }
   }
 
+  // Words already baked into the "Vintage / Y2K" prefix — skip them in the body
+  // to avoid redundancy like "Vintage / Y2K Y2K Vintage Shirts"
+  const REDUNDANT_ERA   = /^(y2k|2000s?|vintage|retro)$/i;
+  const REDUNDANT_STYLE = /^(vintage|retro|y2k)$/i;
+
   // Build body: brand → era → style → modelName → category (item type)
   const bodyParts: string[] = [];
   if (context.brand)     bodyParts.push(clean(context.brand));
-  if (context.era)       bodyParts.push(clean(context.era));
-  if (context.style)     bodyParts.push(clean(context.style));
+  // Include era only if it adds info beyond the "Vintage / Y2K" prefix
+  const era = clean(context.era);
+  if (era && !REDUNDANT_ERA.test(era))   bodyParts.push(era);
+  // Include style only if it's not just "Vintage" (already in prefix)
+  const style = clean(context.style);
+  if (style && !REDUNDANT_STYLE.test(style)) bodyParts.push(style);
   if (context.modelName) bodyParts.push(clean(context.modelName));
   if (context.category)  bodyParts.push(clean(context.category));
 
