@@ -271,6 +271,11 @@ function App() {
   // upload session. Set to true after the first insert so handleImagesUploaded doesn't
   // try to insert again when the batch ID was already minted by the first chunk callback.
   const batchRowInsertedRef = useRef(false);
+  // Tracks whether an upload is actively in progress. Set true on the first chunk,
+  // cleared when all chunks are done (handleImagesUploaded). Used to suppress the
+  // handleImagesGrouped → setGroupedImages cascade that fires via onGrouped during
+  // upload and causes a second O(n) re-render per 150ms debounce flush.
+  const isUploadingRef = useRef(false);
 
   // Ref mirrors of the four item arrays so async handlers always read live state
   // without capturing stale closures. Updated every render.
@@ -348,6 +353,9 @@ function App() {
   // stable UUID — preventing ImageGrouper's batchId prop from changing mid-upload
   // and wiping any groups the user formed while images were still uploading.
   const handleChunkReady = useCallback((newItems: ClothingItem[]) => {
+    // Mark upload in progress so handleImagesGrouped skips the cascade-triggering
+    // setGroupedImages update for every intermediate onGrouped call during upload.
+    isUploadingRef.current = true;
     // Mint batch ID synchronously on first chunk so ImageGrouper never sees a
     // null → UUID transition that would trigger its group-wipe useEffect.
     if (!currentBatchIdRef.current) {
@@ -909,6 +917,7 @@ function App() {
       localStorage.removeItem('sortbot_current_batch_number');
       // Reset upload-session state so the next file drop gets a fresh batch row
       batchRowInsertedRef.current = false;
+      isUploadingRef.current = false;
       pendingChunkRef.current = [];
       if (chunkTimerRef.current) { clearTimeout(chunkTimerRef.current); chunkTimerRef.current = null; }
     }
@@ -928,6 +937,9 @@ function App() {
   }
 
   const handleImagesUploaded = async (items: ClothingItem[]) => {
+    // Upload is complete — allow handleImagesGrouped to resume normal operation
+    // from this point onward (user-initiated or final-sync calls).
+    isUploadingRef.current = false;
     log.upload(`handleImagesUploaded | newItems=${items.length} totalAfter=${uploadedImagesRef.current.length + items.length}`);
     // onChunkReady already appended each item progressively — deduplicate using the ref
     // (always current) so we don't double-add anything now that all chunks are done.
@@ -1165,6 +1177,11 @@ function App() {
   };
 
   const handleImagesGrouped = async (items: ClothingItem[]) => {
+    // Skip mid-upload calls — ImageGrouper's [items] useEffect calls onGrouped on every
+    // chunk flush, which triggers setGroupedImages → another re-render → another
+    // [items] useEffect run (O(n) map). Suppressing this during upload eliminates the
+    // cascade; the final call after upload completes (isUploadingRef=false) does the sync.
+    if (isUploadingRef.current) return;
     const groups = new Set(items.map(i => i.productGroup).filter(Boolean));
     log.grouper(`handleImagesGrouped | items=${items.length} groups=${groups.size}`);
     // Preserve existing categories when updating groups.
