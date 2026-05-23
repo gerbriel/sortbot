@@ -846,6 +846,8 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
     const success = await deleteImage(imageId, storagePath);
     if (success) {
       setImages(images.filter(img => img.id !== imageId));
+      // Reload all data so batch image counts and product group counts reflect the deletion.
+      await loadAll();
     }
     
     setDeletingItem(null);
