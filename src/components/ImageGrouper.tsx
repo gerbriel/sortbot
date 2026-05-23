@@ -395,7 +395,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       // Cannot upsert on storage_path — no unique constraint exists on that column.
       // The old row (oldPath) is deleted below, so there's no duplicate to worry about.
       const { error: upsertErr } = await supabase.from('product_images').insert(
-        { product_id: itemId, image_url: newUrl, storage_path: newPath }
+        { product_id: itemId, user_id: userId, image_url: newUrl, storage_path: newPath }
       );
       if (upsertErr) console.error('[crop] product_images insert error:', upsertErr.message);
       else console.log('[crop] product_images insert ok');
