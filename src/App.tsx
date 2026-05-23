@@ -245,6 +245,9 @@ function App() {
   const exporterRef = useRef<GoogleSheetExporterHandle>(null);
   const uploadRef = useRef<ImageUploadHandle>(null);
   const [showStep2Info, setShowStep2Info] = useState(false);
+  const [boredMode, setBoredMode] = useState<boolean>(() => {
+    try { return localStorage.getItem('sortbot_bored_mode') === 'true'; } catch { return false; }
+  });
   const [currentBatchId, setCurrentBatchId] = useState<string | null>(() => {
     // Restore batch ID from localStorage so reloads don't lose progress
     return localStorage.getItem('sortbot_current_batch_id') || null;
@@ -2055,9 +2058,24 @@ function App() {
               >
                 🗜️ Import ZIP
               </button>
+              <button
+                title={boredMode ? 'Click to hide the cat & yarn animation' : 'Click to enable the cat & yarn animation while uploading'}
+                onClick={() => { const next = !boredMode; setBoredMode(next); try { localStorage.setItem('sortbot_bored_mode', String(next)); } catch {} }}
+                style={{
+                  fontSize: '0.75rem', padding: '0.3rem 0.65rem',
+                  borderRadius: 6, border: '1.5px solid',
+                  cursor: 'pointer', fontWeight: 600,
+                  background: boredMode ? '#6366f1' : 'transparent',
+                  color: boredMode ? '#fff' : '#9ca3af',
+                  borderColor: boredMode ? '#6366f1' : '#d1d5db',
+                  transition: 'all 0.15s',
+                }}
+              >
+                😴 Bored Mode
+              </button>
             </div>
           </div>
-          <ImageUpload ref={uploadRef} onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} onToast={addToast} onChunkReady={(newItems) => setUploadedImages(prev => [...prev, ...newItems])} />
+          <ImageUpload ref={uploadRef} onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} onToast={addToast} onChunkReady={(newItems) => setUploadedImages(prev => [...prev, ...newItems])} boredMode={boredMode} />
           {/* "N images uploaded" moved to toast — see handleImagesUploaded */}
         </section>
 
