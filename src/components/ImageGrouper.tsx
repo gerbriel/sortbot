@@ -858,12 +858,19 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         }
       }
 
-      // Append new items; deduplicate by ID to prevent React key collisions
-      setGroupedItems(prev => {
-        const existingIdSet = new Set(prev.map(i => i.id));
+      // Append new items; deduplicate by ID to prevent React key collisions.
+      // CRITICAL: also call onGrouped with the full merged list so App.tsx learns about
+      // the newly uploaded URLs.  Without this, items uploaded after the user first groups
+      // something are never propagated upstream — their storagePath/imageUrls are lost on
+      // refresh because App.tsx/workflow state never sees them.
+      const finalItems = (() => {
+        const existingItems = groupedItemsRef.current;
+        const existingIdSet = new Set(existingItems.map(i => i.id));
         const deduped = incoming.filter(i => !existingIdSet.has(i.id));
-        return [...prev, ...deduped];
-      });
+        return [...existingItems, ...deduped];
+      })();
+      setGroupedItems(finalItems);
+      onGrouped(finalItems);
 
       if (toUpload.length > 0) {
         await new Promise(resolve => setTimeout(resolve, 1000));
