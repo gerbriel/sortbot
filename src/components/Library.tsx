@@ -2088,11 +2088,12 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
   // Render Batches View
   function renderBatchesView() {
-    const q = searchQuery.toLowerCase();
+    const normSearch = (s: string) => s.toLowerCase().replace(/['’\-.,]/g, '');
+    const q = normSearch(searchQuery);
     const filtered = q
       ? batches.filter(b => {
           const name = b.batch_name || `Batch ${new Date(b.created_at).toLocaleDateString()}`;
-          return name.toLowerCase().includes(q) || b.batch_number.toLowerCase().includes(q);
+          return normSearch(name).includes(q) || normSearch(b.batch_number).includes(q);
         })
       : batches;
     return filtered.map((batch) => {
@@ -2298,10 +2299,11 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
   // Render Product Groups View — grouped by batch with collapsible sections
   function renderProductGroupsView() {
-    const q = searchQuery.toLowerCase();
+    const normSearch = (s: string) => s.toLowerCase().replace(/['’\-.,]/g, '');
+    const q = normSearch(searchQuery);
     const filtered = q
       ? productGroups.filter(g =>
-          g.title.toLowerCase().includes(q) || g.category.toLowerCase().includes(q) || (g.batchName || '').toLowerCase().includes(q)
+          normSearch(g.title).includes(q) || normSearch(g.category).includes(q) || normSearch(g.batchName || '').includes(q)
         )
       : productGroups;
 
@@ -2509,12 +2511,13 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
   // Render Images View — grouped by batch → product group
   function renderImagesView() {
-    const q = searchQuery.toLowerCase();
+    const normSearch = (s: string) => s.toLowerCase().replace(/['’\-.,]/g, '');
+    const q = normSearch(searchQuery);
     const filtered = q
       ? images.filter(img =>
-          (img.category || '').toLowerCase().includes(q) ||
-          (img.productGroupTitle || '').toLowerCase().includes(q) ||
-          (img.batchName || '').toLowerCase().includes(q)
+          normSearch(img.category || '').includes(q) ||
+          normSearch(img.productGroupTitle || '').includes(q) ||
+          normSearch(img.batchName || '').includes(q)
         )
       : images;
 
