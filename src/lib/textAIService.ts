@@ -115,10 +115,21 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   // PASS 1: Explicit "field value period" commands (highest priority)
   // ─────────────────────────────────────────────────────────────────────────
 
-  // Helper: grab value between a field trigger and the word "period"
+  // Helper: grab value between a field trigger and the word "period".
+  // Guards against cross-field contamination: if the captured value contains a
+  // field trigger keyword followed by at least one more word (indicating a new
+  // command started without a preceding "period"), truncate at that boundary.
+  // Example: "brand quicksilver size xl period" → primary regex captures
+  // "quicksilver size xl" → trimmed to "quicksilver" before "size xl".
+  const FIELD_BOUNDARY_RE =
+    /^(.*?)\b(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\s+\w/i;
+
   function extractCommand(pattern: RegExp): string | null {
     const match = voiceDesc.match(pattern);
-    return match ? match[1].trim() : null;
+    if (!match) return null;
+    const val = match[1].trim();
+    const boundary = val.match(FIELD_BOUNDARY_RE);
+    return boundary ? (boundary[1].trim() || null) : val;
   }
 
   // ── BRAND ────────────────────────────────────────────────────────────────
