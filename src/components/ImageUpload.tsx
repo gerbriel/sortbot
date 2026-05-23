@@ -1,5 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import JSZip from 'jszip';
 import exifr from 'exifr';
@@ -57,9 +56,9 @@ interface ImageUploadProps {
    */
   onChunkReady?: (newItems: ClothingItem[]) => void;
   /** When true, suppresses the cat + yarn ball overlay during uploads. Default false. */
-  boredMode?: boolean;
+  // boredMode?: boolean; // reserved for future use
   /** Called when the user toggles bored mode from within the upload overlay. */
-  onBoredModeChange?: (val: boolean) => void;
+  // onBoredModeChange?: (val: boolean) => void; // reserved for future use
 }
 
 /** Imperative handle so App.tsx can trigger folder/ZIP dialogs from its own buttons. */
@@ -166,7 +165,7 @@ async function extractImagesFromZip(zipFile: File): Promise<File[]> {
   return imageFiles.sort((a, b) => a.lastModified - b.lastModified);
 }
 
-const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesUploaded, userId, existingItems, onCapturedAtUpdated: _onCapturedAtUpdated, onToast, onChunkReady, boredMode = false, onBoredModeChange }, ref) => {
+const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesUploaded, userId, existingItems, onCapturedAtUpdated: _onCapturedAtUpdated, onToast, onChunkReady }, ref) => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [extractingZip, setExtractingZip] = useState(false);
@@ -180,9 +179,8 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
   // lastClickRef — timestamp of previous yarn-ball click (double-click detection).
   const pausedRef    = useRef(false);
   const cancelledRef = useRef(false);
-  const lastClickRef = useRef(0);
-  const [isPaused,   setIsPaused]   = useState(false);
-  const [isCancelling, setIsCancelling] = useState(false);
+  const [_isPaused,   setIsPaused]   = useState(false);
+  const [_isCancelling, setIsCancelling] = useState(false);
   const [recompressState, setRecompressState] = useState<{
     running: boolean;
     done: number;
@@ -221,9 +219,9 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
   const catTrailTRef  = useRef(0);
   const prevCatPxRef  = useRef({ x: -300, y: -300 });
   const bodyRotRef    = useRef(0);
-  const [cat, setCat] = useState<CatState | null>(null);
+  const [_cat, setCat] = useState<CatState | null>(null);
 
-  const [yarnCursor, setYarnCursor] = useState<{ x: number; y: number; rot: number; r: number } | null>(null);
+  const [_yarnCursor, setYarnCursor] = useState<{ x: number; y: number; rot: number; r: number } | null>(null);
 
   useEffect(() => {
     if (!isUploading) {
@@ -741,145 +739,8 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     disabled: isUploading
   });
 
-  // ── Yarn ball click handler: single = pause/resume, double = cancel prompt ──
-  const handleYarnClick = () => {
-    const now = Date.now();
-    const timeSinceLast = now - lastClickRef.current;
-    lastClickRef.current = now;
-
-    if (timeSinceLast < 350) {
-      // Double-click — confirm cancel
-      setIsCancelling(true);
-    } else {
-      // Single click — toggle pause/resume
-      const nextPaused = !pausedRef.current;
-      pausedRef.current = nextPaused;
-      setIsPaused(nextPaused);
-    }
-  };
-
-  const handleConfirmCancel = () => {
-    cancelledRef.current = true;
-    pausedRef.current    = false; // unblock the wait loop so it exits
-    setIsCancelling(false);
-    setIsPaused(false);
-  };
-
-  const handleDismissCancel = () => {
-    setIsCancelling(false);
-    // If we were paused before the cancel prompt, stay paused
-  };
-
-  // Full-screen yarn overlay — portalled to body so it's truly fullscreen
-  // Suppressed when boredMode is enabled.
-  const creatureOverlay = false ? createPortal(
-    <div className="upload-overlay">
-      {/* Trail canvas — fills the whole viewport */}
-      <canvas ref={yarnCanvasRef} className="yarn-trail-canvas" />
-
-      {/* Yarn ball — sits exactly on the cursor; click to pause/resume, double-click to cancel */}
-      {yarnCursor && (
-        <div
-          className={`yarn-ball${isPaused ? ' yarn-ball-paused' : ''}`}
-          style={{
-            left: yarnCursor.x,
-            top:  yarnCursor.y,
-            width:  yarnCursor.r * 2,
-            height: yarnCursor.r * 2,
-            transform: `translate(-50%, -50%) rotate(${yarnCursor.rot}deg)`,
-            cursor: 'pointer',
-          } as React.CSSProperties}
-          onClick={handleYarnClick}
-        >
-          {/* Wound-line grooves drawn as SVG so they rotate with the ball */}
-          <svg viewBox="0 0 56 56" className="yarn-svg">
-            <ellipse cx="28" cy="28" rx="24" ry="22" fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="2.5"/>
-            <ellipse cx="28" cy="28" rx="18" ry="26" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="2"/>
-            <ellipse cx="28" cy="28" rx="26" ry="14" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5"/>
-            <ellipse cx="28" cy="28" rx="10" ry="26" fill="none" stroke="rgba(120,40,0,0.18)"    strokeWidth="1.5"/>
-            <ellipse cx="20" cy="18" rx="6" ry="4" fill="rgba(255,220,160,0.28)" />
-          </svg>
-        </div>
-      )}
-
-      {/* Stalking cat — full CSS cat, body rotates to travel direction, head aims at cursor */}
-      {cat && (
-        <div
-          className="upload-creature"
-          style={{
-            left: cat.x,
-            top:  cat.y,
-            transform: `translate(-50%, -50%) rotate(${cat.bodyRot}deg)`,
-          } as React.CSSProperties}
-        >
-          <div className={`cat-side${cat.speed > 0.05 ? ' cat-walking' : ''}`}>
-            <div className="cat-tail-side" />
-            <div className="cat-body-side">
-              <div className="cat-leg-side cat-back-leg-far" />
-              <div className="cat-leg-side cat-back-leg-near" />
-              <div className="cat-leg-side cat-front-leg-far" />
-              <div className="cat-leg-side cat-front-leg-near" />
-            </div>
-            <div
-              className="cat-head-side"
-              style={{ transform: `rotate(${cat.headRot}deg)` } as React.CSSProperties}
-            >
-              <div className="cat-ear-side cat-ear-side-l" />
-              <div className="cat-ear-side cat-ear-side-r" />
-              <div className="cat-eye-side" />
-              <div className="cat-nose-side" />
-              <div className="cat-whiskers-side" />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Paused indicator */}
-      {isPaused && !isCancelling && (
-        <div className="yarn-paused-badge">
-          ⏸ Paused — click yarn to resume · double-click to cancel
-        </div>
-      )}
-
-      {/* Cancel confirm dialog */}
-      {isCancelling && (
-        <div className="yarn-cancel-dialog">
-          <p>Cancel upload?</p>
-          <p className="yarn-cancel-sub">
-            {uploadProgress
-              ? `${uploadProgress.done} of ${uploadProgress.total} images uploaded so far will be discarded.`
-              : 'All progress will be lost.'}
-          </p>
-          <div className="yarn-cancel-buttons">
-            <button className="yarn-cancel-btn-yes" onClick={handleConfirmCancel}>Yes, cancel</button>
-            <button className="yarn-cancel-btn-no"  onClick={handleDismissCancel}>Keep uploading</button>
-          </div>
-        </div>
-      )}
-
-      <div className="upload-overlay-label">
-        {isPaused ? 'Paused' : isCancelling ? 'Cancel upload?' : `Uploading${uploadProgress ? ` ${uploadProgress.done} / ${uploadProgress.total}` : '…'}`}
-      </div>
-
-      {/* Bored Mode toggle — always reachable even though overlay covers the page */}
-      <button
-        onClick={() => onBoredModeChange?.(false)}
-        onMouseEnter={() => { document.body.style.cursor = 'pointer'; setYarnCursor(null); }}
-        onMouseLeave={() => { document.body.style.cursor = 'none'; }}
-        style={{
-          position: 'absolute', top: 14, right: 16,
-          fontSize: '0.72rem', padding: '0.25rem 0.6rem',
-          borderRadius: 6, border: '1.5px solid #6366f1',
-          background: 'rgba(99,102,241,0.18)', color: '#c4b5fd',
-          cursor: 'pointer', fontWeight: 600, zIndex: 10002,
-        }}
-        title="Turn off the animation"
-      >
-        😴 Exit Bored Mode
-      </button>
-    </div>,
-    document.body
-  ) : null;
+  // Creature overlay removed — was cat + yarn ball animation during upload
+  const creatureOverlay = null;
 
   return (
       <div className="image-upload-container">
