@@ -813,6 +813,29 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         return true;
       });
 
+      // ── FAST PATH ──────────────────────────────────────────────────────────
+      // All new items already have Supabase URLs (came from ImageUpload onChunkReady).
+      // Skip the async upload loop entirely and append synchronously via a functional
+      // updater so concurrent effect invocations chain correctly and never race.
+      if (toUpload.length === 0) {
+        const incoming = newItems
+          .filter(item => !(item.preview?.startsWith('blob:') && !item.file))
+          .map(item => ({ ...item, productGroup: item.productGroup || item.id }));
+        if (incoming.length === 0) return;
+        setGroupedItems(prev => {
+          const existingIdSet = new Set(prev.map(i => i.id));
+          const deduped = incoming.filter(i => !existingIdSet.has(i.id));
+          if (deduped.length === 0) return prev;
+          return [...prev, ...deduped];
+        });
+        // Notify App.tsx — groupedItemsRef.current is updated by React on every render,
+        // and handleImagesGrouped's internal upsert is debounced 2s, so by the time it
+        // fires all chunks have been appended and the ref reflects the full state.
+        onGrouped(groupedItemsRef.current);
+        return;
+      }
+      // ── END FAST PATH ──────────────────────────────────────────────────────
+
       if (toUpload.length > 0) {
         setIsLoading(true);
         setLoadingProgress(0);
