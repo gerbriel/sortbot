@@ -1239,6 +1239,37 @@ function App() {
         }
       }
       if (!hadError) {
+        // Also upsert product_images rows for items that were uploaded directly by
+        // ImageGrouper (bypassing handleImagesUploaded).  Without this, those items
+        // have products rows but no product_images rows — so Library / open-item
+        // views show blank images after the first group action.
+        const withImages = allRegisterable.filter(i => i.imageUrls?.[0] || i.storagePath);
+        if (withImages.length > 0) {
+          const productImageRows = withImages.map((item, idx) => {
+            const imageUrl = item.imageUrls?.[0] ||
+              (item.storagePath
+                ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
+                : null);
+            if (!imageUrl) return null;
+            return {
+              image_url: imageUrl,
+              storage_path: item.storagePath ?? null,
+              product_id: item.id,
+              user_id: user.id,
+              position: idx,
+              alt_text: item.seoTitle || 'Uploaded image',
+              original_name: item.originalName ?? null,
+            };
+          }).filter(Boolean) as { image_url: string; storage_path: string | null; product_id: string; user_id: string; position: number; alt_text: string; original_name: string | null }[];
+
+          if (productImageRows.length > 0) {
+            await supabase.from('product_images').upsert(
+              productImageRows,
+              { onConflict: 'product_id,image_url', ignoreDuplicates: true }
+            );
+          }
+        }
+
         // Prune any stale products rows for this batch that are no longer in the current item set.
         if (currentBatchIdRef.current) {
           await pruneStaleProducts(currentBatchIdRef.current, allRegisterable.map(i => i.id));
