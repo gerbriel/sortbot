@@ -964,7 +964,29 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         const measKey = fieldKey.slice(5);
         updated = { ...item, measurements: { ...(item.measurements || {}), [measKey]: value } };
       } else if (fieldKey === 'price') {
-        updated = { ...item, price: parseFloat(value) || undefined };
+        // Support both numeric ("45", "$45") and spoken-word prices ("forty five")
+        const directNum = parseFloat(value.replace(/[^0-9.]/g, ''));
+        let resolvedPrice: number | undefined = isNaN(directNum) ? undefined : directNum;
+        if (!resolvedPrice) {
+          const wordToNum: Record<string, number> = {
+            zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,
+            eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,
+            eighteen:18,nineteen:19,twenty:20,thirty:30,forty:40,fifty:50,sixty:60,
+            seventy:70,eighty:80,ninety:90,hundred:100,
+          };
+          const tokens = value.toLowerCase().replace(/[^a-z\s]/g,'').replace(/\bdollars?\b/g,'').trim().split(/[\s-]+/);
+          let total = 0, current = 0;
+          for (const tok of tokens) {
+            const n = wordToNum[tok];
+            if (n === undefined) continue;
+            if (n === 100) { current = (current || 1) * 100; }
+            else if (n >= 20) { total += n; }
+            else { current += n; }
+          }
+          total += current;
+          if (total > 0) resolvedPrice = total;
+        }
+        updated = { ...item, price: resolvedPrice };
       } else if (fieldKey === 'tags') {
         updated = { ...item, tags: value.split(/,\s*/).filter(Boolean) };
       } else {
