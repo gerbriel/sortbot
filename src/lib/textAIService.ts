@@ -136,7 +136,11 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   if (brand) extracted.brand = toTitleCase(brand);
 
   // ── MODEL ─────────────────────────────────────────────────────────────────
-  const model = extractCommand(/\bmodel\s+(.+?)\s+period\b/i);
+  let model = extractCommand(/\bmodel\s+(.+?)\s+period\b/i);
+  if (!model) {
+    const m = voiceDesc.match(/\bmodel\s+(.+?)(?=\s+(?:brand|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    if (m) model = m[1].trim();
+  }
   if (model) extracted.modelName = toTitleCase(model);
 
   // ── SIZE ──────────────────────────────────────────────────────────────────
@@ -161,23 +165,43 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   }
 
   // ── MATERIAL ──────────────────────────────────────────────────────────────
-  const materialCmd = extractCommand(/\b(?:material|fabric)\s+(.+?)\s+period\b/i);
+  let materialCmd = extractCommand(/\b(?:material|fabric)\s+(.+?)\s+period\b/i);
+  if (!materialCmd) {
+    const m = voiceDesc.match(/\b(?:material|fabric)\s+(.+?)(?=\s+(?:brand|model|size|colou?r|secondary|second|accent|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    if (m) materialCmd = m[1].trim();
+  }
   if (materialCmd) extracted.material = toTitleCase(materialCmd);
 
   // ── CONDITION ─────────────────────────────────────────────────────────────
-  const condRaw = extractCommand(/\bcondition\s+(.+?)\s+period\b/i);
+  let condRaw = extractCommand(/\bcondition\s+(.+?)\s+period\b/i);
+  if (!condRaw) {
+    const m = voiceDesc.match(/\bcondition\s+(.+?)(?=\s+(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    if (m) condRaw = m[1].trim();
+  }
   if (condRaw) extracted.condition = normalizeCondition(condRaw);
 
   // ── ERA ───────────────────────────────────────────────────────────────────
-  const eraCmd = extractCommand(/\bera\s+(.+?)\s+period\b/i);
+  let eraCmd = extractCommand(/\bera\s+(.+?)\s+period\b/i);
+  if (!eraCmd) {
+    const m = voiceDesc.match(/\bera\s+(.+?)(?=\s+(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    if (m) eraCmd = m[1].trim();
+  }
   if (eraCmd) extracted.era = normalizeEra(eraCmd);
 
   // ── STYLE ─────────────────────────────────────────────────────────────────
-  const styleCmd = extractCommand(/\bstyle\s+(.+?)\s+period\b/i);
+  let styleCmd = extractCommand(/\bstyle\s+(.+?)\s+period\b/i);
+  if (!styleCmd) {
+    const m = voiceDesc.match(/\bstyle\s+(.+?)(?=\s+(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    if (m) styleCmd = m[1].trim();
+  }
   if (styleCmd) extracted.style = toTitleCase(styleCmd);
 
   // ── GENDER ────────────────────────────────────────────────────────────────
-  const genderCmd = extractCommand(/\bgender\s+(.+?)\s+period\b/i);
+  let genderCmd = extractCommand(/\bgender\s+(.+?)\s+period\b/i);
+  if (!genderCmd) {
+    const m = voiceDesc.match(/\bgender\s+(.+?)(?=\s+(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    if (m) genderCmd = m[1].trim();
+  }
   if (genderCmd) extracted.gender = normalizeGender(genderCmd);
 
   // ── PRICE ─────────────────────────────────────────────────────────────────
