@@ -56,6 +56,8 @@ interface ImageUploadProps {
    * `newItems` contains only the items from this chunk.
    */
   onChunkReady?: (newItems: ClothingItem[]) => void;
+  /** When true, suppresses the cat + yarn ball overlay during uploads. Default false. */
+  boredMode?: boolean;
 }
 
 /** Imperative handle so App.tsx can trigger folder/ZIP dialogs from its own buttons. */
@@ -162,7 +164,7 @@ async function extractImagesFromZip(zipFile: File): Promise<File[]> {
   return imageFiles.sort((a, b) => a.lastModified - b.lastModified);
 }
 
-const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesUploaded, userId, existingItems, onCapturedAtUpdated: _onCapturedAtUpdated, onToast, onChunkReady }, ref) => {
+const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesUploaded, userId, existingItems, onCapturedAtUpdated: _onCapturedAtUpdated, onToast, onChunkReady, boredMode = false }, ref) => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [extractingZip, setExtractingZip] = useState(false);
@@ -767,7 +769,8 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
   };
 
   // Full-screen yarn overlay — portalled to body so it's truly fullscreen
-  const creatureOverlay = isUploading ? createPortal(
+  // Suppressed when boredMode is enabled.
+  const creatureOverlay = isUploading && !boredMode ? createPortal(
     <div className="upload-overlay">
       {/* Trail canvas — fills the whole viewport */}
       <canvas ref={yarnCanvasRef} className="yarn-trail-canvas" />
