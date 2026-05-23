@@ -819,14 +819,33 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         setLoadingMessage(`Uploading ${toUpload.length} image${toUpload.length > 1 ? 's' : ''}...`);
       }
 
-      const incoming: ClothingItem[] = [];
+      // STEP 1: Immediately show ALL new items with their current (blob) URLs so thumbnails
+      // appear right away rather than waiting for the full upload loop to finish.
+      const initialItems = (() => {
+        const existingItems = groupedItemsRef.current;
+        const existingIdSet = new Set(existingItems.map(i => i.id));
+        const initialIncoming = newItems
+          .filter(item => {
+            if (existingIdSet.has(item.id)) return false;
+            if (item.preview?.startsWith('blob:') && !item.file) return false; // expired blob, skip
+            return true;
+          })
+          .map(item => ({ ...item, productGroup: item.productGroup || item.id }));
+        return [...existingItems, ...initialIncoming];
+      })();
+      setGroupedItems(initialItems);
+
+      // STEP 2: Upload each item and update it in-place as its URL resolves.
       let processedCount = 0;
 
       for (const item of newItems) {
         const hasSupabaseUrl = item.imageUrls?.length || (item.preview && item.preview.startsWith('https://'));
 
         if (uploadedImages.has(item.id) || hasSupabaseUrl) {
-          incoming.push({ ...item, productGroup: item.productGroup || item.id });
+          // Already has a real URL — nothing to do (already rendered in step 1).
+          if (toUpload.length > 0) {
+            // Don't count pre-uploaded items against the progress bar.
+          }
           continue;
         }
 
@@ -839,12 +858,12 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           const uploaded = await uploadImageImmediately(item, userId);
           if (uploaded) {
             setUploadedImages(prev => new Set(prev).add(item.id));
-            incoming.push({ ...uploaded, productGroup: uploaded.productGroup || uploaded.id });
-          } else {
-            incoming.push({ ...item, productGroup: item.productGroup || item.id });
+            const uploadedWithGroup = { ...uploaded, productGroup: uploaded.productGroup || uploaded.id };
+            // Update this item in-place so its blob URL is swapped for the real Supabase URL.
+            setGroupedItems(prev =>
+              prev.map(existing => existing.id === item.id ? { ...existing, ...uploadedWithGroup } : existing)
+            );
           }
-        } else {
-          incoming.push({ ...item, productGroup: item.productGroup || item.id });
         }
 
         if (toUpload.length > 0) {
@@ -858,18 +877,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         }
       }
 
-      // Append new items; deduplicate by ID to prevent React key collisions.
-      // CRITICAL: also call onGrouped with the full merged list so App.tsx learns about
-      // the newly uploaded URLs.  Without this, items uploaded after the user first groups
-      // something are never propagated upstream — their storagePath/imageUrls are lost on
-      // refresh because App.tsx/workflow state never sees them.
-      const finalItems = (() => {
-        const existingItems = groupedItemsRef.current;
-        const existingIdSet = new Set(existingItems.map(i => i.id));
-        const deduped = incoming.filter(i => !existingIdSet.has(i.id));
-        return [...existingItems, ...deduped];
-      })();
-      setGroupedItems(finalItems);
+      // STEP 3: After all uploads done, propagate the final authoritative state upstream
+      // so App.tsx / workflow state / DB all have the real Supabase URLs.
+      const finalItems = groupedItemsRef.current;
       onGrouped(finalItems);
 
       if (toUpload.length > 0) {
