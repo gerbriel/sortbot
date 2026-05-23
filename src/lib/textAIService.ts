@@ -703,12 +703,12 @@ export const generateProductDescription = async (
 function createFallbackDescription(context: ProductContext): AIGeneratedContent {
   let description = '';
 
-  // Generate the clean title — used as the description opener line
-  const suggestedTitle = context.title || generateTitleFromFields(context);
-  const sizePrefix = context.size ? `${context.size} - ` : '';
+  // Generate the structured SEO title from fields — always auto-generated, never
+  // pulled from the existing seoTitle (which would cause a double prefix).
+  const suggestedTitle = generateTitleFromFields(context);
 
-  // PART 1: Opener line: "[size] - Vintage / Y2K [title]"
-  description += `${sizePrefix}Vintage / Y2K ${suggestedTitle || 'Vintage clothing item'}`;
+  // PART 1: Opener line — the full formatted title (already contains size + Vintage / Y2K)
+  description += suggestedTitle || 'Vintage clothing item';
 
   description += '\n\n';
 
@@ -766,36 +766,58 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
 }
 
 /**
- * Generate SEO title ONLY from filled fields.
- * - Max 60 characters (Google/Shopify best practice)
- * - Priority order: Brand → Era/Style → Color → Category → Size
- * - "period" word is never included (it's a voice delimiter, not content)
+ * Generate SEO title from filled fields.
+ * Format: [size] - Vintage / Y2K [brand] [era] [style] [modelName] [category]
+ * - Max 60 characters
+ * - No size prefix for bags
+ * - OSFA for hats/caps
+ * - "period" voice delimiter is never included
  */
 function generateTitleFromFields(context: ProductContext): string {
-  // Strip the voice delimiter word "period" from any field value before using it
   const clean = (s?: string) =>
     (s || '').replace(/\bperiod\b/gi, '').replace(/\s{2,}/g, ' ').trim();
 
-  const parts: string[] = [];
+  // Detect item type from category + voice for bag/hat special handling
+  const categoryStr = `${context.category || ''} ${context.voiceDescription || ''}`.toLowerCase();
+  const BAG_TYPES = /\b(bag|backpack|tote|purse|handbag|crossbody|cross-body|messenger|duffel|duffle|fanny\s*pack|belt\s*bag|satchel|clutch|wristlet|pouch|briefcase)\b/;
+  const HAT_TYPES = /\b(hat|cap|beanie|snapback|fitted|bucket\s*hat|dad\s*hat|trucker|visor|beret|boonie|headwear|five.panel)\b/;
 
-  if (context.brand) parts.push(clean(context.brand));
-  if (context.era)   parts.push(clean(context.era));
-  if (context.style) parts.push(clean(context.style));
-  if (context.color) parts.push(clean(context.color));
-  if (context.category) parts.push(clean(context.category));
-  if (context.size)  parts.push(`(${clean(context.size)})`);
+  const isBag = BAG_TYPES.test(categoryStr);
+  const isHat = HAT_TYPES.test(categoryStr);
 
-  const raw = parts.filter(Boolean).join(' ') || 'Vintage Item';
+  // Determine size prefix
+  let sizePrefix = '';
+  if (!isBag) {
+    const size = clean(context.size);
+    if (isHat) {
+      sizePrefix = 'OSFA - ';
+    } else if (size) {
+      sizePrefix = `${size} - `;
+    }
+  }
 
-  // Trim to 60 characters at a word boundary
-  if (raw.length <= 60) return raw;
+  // Build body: brand → era → style → modelName → category (item type)
+  const bodyParts: string[] = [];
+  if (context.brand)     bodyParts.push(clean(context.brand));
+  if (context.era)       bodyParts.push(clean(context.era));
+  if (context.style)     bodyParts.push(clean(context.style));
+  if (context.modelName) bodyParts.push(clean(context.modelName));
+  if (context.category)  bodyParts.push(clean(context.category));
+
+  const vintageMarker = 'Vintage / Y2K';
+  const body = bodyParts.filter(Boolean).join(' ');
+  let full = sizePrefix ? `${sizePrefix}${vintageMarker}` : vintageMarker;
+  if (body) full += ` ${body}`;
+
+  // Trim to 60 chars at a word boundary
+  if (full.length <= 60) return full;
   let trimmed = '';
-  for (const word of raw.split(' ')) {
+  for (const word of full.split(' ')) {
     const candidate = trimmed ? `${trimmed} ${word}` : word;
     if (candidate.length > 60) break;
     trimmed = candidate;
   }
-  return trimmed || raw.slice(0, 60);
+  return trimmed || full.slice(0, 60);
 }
 
 /**
