@@ -781,18 +781,23 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             const newGroup = incomingGroup !== updated.id ? incomingGroup : existing.productGroup;
             // IMPORTANT: keep existing image URL fields — do NOT overwrite with incoming
             // imageUrls from props, which may be corrupted by App.tsx merge operations.
-            // EXCEPTION: if storagePath changed (e.g. after a crop), the incoming item
-            // is authoritative and its image fields should win.
+            // EXCEPTIONS: (1) if storagePath changed (e.g. after a crop), the incoming item
+            // is authoritative and its image fields should win. (2) if the existing preview
+            // is still a blob: URL but the incoming one is a real https:// URL, the upload
+            // just completed — let the fresh URL win so the thumbnail renders.
             const pathChanged = updated.storagePath && updated.storagePath !== existing.storagePath;
+            const existingIsBlob = existing.preview?.startsWith('blob:') || (!existing.imageUrls?.length && !existing.preview?.startsWith('https://'));
+            const incomingHasReal = updated.preview?.startsWith('https://') || (updated.imageUrls && updated.imageUrls.length > 0);
+            const uploadJustFinished = existingIsBlob && incomingHasReal;
             return {
               ...updated,
               productGroup: newGroup,
-              // If storagePath changed (crop applied), trust incoming fields entirely.
+              // If storagePath changed (crop applied) or upload just finished, trust incoming fields.
               // Otherwise keep existing fields which are authoritative from upload time.
-              storagePath:  pathChanged ? updated.storagePath  : (existing.storagePath  || updated.storagePath),
-              imageUrls:    pathChanged ? (updated.imageUrls ?? []) : (existing.imageUrls?.length ? existing.imageUrls : (updated.imageUrls ?? [])),
-              preview:      pathChanged ? updated.preview      : (existing.preview      || updated.preview),
-              thumbnailUrl: pathChanged ? updated.thumbnailUrl : (existing.thumbnailUrl || updated.thumbnailUrl),
+              storagePath:  (pathChanged || uploadJustFinished) ? updated.storagePath  : (existing.storagePath  || updated.storagePath),
+              imageUrls:    (pathChanged || uploadJustFinished) ? (updated.imageUrls ?? []) : (existing.imageUrls?.length ? existing.imageUrls : (updated.imageUrls ?? [])),
+              preview:      (pathChanged || uploadJustFinished) ? updated.preview      : (existing.preview      || updated.preview),
+              thumbnailUrl: (pathChanged || uploadJustFinished) ? updated.thumbnailUrl : (existing.thumbnailUrl || updated.thumbnailUrl),
             };
           })
         );
