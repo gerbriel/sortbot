@@ -155,7 +155,7 @@ export const saveProductToDatabase = async (
         product_type: product.productType || 'Clothing',
         tags: product.tags || [],
         published: product.published || false,
-        status: product.status || 'Draft',
+        status: product.status || 'Active',
         
         // Variants/Options
         size: product.size || '',

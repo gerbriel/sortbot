@@ -2197,15 +2197,16 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   </div>
 
                   {presetSearchOpen && (() => {
-                    const q = presetSearchQuery.toLowerCase();
+                    const normSearch = (s: string) => s.toLowerCase().replace(/['’\-.,]/g, '');
+                    const q = normSearch(presetSearchQuery);
                     const filtered = [
                       ...(currentItem._presetData ? [{ id: '', label: `Keep Current: ${currentItem._presetData.displayName}`, sub: '' }] : [{ id: '', label: 'Keep current / no change', sub: '' }]),
                       ...availablePresets
                         .filter(p =>
                           !q ||
-                          p.display_name.toLowerCase().includes(q) ||
-                          (p.product_type || '').toLowerCase().includes(q) ||
-                          (p.category_name || '').toLowerCase().includes(q)
+                          normSearch(p.display_name).includes(q) ||
+                          normSearch(p.product_type || '').includes(q) ||
+                          normSearch(p.category_name || '').includes(q)
                         )
                         .map(p => ({ id: p.id, label: p.display_name + (p.is_default ? ' ✓' : ''), sub: p.product_type || '' }))
                     ];

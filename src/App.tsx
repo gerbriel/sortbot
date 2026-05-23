@@ -360,7 +360,7 @@ function App() {
           user_id: activeUser.id,
           batch_id: batchId,
           title: item.seoTitle || null,
-          status: 'Draft',
+          status: 'Active',
           product_group: item.productGroup || item.id,
         })),
         // ignoreDuplicates: true — NEVER overwrite batch_id on an existing products row.
@@ -964,7 +964,7 @@ function App() {
           user_id: user.id,
           batch_id: currentBatchIdRef.current,   // use ref — state may still be null this render
           title: item.seoTitle || null,
-          status: 'Draft',
+          status: 'Active',
           product_group: item.productGroup || item.id,
         })),
         { onConflict: 'id', ignoreDuplicates: true }
@@ -1228,7 +1228,7 @@ function App() {
             batch_id: currentBatchIdRef.current,
             product_group: item.productGroup || item.id,
             title: item.seoTitle || null,
-            status: 'Draft',
+            status: 'Active',
           })),
           { onConflict: 'id', ignoreDuplicates: false }
         );

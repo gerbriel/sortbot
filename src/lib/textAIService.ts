@@ -210,10 +210,13 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   const tagsRaw = extractCommand(/\btags?\s+(.+?)\s+period\b/i);
   if (tagsRaw) {
     extracted.tags = tagsRaw
-      .replace(/#/g, ' ')
+      // treat spoken "comma" and "hashtag" (or "hash") as delimiters
+      .replace(/\b(comma|hashtag|hash)\b/gi, ',')
+      .replace(/#/g, ',')
       .split(/[\s,]+/)
+      .map((t: string) => t.toLowerCase())
       .filter(Boolean)
-      .map((t: string) => t.toLowerCase());
+      .slice(0, 5);
   }
 
   // ── TITLE ─────────────────────────────────────────────────────────────────

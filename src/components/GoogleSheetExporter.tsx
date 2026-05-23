@@ -609,7 +609,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         'g',                                                             // Variant Weight Unit
         product.taxCode || '',                                           // Variant Tax Code
         String(product.costPerItem || '0.00'),                          // Cost per item
-        (product.status || 'draft').toLowerCase(),                       // Status
+        (product.status || 'active').toLowerCase(),                       // Status
         product.size || '',                                              // Size (product.metafields.custom.size)
         product.condition || '',                                         // Condition (product.metafields.custom.condition)
         product.parcelSize || '',                                        // Parcel Size (product.metafields.custom.parcel_size)
@@ -617,7 +617,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       ]);
       
       // Additional image rows — only Handle, Image Src, Image Position, Image Alt Text, Status
-      const productStatus = (product.status || 'draft').toLowerCase();
+      const productStatus = (product.status || 'active').toLowerCase();
       const imageCount = product.imageUrls?.length || 0;
       for (let i = 1; i < imageCount; i++) {
         const imageRow = Array(headers.length).fill('') as string[];
@@ -808,7 +808,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       'g',                                                           // Variant Weight Unit
                       product.taxCode || '',                                         // Variant Tax Code
                       String(product.costPerItem || '0.00'),                       // Cost per item
-                      (product.status || 'draft').toLowerCase(),                    // Status
+                      (product.status || 'active').toLowerCase(),                    // Status
                       product.size || '',                                            // Size (custom.size)
                       product.condition || '',                                       // Condition (custom.condition)
                       product.parcelSize || '',                                      // Parcel Size (custom.parcel_size)

@@ -231,8 +231,9 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
       'accessories': 16, 'mens-accessories': 16, 'womens-accessories': 16, 'kids-accessories': 16,
     };
     const filtered = presets.filter(p => (p as any).gender === genderFilter);
+    const normSearch = (s: string) => s.toLowerCase().replace(/['’\-.,]/g, '');
     const searched = categorySearch.trim()
-      ? filtered.filter(p => p.display_name.toLowerCase().includes(categorySearch.toLowerCase()))
+      ? filtered.filter(p => normSearch(p.display_name).includes(normSearch(categorySearch)))
       : filtered;
     return [...searched].sort((a, b) => {
       const ao = SORT_ORDER[a.category_name] ?? 99;
