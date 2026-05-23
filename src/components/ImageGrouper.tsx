@@ -391,13 +391,14 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       }
 
       console.log('[crop] writing to DB — product_id:', itemId, 'newPath:', newPath);
-      // Update product_images: upsert the new row, then delete the old path row
-      const { error: upsertErr } = await supabase.from('product_images').upsert(
-        { product_id: itemId, image_url: newUrl, storage_path: newPath },
-        { onConflict: 'storage_path', ignoreDuplicates: false }
+      // Insert a fresh product_images row for the new cropped path.
+      // Cannot upsert on storage_path — no unique constraint exists on that column.
+      // The old row (oldPath) is deleted below, so there's no duplicate to worry about.
+      const { error: upsertErr } = await supabase.from('product_images').insert(
+        { product_id: itemId, image_url: newUrl, storage_path: newPath }
       );
-      if (upsertErr) console.error('[crop] product_images upsert error:', upsertErr.message);
-      else console.log('[crop] product_images upsert ok');
+      if (upsertErr) console.error('[crop] product_images insert error:', upsertErr.message);
+      else console.log('[crop] product_images insert ok');
 
       if (oldPath && oldPath !== newPath) {
         // Delete old storage file
