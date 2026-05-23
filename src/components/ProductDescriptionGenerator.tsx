@@ -1929,7 +1929,14 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       const parseVoiceTextToFields = (text: string): Partial<ClothingItem> & { measurements?: any } => {
                         const fields: any = {};
                         const normalized = text.replace(/\.(?=\s|$)/g, ' period').replace(/\n/g, ' ');
-                        const grab = (pattern: RegExp) => { const m = normalized.match(pattern); return m ? m[1].trim() : null; };
+                        const BOUNDARY_RE = /^(.*?)\b(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\s+\w/i;
+                        const grab = (pattern: RegExp) => {
+                          const m = normalized.match(pattern);
+                          if (!m) return null;
+                          const val = m[1].trim();
+                          const b = val.match(BOUNDARY_RE);
+                          return b ? (b[1].trim() || null) : val;
+                        };
                         const v = (label: string) => grab(new RegExp(`\\b${label}\\s+(.+?)\\s+period\\b`, 'i'));
                         const b = v('brand');      if (b) fields.brand = b;
                         const s = v('size');       if (s) fields.size = s;
