@@ -281,9 +281,9 @@ export const saveProductToDatabase = async (
         }
       }
 
-      // Save image record to database — upsert on storage_path so early uploads
-      // (written in handleImagesUploaded) are updated with the real product_id
-      // rather than creating a duplicate row.
+      // Save image record to database — upsert on (product_id, image_url) which is the
+      // actual composite unique constraint, so an early-uploaded row is updated in-place
+      // rather than creating a duplicate. storage_path has no unique constraint.
       if (imageUrl && storagePath) {
         const transforms = item.crop || item.imageRotation ? { rotation: item.imageRotation || 0, crop: item.crop || null } : null;
         const { error: imageError } = await supabase
@@ -298,7 +298,7 @@ export const saveProductToDatabase = async (
               alt_text: `${product.seoTitle || 'Product'} - Image ${i + 1}`,
               transforms: transforms,
             },
-            { onConflict: 'storage_path', ignoreDuplicates: false }
+            { onConflict: 'product_id,image_url', ignoreDuplicates: false }
           );
 
         if (imageError) {

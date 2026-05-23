@@ -267,10 +267,10 @@ function App() {
   // re-render for every 10-image chunk (385 images = 39 chunks = 39 repaints without this).
   const pendingChunkRef = useRef<ClothingItem[]>([]);
   const chunkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Tracks whether the workflow_batches DB row has been pre-inserted for the current
-  // upload session. Set to true after the first insert so handleImagesUploaded doesn't
-  // try to insert again when the batch ID was already minted by the first chunk callback.
-  const batchRowInsertedRef = useRef(false);
+  // True if the workflow_batches DB row has been pre-inserted for the current session.
+  // Initialized to true when localStorage already has a batch ID — the row was created
+  // in a prior session so we must not INSERT it again (would 409 Conflict on reload).
+  const batchRowInsertedRef = useRef(!!localStorage.getItem('sortbot_current_batch_id'));
   // Tracks whether an upload is actively in progress. Set true on the first chunk,
   // cleared when all chunks are done (handleImagesUploaded). Used to suppress the
   // handleImagesGrouped → setGroupedImages cascade that fires via onGrouped during
