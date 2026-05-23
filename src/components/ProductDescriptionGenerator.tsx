@@ -2065,21 +2065,49 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 style={{ width: '100%' }}
                 onKeyDown={(e) => e.stopPropagation()}
               />
-              <button
-                className="button button-primary"
-                onClick={() => handleRegenerateAll()}
-                disabled={isGenerating || isSyncingFields || isSyncingFromVoice}
-                style={{
-                  marginTop: '0.5rem',
-                  width: '100%',
-                  background: isGenerating
-                    ? 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)'
-                    : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                }}
-                title="Re-extract all fields from voice + description, then regenerate AI description"
-              >
-                {isGenerating ? '🧠 Regenerating…' : '🔄 Regenerate AI Description'}
-              </button>
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <button
+                  className="button button-primary"
+                  onClick={() => handleRegenerateAll()}
+                  disabled={isGenerating || isSyncingFields || isSyncingFromVoice}
+                  style={{
+                    flex: 1,
+                    background: isGenerating
+                      ? 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)'
+                      : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                  }}
+                  title="Re-extract all fields from voice + description, then regenerate AI description"
+                >
+                  {isGenerating ? '🧠 Regenerating…' : '🔄 Regenerate AI Description'}
+                </button>
+                <button
+                  className="button"
+                  onClick={() => {
+                    const updated = [...processedItems];
+                    currentGroup.forEach(groupItem => {
+                      const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                      if (itemIndex !== -1) {
+                        updated[itemIndex].generatedDescription = '';
+                        updated[itemIndex].seoDescription = '';
+                      }
+                    });
+                    setProcessedItems(updated);
+                  }}
+                  title="Clear the AI generated description"
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid #d1d5db',
+                    color: '#6b7280',
+                    padding: '0 0.75rem',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  🗑 Clear
+                </button>
+              </div>
               <p style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: '0.35rem', marginBottom: 0 }}>
                 Reads voice &amp; description → updates all fields → writes new AI description
               </p>
