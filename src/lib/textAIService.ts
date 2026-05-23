@@ -152,16 +152,33 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   }
 
   // ── COLOR ─────────────────────────────────────────────────────────────────
-  // Standalone secondary color FIRST so it doesn't get swallowed by the color command
-  const secondaryColorCmd = extractCommand(/\b(?:secondary\s+colou?r|second\s+colou?r|accent\s+colou?r)\s+(.+?)\s+period\b/i);
+  // Secondary color runs FIRST so "secondary/second/accent color X" is consumed
+  // before the plain "color X" command gets a chance to match.
+  // Accepts: "secondary color blue period", "secondary blue period",
+  //          "second color blue period", "accent color blue period"
+  const NEXT_FIELD = /brand|model|size|colou?r|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title/i;
+
+  let secondaryColorCmd =
+    extractCommand(/\b(?:secondary\s+colou?r?|second\s+colou?r?|accent\s+colou?r?)\s+(.+?)\s+period\b/i);
+  if (!secondaryColorCmd) {
+    const m = voiceDesc.match(/\b(?:secondary\s+colou?r?|second\s+colou?r?|accent\s+colou?r?)\s+(.+?)(?=\s+(?:brand|model|size|colou?r|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    if (m) secondaryColorCmd = m[1].trim();
+  }
   if (secondaryColorCmd) extracted.secondaryColor = toTitleCase(secondaryColorCmd);
 
-  const colorCmd = extractCommand(/(?<!secondary\s)(?<!second\s)(?<!accent\s)\bcolou?r\s+(.+?)\s+period\b/i);
+  // Primary color — only matches plain "color X" not prefixed by secondary/second/accent
+  let colorCmd =
+    extractCommand(/(?<!secondary[\s])(?<!second[\s])(?<!accent[\s])\bcolou?r\s+(.+?)\s+period\b/i);
+  if (!colorCmd) {
+    // No-period fallback: "color blue" → stop at next field trigger
+    const m = voiceDesc.match(/(?<!secondary[\s])(?<!second[\s])(?<!accent[\s])\bcolou?r\s+(.+?)(?=\s+(?:brand|model|size|secondary|second|accent|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    if (m) colorCmd = m[1].trim();
+  }
   if (colorCmd) {
-    const parts = colorCmd.split(/\s+and\s+|\s*\/\s*|\s+/i).filter(Boolean);
+    const parts = colorCmd.split(/\s+and\s+|\s*\/\s*/i).filter(Boolean);
     extracted.color = toTitleCase(parts[0]);
-    // "color red and blue period" — second token goes to secondaryColor only if not already set
     if (parts[1] && !extracted.secondaryColor) extracted.secondaryColor = toTitleCase(parts[1]);
+    void NEXT_FIELD; // used in fallback regexes above
   }
 
   // ── MATERIAL ──────────────────────────────────────────────────────────────
@@ -205,24 +222,24 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   if (genderCmd) extracted.gender = normalizeGender(genderCmd);
 
   // ── PRICE ─────────────────────────────────────────────────────────────────
-  const priceCmd = extractCommand(/\bprice[:\s]+(.+?)\s+period\b/i);
-  if (priceCmd) {
-    // First try: direct digit extraction (e.g. "45", "$45", "45.00")
-    const directNum = priceCmd.replace(/[^0-9.]/g, '');
+  let priceRaw = extractCommand(/\bprice[:\s]+(.+?)\s+period\b/i);
+  if (!priceRaw) {
+    const m = voiceDesc.match(/\bprice[:\s]+(.+?)(?=\s+(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|gender|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    if (m) priceRaw = m[1].trim();
+  }
+  if (priceRaw) {
+    const directNum = priceRaw.replace(/[^0-9.]/g, '');
     if (directNum) {
       extracted.price = directNum;
     } else {
-      // Fallback: convert spoken number words → digits
-      // Handles: "forty five", "forty-five", "thirty", "sixty dollars", etc.
       const wordToNum: Record<string, number> = {
         zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,
         eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,
         eighteen:18,nineteen:19,twenty:20,thirty:30,forty:40,fifty:50,sixty:60,
         seventy:70,eighty:80,ninety:90,hundred:100,
       };
-      const tokens = priceCmd.toLowerCase().replace(/[^a-z\s]/g, '').replace(/\bdollars?\b/g, '').trim().split(/[\s-]+/);
-      let total = 0;
-      let current = 0;
+      const tokens = priceRaw.toLowerCase().replace(/[^a-z\s]/g, '').replace(/\bdollars?\b/g, '').trim().split(/[\s-]+/);
+      let total = 0, current = 0;
       for (const tok of tokens) {
         const n = wordToNum[tok];
         if (n === undefined) continue;
@@ -594,7 +611,8 @@ export function formatVoiceTranscript(voiceDesc: string): string {
     'condition', 'era', 'style', 'gender', 'price',
     'flaws?', 'care', 'width', 'length', 'waist', 'shoulder', 'sleeve',
     'inseam', 'outseam', 'leg\\s+opening', 'tags?', 'title',
-    'secondary colo(?:u?r)?', 'second color', 'second colour',
+    // secondary/second/accent accept an optional " color" suffix
+    'secondary(?:\\s+colou?r?)?', 'second(?:\\s+colou?r?)?', 'accent(?:\\s+colou?r?)?',
   ].join('|');
 
   // Insert a newline before each trigger word that starts a new command block,
@@ -615,7 +633,7 @@ export function stripVoiceCommands(voiceDesc: string): string {
     'condition', 'era', 'style', 'gender', 'price',
     'flaws?', 'care', 'width', 'length', 'waist', 'shoulder', 'sleeve',
     'inseam', 'outseam', 'leg\\s+opening', 'tags?', 'title',
-    'secondary colo(?:u?r)?', 'second color', 'second colour',
+    'secondary(?:\\s+colou?r?)?', 'second(?:\\s+colou?r?)?', 'accent(?:\\s+colou?r?)?',
   ].join('|');
 
   // Pass 1 — raw format: "trigger value period" on one line (original speech output)
