@@ -323,8 +323,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
         // Detect active column from final chunk — clear on period/dot, set on keyword
         const finalLower = final.toLowerCase();
-        const periodMatch = finalLower.search(/\bperiod\b/);
-        const hasPeriod = periodMatch >= 0;
+        const hasPeriod = /\bperiod\b/i.test(final);
 
         // Find last keyword in this chunk
         let lastPos = -1;
@@ -336,28 +335,83 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         }
 
         if (hasPeriod) {
-          // Text before "period" in this chunk
-          const beforePeriod = final.slice(0, periodMatch).trim();
-          if (lastKey && lastPos < periodMatch) {
-            // keyword + value + period all in same chunk: "brand Nike period"
-            const valueInChunk = final.slice(lastPos + lastKeyword.length, periodMatch).trim();
-            pendingFieldValueRef.current = valueInChunk;
-            activeVoiceFieldRef.current = lastKey;
-          } else if (activeVoiceFieldRef.current) {
-            // Ongoing field terminated by period
-            pendingFieldValueRef.current = (pendingFieldValueRef.current + ' ' + beforePeriod).trim();
+          // ── Multi-command chunked processing ─────────────────────────────
+          // A single speech chunk can contain multiple commands, e.g.:
+          //   "brand quicksilver period size xl period color blue period"
+          // We walk through the chunk segment-by-segment, splitting on "period",
+          // so fast speech never causes one field's value to bleed into another.
+
+          // Split on "period" boundaries (case-insensitive)
+          const segments = final.split(/\s*\bperiod\b\s*/i);
+          // segments[last] is whatever came after the final "period" (often empty or next keyword)
+          const trailingText = segments[segments.length - 1].trim();
+
+          for (let si = 0; si < segments.length - 1; si++) {
+            const seg = segments[si].trim();
+            if (!seg) continue;
+
+            const segLower = seg.toLowerCase();
+            // Find if this segment starts with a field keyword
+            let segField: string | null = null;
+            let segKeywordLen = 0;
+            for (const [kw, fk] of Object.entries(VOICE_KEYWORD_TO_FIELD)) {
+              if (segLower.startsWith(kw + ' ') || segLower === kw) {
+                if (kw.length > segKeywordLen) {
+                  segField = fk; segKeywordLen = kw.length;
+                }
+              }
+            }
+
+            if (segField) {
+              // Segment begins a new command — apply any previously pending field first
+              const prevField = activeVoiceFieldRef.current;
+              const prevValue = pendingFieldValueRef.current.trim();
+              if (prevField && prevValue) {
+                applyTableFieldRef.current(prevField, prevValue);
+              }
+              // Now set up the new field from this segment
+              const value = seg.slice(segKeywordLen).trim();
+              pendingFieldValueRef.current = value;
+              activeVoiceFieldRef.current = segField;
+            } else if (activeVoiceFieldRef.current) {
+              // Continuation of the active field
+              pendingFieldValueRef.current = (pendingFieldValueRef.current + ' ' + seg).trim();
+            }
+
+            // Apply and clear — this segment's "period" closes the field
+            const fieldToApply = activeVoiceFieldRef.current;
+            const valueToApply = pendingFieldValueRef.current.trim();
+            if (fieldToApply && valueToApply) {
+              applyTableFieldRef.current(fieldToApply, valueToApply);
+            }
+            pendingFieldValueRef.current = '';
+            activeVoiceFieldRef.current = null;
           }
-          // Apply accumulated value immediately
-          const fieldToApply = activeVoiceFieldRef.current;
-          const valueToApply = pendingFieldValueRef.current.trim();
-          if (fieldToApply && valueToApply) {
-            applyTableFieldRef.current(fieldToApply, valueToApply);
+
+          // Handle trailing text after the last "period" — it may be a new keyword
+          // starting the next command (e.g. "... period size" — user hasn't said the value yet)
+          if (trailingText) {
+            const trailLower = trailingText.toLowerCase();
+            let trailField: string | null = null;
+            let trailKwLen = 0;
+            for (const [kw, fk] of Object.entries(VOICE_KEYWORD_TO_FIELD)) {
+              if (trailLower.startsWith(kw + ' ') || trailLower === kw) {
+                if (kw.length > trailKwLen) { trailField = fk; trailKwLen = kw.length; }
+              }
+            }
+            if (trailField) {
+              const afterKw = trailingText.slice(trailKwLen).trim();
+              activeVoiceFieldRef.current = trailField;
+              pendingFieldValueRef.current = afterKw;
+              setActiveVoiceField(trailField);
+            } else {
+              setActiveVoiceField(null);
+            }
+          } else {
+            setActiveVoiceField(null);
           }
-          pendingFieldValueRef.current = '';
-          activeVoiceFieldRef.current = null;
-          setActiveVoiceField(null);
         } else if (lastKey) {
-          // New keyword detected — start accumulating value after keyword
+          // No period in chunk — new keyword detected, start accumulating value
           const afterKeyword = final.slice(lastPos + lastKeyword.length).trim();
           pendingFieldValueRef.current = afterKeyword;
           activeVoiceFieldRef.current = lastKey;
