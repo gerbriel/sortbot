@@ -836,6 +836,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       setGroupedItems(initialItems);
 
       // STEP 2: Upload each item and update it in-place as its URL resolves.
+      // Track results in a Map so step 3 can compute the authoritative final state
+      // without relying on groupedItemsRef.current (which may lag behind pending setState calls).
+      const uploadResultMap = new Map<string, ClothingItem>();
       let processedCount = 0;
 
       for (const item of newItems) {
@@ -843,9 +846,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
         if (uploadedImages.has(item.id) || hasSupabaseUrl) {
           // Already has a real URL — nothing to do (already rendered in step 1).
-          if (toUpload.length > 0) {
-            // Don't count pre-uploaded items against the progress bar.
-          }
           continue;
         }
 
@@ -859,6 +859,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           if (uploaded) {
             setUploadedImages(prev => new Set(prev).add(item.id));
             const uploadedWithGroup = { ...uploaded, productGroup: uploaded.productGroup || uploaded.id };
+            uploadResultMap.set(item.id, uploadedWithGroup);
             // Update this item in-place so its blob URL is swapped for the real Supabase URL.
             setGroupedItems(prev =>
               prev.map(existing => existing.id === item.id ? { ...existing, ...uploadedWithGroup } : existing)
@@ -879,7 +880,23 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
       // STEP 3: After all uploads done, propagate the final authoritative state upstream
       // so App.tsx / workflow state / DB all have the real Supabase URLs.
-      const finalItems = groupedItemsRef.current;
+      // Build deterministically — don't rely on React render timing:
+      //   • initialItems is the authoritative list of items (existing + newly added)
+      //   • groupedItemsRef may have productGroup changes from mid-upload group actions
+      //   • uploadResultMap has real Supabase URLs for every item we just uploaded
+      const groupRefMap = new Map(groupedItemsRef.current.map(i => [i.id, i]));
+      const finalItems = initialItems.map(item => {
+        const fromRef = groupRefMap.get(item.id);
+        const fromUpload = uploadResultMap.get(item.id);
+        return {
+          ...item,
+          // Preserve any productGroup change made mid-upload
+          productGroup: fromRef?.productGroup ?? item.productGroup,
+          // Apply real Supabase URLs (overrides any stale blob URL)
+          ...(fromUpload ?? {}),
+        };
+      });
+      setGroupedItems(finalItems);
       onGrouped(finalItems);
 
       if (toUpload.length > 0) {
