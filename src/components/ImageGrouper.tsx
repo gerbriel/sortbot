@@ -410,13 +410,19 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       }
 
       // Update React state with the new URL/path — bake out rotation; keep crop so Copy Crop can read it
+      const stateBeforeMap = groupedItemsRef.current.find(i => i.id === itemId);
+      console.log('[crop] pre-commitUpdate — item:', itemId, 'ref has storagePath:', stateBeforeMap?.storagePath, 'expected new:', newPath);
       const updated = groupedItemsRef.current.map(i =>
         i.id === itemId
           ? { ...i, preview: newUrl, thumbnailUrl: newUrl, imageUrls: [newUrl], storagePath: newPath, imageRotation: 0, crop: cropOverride }
           : i
       );
+      const patchedItem = updated.find(i => i.id === itemId);
+      console.log('[crop] commitUpdate — item:', itemId, 'patched storagePath in array:', patchedItem?.storagePath);
       commitUpdate(updated);
-      console.log('[crop] done ✅');
+      // After commitUpdate, groupedItemsRef won't reflect this yet (pending re-render).
+      // The next concurrent crop reading groupedItemsRef.current will see the STALE state.
+      console.log('[crop] done ✅ item:', itemId, 'newUrl:', newUrl);
     } catch (err) { console.error('[crop] unexpected error:', err); }
   };
 
@@ -1997,15 +2003,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                         // Bake the crop (+ optional rotation) into each target image — batched with progress
                         const total = targetIds.length;
                         setCropPasteProgress({ done: 0, total, status: 'running' });
-                        const BATCH = 4;
+                        // Process sequentially — concurrent crops all read the same stale
+                        // groupedItemsRef.current snapshot and overwrite each other's state.
+                        // Serial processing ensures each crop reads the freshly updated ref.
                         let done = 0;
-                        for (let i = 0; i < targetIds.length; i += BATCH) {
-                          const batch = targetIds.slice(i, i + BATCH);
-                          await Promise.all(batch.map(id =>
-                            applyAndPersistTransformGrouper(id, copiedCrop, copiedRotation !== null ? copiedRotation : undefined)
-                              .then(() => { done++; setCropPasteProgress({ done, total, status: 'running' }); })
-                              .catch(() => { done++; setCropPasteProgress({ done, total, status: 'running' }); })
-                          ));
+                        for (const id of targetIds) {
+                          try {
+                            await applyAndPersistTransformGrouper(id, copiedCrop, copiedRotation !== null ? copiedRotation : undefined);
+                          } catch (_) { /* individual failure logged inside */ }
+                          done++;
+                          setCropPasteProgress({ done, total, status: 'running' });
                         }
                         setCropPasteProgress({ done: total, total, status: 'done' });
                         setTimeout(() => setCropPasteProgress(null), 3500);
