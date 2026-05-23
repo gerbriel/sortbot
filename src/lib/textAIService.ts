@@ -122,7 +122,17 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   }
 
   // ── BRAND ────────────────────────────────────────────────────────────────
-  const brand = extractCommand(/\bbrand\s+(.+?)\s+period\b/i);
+  // ── BRAND ──────────────────────────────────────────────────────────────────
+  // Primary: "brand X period" (explicit command)
+  // Fallback 1: "brand X." (period already converted to dot by formatVoiceTranscript)
+  // Fallback 2: "brand X" at end of line or end of string (fast speech, period dropped)
+  let brand = extractCommand(/\bbrand\s+(.+?)\s+period\b/i);
+  if (!brand) {
+    // Fallback for fast speech where "period" delimiter is missing or dropped.
+    // Capture everything after "brand " up to the next field trigger keyword or end of string.
+    const m = voiceDesc.match(/\bbrand\s+(.+?)(?=\s+(?:model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    if (m) brand = m[1].trim();
+  }
   if (brand) extracted.brand = toTitleCase(brand);
 
   // ── MODEL ─────────────────────────────────────────────────────────────────
@@ -415,7 +425,10 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
       'Legendary Whitetails', 'Mossy Oak', 'Realtree', 'Bass Pro Shops',
       "Cabela's", 'Pacific Trail', 'Marmot', 'High Sierra', 'Columbia Sportswear',
     ];
-    for (const b of KNOWN_BRANDS) {
+    // Sort longest-first so multi-word brands (e.g. "American Vintage") match
+    // before their shorter subsets (e.g. "American").
+    const sortedBrands = [...KNOWN_BRANDS].sort((x, y) => y.length - x.length);
+    for (const b of sortedBrands) {
       if (new RegExp(`\\b${b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(voiceDesc)) {
         extracted.brand = toTitleCase(b);
         break;
@@ -463,7 +476,10 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   // ── ERA fallback ──────────────────────────────────────────────────────────
   if (!extracted.era) {
     const eraFallback = lower.match(
-      /\b(y2k|90s|80s|70s|60s|50s|1990s?|1980s?|1970s?|1960s?|1950s?|2000s?|vintage|retro)\b/i
+      // Note: "vintage" and "retro" intentionally excluded — every item in this app
+      // is vintage, so they don't convey a useful era and collide with brand names
+      // like "American Vintage". Use the explicit "era X period" command instead.
+      /\b(y2k|90s|80s|70s|60s|50s|1990s?|1980s?|1970s?|1960s?|1950s?|2000s?)\b/i
     );
     if (eraFallback) extracted.era = normalizeEra(eraFallback[1]);
   }
