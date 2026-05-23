@@ -889,12 +889,12 @@ function App() {
   }
 
   const handleImagesUploaded = async (items: ClothingItem[]) => {
-    log.upload(`handleImagesUploaded | newItems=${items.length} totalAfter=${uploadedImages.length + items.length}`);
-    // onChunkReady already appended each item as it finished — deduplicate by id
-    // so we don't double-add anything. Only truly new items (no storagePath yet) get appended.
-    const existingIds = new Set(uploadedImages.map(i => i.id));
+    log.upload(`handleImagesUploaded | newItems=${items.length} totalAfter=${uploadedImagesRef.current.length + items.length}`);
+    // onChunkReady already appended each item progressively — deduplicate using the ref
+    // (always current) so we don't double-add anything now that all chunks are done.
+    const existingIds = new Set(uploadedImagesRef.current.map(i => i.id));
     const brandNew = items.filter(i => !existingIds.has(i.id));
-    const newImages = [...uploadedImages, ...brandNew];
+    const newImages = [...uploadedImagesRef.current, ...brandNew];
     setUploadedImages(newImages);
 
     // If this is the very first upload of a brand-new session (e.g. localStorage was cleared),
