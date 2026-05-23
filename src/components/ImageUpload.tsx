@@ -50,6 +50,12 @@ interface ImageUploadProps {
   onCapturedAtUpdated?: (updatedItems: ClothingItem[]) => void;
   /** Optional: fires a toast notification in the parent (App.tsx) */
   onToast?: (msg: string) => void;
+  /**
+   * Called after each upload chunk so the parent can progressively render
+   * images as they finish rather than waiting for the full batch.
+   * `newItems` contains only the items from this chunk.
+   */
+  onChunkReady?: (newItems: ClothingItem[]) => void;
 }
 
 /** Imperative handle so App.tsx can trigger folder/ZIP dialogs from its own buttons. */
@@ -156,7 +162,7 @@ async function extractImagesFromZip(zipFile: File): Promise<File[]> {
   return imageFiles.sort((a, b) => a.lastModified - b.lastModified);
 }
 
-const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesUploaded, userId, existingItems, onCapturedAtUpdated: _onCapturedAtUpdated, onToast }, ref) => {
+const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesUploaded, userId, existingItems, onCapturedAtUpdated: _onCapturedAtUpdated, onToast, onChunkReady }, ref) => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [extractingZip, setExtractingZip] = useState(false);
@@ -494,6 +500,8 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       }));
       items.push(...results);
       setUploadProgress({ done: Math.min(i + CHUNK, imageFiles.length), total: imageFiles.length });
+      // Fire immediately so the parent can show this chunk while the rest upload
+      onChunkReady?.(results);
     }
 
     setIsUploading(false);

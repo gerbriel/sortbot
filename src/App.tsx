@@ -890,8 +890,11 @@ function App() {
 
   const handleImagesUploaded = async (items: ClothingItem[]) => {
     log.upload(`handleImagesUploaded | newItems=${items.length} totalAfter=${uploadedImages.length + items.length}`);
-    // APPEND new images to existing ones (don't replace)
-    const newImages = [...uploadedImages, ...items];
+    // onChunkReady already appended each item as it finished — deduplicate by id
+    // so we don't double-add anything. Only truly new items (no storagePath yet) get appended.
+    const existingIds = new Set(uploadedImages.map(i => i.id));
+    const brandNew = items.filter(i => !existingIds.has(i.id));
+    const newImages = [...uploadedImages, ...brandNew];
     setUploadedImages(newImages);
 
     // If this is the very first upload of a brand-new session (e.g. localStorage was cleared),
@@ -2054,7 +2057,7 @@ function App() {
               </button>
             </div>
           </div>
-          <ImageUpload ref={uploadRef} onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} onToast={addToast} />
+          <ImageUpload ref={uploadRef} onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} onToast={addToast} onChunkReady={(newItems) => setUploadedImages(prev => [...prev, ...newItems])} />
           {/* "N images uploaded" moved to toast — see handleImagesUploaded */}
         </section>
 
