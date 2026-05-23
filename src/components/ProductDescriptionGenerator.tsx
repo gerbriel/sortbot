@@ -1919,26 +1919,62 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               {/* Mode toggle */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                 <label><strong>Voice Description</strong> <span style={{ fontWeight: 400, color: '#64748b', fontSize: '0.85em' }}>— say <em>field name → value → "period"</em> to apply (e.g. <em>"brand Nike period"</em>)</span></label>
-                <div style={{ display: 'flex', gap: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid #d1d5db' }}>
-                  {(['table', 'text'] as const).map(mode => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setVoiceMode(mode)}
-                      style={{
-                        padding: '0.2rem 0.7rem',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        border: 'none',
-                        cursor: 'pointer',
-                        background: voiceMode === mode ? '#6366f1' : '#f9fafb',
-                        color: voiceMode === mode ? '#fff' : '#374151',
-                        transition: 'all 0.15s',
-                      }}
-                    >
-                      {mode === 'table' ? '⊞ Table' : '≡ Text'}
-                    </button>
-                  ))}
+                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    title="Clear all voice fields"
+                    onClick={() => {
+                      const updated = [...processedItems];
+                      currentGroup.forEach(groupItem => {
+                        const idx = updated.findIndex(i => i.id === groupItem.id);
+                        if (idx !== -1) {
+                          updated[idx] = {
+                            ...updated[idx],
+                            brand: '', color: '', secondaryColor: '', size: '',
+                            material: '', condition: undefined, era: '', style: '',
+                            gender: undefined, price: undefined, flaws: '', care: '',
+                            modelName: '', tags: [], measurements: {},
+                            voiceDescription: '',
+                          };
+                        }
+                      });
+                      setProcessedItems(updated);
+                    }}
+                    style={{
+                      padding: '0.2rem 0.55rem',
+                      fontSize: '0.72rem',
+                      fontWeight: 600,
+                      border: '1px solid #fca5a5',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      background: '#fff5f5',
+                      color: '#dc2626',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    🗑 Clear Fields
+                  </button>
+                  <div style={{ display: 'flex', gap: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid #d1d5db' }}>
+                    {(['table', 'text'] as const).map(mode => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setVoiceMode(mode)}
+                        style={{
+                          padding: '0.2rem 0.7rem',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          border: 'none',
+                          cursor: 'pointer',
+                          background: voiceMode === mode ? '#6366f1' : '#f9fafb',
+                          color: voiceMode === mode ? '#fff' : '#374151',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        {mode === 'table' ? '⊞ Table' : '≡ Text'}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
