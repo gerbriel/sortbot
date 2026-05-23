@@ -245,9 +245,6 @@ function App() {
   const exporterRef = useRef<GoogleSheetExporterHandle>(null);
   const uploadRef = useRef<ImageUploadHandle>(null);
   const [showStep2Info, setShowStep2Info] = useState(false);
-  const [boredMode, setBoredMode] = useState<boolean>(() => {
-    try { return localStorage.getItem('sortbot_bored_mode') === 'true'; } catch { return false; }
-  });
   const [currentBatchId, setCurrentBatchId] = useState<string | null>(() => {
     // Restore batch ID from localStorage so reloads don't lose progress
     return localStorage.getItem('sortbot_current_batch_id') || null;
@@ -2060,7 +2057,7 @@ function App() {
               </button>
             </div>
           </div>
-          <ImageUpload ref={uploadRef} onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} onToast={addToast} onChunkReady={(newItems) => setUploadedImages(prev => [...prev, ...newItems])} boredMode={boredMode} onBoredModeChange={(val) => { setBoredMode(val); try { localStorage.setItem('sortbot_bored_mode', String(val)); } catch {} }} />
+          <ImageUpload ref={uploadRef} onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} onToast={addToast} onChunkReady={(newItems) => setUploadedImages(prev => [...prev, ...newItems])} />
           {/* "N images uploaded" moved to toast — see handleImagesUploaded */}
         </section>
 
