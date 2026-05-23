@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import exifr from 'exifr';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
@@ -262,6 +262,15 @@ function App() {
   // Separate from autoSaveTimerRef so the workflow_state save and the products upsert
   // can debounce independently. Both fire after 2 s of inactivity.
   const groupUpsertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Chunk-ready debounce: accumulate items from successive onChunkReady calls and
+  // flush to state at most every 150 ms so we don't trigger a full ImageGrouper
+  // re-render for every 10-image chunk (385 images = 39 chunks = 39 repaints without this).
+  const pendingChunkRef = useRef<ClothingItem[]>([]);
+  const chunkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks whether the workflow_batches DB row has been pre-inserted for the current
+  // upload session. Set to true after the first insert so handleImagesUploaded doesn't
+  // try to insert again when the batch ID was already minted by the first chunk callback.
+  const batchRowInsertedRef = useRef(false);
 
   // Ref mirrors of the four item arrays so async handlers always read live state
   // without capturing stale closures. Updated every render.
@@ -330,6 +339,32 @@ function App() {
     window.addEventListener('presetsUpdated', handler);
     return () => window.removeEventListener('presetsUpdated', handler);
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Debounced onChunkReady handler — batches up chunk results so the UI repaints
+  // at most every 150 ms instead of once per 10-image chunk.
+  // ALSO mints the batchId on the very first call so that by the time
+  // handleImagesUploaded fires (after all chunks), currentBatchId is already the
+  // stable UUID — preventing ImageGrouper's batchId prop from changing mid-upload
+  // and wiping any groups the user formed while images were still uploading.
+  const handleChunkReady = useCallback((newItems: ClothingItem[]) => {
+    // Mint batch ID synchronously on first chunk so ImageGrouper never sees a
+    // null → UUID transition that would trigger its group-wipe useEffect.
+    if (!currentBatchIdRef.current) {
+      const newBatchId = crypto.randomUUID();
+      currentBatchIdRef.current = newBatchId;
+      setCurrentBatchId(newBatchId);
+      localStorage.setItem('sortbot_current_batch_id', newBatchId);
+      // DB row insert happens once in handleImagesUploaded after all chunks complete
+    }
+    pendingChunkRef.current.push(...newItems);
+    if (chunkTimerRef.current) clearTimeout(chunkTimerRef.current);
+    chunkTimerRef.current = setTimeout(() => {
+      const batch = pendingChunkRef.current;
+      pendingChunkRef.current = [];
+      chunkTimerRef.current = null;
+      setUploadedImages(prev => [...prev, ...batch]);
+    }, 150);
   }, []);
 
   // Fetch storage usage once the user is known
@@ -872,6 +907,10 @@ function App() {
       setCurrentBatchNumber(`batch-${Date.now()}`);
       localStorage.removeItem('sortbot_current_batch_id');
       localStorage.removeItem('sortbot_current_batch_number');
+      // Reset upload-session state so the next file drop gets a fresh batch row
+      batchRowInsertedRef.current = false;
+      pendingChunkRef.current = [];
+      if (chunkTimerRef.current) { clearTimeout(chunkTimerRef.current); chunkTimerRef.current = null; }
     }
   };
 
@@ -897,32 +936,35 @@ function App() {
     const newImages = [...uploadedImagesRef.current, ...brandNew];
     setUploadedImages(newImages);
 
-    // If this is the very first upload of a brand-new session (e.g. localStorage was cleared),
-    // currentBatchIdRef.current will still be null and every autoSave would be skipped by the
-    // null-guard below. Create and pin a new batch ID immediately so the debounced save fires.
+    // Ensure we have a batch ID. handleChunkReady mints it on the first chunk so that
+    // ImageGrouper's batchId prop is stable during the upload and no group-wipe fires.
+    // If somehow we arrive here without one (e.g. very small upload that races past
+    // handleChunkReady), mint it now.
     if (!currentBatchIdRef.current) {
       const newBatchId = crypto.randomUUID();
       currentBatchIdRef.current = newBatchId;
       setCurrentBatchId(newBatchId);
       localStorage.setItem('sortbot_current_batch_id', newBatchId);
+    }
 
-      // Pre-insert the batch row NOW so that autoSaveWorkflowBatch's blind UPDATE
-      // always finds an existing row. Without this, the UPDATE hits 0 rows and both
-      // concurrent debounce fires call createWorkflowBatch → duplicate batches.
-      if (user) {
-        await supabase.from('workflow_batches').insert({
-          id: newBatchId,
-          user_id: user.id,
-          batch_number: currentBatchNumber,
-          current_step: 1,
-          total_images: 0,
-          product_groups_count: 0,
-          categorized_count: 0,
-          processed_count: 0,
-          workflow_state: { uploadedImages: [], groupedImages: [], sortedImages: [], processedItems: [] },
-        });
-        log.app(`handleImagesUploaded | pre-inserted batch row | batchId=${newBatchId}`);
-      }
+    // Pre-insert the workflow_batches row exactly once per upload session.
+    // autoSaveWorkflowBatch uses a blind UPDATE — it needs this row to exist.
+    // Without the guard, a session where handleChunkReady already minted the ID
+    // would skip insertion and autoSave would silently drop all state.
+    if (!batchRowInsertedRef.current && user) {
+      batchRowInsertedRef.current = true;
+      await supabase.from('workflow_batches').insert({
+        id: currentBatchIdRef.current,
+        user_id: user.id,
+        batch_number: currentBatchNumber,
+        current_step: 1,
+        total_images: 0,
+        product_groups_count: 0,
+        categorized_count: 0,
+        processed_count: 0,
+        workflow_state: { uploadedImages: [], groupedImages: [], sortedImages: [], processedItems: [] },
+      });
+      log.app(`handleImagesUploaded | pre-inserted batch row | batchId=${currentBatchIdRef.current}`);
     }
     
     // If there are already grouped images, append to those too.
@@ -1929,6 +1971,12 @@ function App() {
 
     // Set current batch info and persist for reload survival
     currentBatchIdRef.current = batch.id;
+    // This batch's DB row already exists — mark as inserted so handleImagesUploaded
+    // doesn't attempt a duplicate insert if the user drops more images onto this batch.
+    batchRowInsertedRef.current = true;
+    // Clear any stale pending-chunk state from a previous upload session
+    pendingChunkRef.current = [];
+    if (chunkTimerRef.current) { clearTimeout(chunkTimerRef.current); chunkTimerRef.current = null; }
     setCurrentBatchId(batch.id);
     setCurrentBatchNumber(batch.batch_number);
     localStorage.setItem('sortbot_current_batch_id', batch.id);
@@ -2088,7 +2136,7 @@ function App() {
               </button>
             </div>
           </div>
-          <ImageUpload ref={uploadRef} onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} onToast={addToast} onChunkReady={(newItems) => setUploadedImages(prev => [...prev, ...newItems])} />
+          <ImageUpload ref={uploadRef} onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} onToast={addToast} onChunkReady={handleChunkReady} />
           {/* "N images uploaded" moved to toast — see handleImagesUploaded */}
         </section>
 
