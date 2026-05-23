@@ -1,75 +1,43 @@
 import React from 'react';
-import './LoadingProgress.css';
 
 interface LoadingProgressProps {
   progress: number; // 0-100
   message?: string;
 }
 
-const LoadingProgress: React.FC<LoadingProgressProps> = ({ progress, message = 'Loading images...' }) => {
+const LoadingProgress: React.FC<LoadingProgressProps> = ({ progress, message = 'Uploading images...' }) => {
   return (
-    <div className="loading-progress-overlay">
-      <div className="loading-progress-container">
-        <div className="loading-message">{message}</div>
-        
-        {/* Clothing Rack */}
-        <div className="clothes-rack-container">
-          {/* Rack base */}
-          <div className="clothes-rack">
-            <div className="rack-bar"></div>
-            <div className="rack-stand-left"></div>
-            <div className="rack-stand-right"></div>
-          </div>
-          
-          {/* Moving Hanger */}
-          <div 
-            className="moving-hanger" 
-            style={{ 
-              left: `${progress}%`,
-              transform: `translateX(-50%) ${progress > 90 ? 'scale(0.95)' : 'scale(1)'}` 
-            }}
-            key={`upload-hanger-${Math.round(progress)}`}
-          >
-            {/* Hanger hook */}
-            <div className="hanger-hook"></div>
-            {/* Hanger bar */}
-            <div className="hanger-bar"></div>
-            {/* Hanger sides */}
-            <div className="hanger-left"></div>
-            <div className="hanger-right"></div>
-            {/* Clothing on hanger */}
-            <div className="hanger-clothing"></div>
-          </div>
-          
-          {/* Static hangers already on rack */}
-          <div className="static-hangers">
-            <div className="static-hanger" style={{ left: '75%', opacity: progress > 70 ? 1 : 0.3 }}>
-              <div className="hanger-hook"></div>
-              <div className="hanger-bar"></div>
-              <div className="hanger-left"></div>
-              <div className="hanger-right"></div>
-              <div className="hanger-clothing static"></div>
-            </div>
-            <div className="static-hanger" style={{ left: '85%', opacity: progress > 80 ? 1 : 0.3 }}>
-              <div className="hanger-hook"></div>
-              <div className="hanger-bar"></div>
-              <div className="hanger-left"></div>
-              <div className="hanger-right"></div>
-              <div className="hanger-clothing static"></div>
-            </div>
-          </div>
-        </div>
-        
-        {/* Progress Bar */}
-        <div className="progress-bar-container">
-          <div className="progress-bar-bg">
-            <div 
-              className="progress-bar-fill" 
-              style={{ width: `${progress}%` }}
-            ></div>
-          </div>
-          <div className="progress-text">{Math.round(progress)}%</div>
-        </div>
+    <div style={{
+      position: 'fixed',
+      bottom: 24,
+      right: 24,
+      zIndex: 99999,
+      background: 'rgba(20, 16, 40, 0.97)',
+      border: '1.5px solid #6366f1',
+      borderRadius: 14,
+      padding: '14px 20px 14px',
+      minWidth: 280,
+      maxWidth: 360,
+      boxShadow: '0 8px 32px rgba(99,102,241,0.25)',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 10,
+      fontFamily: 'inherit',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <span style={{ color: '#e2e8f0', fontWeight: 600, fontSize: '0.88rem' }}>{message}</span>
+        <span style={{ color: '#6366f1', fontWeight: 700, fontSize: '0.88rem', flexShrink: 0 }}>
+          {Math.round(progress)}%
+        </span>
+      </div>
+      <div style={{ height: 6, background: 'rgba(99,102,241,0.2)', borderRadius: 99, overflow: 'hidden' }}>
+        <div style={{
+          height: '100%',
+          width: `${progress}%`,
+          background: 'linear-gradient(90deg, #6366f1, #818cf8)',
+          borderRadius: 99,
+          transition: 'width 0.3s ease',
+        }} />
       </div>
     </div>
   );
