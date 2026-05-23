@@ -772,7 +772,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
 
   // Full-screen yarn overlay — portalled to body so it's truly fullscreen
   // Suppressed when boredMode is enabled.
-  const creatureOverlay = isUploading && !boredMode ? createPortal(
+  const creatureOverlay = false ? createPortal(
     <div className="upload-overlay">
       {/* Trail canvas — fills the whole viewport */}
       <canvas ref={yarnCanvasRef} className="yarn-trail-canvas" />
