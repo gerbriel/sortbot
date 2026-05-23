@@ -828,10 +828,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           if (deduped.length === 0) return prev;
           return [...prev, ...deduped];
         });
-        // Notify App.tsx — groupedItemsRef.current is updated by React on every render,
-        // and handleImagesGrouped's internal upsert is debounced 2s, so by the time it
-        // fires all chunks have been appended and the ref reflects the full state.
-        onGrouped(groupedItemsRef.current);
+        // Do NOT call onGrouped here — items arriving via fast path either came from
+        // onChunkReady (already in App.tsx's uploadedImages) or from a batch open
+        // (already in App.tsx's groupedImages).  Calling onGrouped(groupedItemsRef.current)
+        // synchronously would pass a stale ref (React hasn't flushed the setState above yet)
+        // and blank out App.tsx state with an empty list.
         return;
       }
       // ── END FAST PATH ──────────────────────────────────────────────────────
