@@ -1967,6 +1967,29 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           </div>
         </div>
 
+        {/* ── Delete selected ── */}
+        {selectedItems.size > 0 && (
+          <div style={{ padding: '0 0.5rem', marginTop: '0.5rem' }}>
+            <button
+              onClick={handleDeleteSelected}
+              className="rotate-btn"
+              title={`Delete ${selectedItems.size} selected image${selectedItems.size > 1 ? 's' : ''}`}
+              style={{
+                width: '100%', fontSize: '0.72rem',
+                padding: '0.3rem 0.6rem', height: 'auto',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem',
+                background: '#dc2626', color: '#fff', border: 'none', borderRadius: 6,
+                cursor: 'pointer',
+              }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+              </svg>
+              Delete {selectedItems.size} selected
+            </button>
+          </div>
+        )}
+
         {/* ── Keyboard shortcuts cheat sheet ── */}
         <div className="keyboard-cheatsheet">
           <div className="cheatsheet-title">⌨ Shortcuts</div>
