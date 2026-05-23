@@ -130,17 +130,24 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   if (model) extracted.modelName = toTitleCase(model);
 
   // ── SIZE ──────────────────────────────────────────────────────────────────
-  const sizeRaw = extractCommand(/\bsize\s+(.+?)\s+period\b/i);
+  // Accept: "size large period", "size 32 period", "size extra large period"
+  // Also accept: "size: large" (colon variant from some STT engines)
+  const sizeRaw = extractCommand(/\bsize[:\s]+(.+?)\s+period\b/i);
   if (sizeRaw) {
     extracted.size = normalizeSizeValue(sizeRaw);
   }
 
   // ── COLOR ─────────────────────────────────────────────────────────────────
-  const colorCmd = extractCommand(/\bcolou?r\s+(.+?)\s+period\b/i);
+  // Standalone secondary color FIRST so it doesn't get swallowed by the color command
+  const secondaryColorCmd = extractCommand(/\b(?:secondary\s+colou?r|second\s+colou?r|accent\s+colou?r)\s+(.+?)\s+period\b/i);
+  if (secondaryColorCmd) extracted.secondaryColor = toTitleCase(secondaryColorCmd);
+
+  const colorCmd = extractCommand(/(?<!secondary\s)(?<!second\s)(?<!accent\s)\bcolou?r\s+(.+?)\s+period\b/i);
   if (colorCmd) {
     const parts = colorCmd.split(/\s+and\s+|\s*\/\s*|\s+/i).filter(Boolean);
     extracted.color = toTitleCase(parts[0]);
-    if (parts[1]) extracted.secondaryColor = toTitleCase(parts[1]);
+    // "color red and blue period" — second token goes to secondaryColor only if not already set
+    if (parts[1] && !extracted.secondaryColor) extracted.secondaryColor = toTitleCase(parts[1]);
   }
 
   // ── MATERIAL ──────────────────────────────────────────────────────────────
@@ -164,10 +171,34 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   if (genderCmd) extracted.gender = normalizeGender(genderCmd);
 
   // ── PRICE ─────────────────────────────────────────────────────────────────
-  const priceCmd = extractCommand(/\bprice\s+(.+?)\s+period\b/i);
+  const priceCmd = extractCommand(/\bprice[:\s]+(.+?)\s+period\b/i);
   if (priceCmd) {
-    const num = priceCmd.replace(/[^0-9.]/g, '');
-    if (num) extracted.price = num;
+    // First try: direct digit extraction (e.g. "45", "$45", "45.00")
+    const directNum = priceCmd.replace(/[^0-9.]/g, '');
+    if (directNum) {
+      extracted.price = directNum;
+    } else {
+      // Fallback: convert spoken number words → digits
+      // Handles: "forty five", "forty-five", "thirty", "sixty dollars", etc.
+      const wordToNum: Record<string, number> = {
+        zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,
+        eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,
+        eighteen:18,nineteen:19,twenty:20,thirty:30,forty:40,fifty:50,sixty:60,
+        seventy:70,eighty:80,ninety:90,hundred:100,
+      };
+      const tokens = priceCmd.toLowerCase().replace(/[^a-z\s]/g, '').replace(/\bdollars?\b/g, '').trim().split(/[\s-]+/);
+      let total = 0;
+      let current = 0;
+      for (const tok of tokens) {
+        const n = wordToNum[tok];
+        if (n === undefined) continue;
+        if (n === 100) { current = (current || 1) * 100; }
+        else if (n >= 20) { total += n; }
+        else { current += n; }
+      }
+      total += current;
+      if (total > 0) extracted.price = String(total);
+    }
   }
 
   // ── FLAWS ─────────────────────────────────────────────────────────────────
@@ -241,13 +272,18 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
     } else {
       // Single-word / abbreviation / numeric fallback
       const sizeFallback = voiceDesc.match(
-        /\b(?:size\s+|measurement\s+)?(5xl|4xl|3xl|xxxl|2xl|xxl|xl|large|medium|small|xxs|xs)\b|(?:size\s+|men'?s?\s+|women'?s?\s+)?(\d{1,2}(?:[xX]\d{1,2})?(?:\.\d)?)\b/i
+        /\b(?:size[:\s]+)?(5xl|4xl|3xl|xxxl|2xl|xxl|xl|large|medium|small|xxs|xs)\b/i
       );
       if (sizeFallback) {
-        const raw = (sizeFallback[1] || sizeFallback[2] || '').trim();
-        // Don't grab years (1990), prices ($45), or lone single digits as sizes
-        if (raw && !/^(19|20)\d{2}$/.test(raw) && !/^\$/.test(raw)) {
-          extracted.size = normalizeSizeValue(raw);
+        extracted.size = normalizeSizeValue((sizeFallback[1] || '').trim());
+      } else {
+        // Numeric sizes: "32", "32x30", "10.5" — guard against years and prices
+        const numericSize = voiceDesc.match(/\bsize[:\s]+(\d{1,2}(?:[xX]\d{1,2})?(?:\.\d)?)\b/i);
+        if (numericSize) {
+          const raw = numericSize[1].trim();
+          if (raw && !/^(19|20)\d{2}$/.test(raw)) {
+            extracted.size = normalizeSizeValue(raw);
+          }
         }
       }
     }
