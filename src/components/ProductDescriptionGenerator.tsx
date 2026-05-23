@@ -1023,6 +1023,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           updated[idx] = {
             ...it,
             generatedDescription: finalDescription,
+            // Always sync seoTitle with the freshly generated title
+            ...(aiResult.suggestedTitle && { seoTitle: aiResult.suggestedTitle }),
             ...(!it.seoDescription && finalDescription && { seoDescription: smartSeoTruncate(finalDescription) }),
             ...(extractedFields.brand        && { brand:           extractedFields.brand }),
             ...(extractedFields.modelName    && { modelName:       extractedFields.modelName }),
