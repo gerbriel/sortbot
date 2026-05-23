@@ -864,12 +864,14 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       {/* Bored Mode toggle — always reachable even though overlay covers the page */}
       <button
         onClick={() => onBoredModeChange?.(false)}
+        onMouseEnter={() => { document.body.style.cursor = 'pointer'; setYarnCursor(null); }}
+        onMouseLeave={() => { document.body.style.cursor = 'none'; }}
         style={{
           position: 'absolute', top: 14, right: 16,
           fontSize: '0.72rem', padding: '0.25rem 0.6rem',
           borderRadius: 6, border: '1.5px solid #6366f1',
           background: 'rgba(99,102,241,0.18)', color: '#c4b5fd',
-          cursor: 'pointer', fontWeight: 600, zIndex: 10,
+          cursor: 'pointer', fontWeight: 600, zIndex: 10002,
         }}
         title="Turn off the animation"
       >
