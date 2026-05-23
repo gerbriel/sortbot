@@ -2075,7 +2075,7 @@ function App() {
               </button>
             </div>
           </div>
-          <ImageUpload ref={uploadRef} onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} onToast={addToast} onChunkReady={(newItems) => setUploadedImages(prev => [...prev, ...newItems])} boredMode={boredMode} />
+          <ImageUpload ref={uploadRef} onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} onToast={addToast} onChunkReady={(newItems) => setUploadedImages(prev => [...prev, ...newItems])} boredMode={boredMode} onBoredModeChange={(val) => { setBoredMode(val); try { localStorage.setItem('sortbot_bored_mode', String(val)); } catch {} }} />
           {/* "N images uploaded" moved to toast — see handleImagesUploaded */}
         </section>
 

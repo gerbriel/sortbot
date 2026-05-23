@@ -58,6 +58,8 @@ interface ImageUploadProps {
   onChunkReady?: (newItems: ClothingItem[]) => void;
   /** When true, suppresses the cat + yarn ball overlay during uploads. Default false. */
   boredMode?: boolean;
+  /** Called when the user toggles bored mode from within the upload overlay. */
+  onBoredModeChange?: (val: boolean) => void;
 }
 
 /** Imperative handle so App.tsx can trigger folder/ZIP dialogs from its own buttons. */
@@ -164,7 +166,7 @@ async function extractImagesFromZip(zipFile: File): Promise<File[]> {
   return imageFiles.sort((a, b) => a.lastModified - b.lastModified);
 }
 
-const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesUploaded, userId, existingItems, onCapturedAtUpdated: _onCapturedAtUpdated, onToast, onChunkReady, boredMode = false }, ref) => {
+const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesUploaded, userId, existingItems, onCapturedAtUpdated: _onCapturedAtUpdated, onToast, onChunkReady, boredMode = false, onBoredModeChange }, ref) => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [extractingZip, setExtractingZip] = useState(false);
@@ -858,6 +860,21 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       <div className="upload-overlay-label">
         {isPaused ? 'Paused' : isCancelling ? 'Cancel upload?' : `Uploading${uploadProgress ? ` ${uploadProgress.done} / ${uploadProgress.total}` : '…'}`}
       </div>
+
+      {/* Bored Mode toggle — always reachable even though overlay covers the page */}
+      <button
+        onClick={() => onBoredModeChange?.(false)}
+        style={{
+          position: 'absolute', top: 14, right: 16,
+          fontSize: '0.72rem', padding: '0.25rem 0.6rem',
+          borderRadius: 6, border: '1.5px solid #6366f1',
+          background: 'rgba(99,102,241,0.18)', color: '#c4b5fd',
+          cursor: 'pointer', fontWeight: 600, zIndex: 10,
+        }}
+        title="Turn off the animation"
+      >
+        😴 Exit Bored Mode
+      </button>
     </div>,
     document.body
   ) : null;
