@@ -80,6 +80,7 @@ interface LibraryProps {
   onClose: () => void;
   onOpenBatch: (batch: WorkflowBatch) => void;
   refreshTrigger?: number; // increment from parent to force a reload
+  currentBatchId?: string | null; // currently active batch — shown as "Active" with Add More option
 }
 
 /** Strip unfilled template tokens like {brand}, {model}, {color} and collapse extra spaces/dashes */
@@ -95,7 +96,7 @@ function cleanTitle(raw: string | undefined | null, fallback = 'Untitled Product
   return cleaned || fallback;
 }
 
-export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, refreshTrigger }) => {
+export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, refreshTrigger, currentBatchId }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('batches');
   const [batches, setBatches] = useState<WorkflowBatch[]>([]);
   const [productGroups, setProductGroups] = useState<ProductGroup[]>([]);
@@ -2174,6 +2175,13 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
           <div className="batch-info">
             <div className="batch-title">
               <Folder size={16} className="folder-icon" />
+              {currentBatchId === batch.id && (
+                <span style={{
+                  fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px',
+                  background: '#16a34a', color: '#fff', borderRadius: 999,
+                  letterSpacing: '0.03em', flexShrink: 0,
+                }}>● Active</span>
+              )}
               {editingBatch === batch.id ? (
                 <input
                   type="text"
@@ -2266,17 +2274,29 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
               <Copy size={16} />
               <span>Duplicate</span>
             </button>
-            <button 
-              className="action-button primary"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenBatch(batch);
-              }}
-              title="Open batch"
-            >
-              <ArrowRight size={16} />
-              <span>Open</span>
-            </button>
+{currentBatchId === batch.id ? (
+              <button
+                className="action-button"
+                style={{ background: '#16a34a', color: '#fff', borderColor: '#16a34a' }}
+                onClick={(e) => { e.stopPropagation(); onOpenBatch(batch); }}
+                title="This batch is active — close library and drop more images in Step 1 to add to it"
+              >
+                <ArrowRight size={16} />
+                <span>Add More Images</span>
+              </button>
+            ) : (
+              <button 
+                className="action-button primary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenBatch(batch);
+                }}
+                title="Open batch"
+              >
+                <ArrowRight size={16} />
+                <span>Open</span>
+              </button>
+            )}
             <button 
               className="action-button danger"
               onClick={(e) => {
