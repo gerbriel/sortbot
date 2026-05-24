@@ -66,6 +66,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const prevBatchIdRef = useRef<string | undefined>(batchId);
   useEffect(() => {
     if (batchId && batchId !== prevBatchIdRef.current) {
+      console.log(`[GROUPER] batchId changed: ${prevBatchIdRef.current} → ${batchId} — resetting internal state (had ${groupedItemsRef.current.length} items)`);
       prevBatchIdRef.current = batchId;
       groupedItemsRef.current = [];
       setGroupedItems([]);
@@ -887,13 +888,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     const initializeItems = async () => {
       // Read the LIVE groupedItems via ref (avoids stale closure from [items] dep)
       const existingIds = new Set(groupedItemsRef.current.map(i => i.id));
-
       // Only process truly new items
       const newItems = items.filter(item => !existingIds.has(item.id));
+      console.log(`[GROUPER] initializeItems fired: props.items=${items.length} existing=${existingIds.size} new=${newItems.length} batchId=${batchId}`);
 
       // If nothing is new, just sync categories/metadata that may have changed externally
-      // (e.g. category assigned via CategoryZones, or group merge from category click).
       if (newItems.length === 0) {
+        console.log('[GROUPER] no new items — syncing metadata only');
         setGroupedItems(prev =>
           prev.map(existing => {
             const updated = items.find(i => i.id === existing.id);
@@ -948,20 +949,23 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       // Skip the async upload loop entirely and append synchronously via a functional
       // updater so concurrent effect invocations chain correctly and never race.
       if (toUpload.length === 0) {
+        console.log(`[GROUPER] FAST PATH: ${newItems.length} new items, toUpload=0`);
         const incoming = newItems
           .filter(item => !(item.preview?.startsWith('blob:') && !item.file))
           .map(item => ({ ...item, productGroup: item.productGroup || item.id }));
-        if (incoming.length === 0) return;
+        console.log(`[GROUPER] incoming after blob filter: ${incoming.length}`);
+        if (incoming.length === 0) { console.log('[GROUPER] FAST PATH: incoming=0, returning early'); return; }
         setGroupedItems(prev => {
           const existingIdSet = new Set(prev.map(i => i.id));
           const deduped = incoming.filter(i => !existingIdSet.has(i.id));
+          console.log(`[GROUPER] setGroupedItems: prev=${prev.length} deduped=${deduped.length}`);
           if (deduped.length === 0) return prev;
           return [...prev, ...deduped];
         });
         // During a live upload, App.tsx's handleImagesGrouped guards against mid-upload calls.
         // For batch-open restores, the deferred call lets React flush the setGroupedItems above
         // so groupedItemsRef.current reflects the new items when onGrouped fires.
-        setTimeout(() => onGrouped(groupedItemsRef.current), 0);
+        setTimeout(() => { console.log('[GROUPER] onGrouped deferred call, items=', groupedItemsRef.current.length); onGrouped(groupedItemsRef.current); }, 0);
         return;
       }
       // ── END FAST PATH ──────────────────────────────────────────────────────
