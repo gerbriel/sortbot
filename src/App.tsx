@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Component, type ReactNode } from 'react';
 import exifr from 'exifr';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
@@ -161,6 +161,47 @@ export interface ClothingItem {
   // UI transforms applied locally (not stored in DB yet)
   imageRotation?: number; // degrees, clockwise
   crop?: { x: number; y: number; w: number; h: number }; // percentages (0-100) relative to image
+
+  // Original-image cache — preserved when a crop is applied so the user can revert.
+  // Set on the FIRST crop; unchanged by subsequent re-crops (always points to the
+  // very first upload).  Cleared once "Clear originals cache" is run.
+  originalStoragePath?: string; // Supabase Storage path of the pre-crop original
+  originalUrl?: string;         // Public URL of the pre-crop original
+}
+
+/**
+ * Error boundary wrapping the Step 2 image grouper. If an uncaught render error
+ * occurs (e.g. during grouping) it shows a recovery UI instead of a blank page.
+ */
+interface GrouperBoundaryState { error: Error | null }
+class GrouperErrorBoundary extends Component<{ children: ReactNode }, GrouperBoundaryState> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[GrouperErrorBoundary] caught render error:', error, info);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: '2rem', textAlign: 'center', color: '#f87171' }}>
+          <h3>Something went wrong in the image grouper.</h3>
+          <pre style={{ fontSize: '0.75rem', opacity: 0.7, maxWidth: 600, margin: '1rem auto', textAlign: 'left', whiteSpace: 'pre-wrap' }}>
+            {this.state.error.message}
+          </pre>
+          <button
+            style={{ marginTop: '1rem', padding: '0.5rem 1.5rem', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+            onClick={() => this.setState({ error: null })}
+          >
+            Try to recover
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 function App() {
@@ -2217,8 +2258,9 @@ function App() {
                 <p className="step-description" style={{ marginTop: 0 }}>
                   Select &amp; group your product images, then drag groups to a category on the right.
                 </p>
+                <GrouperErrorBoundary>
                 <ImageGrouper 
-                  items={groupedImages.length > 0 ? groupedImages : uploadedImages} 
+                  items={groupedImages.length > 0 ? groupedImages : uploadedImages}
                   onGrouped={handleImagesGrouped}
                   onStatsChange={() => {}} // stats now computed directly from processedItems
                   userId={user.id}
@@ -2229,6 +2271,7 @@ function App() {
                   onSelectionChange={setSelectedGroupItems}
                   onActionsReady={setGrouperActions}
                 />
+                </GrouperErrorBoundary>
               </div>
               {/* Right: Category drop zones — sticky so always visible */}
               <div className="step2-right-panel">

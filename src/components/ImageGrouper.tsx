@@ -102,6 +102,20 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     onGrouped(newItems);
   };
 
+  /**
+   * Concurrent-safe state update using React's functional setState.
+   * Each call sees the LATEST state regardless of how many other setGroupedItems
+   * calls are queued — no race condition even with parallel async crop operations.
+   *
+   * NOTE: Does NOT push to undo history and does NOT call onGrouped.
+   * Callers handling batches should call onGrouped(groupedItemsRef.current) once
+   * the entire batch completes (after all awaits resolve, groupedItemsRef.current
+   * will reflect the final merged state).
+   */
+  const commitFunctional = (mapper: (prev: ClothingItem[]) => ClothingItem[]) => {
+    setGroupedItems(mapper);
+  };
+
   const handleUndo = () => {
     if (historyRef.current.length === 0) return;
     const prev = historyRef.current[historyRef.current.length - 1];
@@ -357,13 +371,21 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       if (!file) { console.error('[crop] createTransformedFile returned null — check CORS or image src'); return; }
       console.log('[crop] transformed file ok, size:', file.size);
 
-      // Always upload to a NEW path so the CDN URL changes and caches are busted.
-      // Old path is deleted after the new one is confirmed.
+      // ── Determine original path to cache ────────────────────────────────────
+      // On the FIRST crop the item's storagePath IS the original.
+      // On subsequent re-crops, item.originalStoragePath is already set.
+      const isFirstCrop = !item.originalStoragePath;
+      const originalPathToCache  = isFirstCrop ? (item.storagePath ?? null)   : item.originalStoragePath ?? null;
+      const originalUrlToCache   = isFirstCrop ? (item.imageUrls?.[0] || item.preview || '') : item.originalUrl ?? '';
+      // The "previous crop" — if re-cropping, this is the intermediate cropped
+      // file that should be deleted (NOT the original).
+      const prevCropPath = isFirstCrop ? null : item.storagePath ?? null;
+
+      // ── Upload the newly-cropped image ──────────────────────────────────────
       const oldPath = item.storagePath;
       let newUrl = '';
       let newPath = '';
 
-      // Derive a fresh path from the old one, replacing the filename with a timestamp.
       if (oldPath) {
         const dir = oldPath.substring(0, oldPath.lastIndexOf('/') + 1);
         const ext = oldPath.split('.').pop() || 'jpg';
@@ -391,48 +413,133 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       }
 
       console.log('[crop] writing to DB — product_id:', itemId, 'newPath:', newPath);
-      // Insert a fresh product_images row for the new cropped path.
-      // Cannot upsert on storage_path — no unique constraint exists on that column.
-      // The old row (oldPath) is deleted below, so there's no duplicate to worry about.
       const { error: upsertErr } = await supabase.from('product_images').insert(
         { product_id: itemId, user_id: userId, image_url: newUrl, storage_path: newPath }
       );
       if (upsertErr) console.error('[crop] product_images insert error:', upsertErr.message);
       else console.log('[crop] product_images insert ok');
 
-      if (oldPath && oldPath !== newPath) {
-        // Delete old storage file
-        const { error: storageDelErr } = await supabase.storage.from('product-images').remove([oldPath]);
-        if (storageDelErr) console.warn('[crop] old storage delete error:', storageDelErr.message);
-        // Delete old DB row
-        const { error: dbDelErr } = await supabase.from('product_images').delete().eq('storage_path', oldPath);
-        if (dbDelErr) console.warn('[crop] old product_images row delete error:', dbDelErr.message);
+      // ── Delete the previous CROP (not the original) ─────────────────────────
+      // If this is a re-crop, the intermediate cropped file is no longer needed.
+      // The original file is intentionally kept in storage so the user can revert.
+      if (prevCropPath && prevCropPath !== newPath && prevCropPath !== originalPathToCache) {
+        const { error: storageDelErr } = await supabase.storage.from('product-images').remove([prevCropPath]);
+        if (storageDelErr) console.warn('[crop] prev-crop storage delete error:', storageDelErr.message);
+        const { error: dbDelErr } = await supabase.from('product_images').delete().eq('storage_path', prevCropPath);
+        if (dbDelErr) console.warn('[crop] prev-crop DB row delete error:', dbDelErr.message);
+        console.log('[crop] deleted previous crop:', prevCropPath);
+      } else if (isFirstCrop) {
+        console.log('[crop] first crop — original preserved in storage at:', originalPathToCache);
       }
 
-      // Update React state with the new URL/path — bake out rotation; keep crop so Copy Crop can read it
-      const stateBeforeMap = groupedItemsRef.current.find(i => i.id === itemId);
-      console.log('[crop] pre-commitUpdate — item:', itemId, 'ref has storagePath:', stateBeforeMap?.storagePath, 'expected new:', newPath);
-      const updated = groupedItemsRef.current.map(i =>
+      // ── Update React state via functional updater (race-condition safe) ──────
+      console.log('[crop] commitFunctional — item:', itemId, 'newPath:', newPath, 'originalCached:', originalPathToCache);
+      commitFunctional(prev => prev.map(i =>
         i.id === itemId
-          ? { ...i, preview: newUrl, thumbnailUrl: newUrl, imageUrls: [newUrl], storagePath: newPath, imageRotation: 0, crop: cropOverride }
+          ? {
+              ...i,
+              preview: newUrl,
+              thumbnailUrl: newUrl,
+              imageUrls: [newUrl],
+              storagePath: newPath,
+              imageRotation: 0,
+              crop: cropOverride,
+              // Cache originals on first crop; preserve on re-crops
+              originalStoragePath: originalPathToCache ?? i.originalStoragePath,
+              originalUrl: (originalUrlToCache || i.originalUrl) as string | undefined,
+            }
           : i
-      );
-      const patchedItem = updated.find(i => i.id === itemId);
-      console.log('[crop] commitUpdate — item:', itemId, 'patched storagePath in array:', patchedItem?.storagePath);
-      commitUpdate(updated);
-      // After commitUpdate, groupedItemsRef won't reflect this yet (pending re-render).
-      // The next concurrent crop reading groupedItemsRef.current will see the STALE state.
+      ));
+
       console.log('[crop] done ✅ item:', itemId, 'newUrl:', newUrl);
     } catch (err) { console.error('[crop] unexpected error:', err); }
   };
 
-  // Selection box state
+  // ── Revert a single item to its cached original ─────────────────────────────
+  const revertToOriginal = async (itemId: string) => {
+    const item = groupedItemsRef.current.find(i => i.id === itemId);
+    if (!item?.originalStoragePath || !item.originalUrl) {
+      console.warn('[revert] no original cached for item', itemId);
+      return;
+    }
+    console.log('[revert] reverting item:', itemId, 'to', item.originalStoragePath);
+    try {
+      // Delete the current cropped file from storage (only if it differs from the original)
+      if (item.storagePath && item.storagePath !== item.originalStoragePath) {
+        await supabase.storage.from('product-images').remove([item.storagePath]);
+        await supabase.from('product_images').delete().eq('storage_path', item.storagePath);
+      }
+      // Restore state to original
+      commitFunctional(prev => prev.map(i =>
+        i.id === itemId
+          ? {
+              ...i,
+              preview: item.originalUrl!,
+              thumbnailUrl: item.originalUrl!,
+              imageUrls: [item.originalUrl!],
+              storagePath: item.originalStoragePath,
+              imageRotation: 0,
+              crop: undefined,
+              originalStoragePath: undefined,
+              originalUrl: undefined,
+            }
+          : i
+      ));
+      onGrouped(groupedItemsRef.current);
+      console.log('[revert] done for item:', itemId);
+    } catch (err) { console.error('[revert] error:', err); }
+  };
+
+  // Revert multiple items (selected or all cropped)
+  const revertToOriginalBatch = async (itemIds: string[]) => {
+    const toDo = itemIds.filter(id => {
+      const it = groupedItemsRef.current.find(i => i.id === id);
+      return it?.originalStoragePath && it.originalUrl;
+    });
+    if (toDo.length === 0) { alert('None of the selected images have a cached original to revert to.'); return; }
+    if (!window.confirm(`Revert ${toDo.length} image${toDo.length > 1 ? 's' : ''} to their original (un-cropped) versions? The cropped copies will be deleted.`)) return;
+    for (const id of toDo) {
+      await revertToOriginal(id);
+    }
+    onGrouped(groupedItemsRef.current);
+  };
+
+  // ── Clear the originals cache ────────────────────────────────────────────────
+  // Permanently deletes the preserved original files from Supabase Storage for
+  // items that have been cropped.  After clearing, revert is no longer possible.
+  const clearOriginalsCache = async (scope: 'selected' | 'all') => {
+    const items = groupedItemsRef.current;
+    const toProcess = scope === 'selected'
+      ? items.filter(i => selectedItems.has(i.id) && i.originalStoragePath)
+      : items.filter(i => i.originalStoragePath);
+    if (toProcess.length === 0) { alert('No cached originals found to clear.'); return; }
+    if (!window.confirm(
+      `Permanently delete the original (pre-crop) files for ${toProcess.length} image${toProcess.length > 1 ? 's' : ''} from storage?\n\nThis frees up storage but means you can no longer revert those images. This cannot be undone.`
+    )) return;
+
+    for (const item of toProcess) {
+      try {
+        await supabase.storage.from('product-images').remove([item.originalStoragePath!]);
+        await supabase.from('product_images').delete().eq('storage_path', item.originalStoragePath!);
+      } catch (err) { console.warn('[clearCache] error deleting original for', item.id, err); }
+    }
+    // Clear cache fields from state (skip undo — this is a storage-level operation)
+    commitFunctional(prev => prev.map(i =>
+      toProcess.find(t => t.id === i.id)
+        ? { ...i, originalStoragePath: undefined, originalUrl: undefined }
+        : i
+    ));
+    onGrouped(groupedItemsRef.current);
+    alert(`Cleared ${toProcess.length} original${toProcess.length > 1 ? 's' : ''} from cache.`);
+  };
+
+  // ── Selection box state ──────────────────────────────────────────────────────
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null);
   const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [activeContainer, setActiveContainer] = useState<'singles' | 'groups' | null>(null);
   const [selectionThresholdMet, setSelectionThresholdMet] = useState(false);
-  
+
   // Refs for selection containers
   const singlesContainerRef = useRef<HTMLDivElement>(null);
   const groupsContainerRef = useRef<HTMLDivElement>(null);
@@ -1135,7 +1242,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         : item
     );
 
-    commitUpdate(updated);
+    try {
+      commitUpdate(updated);
+    } catch (err) {
+      console.error('[createGroup] commitUpdate threw — state may be inconsistent:', err);
+    }
     updateSelection(new Set());
   };
 
@@ -1153,7 +1264,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         : item
     );
 
-    commitUpdate(updated);
+    try {
+      commitUpdate(updated);
+    } catch (err) {
+      console.error('[ungroupSelected] commitUpdate threw:', err);
+    }
     updateSelection(new Set());
   };
 
@@ -2003,17 +2118,35 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                         // Bake the crop (+ optional rotation) into each target image — batched with progress
                         const total = targetIds.length;
                         setCropPasteProgress({ done: 0, total, status: 'running' });
-                        // Process sequentially — concurrent crops all read the same stale
-                        // groupedItemsRef.current snapshot and overwrite each other's state.
-                        // Serial processing ensures each crop reads the freshly updated ref.
+
+                        // Acquire a Screen Wake Lock so the device doesn't sleep
+                        // during long crop batches (1000+ images, walk-away use).
+                        let wakeLock: WakeLockSentinel | null = null;
+                        try {
+                          if ('wakeLock' in navigator) {
+                            wakeLock = await (navigator as Navigator & { wakeLock: { request(type: string): Promise<WakeLockSentinel> } }).wakeLock.request('screen');
+                            console.log('[crop-batch] Screen Wake Lock acquired');
+                          }
+                        } catch (wlErr) { console.warn('[crop-batch] Wake Lock not available:', wlErr); }
+
+                        // Process crops in parallel batches of 8.
+                        // commitFunctional uses React's functional setState so
+                        // concurrent updates are safe — no last-writer-wins race.
+                        const BATCH = 8;
                         let done = 0;
-                        for (const id of targetIds) {
-                          try {
-                            await applyAndPersistTransformGrouper(id, copiedCrop, copiedRotation !== null ? copiedRotation : undefined);
-                          } catch (_) { /* individual failure logged inside */ }
-                          done++;
-                          setCropPasteProgress({ done, total, status: 'running' });
+                        for (let i = 0; i < targetIds.length; i += BATCH) {
+                          const batch = targetIds.slice(i, i + BATCH);
+                          await Promise.all(batch.map(id =>
+                            applyAndPersistTransformGrouper(id, copiedCrop, copiedRotation !== null ? copiedRotation : undefined)
+                              .then(() => { done++; setCropPasteProgress({ done, total, status: 'running' }); })
+                              .catch(() => { done++; setCropPasteProgress({ done, total, status: 'running' }); })
+                          ));
                         }
+                        // Release wake lock
+                        if (wakeLock) { try { await wakeLock.release(); console.log('[crop-batch] Screen Wake Lock released'); } catch { /* ignore */ } }
+
+                        // Notify App.tsx of final merged state once all updates settle.
+                        onGrouped(groupedItemsRef.current);
                         setCropPasteProgress({ done: total, total, status: 'done' });
                         setTimeout(() => setCropPasteProgress(null), 3500);
                       } else {
@@ -2057,6 +2190,50 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
               </svg>
               Delete {selectedItems.size} selected
+            </button>
+          </div>
+        )}
+
+        {/* ── Revert selected to originals ── */}
+        {selectedItems.size > 0 && groupedItems.some(i => selectedItems.has(i.id) && i.originalStoragePath) && (
+          <div style={{ padding: '0 0.5rem', marginTop: '0.4rem' }}>
+            <button
+              className="rotate-btn"
+              title="Revert selected cropped images back to their original un-cropped versions"
+              onClick={() => revertToOriginalBatch([...selectedItems])}
+              style={{
+                width: '100%', fontSize: '0.72rem',
+                padding: '0.3rem 0.6rem', height: 'auto',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem',
+                background: '#b45309', color: '#fff', border: 'none', borderRadius: 6,
+                cursor: 'pointer',
+              }}
+            >
+              ↺ Revert {groupedItems.filter(i => selectedItems.has(i.id) && i.originalStoragePath).length} to original
+            </button>
+          </div>
+        )}
+
+        {/* ── Clear originals cache ── */}
+        {groupedItems.some(i => i.originalStoragePath) && (
+          <div style={{ padding: '0 0.5rem', marginTop: '0.4rem' }}>
+            <button
+              className="rotate-btn"
+              title="Free up storage by permanently deleting cached original images. Revert will no longer be possible."
+              onClick={() => clearOriginalsCache(selectedItems.size > 0 && groupedItems.some(i => selectedItems.has(i.id) && i.originalStoragePath) ? 'selected' : 'all')}
+              style={{
+                width: '100%', fontSize: '0.68rem',
+                padding: '0.25rem 0.6rem', height: 'auto',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem',
+                background: 'transparent', color: '#f87171', border: '1px solid #7f1d1d', borderRadius: 6,
+                cursor: 'pointer',
+              }}
+            >
+              🗑 Clear {
+                selectedItems.size > 0 && groupedItems.some(i => selectedItems.has(i.id) && i.originalStoragePath)
+                  ? `${groupedItems.filter(i => selectedItems.has(i.id) && i.originalStoragePath).length} selected`
+                  : `${groupedItems.filter(i => i.originalStoragePath).length} all`
+              } originals cache
             </button>
           </div>
         )}
@@ -2256,6 +2433,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                             style={{ fontSize: '0.6rem', padding: '0 0.25rem' }}
                           >⟳ All</button>
                         </>)}
+                        {/* Revert-to-original — only visible when this image has been cropped */}
+                        {item.originalStoragePath && (
+                          <button
+                            className="rotate-btn"
+                            title="Revert to original (un-cropped) image"
+                            style={{ fontSize: '0.6rem', padding: '0 0.25rem', background: '#b45309', color: '#fff' }}
+                            onClick={(e) => { e.stopPropagation(); revertToOriginal(item.id); }}
+                          >↺ Orig</button>
+                        )}
                       </div>
                     </div>
                   ) : (
@@ -2544,6 +2730,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     <button className="crop-fs-btn crop-fs-done" disabled={!tempCrop} onClick={async () => {
                       if (!cropModal.itemId || !tempCrop) return;
                       await applyAndPersistTransformGrouper(cropModal.itemId, tempCrop);
+                      onGrouped(groupedItemsRef.current);
                       setCropModal({ open: false }); setTempCrop(null); setActivePreset('FREE'); setAspectLock(null);
                       setLightboxSrc(null);
                     }}>Done</button>
