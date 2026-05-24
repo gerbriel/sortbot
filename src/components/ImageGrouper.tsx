@@ -434,7 +434,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
       // ── Update React state via functional updater (race-condition safe) ──────
       console.log('[crop] commitFunctional — item:', itemId, 'newPath:', newPath, 'originalCached:', originalPathToCache);
-      commitFunctional(prev => prev.map(i =>
+      const cropMapper = (i: ClothingItem): ClothingItem =>
         i.id === itemId
           ? {
               ...i,
@@ -448,8 +448,12 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               originalStoragePath: originalPathToCache ?? i.originalStoragePath,
               originalUrl: (originalUrlToCache || i.originalUrl) as string | undefined,
             }
-          : i
-      ));
+          : i;
+      commitFunctional(prev => prev.map(cropMapper));
+      // Notify parent (autoSave) with the computed new items.
+      // We CANNOT use groupedItemsRef.current here — it reflects the pre-crop
+      // state until React processes the setGroupedItems call above.
+      onGrouped(groupedItemsRef.current.map(cropMapper));
 
       console.log('[crop] done ✅ item:', itemId, 'newUrl:', newUrl);
     } catch (err) { console.error('[crop] unexpected error:', err); }
@@ -2144,9 +2148,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                         }
                         // Release wake lock
                         if (wakeLock) { try { await wakeLock.release(); console.log('[crop-batch] Screen Wake Lock released'); } catch { /* ignore */ } }
-
-                        // Notify App.tsx of final merged state once all updates settle.
-                        onGrouped(groupedItemsRef.current);
+                        // onGrouped is called per-item inside applyAndPersistTransformGrouper.
+                        // No extra call needed here — the last one to complete carries the save.
                         setCropPasteProgress({ done: total, total, status: 'done' });
                         setTimeout(() => setCropPasteProgress(null), 3500);
                       } else {
@@ -2730,7 +2733,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     <button className="crop-fs-btn crop-fs-done" disabled={!tempCrop} onClick={async () => {
                       if (!cropModal.itemId || !tempCrop) return;
                       await applyAndPersistTransformGrouper(cropModal.itemId, tempCrop);
-                      onGrouped(groupedItemsRef.current);
+                      // onGrouped is now called inside applyAndPersistTransformGrouper
+                      // with the correct post-crop items — no need to call it here.
                       setCropModal({ open: false }); setTempCrop(null); setActivePreset('FREE'); setAspectLock(null);
                       setLightboxSrc(null);
                     }}>Done</button>
