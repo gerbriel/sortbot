@@ -403,6 +403,18 @@ function App() {
       pendingChunkRef.current = [];
       chunkTimerRef.current = null;
       setUploadedImages(prev => [...prev, ...batch]);
+      // If a batch is already open (add-more scenario), stream each chunk into
+      // groupedImages/sortedImages/processedItems immediately so the user can
+      // start grouping the new images as they arrive — same as the first upload.
+      if (currentBatchIdRef.current && groupedImagesRef.current.length > 0) {
+        const existingGroupedIds = new Set(groupedImagesRef.current.map(i => i.id));
+        const freshItems = batch.filter(i => !existingGroupedIds.has(i.id));
+        if (freshItems.length > 0) {
+          setGroupedImages(prev => [...prev, ...freshItems]);
+          setSortedImages(prev => [...prev, ...freshItems]);
+          setProcessedItems(prev => [...prev, ...freshItems]);
+        }
+      }
     }, 150);
   }, []);
 
@@ -1022,15 +1034,23 @@ function App() {
     let newSorted   = liveSorted;
     let newProcessed = liveProcessed;
     if (liveGrouped.length > 0) {
-      newGrouped   = [...liveGrouped,   ...brandNew];
-      setGroupedImages(newGrouped);
-      // Also append new items to sortedImages / processedItems so the persisted list
-      // is complete and the new photos survive a page reload even before the user
-      // explicitly assigns them to a group in Step 2.
-      newSorted    = [...liveSorted,    ...brandNew];
-      newProcessed = [...liveProcessed, ...brandNew];
-      setSortedImages(newSorted);
-      setProcessedItems(newProcessed);
+      // handleChunkReady already appended each chunk to groupedImages progressively.
+      // Dedup against liveGrouped so we don't double-add items that arrived via chunks.
+      const alreadyGroupedIds = new Set(liveGrouped.map(i => i.id));
+      const groupedBrandNew = brandNew.filter(i => !alreadyGroupedIds.has(i.id));
+      if (groupedBrandNew.length > 0) {
+        newGrouped   = [...liveGrouped,   ...groupedBrandNew];
+        setGroupedImages(newGrouped);
+        newSorted    = [...liveSorted,    ...groupedBrandNew];
+        newProcessed = [...liveProcessed, ...groupedBrandNew];
+        setSortedImages(newSorted);
+        setProcessedItems(newProcessed);
+      } else {
+        // All items already streamed in — just sync the computed refs for autoSave
+        newGrouped   = liveGrouped;
+        newSorted    = liveSorted;
+        newProcessed = liveProcessed;
+      }
     }
     
     // Auto-save workflow state (Step 1 complete)
