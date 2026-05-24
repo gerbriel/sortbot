@@ -2274,17 +2274,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
               <Copy size={16} />
               <span>Duplicate</span>
             </button>
-{currentBatchId === batch.id ? (
-              <button
-                className="action-button"
-                style={{ background: '#16a34a', color: '#fff', borderColor: '#16a34a' }}
-                onClick={(e) => { e.stopPropagation(); onOpenBatch(batch); }}
-                title="This batch is active — close library and drop more images in Step 1 to add to it"
-              >
-                <ArrowRight size={16} />
-                <span>Add More Images</span>
-              </button>
-            ) : (
               <button 
                 className="action-button primary"
                 onClick={(e) => {
@@ -2296,7 +2285,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
                 <ArrowRight size={16} />
                 <span>Open</span>
               </button>
-            )}
             <button 
               className="action-button danger"
               onClick={(e) => {
