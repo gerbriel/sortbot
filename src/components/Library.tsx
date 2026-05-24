@@ -10,7 +10,7 @@ import {
   fetchSavedImages 
 } from '../lib/libraryService';
 import { supabase } from '../lib/supabase';
-import { Folder, Calendar, Image, Layers, Tag, ArrowRight, Trash2, X, Grid3x3, Package, Edit2, Copy, Check, Search, Plus, Merge, ChevronDown, ChevronRight } from 'lucide-react';
+import { Folder, Calendar, Image, Layers, Tag, ArrowRight, Trash2, X, Grid3x3, Package, Edit2, Copy, Check, Search, Plus, Merge, ChevronDown, ChevronRight, Wrench } from 'lucide-react';
 import type { ClothingItem } from '../App';
 import { log } from '../lib/debugLogger';
 import './Library.css';
@@ -106,6 +106,9 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   
   // Deletion progress state
   const [deletingItem, setDeletingItem] = useState<{id: string, type: 'batch' | 'group' | 'image', progress: number} | null>(null);
+
+  // Batch repair state
+  const [repairingBatch, setRepairingBatch] = useState<string | null>(null);
   
   const [editingBatch, setEditingBatch] = useState<string | null>(null);
   const [editBatchName, setEditBatchName] = useState<string>('');
@@ -771,6 +774,105 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       await loadProductGroups();
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  /**
+   * Returns true if a batch has workflow_state items with no storagePath — these are
+   * old-format items whose imageUrls were ephemeral blob URLs. The images may still
+   * exist in storage under userId/itemId/ and can be recovered.
+   */
+  const needsRepair = (batch: WorkflowBatch): boolean => {
+    const arrays = [
+      batch.workflow_state?.uploadedImages,
+      batch.workflow_state?.groupedImages,
+      batch.workflow_state?.sortedImages,
+      batch.workflow_state?.processedItems,
+    ];
+    for (const arr of arrays) {
+      if (!arr || arr.length === 0) continue;
+      // If ANY item lacks a storagePath, the batch needs repair
+      if (arr.some(i => !i.storagePath)) return true;
+    }
+    return false;
+  };
+
+  /**
+   * Repair an old-format batch by scanning Supabase Storage under userId/itemId/
+   * for each item that lacks a storagePath, then patching workflow_state back to DB.
+   */
+  const handleRepairBatch = async (batchId: string) => {
+    setRepairingBatch(batchId);
+    try {
+      const batch = batches.find(b => b.id === batchId);
+      if (!batch) return;
+
+      // Collect all items across all workflow_state arrays, deduplicated by id
+      const allItems: (ClothingItem | SlimItem)[] = [
+        ...(batch.workflow_state?.processedItems || []),
+        ...(batch.workflow_state?.sortedImages   || []),
+        ...(batch.workflow_state?.groupedImages  || []),
+        ...(batch.workflow_state?.uploadedImages || []),
+      ];
+      const seen = new Set<string>();
+      const dedupedItems = allItems.filter(i => { if (seen.has(i.id)) return false; seen.add(i.id); return true; });
+
+      if (dedupedItems.length === 0) {
+        alert('No items found in workflow state for this batch.');
+        return;
+      }
+
+      let recovered = 0;
+      let notFound = 0;
+
+      // For each item missing a storagePath, scan storage under userId/itemId/
+      const patchedItems: (ClothingItem | SlimItem)[] = await Promise.all(
+        dedupedItems.map(async (item) => {
+          if (item.storagePath) return item; // already has a path — keep as-is
+          const prefix = `${userId}/${item.id}`;
+          const { data: files } = await supabase.storage
+            .from('product-images')
+            .list(prefix, { limit: 10 });
+          if (files && files.length > 0) {
+            // Pick the first real file (skip .emptyFolderPlaceholder)
+            const file = files.find(f => f.name !== '.emptyFolderPlaceholder' && !f.name.endsWith('/'));
+            if (file) {
+              recovered++;
+              return { ...item, storagePath: `${prefix}/${file.name}` };
+            }
+          }
+          notFound++;
+          return item;
+        })
+      );
+
+      // Rebuild each workflow_state array with patched items (matched by id)
+      const patchMap = new Map(patchedItems.map(i => [i.id, i]));
+      const patchArray = <T extends ClothingItem | SlimItem>(arr: T[] | undefined): T[] | undefined =>
+        arr?.map(i => (patchMap.get(i.id) as T) ?? i);
+
+      const patchedState: WorkflowBatch['workflow_state'] = {
+        ...batch.workflow_state,
+        uploadedImages: patchArray(batch.workflow_state?.uploadedImages as ClothingItem[] | undefined),
+        groupedImages:  patchArray(batch.workflow_state?.groupedImages  as ClothingItem[] | undefined),
+        sortedImages:   patchArray(batch.workflow_state?.sortedImages   as ClothingItem[] | undefined),
+        processedItems: patchArray(batch.workflow_state?.processedItems as ClothingItem[] | undefined),
+      };
+
+      const { error } = await supabase
+        .from('workflow_batches')
+        .update({ workflow_state: patchedState })
+        .eq('id', batchId);
+
+      if (error) throw error;
+
+      await loadAll();
+      alert(`Repair complete: ${recovered} image${recovered !== 1 ? 's' : ''} recovered from storage.${notFound > 0 ? ` ${notFound} could not be found (may have been deleted).` : ''}`);
+    } catch (err) {
+      console.error('[handleRepairBatch]', err);
+      alert('Repair failed: ' + (err as Error).message);
+    } finally {
+      setRepairingBatch(null);
     }
   };
 
@@ -2309,6 +2411,20 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
           {/* Hover Actions */}
           <div className="batch-actions">
+            {needsRepair(batch) && (
+              <button
+                className="action-button secondary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRepairBatch(batch.id);
+                }}
+                title="Scan storage to recover missing image paths"
+                disabled={repairingBatch === batch.id}
+              >
+                <Wrench size={16} />
+                <span>{repairingBatch === batch.id ? 'Repairing…' : 'Repair'}</span>
+              </button>
+            )}
             <button 
               className="action-button secondary"
               onClick={(e) => {
