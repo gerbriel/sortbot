@@ -474,7 +474,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         await supabase.from('product_images').delete().eq('storage_path', item.storagePath);
       }
       // Restore state to original
-      commitFunctional(prev => prev.map(i =>
+      const revertMapper = (i: ClothingItem): ClothingItem =>
         i.id === itemId
           ? {
               ...i,
@@ -487,9 +487,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               originalStoragePath: undefined,
               originalUrl: undefined,
             }
-          : i
-      ));
-      onGrouped(groupedItemsRef.current);
+          : i;
+      commitFunctional(prev => prev.map(revertMapper));
+      // Pass computed new items — groupedItemsRef.current is still pre-revert here
+      onGrouped(groupedItemsRef.current.map(revertMapper));
       console.log('[revert] done for item:', itemId);
     } catch (err) { console.error('[revert] error:', err); }
   };
@@ -505,7 +506,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     for (const id of toDo) {
       await revertToOriginal(id);
     }
-    onGrouped(groupedItemsRef.current);
+    // Each revertToOriginal call already passed the correct updated state via onGrouped.
+    // Schedule one final call after React flushes all the setGroupedItems updates
+    // so App.tsx auto-save captures the fully merged post-revert state.
+    setTimeout(() => onGrouped(groupedItemsRef.current), 0);
   };
 
   // ── Clear the originals cache ────────────────────────────────────────────────
@@ -528,12 +532,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       } catch (err) { console.warn('[clearCache] error deleting original for', item.id, err); }
     }
     // Clear cache fields from state (skip undo — this is a storage-level operation)
-    commitFunctional(prev => prev.map(i =>
+    const clearCacheMapper = (i: ClothingItem): ClothingItem =>
       toProcess.find(t => t.id === i.id)
         ? { ...i, originalStoragePath: undefined, originalUrl: undefined }
-        : i
-    ));
-    onGrouped(groupedItemsRef.current);
+        : i;
+    commitFunctional(prev => prev.map(clearCacheMapper));
+    // Pass computed new items — groupedItemsRef.current is still pre-clear here
+    onGrouped(groupedItemsRef.current.map(clearCacheMapper));
     alert(`Cleared ${toProcess.length} original${toProcess.length > 1 ? 's' : ''} from cache.`);
   };
 
@@ -916,6 +921,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               imageUrls:    (pathChanged || uploadJustFinished) ? (updated.imageUrls ?? []) : (existing.imageUrls?.length ? existing.imageUrls : (updated.imageUrls ?? [])),
               preview:      (pathChanged || uploadJustFinished) ? updated.preview      : (existing.preview      || updated.preview),
               thumbnailUrl: (pathChanged || uploadJustFinished) ? updated.thumbnailUrl : (existing.thumbnailUrl || updated.thumbnailUrl),
+              // Always preserve crop-related fields from existing — these live in ImageGrouper
+              // state and App.tsx may not have received them yet via onGrouped when this
+              // effect re-runs (e.g. items prop update races with a just-applied crop).
+              // Only fall back to updated if existing has nothing set.
+              crop:                 existing.crop                 ?? updated.crop,
+              originalStoragePath: existing.originalStoragePath  ?? updated.originalStoragePath,
+              originalUrl:         existing.originalUrl           ?? updated.originalUrl,
             };
           })
         );
@@ -946,11 +958,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           if (deduped.length === 0) return prev;
           return [...prev, ...deduped];
         });
-        // Do NOT call onGrouped here — items arriving via fast path either came from
-        // onChunkReady (already in App.tsx's uploadedImages) or from a batch open
-        // (already in App.tsx's groupedImages).  Calling onGrouped(groupedItemsRef.current)
-        // synchronously would pass a stale ref (React hasn't flushed the setState above yet)
-        // and blank out App.tsx state with an empty list.
+        // During a live upload, App.tsx's handleImagesGrouped guards against mid-upload calls.
+        // For batch-open restores, the deferred call lets React flush the setGroupedItems above
+        // so groupedItemsRef.current reflects the new items when onGrouped fires.
+        setTimeout(() => onGrouped(groupedItemsRef.current), 0);
         return;
       }
       // ── END FAST PATH ──────────────────────────────────────────────────────
@@ -2148,8 +2159,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                         }
                         // Release wake lock
                         if (wakeLock) { try { await wakeLock.release(); console.log('[crop-batch] Screen Wake Lock released'); } catch { /* ignore */ } }
-                        // onGrouped is called per-item inside applyAndPersistTransformGrouper.
-                        // No extra call needed here — the last one to complete carries the save.
+                        // onGrouped is called per-item inside applyAndPersistTransformGrouper,
+                        // but React may batch setGroupedItems updates so groupedItemsRef.current
+                        // may not reflect all changes until after the next flush. Schedule a
+                        // final deferred call to ensure App.tsx auto-saves the fully merged state.
+                        setTimeout(() => onGrouped(groupedItemsRef.current), 0);
                         setCropPasteProgress({ done: total, total, status: 'done' });
                         setTimeout(() => setCropPasteProgress(null), 3500);
                       } else {
