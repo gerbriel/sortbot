@@ -1011,20 +1011,24 @@ function App() {
     }
     
     // If there are already grouped images, append to those too.
-    // Build the updated array explicitly so we can pass it to autoSaveWorkflow
-    // (setGroupedImages is async — using the stale `groupedImages` closure in the
-    // autoSaveWorkflow call below would leave the new items out of the saved state).
-    let newGrouped = groupedImages;
-    let newSorted = sortedImages;
-    let newProcessed = processedItems;
-    if (groupedImages.length > 0) {
-      newGrouped = [...groupedImages, ...items];
+    // Build the updated array explicitly so we can pass it to autoSaveWorkflow.
+    // IMPORTANT: read from refs, not closure values — if the batch was just opened
+    // from the Library, React may not have committed the new state yet before the
+    // upload callback fires, and the closure would still see empty arrays.
+    const liveGrouped   = groupedImagesRef.current;
+    const liveSorted    = sortedImagesRef.current;
+    const liveProcessed = processedItemsRef.current;
+    let newGrouped  = liveGrouped;
+    let newSorted   = liveSorted;
+    let newProcessed = liveProcessed;
+    if (liveGrouped.length > 0) {
+      newGrouped   = [...liveGrouped,   ...brandNew];
       setGroupedImages(newGrouped);
       // Also append new items to sortedImages / processedItems so the persisted list
       // is complete and the new photos survive a page reload even before the user
       // explicitly assigns them to a group in Step 2.
-      newSorted    = [...sortedImages,    ...items];
-      newProcessed = [...processedItems,  ...items];
+      newSorted    = [...liveSorted,    ...brandNew];
+      newProcessed = [...liveProcessed, ...brandNew];
       setSortedImages(newSorted);
       setProcessedItems(newProcessed);
     }
@@ -2039,7 +2043,7 @@ function App() {
     const batchDisplayName = batch.batch_name || defaultName;
     setSaveMessage({
       type: 'success',
-      text: `✅ Opened "${batchDisplayName}" - Continue from Step ${batch.current_step}`,
+      text: `✅ Opened "${batchDisplayName}" — drop more images in Step 1 to add to this batch`,
     });
     
     // Clear message after 5 seconds
@@ -2163,9 +2167,15 @@ function App() {
           <div className="step1-header">
             <div>
               <h2>Step 1: Upload Images</h2>
-              <p className="step-description" style={{ fontSize: '14px', color: '#666', margin: 0 }}>
-                💡 <strong>Tip:</strong> You can upload multiple batches! New images will be added to your current session.
-              </p>
+              {uploadedImages.length > 0 && currentBatchId ? (
+                <p className="step-description" style={{ fontSize: '14px', color: '#4ade80', margin: 0 }}>
+                  ➕ <strong>Batch active</strong> — drop more images here to add them to this batch ({uploadedImages.length} image{uploadedImages.length !== 1 ? 's' : ''} already loaded)
+                </p>
+              ) : (
+                <p className="step-description" style={{ fontSize: '14px', color: '#666', margin: 0 }}>
+                  💡 <strong>Tip:</strong> You can upload multiple batches! New images will be added to your current session.
+                </p>
+              )}
             </div>
             <div className="step1-header-actions">
               <button
@@ -2451,6 +2461,7 @@ function App() {
           onClose={() => setShowLibrary(false)}
           onOpenBatch={handleOpenBatch}
           refreshTrigger={libraryRefreshTrigger}
+          currentBatchId={currentBatchId}
         />
       )}
 
