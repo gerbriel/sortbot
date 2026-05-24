@@ -156,12 +156,29 @@ export async function deleteWorkflowBatch(batchId: string): Promise<boolean> {
         (await supabase.from('products').select('id').eq('batch_id', batchId)).data?.map((r: any) => r.id) ?? []
       );
 
-    // 2. Delete files from Storage
+    // 1b. Also collect originalStoragePath values cached in the workflow_state JSON
+    // (these are NOT stored as product_images rows — they're backup copies of pre-crop
+    // originals and would be orphaned in Storage if we only delete product_images paths).
+    const { data: batchRow } = await supabase
+      .from('workflow_batches')
+      .select('workflow_state')
+      .eq('id', batchId)
+      .maybeSingle();
+    const workflowItems: any[] = [
+      ...(batchRow?.workflow_state?.uploadedImages ?? []),
+      ...(batchRow?.workflow_state?.groupedImages ?? []),
+    ];
+    const originalPaths = workflowItems
+      .map((i: any) => i.originalStoragePath)
+      .filter(Boolean) as string[];
+
+    // 2. Delete files from Storage (live images + cached originals)
     const storagePaths = (imageRows ?? [])
       .map((r: any) => r.storage_path)
       .filter(Boolean) as string[];
-    if (storagePaths.length > 0) {
-      await supabase.storage.from('product-images').remove(storagePaths);
+    const allPaths = [...new Set([...storagePaths, ...originalPaths])];
+    if (allPaths.length > 0) {
+      await supabase.storage.from('product-images').remove(allPaths);
     }
 
     // 3. Delete product_images rows
