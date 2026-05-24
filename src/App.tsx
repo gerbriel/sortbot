@@ -170,8 +170,9 @@ export interface ClothingItem {
 }
 
 /**
- * Error boundary wrapping the Step 2 image grouper. If an uncaught render error
- * occurs (e.g. during grouping) it shows a recovery UI instead of a blank page.
+ * Error boundary wrapping the Step 2 image grouper.
+ * Catches render errors silently — logs to console and immediately resets
+ * so the grouper re-mounts without any visible error screen.
  */
 interface GrouperBoundaryState { error: Error | null }
 class GrouperErrorBoundary extends Component<{ children: ReactNode }, GrouperBoundaryState> {
@@ -181,25 +182,14 @@ class GrouperErrorBoundary extends Component<{ children: ReactNode }, GrouperBou
   }
   static getDerivedStateFromError(error: Error) { return { error }; }
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error('[GrouperErrorBoundary] caught render error:', error, info);
+    console.error('[GrouperErrorBoundary] caught render error — auto-recovering:', error, info);
+    // Reset immediately so the grouper re-renders without an error screen
+    setTimeout(() => this.setState({ error: null }), 0);
   }
   render() {
-    if (this.state.error) {
-      return (
-        <div style={{ padding: '2rem', textAlign: 'center', color: '#f87171' }}>
-          <h3>Something went wrong in the image grouper.</h3>
-          <pre style={{ fontSize: '0.75rem', opacity: 0.7, maxWidth: 600, margin: '1rem auto', textAlign: 'left', whiteSpace: 'pre-wrap' }}>
-            {this.state.error.message}
-          </pre>
-          <button
-            style={{ marginTop: '1rem', padding: '0.5rem 1.5rem', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
-            onClick={() => this.setState({ error: null })}
-          >
-            Try to recover
-          </button>
-        </div>
-      );
-    }
+    // While the reset setTimeout hasn't fired yet, render nothing rather than
+    // showing an error screen — the grouper will reappear on the next tick.
+    if (this.state.error) return null;
     return this.props.children;
   }
 }
