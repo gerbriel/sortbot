@@ -1515,9 +1515,18 @@ function App() {
   const handleOpenBatch = async (batch: WorkflowBatch) => {
     // Guard against double-fire (React Strict Mode, or rapid double-click)
     if (isOpeningBatchRef.current) {
-      log.app(`handleOpenBatch SKIPPED — already in progress | batchId=${batch.id}`);
+      console.log(`[OPEN] SKIPPED — already in progress | batchId=${batch.id}`);
       return;
     }
+    console.log(`[OPEN] ▶ START batchId=${batch.id} name="${batch.batch_name}" step=${batch.current_step}`);
+    console.log('[OPEN] workflow_state keys:', batch.workflow_state ? Object.keys(batch.workflow_state) : 'NULL');
+    const wsLengths = batch.workflow_state ? {
+      processedItems: batch.workflow_state.processedItems?.length ?? 0,
+      sortedImages:   batch.workflow_state.sortedImages?.length ?? 0,
+      groupedImages:  batch.workflow_state.groupedImages?.length ?? 0,
+      uploadedImages: batch.workflow_state.uploadedImages?.length ?? 0,
+    } : 'none';
+    console.log('[OPEN] workflow_state array lengths:', wsLengths);
     log.app(`handleOpenBatch | batchId=${batch.id} batchName="${batch.batch_name}" step=${batch.current_step}`);
     isOpeningBatchRef.current = true;
     try {
@@ -1538,6 +1547,7 @@ function App() {
     localStorage.setItem('sortbot_current_batch_id', batch.id);
     localStorage.setItem('sortbot_current_batch_number', batch.batch_number);
     // ── Now clear in-flight image state ─────────────────────────────────────────
+    console.log('[OPEN] Clearing current state and setting batchId=', batch.id);
     setUploadedImages([]);
     setGroupedImages([]);
     setSortedImages([]);
@@ -1555,6 +1565,7 @@ function App() {
       groupedImages?.length   ? groupedImages    :
       uploadedImages?.length  ? uploadedImages   : []
     ) as ClothingItem[];
+    console.log(`[OPEN] rawWorkflowItems=${rawWorkflowItems.length} (source: ${processedItems?.length ? 'processedItems' : sortedImages?.length ? 'sortedImages' : groupedImages?.length ? 'groupedImages' : uploadedImages?.length ? 'uploadedImages' : 'NONE'})`);
 
     // Re-hydrate preview — stripped before saving to reduce payload size.
     // imageUrls may also be empty for older items; reconstruct from storagePath
@@ -1579,13 +1590,21 @@ function App() {
       };
     });
     
+    console.log(`[OPEN] workflowItems after hydration=${workflowItems.length}`);
+    const withPreview = workflowItems.filter(i => i.preview || i.imageUrls?.length || i.thumbnailUrl);
+    console.log(`[OPEN] items with image URL: ${withPreview.length}/${workflowItems.length}`);
+    if (workflowItems[0]) console.log('[OPEN] first item sample:', { id: workflowItems[0].id, preview: workflowItems[0].preview?.slice(0,80), storagePath: workflowItems[0].storagePath, imageUrls: workflowItems[0].imageUrls?.length });
+
     // Set state immediately from workflow_state so images render right away.
     // DB product descriptions will merge in after the fetch below.
     if (workflowItems.length > 0) {
+      console.log('[OPEN] ✓ Setting initial state from workflow_state');
       setUploadedImages(workflowItems);
       setGroupedImages(workflowItems);
       setSortedImages(workflowItems);
       setProcessedItems(workflowItems);
+    } else {
+      console.log('[OPEN] ⚠ workflow_state was empty — will try DB reconstruction below');
     }
 
     // Fetch saved products from database to restore descriptions
@@ -1653,11 +1672,13 @@ function App() {
         )
       `;
 
-      const { data: savedProducts } = await supabase
+      console.log('[OPEN] Fetching products from DB for batch', batch.id);
+      const { data: savedProducts, error: prodErr } = await supabase
         .from('products')
         .select(slimProductSelect)
         .eq('batch_id', batch.id)
         .order('created_at', { ascending: true });
+      console.log(`[OPEN] DB products fetch: count=${savedProducts?.length ?? 0} error=${prodErr?.message ?? 'none'}`);
       
       // If no products found with this batch_id, try to find orphaned products
       // (products saved around the same time with image URLs matching this batch)
@@ -1688,6 +1709,7 @@ function App() {
         }
       }
       
+      console.log(`[OPEN] potentialOrphans=${potentialOrphans.length} productsToUse=${savedProducts?.length ? savedProducts.length + ' (from DB)' : potentialOrphans.length + ' (orphans)'}`);
       const productsToUse = savedProducts && savedProducts.length > 0 ? savedProducts : potentialOrphans;
       
       // Always derive baseItems from the most-progressed single list (workflowItems),
@@ -1696,7 +1718,9 @@ function App() {
       // When there is NO workflow_state at all, reconstruct ClothingItems from DB products.
       let baseItems: ClothingItem[] = workflowItems;
 
+      console.log(`[OPEN] baseItems from workflow_state=${baseItems.length}`);
       if (baseItems.length === 0 && productsToUse && productsToUse.length > 0) {
+        console.log(`[OPEN] workflow_state empty — reconstructing ${productsToUse.length} items from DB products`);
         // No workflow_state — build items from the DB products table
         baseItems = productsToUse.map((p: any): ClothingItem => {
           const sortedImgs = (p.product_images || [])
@@ -1986,12 +2010,17 @@ function App() {
       }
       
       // Set all 4 arrays from the single restored list so every step stays in sync.
+      console.log(`[OPEN] ✓ Final state set: restoredProcessedItems=${restoredProcessedItems.length}`);
+      const finalWithImg = restoredProcessedItems.filter(i => i.preview || i.imageUrls?.length || i.thumbnailUrl);
+      console.log(`[OPEN] final items with images: ${finalWithImg.length}/${restoredProcessedItems.length}`);
+      if (restoredProcessedItems[0]) console.log('[OPEN] first final item:', { id: restoredProcessedItems[0].id, preview: restoredProcessedItems[0].preview?.slice(0,80), category: restoredProcessedItems[0].category });
       setUploadedImages(restoredProcessedItems);
       setGroupedImages(restoredProcessedItems);
       setSortedImages(restoredProcessedItems);
       setProcessedItems(restoredProcessedItems);
     } catch (error) {
-      console.error('Error restoring saved product data:', error);
+      console.error('[OPEN] ❌ CATCH — Error restoring saved product data:', error);
+      console.log('[OPEN] Falling back to workflowItems:', workflowItems.length);
       // Fallback to basic workflow state — restoredProcessedItems stays as workflowItems (hoisted default)
       setUploadedImages(workflowItems);
       setGroupedImages(workflowItems);
@@ -2058,6 +2087,7 @@ function App() {
 
     // Batch identity already set at the top of this function — nothing to do here.
     
+    console.log('[OPEN] ✓ DONE — closing library, isAlreadyActiveBatch=', isAlreadyActiveBatch);
     // Close library and refresh it so new registrations are visible next open
     setShowLibrary(false);
     setLibraryRefreshTrigger(prev => prev + 1);
