@@ -1,6 +1,6 @@
 // Library v3 — user-scoped fetches; product_group deduplication; workflow_batch user_id filter
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { fetchWorkflowBatches, deleteWorkflowBatch, type WorkflowBatch, type SlimItem } from '../lib/workflowBatchService';
+import { fetchWorkflowBatches, deleteWorkflowBatch, removeItemsFromWorkflowBatch, type WorkflowBatch, type SlimItem } from '../lib/workflowBatchService';
 import { 
   deleteProductGroup, 
   deleteImage, 
@@ -822,6 +822,31 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
     const success = await deleteProductGroup(groupId);
     if (success) {
       setProductGroups(productGroups.filter(g => g.id !== groupId));
+      // Purge from workflow_state so items don't resurrect on next loadAll()
+      const batchId = productGroups.find(g => g.id === groupId)?.batchId;
+      if (batchId) {
+        // Collect all item IDs in this group from the batch's workflow_state
+        const batchWs = batches.find(b => b.id === batchId)?.workflow_state;
+        const allItems = [
+          ...(batchWs?.groupedImages   ?? []),
+          ...(batchWs?.sortedImages    ?? []),
+          ...(batchWs?.processedItems  ?? []),
+          ...(batchWs?.uploadedImages  ?? []),
+        ];
+        const groupItemIds = [...new Set(
+          allItems
+            .filter((i: any) => i.id === groupId || i.productGroup === groupId)
+            .map((i: any) => i.id)
+        )];
+        await removeItemsFromWorkflowBatch(batchId, groupItemIds);
+        // Also update local batches state so Library re-reads won't show them
+        setBatches(prev => prev.map(b => {
+          if (b.id !== batchId || !b.workflow_state) return b;
+          const idSet = new Set(groupItemIds);
+          const f = (arr: any[] | undefined) => (arr ?? []).filter((i: any) => !idSet.has(i.id));
+          return { ...b, workflow_state: { ...b.workflow_state, uploadedImages: f(b.workflow_state.uploadedImages), groupedImages: f(b.workflow_state.groupedImages), sortedImages: f(b.workflow_state.sortedImages), processedItems: f(b.workflow_state.processedItems) } };
+        }));
+      }
     }
     
     setDeletingItem(null);
@@ -847,6 +872,16 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
     const success = await deleteImage(imageId, storagePath);
     if (success) {
       setImages(images.filter(img => img.id !== imageId));
+      // Purge from workflow_state so the item doesn't resurrect on next loadAll()
+      const batchId = images.find(img => img.id === imageId)?.batchId;
+      if (batchId) {
+        await removeItemsFromWorkflowBatch(batchId, [imageId]);
+        setBatches(prev => prev.map(b => {
+          if (b.id !== batchId || !b.workflow_state) return b;
+          const f = (arr: any[] | undefined) => (arr ?? []).filter((i: any) => i.id !== imageId);
+          return { ...b, workflow_state: { ...b.workflow_state, uploadedImages: f(b.workflow_state.uploadedImages), groupedImages: f(b.workflow_state.groupedImages), sortedImages: f(b.workflow_state.sortedImages), processedItems: f(b.workflow_state.processedItems) } };
+        }));
+      }
       // Reload all data so batch image counts and product group counts reflect the deletion.
       await loadAll();
     }
@@ -1670,6 +1705,14 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         deletedCount++;
         const progress = (deletedCount / totalItems) * 100;
         setDeletingItem({id: 'bulk', type: itemType, progress});
+        // Purge from workflow_state
+        const batchId = productGroups.find(g => g.id === groupId)?.batchId;
+        if (batchId) {
+          const batchWs = batches.find(b => b.id === batchId)?.workflow_state;
+          const allItems = [...(batchWs?.groupedImages ?? []), ...(batchWs?.sortedImages ?? []), ...(batchWs?.processedItems ?? []), ...(batchWs?.uploadedImages ?? [])];
+          const groupItemIds = [...new Set(allItems.filter((i: any) => i.id === groupId || i.productGroup === groupId).map((i: any) => i.id))];
+          await removeItemsFromWorkflowBatch(batchId, groupItemIds);
+        }
       }
       setProductGroups(productGroups.filter(g => !selectedItems.has(g.id)));
     } else if (viewMode === 'images') {
@@ -1678,6 +1721,9 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         deletedCount++;
         const progress = (deletedCount / totalItems) * 100;
         setDeletingItem({id: 'bulk', type: itemType, progress});
+        // Purge from workflow_state
+        const batchId = images.find(img => img.id === imageId)?.batchId;
+        if (batchId) await removeItemsFromWorkflowBatch(batchId, [imageId]);
       }
       setImages(images.filter(img => !selectedItems.has(img.id)));
     }

@@ -143,6 +143,40 @@ export async function updateWorkflowBatch(
 }
 
 /**
+ * Remove specific item IDs from all workflow_state arrays of a batch.
+ * Call this after deleting individual images or product groups from the Library
+ * so the items don't resurrect on the next loadAll() (which reads from workflow_state).
+ */
+export async function removeItemsFromWorkflowBatch(
+  batchId: string,
+  itemIds: string[]
+): Promise<void> {
+  if (!batchId || itemIds.length === 0) return;
+  try {
+    const { data } = await supabase
+      .from('workflow_batches')
+      .select('workflow_state')
+      .eq('id', batchId)
+      .maybeSingle();
+    if (!data?.workflow_state) return;
+    const ws = data.workflow_state;
+    const idSet = new Set(itemIds);
+    const filter = (arr: any[] | undefined) => (arr ?? []).filter((i: any) => !idSet.has(i.id));
+    await supabase.from('workflow_batches').update({
+      workflow_state: {
+        ...ws,
+        uploadedImages:  filter(ws.uploadedImages),
+        groupedImages:   filter(ws.groupedImages),
+        sortedImages:    filter(ws.sortedImages),
+        processedItems:  filter(ws.processedItems),
+      }
+    }).eq('id', batchId);
+  } catch (err) {
+    console.error('[removeItemsFromWorkflowBatch] error:', err);
+  }
+}
+
+/**
  * Delete a workflow batch
  */
 export async function deleteWorkflowBatch(batchId: string): Promise<boolean> {
