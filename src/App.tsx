@@ -1521,14 +1521,23 @@ function App() {
     log.app(`handleOpenBatch | batchId=${batch.id} batchName="${batch.batch_name}" step=${batch.current_step}`);
     isOpeningBatchRef.current = true;
     try {
-    // ── Clear ALL current state first so nothing from the active session bleeds in ──
-    // IMPORTANT: setCurrentBatchId is called HERE (synchronously with the state clear) so
-    // React 18 batches them into ONE render. ImageGrouper's batchId reset effect fires while
-    // items are [] — if we defer setCurrentBatchId until after the async DB fetch (old position)
-    // the reset fires while items=546, wiping them from ImageGrouper internal state with no
-    // subsequent initializeItems call to restore them (items prop didn't change → no re-run).
+    // ── Set batch identity FIRST (before any state clears or async work) ──────────
+    // 1. currentBatchIdRef drives autoSave — must be set before ImageGrouper's
+    //    onGrouped fires during initializeItems (which happens synchronously below).
+    // 2. setCurrentBatchId changes the `key` on ImageGrouper, unmounting the old
+    //    instance so its stale internal state can't contaminate the new batch.
+    //    (key={currentBatchId} is set on the ImageGrouper JSX element)
+    // 3. Compute isAlreadyActiveBatch against the OLD ref BEFORE we update it.
+    const isAlreadyActiveBatch = batch.id === currentBatchIdRef.current;
+    currentBatchIdRef.current = batch.id;
+    batchRowInsertedRef.current = true;
+    pendingChunkRef.current = [];
+    if (chunkTimerRef.current) { clearTimeout(chunkTimerRef.current); chunkTimerRef.current = null; }
     setCurrentBatchId(batch.id);
     setCurrentBatchNumber(batch.batch_number);
+    localStorage.setItem('sortbot_current_batch_id', batch.id);
+    localStorage.setItem('sortbot_current_batch_number', batch.batch_number);
+    // ── Now clear in-flight image state ─────────────────────────────────────────
     setUploadedImages([]);
     setGroupedImages([]);
     setSortedImages([]);
@@ -1584,8 +1593,7 @@ function App() {
     // Only select the columns that are actually needed for restoration — skip the 20+ rarely-set
     // columns to keep the payload small and the query fast.
     let restoredProcessedItems: ClothingItem[] = workflowItems;
-    // Capture whether this is already the active batch BEFORE we update the ref below.
-    const isAlreadyActiveBatch = batch.id === currentBatchIdRef.current;
+    // isAlreadyActiveBatch was computed and currentBatchIdRef was set at the top of this function.
     try {
       const slimProductSelect = `
         id,
@@ -2048,18 +2056,7 @@ function App() {
       })();
     }
 
-    // Set current batch info and persist for reload survival
-    currentBatchIdRef.current = batch.id;
-    // This batch's DB row already exists — mark as inserted so handleImagesUploaded
-    // doesn't attempt a duplicate insert if the user drops more images onto this batch.
-    batchRowInsertedRef.current = true;
-    // Clear any stale pending-chunk state from a previous upload session
-    pendingChunkRef.current = [];
-    if (chunkTimerRef.current) { clearTimeout(chunkTimerRef.current); chunkTimerRef.current = null; }
-    setCurrentBatchId(batch.id);
-    setCurrentBatchNumber(batch.batch_number);
-    localStorage.setItem('sortbot_current_batch_id', batch.id);
-    localStorage.setItem('sortbot_current_batch_number', batch.batch_number);
+    // Batch identity already set at the top of this function — nothing to do here.
     
     // Close library and refresh it so new registrations are visible next open
     setShowLibrary(false);
@@ -2287,6 +2284,7 @@ function App() {
                 </p>
                 <GrouperErrorBoundary>
                 <ImageGrouper 
+                  key={currentBatchId || 'no-batch'}
                   items={groupedImages.length > 0 ? groupedImages : uploadedImages}
                   onGrouped={handleImagesGrouped}
                   onStatsChange={() => {}} // stats now computed directly from processedItems
