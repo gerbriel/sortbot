@@ -960,12 +960,14 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           const deduped = incoming.filter(i => !existingIdSet.has(i.id));
           console.log(`[GROUPER] setGroupedItems: prev=${prev.length} deduped=${deduped.length}`);
           if (deduped.length === 0) return prev;
-          return [...prev, ...deduped];
+          const next = [...prev, ...deduped];
+          // Update the ref synchronously inside the updater so the deferred onGrouped
+          // call below reads the correct list. Without this, groupedItemsRef.current is
+          // still the pre-update value (React hasn't re-rendered yet) when setTimeout fires.
+          groupedItemsRef.current = next;
+          return next;
         });
-        // During a live upload, App.tsx's handleImagesGrouped guards against mid-upload calls.
-        // For batch-open restores, the deferred call lets React flush the setGroupedItems above
-        // so groupedItemsRef.current reflects the new items when onGrouped fires.
-        setTimeout(() => { console.log('[GROUPER] onGrouped deferred call, items=', groupedItemsRef.current.length); onGrouped(groupedItemsRef.current); }, 0);
+        setTimeout(() => { console.log('[GROUPER] deferred onGrouped, groupedItemsRef.current.length=', groupedItemsRef.current.length); onGrouped(groupedItemsRef.current); }, 0);
         return;
       }
       // ── END FAST PATH ──────────────────────────────────────────────────────
