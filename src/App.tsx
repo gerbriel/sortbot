@@ -1522,6 +1522,13 @@ function App() {
     isOpeningBatchRef.current = true;
     try {
     // ── Clear ALL current state first so nothing from the active session bleeds in ──
+    // IMPORTANT: setCurrentBatchId is called HERE (synchronously with the state clear) so
+    // React 18 batches them into ONE render. ImageGrouper's batchId reset effect fires while
+    // items are [] — if we defer setCurrentBatchId until after the async DB fetch (old position)
+    // the reset fires while items=546, wiping them from ImageGrouper internal state with no
+    // subsequent initializeItems call to restore them (items prop didn't change → no re-run).
+    setCurrentBatchId(batch.id);
+    setCurrentBatchNumber(batch.batch_number);
     setUploadedImages([]);
     setGroupedImages([]);
     setSortedImages([]);
