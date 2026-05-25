@@ -1300,10 +1300,14 @@ function App() {
       if (existing) {
         return {
           ...existing,
-          productGroup:  sortedItem.productGroup || existing.productGroup,
-          category:      sortedItem.category     || existing.category,
-          imageRotation: sortedItem.imageRotation ?? existing.imageRotation,
-          crop:          sortedItem.crop          ?? existing.crop,
+          productGroup:        sortedItem.productGroup        || existing.productGroup,
+          category:            sortedItem.category            || existing.category,
+          imageRotation:       sortedItem.imageRotation       ?? existing.imageRotation,
+          crop:                sortedItem.crop                ?? existing.crop,
+          // Carry originalStoragePath/originalUrl forward from sortedItem (ImageGrouper ref)
+          // so that crop-paste "revert to original" survives the onGrouped merge into processedItems.
+          originalStoragePath: sortedItem.originalStoragePath || existing.originalStoragePath,
+          originalUrl:         sortedItem.originalUrl         || existing.originalUrl,
           ...imageFields,
         };
       }
