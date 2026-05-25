@@ -231,8 +231,7 @@
   transition: all 0.3s ease;
   position: relative;
   flex: 0 0 auto !important;
-  /* 4 images × 70px + 3 gaps × 4px + 2×0.4rem padding ≈ 304px */
-  width: 304px !important;
+  width: 100%;
   min-width: 0 !important;
   contain: layout style;
 }
@@ -274,8 +273,7 @@
 
 .group-images {
   display: grid !important;
-  grid-template-columns: repeat(4, 70px) !important;
-  grid-auto-rows: 70px !important;
+  grid-template-columns: repeat(4, 1fr) !important;
   gap: 4px !important;
   padding: 0 !important;
   background: transparent !important;
@@ -284,11 +282,11 @@
 
 .group-image-item {
   position: relative;
-  width: 70px !important;
-  height: 70px !important;
+  width: 100%;
+  aspect-ratio: 1;
   cursor: pointer;
   border-radius: 4px;
-  overflow: hidden;
+  overflow: visible;
   border: 2px solid transparent;
   transition: all 0.2s ease;
 }
@@ -307,6 +305,18 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 4px;
+  overflow: hidden;
+  display: block;
+}
+
+/* Orig revert button — shown on hover only inside group thumbnails */
+.group-image-item .rotate-btn {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.group-image-item:hover .rotate-btn {
+  opacity: 1;
 }
 
 .selection-indicator {
@@ -355,6 +365,8 @@
      before layout is computed. Height: 110px img + ~28px footer strip. */
   aspect-ratio: 110 / 138;
   contain: layout style;
+  display: flex;
+  flex-direction: column;
 }
 
 .single-item-card:hover {
@@ -372,12 +384,12 @@
 
 .single-item-card img {
   width: 100%;
-  height: 110px;
+  height: 100%;
   object-fit: cover;
 }
 
-.image-with-controls { position: relative; }
-.image-with-controls img { display: block; width: 100%; height: 110px; object-fit: cover; transition: transform 0.15s ease; }
+.image-with-controls { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.image-with-controls img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform 0.15s ease; }
 .image-controls { position: absolute; right: 6px; bottom: 6px; display: flex; gap: 6px; }
 .rotate-btn { background: rgba(0,0,0,0.5); color: #fff; border: none; padding: 4px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; }
 .rotate-btn:hover { background: rgba(0,0,0,0.7); }
@@ -703,8 +715,12 @@
 }
 
 .group-image-item img {
-  border-radius: 6px;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
   overflow: hidden;
+  display: block;
 }
 
 .group-image-item:active {
