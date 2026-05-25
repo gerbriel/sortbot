@@ -2184,13 +2184,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     onClick={async (e) => {
                       e.stopPropagation();
                       const targetIds = [...selectedItems];
-                      const what = copiedRotation !== null && copiedCrop !== undefined
-                        ? 'rotation + crop'
-                        : copiedRotation !== null ? 'rotation' : 'crop';
-                      const confirmed = window.confirm(
-                        `Apply copied ${what} to ${targetIds.length} selected image${targetIds.length > 1 ? 's' : ''}?`
-                      );
-                      if (!confirmed) return;
                       setSelectedItems(new Set());
                       if (copiedCrop !== undefined && copiedCrop !== null) {
                         await runCropBatchPaste(targetIds, copiedCrop, copiedRotation);
@@ -2624,19 +2617,40 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   {items.every(i => selectedItems.has(i.id)) && (
                     <div className="group-selected-indicator"><Check size={14} /></div>
                   )}
+                  {/* Copy crop from first cropped image in this group */}
+                  <button
+                    className="delete-image-btn"
+                    title={items.some(i => i.crop) ? 'Copy crop from this group' : 'No crop set on any image in this group'}
+                    style={{
+                      marginLeft: 4, borderRadius: 6, border: 'none',
+                      padding: '0.15rem 0.42rem', fontSize: '0.68rem', cursor: 'pointer', fontWeight: 600,
+                      background: copiedCrop !== undefined && items.some(i => i.id === ([...selectedItems][0]) && i.crop)
+                        ? '#6366f1' : 'rgba(99,102,241,0.18)',
+                      color: '#c4b5fd',
+                      opacity: items.some(i => i.crop) ? 1 : 0.4,
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const source = items.find(i => i.crop) ?? items[0];
+                      setCopiedCrop(source.crop ?? null);
+                      setCopiedRotation(source.imageRotation ?? null);
+                    }}
+                  >
+                    Copy
+                  </button>
                   {/* Paste crop to entire group — only visible when a crop is in clipboard */}
                   {copiedCrop !== undefined && copiedCrop !== null && (
                     <button
                       className="delete-image-btn"
                       title="Paste copied crop to all images in this group"
-                      style={{ marginLeft: 4, background: '#6366f1', color: '#fff', borderRadius: 6, border: 'none', padding: '0.15rem 0.45rem', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 600 }}
+                      style={{ marginLeft: 2, background: '#6366f1', color: '#fff', borderRadius: 6, border: 'none', padding: '0.15rem 0.42rem', fontSize: '0.68rem', cursor: 'pointer', fontWeight: 600 }}
                       onClick={async (e) => {
                         e.stopPropagation();
                         const ids = items.map(i => i.id);
                         await runCropBatchPaste(ids, copiedCrop!, copiedRotation);
                       }}
                     >
-                      📐
+                      Paste
                     </button>
                   )}
                   {/* Delete entire group button */}
