@@ -2717,15 +2717,25 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       onClick={(e) => e.stopPropagation()} // don't bubble to group-level toggle
                     >
                       {(item.thumbnailUrl || item.preview || item.imageUrls?.[0]) ? (
-                        <img
-                          src={item.thumbnailUrl || item.preview || item.imageUrls?.[0]}
-                          alt="Product"
-                          draggable={false}
-                          loading="lazy"
-                          decoding="async"
-                          onError={retryImg}
-                          style={{ transform: `rotate(${item.imageRotation || 0}deg)` }}
-                        />
+                        <>
+                          <img
+                            src={item.thumbnailUrl || item.preview || item.imageUrls?.[0]}
+                            alt="Product"
+                            draggable={false}
+                            loading="lazy"
+                            decoding="async"
+                            onError={retryImg}
+                            style={{ transform: `rotate(${item.imageRotation || 0}deg)` }}
+                          />
+                          {item.originalStoragePath && (
+                            <button
+                              className="rotate-btn"
+                              title="Revert to original (un-cropped) image"
+                              style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '0.55rem', padding: '0 0.2rem', background: '#b45309', color: '#fff', zIndex: 10 }}
+                              onClick={(e) => { e.stopPropagation(); revertToOriginal(item.id); }}
+                            >↺ Orig</button>
+                          )}
+                        </>
                       ) : (
                         <div className="lazy-skeleton lazy-skeleton--error" aria-hidden="true" />
                       )}
