@@ -98,35 +98,47 @@ export const createTransformedFile = async (item: ClothingItem): Promise<File | 
       const srcW = img.naturalWidth;
       const srcH = img.naturalHeight;
 
-      const sx = crop ? Math.round((crop.x / 100) * srcW) : 0;
-      const sy = crop ? Math.round((crop.y / 100) * srcH) : 0;
-      const sW = crop ? Math.round((crop.w / 100) * srcW) : srcW;
-      const sH = crop ? Math.round((crop.h / 100) * srcH) : srcH;
-
       console.log('[transform] ✂️  Canvas params — rotation:', rot, 'crop region:', crop
         ? `x=${crop.x.toFixed(1)}% y=${crop.y.toFixed(1)}% w=${crop.w.toFixed(1)}% h=${crop.h.toFixed(1)}%`
-        : 'none (full frame)',
-        `→ src rect: ${sW}×${sH}px`);
+        : 'none (full frame)');
 
+      // ── Step 1: rotate the full image onto an intermediate canvas ─────────
+      // The crop modal shows the image with CSS rotate(), so crop percentages
+      // are drawn relative to the VISUALLY ROTATED image.  We must apply the
+      // rotation first so that crop x/y/w/h map to the correct pixels.
       const radians = (rot * Math.PI) / 180;
       const cos = Math.abs(Math.cos(radians));
       const sin = Math.abs(Math.sin(radians));
+      const rotW = Math.round(srcW * cos + srcH * sin);
+      const rotH = Math.round(srcW * sin + srcH * cos);
 
-      const canvasW = Math.round(sW * cos + sH * sin);
-      const canvasH = Math.round(sW * sin + sH * cos);
+      const rotCanvas = document.createElement('canvas');
+      rotCanvas.width  = rotW;
+      rotCanvas.height = rotH;
+      const rotCtx = rotCanvas.getContext('2d');
+      if (!rotCtx) { console.error('[transform] ❌ Could not get 2D canvas context'); return resolve(null); }
+      rotCtx.translate(rotW / 2, rotH / 2);
+      rotCtx.rotate(radians);
+      rotCtx.drawImage(img, -srcW / 2, -srcH / 2, srcW, srcH);
+
+      // ── Step 2: crop from the rotated canvas ─────────────────────────────
+      const sx = crop ? Math.round((crop.x / 100) * rotW) : 0;
+      const sy = crop ? Math.round((crop.y / 100) * rotH) : 0;
+      const sW = crop ? Math.round((crop.w / 100) * rotW) : rotW;
+      const sH = crop ? Math.round((crop.h / 100) * rotH) : rotH;
+
+      console.log('[transform] 🖼️  Rotated canvas:', rotW, '×', rotH, '→ crop rect:', sW, '×', sH, 'px');
 
       const canvas = document.createElement('canvas');
-      canvas.width = canvasW;
-      canvas.height = canvasH;
+      canvas.width  = sW;
+      canvas.height = sH;
       const ctx = canvas.getContext('2d');
       if (!ctx) {
         console.error('[transform] ❌ Could not get 2D canvas context — browser issue?');
         return resolve(null);
       }
 
-      ctx.translate(canvasW / 2, canvasH / 2);
-      ctx.rotate(radians);
-      ctx.drawImage(img, sx, sy, sW, sH, -sW / 2, -sH / 2, sW, sH);
+      ctx.drawImage(rotCanvas, sx, sy, sW, sH, 0, 0, sW, sH);
 
       canvas.toBlob((blob) => {
         if (!blob) {
@@ -134,7 +146,7 @@ export const createTransformedFile = async (item: ClothingItem): Promise<File | 
           return resolve(null);
         }
         const file = new File([blob], `${item.id}-transformed.jpg`, { type: blob.type });
-        console.log('[transform] 🗜️  Blob ready:', item.id, `${(blob.size / 1024).toFixed(0)} KB`, `(canvas: ${canvasW}×${canvasH}px)`);
+        console.log('[transform] 🗜️  Blob ready:', item.id, `${(blob.size / 1024).toFixed(0)} KB`, `(canvas: ${sW}×${sH}px)`);
         console.log('[transform] ⏭️  NEXT: this blob will be uploaded to Supabase Storage as a new cropped file, then the DB row updated.');
         resolve(file);
       }, 'image/jpeg', 0.92);
