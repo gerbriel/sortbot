@@ -367,15 +367,18 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
           console.error('[upload] ❌ per-chunk products upsert error:', prodErr.message);
         } else {
           // 2) Now safe to insert product_images rows.
+          //    Plain insert — each storagePath is a fresh UUID-based path so
+          //    duplicates are impossible here. (storage_path has no UNIQUE
+          //    constraint so upsert ON CONFLICT would fail.)
           const imgRows = chunkWithStorage.map(r => ({
             product_id: r.id,
             user_id: userId,
             image_url: r.imageUrls![0],
             storage_path: r.storagePath!,
           }));
-          supabase.from('product_images').upsert(imgRows, { onConflict: 'storage_path', ignoreDuplicates: true }).then(({ error }) => {
+          supabase.from('product_images').insert(imgRows).then(({ error }) => {
             if (error) {
-              console.error('[upload] ❌ per-chunk product_images upsert error:', error.message);
+              console.error('[upload] ❌ per-chunk product_images insert error:', error.message);
             } else {
               console.log(`[upload] ✅ DB rows written for chunk — ${chunkWithStorage.length} items saved to products + product_images`);
             }
