@@ -114,7 +114,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
    * will reflect the final merged state).
    */
   const commitFunctional = (mapper: (prev: ClothingItem[]) => ClothingItem[]) => {
-    setGroupedItems(mapper);
+    setGroupedItems(prev => {
+      const next = mapper(prev);
+      // Keep ref in sync SYNCHRONOUSLY inside the updater so that callers reading
+      // groupedItemsRef.current immediately after (e.g. the final onGrouped call
+      // in runCropBatchPaste) always see the accumulated post-crop state rather
+      // than the pre-render stale value — same fix as the initializeItems fast path.
+      groupedItemsRef.current = next;
+      return next;
+    });
   };
 
   const handleUndo = () => {
