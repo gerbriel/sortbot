@@ -231,6 +231,14 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     // This ensures the products rows we create in the per-chunk write carry the
     // correct batch_id from the very first chunk.
     onUploadStart?.();
+    // Clear stale TUS fingerprints so that when the same file is re-dropped,
+    // TUS always uses the fresh UUID path we just generated — not a leftover
+    // partial-session path from a previous broken upload.  Without this, TUS
+    // "resumes" to the old storage path but our code thinks it uploaded to the
+    // new path, writing a DB row that points to a non-existent file (400s).
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('tus::'))
+      .forEach(k => localStorage.removeItem(k));
     // Prevent concurrent uploads — drop any call that arrives while one is already running
     if (isProcessingRef.current) {
       log.upload('processFiles | SKIPPED — already in progress (double-fire guard)');
@@ -376,13 +384,12 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
             image_url: r.imageUrls![0],
             storage_path: r.storagePath!,
           }));
-          supabase.from('product_images').insert(imgRows).then(({ error }) => {
-            if (error) {
-              console.error('[upload] ❌ per-chunk product_images insert error:', error.message);
-            } else {
-              console.log(`[upload] ✅ DB rows written for chunk — ${chunkWithStorage.length} items saved to products + product_images`);
-            }
-          });
+          const { error: imgErr } = await supabase.from('product_images').insert(imgRows);
+          if (imgErr) {
+            console.error('[upload] ❌ per-chunk product_images insert error:', imgErr.message);
+          } else {
+            console.log(`[upload] ✅ DB rows written for chunk — ${chunkWithStorage.length} items saved to products + product_images`);
+          }
         }
       }
       // ──────────────────────────────────────────────────────────────────────
