@@ -2568,6 +2568,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           <div 
             ref={groupsContainerRef}
             className="groups-grid selection-container"
+            style={{ gridTemplateColumns: `repeat(${columnsPerRow}, 1fr)` }}
             onMouseDown={(e) => handleMouseDown(e, groupsContainerRef.current, 'groups')}
           >
             {/* Selection Box Visualization */}

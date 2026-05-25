@@ -210,17 +210,14 @@
 }
 
 .groups-grid {
-  display: flex !important;
-  flex-wrap: wrap !important;
+  display: grid !important;
   gap: 0.5rem !important;
   padding: 0.5rem !important;
   cursor: crosshair;
-  align-items: flex-start !important;
-  align-content: flex-start !important;
+  align-items: start;
   width: 100% !important;
   max-height: none !important;
   overflow-y: visible !important;
-  grid-template-columns: none !important;
 }
 
 .product-group-card {
