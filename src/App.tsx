@@ -382,12 +382,23 @@ function App() {
   // handleImagesUploaded fires (after all chunks), currentBatchId is already the
   // stable UUID — preventing ImageGrouper's batchId prop from changing mid-upload
   // and wiping any groups the user formed while images were still uploading.
+  // Called at the very start of a new upload (before chunk 1 is processed).
+  // Mints the batchId synchronously so it's available for the first per-chunk DB write.
+  const handleUploadStart = useCallback(() => {
+    isUploadingRef.current = true;
+    if (!currentBatchIdRef.current) {
+      const newBatchId = crypto.randomUUID();
+      currentBatchIdRef.current = newBatchId;
+      setCurrentBatchId(newBatchId);
+      localStorage.setItem('sortbot_current_batch_id', newBatchId);
+    }
+  }, []);
+
   const handleChunkReady = useCallback((newItems: ClothingItem[]) => {
     // Mark upload in progress so handleImagesGrouped skips the cascade-triggering
     // setGroupedImages update for every intermediate onGrouped call during upload.
     isUploadingRef.current = true;
-    // Mint batch ID synchronously on first chunk so ImageGrouper never sees a
-    // null → UUID transition that would trigger its group-wipe useEffect.
+    // Fallback: mint batch ID if handleUploadStart somehow didn't fire first.
     if (!currentBatchIdRef.current) {
       const newBatchId = crypto.randomUUID();
       currentBatchIdRef.current = newBatchId;
@@ -2251,7 +2262,7 @@ function App() {
               </button>
             </div>
           </div>
-          <ImageUpload ref={uploadRef} onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} onToast={addToast} onChunkReady={handleChunkReady} />
+          <ImageUpload ref={uploadRef} onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} onToast={addToast} onChunkReady={handleChunkReady} onUploadStart={handleUploadStart} getBatchId={() => currentBatchIdRef.current} />
           {/* "N images uploaded" moved to toast — see handleImagesUploaded */}
         </section>
 
