@@ -16,6 +16,7 @@ import { log } from '../lib/debugLogger';
 import './Library.css';
 
 // ── Lazy-loading image with skeleton shimmer placeholder ──────────────────────
+const STORAGE_PREFIX = '/storage/v1/object/public/product-images/';
 const LazyImg: React.FC<{ src: string; alt: string; className?: string }> = ({ src, alt, className }) => {
   const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
@@ -30,6 +31,20 @@ const LazyImg: React.FC<{ src: string; alt: string; className?: string }> = ({ s
     setErrored(false);
   }, [src]);
 
+  const handleError = () => {
+    setLoaded(true);
+    setErrored(true);
+    // Clean up orphaned DB row so it never reappears after reload
+    const base = src.split('?')[0];
+    const idx = base.indexOf(STORAGE_PREFIX);
+    if (idx !== -1) {
+      const storagePath = base.slice(idx + STORAGE_PREFIX.length);
+      supabase.from('product_images').delete().eq('storage_path', storagePath).then(({ error }) => {
+        if (!error) console.log('[img] 🗑️ deleted orphaned product_images row:', storagePath);
+      });
+    }
+  };
+
   return (
     <>
       {!loaded && !errored && <div className="img-skeleton" aria-hidden="true" />}
@@ -39,7 +54,7 @@ const LazyImg: React.FC<{ src: string; alt: string; className?: string }> = ({ s
         className={`lazy-img${loaded ? ' loaded' : ''}${className ? ` ${className}` : ''}`}
         loading="lazy"
         onLoad={() => setLoaded(true)}
-        onError={() => { setLoaded(true); setErrored(true); }}
+        onError={handleError}
         style={errored ? { display: 'none' } : undefined}
       />
       {errored && <div className="img-skeleton" style={{ opacity: 0.4 }} aria-hidden="true" />}
