@@ -462,6 +462,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       onGrouped(groupedItemsRef.current.map(cropMapper));
 
       console.log('[crop] done ✅ item:', itemId, 'newUrl:', newUrl);
+      // Evict the old URL from the session image cache so a subsequent re-crop
+      // loads the freshly-cropped image rather than the stale pre-crop bitmap.
+      const { evictCachedImage } = await import('../lib/imageTransforms');
+      if (item.preview) evictCachedImage(item.preview);
+      if (item.imageUrls?.[0]) evictCachedImage(item.imageUrls[0]);
     } catch (err) { console.error('[crop] unexpected error:', err); }
   };
 

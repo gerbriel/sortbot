@@ -3,15 +3,46 @@ import type { ClothingItem } from '../App';
 const LOAD_RETRIES = 3;
 const RETRY_DELAY_MS = 500;
 
+// ─── Session image cache ──────────────────────────────────────────────────────
+// Keeps loaded HTMLImageElements in memory for the lifetime of the browser tab.
+// This eliminates re-fetches from Supabase CDN when paste-crop is applied to
+// hundreds/thousands of images on a slow connection — the canvas transform
+// works entirely from this in-memory copy.
+// Keys are the original image URL (before any cache-busting suffix).
+// The cache is intentionally not bounded: a user doing 1500 images needs them
+// all available without eviction during a single paste-crop batch. Each decoded
+// HTMLImageElement is a reference to GPU-decoded bitmap data (not the raw JPEG
+// bytes), so memory footprint is manageable. If memory ever becomes a concern,
+// close/reload the tab — the cache is fully ephemeral.
+const _imgCache = new Map<string, HTMLImageElement>();
+
+/** Expose for cache-warming from upload flow (optional future use). */
+export function cacheImage(url: string, img: HTMLImageElement) {
+  _imgCache.set(url, img);
+}
+
+/** Remove a cached entry when the underlying storage path changes (e.g. after re-crop). */
+export function evictCachedImage(url: string) {
+  _imgCache.delete(url);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 /** Load an HTMLImageElement from a URL, retrying on transient network/TLS errors. */
 const loadImageWithRetry = (src: string): Promise<HTMLImageElement> => {
+  // Return the cached element immediately — avoids any network round-trip.
+  const cached = _imgCache.get(src);
+  if (cached) return Promise.resolve(cached);
+
   return new Promise((resolve, reject) => {
     let attempt = 0;
 
     const tryLoad = () => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
-      img.onload = () => resolve(img);
+      img.onload = () => {
+        _imgCache.set(src, img); // store for future paste-crop calls
+        resolve(img);
+      };
       img.onerror = () => {
         attempt += 1;
         if (attempt < LOAD_RETRIES) {

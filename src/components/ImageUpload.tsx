@@ -10,10 +10,13 @@ import './ImageUpload.css';
 // ─── Compression config ───────────────────────────────────────────────────────
 // Set to false to bypass compression and upload originals (for debugging).
 const COMPRESS_ON_UPLOAD = true;
-// Max dimension (width or height) in pixels. 4000px → 1600px drops ~10× in size.
-const COMPRESS_MAX_PX = 1600;
-// JPEG quality 0–1. 0.82 is visually lossless for product photos.
-const COMPRESS_QUALITY = 0.82;
+// Max dimension (width or height) in pixels.
+// 1200px at 0.75 quality is the right trade-off for product photos on slow/rural
+// connections: a raw 4000px DSLR photo (3-4 MB) compresses to ~120-180 KB —
+// roughly 20× smaller — while remaining sharp enough for e-commerce thumbnails.
+const COMPRESS_MAX_PX = 1200;
+// JPEG quality 0–1. 0.75 is visually good for product photos at 1200px.
+const COMPRESS_QUALITY = 0.75;
 // Skip recompression of existing images already under this size (bytes).
 const RECOMPRESS_SKIP_UNDER_BYTES = 200 * 1024; // 200 KB
 // localStorage key that records which storagePaths have already been compressed.
@@ -269,6 +272,27 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       }));
       items.push(...results);
       setUploadProgress({ done: Math.min(i + CHUNK, imageFiles.length), total: imageFiles.length });
+
+      // ── Per-chunk DB write ─────────────────────────────────────────────────
+      // Write a product_images row for every successfully-uploaded image in this
+      // chunk immediately after it lands in Storage.  This means if the connection
+      // drops at image 900 of 1500, the first 900 already have DB records and are
+      // fully recoverable — the user doesn't lose that work.  Items that only have
+      // a blob URL fallback (upload failed) are skipped; they have no storagePath.
+      const chunkWithStorage = results.filter(r => r.storagePath && r.imageUrls?.[0]);
+      if (chunkWithStorage.length > 0) {
+        const rows = chunkWithStorage.map(r => ({
+          product_id: r.id,
+          user_id: userId,
+          image_url: r.imageUrls![0],
+          storage_path: r.storagePath!,
+        }));
+        supabase.from('product_images').insert(rows).then(({ error }) => {
+          if (error) console.warn('[upload] per-chunk DB insert error:', error.message);
+        });
+      }
+      // ──────────────────────────────────────────────────────────────────────
+
       // Fire immediately so the parent can show this chunk while the rest upload
       onChunkReady?.(results);
     }
@@ -303,12 +327,29 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
   
   const uploadToSupabase = async (file: File, productId: string): Promise<{ preview: string; imageUrls: string[]; storagePath: string } | null> => {
     try {
-      const fileExt = file.name.split('.').pop();
+      const fileExt = file.name.split('.').pop() || 'jpg';
       const randomId = Math.random().toString(36).substring(2, 15);
       const fileName = `${Date.now()}-${randomId}.${fileExt}`;
       // Use permanent path so the URL stored in DB remains valid indefinitely.
       const filePath = `${userId}/${productId}/${fileName}`;
 
+      // ── Try TUS resumable upload first ────────────────────────────────────
+      // TUS survives connection drops by resuming from the exact byte it stopped
+      // at, rather than restarting the whole file.  This is the primary upload
+      // path for all users; it's especially critical on slow/rural connections.
+      try {
+        const { tusUploadFile } = await import('../lib/tusUpload');
+        const result = await tusUploadFile(file, filePath);
+        return {
+          preview: result.publicUrl,
+          imageUrls: [result.publicUrl],
+          storagePath: result.storagePath,
+        };
+      } catch (tusErr) {
+        console.warn('[upload] TUS failed, falling back to standard upload:', tusErr);
+      }
+
+      // ── Fallback: standard Supabase Storage PUT ────────────────────────────
       const { data, error } = await supabase.storage
         .from('product-images')
         .upload(filePath, file, {
