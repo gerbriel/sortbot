@@ -183,6 +183,16 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
   const cancelledRef = useRef(false);
   const [_isPaused,     setIsPaused]     = useState(false);
   const [_isCancelling, setIsCancelling] = useState(false);
+  // Files that failed all upload retries — shown in a banner with a Retry button.
+  // We never silently fall back to a blob URL; if a file can't reach Storage it
+  // goes here so the user can retry rather than getting a ghost item that breaks
+  // after a page reload.
+  const [failedUploads, setFailedUploads] = useState<{
+    file: File;
+    capturedAt: number;
+    originalName: string;
+  }[]>([]);
+
   const [recompressState, setRecompressState] = useState<{
     running: boolean;
     done: number;
@@ -203,7 +213,18 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     isBusy: isUploading || extractingZip,
   }), [isUploading, extractingZip]);
 
-  const processFiles = useCallback(async (acceptedFiles: File[]) => {
+  // Re-upload all files that failed during the last processFiles run.
+  // Clears the failed list first so the banner disappears immediately, then
+  // re-runs the exact same upload pipeline on just those files.
+  const retryFailedUploads = useCallback(async () => {
+    if (failedUploads.length === 0) return;
+    const toRetry = [...failedUploads];
+    setFailedUploads([]);
+    console.log('[upload] 🔄 Retrying', toRetry.length, 'failed file(s)…');
+    await processFiles(toRetry.map(f => f.file));
+  }, [failedUploads, processFiles]);
+
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
     // Prevent concurrent uploads — drop any call that arrives while one is already running
     if (isProcessingRef.current) {
@@ -248,9 +269,10 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       }
 
       const chunk = imageFiles.slice(i, i + CHUNK);
-      const results = await Promise.all(chunk.map(async ({ file, capturedAt }) => {
+      const chunkFailed: { file: File; capturedAt: number; originalName: string }[] = [];
+      const results = (await Promise.all(chunk.map(async ({ file, capturedAt }) => {
         const productId = crypto.randomUUID();
-        // Compress before upload if enabled
+        // Compress before upload
         const fileToUpload = COMPRESS_ON_UPLOAD
           ? await compressImage(file).catch((err) => {
               console.warn('[upload] compress failed, using original:', file.name, err);
@@ -262,16 +284,35 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
           `${(file.size / 1024).toFixed(0)} KB → ${(fileToUpload.size / 1024).toFixed(0)} KB`,
           `(saved ${((1 - fileToUpload.size / file.size) * 100).toFixed(0)}%)`,
         );
-        const uploaded = await uploadToSupabase(fileToUpload, productId);
-        if (!uploaded) {
-          console.warn('[upload] ⚠️  All upload paths failed for:', file.name, '— using local blob URL as fallback.');
-          console.warn('[upload] ⚠️  MISSING: this image has NO storagePath. It will not survive a page reload and cannot be re-cropped from the CDN.');
-          return { id: productId, file, capturedAt, originalName: file.name, preview: URL.createObjectURL(file) };
+
+        // ── Retry loop: backoff 1 s → 2 s → 4 s → 8 s → 16 s ─────────────────
+        // We attempt upload up to MAX_UPLOAD_ATTEMPTS times before giving up.
+        // Each attempt tries TUS first, then falls back to the standard PUT.
+        // This covers transient connectivity blips without demanding manual retries
+        // from the user on every flaky-connection batch.
+        const MAX_UPLOAD_ATTEMPTS = 5;
+        let uploaded: Awaited<ReturnType<typeof uploadToSupabase>> = null;
+        for (let attempt = 1; attempt <= MAX_UPLOAD_ATTEMPTS; attempt++) {
+          uploaded = await uploadToSupabase(fileToUpload, productId);
+          if (uploaded) break;
+          if (attempt < MAX_UPLOAD_ATTEMPTS) {
+            const delayMs = Math.min(1000 * 2 ** (attempt - 1), 16000); // 1s,2s,4s,8s,16s
+            console.warn(`[upload] ⚠️  Attempt ${attempt}/${MAX_UPLOAD_ATTEMPTS} failed for ${file.name} — retrying in ${delayMs / 1000}s…`);
+            await new Promise(r => setTimeout(r, delayMs));
+          }
         }
+        // ─────────────────────────────────────────────────────────────────────
+
+        if (!uploaded) {
+          // All attempts exhausted — do NOT create a ghost blob item.
+          // Queue for the failed-uploads banner so the user can retry.
+          console.error(`[upload] ❌ All ${MAX_UPLOAD_ATTEMPTS} attempts failed for: ${file.name} — added to retry queue.`);
+          chunkFailed.push({ file, capturedAt, originalName: file.name });
+          return null; // excluded from items
+        }
+
         console.log('[upload] ✅ Uploaded to Storage:', file.name, '→', uploaded.storagePath);
-        // Mark as compressed so the "needs compression" badge never shows for fresh uploads
         if (COMPRESS_ON_UPLOAD) markCompressed(uploaded.storagePath);
-        // Track for potential cancel-cleanup
         uploadedPaths.push(uploaded.storagePath);
         return {
           id: productId, file,
@@ -281,7 +322,13 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
           imageUrls: uploaded.imageUrls,
           storagePath: uploaded.storagePath,
         };
-      }));
+      }))).filter((r): r is NonNullable<typeof r> => r !== null);
+
+      // Accumulate any newly-failed files into state so the banner updates live
+      if (chunkFailed.length > 0) {
+        setFailedUploads(prev => [...prev, ...chunkFailed]);
+        console.warn(`[upload] ⚠️  ${chunkFailed.length} file(s) added to retry queue:`, chunkFailed.map(f => f.originalName));
+      }
       items.push(...results);
       setUploadProgress({ done: Math.min(i + CHUNK, imageFiles.length), total: imageFiles.length });
 
@@ -647,6 +694,60 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
             )}
           </div>
         </div>
+
+        {/* ── Failed uploads banner ────────────────────────────────────────── */}
+        {failedUploads.length > 0 && (
+          <div style={{
+            marginTop: '0.75rem',
+            background: 'rgba(220,38,38,0.08)',
+            border: '1.5px solid #dc2626',
+            borderRadius: '8px',
+            padding: '0.7rem 1rem',
+            fontSize: '0.85rem',
+            color: '#7f1d1d',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 600 }}>
+                ❌ {failedUploads.length} file{failedUploads.length !== 1 ? 's' : ''} failed to upload after 5 attempts
+              </span>
+              <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                <button
+                  type="button"
+                  onClick={retryFailedUploads}
+                  disabled={isUploading}
+                  style={{
+                    padding: '0.35rem 0.9rem',
+                    background: '#dc2626',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: 600,
+                    fontSize: '0.82rem',
+                    cursor: isUploading ? 'not-allowed' : 'pointer',
+                    opacity: isUploading ? 0.6 : 1,
+                  }}
+                >
+                  🔄 Retry All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFailedUploads([])}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: '#7f1d1d' }}
+                >
+                  ✕ dismiss
+                </button>
+              </div>
+            </div>
+            <ul style={{ margin: '0.4rem 0 0 0', paddingLeft: '1.2rem', lineHeight: 1.6, fontSize: '0.78rem', color: '#991b1b' }}>
+              {failedUploads.slice(0, 10).map((f, i) => (
+                <li key={i}>{f.originalName}</li>
+              ))}
+              {failedUploads.length > 10 && (
+                <li style={{ fontStyle: 'italic' }}>…and {failedUploads.length - 10} more</li>
+              )}
+            </ul>
+          </div>
+        )}
 
         {/* Recompress existing images button — shown when there are already-uploaded items */}
         {!isUploading && !extractingZip && (existingItems?.length ?? 0) > 0 && (() => {
