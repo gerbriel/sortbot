@@ -116,10 +116,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const commitFunctional = (mapper: (prev: ClothingItem[]) => ClothingItem[]) => {
     setGroupedItems(prev => {
       const next = mapper(prev);
-      // Keep ref in sync SYNCHRONOUSLY inside the updater so that callers reading
-      // groupedItemsRef.current immediately after (e.g. the final onGrouped call
-      // in runCropBatchPaste) always see the accumulated post-crop state rather
-      // than the pre-render stale value — same fix as the initializeItems fast path.
+      console.log('[commitFunctional] prev.length=', prev.length, '→ next.length=', next.length, 'ref updated synchronously');
       groupedItemsRef.current = next;
       return next;
     });
@@ -512,7 +509,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     crop: { x: number; y: number; w: number; h: number },
     rotation: number | null = null,
   ) => {
-    if (targetIds.length === 0) return;
+    console.log('[paste] runCropBatchPaste START — ids:', targetIds.length, 'crop:', crop, 'rotation:', rotation);
+    console.log('[paste] groupedItemsRef.current.length at start:', groupedItemsRef.current.length);
+    if (targetIds.length === 0) { console.warn('[paste] targetIds empty — nothing to do'); return; }
     const total = targetIds.length;
     const failed: string[] = [];
     setCropPasteProgress({ done: 0, total, status: 'running', failed: [] });
@@ -527,12 +526,17 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       const chunk = targetIds.slice(i, i + BATCH);
       await Promise.all(chunk.map(id =>
         applyAndPersistTransformGrouper(id, crop, rotation !== null ? rotation : undefined)
-          .then(() => { done++; setCropPasteProgress({ done, total, status: 'running', failed: [...failed] }); })
-          .catch(() => { done++; failed.push(id); setCropPasteProgress({ done, total, status: 'running', failed: [...failed] }); })
+          .then(() => { done++; console.log('[paste] ✅ item done:', id, done, '/', total); setCropPasteProgress({ done, total, status: 'running', failed: [...failed] }); })
+          .catch((err) => { done++; failed.push(id); console.error('[paste] ❌ item failed:', id, err); setCropPasteProgress({ done, total, status: 'running', failed: [...failed] }); })
       ));
     }
     if (wakeLock) { try { await wakeLock.release(); } catch { /* ignore */ } }
-    setTimeout(() => onGrouped(groupedItemsRef.current), 0);
+    console.log('[paste] all done — failed:', failed.length, 'groupedItemsRef.current.length:', groupedItemsRef.current.length);
+    console.log('[paste] scheduling deferred onGrouped with', groupedItemsRef.current.length, 'items');
+    setTimeout(() => {
+      console.log('[paste] deferred onGrouped firing — ref.length:', groupedItemsRef.current.length);
+      onGrouped(groupedItemsRef.current);
+    }, 0);
     const snapshot = [...failed];
     setCropPasteProgress({ done: total, total, status: 'done', failed: snapshot });
     if (snapshot.length === 0) setTimeout(() => setCropPasteProgress(null), 3500);
@@ -2192,6 +2196,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     onClick={async (e) => {
                       e.stopPropagation();
                       const targetIds = [...selectedItems];
+                      console.log('[paste] Paste-to-selected clicked — selectedItems:', targetIds.length, 'copiedCrop:', copiedCrop, 'copiedRotation:', copiedRotation);
                       setSelectedItems(new Set());
                       if (copiedCrop !== undefined && copiedCrop !== null) {
                         await runCropBatchPaste(targetIds, copiedCrop, copiedRotation);
@@ -2655,6 +2660,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       onClick={async (e) => {
                         e.stopPropagation();
                         const ids = items.map(i => i.id);
+                        console.log('[paste] Group Paste clicked — groupId:', groupId, 'items:', ids.length, 'copiedCrop:', copiedCrop, 'copiedRotation:', copiedRotation);
+                        console.log('[paste] item storagePathes:', items.map(i => i.storagePath));
                         await runCropBatchPaste(ids, copiedCrop!, copiedRotation);
                       }}
                     >
