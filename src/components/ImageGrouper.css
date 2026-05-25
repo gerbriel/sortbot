@@ -701,13 +701,12 @@
 
 .group-image-item {
   position: relative;
-  width: 70px !important;
-  height: 70px !important;
-  aspect-ratio: unset !important;
+  width: 100%;
+  aspect-ratio: 1;
   cursor: grab;
-  border-radius: 4px !important;
-  overflow: hidden !important;
-  border: 2px solid transparent !important;
+  border-radius: 4px;
+  overflow: visible;
+  border: 2px solid transparent;
   transition: transform 0.12s ease, opacity 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
