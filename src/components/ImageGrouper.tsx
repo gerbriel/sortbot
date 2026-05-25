@@ -941,6 +941,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       // If nothing is new, just sync categories/metadata that may have changed externally
       if (newItems.length === 0) {
         console.log('[GROUPER] no new items — syncing metadata only');
+        // Skip the setGroupedItems call entirely when the item set is identical
+        // (same ids, same count) — avoids a spurious re-render cascade after deletions.
+        const propsIdSet = new Set(items.map(i => i.id));
+        const existingArr = groupedItemsRef.current;
+        if (
+          existingArr.length === items.length &&
+          existingArr.every(i => propsIdSet.has(i.id))
+        ) {
+          return;
+        }
         setGroupedItems(prev =>
           prev.map(existing => {
             const updated = items.find(i => i.id === existing.id);
@@ -980,6 +990,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         );
         return;
       }
+
 
       // Find truly new images that need uploading (have file but not uploaded yet)
       const toUpload = newItems.filter(item => {
