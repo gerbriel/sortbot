@@ -58,6 +58,18 @@ interface ImageUploadProps {
    * `newItems` contains only the items from this chunk.
    */
   onChunkReady?: (newItems: ClothingItem[]) => void;
+  /**
+   * Called synchronously at the very start of a new upload batch (before any
+   * files are processed). Allows the parent to mint a stable batchId before
+   * the first per-chunk DB write runs — ensuring products rows are created
+   * with the correct batch_id from the start.
+   */
+  onUploadStart?: () => void;
+  /**
+   * Returns the current batchId — read via a ref in the parent so it's always
+   * up-to-date even in the same synchronous frame that `onUploadStart` fires.
+   */
+  getBatchId?: () => string | null;
   /** When true, suppresses the cat + yarn ball overlay during uploads. Default false. */
   // boredMode?: boolean; // reserved for future use
   /** Called when the user toggles bored mode from within the upload overlay. */
@@ -168,7 +180,7 @@ async function extractImagesFromZip(zipFile: File): Promise<File[]> {
   return imageFiles.sort((a, b) => a.lastModified - b.lastModified);
 }
 
-const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesUploaded, userId, existingItems, onCapturedAtUpdated: _onCapturedAtUpdated, onToast, onChunkReady }, ref) => {
+const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesUploaded, userId, existingItems, onCapturedAtUpdated: _onCapturedAtUpdated, onToast, onChunkReady, onUploadStart, getBatchId }, ref) => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [extractingZip, setExtractingZip] = useState(false);
@@ -215,6 +227,10 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
 
   const processFiles = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
+    // Notify parent to mint batchId synchronously before any DB writes happen.
+    // This ensures the products rows we create in the per-chunk write carry the
+    // correct batch_id from the very first chunk.
+    onUploadStart?.();
     // Prevent concurrent uploads — drop any call that arrives while one is already running
     if (isProcessingRef.current) {
       log.upload('processFiles | SKIPPED — already in progress (double-fire guard)');
@@ -334,21 +350,37 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
         console.warn('[upload] ⚠️  MISSING: these items will not survive a reload. If this is happening frequently, check network connectivity and Supabase storage bucket permissions.');
       }
       if (chunkWithStorage.length > 0) {
-        console.log(`[upload] 💾 Writing ${chunkWithStorage.length} product_images DB rows for chunk ${Math.floor(i / CHUNK) + 1}...`);
-        const rows = chunkWithStorage.map(r => ({
-          product_id: r.id,
+        const batchId = getBatchId?.() ?? null;
+        console.log(`[upload] 💾 Writing ${chunkWithStorage.length} products + product_images DB rows for chunk ${Math.floor(i / CHUNK) + 1} (batchId=${batchId ?? 'null'})...`);
+        // 1) Upsert the products rows FIRST — product_images has an FK constraint
+        //    on product_id that requires the parent products row to exist.
+        //    ignoreDuplicates: false so that if this is a retry, batch_id is kept.
+        const productRows = chunkWithStorage.map(r => ({
+          id: r.id,
           user_id: userId,
-          image_url: r.imageUrls![0],
-          storage_path: r.storagePath!,
+          batch_id: batchId,
+          status: 'Active' as const,
+          product_group: r.id,
         }));
-        supabase.from('product_images').insert(rows).then(({ error }) => {
-          if (error) {
-            console.error('[upload] ❌ per-chunk DB insert error:', error.message);
-            console.error('[upload] ❌ EXPECTED: DB rows should be written immediately after each chunk lands in Storage so data is recoverable if the session dies mid-upload.');
-          } else {
-            console.log(`[upload] ✅ DB rows written for chunk — ${chunkWithStorage.length} items saved to product_images`);
-          }
-        });
+        const { error: prodErr } = await supabase.from('products').upsert(productRows, { onConflict: 'id', ignoreDuplicates: true });
+        if (prodErr) {
+          console.error('[upload] ❌ per-chunk products upsert error:', prodErr.message);
+        } else {
+          // 2) Now safe to insert product_images rows.
+          const imgRows = chunkWithStorage.map(r => ({
+            product_id: r.id,
+            user_id: userId,
+            image_url: r.imageUrls![0],
+            storage_path: r.storagePath!,
+          }));
+          supabase.from('product_images').upsert(imgRows, { onConflict: 'storage_path', ignoreDuplicates: true }).then(({ error }) => {
+            if (error) {
+              console.error('[upload] ❌ per-chunk product_images upsert error:', error.message);
+            } else {
+              console.log(`[upload] ✅ DB rows written for chunk — ${chunkWithStorage.length} items saved to products + product_images`);
+            }
+          });
+        }
       }
       // ──────────────────────────────────────────────────────────────────────
 
@@ -382,7 +414,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       pausedRef.current    = false;
       cancelledRef.current = false;
     }
-  }, [onImagesUploaded, userId]);
+  }, [onImagesUploaded, userId, onUploadStart, getBatchId]);
 
   // Re-upload all files that failed during the last processFiles run.
   // Clears the failed list first so the banner disappears immediately, then
