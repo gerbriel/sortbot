@@ -52,7 +52,15 @@ export function tusUploadFile(
     // Retrieve the current session token so Storage RLS accepts this upload.
     const { data: sessionData } = await supabase.auth.getSession();
     const token = sessionData?.session?.access_token;
-    if (!token) { reject(new Error('tusUpload: no auth session')); return; }
+    if (!token) {
+      console.error('[tus] ❌ No auth session — cannot upload', storagePath);
+      reject(new Error('tusUpload: no auth session'));
+      return;
+    }
+
+    console.log('[tus] 🚀 Starting upload:', storagePath, `(${(file.size / 1024).toFixed(0)} KB)`);
+
+    let lastLoggedPct = -1;
 
     const upload = new tus.Upload(file, {
       // Supabase TUS endpoint
@@ -76,17 +84,33 @@ export function tusUploadFile(
       // reloads so interrupted uploads resume automatically on next visit.
       storeFingerprintForResuming: true,
       onProgress(bytesUploaded, bytesTotal) {
+        // Log at every 25% milestone to avoid flooding the console
+        const pct = Math.floor((bytesUploaded / bytesTotal) * 4) * 25;
+        if (pct !== lastLoggedPct) {
+          lastLoggedPct = pct;
+          console.log(
+            `[tus] 📶 ${storagePath.split('/').pop()} — ${pct}%`,
+            `(${(bytesUploaded / 1024).toFixed(0)}/${(bytesTotal / 1024).toFixed(0)} KB)`,
+          );
+        }
         onProgress?.(bytesUploaded, bytesTotal);
       },
       onSuccess() {
         const { data: { publicUrl } } = supabase.storage
           .from(BUCKET)
           .getPublicUrl(storagePath);
+        console.log('[tus] ✅ Upload complete:', storagePath);
         resolve({ storagePath, publicUrl });
       },
       onError(err) {
-        console.error('[tus] upload error for', storagePath, err);
+        console.error('[tus] ❌ Upload error for', storagePath, err);
         reject(err);
+      },
+      onBeforeRequest(req) {
+        // Log each PATCH (chunk) sent — useful for diagnosing stalled uploads
+        if (req.getMethod() === 'PATCH') {
+          console.log('[tus] → PATCH chunk sent for', storagePath.split('/').pop());
+        }
       },
     });
 
@@ -94,11 +118,15 @@ export function tusUploadFile(
     // where it left off rather than re-uploading from byte 0.
     upload.findPreviousUploads().then(previousUploads => {
       if (previousUploads.length > 0) {
+        console.log('[tus] ♻️  Resuming previous upload for', storagePath, '— found', previousUploads.length, 'previous session(s)');
         upload.resumeFromPreviousUpload(previousUploads[0]);
+      } else {
+        console.log('[tus] 🆕 No previous upload found — starting fresh for', storagePath);
       }
       upload.start();
-    }).catch(() => {
+    }).catch((err) => {
       // findPreviousUploads can fail if localStorage is unavailable — start fresh.
+      console.warn('[tus] findPreviousUploads failed (localStorage unavailable?), starting fresh:', err);
       upload.start();
     });
   });

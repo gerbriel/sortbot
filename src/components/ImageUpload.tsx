@@ -251,12 +251,24 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       const results = await Promise.all(chunk.map(async ({ file, capturedAt }) => {
         const productId = crypto.randomUUID();
         // Compress before upload if enabled
-        const fileToUpload = COMPRESS_ON_UPLOAD ? await compressImage(file).catch(() => file) : file;
+        const fileToUpload = COMPRESS_ON_UPLOAD
+          ? await compressImage(file).catch((err) => {
+              console.warn('[upload] compress failed, using original:', file.name, err);
+              return file;
+            })
+          : file;
+        console.log(
+          `[upload] 📦 Compressed: ${file.name}`,
+          `${(file.size / 1024).toFixed(0)} KB → ${(fileToUpload.size / 1024).toFixed(0)} KB`,
+          `(saved ${((1 - fileToUpload.size / file.size) * 100).toFixed(0)}%)`,
+        );
         const uploaded = await uploadToSupabase(fileToUpload, productId);
         if (!uploaded) {
-          console.warn('⚠️ Upload failed for:', file.name, '- using blob URL as fallback');
+          console.warn('[upload] ⚠️  All upload paths failed for:', file.name, '— using local blob URL as fallback.');
+          console.warn('[upload] ⚠️  MISSING: this image has NO storagePath. It will not survive a page reload and cannot be re-cropped from the CDN.');
           return { id: productId, file, capturedAt, originalName: file.name, preview: URL.createObjectURL(file) };
         }
+        console.log('[upload] ✅ Uploaded to Storage:', file.name, '→', uploaded.storagePath);
         // Mark as compressed so the "needs compression" badge never shows for fresh uploads
         if (COMPRESS_ON_UPLOAD) markCompressed(uploaded.storagePath);
         // Track for potential cancel-cleanup
@@ -280,7 +292,13 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       // fully recoverable — the user doesn't lose that work.  Items that only have
       // a blob URL fallback (upload failed) are skipped; they have no storagePath.
       const chunkWithStorage = results.filter(r => r.storagePath && r.imageUrls?.[0]);
+      const chunkFallback = results.filter(r => !r.storagePath);
+      if (chunkFallback.length > 0) {
+        console.warn(`[upload] ⚠️  ${chunkFallback.length} item(s) in this chunk are blob-only (no storagePath):`, chunkFallback.map(r => r.originalName));
+        console.warn('[upload] ⚠️  MISSING: these items will not survive a reload. If this is happening frequently, check network connectivity and Supabase storage bucket permissions.');
+      }
       if (chunkWithStorage.length > 0) {
+        console.log(`[upload] 💾 Writing ${chunkWithStorage.length} product_images DB rows for chunk ${Math.floor(i / CHUNK) + 1}...`);
         const rows = chunkWithStorage.map(r => ({
           product_id: r.id,
           user_id: userId,
@@ -288,7 +306,12 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
           storage_path: r.storagePath!,
         }));
         supabase.from('product_images').insert(rows).then(({ error }) => {
-          if (error) console.warn('[upload] per-chunk DB insert error:', error.message);
+          if (error) {
+            console.error('[upload] ❌ per-chunk DB insert error:', error.message);
+            console.error('[upload] ❌ EXPECTED: DB rows should be written immediately after each chunk lands in Storage so data is recoverable if the session dies mid-upload.');
+          } else {
+            console.log(`[upload] ✅ DB rows written for chunk — ${chunkWithStorage.length} items saved to product_images`);
+          }
         });
       }
       // ──────────────────────────────────────────────────────────────────────
@@ -338,15 +361,18 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       // at, rather than restarting the whole file.  This is the primary upload
       // path for all users; it's especially critical on slow/rural connections.
       try {
+        console.log('[upload] 🔌 Attempting TUS resumable upload for:', filePath);
         const { tusUploadFile } = await import('../lib/tusUpload');
         const result = await tusUploadFile(file, filePath);
+        console.log('[upload] ✅ TUS succeeded for:', filePath);
         return {
           preview: result.publicUrl,
           imageUrls: [result.publicUrl],
           storagePath: result.storagePath,
         };
       } catch (tusErr) {
-        console.warn('[upload] TUS failed, falling back to standard upload:', tusErr);
+        console.warn('[upload] ⚠️  TUS failed — falling back to standard Supabase PUT:', tusErr);
+        console.warn('[upload] ⚠️  If TUS keeps failing: check that the Supabase project has TUS enabled (Dashboard → Storage → Settings)');
       }
 
       // ── Fallback: standard Supabase Storage PUT ────────────────────────────
