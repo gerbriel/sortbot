@@ -865,14 +865,15 @@ function App() {
   // Uses localStorage so this only fires once per browser, not on every page load.
   useEffect(() => {
     if (!user) return;
-    const CLEANUP_KEY = 'sortbot_orphan_cleanup_v1';
+    const CLEANUP_KEY = 'sortbot_orphan_cleanup_v3';
     if (localStorage.getItem(CLEANUP_KEY)) return;
 
     (async () => {
       try {
-        // Delete rows whose storage_path contains timestamps from the known bad sessions.
-        // These are timestamp-prefixed filenames from uploads that never completed correctly.
-        const badPrefixes = ['17796956', '17796957'];
+        // Delete rows from all known broken sessions (bad timestamp prefixes).
+        // v1 targeted 17796956/17796957 (wrong session).
+        // v3 adds 17796974 which was the actual session with wrong-path DB writes.
+        const badPrefixes = ['17796956', '17796957', '17796974'];
         for (const prefix of badPrefixes) {
           await supabase
             .from('product_images')
