@@ -191,7 +191,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // Format painter — copy crop/rotation style from one image and paste to others
   const [copiedRotation, setCopiedRotation] = useState<number | null>(null);
   const [copiedCrop, setCopiedCrop] = useState<{ x: number; y: number; w: number; h: number } | null | undefined>(undefined);
-  const [cropPasteProgress, setCropPasteProgress] = useState<{ done: number; total: number; status: 'running' | 'done' } | null>(null);
+  const [cropPasteProgress, setCropPasteProgress] = useState<{ done: number; total: number; status: 'running' | 'done'; failed: string[] } | null>(null);
 
   // Lightbox state  — pool stores item IDs (not URLs) so we can look up rotation
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -494,6 +494,40 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       onGrouped(groupedItemsRef.current.map(revertMapper));
       console.log('[revert] done for item:', itemId);
     } catch (err) { console.error('[revert] error:', err); }
+  };
+
+  // ── Shared batch crop paste helper ─────────────────────────────────────────
+  // Applies crop (+ optional rotation) to a list of item IDs in parallel batches.
+  // Tracks failures and exposes a retry button in the progress toast.
+  const runCropBatchPaste = async (
+    targetIds: string[],
+    crop: { x: number; y: number; w: number; h: number },
+    rotation: number | null = null,
+  ) => {
+    if (targetIds.length === 0) return;
+    const total = targetIds.length;
+    const failed: string[] = [];
+    setCropPasteProgress({ done: 0, total, status: 'running', failed: [] });
+    let wakeLock: WakeLockSentinel | null = null;
+    try {
+      if ('wakeLock' in navigator)
+        wakeLock = await (navigator as Navigator & { wakeLock: { request(type: string): Promise<WakeLockSentinel> } }).wakeLock.request('screen');
+    } catch { /* ignore */ }
+    const BATCH = 8;
+    let done = 0;
+    for (let i = 0; i < targetIds.length; i += BATCH) {
+      const chunk = targetIds.slice(i, i + BATCH);
+      await Promise.all(chunk.map(id =>
+        applyAndPersistTransformGrouper(id, crop, rotation !== null ? rotation : undefined)
+          .then(() => { done++; setCropPasteProgress({ done, total, status: 'running', failed: [...failed] }); })
+          .catch(() => { done++; failed.push(id); setCropPasteProgress({ done, total, status: 'running', failed: [...failed] }); })
+      ));
+    }
+    if (wakeLock) { try { await wakeLock.release(); } catch { /* ignore */ } }
+    setTimeout(() => onGrouped(groupedItemsRef.current), 0);
+    const snapshot = [...failed];
+    setCropPasteProgress({ done: total, total, status: 'done', failed: snapshot });
+    if (snapshot.length === 0) setTimeout(() => setCropPasteProgress(null), 3500);
   };
 
   // Revert multiple items (selected or all cropped)
@@ -1826,12 +1860,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             )}
             {cropPasteProgress.status === 'running'
               ? `Applying crop to ${cropPasteProgress.total} image${cropPasteProgress.total > 1 ? 's' : ''}…`
-              : 'Crop applied successfully!'}
+              : cropPasteProgress.failed.length > 0
+                ? `Done — ${cropPasteProgress.failed.length} failed`
+                : 'Crop applied successfully!'}
           </div>
           <div style={{ color: '#a5b4fc', fontSize: '0.78rem', marginTop: 1 }}>
             {cropPasteProgress.status === 'running'
               ? `${cropPasteProgress.done} / ${cropPasteProgress.total} complete (${Math.round((cropPasteProgress.done / cropPasteProgress.total) * 100)}%)`
-              : `All ${cropPasteProgress.total} image${cropPasteProgress.total > 1 ? 's' : ''} processed.`}
+              : cropPasteProgress.failed.length > 0
+                ? `${cropPasteProgress.total - cropPasteProgress.failed.length} succeeded, ${cropPasteProgress.failed.length} failed`
+                : `All ${cropPasteProgress.total} image${cropPasteProgress.total > 1 ? 's' : ''} processed.`}
           </div>
           <div style={{ background: 'rgba(99,102,241,0.18)', borderRadius: 8, height: 10, width: '100%', overflow: 'hidden', marginTop: 2 }}>
             <div style={{
@@ -1842,6 +1880,25 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               transition: 'width 0.25s ease',
             }} />
           </div>
+          {cropPasteProgress.status === 'done' && cropPasteProgress.failed.length > 0 && copiedCrop && (
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              <button
+                onClick={async () => {
+                  const ids = [...cropPasteProgress.failed];
+                  await runCropBatchPaste(ids, copiedCrop!, copiedRotation);
+                }}
+                style={{ flex: 1, background: '#f59e0b', color: '#111', border: 'none', borderRadius: 8, padding: '0.4rem 0.7rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem' }}
+              >
+                ↺ Retry {cropPasteProgress.failed.length} failed
+              </button>
+              <button
+                onClick={() => setCropPasteProgress(null)}
+                style={{ background: 'none', border: '1px solid #6366f1', color: '#a5b4fc', borderRadius: 8, padding: '0.4rem 0.7rem', cursor: 'pointer', fontSize: '0.78rem' }}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
         </div>
       )}
       
@@ -2136,42 +2193,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       if (!confirmed) return;
                       setSelectedItems(new Set());
                       if (copiedCrop !== undefined && copiedCrop !== null) {
-                        // Bake the crop (+ optional rotation) into each target image — batched with progress
-                        const total = targetIds.length;
-                        setCropPasteProgress({ done: 0, total, status: 'running' });
-
-                        // Acquire a Screen Wake Lock so the device doesn't sleep
-                        // during long crop batches (1000+ images, walk-away use).
-                        let wakeLock: WakeLockSentinel | null = null;
-                        try {
-                          if ('wakeLock' in navigator) {
-                            wakeLock = await (navigator as Navigator & { wakeLock: { request(type: string): Promise<WakeLockSentinel> } }).wakeLock.request('screen');
-                            console.log('[crop-batch] Screen Wake Lock acquired');
-                          }
-                        } catch (wlErr) { console.warn('[crop-batch] Wake Lock not available:', wlErr); }
-
-                        // Process crops in parallel batches of 8.
-                        // commitFunctional uses React's functional setState so
-                        // concurrent updates are safe — no last-writer-wins race.
-                        const BATCH = 8;
-                        let done = 0;
-                        for (let i = 0; i < targetIds.length; i += BATCH) {
-                          const batch = targetIds.slice(i, i + BATCH);
-                          await Promise.all(batch.map(id =>
-                            applyAndPersistTransformGrouper(id, copiedCrop, copiedRotation !== null ? copiedRotation : undefined)
-                              .then(() => { done++; setCropPasteProgress({ done, total, status: 'running' }); })
-                              .catch(() => { done++; setCropPasteProgress({ done, total, status: 'running' }); })
-                          ));
-                        }
-                        // Release wake lock
-                        if (wakeLock) { try { await wakeLock.release(); console.log('[crop-batch] Screen Wake Lock released'); } catch { /* ignore */ } }
-                        // onGrouped is called per-item inside applyAndPersistTransformGrouper,
-                        // but React may batch setGroupedItems updates so groupedItemsRef.current
-                        // may not reflect all changes until after the next flush. Schedule a
-                        // final deferred call to ensure App.tsx auto-saves the fully merged state.
-                        setTimeout(() => onGrouped(groupedItemsRef.current), 0);
-                        setCropPasteProgress({ done: total, total, status: 'done' });
-                        setTimeout(() => setCropPasteProgress(null), 3500);
+                        await runCropBatchPaste(targetIds, copiedCrop, copiedRotation);
                       } else {
                         // Rotation only — just update state
                         const updated = groupedItems.map(i => {
@@ -2601,6 +2623,21 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   {/* Group-level selection indicator */}
                   {items.every(i => selectedItems.has(i.id)) && (
                     <div className="group-selected-indicator"><Check size={14} /></div>
+                  )}
+                  {/* Paste crop to entire group — only visible when a crop is in clipboard */}
+                  {copiedCrop !== undefined && copiedCrop !== null && (
+                    <button
+                      className="delete-image-btn"
+                      title="Paste copied crop to all images in this group"
+                      style={{ marginLeft: 4, background: '#6366f1', color: '#fff', borderRadius: 6, border: 'none', padding: '0.15rem 0.45rem', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 600 }}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const ids = items.map(i => i.id);
+                        await runCropBatchPaste(ids, copiedCrop!, copiedRotation);
+                      }}
+                    >
+                      📐
+                    </button>
                   )}
                   {/* Delete entire group button */}
                   <button
