@@ -859,6 +859,35 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // One-time cleanup: delete orphaned product_images rows from old broken sessions.
+  // These have storage_path timestamps that predate the FK-fix and never actually
+  // uploaded a file (or the DB write failed), causing perpetual 400s in the gallery.
+  // Uses localStorage so this only fires once per browser, not on every page load.
+  useEffect(() => {
+    if (!user) return;
+    const CLEANUP_KEY = 'sortbot_orphan_cleanup_v1';
+    if (localStorage.getItem(CLEANUP_KEY)) return;
+
+    (async () => {
+      try {
+        // Delete rows whose storage_path contains timestamps from the known bad sessions.
+        // These are timestamp-prefixed filenames from uploads that never completed correctly.
+        const badPrefixes = ['17796956', '17796957'];
+        for (const prefix of badPrefixes) {
+          await supabase
+            .from('product_images')
+            .delete()
+            .like('storage_path', `%${prefix}%`);
+        }
+      } catch {
+        // Non-critical — swallow silently
+      } finally {
+        localStorage.setItem(CLEANUP_KEY, '1');
+        log.app('one-time orphan cleanup complete');
+      }
+    })();
+  }, [user]);
+
   const handleSignOut = async () => {
     log.auth('handleSignOut');
     await supabase.auth.signOut();
