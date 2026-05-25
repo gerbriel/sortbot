@@ -183,12 +183,11 @@ class GrouperErrorBoundary extends Component<{ children: ReactNode }, GrouperBou
   static getDerivedStateFromError(error: Error) { return { error }; }
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('[GrouperErrorBoundary] caught render error — auto-recovering:', error, info);
-    // Reset immediately so the grouper re-renders without an error screen
-    setTimeout(() => this.setState({ error: null }), 0);
+    // Reset synchronously so React can batch this with the current work loop,
+    // avoiding a visible null-render frame that would unmount/remount the grouper.
+    this.setState({ error: null });
   }
   render() {
-    // While the reset setTimeout hasn't fired yet, render nothing rather than
-    // showing an error screen — the grouper will reappear on the next tick.
     if (this.state.error) return null;
     return this.props.children;
   }
