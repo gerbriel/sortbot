@@ -213,18 +213,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     isBusy: isUploading || extractingZip,
   }), [isUploading, extractingZip]);
 
-  // Re-upload all files that failed during the last processFiles run.
-  // Clears the failed list first so the banner disappears immediately, then
-  // re-runs the exact same upload pipeline on just those files.
-  const retryFailedUploads = useCallback(async () => {
-    if (failedUploads.length === 0) return;
-    const toRetry = [...failedUploads];
-    setFailedUploads([]);
-    console.log('[upload] 🔄 Retrying', toRetry.length, 'failed file(s)…');
-    await processFiles(toRetry.map(f => f.file));
-  }, [failedUploads, processFiles]);
-
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+  const processFiles = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
     // Prevent concurrent uploads — drop any call that arrives while one is already running
     if (isProcessingRef.current) {
@@ -394,7 +383,18 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       cancelledRef.current = false;
     }
   }, [onImagesUploaded, userId]);
-  
+
+  // Re-upload all files that failed during the last processFiles run.
+  // Clears the failed list first so the banner disappears immediately, then
+  // re-runs the exact same upload pipeline on just those files.
+  const retryFailedUploads = useCallback(async () => {
+    if (failedUploads.length === 0) return;
+    const toRetry = [...failedUploads];
+    setFailedUploads([]);
+    console.log('[upload] 🔄 Retrying', toRetry.length, 'failed file(s)…');
+    await processFiles(toRetry.map(f => f.file));
+  }, [failedUploads, processFiles]);
+
   const uploadToSupabase = async (file: File, productId: string): Promise<{ preview: string; imageUrls: string[]; storagePath: string } | null> => {
     try {
       const fileExt = file.name.split('.').pop() || 'jpg';
