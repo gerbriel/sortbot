@@ -182,13 +182,18 @@ class GrouperErrorBoundary extends Component<{ children: ReactNode }, GrouperBou
   }
   static getDerivedStateFromError(error: Error) { return { error }; }
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error('[GrouperErrorBoundary] caught render error — auto-recovering:', error, info);
-    // Reset synchronously so React can batch this with the current work loop,
-    // avoiding a visible null-render frame that would unmount/remount the grouper.
-    this.setState({ error: null });
+    console.error('[GrouperErrorBoundary] caught render error:', error, info);
   }
   render() {
-    if (this.state.error) return null;
+    if (this.state.error) {
+      return (
+        <div style={{ padding: '1rem', background: '#fff0f0', border: '1px solid red', borderRadius: 8, minHeight: 200 }}>
+          <strong style={{ color: 'red' }}>Render error (please report this message):</strong>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12, marginTop: 8 }}>{this.state.error.message}{'\n'}{this.state.error.stack}</pre>
+          <button onClick={() => this.setState({ error: null })} style={{ marginTop: 8 }}>Retry</button>
+        </div>
+      );
+    }
     return this.props.children;
   }
 }
@@ -2378,6 +2383,7 @@ function App() {
                 <p className="step-description" style={{ marginTop: 0 }}>
                   Drag a group here to assign a category.
                 </p>
+                <GrouperErrorBoundary>
                 <CategoryZones 
                   items={groupedImages.length > 0 ? groupedImages : uploadedImages}
                   onCategorized={handleImagesSorted}
@@ -2385,6 +2391,7 @@ function App() {
                   selectedItemIds={selectedGroupItems}
                   onCategoryAssigned={() => { setSelectedGroupItems(new Set()); grouperActionsRef.current?.clearSelection(); }}
                 />
+                </GrouperErrorBoundary>
                 {/* Selection action buttons — rendered here so they stay visible while scrolling left panel */}
                 {grouperActions && (
                   <div className="grouper-actions-sidebar">
