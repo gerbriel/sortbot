@@ -311,6 +311,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     newGroupOrder.forEach(gid => {
       if (newGroupsMap[gid]) reordered.push(...newGroupsMap[gid]);
     });
+    console.log(`[emitReordered] reordered=${reordered.length} groups=${newGroupOrder.length} — calling onCategorized`);
     onCategorized(reordered);
   };
 
@@ -450,6 +451,9 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     const selected = items.filter(i => selectedItemIds.has(i.id));
     if (selected.length === 0) return;
     log.sorter(`handleCategoryClick | category=${categoryName} selectedCount=${selected.length}`);
+    console.group(`%c[CategoryClick] category="${categoryName}" selected=${selected.length}`, 'color:#8b5cf6;font-weight:bold');
+    console.log('selectedItemIds:', [...selectedItemIds]);
+    console.log('selected items:', selected.map(i => ({ id: i.id.slice(0,8), name: i.originalName, productGroup: i.productGroup?.slice(0,8) ?? 'none' })));
 
     // Collect all unique group IDs touched by the selection.
     // A group is "already grouped" if it has 2+ members in the full items list.
@@ -524,6 +528,9 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
       newGroupOrder.push(mergedSinglesGroupId);
     }
 
+    console.log('[CategoryClick] updatedMap groups:', Object.entries(updatedMap).map(([gid, its]) => ({ gid: gid.slice(0,8), count: its.length, category: its[0]?.category })));
+    console.log('[CategoryClick] newGroupOrder length:', newGroupOrder.length);
+    console.groupEnd();
     emitReordered(newGroupOrder, updatedMap);
     onCategoryAssigned?.();
   };

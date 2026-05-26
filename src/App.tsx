@@ -1188,6 +1188,8 @@ function App() {
 
   const handleImagesSorted = async (items: ClothingItem[]) => {
     log.app(`handleImagesSorted | items=${items.length} categories=${[...new Set(items.map(i => i.category).filter(Boolean))].join(', ')}`);
+    const categoryCounts = [...new Set(items.map(i => i.category).filter(Boolean))].map(cat => ({ cat, count: items.filter(i => i.category === cat).length }));
+    console.log(`[handleImagesSorted] items=${items.length}`, categoryCounts);
     setSortedImages(items);
     // Also update groupedImages so Step 2 shows the categories
     setGroupedImages(items);
@@ -1285,6 +1287,7 @@ function App() {
     // thanks to initializeItems' dedup logic, so the guard is not needed for correctness.
     const groups = new Set(items.map(i => i.productGroup).filter(Boolean));
     log.grouper(`handleImagesGrouped | items=${items.length} groups=${groups.size}`);
+    console.log(`[handleImagesGrouped] items=${items.length} groups=${groups.size}`);
     // Preserve existing categories when updating groups.
     // Read from groupedImagesRef (not groupedImages closure) so rapid calls always
     // see the latest categories, not a stale snapshot from the render that fired.

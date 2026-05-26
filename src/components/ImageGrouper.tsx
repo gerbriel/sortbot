@@ -117,6 +117,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       setCanUndo(true);
       setCanRedo(false);
     }
+    const groups = new Set(newItems.map(i => i.productGroup).filter(Boolean));
+    console.log(`[commitUpdate] items=${newItems.length} groups=${groups.size} skipHistory=${skipHistory}`);
     setGroupedItems(newItems);
     onGrouped(newItems);
   };
@@ -1348,6 +1350,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       return;
     }
     log.grouper(`ungroupSelected | selected=${selectedItems.size}`);
+    console.log(`[ungroupSelected] ungrouping ${selectedItems.size} items`);
 
     const updated = groupedItems.map(item =>
       selectedItems.has(item.id)
