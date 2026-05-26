@@ -1272,11 +1272,12 @@ function App() {
   };
 
   const handleImagesGrouped = async (items: ClothingItem[]) => {
-    // Skip mid-upload calls — ImageGrouper's [items] useEffect calls onGrouped on every
-    // chunk flush, which triggers setGroupedImages → another re-render → another
-    // [items] useEffect run (O(n) map). Suppressing this during upload eliminates the
-    // cascade; the final call after upload completes (isUploadingRef=false) does the sync.
-    if (isUploadingRef.current) return;
+    // NOTE: We intentionally do NOT skip this during upload (isUploadingRef.current).
+    // The previous guard caused all user group actions during an active upload to be
+    // silently dropped — local state showed the group, but it was never persisted,
+    // so a page reload lost all grouping work.  The cascade concern (onGrouped firing
+    // per chunk → setGroupedImages → initializeItems loop) terminates in ≤2 iterations
+    // thanks to initializeItems' dedup logic, so the guard is not needed for correctness.
     const groups = new Set(items.map(i => i.productGroup).filter(Boolean));
     log.grouper(`handleImagesGrouped | items=${items.length} groups=${groups.size}`);
     // Preserve existing categories when updating groups.

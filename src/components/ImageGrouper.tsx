@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
 import { Package, Image, ArrowDown, ArrowUp, ArrowUpDown, Check } from 'lucide-react';
@@ -1203,17 +1203,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     }
   };
 
-  const getGroups = () => {
-    const groups: Record<string, ClothingItem[]> = {};
-    groupedItems.forEach(item => {
-      const groupId = item.productGroup || item.id;
-      if (!groups[groupId]) {
-        groups[groupId] = [];
-      }
-      groups[groupId].push(item);
-    });
-    return groups;
-  };
+  // ── Memoized group/sort/filter computations start below ──
 
   // Click-to-Select functionality (with Shift+Click for multi-select)
   // Helper: update selection state and notify parent so CategoryZones can use it
@@ -1741,88 +1731,79 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     onImageDeleted?.();
   };
 
-  const groups = getGroups();
-  const groupEntries = Object.entries(groups);
-
-  // ── Sort helpers ─────────────────────────────────────────────────────────
-  // Name key: prefer originalName (e.g. "DSC02175.jpg") so numeric sequence is correct.
-  // Falls back to the filename portion of storagePath, then to id.
+  // ── Sort helpers — defined once, stable references ────────────────────────
   const nameKey = (item: ClothingItem): string => {
     if (item.originalName) return item.originalName.toLowerCase();
     if (item.storagePath) return item.storagePath.split('/').pop()?.toLowerCase() ?? item.id;
     return item.id.toLowerCase();
   };
-
-  // Natural (numeric-aware) comparator so DSC02175 < DSC02176 < DSC02177 etc.
   const naturalCompare = (a: string, b: string) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 
-  const sortItems = (arr: ClothingItem[]): ClothingItem[] => {
-    const copy = [...arr];
-    switch (sortOrder) {
-      case 'date-asc':  return copy.sort((a, b) => (a.capturedAt ?? 0) - (b.capturedAt ?? 0));
-      case 'date-desc': return copy.sort((a, b) => (b.capturedAt ?? 0) - (a.capturedAt ?? 0));
-      case 'name-asc':  return copy.sort((a, b) => naturalCompare(nameKey(a), nameKey(b)));
-      case 'name-desc': return copy.sort((a, b) => naturalCompare(nameKey(b), nameKey(a)));
-    }
-  };
-
-  // Sort group entries by the representative item (first item, lowest capturedAt, or name)
-  const sortGroupEntries = (entries: [string, ClothingItem[]][]): [string, ClothingItem[]][] => {
-    const copy = [...entries];
-    switch (sortOrder) {
-      case 'date-asc':
-        return copy.sort(([, a], [, b]) =>
-          Math.min(...a.map(i => i.capturedAt ?? 0)) - Math.min(...b.map(i => i.capturedAt ?? 0)));
-      case 'date-desc':
-        return copy.sort(([, a], [, b]) =>
-          Math.min(...b.map(i => i.capturedAt ?? 0)) - Math.min(...a.map(i => i.capturedAt ?? 0)));
-      case 'name-asc':
-        return copy.sort(([, a], [, b]) => naturalCompare(nameKey(a[0]), nameKey(b[0])));
-      case 'name-desc':
-        return copy.sort(([, a], [, b]) => naturalCompare(nameKey(b[0]), nameKey(a[0])));
-    }
-  };
-
-  const multiItemGroups = sortGroupEntries(groupEntries.filter(([_, items]) => items.length > 1));
-  const baseSingleItems = sortItems(
-    groupEntries
-      .filter(([_, items]) => items.length === 1)
-      .flatMap(([_, items]) => items)
-  );
-  // Apply manual order if one has been set (drag-to-reorder)
-  const singleItems = manualOrder.length > 0
-    ? (() => {
-        const byId = Object.fromEntries(baseSingleItems.map(i => [i.id, i]));
-        const ordered = manualOrder.map(id => byId[id]).filter(Boolean) as typeof baseSingleItems;
-        // Append any new items not yet in manualOrder at the end
-        const inOrder = new Set(manualOrder);
-        const tail = baseSingleItems.filter(i => !inOrder.has(i.id));
-        return [...ordered, ...tail];
-      })()
-    : baseSingleItems;
-
-  // Build a sorted list of unique calendar dates (YYYY-MM-DD) from all items for the filter dropdown
-  const uniqueFilterDates: string[] = (() => {
-    const dateSet = new Set<string>();
+  // ── Memoized derived data — only recomputes when groupedItems / sortOrder /
+  //    filters / manualOrder actually change, not on hover/scroll/selection. ──
+  const { multiItemGroups, singleItems, uniqueFilterDates, uniqueFilterCategories } = useMemo(() => {
+    // Build group map
+    const grps: Record<string, ClothingItem[]> = {};
     groupedItems.forEach(item => {
-      if (item.capturedAt) {
-        dateSet.add(new Date(item.capturedAt).toLocaleDateString('en-CA')); // YYYY-MM-DD
-      }
+      const gid = item.productGroup || item.id;
+      if (!grps[gid]) grps[gid] = [];
+      grps[gid].push(item);
     });
-    return [...dateSet].sort();
-  })();
+    const entries = Object.entries(grps);
 
-  // Build sorted unique category values across all items
-  const uniqueFilterCategories: string[] = (() => {
-    const cats = new Set<string>();
-    groupedItems.forEach(item => { if (item.category) cats.add(item.category); });
-    return [...cats].sort();
-  })();
+    const sortArr = (arr: ClothingItem[]): ClothingItem[] => {
+      const copy = [...arr];
+      switch (sortOrder) {
+        case 'date-asc':  return copy.sort((a, b) => (a.capturedAt ?? 0) - (b.capturedAt ?? 0));
+        case 'date-desc': return copy.sort((a, b) => (b.capturedAt ?? 0) - (a.capturedAt ?? 0));
+        case 'name-asc':  return copy.sort((a, b) => naturalCompare(nameKey(a), nameKey(b)));
+        case 'name-desc': return copy.sort((a, b) => naturalCompare(nameKey(b), nameKey(a)));
+      }
+    };
+    const sortGroups = (es: [string, ClothingItem[]][]): [string, ClothingItem[]][] => {
+      const copy = [...es];
+      switch (sortOrder) {
+        case 'date-asc':
+          return copy.sort(([, a], [, b]) => Math.min(...a.map(i => i.capturedAt ?? 0)) - Math.min(...b.map(i => i.capturedAt ?? 0)));
+        case 'date-desc':
+          return copy.sort(([, a], [, b]) => Math.min(...b.map(i => i.capturedAt ?? 0)) - Math.min(...a.map(i => i.capturedAt ?? 0)));
+        case 'name-asc':
+          return copy.sort(([, a], [, b]) => naturalCompare(nameKey(a[0]), nameKey(b[0])));
+        case 'name-desc':
+          return copy.sort(([, a], [, b]) => naturalCompare(nameKey(b[0]), nameKey(a[0])));
+      }
+    };
+
+    const multi = sortGroups(entries.filter(([, its]) => its.length > 1));
+    const baseSingles = sortArr(entries.filter(([, its]) => its.length === 1).flatMap(([, its]) => its));
+    const singles = manualOrder.length > 0
+      ? (() => {
+          const byId = Object.fromEntries(baseSingles.map(i => [i.id, i]));
+          const ordered = manualOrder.map(id => byId[id]).filter(Boolean) as ClothingItem[];
+          const inOrder = new Set(manualOrder);
+          return [...ordered, ...baseSingles.filter(i => !inOrder.has(i.id))];
+        })()
+      : baseSingles;
+
+    const dateSet = new Set<string>();
+    const catSet  = new Set<string>();
+    groupedItems.forEach(item => {
+      if (item.capturedAt) dateSet.add(new Date(item.capturedAt).toLocaleDateString('en-CA'));
+      if (item.category)   catSet.add(item.category);
+    });
+
+    return {
+      multiItemGroups:       multi,
+      singleItems:           singles,
+      uniqueFilterDates:     [...dateSet].sort() as string[],
+      uniqueFilterCategories: [...catSet].sort()  as string[],
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupedItems, sortOrder, manualOrder]);
 
   // Apply all filters to both lists (AND logic)
   const toLocalDate = (ts: number) => new Date(ts).toLocaleDateString('en-CA');
-
   const itemPassesFilters = (item: ClothingItem): boolean => {
     if (filters.date && !(item.capturedAt && toLocalDate(item.capturedAt) === filters.date)) return false;
     if (filters.category === 'uncategorized' && item.category) return false;
@@ -1830,15 +1811,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     return true;
   };
 
-  const filteredSingleItems = (() => {
-    if (filters.view === 'groups') return [];
-    return singleItems.filter(item => itemPassesFilters(item));
-  })();
-
-  const filteredMultiItemGroups = (() => {
-    if (filters.view === 'singles') return [];
-    return multiItemGroups.filter(([, items]) => items.some(i => itemPassesFilters(i)));
-  })();
+  const { filteredSingleItems, filteredMultiItemGroups } = useMemo(() => ({
+    filteredSingleItems:    filters.view === 'groups'   ? [] : singleItems.filter(item => itemPassesFilters(item)),
+    filteredMultiItemGroups: filters.view === 'singles' ? [] : multiItemGroups.filter(([, its]) => its.some(i => itemPassesFilters(i))),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [singleItems, multiItemGroups, filters]);
 
   const activeFilterCount = [filters.date, filters.view !== 'all' ? filters.view : '', filters.category]
     .filter(Boolean).length;
