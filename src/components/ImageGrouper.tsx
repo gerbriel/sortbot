@@ -964,11 +964,23 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       // If nothing is new, just sync categories/metadata that may have changed externally
       if (newItems.length === 0) {
         console.log('[GROUPER] no new items — syncing metadata only');
-        // Skip the setGroupedItems call entirely when the item set is identical
-        // (same ids, same count) — avoids a spurious re-render cascade after deletions.
+        // Skip the setGroupedItems call entirely when the item set AND all
+        // grouping/category metadata are identical — avoids a spurious re-render
+        // cascade after deletions or upload-only prop changes.
+        // NOTE: must NOT skip when productGroup or category changed (e.g. after
+        // a group action or category preset click), otherwise those changes are
+        // never propagated into ImageGrouper's internal state.
         const propsIdSet = new Set(items.map(i => i.id));
         const existingArr = groupedItemsRef.current;
+        const itemsByPropId = new Map(items.map(i => [i.id, i]));
+        const hasGroupOrCategoryChange = existingArr.some(i => {
+          const incoming = itemsByPropId.get(i.id);
+          if (!incoming) return true; // item removed — not a "same set" scenario
+          return (incoming.productGroup || incoming.id) !== (i.productGroup || i.id)
+              || incoming.category !== i.category;
+        });
         if (
+          !hasGroupOrCategoryChange &&
           existingArr.length === items.length &&
           existingArr.every(i => propsIdSet.has(i.id))
         ) {
