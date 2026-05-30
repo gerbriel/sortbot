@@ -978,7 +978,14 @@ const TITLE_SYNONYMS: string[][] = [
   ['jeans', 'denim jeans', 'blue jeans', 'jean pants', 'denim pants'],
   ['pants', 'trousers', 'slacks', 'bottoms', 'long pants'],
   ['shorts', 'short pants', 'sport shorts', 'casual shorts', 'gym shorts'],
-  ['hat', 'cap', 'fitted hat', 'snapback hat', 'ball cap'],
+  ['hat', 'ball cap', 'sport cap', 'logo cap', 'dad hat'],
+  ['snapback', 'snapback cap', 'snap cap', 'snap back hat', 'adjustable cap'],
+  ['fitted', 'fitted cap', 'fitted hat', 'structured cap', 'closed back cap'],
+  ['trucker', 'trucker hat', 'trucker cap', 'mesh back hat', 'foam front hat'],
+  ['beanie', 'knit beanie', 'knit cap', 'winter beanie', 'cuffed beanie'],
+  ['bucket hat', 'bucket cap', 'sun hat', 'wide brim hat', 'cotton bucket'],
+  ['visor', 'sun visor', 'sport visor', 'open top cap', 'tennis visor'],
+  ['cap', 'baseball cap', 'sport cap', 'logo cap', 'adjustable hat'],
   // ITEM — skirt/dress length
   ['mini', 'micro mini', 'short hem', 'above knee', 'mini length'],
   ['midi', 'mid length', 'knee length', 'below knee', 'midi length'],
@@ -1002,16 +1009,18 @@ function dedupeTitle(title: string): string {
 
 // fitTo60: after assembling a title, greedily swap synonyms across all tokens
 // to get as close to 60 characters as possible (never cuts mid-word).
+// When multiple swaps are within RANDOM_TOLERANCE chars of the best, picks randomly.
 function fitTo60(title: string): string {
   const TARGET = 60;
+  const RANDOM_TOLERANCE = 3; // chars — candidates within this range of best are randomized
   let current = title.replace(/\s{2,}/g, ' ').trim();
 
   for (let pass = 0; pass < 30; pass++) {
     const len = current.length;
     if (len === TARGET) break;
 
-    let bestCandidate = current;
     let bestDiff = Math.abs(len - TARGET);
+    const topCandidates: string[] = [];
 
     for (const group of TITLE_SYNONYMS) {
       // Find which member of this group appears in the current title
@@ -1031,21 +1040,23 @@ function fitTo60(title: string): string {
       for (const alt of group) {
         if (alt.toLowerCase() === matchedWord.toLowerCase()) continue;
         const swapped = current.replace(matchedRe, alt);
-        // Dedupe after swap to prevent cascading repeats (e.g. hat → snapback hat → snapback snapback hat)
         const candidate = dedupeTitle(swapped.replace(/\s{2,}/g, ' ').trim());
         const candLen = candidate.length;
-        // Never push over 60 if we're currently at or under 60
         if (len <= TARGET && candLen > TARGET) continue;
         const diff = Math.abs(candLen - TARGET);
         if (diff < bestDiff) {
           bestDiff = diff;
-          bestCandidate = candidate;
+          topCandidates.length = 0;
+          topCandidates.push(candidate);
+        } else if (diff <= bestDiff + RANDOM_TOLERANCE) {
+          topCandidates.push(candidate);
         }
       }
     }
 
-    if (bestCandidate === current) break; // no improvement possible
-    current = bestCandidate;
+    if (topCandidates.length === 0) break;
+    // Pick randomly among near-best candidates for title variety
+    current = topCandidates[Math.floor(Math.random() * topCandidates.length)];
   }
 
   return current;
@@ -1228,12 +1239,25 @@ function generateTitleFromFields(context: ProductContext): string {
   }
   // ── HATS / BEANIES ────────────────────────────────────────────────────────
   else if (isHat) {
-    const hatWord = isBeanie ? (isWomens ? 'womens beanie' : 'beanie') : (isWomens ? 'womens hat' : 'hat');
+    // Detect specific hat subtype from category string for accurate item word
+    const isSnapback = /snapback/.test(catStr);
+    const isFitted   = /\bfitted\b/.test(catStr);
+    const isTrucker  = /trucker/.test(catStr);
+    const isBucket   = /bucket/.test(catStr);
+    const isVisor    = /visor/.test(catStr);
+    const hatBase =
+      isBeanie  ? 'beanie'   :
+      isSnapback? 'snapback' :
+      isFitted  ? 'fitted'   :
+      isTrucker ? 'trucker'  :
+      isBucket  ? 'bucket hat':
+      isVisor   ? 'visor'    : 'hat';
+    const hatWord = isWomens ? `womens ${hatBase}` : hatBase;
     if      (v === 1) title = asm(displaySize, ERA, SUBJECT, STYLE, DECADE, hatWord);
     else if (v === 2) title = asm(displaySize, ERA, BRAND,   STYLE, DECADE, hatWord);
-    else if (v === 3) title = asm(displaySize, ERA, SUBJECT, BRAND,   STYLE, DECADE, hatWord);
+    else if (v === 3) title = asm(displaySize, ERA, SUBJECT, BRAND, STYLE, DECADE, hatWord);
     else if (v === 4) title = asm(displaySize, ERA, SUBJECT, MATERIAL, STYLE, DECADE, hatWord);
-    else if (v === 5) title = asm(displaySize, ERA, BRAND,   STYLE, DECADE, isBeanie ? 'beanie' : 'hat');
+    else if (v === 5) title = asm(displaySize, ERA, BRAND,   STYLE, DECADE, hatWord);
     else              title = asm(displaySize, ERA, SUBJECT, DECADE, hatWord);
   }
   // ── ACCESSORIES / BAGS ────────────────────────────────────────────────────
