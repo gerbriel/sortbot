@@ -1039,6 +1039,15 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const item = group[0];
     if (!item) return;
 
+    // Guard: if user has manually edited the description, confirm before overwriting
+    const hasManualEdit = group.some(g => g.descriptionEdited);
+    if (hasManualEdit) {
+      const ok = window.confirm(
+        'You have manually edited this description.\nRegenerate will overwrite your edits. Continue?'
+      );
+      if (!ok) return;
+    }
+
     setIsGenerating(true);
     const targetIds = new Set(group.map(g => g.id));
 
@@ -1136,6 +1145,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             ...(extractedFields.tags && extractedFields.tags.length > 0 && {
               tags: [...new Set([...(it.tags || []), ...extractedFields.tags])].slice(0, 5),
             }),
+            descriptionEdited: false, // clear manual-edit flag after regeneration
           };
         });
         return updated;
@@ -2204,8 +2214,19 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
             {/* AI Description — sits directly below the voice box */}
             <div style={{ marginTop: '0.75rem' }}>
-              <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, marginBottom: '0.4rem' }}>
                 AI Generated Description:
+                {currentItem.descriptionEdited && (
+                  <span style={{
+                    fontSize: '0.7rem',
+                    fontWeight: 500,
+                    background: '#fef3c7',
+                    color: '#92400e',
+                    border: '1px solid #fcd34d',
+                    borderRadius: '4px',
+                    padding: '1px 6px',
+                  }}>✏️ Edited — will export as-is</span>
+                )}
               </label>
               <textarea
                 value={currentItem.generatedDescription}
@@ -2215,6 +2236,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     const itemIndex = updated.findIndex(item => item.id === groupItem.id);
                     if (itemIndex !== -1) {
                       updated[itemIndex].generatedDescription = e.target.value;
+                      updated[itemIndex].descriptionEdited = true;
                     }
                   });
                   setProcessedItems(updated);
@@ -2248,6 +2270,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       if (itemIndex !== -1) {
                         updated[itemIndex].generatedDescription = '';
                         updated[itemIndex].seoDescription = '';
+                        updated[itemIndex].descriptionEdited = false;
                       }
                     });
                     setProcessedItems(updated);
