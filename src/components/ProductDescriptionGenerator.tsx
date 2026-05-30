@@ -1670,6 +1670,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             <LazyImg
               src={currentItem.preview || currentItem.imageUrls?.[0] || ''}
               alt="Product"
+              loading="eager"
               className="preview-image"
               style={{ cursor: 'zoom-in', transform: `rotate(${currentItem.imageRotation || 0}deg)`, clipPath: currentItem.crop ? `inset(${currentItem.crop.y}% ${100 - (currentItem.crop.x + currentItem.crop.w)}% ${100 - (currentItem.crop.y + currentItem.crop.h)}% ${currentItem.crop.x}%)` : undefined }}
               onDoubleClick={() => openLightbox(currentItem.preview || currentItem.imageUrls?.[0] || '', currentItem.id, currentGroup.map(i => i.id))}
@@ -1711,6 +1712,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     <LazyImg
                       src={groupItem.preview || groupItem.imageUrls?.[0] || ''}
                       alt={`Image ${idx + 1}`}
+                      loading="eager"
                       className="group-thumbnail"
                       style={{ transform: `rotate(${groupItem.imageRotation || 0}deg)`, clipPath: groupItem.crop ? `inset(${groupItem.crop.y}% ${100 - (groupItem.crop.x + groupItem.crop.w)}% ${100 - (groupItem.crop.y + groupItem.crop.h)}% ${groupItem.crop.x}%)` : undefined }}
                     />
