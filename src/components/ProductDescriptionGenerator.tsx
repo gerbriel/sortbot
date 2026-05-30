@@ -2214,19 +2214,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
             {/* AI Description — sits directly below the voice box */}
             <div style={{ marginTop: '0.75rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, marginBottom: '0.4rem' }}>
+              <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem' }}>
                 AI Generated Description:
-                {currentItem.descriptionEdited && (
-                  <span style={{
-                    fontSize: '0.7rem',
-                    fontWeight: 500,
-                    background: '#fef3c7',
-                    color: '#92400e',
-                    border: '1px solid #fcd34d',
-                    borderRadius: '4px',
-                    padding: '1px 6px',
-                  }}>✏️ Edited — will export as-is</span>
-                )}
               </label>
               <textarea
                 value={currentItem.generatedDescription}
