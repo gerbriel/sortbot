@@ -1066,13 +1066,13 @@ function generateTitleFromFields(context: ProductContext): string {
   const clean = (s?: string) =>
     (s || '').replace(/\bperiod\b/gi, '').replace(/\s{2,}/g, ' ').trim();
 
-  // ── Filled tokens — dedupe each field's own internal words first ───────────
+  // ── Filled tokens — dedupe internal repeated words, but preserve proper nouns ─
   const SIZE    = dedupeTitle(clean(context.size));
-  const BRAND   = dedupeTitle(clean(context.brand));
+  const BRAND   = clean(context.brand);   // do NOT dedupe — proper noun (e.g. "American Vintage")
   const STYLE   = dedupeTitle(clean(context.style));
   const COLOR   = dedupeTitle(clean(context.color));
   const MATERIAL = dedupeTitle(clean(context.material));
-  const SUBJECT  = dedupeTitle(clean(context.modelName)); // band, team, character, model name
+  const SUBJECT  = clean(context.modelName); // do NOT dedupe — proper noun (band/team/artist name)
 
   // ERA is always "Vintage Y2K" in this app (the constant prefix)
   const ERA = 'Vintage Y2K';
@@ -1315,8 +1315,19 @@ function generateTitleFromFields(context: ProductContext): string {
     else              title = asm(displaySize, ERA, BRAND, DECADE, item);
   }
 
-  // ── Remove duplicate words, then optimize length toward 60 chars ──────────
-  title = dedupeTitle(title.replace(/\s{2,}/g, ' ').trim());
+  // ── Remove duplicate words (protecting BRAND/SUBJECT proper noun sequences) ─
+  // Swap brand/subject with placeholders BEFORE deduping so words like
+  // "Vintage" in "American Vintage" aren't stripped when ERA also says
+  // "Vintage Y2K". Restore them after.
+  const brandPH   = BRAND   ? '\x00BRAND\x00'   : '';
+  const subjectPH = SUBJECT ? '\x00SUBJECT\x00' : '';
+  let td = title.replace(/\s{2,}/g, ' ').trim();
+  if (BRAND)   td = td.replace(new RegExp(BRAND.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), brandPH);
+  if (SUBJECT) td = td.replace(new RegExp(SUBJECT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), subjectPH);
+  td = dedupeTitle(td);
+  if (BRAND)   td = td.replace(brandPH, BRAND);
+  if (SUBJECT) td = td.replace(subjectPH, SUBJECT);
+  title = td.replace(/\s{2,}/g, ' ').trim();
   title = fitTo60(title);
 
   // Hard word-boundary trim to 60 chars (safety net for titles with no synonyms)
