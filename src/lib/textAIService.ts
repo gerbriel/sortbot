@@ -885,57 +885,253 @@ function generateTitleFromFields(context: ProductContext): string {
   const clean = (s?: string) =>
     (s || '').replace(/\bperiod\b/gi, '').replace(/\s{2,}/g, ' ').trim();
 
-  // Detect item type from category + voice for bag/hat special handling
-  const categoryStr = `${context.category || ''} ${context.voiceDescription || ''}`.toLowerCase();
-  const BAG_TYPES = /\b(bag|backpack|tote|purse|handbag|crossbody|cross-body|messenger|duffel|duffle|fanny\s*pack|belt\s*bag|satchel|clutch|wristlet|pouch|briefcase)\b/;
-  const HAT_TYPES = /\b(hat|cap|beanie|snapback|fitted|bucket\s*hat|dad\s*hat|trucker|visor|beret|boonie|headwear|five.panel)\b/;
+  // ── Filled tokens ──────────────────────────────────────────────────────────
+  const SIZE    = clean(context.size);
+  const BRAND   = clean(context.brand);
+  const STYLE   = clean(context.style);
+  const COLOR   = clean(context.color);
+  const MATERIAL = clean(context.material);
+  const SUBJECT  = clean(context.modelName); // band, team, character, model name
 
-  const isBag = BAG_TYPES.test(categoryStr);
-  const isHat = HAT_TYPES.test(categoryStr);
+  // ERA is always "Vintage Y2K" in this app (the constant prefix)
+  const ERA = 'Vintage Y2K';
 
-  // Determine size prefix
-  let sizePrefix = '';
-  if (!isBag) {
-    const size = clean(context.size);
-    if (isHat) {
-      sizePrefix = 'OSFA - ';
-    } else if (size) {
-      sizePrefix = `${size} - `;
-    }
+  // DECADE is derived from the era field: "90s", "00s", "2000s", "80s", etc.
+  // Strip generic terms that are already covered by ERA so we don't repeat them.
+  const rawEra = clean(context.era).toLowerCase().replace(/\s+/g, '');
+  let DECADE = '';
+  if (/^y2k$|^2000s?$|^00s$/.test(rawEra))       DECADE = '2000s';
+  else if (/^90s$|^1990s?$/.test(rawEra))          DECADE = '90s';
+  else if (/^80s$|^1980s?$/.test(rawEra))          DECADE = '80s';
+  else if (/^70s$|^1970s?$/.test(rawEra))          DECADE = '70s';
+  else if (/^60s$|^1960s?$/.test(rawEra))          DECADE = '60s';
+  else if (rawEra && !/vintage|retro/.test(rawEra)) DECADE = clean(context.era);
+
+  // ── Category / gender detection ────────────────────────────────────────────
+  const catRaw   = (context.category || '').toLowerCase();
+  const genderRaw = (context.gender  || '').toLowerCase();
+
+  const isWomens = /women|female|ladies/.test(genderRaw) || /women/.test(catRaw);
+  const isKids   = /kid|youth|child|boy|girl|junior/.test(genderRaw) || /kid|youth/.test(catRaw);
+
+  const catStr = catRaw; // convenience alias
+
+  const isTee        = /tee|t[-\s]?shirt|tshirt/.test(catStr);
+  const isShirt      = /\bshirt\b/.test(catStr) && !isTee;
+  const isSweatshirt = /sweatshirt|crewneck/.test(catStr) && !/hoodie/.test(catStr);
+  const isHoodie     = /hoodie/.test(catStr);
+  const isJacket     = /jacket|coat/.test(catStr);
+  const isPants      = /\bpants?\b|\btrouser/.test(catStr) && !/jeans/.test(catStr);
+  const isJeans      = /jeans/.test(catStr);
+  const isShorts     = /shorts/.test(catStr);
+  const isJersey     = /jersey/.test(catStr);
+  const isHat        = /\bhat\b|\bcap\b|\bbeanie\b|\bsnapback\b|\bfitted\b|\bbucket\b|\btrucker\b|\bvisor\b/.test(catStr);
+  const isBeanie     = /beanie|knit\s*hat/.test(catStr);
+  const isAccessory  = /accessor|bag|backpack|tote|purse|handbag|crossbody|wallet/.test(catStr);
+  const isSkirt      = /skirt/.test(catStr);
+  const isDress      = /dress/.test(catStr);
+  const isBodysuit   = /bodysuit/.test(catStr);
+  const isTop        = /\btop\b/.test(catStr) && !isTee && !isShirt;
+
+  // Hats always show OSFA unless we have a numeric size (e.g. "7½")
+  let displaySize = SIZE;
+  if (isHat) {
+    displaySize = (SIZE && /^\d/.test(SIZE)) ? SIZE : 'OSFA';
+  }
+  // Accessories skip the size prefix
+  if (isAccessory) displaySize = '';
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  // Join non-empty tokens with a single space
+  const j = (...parts: string[]) => parts.filter(Boolean).join(' ');
+
+  // Assemble: "{size} - {body}" or "{body}" when size is empty
+  const asm = (sz: string, ...tokens: string[]) => {
+    const body = j(...tokens);
+    return sz ? `${sz} - ${body}` : body;
+  };
+
+  // ── Pick variation (1–6) based on which fields are filled ──────────────────
+  // Prefer subject-forward (V2/V3) when modelName is filled.
+  // Prefer color/material (V3) when both color & material are filled.
+  // Otherwise pick randomly so titles stay varied.
+  let v: number;
+  if (SUBJECT && !BRAND)      v = 2;          // subject-only scenario
+  else if (SUBJECT && BRAND)  v = Math.random() < 0.5 ? 2 : 1;
+  else if (COLOR && MATERIAL) v = 3;
+  else if (!STYLE && !DECADE) v = 6;          // minimal fallback
+  else v = Math.floor(Math.random() * 4) + 1; // V1-V4 for most cases
+
+  // ── Category-specific formula sets ────────────────────────────────────────
+  let title = '';
+
+  // ── TEES ──────────────────────────────────────────────────────────────────
+  if (isTee) {
+    const item = isWomens ? 'womens t-shirt' : isKids ? 'youth t-shirt' : 't-shirt';
+    if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, SUBJECT, BRAND, DECADE, item);
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, COLOR, MATERIAL, DECADE, item);
+    else if (v === 4) title = asm(displaySize, ERA, BRAND, STYLE, item);
+    else if (v === 5) title = asm(displaySize, ERA, BRAND, DECADE, item);
+    else              title = asm(displaySize, ERA, SUBJECT, STYLE, DECADE, item);
+  }
+  // ── SHIRTS ────────────────────────────────────────────────────────────────
+  else if (isShirt) {
+    const item = isWomens ? 'womens shirt' : isKids ? 'youth shirt' : 'shirt';
+    if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, MATERIAL, STYLE, DECADE, item);
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, COLOR, STYLE, DECADE, item);
+    else if (v === 4) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
+    else if (v === 5) title = asm(displaySize, ERA, BRAND, DECADE, item);
+    else              title = asm(displaySize, ERA, SUBJECT, BRAND, STYLE, item);
+  }
+  // ── SWEATSHIRTS ───────────────────────────────────────────────────────────
+  else if (isSweatshirt) {
+    const item = isWomens ? 'womens sweatshirt' : isKids ? 'youth sweatshirt' : 'sweatshirt';
+    if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, SUBJECT, BRAND, DECADE, item);
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, MATERIAL, STYLE, DECADE, item);
+    else if (v === 4) title = asm(displaySize, ERA, BRAND, COLOR, 'heavyweight', DECADE, item);
+    else if (v === 5) title = asm(displaySize, ERA, BRAND, STYLE, item);
+    else              title = asm(displaySize, ERA, SUBJECT, BRAND, DECADE, item);
+  }
+  // ── HOODIES ───────────────────────────────────────────────────────────────
+  else if (isHoodie) {
+    const item = isWomens ? 'womens hoodie' : isKids ? 'youth hoodie' : 'hoodie';
+    if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, MATERIAL, STYLE, DECADE, item);
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, STYLE, 'zip up', DECADE, item);
+    else if (v === 4) title = asm(displaySize, ERA, BRAND, COLOR, 'pullover', DECADE, item);
+    else if (v === 5) title = asm(displaySize, ERA, SUBJECT, STYLE, DECADE, item);
+    else              title = asm(displaySize, ERA, BRAND, DECADE, item);
+  }
+  // ── JACKETS ───────────────────────────────────────────────────────────────
+  else if (isJacket) {
+    const item = isWomens ? 'womens jacket' : isKids ? 'youth jacket' : 'jacket';
+    if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, MATERIAL, STYLE, DECADE, item);
+    else if (v === 3) title = asm(displaySize, ERA, SUBJECT, STYLE, DECADE, item);
+    else if (v === 4) title = asm(displaySize, ERA, BRAND, STYLE, 'workwear', DECADE, item);
+    else if (v === 5) title = asm(displaySize, ERA, BRAND, COLOR, STYLE, DECADE, item);
+    else              title = asm(displaySize, ERA, BRAND, DECADE, item);
+  }
+  // ── PANTS ─────────────────────────────────────────────────────────────────
+  else if (isPants) {
+    const item = isWomens ? 'womens pants' : isKids ? 'youth pants' : 'pants';
+    if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, MATERIAL, STYLE, DECADE, item);
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, 'baggy', STYLE, DECADE, item);
+    else if (v === 4) title = asm(displaySize, ERA, BRAND, COLOR, MATERIAL, DECADE, item);
+    else if (v === 5) title = asm(displaySize, ERA, BRAND, DECADE, item);
+    else              title = asm(displaySize, ERA, BRAND, STYLE, 'fit', DECADE, item);
+  }
+  // ── JEANS ─────────────────────────────────────────────────────────────────
+  else if (isJeans) {
+    const item = isWomens ? 'womens jeans' : isKids ? 'youth jeans' : 'jeans';
+    if      (v === 1) title = asm(displaySize, ERA, BRAND, SUBJECT, STYLE, DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, COLOR, STYLE, DECADE, item);
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, 'baggy', STYLE, DECADE, item);
+    else if (v === 4) title = asm(displaySize, ERA, BRAND, DECADE, item);
+    else if (v === 5) title = asm(displaySize, ERA, BRAND, 'super faded', DECADE, item);
+    else              title = asm(displaySize, ERA, BRAND, STYLE, MATERIAL, 'carpenter', DECADE, item);
+  }
+  // ── SHORTS ────────────────────────────────────────────────────────────────
+  else if (isShorts) {
+    const item = isWomens ? 'womens shorts' : isKids ? 'youth shorts' : 'shorts';
+    if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, MATERIAL, STYLE, DECADE, item);
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, COLOR, STYLE, DECADE, item);
+    else if (v === 4) title = asm(displaySize, ERA, BRAND, STYLE, 'hip hop', DECADE, item);
+    else if (v === 5) title = asm(displaySize, ERA, BRAND, DECADE, item);
+    else              title = asm(displaySize, ERA, SUBJECT, STYLE, DECADE, item);
+  }
+  // ── JERSEYS ───────────────────────────────────────────────────────────────
+  else if (isJersey) {
+    const item = 'jersey';
+    if      (v === 1) title = asm(displaySize, ERA, SUBJECT, BRAND, DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, SUBJECT, STYLE, DECADE, item);
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, STYLE, SUBJECT, DECADE, item);
+    else if (v === 4) title = asm(displaySize, ERA, SUBJECT, COLOR, DECADE, item);
+    else if (v === 5) title = asm(displaySize, ERA, SUBJECT, DECADE, item);
+    else              title = asm(displaySize, ERA, SUBJECT, BRAND, STYLE, item);
+  }
+  // ── HATS / BEANIES ────────────────────────────────────────────────────────
+  else if (isHat) {
+    const hatWord = isBeanie ? (isWomens ? 'womens beanie' : 'beanie') : (isWomens ? 'womens hat' : 'hat');
+    if      (v === 1) title = asm(displaySize, ERA, SUBJECT, STYLE, DECADE, hatWord);
+    else if (v === 2) title = asm(displaySize, ERA, BRAND,   STYLE, DECADE, hatWord);
+    else if (v === 3) title = asm(displaySize, ERA, SUBJECT, 'embroider', DECADE, hatWord);
+    else if (v === 4) title = asm(displaySize, ERA, SUBJECT, MATERIAL, STYLE, DECADE, hatWord);
+    else if (v === 5) title = asm(displaySize, ERA, BRAND,   STYLE, DECADE, isBeanie ? 'beanie' : 'hat');
+    else              title = asm(displaySize, ERA, SUBJECT, DECADE, hatWord);
+  }
+  // ── ACCESSORIES / BAGS ────────────────────────────────────────────────────
+  else if (isAccessory) {
+    const item = isWomens ? 'womens bag' : 'bag';
+    if      (v === 1) title = asm('', ERA, BRAND,   STYLE,    DECADE, item);
+    else if (v === 2) title = asm('', ERA, BRAND,   COLOR,    MATERIAL, DECADE, item);
+    else if (v === 3) title = asm('', ERA, SUBJECT, STYLE,    DECADE, item);
+    else if (v === 4) title = asm('', ERA, BRAND,   MATERIAL, DECADE, item);
+    else if (v === 5) title = asm('', ERA, BRAND,   STYLE,    COLOR, item);
+    else              title = asm('', ERA, SUBJECT, STYLE,    'accessory');
+  }
+  // ── SKIRTS ────────────────────────────────────────────────────────────────
+  else if (isSkirt) {
+    if      (v === 1) title = asm(displaySize, ERA, BRAND, MATERIAL, STYLE, DECADE, 'womens skirt');
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, COLOR,    MATERIAL, DECADE, 'womens skirt');
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, STYLE,    DECADE, 'womens skirt');
+    else if (v === 4) title = asm(displaySize, ERA, BRAND, DECADE, 'womens skirt');
+    else if (v === 5) title = asm(displaySize, ERA, SUBJECT, STYLE, DECADE, 'womens skirt');
+    else              title = asm(displaySize, ERA, BRAND, MATERIAL, 'mini', DECADE, 'womens skirt');
+  }
+  // ── DRESSES ───────────────────────────────────────────────────────────────
+  else if (isDress) {
+    if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE,    DECADE, 'womens dress');
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, COLOR,    MATERIAL, DECADE, 'womens dress');
+    else if (v === 3) title = asm(displaySize, ERA, SUBJECT, STYLE,  DECADE, 'womens dress');
+    else if (v === 4) title = asm(displaySize, ERA, BRAND, STYLE,    'midi', DECADE, 'womens dress');
+    else if (v === 5) title = asm(displaySize, ERA, BRAND, DECADE, 'womens dress');
+    else              title = asm(displaySize, ERA, BRAND, COLOR,    STYLE, 'womens dress');
+  }
+  // ── BODYSUITS ─────────────────────────────────────────────────────────────
+  else if (isBodysuit) {
+    if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE,    DECADE, 'womens bodysuit');
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, COLOR,    MATERIAL, DECADE, 'womens bodysuit');
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, STYLE,    COLOR, 'womens bodysuit');
+    else if (v === 4) title = asm(displaySize, ERA, BRAND, DECADE, 'womens bodysuit');
+    else if (v === 5) title = asm(displaySize, ERA, BRAND, MATERIAL, DECADE, 'womens bodysuit');
+    else              title = asm(displaySize, ERA, BRAND, COLOR,    'snap', DECADE, 'womens bodysuit');
+  }
+  // ── TOPS (women) ──────────────────────────────────────────────────────────
+  else if (isTop) {
+    if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE,    DECADE, 'womens top');
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, MATERIAL, STYLE, DECADE, 'womens top');
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, COLOR,    STYLE, DECADE, 'womens top');
+    else if (v === 4) title = asm(displaySize, ERA, BRAND, DECADE, 'womens top');
+    else if (v === 5) title = asm(displaySize, ERA, SUBJECT, STYLE,  DECADE, 'womens top');
+    else              title = asm(displaySize, ERA, BRAND, MATERIAL, COLOR, 'womens top');
+  }
+  // ── GENERIC FALLBACK ──────────────────────────────────────────────────────
+  else {
+    const item = clean(context.category) || 'item';
+    if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, SUBJECT, BRAND, DECADE, item);
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, COLOR, STYLE, DECADE, item);
+    else              title = asm(displaySize, ERA, BRAND, DECADE, item);
   }
 
-  // Words already baked into the "Vintage / Y2K" prefix — skip them in the body
-  // to avoid redundancy like "Vintage / Y2K Y2K Vintage Shirts"
-  const REDUNDANT_ERA   = /^(y2k|2000s?|vintage|retro)$/i;
-  const REDUNDANT_STYLE = /^(vintage|retro|y2k)$/i;
-
-  // Build body: brand → era → style → modelName → category (item type)
-  const bodyParts: string[] = [];
-  if (context.brand)     bodyParts.push(clean(context.brand));
-  // Include era only if it adds info beyond the "Vintage / Y2K" prefix
-  const era = clean(context.era);
-  if (era && !REDUNDANT_ERA.test(era))   bodyParts.push(era);
-  // Include style only if it's not just "Vintage" (already in prefix)
-  const style = clean(context.style);
-  if (style && !REDUNDANT_STYLE.test(style)) bodyParts.push(style);
-  if (context.modelName) bodyParts.push(clean(context.modelName));
-  if (context.category)  bodyParts.push(clean(context.category));
-
-  const vintageMarker = 'Vintage / Y2K';
-  const body = bodyParts.filter(Boolean).join(' ');
-  let full = sizePrefix ? `${sizePrefix}${vintageMarker}` : vintageMarker;
-  if (body) full += ` ${body}`;
-
-  // Trim to 60 chars at a word boundary
-  if (full.length <= 60) return full;
+  // Collapse any double-spaces left by empty slots, then word-boundary trim to 60 chars
+  title = title.replace(/\s{2,}/g, ' ').trim();
+  if (title.length <= 60) return title;
   let trimmed = '';
-  for (const word of full.split(' ')) {
+  for (const word of title.split(' ')) {
     const candidate = trimmed ? `${trimmed} ${word}` : word;
     if (candidate.length > 60) break;
     trimmed = candidate;
   }
-  return trimmed || full.slice(0, 60);
+  return trimmed || title.slice(0, 60);
 }
+
 
 /**
  * Scan a title (or any text) for specific item-type keywords and return
