@@ -1077,22 +1077,22 @@ function generateTitleFromFields(context: ProductContext): string {
 
   const catStr = catRaw; // convenience alias
 
-  const isTee        = /tee|t[-\s]?shirt|tshirt/.test(catStr);
-  const isShirt      = /\bshirt\b/.test(catStr) && !isTee;
-  const isSweatshirt = /sweatshirt|crewneck/.test(catStr) && !/hoodie/.test(catStr);
-  const isHoodie     = /hoodie/.test(catStr);
-  const isJacket     = /jacket|coat/.test(catStr);
-  const isPants      = /\bpants?\b|\btrouser/.test(catStr) && !/jeans/.test(catStr);
-  const isJeans      = /jeans/.test(catStr);
-  const isShorts     = /shorts/.test(catStr);
-  const isJersey     = /jersey/.test(catStr);
-  const isHat        = /\bhat\b|\bcap\b|\bbeanie\b|\bsnapback\b|\bfitted\b|\bbucket\b|\btrucker\b|\bvisor\b/.test(catStr);
-  const isBeanie     = /beanie|knit\s*hat/.test(catStr);
-  const isAccessory  = /accessor|bag|backpack|tote|purse|handbag|crossbody|wallet/.test(catStr);
-  const isSkirt      = /skirt/.test(catStr);
-  const isDress      = /dress/.test(catStr);
-  const isBodysuit   = /bodysuit/.test(catStr);
-  const isTop        = /\btop\b/.test(catStr) && !isTee && !isShirt;
+  const isTee        = /tees?|t[-\s]?shirts?|tshirts?/.test(catStr);
+  const isShirt      = /\bshirts?\b/.test(catStr) && !isTee;
+  const isSweatshirt = /sweatshirts?|crewnecks?/.test(catStr) && !/hoodie/.test(catStr);
+  const isHoodie     = /hoodies?/.test(catStr);
+  const isJacket     = /jackets?|coats?/.test(catStr);
+  const isPants      = /\bpants?\b|\btrousers?\b/.test(catStr) && !/jeans/.test(catStr);
+  const isJeans      = /jeans?/.test(catStr);
+  const isShorts     = /shorts?/.test(catStr);
+  const isJersey     = /jerseys?/.test(catStr);
+  const isHat        = /\bhats?\b|\bcaps?\b|\bbeanies?\b|\bsnapbacks?\b|\bfitteds?\b|\bbuckets?\b|\btruckers?\b|\bvisors?\b/.test(catStr);
+  const isBeanie     = /beanies?|knit\s*hat/.test(catStr);
+  const isAccessory  = /accessor|bags?\b|backpacks?|totes?\b|purses?|handbags?|crossbody|wallets?/.test(catStr);
+  const isSkirt      = /skirts?/.test(catStr);
+  const isDress      = /dresses?/.test(catStr);
+  const isBodysuit   = /bodysuits?/.test(catStr);
+  const isTop        = /\btops?\b/.test(catStr) && !isTee && !isShirt;
 
   // Hats always show OSFA unless we have a numeric size (e.g. "7½")
   let displaySize = SIZE;
