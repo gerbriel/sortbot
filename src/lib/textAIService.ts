@@ -1014,22 +1014,32 @@ function fitTo60(title: string): string {
     let bestDiff = Math.abs(len - TARGET);
 
     for (const group of TITLE_SYNONYMS) {
+      // Find which member of this group appears in the current title
+      let matchedWord = '';
+      let matchedRe: RegExp | null = null;
       for (const word of group) {
         const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const re = new RegExp(`\\b${escaped}\\b`, 'i');
-        if (!re.test(current)) continue;
+        const re = new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`, 'i');
+        if (re.test(current)) {
+          matchedWord = word;
+          matchedRe = re;
+          break;
+        }
+      }
+      if (!matchedRe) continue;
 
-        for (const alt of group) {
-          if (alt.toLowerCase() === word.toLowerCase()) continue;
-          const candidate = current.replace(re, alt).replace(/\s{2,}/g, ' ').trim();
-          const candLen = candidate.length;
-          // Never push over 60 if we're currently at or under 60
-          if (len <= TARGET && candLen > TARGET) continue;
-          const diff = Math.abs(candLen - TARGET);
-          if (diff < bestDiff) {
-            bestDiff = diff;
-            bestCandidate = candidate;
-          }
+      for (const alt of group) {
+        if (alt.toLowerCase() === matchedWord.toLowerCase()) continue;
+        const swapped = current.replace(matchedRe, alt);
+        // Dedupe after swap to prevent cascading repeats (e.g. hat → snapback hat → snapback snapback hat)
+        const candidate = dedupeTitle(swapped.replace(/\s{2,}/g, ' ').trim());
+        const candLen = candidate.length;
+        // Never push over 60 if we're currently at or under 60
+        if (len <= TARGET && candLen > TARGET) continue;
+        const diff = Math.abs(candLen - TARGET);
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          bestCandidate = candidate;
         }
       }
     }
