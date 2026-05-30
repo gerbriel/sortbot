@@ -284,7 +284,20 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           .replace(/\b(wits|what's|whats|wit's)\b(?=\s+\d)/gi, 'width')
           .replace(/\bwith\b(?=\s+\d)/gi, 'width')   // "with 18 inches" → "width 18 inches"
           .replace(/\bwidth\b(?=\s+(a|an|the)\b)/gi, 'with') // "width a great" → "with a great"
-          .replace(/\bwidth\b(?=\s+[a-z]{3,}(?!\s*\d))/gi, 'with'); // "width nice" → "with nice"
+          .replace(/\bwidth\b(?=\s+[a-z]{3,}(?!\s*\d))/gi, 'with') // "width nice" → "with nice"
+          // Common measurement word misrecognitions
+          .replace(/\b(shows|shower|shoulder's|shoulders)\b(?=\s+\d)/gi, 'shoulder')
+          .replace(/\b(waste|ways|waist's)\b(?=\s+\d)/gi, 'waist')
+          .replace(/\b(in seam|in-seam|unseam)\b/gi, 'inseam')
+          .replace(/\b(out seam|out-seam)\b/gi, 'outseam')
+          .replace(/\b(chest's|chess|jest)\b(?=\s+\d)/gi, 'chest')
+          .replace(/\b(hip's|hips)\b(?=\s+\d)/gi, 'hip')
+          .replace(/\b(sleeve's|sleeves)\b(?=\s+\d)/gi, 'sleeve')
+          .replace(/\b(length's|lengths)\b(?=\s+\d)/gi, 'length')
+          // "30 and a half" / "30 and half" → "30.5"
+          .replace(/(\d+)\s+and\s+a?\s*half\b/gi, (_, n) => String(parseFloat(n) + 0.5))
+          // Normalize "inches" / "inch" / "in." after a number so the number is clean
+          .replace(/(\d+(?:\.\d+)?)\s*(?:inches|inch|in\.)\b/gi, '$1');
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = fixTranscript(event.results[i][0].transcript);
@@ -939,9 +952,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     add('care',     item.care);
     const m = item.measurements as any;
     if (m) {
+      add('chest',       m.chest);
       add('width',       m.width);
       add('length',      m.length);
       add('waist',       m.waist);
+      add('hip',         m.hip);
+      add('rise',        m.rise);
       add('inseam',      m.inseam);
       add('outseam',     m.outseam);
       add('leg opening', m.leg_opening);
@@ -2033,7 +2049,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       const parseVoiceTextToFields = (text: string): Partial<ClothingItem> & { measurements?: any } => {
                         const fields: any = {};
                         const normalized = text.replace(/\.(?=\s|$)/g, ' period').replace(/\n/g, ' ');
-                        const BOUNDARY_RE = /^(.*?)\b(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\s+\w/i;
+                        const MEAS_KEYWORDS = 'brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|chest|hip|rise|leg|tags?|title';
+                        const BOUNDARY_RE = new RegExp(`^(.*?)\\b(?:${MEAS_KEYWORDS})\\s+\\w`, 'i');
+
                         const grab = (pattern: RegExp) => {
                           const m = normalized.match(pattern);
                           if (!m) return null;
@@ -2041,7 +2059,30 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                           const b = val.match(BOUNDARY_RE);
                           return b ? (b[1].trim() || null) : val;
                         };
+
+                        // Standard: requires spoken "period" as terminator
                         const v = (label: string) => grab(new RegExp(`\\b${label}\\s+(.+?)\\s+period\\b`, 'i'));
+
+                        // Measurement-specific: captures a number (with optional decimal/fraction)
+                        // after a label WITHOUT requiring "period" — works even at end of transcript.
+                        // Strips trailing units (inches, inch, in) automatically.
+                        const measV = (label: string): string | null => {
+                          // Try period-terminated first (most reliable)
+                          const withPeriod = v(label);
+                          if (withPeriod) return withPeriod.replace(/[^0-9.]/g, '');
+                          // Then try: LABEL NUMBER (units?) terminated by next keyword or end-of-string
+                          const re = new RegExp(
+                            `\\b${label}\\s+(\\d+(?:\\.\\d+)?)\\s*(?:inches?|in\\.)?\\s*(?=\\b(?:${MEAS_KEYWORDS})\\b|$)`,
+                            'i'
+                          );
+                          const m = normalized.match(re);
+                          if (m) return m[1];
+                          // Last fallback: LABEL followed by any number anywhere before a keyword
+                          const re2 = new RegExp(`\\b${label}\\s+(\\d+(?:\\.\\d+)?)`, 'i');
+                          const m2 = normalized.match(re2);
+                          return m2 ? m2[1] : null;
+                        };
+
                         const b = v('brand');      if (b) fields.brand = b;
                         const s = v('size');       if (s) fields.size = s;
                         const col = v('colou?r');  if (col) { const p = col.split(/\s+and\s+|\s*\/\s*/i); fields.color = p[0]; if (p[1]) fields.secondaryColor = p[1]; }
@@ -2056,15 +2097,19 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                         const fl = v('flaws?');    if (fl) fields.flaws = fl;
                         const ca = v('care');      if (ca) fields.care = ca;
                         const ti = v('title');     if (ti) fields.seoTitle = ti;
+
                         const meas: any = {};
-                        const mw = v('width');           if (mw) meas.width = mw.replace(/[^0-9.]/g,'');
-                        const ml = v('length');          if (ml) meas.length = ml.replace(/[^0-9.]/g,'');
-                        const mwa = v('waist');          if (mwa) meas.waist = mwa.replace(/[^0-9.]/g,'');
-                        const mi = v('inseam');          if (mi) meas.inseam = mi.replace(/[^0-9.]/g,'');
-                        const mo = v('outseam');         if (mo) meas.outseam = mo.replace(/[^0-9.]/g,'');
-                        const mleg = v('leg\\s+opening'); if (mleg) meas.leg_opening = mleg.replace(/[^0-9.]/g,'');
-                        const msl = v('sleeve');         if (msl) meas.sleeve = msl.replace(/[^0-9.]/g,'');
-                        const msh = v('shoulder');       if (msh) meas.shoulder = msh.replace(/[^0-9.]/g,'');
+                        const mch = measV('chest');          if (mch) meas.chest = mch;
+                        const mw  = measV('width');          if (mw)  meas.width = mw;
+                        const ml  = measV('length');         if (ml)  meas.length = ml;
+                        const mwa = measV('waist');          if (mwa) meas.waist = mwa;
+                        const mhi = measV('hip');            if (mhi) meas.hip = mhi;
+                        const mri = measV('rise');           if (mri) meas.rise = mri;
+                        const mi  = measV('inseam');         if (mi)  meas.inseam = mi;
+                        const mo  = measV('outseam');        if (mo)  meas.outseam = mo;
+                        const mleg = measV('leg\\s+opening'); if (mleg) meas.leg_opening = mleg;
+                        const msl = measV('sleeve');         if (msl) meas.sleeve = msl;
+                        const msh = measV('shoulder');       if (msh) meas.shoulder = msh;
                         if (Object.keys(meas).length) fields.measurements = meas;
                         return fields;
                       };
@@ -2087,7 +2132,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       });
                       setProcessedItems(updated);
                     }}
-                    placeholder={"Start Recording and speak...\n\nExample:\n  color black period\n  brand Nike period\n  size large period"}
+                    placeholder={"Start Recording and speak...\n\nExample (say measurements without needing 'period'):\n  chest 38 waist 32 sleeve 25\n  color black period brand Nike period"}
                     rows={8}
                     className="description-textarea"
                     style={{ flex: 1, minWidth: 0 }}

@@ -100,13 +100,17 @@ export interface ClothingItem {
   
   // Product Details
   measurements?: {
+    chest?: string;
     width?: string;
     length?: string;
     waist?: string;
+    hip?: string;
     inseam?: string;
+    outseam?: string;
     rise?: string;
     shoulder?: string;
     sleeve?: string;
+    leg_opening?: string;
   };
   era?: string; // vintage, modern, etc.
   care?: string; // Care instructions

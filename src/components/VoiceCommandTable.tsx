@@ -33,16 +33,22 @@ const ROWS: { label: string; key: string; placeholder: string; getValue: (item: 
     { label: 'flaws',     key: 'flaws',           placeholder: 'small hole',        getValue: i => i.flaws || '' },
     { label: 'care',      key: 'care',            placeholder: 'hand wash',         getValue: i => i.care || '' },
   ],
-  // Row 3 — Measurements
+  // Row 3 — Measurements (upper body / flat-lay)
   [
+    { label: 'chest',      key: 'meas_chest',     placeholder: '38"', getValue: i => (i.measurements as any)?.chest || '' },
     { label: 'width',      key: 'meas_width',     placeholder: '18"', getValue: i => (i.measurements as any)?.width || '' },
     { label: 'length',     key: 'meas_length',    placeholder: '28"', getValue: i => (i.measurements as any)?.length || '' },
+    { label: 'sleeve',     key: 'meas_sleeve',    placeholder: '24"', getValue: i => (i.measurements as any)?.sleeve || '' },
+    { label: 'shoulder',   key: 'meas_shoulder',  placeholder: '17"', getValue: i => (i.measurements as any)?.shoulder || '' },
+  ],
+  // Row 4 — Measurements (lower body)
+  [
     { label: 'waist',      key: 'meas_waist',     placeholder: '32"', getValue: i => (i.measurements as any)?.waist || '' },
+    { label: 'hip',        key: 'meas_hip',       placeholder: '40"', getValue: i => (i.measurements as any)?.hip || '' },
+    { label: 'rise',       key: 'meas_rise',      placeholder: '10"', getValue: i => (i.measurements as any)?.rise || '' },
     { label: 'inseam',     key: 'meas_inseam',    placeholder: '30"', getValue: i => (i.measurements as any)?.inseam || '' },
     { label: 'outseam',    key: 'meas_outseam',   placeholder: '40"', getValue: i => (i.measurements as any)?.outseam || '' },
     { label: 'leg opening',key: 'meas_leg',       placeholder: '18"', getValue: i => (i.measurements as any)?.leg_opening || '' },
-    { label: 'sleeve',     key: 'meas_sleeve',    placeholder: '24"', getValue: i => (i.measurements as any)?.sleeve || '' },
-    { label: 'shoulder',   key: 'meas_shoulder',  placeholder: '17"', getValue: i => (i.measurements as any)?.shoulder || '' },
   ],
 ];
 
@@ -76,7 +82,10 @@ export const VOICE_KEYWORD_TO_FIELD: Record<string, string> = {
   'care': 'care',
   'width': 'meas_width',
   'length': 'meas_length',
+  'chest': 'meas_chest',
   'waist': 'meas_waist',
+  'hip': 'meas_hip',
+  'rise': 'meas_rise',
   'inseam': 'meas_inseam',
   'outseam': 'meas_outseam',
   'leg opening': 'meas_leg',
@@ -84,7 +93,7 @@ export const VOICE_KEYWORD_TO_FIELD: Record<string, string> = {
   'shoulder': 'meas_shoulder',
 };
 
-const ROW_LABELS = ['Core Info', 'Style & Details', 'Measurements'];
+const ROW_LABELS = ['Core Info', 'Style & Details', 'Measurements (upper)', 'Measurements (lower)'];
 
 const VoiceCommandTable: React.FC<VoiceCommandTableProps> = ({
   currentItem,
