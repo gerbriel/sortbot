@@ -63,6 +63,7 @@ export interface ClothingItem {
   productGroup?: string; // For grouping multiple images of same product
   voiceDescription?: string;
   generatedDescription?: string;
+  descriptionEdited?: boolean; // true when user has manually edited the AI description
   storagePath?: string; // Supabase Storage path for deletion
   
   // Category Preset Data (applied when category is assigned)
