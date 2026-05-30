@@ -79,17 +79,29 @@
   border: 1px solid var(--gray-200);
   border-radius: var(--radius-lg);
   padding: var(--space-5);
-  height: fit-content;
+  /* Fixed height so nav buttons never shift position */
+  height: calc(100vh - 160px);
+  display: flex;
+  flex-direction: column;
   box-shadow: var(--shadow-sm);
 }
 
-/* Prev / Next buttons inside the left preview column */
+/* Scrollable area inside preview card — image, thumbnails, magnifier controls */
+.preview-scroll-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Prev / Next buttons inside the left preview column — always pinned at bottom */
 .preview-nav-controls {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
   margin-top: var(--space-3);
+  flex-shrink: 0;
 }
 
 .preview-nav-controls .button {
@@ -435,6 +447,7 @@
     top: 0;
     max-width: 500px;
     margin: 0 auto;
+    height: auto;
   }
 }
 

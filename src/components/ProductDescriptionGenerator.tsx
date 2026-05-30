@@ -1655,6 +1655,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
       <div className="product-editor">
         <div className="product-preview">
+          {/* Scrollable area — image, thumbnails, magnifier controls. Height varies; nav buttons below stay fixed. */}
+          <div className="preview-scroll-area">
           <div
             className="preview-image-wrap"
             ref={mainPreviewRef}
@@ -1766,6 +1768,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               <span className="magnifier-slider-value">{magnifierSettings.zoom}×</span>
             </label>
           </div>
+          </div>{/* end preview-scroll-area */}
 
           {/* Navigation — cycles through product groups */}
           <div className="preview-nav-controls">
