@@ -883,22 +883,38 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
  */
 // ── Synonym groups — any member can freely substitute for any other ──────────
 const TITLE_SYNONYMS: string[][] = [
-  ['spellout', 'spell out', 'graphic print', 'printed graphic', 'print'],
+  ['spellout', 'spell out', 'graphic tee print', 'printed graphic', 'screen print'],
   ['embroidered', 'embroider', 'embroidery', 'stitched logo', 'stitched'],
   ['faded', 'distressed', 'washed out', 'worn in', 'acid wash'],
   ['super faded', 'heavily distressed', 'acid washed', 'over dyed'],
-  ['baggy', 'oversized', 'wide fit', 'relaxed fit', 'loose fit'],
+  ['baggy', 'oversized', 'wide leg', 'relaxed fit', 'loose fit'],
   ['zip up', 'full zip', 'zippered', 'zip front'],
   ['pullover', 'overhead', 'pull on'],
   ['heavyweight', 'heavy fleece', 'thick fleece', 'dense knit'],
-  ['graphic', 'graphic print', 'printed', 'all over print'],
+  ['graphic', 'all over print', 'printed', 'sublimated'],
   ['hip hop', 'streetwear', 'street style', 'urban street'],
-  ['workwear', 'work wear', 'utility wear', 'chore'],
-  ['carpenter', 'utility', 'work pant', 'chore pant'],
-  ['mini', 'micro mini', 'micro', 'short hem'],
+  ['workwear', 'work wear', 'utility wear', 'chore wear'],
+  ['carpenter', 'utility pant', 'work pant', 'chore pant'],
+  ['mini', 'micro mini', 'short hem', 'micro length'],
   ['midi', 'mid length', 'knee length', 'below knee'],
   ['snap', 'snap button', 'button snap', 'snap front'],
 ];
+
+// dedupeTitle: remove repeated words from an assembled title (case-insensitive).
+// Keeps the first occurrence of each word. Handles hyphenated words as one unit.
+function dedupeTitle(title: string): string {
+  const seen = new Set<string>();
+  return title
+    .split(' ')
+    .filter(word => {
+      const key = word.toLowerCase().replace(/[^a-z0-9-]/g, '');
+      if (!key) return false;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .join(' ');
+}
 
 // fitTo60: after assembling a title, greedily swap synonyms across all tokens
 // to get as close to 60 characters as possible (never cuts mid-word).
@@ -1180,8 +1196,9 @@ function generateTitleFromFields(context: ProductContext): string {
     else              title = asm(displaySize, ERA, BRAND, DECADE, item);
   }
 
-  // ── Optimize length toward 60 chars by swapping synonyms across all tokens ─
-  title = fitTo60(title.replace(/\s{2,}/g, ' ').trim());
+  // ── Remove duplicate words, then optimize length toward 60 chars ──────────
+  title = dedupeTitle(title.replace(/\s{2,}/g, ' ').trim());
+  title = fitTo60(title);
 
   // Hard word-boundary trim to 60 chars (safety net for titles with no synonyms)
   if (title.length <= 60) return title;
