@@ -607,11 +607,23 @@ function App() {
               const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state;
               // processedItems is now the single saved list (others are empty arrays).
               // Fall back through all arrays in case an older batch format is loaded.
-              const rawItems =
+              let rawItems: any[] =
                 processedItems?.length  ? processedItems  :
                 sortedImages?.length    ? sortedImages     :
                 groupedImages?.length   ? groupedImages    :
                 uploadedImages          ? uploadedImages   : [];
+
+              // If Supabase has no items yet (quick refresh before 2s debounce fired),
+              // fall back to the instant localStorage backup written by autoSaveWorkflow.
+              if (rawItems.length === 0) {
+                try {
+                  const backup = JSON.parse(localStorage.getItem('sortbot_workflow_backup') || 'null');
+                  if (backup?.batchId === savedBatchId && backup?.items?.length > 0) {
+                    log.app(`startup restore | using localStorage backup (${backup.items.length} items, saved ${Math.round((Date.now() - backup.savedAt) / 1000)}s ago)`);
+                    rawItems = backup.items;
+                  }
+                } catch { /* corrupt backup — ignore */ }
+              }
               // Re-hydrate preview — stripped before saving to reduce payload size.
               // imageUrls may also be empty for older items; reconstruct from storagePath
               // (synchronous, no extra DB query) as the final fallback.
@@ -838,6 +850,30 @@ function App() {
                   })();
                 }
               }
+            } else {
+              // workflow_state is null (batch row exists but has never been auto-saved,
+              // e.g. user refreshed within the first 2s after uploading). Check the
+              // instant localStorage backup written by autoSaveWorkflow.
+              try {
+                const backup = JSON.parse(localStorage.getItem('sortbot_workflow_backup') || 'null');
+                if (backup?.batchId === savedBatchId && backup?.items?.length > 0) {
+                  log.app(`startup restore | workflow_state null — using localStorage backup (${backup.items.length} items, saved ${Math.round((Date.now() - backup.savedAt) / 1000)}s ago)`);
+                  const backupItems = (backup.items as any[]).map((item: any) => {
+                    const canonical = item.storagePath
+                      ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
+                      : '';
+                    const imageUrls = canonical ? [canonical] : (item.imageUrls?.length ? item.imageUrls : []);
+                    const preview = canonical || (item.preview?.startsWith('blob:') ? '' : (item.preview || ''));
+                    const thumbnailUrl = item.storagePath ? getThumbnailUrl(item.storagePath, 300) : (imageUrls[0] || '');
+                    return { ...item, preview, imageUrls, thumbnailUrl };
+                  });
+                  setUploadedImages(backupItems);
+                  setGroupedImages(backupItems);
+                  setSortedImages(backupItems);
+                  setProcessedItems(backupItems);
+                  registerItemsInDB(backupItems, savedBatchId, session.user);
+                }
+              } catch { /* corrupt backup — ignore */ }
             }
           }
         } catch (err) {
@@ -1484,6 +1520,27 @@ function App() {
     processedItems: ClothingItem[];
   }) => {
     if (!user) return;
+
+    // ── Instant localStorage backup ──────────────────────────────────────
+    // Written synchronously (no debounce) so a quick page refresh never loses
+    // pending group/category changes that haven't reached Supabase yet.
+    // The Supabase debounced save below remains as the durable store.
+    try {
+      const slimNow = (items: ClothingItem[]): ClothingItem[] =>
+        items.map(({ file: _f, preview: _p, _presetData: _pr, ...rest }) => rest as ClothingItem);
+      const liveNow =
+        workflowState.processedItems.length > 0 ? workflowState.processedItems :
+        workflowState.sortedImages.length    > 0 ? workflowState.sortedImages    :
+        workflowState.groupedImages.length   > 0 ? workflowState.groupedImages   :
+        workflowState.uploadedImages;
+      if (liveNow.length > 0 && currentBatchIdRef.current) {
+        localStorage.setItem('sortbot_workflow_backup', JSON.stringify({
+          batchId:   currentBatchIdRef.current,
+          savedAt:   Date.now(),
+          items:     slimNow(liveNow),
+        }));
+      }
+    } catch { /* localStorage full or unavailable — skip */ }
 
     // Cancel any pending save
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);

@@ -18,8 +18,9 @@ const LazyImg: React.FC<{
   className?: string;
   style?: React.CSSProperties;
   draggable?: boolean;
+  loading?: 'lazy' | 'eager';
   onDoubleClick?: React.MouseEventHandler<HTMLImageElement>;
-}> = ({ src, alt, className, style, draggable, onDoubleClick }) => {
+}> = ({ src, alt, className, style, draggable, loading = 'lazy', onDoubleClick }) => {
   const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
   const [activeSrc, setActiveSrc] = useState(src);
@@ -85,7 +86,7 @@ const LazyImg: React.FC<{
         src={activeSrc}
         alt={alt}
         className={`lazy-img${loaded ? ' loaded' : ''}${className ? ` ${className}` : ''}`}
-        loading="lazy"
+        loading={loading}
         decoding="async"
         draggable={draggable}
         style={errored ? { display: 'none' } : style}
