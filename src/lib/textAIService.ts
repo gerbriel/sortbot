@@ -1325,10 +1325,10 @@ function generateTitleFromFields(context: ProductContext): string {
   if (BRAND)   td = td.replace(new RegExp(BRAND.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), brandPH);
   if (SUBJECT) td = td.replace(new RegExp(SUBJECT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), subjectPH);
   td = dedupeTitle(td);
+  td = fitTo60(td); // run BEFORE restoring placeholders so internal dedupeTitle also treats brand as opaque
   if (BRAND)   td = td.replace(brandPH, BRAND);
   if (SUBJECT) td = td.replace(subjectPH, SUBJECT);
   title = td.replace(/\s{2,}/g, ' ').trim();
-  title = fitTo60(title);
 
   // Hard word-boundary trim to 60 chars (safety net for titles with no synonyms)
   if (title.length <= 60) return title;
