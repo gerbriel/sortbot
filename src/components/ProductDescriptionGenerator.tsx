@@ -1356,11 +1356,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     if (hasUnsavedChanges) handleSave();
     if (currentGroupIndex < groupArray.length - 1) {
       setCurrentGroupIndex(currentGroupIndex + 1);
-      // Scroll to top of Step 4 section
-      const container = document.querySelector('.product-description-container');
-      if (container) {
-        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
     }
   };
 
@@ -1370,11 +1365,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     if (hasUnsavedChanges) handleSave();
     if (currentGroupIndex > 0) {
       setCurrentGroupIndex(currentGroupIndex - 1);
-      // Scroll to top of Step 4 section
-      const container = document.querySelector('.product-description-container');
-      if (container) {
-        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
     }
   };
 
