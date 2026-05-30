@@ -881,23 +881,107 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
  * - OSFA for hats/caps
  * - "period" voice delimiter is never included
  */
-// ── Synonym groups — any member can freely substitute for any other ──────────
+// ── Synonym groups — organized by field, any member substitutes for any other ─
+// STYLE — print / graphic techniques
 const TITLE_SYNONYMS: string[][] = [
-  ['spellout', 'spell out', 'graphic tee print', 'printed graphic', 'screen print'],
-  ['embroidered', 'embroider', 'embroidery', 'stitched logo', 'stitched'],
-  ['faded', 'distressed', 'washed out', 'worn in', 'acid wash'],
-  ['super faded', 'heavily distressed', 'acid washed', 'over dyed'],
+  ['spellout', 'spell out', 'screen print', 'printed logo', 'print logo'],
+  ['embroidered', 'embroider', 'embroidery', 'stitched logo', 'stitched patch'],
+  ['graphic', 'all over print', 'sublimated print', 'full print', 'aop'],
+  ['patch logo', 'iron on patch', 'woven patch', 'sewn patch'],
+  ['bootleg', 'knockoff style', 'unofficial print', 'off brand print'],
+  // STYLE — distress / wash
+  ['faded', 'distressed', 'washed', 'acid wash', 'sun faded'],
+  ['super faded', 'heavily distressed', 'heavily faded', 'over dyed', 'raw faded'],
+  ['stonewash', 'stone washed', 'bleach wash', 'bleached', 'enzyme wash'],
+  ['thrashed', 'worn in', 'beat up', 'well worn', 'broken in'],
+  // STYLE — fit descriptors
   ['baggy', 'oversized', 'wide leg', 'relaxed fit', 'loose fit'],
-  ['zip up', 'full zip', 'zippered', 'zip front'],
-  ['pullover', 'overhead', 'pull on'],
-  ['heavyweight', 'heavy fleece', 'thick fleece', 'dense knit'],
-  ['graphic', 'all over print', 'printed', 'sublimated'],
-  ['hip hop', 'streetwear', 'street style', 'urban street'],
-  ['workwear', 'work wear', 'utility wear', 'chore wear'],
-  ['carpenter', 'utility pant', 'work pant', 'chore pant'],
-  ['mini', 'micro mini', 'short hem', 'micro length'],
-  ['midi', 'mid length', 'knee length', 'below knee'],
-  ['snap', 'snap button', 'button snap', 'snap front'],
+  ['slim', 'slim fit', 'tapered', 'fitted cut', 'narrow fit'],
+  ['cropped', 'crop', 'cut off', 'shortened', 'above waist'],
+  ['boxy', 'boxy fit', 'boxy cut', 'boxy silhouette', 'square cut'],
+  // STYLE — closures / construction
+  ['zip up', 'full zip', 'zippered', 'zip front', 'front zip'],
+  ['pullover', 'overhead', 'pull on', 'no zip'],
+  ['button up', 'button down', 'buttoned', 'front button', 'snap button'],
+  ['snap', 'snap closure', 'snap front', 'press stud', 'popper'],
+  ['lace up', 'laced', 'drawstring', 'tie front', 'tie waist'],
+  // STYLE — weight / fabric feel
+  ['heavyweight', 'heavy weight', 'thick fleece', 'dense knit', 'heavy duty'],
+  ['lightweight', 'light weight', 'thin knit', 'sheer', 'breathable'],
+  ['ribbed', 'rib knit', 'waffle knit', 'textured knit', 'cable knit'],
+  // STYLE — cultural / aesthetic
+  ['hip hop', 'streetwear', 'street style', 'urban street', 'rap style'],
+  ['workwear', 'work wear', 'utility wear', 'chore wear', 'labor wear'],
+  ['athletic', 'sport', 'activewear', 'sporty', 'performance'],
+  ['preppy', 'collegiate', 'ivy league', 'classic fit', 'campus style'],
+  ['western', 'cowboy', 'country', 'rodeo', 'ranch style'],
+  ['biker', 'moto', 'motorcycle', 'rocker', 'punk'],
+  ['skater', 'skate style', 'sk8', 'boarder', 'skate brand'],
+  ['grunge', 'alternative', 'alt', 'indie', 'underground'],
+  ['hip hop style', 'rap tee', 'rap shirt', 'hip hop tee', 'rap graphic'],
+  // STYLE — item-specific descriptors
+  ['carpenter', 'utility pant', 'work pant', 'chore pant', 'multi pocket'],
+  ['cargo', 'cargo style', 'cargo pocket', 'multi pocket', 'tactical'],
+  ['flare', 'flare leg', 'bell bottom', 'wide hem', 'flared cut'],
+  ['straight leg', 'straight cut', 'regular cut', 'classic cut', 'traditional cut'],
+  // MATERIAL — denim
+  ['denim', 'jean material', 'indigo denim', 'blue denim', 'raw denim'],
+  ['corduroy', 'cord', 'corduroy fabric', 'wide wale cord', 'fine wale cord'],
+  ['canvas', 'canvas material', 'heavy canvas', 'waxed canvas', 'duck canvas'],
+  ['twill', 'twill fabric', 'cotton twill', 'poly twill', 'woven twill'],
+  ['flannel', 'brushed flannel', 'plaid flannel', 'soft flannel', 'woven flannel'],
+  ['fleece', 'polar fleece', 'sherpa', 'plush fleece', 'brushed fleece'],
+  ['terry', 'terry cloth', 'french terry', 'loopback terry', 'sweat terry'],
+  ['nylon', 'rip stop', 'ripstop nylon', 'nylon shell', 'windbreaker material'],
+  ['polyester', 'poly', 'poly blend', 'synthetic', 'poly fabric'],
+  ['cotton', 'all cotton', 'pure cotton', 'soft cotton', '100% cotton'],
+  ['velour', 'velvet', 'crushed velvet', 'plush velvet', 'velour fabric'],
+  ['leather', 'faux leather', 'pu leather', 'pleather', 'vegan leather'],
+  ['suede', 'faux suede', 'microsuede', 'suede fabric', 'suede material'],
+  ['wool', 'wool blend', 'knit wool', 'merino', 'lambswool'],
+  ['silk', 'satin', 'silky', 'charmeuse', 'satin finish'],
+  ['mesh', 'open mesh', 'jersey mesh', 'athletic mesh', 'breathable mesh'],
+  // COLOR — neutrals
+  ['black', 'jet black', 'all black', 'onyx', 'midnight black'],
+  ['white', 'off white', 'cream white', 'ivory', 'bright white'],
+  ['grey', 'gray', 'heather grey', 'charcoal', 'slate grey'],
+  ['beige', 'tan', 'khaki', 'sand', 'cream'],
+  ['brown', 'chocolate', 'camel', 'coffee', 'mocha brown'],
+  // COLOR — main colors
+  ['navy', 'navy blue', 'dark navy', 'midnight blue', 'deep navy'],
+  ['blue', 'royal blue', 'cobalt', 'bright blue', 'sky blue'],
+  ['red', 'crimson', 'scarlet', 'bright red', 'cherry red'],
+  ['green', 'forest green', 'olive', 'hunter green', 'army green'],
+  ['orange', 'burnt orange', 'rust', 'tangerine', 'flame orange'],
+  ['yellow', 'gold', 'mustard', 'canary yellow', 'lemon yellow'],
+  ['purple', 'violet', 'plum', 'grape', 'lavender'],
+  ['pink', 'hot pink', 'bubblegum pink', 'blush', 'rose pink'],
+  ['teal', 'teal blue', 'cyan', 'aqua', 'turquoise'],
+  ['maroon', 'burgundy', 'wine', 'oxblood', 'dark red'],
+  // SIZE shorthands
+  ['small', 'sm', 'sz small', 'size small', 's size'],
+  ['medium', 'med', 'sz medium', 'size medium', 'm size'],
+  ['large', 'lg', 'sz large', 'size large', 'l size'],
+  ['xl', 'extra large', 'sz xl', 'size xl', 'xlarge'],
+  ['xxl', '2xl', 'double xl', 'sz xxl', 'size xxl'],
+  ['xxxl', '3xl', 'triple xl', 'sz xxxl', 'size 3xl'],
+  // DECADE / ERA
+  ['90s', 'nineties', 'mid 90s', 'late 90s', 'early 90s'],
+  ['2000s', 'y2k era', 'early 2000s', 'mid 2000s', '00s'],
+  ['80s', 'eighties', 'mid 80s', 'late 80s', 'early 80s'],
+  ['70s', 'seventies', 'mid 70s', 'late 70s', 'early 70s'],
+  // ITEM suffix variants (for fitTo60 padding)
+  ['t-shirt', 'tee shirt', 'graphic tee', 'cotton tee', 'crewneck tee'],
+  ['sweatshirt', 'crewneck sweatshirt', 'crew sweatshirt', 'fleece sweatshirt', 'pullover sweatshirt'],
+  ['hoodie', 'hooded sweatshirt', 'hooded fleece', 'zip hoodie', 'pull hoodie'],
+  ['jacket', 'outerwear jacket', 'shell jacket', 'sport jacket', 'light jacket'],
+  ['jeans', 'denim jeans', 'blue jeans', 'jean pants', 'denim pants'],
+  ['pants', 'trousers', 'slacks', 'bottoms', 'long pants'],
+  ['shorts', 'short pants', 'sport shorts', 'casual shorts', 'gym shorts'],
+  ['hat', 'cap', 'fitted hat', 'snapback hat', 'ball cap'],
+  // ITEM — skirt/dress length
+  ['mini', 'micro mini', 'short hem', 'above knee', 'mini length'],
+  ['midi', 'mid length', 'knee length', 'below knee', 'midi length'],
 ];
 
 // dedupeTitle: remove repeated words from an assembled title (case-insensitive).
