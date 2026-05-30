@@ -1045,22 +1045,23 @@ function generateTitleFromFields(context: ProductContext): string {
   const clean = (s?: string) =>
     (s || '').replace(/\bperiod\b/gi, '').replace(/\s{2,}/g, ' ').trim();
 
-  // ── Filled tokens ──────────────────────────────────────────────────────────
-  const SIZE    = clean(context.size);
-  const BRAND   = clean(context.brand);
-  const STYLE   = clean(context.style);
-  const COLOR   = clean(context.color);
-  const MATERIAL = clean(context.material);
-  const SUBJECT  = clean(context.modelName); // band, team, character, model name
+  // ── Filled tokens — dedupe each field's own internal words first ───────────
+  const SIZE    = dedupeTitle(clean(context.size));
+  const BRAND   = dedupeTitle(clean(context.brand));
+  const STYLE   = dedupeTitle(clean(context.style));
+  const COLOR   = dedupeTitle(clean(context.color));
+  const MATERIAL = dedupeTitle(clean(context.material));
+  const SUBJECT  = dedupeTitle(clean(context.modelName)); // band, team, character, model name
 
   // ERA is always "Vintage Y2K" in this app (the constant prefix)
   const ERA = 'Vintage Y2K';
 
   // DECADE is derived from the era field: "90s", "00s", "2000s", "80s", etc.
-  // Strip generic terms that are already covered by ERA so we don't repeat them.
+  // Y2K/2000s is intentionally left BLANK here — ERA = 'Vintage Y2K' already
+  // covers it, so adding '2000s' would be redundant.
   const rawEra = clean(context.era).toLowerCase().replace(/\s+/g, '');
   let DECADE = '';
-  if (/^y2k$|^2000s?$|^00s$/.test(rawEra))       DECADE = '2000s';
+  if (/^y2k$|^2000s?$|^00s$/.test(rawEra))       DECADE = ''; // covered by ERA
   else if (/^90s$|^1990s?$/.test(rawEra))          DECADE = '90s';
   else if (/^80s$|^1980s?$/.test(rawEra))          DECADE = '80s';
   else if (/^70s$|^1970s?$/.test(rawEra))          DECADE = '70s';
