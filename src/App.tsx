@@ -617,17 +617,21 @@ function App() {
                 groupedImages?.length   ? groupedImages    :
                 uploadedImages          ? uploadedImages   : [];
 
-              // If Supabase has no items yet (quick refresh before 2s debounce fired),
-              // fall back to the instant localStorage backup written by autoSaveWorkflow.
-              if (rawItems.length === 0) {
-                try {
-                  const backup = JSON.parse(localStorage.getItem('sortbot_workflow_backup') || 'null');
-                  if (backup?.batchId === savedBatchId && backup?.items?.length > 0) {
-                    log.app(`startup restore | using localStorage backup (${backup.items.length} items, saved ${Math.round((Date.now() - backup.savedAt) / 1000)}s ago)`);
+              // If the localStorage backup is NEWER than the Supabase data (e.g. user
+              // grouped items and refreshed before the 2s debounce flushed to Supabase),
+              // prefer the backup so recently grouped items aren't silently lost.
+              // Also used as the sole source when Supabase has no items yet.
+              try {
+                const backup = JSON.parse(localStorage.getItem('sortbot_workflow_backup') || 'null');
+                if (backup?.batchId === savedBatchId && backup?.items?.length > 0) {
+                  const supabaseUpdatedAt = batch.last_opened_at ? new Date(batch.last_opened_at).getTime() : (batch.updated_at ? new Date(batch.updated_at).getTime() : 0);
+                  const backupIsNewer = backup.savedAt > supabaseUpdatedAt;
+                  if (rawItems.length === 0 || backupIsNewer) {
+                    log.app(`startup restore | using localStorage backup (${backup.items.length} items, saved ${Math.round((Date.now() - backup.savedAt) / 1000)}s ago, supabase updated ${Math.round((Date.now() - supabaseUpdatedAt) / 1000)}s ago, newer=${backupIsNewer})`);
                     rawItems = backup.items;
                   }
-                } catch { /* corrupt backup — ignore */ }
-              }
+                }
+              } catch { /* corrupt backup — ignore */ }
               // Re-hydrate preview — stripped before saving to reduce payload size.
               // imageUrls may also be empty for older items; reconstruct from storagePath
               // (synchronous, no extra DB query) as the final fallback.
