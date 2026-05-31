@@ -53,6 +53,7 @@ export interface ImageGrouperStats {
 export interface GrouperActions {
   groupSelected: () => void;
   ungroupSelected: () => void;
+  ungroupAll: () => void;
   clearSelection: () => void;
   deleteSelected: () => void;
   selectedCount: number;
@@ -1375,6 +1376,21 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     updateSelection(new Set());
   };
 
+  // Ungroup ALL items in one atomic operation — no selection required
+  const ungroupAll = () => {
+    const grouped = groupedItemsRef.current;
+    const hasAnyGroup = grouped.some(item => item.productGroup && item.productGroup !== item.id);
+    if (!hasAnyGroup) return;
+    const updated = grouped.map(item => ({ ...item, productGroup: item.id }));
+    log.grouper(`ungroupAll | total=${updated.length}`);
+    try {
+      commitUpdate(updated);
+    } catch (err) {
+      console.error('[ungroupAll] commitUpdate threw:', err);
+    }
+    updateSelection(new Set());
+  };
+
   /**
    * Auto-group all items by sequential filename order.
    * Sorts all current items by originalName (natural numeric order),
@@ -1855,6 +1871,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     onActionsReady?.({
       groupSelected: createGroupFromSelected,
       ungroupSelected,
+      ungroupAll,
       clearSelection: () => updateSelection(new Set()),
       deleteSelected: handleDeleteSelected,
       selectedCount: selectedItems.size,
