@@ -1362,7 +1362,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     }
     log.grouper(`ungroupSelected | selected=${selectedItems.size}`);
 
-    const updated = groupedItems.map(item =>
+    // Use the ref (always latest) instead of the state snapshot to avoid stale-closure misses
+    const updated = groupedItemsRef.current.map(item =>
       selectedItems.has(item.id)
         ? { ...item, productGroup: item.id, category: undefined }
         : item
