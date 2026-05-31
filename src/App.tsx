@@ -2480,6 +2480,18 @@ function App() {
                     </button>
                     <button
                       className="button button-secondary"
+                      onClick={() => {
+                        if (window.confirm('Ungroup ALL images? Every item will become its own listing.')) {
+                          grouperActions.ungroupAll();
+                        }
+                      }}
+                      title="Remove all groupings at once"
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                      <Scissors size={16} /> Ungroup All
+                    </button>
+                    <button
+                      className="button button-secondary"
                       onClick={grouperActions.clearSelection}
                       disabled={grouperActions.selectedCount === 0}
                       style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
