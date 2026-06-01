@@ -182,6 +182,12 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const [reorderDragId, setReorderDragId] = useState<string | null>(null);
   const [reorderOverId, setReorderOverId] = useState<string | null>(null);
   const [reorderOverSide, setReorderOverSide] = useState<'left' | 'right'>('left');
+
+  // Progressive rendering for singles — mount 150 at a time so the initial
+  // render with hundreds of items doesn't block the main thread for 5-10s.
+  const SINGLES_PAGE = 150;
+  const [visibleSingleCount, setVisibleSingleCount] = useState(SINGLES_PAGE);
+  const singlesSentinelRef = useRef<HTMLDivElement | null>(null);
   // Manual order: array of item IDs. Empty = use default sort.
   const [manualOrder, setManualOrder] = useState<string[]>([]);
   const scrollContentRef = useRef<HTMLDivElement | null>(null);
@@ -1846,6 +1852,28 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [singleItems, multiItemGroups, filters]);
 
+  // Reset visible count whenever the filtered list changes (filter applied or items change)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setVisibleSingleCount(SINGLES_PAGE); }, [filteredSingleItems.length, filters]);
+
+  // IntersectionObserver sentinel — when it enters the viewport, load the next page
+  useEffect(() => {
+    const el = singlesSentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisibleSingleCount(prev => prev + SINGLES_PAGE);
+        }
+      },
+      { rootMargin: '400px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  // re-attach whenever visibleSingleCount changes (sentinel may move)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleSingleCount, filteredSingleItems.length]);
+
   const activeFilterCount = [filters.date, filters.view !== 'all' ? filters.view : '', filters.category]
     .filter(Boolean).length;
 
@@ -2417,7 +2445,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               />
             )}
             
-            {filteredSingleItems.map((item) => {
+            {filteredSingleItems.slice(0, visibleSingleCount).map((item) => {
               const itemGroupId = item.productGroup || item.id;
               const isReorderTarget = reorderOverId === item.id;
               return (
@@ -2574,6 +2602,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 </div>
               );
             })}
+            {/* Sentinel — triggers next page load when scrolled into view */}
+            {visibleSingleCount < filteredSingleItems.length && (
+              <div
+                ref={singlesSentinelRef}
+                style={{ gridColumn: '1 / -1', height: 1, pointerEvents: 'none' }}
+              />
+            )}
           </div>
         )}
       </div>
