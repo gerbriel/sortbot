@@ -1852,9 +1852,12 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [singleItems, multiItemGroups, filters]);
 
-  // Reset visible count whenever the filtered list changes (filter applied or items change)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setVisibleSingleCount(SINGLES_PAGE); }, [filteredSingleItems.length, filters]);
+  // Stable string key so the reset effect only fires when filters actually change,
+  // not on every render (avoids the infinite-loop that a plain `filters` object dep causes).
+  const filterKey = `${filters.view}|${filters.date ?? ''}|${filters.category ?? ''}`;
+
+  // Reset visible count whenever filters change or the list length changes
+  useEffect(() => { setVisibleSingleCount(SINGLES_PAGE); }, [filterKey, filteredSingleItems.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // IntersectionObserver sentinel — when it enters the viewport, load the next page
   useEffect(() => {

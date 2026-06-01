@@ -360,9 +360,6 @@
   transition: all 0.2s ease;
   aspect-ratio: 110 / 138;
   contain: layout style;
-  /* Skip layout+paint for off-screen cards — major speedup for large grids */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 138px;
   display: flex;
   flex-direction: column;
 }
