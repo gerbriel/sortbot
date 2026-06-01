@@ -9,6 +9,7 @@ import {
   fetchSavedProducts,
   fetchSavedImages 
 } from '../lib/libraryService';
+import { fetchWorkflowBatchesMeta } from '../lib/workflowBatchService';
 import { supabase } from '../lib/supabase';
 import { Folder, Calendar, Image, Layers, Tag, ArrowRight, Trash2, X, Grid3x3, Package, Edit2, Copy, Check, Search, Plus, Merge, ChevronDown, ChevronRight, Wrench } from 'lucide-react';
 import type { ClothingItem } from '../App';
@@ -263,21 +264,26 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
     };
     setLoading(true);
     try {
-      // ── 1. Fetch workflow batches ONCE ──────────────────────────────────
-      const wfBatches = await fetchWorkflowBatches();
+      // ── Phase 1: fetch batch metadata only (no workflow_state blob) ──────
+      // This is a tiny query — shows the batch list almost instantly.
+      const metaBatches = await fetchWorkflowBatchesMeta();
       if (isCancelled()) return;
-
-      const batchesById = new Map<string, WorkflowBatch>(wfBatches.map(b => [b.id, b]));
-
-      const makeBatchName = (b: WorkflowBatch) =>
+      const makeBatchName = (b: { batch_name?: string; created_at: string }) =>
         b.batch_name || `Batch ${new Date(b.created_at).toLocaleDateString()} ${new Date(b.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      const sortedMetaBatches = [...metaBatches].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+      setBatches(sortedMetaBatches as any);
+      setLoading(false); // stop the spinner — batch list is visible now
 
-      // ── 2. Fetch DB tables in parallel ──────────────────────────────────
-      const [savedProducts, savedImages] = await Promise.all([
+      // ── Phase 2: fetch heavy data in parallel ─────────────────────────────
+      // workflow_state blobs + DB products + DB images all at once.
+      const [wfBatches, savedProducts, savedImages] = await Promise.all([
+        fetchWorkflowBatches(),
         fetchSavedProducts(userId),
         fetchSavedImages(userId),
       ]);
       if (isCancelled()) return;
+
+      const batchesById = new Map<string, WorkflowBatch>(wfBatches.map(b => [b.id, b]));
 
       // Helper: synthesize a batch entry for any batch_id missing from workflow_batches
       const synthesizeBatch = (batchId: string, wb: any, fallbackDate: string) => {
