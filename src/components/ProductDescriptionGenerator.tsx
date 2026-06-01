@@ -1401,16 +1401,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     onDownloadCSV?.();
   };
 
-  // Guard: no items ready yet (nothing categorized)
-  if (!currentItem) {
-    return (
-      <div className="product-description-container" style={{ padding: '2rem', textAlign: 'center', color: '#888', fontSize: '0.95rem' }}>
-        ⚠️ No categorized items yet — go back to Step 2 and drag items to a category zone.
-      </div>
-    );
-  }
-
-  // ── Crop UI state ───────────────────────────────────────────────────────────
+  // ── Crop UI state ─────────────────────────────────────────────────────────
+  // IMPORTANT: All hooks must be declared before any early returns (React rules
+  // of hooks). These crop refs/states are only *used* when currentItem is set,
+  // but they must be unconditionally declared here.
+  // ──────────────────────────────────────────────────────────────────────────
+  type DragMode = 'new' | 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | 'move';
   const cropImgRef  = useRef<HTMLImageElement | null>(null);
   const cropStageRef = useRef<HTMLDivElement | null>(null);
   // Measured after image loads — px offsets of the image from the stage top-left
@@ -1420,9 +1416,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // null = free draw, otherwise w/h ratio
   const [aspectLock, setAspectLock] = useState<number | null>(null);
   const [activePreset, setActivePreset] = useState<string>('FREE');
-
   // Drag state: 'new' = drawing fresh rect; handle = which edge/corner being dragged
-  type DragMode = 'new' | 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | 'move';
   const cropDragRef = useRef<{ mode: DragMode; startX: number; startY: number; startCrop: { x: number; y: number; w: number; h: number } } | null>(null);
 
   const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -1548,6 +1542,17 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [lightboxSrc, lightboxItemId, lightboxPool, cropModal.open]);
+
+  // Guard: no items ready yet (nothing categorized)
+  // NOTE: This must come AFTER all hook declarations above (React rules of hooks)
+  if (!currentItem) {
+    return (
+      <div className="product-description-container" style={{ padding: '2rem', textAlign: 'center', color: '#888', fontSize: '0.95rem' }}>
+        ⚠️ No categorized items yet — go back to Step 2 and drag items to a category zone.
+      </div>
+    );
+  }
+
   // Use shared helper to create transformed file
   // helper createTransformedFile will be dynamically imported where needed
 
