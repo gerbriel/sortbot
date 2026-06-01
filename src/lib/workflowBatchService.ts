@@ -69,6 +69,29 @@ export async function fetchWorkflowBatches(): Promise<WorkflowBatch[]> {
 }
 
 /**
+ * Fetch only batch metadata — excludes the heavy workflow_state JSONB blob.
+ * Used for Phase 1 of Library load so the batch list renders immediately.
+ */
+export async function fetchWorkflowBatchesMeta(): Promise<Omit<WorkflowBatch, 'workflow_state'>[]> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+    const { data, error } = await supabase
+      .from('workflow_batches')
+      .select('id, user_id, batch_name, batch_number, current_step, is_completed, total_images, product_groups_count, categorized_count, processed_count, saved_products_count, created_at, updated_at')
+      .order('updated_at', { ascending: false });
+    if (error) throw error;
+    log.service(`fetchWorkflowBatchesMeta | rows=${(data || []).length}`);
+    return (data || []) as Omit<WorkflowBatch, 'workflow_state'>[];
+  } catch (error: any) {
+    if (error?.name === 'AbortError') return [];
+    if (error?.message === 'Failed to fetch') return [];
+    console.error('Error fetching workflow batch metadata:', error);
+    return [];
+  }
+}
+
+/**
  * Create a new workflow batch
  */
 export async function createWorkflowBatch(
