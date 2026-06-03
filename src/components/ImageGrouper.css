@@ -231,6 +231,8 @@
   width: 100%;
   min-width: 0 !important;
   contain: layout style;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 250px;
 }
 
 .product-group-card:hover {
@@ -360,6 +362,8 @@
   transition: all 0.2s ease;
   aspect-ratio: 110 / 138;
   contain: layout style;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
   display: flex;
   flex-direction: column;
 }

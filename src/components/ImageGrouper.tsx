@@ -216,6 +216,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const [copiedRotation, setCopiedRotation] = useState<number | null>(null);
   const [copiedCrop, setCopiedCrop] = useState<{ x: number; y: number; w: number; h: number } | null | undefined>(undefined);
   const [cropPasteProgress, setCropPasteProgress] = useState<{ done: number; total: number; status: 'running' | 'done'; failed: string[] } | null>(null);
+  // Individual-crop upload indicator (shown while a single image is being cropped + uploaded)
+  const [cropUploadInProgress, setCropUploadInProgress] = useState(false);
 
   // Lightbox state  — pool stores item IDs (not URLs) so we can look up rotation
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -384,12 +386,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     measureGCImg();
   }, [cropModal.open, measureGCImg]);
 
-  const applyAndPersistTransformGrouper = async (itemId: string, cropOverride: { x: number; y: number; w: number; h: number }, rotationOverride?: number) => {
+  const applyAndPersistTransformGrouper = async (itemId: string, cropOverride: { x: number; y: number; w: number; h: number }, rotationOverride?: number, _skipSingleProgress = false) => {
     const baseItem = groupedItemsRef.current.find(i => i.id === itemId);
     if (!baseItem) { console.error('[crop] baseItem not found', itemId); return; }
     const rot = rotationOverride !== undefined ? rotationOverride : (baseItem.imageRotation || 0);
     const item = { ...baseItem, imageRotation: rot, crop: cropOverride };
     console.log('[crop] starting — item:', itemId, 'storagePath:', item.storagePath, 'crop:', cropOverride);
+    if (!_skipSingleProgress) setCropUploadInProgress(true);
     try {
       const { createTransformedFile } = await import('../lib/imageTransforms');
       const file = await createTransformedFile(item);
@@ -487,6 +490,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       if (item.preview) evictCachedImage(item.preview);
       if (item.imageUrls?.[0]) evictCachedImage(item.imageUrls[0]);
     } catch (err) { console.error('[crop] unexpected error:', err); }
+    finally { if (!_skipSingleProgress) setCropUploadInProgress(false); }
   };
 
   // ── Revert a single item to its cached original ─────────────────────────────
@@ -549,7 +553,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     for (let i = 0; i < targetIds.length; i += BATCH) {
       const chunk = targetIds.slice(i, i + BATCH);
       await Promise.all(chunk.map(id =>
-        applyAndPersistTransformGrouper(id, crop, rotation !== null ? rotation : undefined)
+        applyAndPersistTransformGrouper(id, crop, rotation !== null ? rotation : undefined, true /* skipSingleProgress */)
           .then(() => { done++; console.log('[paste] ✅ item done:', id, done, '/', total); setCropPasteProgress({ done, total, status: 'running', failed: [...failed] }); })
           .catch((err) => { done++; failed.push(id); console.error('[paste] ❌ item failed:', id, err); setCropPasteProgress({ done, total, status: 'running', failed: [...failed] }); })
       ));
@@ -1955,6 +1959,27 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         </div>
       )}
       
+      {/* ── Individual crop upload indicator ── */}
+      {cropUploadInProgress && !cropPasteProgress && (
+        <div style={{
+          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 99999, background: 'rgba(20,16,40,0.97)',
+          border: '1.5px solid #6366f1', borderRadius: 14,
+          padding: '12px 22px', minWidth: 260,
+          boxShadow: '0 8px 32px rgba(99,102,241,0.25)',
+          display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'inherit',
+        }}>
+          <span style={{
+            display: 'inline-block', width: 14, height: 14,
+            border: '2px solid #6366f1', borderTopColor: '#a78bfa',
+            borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0,
+          }} />
+          <span style={{ color: '#e0e7ff', fontSize: '0.85rem', fontWeight: 600 }}>
+            Uploading cropped image…
+          </span>
+        </div>
+      )}
+
       <div className="image-grouper-container">
       <div className="grouper-header">
         <div className="stats">
