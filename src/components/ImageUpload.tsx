@@ -11,12 +11,14 @@ import './ImageUpload.css';
 // Set to false to bypass compression and upload originals (for debugging).
 const COMPRESS_ON_UPLOAD = true;
 // Max dimension (width or height) in pixels.
-// 1200px at 0.75 quality is the right trade-off for product photos on slow/rural
-// connections: a raw 4000px DSLR photo (3-4 MB) compresses to ~120-180 KB —
-// roughly 20× smaller — while remaining sharp enough for e-commerce thumbnails.
-const COMPRESS_MAX_PX = 1200;
-// JPEG quality 0–1. 0.75 is visually good for product photos at 1200px.
-const COMPRESS_QUALITY = 0.75;
+// 2000px at 0.88 quality keeps product photos sharp enough for Shopify (which
+// recommends ≥2048px) while still achieving 3-5× size reduction from a raw
+// DSLR shot. Previous values (1200px / 0.75) caused visible pixelation,
+// especially after a second JPEG pass during crop.
+const COMPRESS_MAX_PX = 2000;
+// JPEG quality 0–1. 0.88 is a good balance: visually indistinguishable from
+// lossless at typical product-photo viewing sizes, ~40% smaller than 0.95.
+const COMPRESS_QUALITY = 0.88;
 // Skip recompression of existing images already under this size (bytes).
 const RECOMPRESS_SKIP_UNDER_BYTES = 200 * 1024; // 200 KB
 // localStorage key that records which storagePaths have already been compressed.
