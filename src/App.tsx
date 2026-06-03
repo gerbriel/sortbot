@@ -813,6 +813,103 @@ function App() {
                 // (setUser(session.user) queues a re-render but doesn't run synchronously)
                 registerItemsInDB(hydratedItems, savedBatchId, session.user);
 
+                // ── Background DB hydration ──────────────────────────────────────────
+                // workflow_state now stores only slim items (non-DB fields).
+                // Re-fill all DB-backed fields (descriptions, prices, tags, etc.) from
+                // the products table after the UI is already visible. Fire-and-forget.
+                (async () => {
+                  try {
+                    const hydrateSelect = `id, description, seo_title, seo_description, voice_description, vendor, product_category, product_type, tags, published, status, size, color, secondary_color, price, compare_at_price, cost_per_item, sku, barcode, inventory_quantity, weight_value, requires_shipping, continue_selling_out_of_stock, package_dimensions, parcel_size, ships_from, condition, flaws, material, era, care_instructions, measurements, model_name, model_number, size_type, style, gender, age_group, policies, renewal_options, who_made_it, what_is_it, listing_type, discounted_shipping, mpn, custom_label_0, product_group, product_images(image_url, storage_path, position, original_name)`;
+                    const { data: dbProds } = await supabase
+                      .from('products')
+                      .select(hydrateSelect)
+                      .eq('batch_id', savedBatchId)
+                      .order('created_at', { ascending: true });
+                    if (!dbProds || dbProds.length === 0) return;
+                    log.app(`startup restore | DB hydration | merging ${dbProds.length} products into live state`);
+                    // O(1) lookup maps
+                    const byTitle = new Map<string, any>();
+                    const byImgUrl = new Map<string, any>();
+                    for (const p of dbProds) {
+                      if (p.seo_title) byTitle.set(p.seo_title.trim(), p);
+                      for (const img of (p.product_images || [])) {
+                        if (img.image_url) byImgUrl.set(img.image_url, p);
+                      }
+                    }
+                    const mergeDB = (arr: ClothingItem[]): ClothingItem[] =>
+                      arr.map((item) => {
+                        const p: any =
+                          (item.seoTitle ? byTitle.get(item.seoTitle.trim()) : undefined) ??
+                          (item.preview  ? byImgUrl.get(item.preview)        : undefined) ??
+                          (item.imageUrls?.[0] ? byImgUrl.get(item.imageUrls[0]) : undefined);
+                        if (!p) return item;
+                        const dbImageUrls: string[] = (p.product_images || [])
+                          .sort((a: any, b: any) => a.position - b.position)
+                          .map((img: any) => img.image_url)
+                          .filter(Boolean);
+                        const resolvedImageUrls = dbImageUrls.length ? dbImageUrls : (item.imageUrls ?? []);
+                        const resolvedPreview = resolvedImageUrls[0] || item.preview || '';
+                        return {
+                          ...item,
+                          imageUrls:                 resolvedImageUrls,
+                          preview:                   resolvedPreview,
+                          generatedDescription:      htmlDescToPlain(p.description ?? '') || item.generatedDescription || '',
+                          voiceDescription:          p.voice_description   ?? item.voiceDescription   ?? '',
+                          seoTitle:                  p.seo_title           || item.seoTitle            || '',
+                          seoDescription:            p.seo_description     || item.seoDescription      || '',
+                          tags:                      p.tags?.length        ? p.tags                    : (item.tags || []),
+                          brand:                     p.vendor              || item.brand               || '',
+                          category:                  p.product_category    || item.category            || '',
+                          productType:               p.product_type        || item.productType         || '',
+                          published:                 p.published           ?? item.published,
+                          status:                    p.status              || item.status              || 'Active',
+                          size:                      p.size                || item.size                || '',
+                          color:                     p.color               || item.color               || '',
+                          secondaryColor:            p.secondary_color     || item.secondaryColor      || '',
+                          price:                     p.price               ?? item.price,
+                          compareAtPrice:            p.compare_at_price    ?? item.compareAtPrice,
+                          costPerItem:               p.cost_per_item       ?? item.costPerItem,
+                          sku:                       p.sku                 || item.sku                 || '',
+                          barcode:                   p.barcode             || item.barcode             || '',
+                          inventoryQuantity:         p.inventory_quantity  ?? item.inventoryQuantity,
+                          weightValue:               p.weight_value        || item.weightValue         || '',
+                          requiresShipping:          p.requires_shipping   ?? item.requiresShipping,
+                          continueSellingOutOfStock: p.continue_selling_out_of_stock ?? item.continueSellingOutOfStock,
+                          packageDimensions:         p.package_dimensions  || item.packageDimensions   || '',
+                          parcelSize:                p.parcel_size         || item.parcelSize          || '',
+                          shipsFrom:                 p.ships_from          || item.shipsFrom           || '',
+                          condition:                 p.condition           || item.condition           || '',
+                          flaws:                     p.flaws               || item.flaws               || '',
+                          material:                  p.material            || item.material            || '',
+                          era:                       p.era                 || item.era                 || '',
+                          care:                      p.care_instructions   || item.care                || '',
+                          measurements:              p.measurements        || item.measurements        || {},
+                          modelName:                 p.model_name          || item.modelName           || '',
+                          modelNumber:               p.model_number        || item.modelNumber         || '',
+                          sizeType:                  p.size_type           || item.sizeType            || '',
+                          style:                     p.style               || item.style               || '',
+                          gender:                    p.gender              || item.gender,
+                          ageGroup:                  p.age_group           || item.ageGroup            || '',
+                          policies:                  p.policies            || item.policies            || '',
+                          renewalOptions:            p.renewal_options     || item.renewalOptions      || '',
+                          whoMadeIt:                 p.who_made_it         || item.whoMadeIt           || '',
+                          whatIsIt:                  p.what_is_it          || item.whatIsIt            || '',
+                          listingType:               p.listing_type        || item.listingType         || '',
+                          discountedShipping:        p.discounted_shipping || item.discountedShipping   || '',
+                          mpn:                       p.mpn                 || item.mpn                 || '',
+                          customLabel0:              p.custom_label_0      || item.customLabel0        || '',
+                        };
+                      });
+                    setUploadedImages(prev => mergeDB(prev));
+                    setGroupedImages(prev => mergeDB(prev));
+                    setSortedImages(prev => mergeDB(prev));
+                    setProcessedItems(prev => mergeDB(prev));
+                    log.app(`startup restore | DB hydration done`);
+                  } catch (e) {
+                    log.app(`startup restore | DB hydration error: ${e}`);
+                  }
+                })();
+
                 // Auto-rescan EXIF for items missing capturedAt (old batches uploaded before ac06e11).
                 // Fire-and-forget — runs after state is set and UI is visible.
                 // SAFETY CAP: skip rescan for large batches — downloading full-res images for 400+
@@ -1535,10 +1632,20 @@ function App() {
     // ── Instant localStorage backup ──────────────────────────────────────
     // Written synchronously (no debounce) so a quick page refresh never loses
     // pending group/category changes that haven't reached Supabase yet.
-    // The Supabase debounced save below remains as the durable store.
+    // Ultra-slim: only the 7 fields needed to detect a race with Supabase.
+    // Everything else is recovered from the DB merge in handleOpenBatch / startup hydration.
     try {
-      const slimNow = (items: ClothingItem[]): ClothingItem[] =>
-        items.map(({ file: _f, preview: _p, _presetData: _pr, ...rest }) => rest as ClothingItem);
+      // Only the fields that are NOT in the products/product_images tables — we cannot
+      // recover these from any DB query, so they must survive a page refresh here.
+      const ultraSlim = (item: ClothingItem) => ({
+        id:                  item.id,
+        storagePath:         item.storagePath,
+        productGroup:        item.productGroup,
+        category:            item.category,
+        capturedAt:          item.capturedAt,
+        imageRotation:       item.imageRotation,
+        crop:                item.crop,
+      });
       const liveNow =
         workflowState.processedItems.length > 0 ? workflowState.processedItems :
         workflowState.sortedImages.length    > 0 ? workflowState.sortedImages    :
@@ -1548,7 +1655,7 @@ function App() {
         localStorage.setItem('sortbot_workflow_backup', JSON.stringify({
           batchId:   currentBatchIdRef.current,
           savedAt:   Date.now(),
-          items:     slimNow(liveNow),
+          items:     liveNow.map(ultraSlim),
         }));
       }
     } catch { /* localStorage full or unavailable — skip */ }
@@ -1575,11 +1682,26 @@ function App() {
       }
       autoSaveInFlightRef.current = true;
 
-      // Strip only runtime-only fields (File objects, blob URLs, preset cache) before saving.
-      // generatedDescription and voiceDescription ARE kept so export works after a page reload
-      // without requiring a separate DB fetch.
-      const slim = (items: ClothingItem[]): ClothingItem[] =>
-        items.map(({ file: _f, preview: _p, _presetData: _pr, ...rest }) => rest as ClothingItem);
+      // True slim — only the fields that CANNOT be recovered from the products/product_images
+      // DB tables. All text content (generatedDescription, voiceDescription, seoTitle, price,
+      // tags, etc.) lives in products and is merged back in handleOpenBatch / startup hydration.
+      // This reduces the workflow_state blob by ~10x (2000 items: ~10 MB → ~800 KB).
+      const slim = (items: ClothingItem[]): any[] => items.map(item => ({
+        id:                  item.id,
+        storagePath:         item.storagePath,
+        imageUrls:           item.imageUrls,
+        thumbnailUrl:        item.thumbnailUrl,
+        productGroup:        item.productGroup,
+        category:            item.category,
+        capturedAt:          item.capturedAt,
+        originalName:        item.originalName,
+        imageRotation:       item.imageRotation,
+        crop:                item.crop,
+        originalStoragePath: item.originalStoragePath,
+        originalUrl:         item.originalUrl,
+        brandCategory:       item.brandCategory,
+        descriptionEdited:   item.descriptionEdited,
+      }));
 
       // Only persist ONE list — the most progressed one — to avoid 4x duplication.
       // On restore, all four arrays are set from this single list.
