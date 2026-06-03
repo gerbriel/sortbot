@@ -811,7 +811,9 @@ function App() {
                 setProcessedItems(hydratedItems);
                 // Pass session.user explicitly — React `user` state hasn't been set yet at this point
                 // (setUser(session.user) queues a re-render but doesn't run synchronously)
-                registerItemsInDB(hydratedItems, savedBatchId, session.user);
+                // NOTE: registerItemsInDB is called ONLY if products are missing from DB
+                // (checked inside the hydration block below). Calling it unconditionally
+                // caused 10 heavy queries (400-row delete+upsert) on every page load.
 
                 // ── Background DB hydration ──────────────────────────────────────────
                 // workflow_state now stores only slim items (non-DB fields).
@@ -825,7 +827,12 @@ function App() {
                       .select(hydrateSelect)
                       .eq('batch_id', savedBatchId)
                       .order('created_at', { ascending: true });
-                    if (!dbProds || dbProds.length === 0) return;
+                    // If no DB products found, items haven’t been registered yet — do it now.
+                    // This covers fresh uploads that haven’t been through handleImagesUploaded yet.
+                    if (!dbProds || dbProds.length === 0) {
+                      registerItemsInDB(hydratedItems, savedBatchId, session.user);
+                      return;
+                    }
                     log.app(`startup restore | DB hydration | merging ${dbProds.length} products into live state`);
                     // O(1) lookup maps
                     const byTitle = new Map<string, any>();
@@ -1852,6 +1859,7 @@ function App() {
     // Only select the columns that are actually needed for restoration — skip the 20+ rarely-set
     // columns to keep the payload small and the query fast.
     let restoredProcessedItems: ClothingItem[] = workflowItems;
+    let foundInDB = false; // set true when productsToUse has rows — skip registerItemsInDB in that case
     // isAlreadyActiveBatch was computed and currentBatchIdRef was set at the top of this function.
     try {
       const slimProductSelect = `
@@ -1951,6 +1959,7 @@ function App() {
       
       console.log(`[OPEN] potentialOrphans=${potentialOrphans.length} productsToUse=${savedProducts?.length ? savedProducts.length + ' (from DB)' : potentialOrphans.length + ' (orphans)'}`);
       const productsToUse = savedProducts && savedProducts.length > 0 ? savedProducts : potentialOrphans;
+      if (productsToUse.length > 0) foundInDB = true;
       
       // Always derive baseItems from the most-progressed single list (workflowItems),
       // not from the stale individual arrays. This handles both the new single-list
@@ -2279,7 +2288,12 @@ function App() {
     // only matters for Library consistency, which is non-blocking from the user's perspective.
     // Skip entirely if this batch was already the active one (checked before updating currentBatchIdRef).
     if (!isAlreadyActiveBatch) {
-      registerItemsInDB(restoredProcessedItems, batch.id);
+      // Only register items that are genuinely missing from the DB.
+      // foundInDB is true when the DB query above returned products for this batch —
+      // items are already registered so the expensive delete+upsert loop is unnecessary.
+      if (!foundInDB) {
+        registerItemsInDB(restoredProcessedItems, batch.id);
+      }
     }
 
     // Auto-rescan EXIF for any items missing capturedAt — fires in background after open.
