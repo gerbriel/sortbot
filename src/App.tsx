@@ -815,8 +815,10 @@ function App() {
 
                 // Auto-rescan EXIF for items missing capturedAt (old batches uploaded before ac06e11).
                 // Fire-and-forget — runs after state is set and UI is visible.
+                // SAFETY CAP: skip rescan for large batches — downloading full-res images for 400+
+                // items freezes the browser. 30 is a safe limit; dates are non-critical sort hints.
                 const missingDate = hydratedItems.filter((i: any) => !i.capturedAt && (i.imageUrls?.[0] || i.thumbnailUrl || i.preview));
-                if (missingDate.length > 0) {
+                if (missingDate.length > 0 && missingDate.length <= 30) {
                   log.app(`startup restore | auto-EXIF rescan | ${missingDate.length} items missing capturedAt`);
                   (async () => {
                     const CHUNK = 5;
@@ -2022,17 +2024,23 @@ function App() {
       // Merge saved data back into processedItems
       restoredProcessedItems = baseItems;
       if (baseItems.length > 0 && productsToUse && productsToUse.length > 0) {
+        // Build O(1) lookup Maps — avoids O(n²) .find() inside .map() for large batches.
+        const productsByTitle = new Map<string, any>();
+        const productsByImageUrl = new Map<string, any>();
+        for (const p of productsToUse) {
+          if (p.seo_title) productsByTitle.set(p.seo_title.trim(), p);
+          for (const img of (p.product_images || [])) {
+            if (img.image_url) productsByImageUrl.set(img.image_url, p);
+          }
+        }
+
         restoredProcessedItems = baseItems.map((item: ClothingItem, index: number) => {
           // Try to match by seoTitle first (most reliable for our use case)
-          let savedProduct = productsToUse.find((p: any) => 
-            p.seo_title && item.seoTitle && p.seo_title.trim() === item.seoTitle.trim()
-          );
+          let savedProduct: any = item.seoTitle ? productsByTitle.get(item.seoTitle.trim()) : undefined;
           
           // Fallback: match by image URL (preview)
           if (!savedProduct && item.preview) {
-            savedProduct = productsToUse.find((p: any) => 
-              p.product_images?.some((img: any) => img.image_url === item.preview)
-            );
+            savedProduct = productsByImageUrl.get(item.preview);
           }
           
           // Fallback: match by position in batch (if all else fails)
@@ -2156,8 +2164,9 @@ function App() {
     // Old batches (uploaded before ac06e11) never had capturedAt set. This silently
     // downloads each image and reads DateTimeOriginal so dates appear on Step 2 cards
     // without the user having to manually click the rescan button in Step 1.
+    // SAFETY CAP: skip for large batches — downloading 400+ full-res images freezes the browser.
     const itemsMissingDate = restoredProcessedItems.filter(i => !i.capturedAt && (i.imageUrls?.[0] || i.thumbnailUrl || i.preview));
-    if (itemsMissingDate.length > 0) {
+    if (itemsMissingDate.length > 0 && itemsMissingDate.length <= 30) {
       log.app(`handleOpenBatch | auto-EXIF rescan | ${itemsMissingDate.length} items missing capturedAt`);
       (async () => {
         const CHUNK = 5;
