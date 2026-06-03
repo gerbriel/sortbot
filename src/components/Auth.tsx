@@ -12,12 +12,14 @@ const Auth: React.FC<AuthProps> = ({ onAuthenticated }) => {
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isOutageError, setIsOutageError] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setIsOutageError(false);
     setMessage(null);
 
     try {
@@ -47,7 +49,22 @@ const Auth: React.FC<AuthProps> = ({ onAuthenticated }) => {
         }
       }
     } catch (error: any) {
-      setError(error.message || 'An error occurred during authentication');
+      const msg: string = error?.message || '';
+      const status: number | undefined = error?.status;
+      // Detect Supabase server-side outages (504/502/503) or network failures.
+      const isOutage =
+        status === 504 || status === 502 || status === 503 ||
+        msg.includes('504') || msg.includes('502') || msg.includes('503') ||
+        msg.toLowerCase().includes('gateway') ||
+        msg.toLowerCase().includes('failed to fetch') ||
+        msg.toLowerCase().includes('network request failed');
+      if (isOutage) {
+        setIsOutageError(true);
+        setError('Supabase is temporarily unreachable — this is a server-side outage or scheduled maintenance, not your credentials. Try again in a few minutes. A mobile hotspot or VPN can also bypass routing issues.');
+      } else {
+        setIsOutageError(false);
+        setError(msg || 'An error occurred during authentication');
+      }
     } finally {
       setLoading(false);
     }
@@ -66,7 +83,12 @@ const Auth: React.FC<AuthProps> = ({ onAuthenticated }) => {
 
           {error && (
             <div className="auth-error">
-              ⚠️ {error}
+              ⚠️ {error}{' '}
+              {isOutageError && (
+                <a href="https://status.supabase.com" target="_blank" rel="noreferrer" style={{ color: 'inherit', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  Check status.supabase.com ↗
+                </a>
+              )}
             </div>
           )}
 
@@ -130,6 +152,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthenticated }) => {
                   onClick={() => {
                     setIsSignUp(false);
                     setError(null);
+                    setIsOutageError(false);
                     setMessage(null);
                   }}
                   disabled={loading}
@@ -145,6 +168,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthenticated }) => {
                   onClick={() => {
                     setIsSignUp(true);
                     setError(null);
+                    setIsOutageError(false);
                     setMessage(null);
                   }}
                   disabled={loading}
