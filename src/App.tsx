@@ -1350,13 +1350,15 @@ function App() {
     const liveProcessed = processedItemsRef.current;
     let finalProcessed: ClothingItem[];
     if (liveProcessed.length > 0) {
+      // O(1) map — avoids O(n²) .find() inside .map() for large batches
+      const sortedMap = new Map(items.map(i => [i.id, i]));
       // Update existing processedItems with the full preset-applied sorted item, but
       // preserve any user-entered fields (voice descriptions, manually typed values)
       // by re-overlaying non-nullish values from the existing procItem on top.
       // This means: preset fields always come through from sortedItem, but anything
       // the user already typed/spoke takes precedence (same || priority as applyPresetFields).
       finalProcessed = liveProcessed.map(procItem => {
-        const sortedItem = items.find(i => i.id === procItem.id);
+        const sortedItem = sortedMap.get(procItem.id);
         if (sortedItem) {
           // Start from the preset-enriched sortedItem, then re-apply user-entered
           // overrides from procItem (only if they actually have a value).
@@ -1440,9 +1442,11 @@ function App() {
     // Read from groupedImagesRef (not groupedImages closure) so rapid calls always
     // see the latest categories, not a stale snapshot from the render that fired.
     const liveCurrent = groupedImagesRef.current;
+    // O(1) lookup map — avoids O(n²) .find() inside .map() for large batches
+    const liveCategoryMap = new Map(liveCurrent.filter(g => g.category).map(g => [g.id, g.category!]));
     const itemsWithCategories = items.map(item => {
-      const existingItem = liveCurrent.find(g => g.id === item.id);
-      return existingItem?.category ? { ...item, category: existingItem.category } : item;
+      const cat = liveCategoryMap.get(item.id);
+      return cat ? { ...item, category: cat } : item;
     });
     
     setGroupedImages(itemsWithCategories);
@@ -1461,10 +1465,12 @@ function App() {
     // not a stale closure value (critical when handleImagesSorted just ran and set
     // sortedImages, but handleImagesGrouped was already captured before that update).
     const liveSorted = sortedImagesRef.current;
+    // O(1) map for grouped items lookup
+    const groupedMap = new Map(itemsWithCategories.map(i => [i.id, i]));
     const updatedSorted = liveSorted
       .filter(s => remainingIds.has(s.id))
       .map(s => {
-        const grouped = itemsWithCategories.find(i => i.id === s.id);
+        const grouped = groupedMap.get(s.id);
         return grouped ? { ...s, ...grouped, category: s.category || grouped.category } : s;
       });
     // For items not yet in sortedImages (newly added), include them from itemsWithCategories
@@ -1478,8 +1484,10 @@ function App() {
     // processedItemsRef reflects any preset application done in Step 3; finalSorted
     // is derived from sortedImages which only carries structural fields (no preset data).
     const liveProcessedForGroup = processedItemsRef.current;
+    // O(1) map for processed items lookup
+    const processedMap = new Map(liveProcessedForGroup.map(p => [p.id, p]));
     const mergedProcessed = finalSorted.map(sortedItem => {
-      const existing = liveProcessedForGroup.find(p => p.id === sortedItem.id);
+      const existing = processedMap.get(sortedItem.id);
       // For image URL fields, storagePath is always the authoritative source.
       // Rebuild canonical URL and thumbnailUrl from storagePath to avoid using
       // imageUrls[0] values that may have been corrupted by earlier merges.
