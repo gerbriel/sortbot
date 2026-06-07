@@ -216,23 +216,22 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const pickCursorRef = useRef(0); // position in filename-sorted ungrouped list
   // Re-assigned every render so it always captures the latest autoGroupN value
   const advancePickSelectionRef = useRef<(items: ClothingItem[]) => void>(() => {});
-  // Set to true when pick mode needs to advance (after group or category action).
-  // Consumed by useEffect([groupedItems, pendingPick]) below — this guarantees the
-  // advance runs only after groupedItems state is fully flushed (including the
-  // initializeItems metadata sync triggered by category assignment via App.tsx).
-  const [pendingPick, setPendingPick] = useState(false);
+  // Ref flag: set to true when pick needs to advance after the NEXT groupedItems change.
+  // Using a ref (not state) means setting it never causes a render — the advance only
+  // fires when groupedItems actually changes (i.e. after initializeItems has synced
+  // the category metadata from the updated items prop into local state).
+  const pendingPickRef = useRef(false);
 
-  // Fire only when BOTH pendingPick is true AND groupedItems has updated.
-  // This is the only way to guarantee category changes have propagated through
-  // App.tsx → items prop → initializeItems → setGroupedItems before we re-select.
+  // Watch groupedItems: when pendingPickRef is set, advance pick selection.
+  // Fires only when groupedItems state changes, so category data is always fresh.
   useEffect(() => {
-    if (!pendingPick) return;
-    if (!pickModeRef.current) { setPendingPick(false); return; }
-    console.log(`[PICK] pendingPick effect | groupedItems=${groupedItems.length} pickMode=true`);
-    setPendingPick(false);
+    if (!pendingPickRef.current) return;
+    if (!pickModeRef.current) { pendingPickRef.current = false; return; }
+    console.log(`[PICK] groupedItems effect | groupedItems=${groupedItems.length} pickMode=true`);
+    pendingPickRef.current = false;
     advancePickSelectionRef.current(groupedItems);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupedItems, pendingPick]);
+  }, [groupedItems]);
 
   // When N changes while pick mode is active, immediately re-select from the
   // current cursor position so the highlighted images update in real time.
@@ -1399,7 +1398,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       pickCursorRef.current = 0;
       console.log(`[PICK] createGroupFromSelected — setting pendingPick`);
       updateSelection(new Set());
-      setPendingPick(true);
+      pendingPickRef.current = true;
     } else {
       updateSelection(new Set());
     }
@@ -1976,7 +1975,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         // will fire once initializeItems has synced the category into groupedItems.
         pickCursorRef.current = 0;
         updateSelection(new Set());
-        setPendingPick(true);
+        pendingPickRef.current = true;
       },
     });
   // createGroupFromSelected now reads via refs so it's safe to keep a stable dep here;
