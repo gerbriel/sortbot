@@ -1785,10 +1785,18 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const naturalCompare = (a: string, b: string) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 
-  // Pick-mode helper — updated every render so autoGroupN is always current
+  // Pick-mode helper — updated every render so autoGroupN + sortOrder are always current
   advancePickSelectionRef.current = (currentItems: ClothingItem[]) => {
     const n = Math.max(1, parseInt(autoGroupN, 10) || 1);
-    const sorted = [...currentItems].sort((a, b) => naturalCompare(nameKey(a), nameKey(b)));
+    // Sort using the same order the grid is currently displaying
+    const sorted = [...currentItems].sort((a, b) => {
+      switch (sortOrder) {
+        case 'date-asc':  return (a.capturedAt ?? 0) - (b.capturedAt ?? 0);
+        case 'date-desc': return (b.capturedAt ?? 0) - (a.capturedAt ?? 0);
+        case 'name-desc': return naturalCompare(nameKey(b), nameKey(a));
+        default:          return naturalCompare(nameKey(a), nameKey(b));
+      }
+    });
     // "Ungrouped" = items that are singletons (no other item shares their productGroup).
     // This matches exactly what the grid shows in the "Individual Items" section.
     const groupFreq = new Map<string, number>();
