@@ -988,6 +988,24 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     return () => document.removeEventListener('keydown', handler);
   }, []); // stable — reads live values via refs
 
+  // ⌘1–9 / ⌘0 — set Photos/item count (0 = 10)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      if (e.shiftKey || e.altKey) return;
+      if (e.repeat) return;
+      const active = document.activeElement;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)) return;
+      const digit = e.key >= '1' && e.key <= '9' ? parseInt(e.key, 10)
+                  : e.key === '0' ? 10 : null;
+      if (digit === null) return;
+      e.preventDefault();
+      setAutoGroupN(String(digit));
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []); // stable — setAutoGroupN is stable
+
   // Initialize items with individual groups and auto-upload.
   // IMPORTANT: Only process items that are genuinely new (not already in groupedItems).
   // This prevents the items prop feedback loop from resetting group state every time
@@ -2491,6 +2509,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           <div className="cheatsheet-title">⌨ Shortcuts</div>
           <div className="cheatsheet-row"><kbd>⌘ Enter</kbd><span>Group selected</span></div>
           <div className="cheatsheet-row"><kbd>⌘ ⌫</kbd><span>Ungroup selected</span></div>
+          <div className="cheatsheet-row"><kbd>⌘ 1–9</kbd><span>Set photos/item</span></div>
+          <div className="cheatsheet-row"><kbd>⌘ 0</kbd><span>Set photos/item 10</span></div>
           <div className="cheatsheet-row"><kbd>⌘A</kbd><span>Select singles</span></div>
           <div className="cheatsheet-row"><kbd>⌘ Shift A</kbd><span>Select groups</span></div>
           <div className="cheatsheet-row"><kbd>⌘D</kbd><span>Deselect all</span></div>
