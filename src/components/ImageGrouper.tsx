@@ -57,6 +57,8 @@ export interface GrouperActions {
   clearSelection: () => void;
   deleteSelected: () => void;
   selectedCount: number;
+  /** Call this after a category preset is applied so pick-mode can advance to the next N. */
+  onCategoryAssigned: () => void;
 }
 
 interface ImageGrouperProps {
@@ -225,6 +227,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     if (!pendingPickItemsRef.current) return;
     const items = pendingPickItemsRef.current;
     pendingPickItemsRef.current = null;
+    console.log(`[PICK] post-render effect firing | items=${items.length} pickMode=${pickModeRef.current}`);
     advancePickSelectionRef.current(items);
   });
 
@@ -1258,6 +1261,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const lastClickedSingleRef = useRef<string | null>(null);
 
   const updateSelection = (next: Set<string>) => {
+    console.log(`[PICK] updateSelection | size=${next.size} pickMode=${pickModeRef.current}`, new Error().stack?.split('\n').slice(1,4).join(' | '));
     setSelectedItems(next);
     onSelectionChange?.(next);
   };
@@ -1389,6 +1393,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     // the next N after React has fully flushed commitUpdate + onGrouped.
     if (pickModeRef.current) {
       pickCursorRef.current = 0;
+      console.log(`[PICK] createGroupFromSelected — setting pendingPickItems | updatedTotal=${updated.length}`);
       updateSelection(new Set()); // clear current highlight immediately
       pendingPickItemsRef.current = updated;
     } else {
@@ -1814,6 +1819,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // Pick-mode helper — updated every render so autoGroupN + sortOrder are always current
   advancePickSelectionRef.current = (currentItems: ClothingItem[]) => {
     const n = Math.max(1, parseInt(autoGroupN, 10) || 1);
+    console.log(`[PICK] advancePickSelection called | totalItems=${currentItems.length} n=${n} sortOrder=${sortOrder}`);
     // Sort using the same order the grid is currently displaying
     const sorted = [...currentItems].sort((a, b) => {
       switch (sortOrder) {
@@ -1833,8 +1839,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     const ungrouped = sorted.filter(i => (groupFreq.get(i.productGroup || i.id) ?? 0) === 1);
     const cursor = pickCursorRef.current;
     const slice = ungrouped.slice(cursor, cursor + n);
+    console.log(`[PICK] ungrouped=${ungrouped.length} cursor=${cursor} slice=${slice.length} ids=${slice.map(i=>i.id.slice(0,6)).join(',')}`);
     if (slice.length === 0) {
       // No more ungrouped items — turn off pick mode
+      console.log('[PICK] no more ungrouped items — turning off pick mode');
       setPickMode(false);
       pickModeRef.current = false;
       pickCursorRef.current = 0;
@@ -1843,6 +1851,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     }
     updateSelection(new Set(slice.map(i => i.id)));
     pickCursorRef.current = cursor + slice.length;
+    console.log(`[PICK] selection updated | new cursor=${pickCursorRef.current}`);
   };
 
   // ── Memoized derived data — only recomputes when groupedItems / sortOrder /
@@ -1952,6 +1961,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       clearSelection: () => updateSelection(new Set()),
       deleteSelected: handleDeleteSelected,
       selectedCount: selectedItems.size,
+      onCategoryAssigned: () => {
+        console.log(`[PICK] onCategoryAssigned called | pickMode=${pickModeRef.current}`);
+        if (!pickModeRef.current) { updateSelection(new Set()); return; }
+        // Category was just applied to the current selection.
+        // Advance pick mode to the next N singletons (same as after manual grouping).
+        pickCursorRef.current = 0;
+        updateSelection(new Set());
+        pendingPickItemsRef.current = groupedItemsRef.current;
+      },
     });
   // createGroupFromSelected now reads via refs so it's safe to keep a stable dep here;
   // selectedItems is still needed so selectedCount stays up-to-date.
@@ -2243,6 +2261,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               className={`sort-btn pick-mode-btn${pickMode ? ' pick-mode-active' : ''}`}
               onClick={() => {
                 const next = !pickMode;
+                console.log(`[PICK] toggle | ${pickMode ? 'ON→OFF' : 'OFF→ON'} n=${autoGroupN}`);
                 setPickMode(next);
                 pickModeRef.current = next;
                 if (next) {
