@@ -1372,13 +1372,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     } catch (err) {
       console.error('[createGroup] commitUpdate threw — state may be inconsistent:', err);
     }
-    // Pick mode: auto-advance to next N singletons after React has flushed the group update.
-    // Defer via setTimeout so commitUpdate's setGroupedItems resolves before we re-select.
+    // Pick mode: auto-advance to next N singletons.
+    // Pass `updated` directly — groupedItemsRef.current won't reflect the new
+    // grouping until after React re-renders, so we use the value we just computed.
     if (pickModeRef.current) {
       pickCursorRef.current = 0;
-      setTimeout(() => {
-        advancePickSelectionRef.current(groupedItemsRef.current);
-      }, 0);
+      const nextItems = updated; // already has grouped items merged in
+      setTimeout(() => advancePickSelectionRef.current(nextItems), 0);
     } else {
       updateSelection(new Set());
     }
