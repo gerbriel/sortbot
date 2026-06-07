@@ -1833,14 +1833,18 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         default:          return naturalCompare(nameKey(a), nameKey(b));
       }
     });
-    // "Ungrouped" = items that are singletons (no other item shares their productGroup).
-    // This matches exactly what the grid shows in the "Individual Items" section.
+    // "Ungrouped & uncategorized" = singletons that haven't been assigned a category yet.
+    // Must exclude BOTH already-grouped items (multi-item productGroup) AND already-
+    // categorized items (category field set) — category assignment doesn't change
+    // productGroup, so without this check categorized singletons stay in the pool forever.
     const groupFreq = new Map<string, number>();
     currentItems.forEach(i => {
       const gid = i.productGroup || i.id;
       groupFreq.set(gid, (groupFreq.get(gid) || 0) + 1);
     });
-    const ungrouped = sorted.filter(i => (groupFreq.get(i.productGroup || i.id) ?? 0) === 1);
+    const ungrouped = sorted.filter(i =>
+      (groupFreq.get(i.productGroup || i.id) ?? 0) === 1 && !i.category
+    );
     const cursor = pickCursorRef.current;
     const slice = ungrouped.slice(cursor, cursor + n);
     console.log(`[PICK] ungrouped=${ungrouped.length} cursor=${cursor} slice=${slice.length} ids=${slice.map(i=>i.id.slice(0,6)).join(',')}`);
