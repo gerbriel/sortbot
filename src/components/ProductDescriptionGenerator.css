@@ -119,6 +119,14 @@
   flex-shrink: 0;
 }
 
+.group-nav-slider {
+  width: 100%;
+  margin-top: 0.5rem;
+  accent-color: #6366f1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 .preview-image {
   width: 100%;
   height: auto;

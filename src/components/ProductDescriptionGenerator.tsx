@@ -1832,6 +1832,22 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               </button>
             )}
           </div>
+          {groupArray.length > 1 && (
+            <input
+              type="range"
+              className="group-nav-slider"
+              min={0}
+              max={groupArray.length - 1}
+              step={1}
+              value={currentGroupIndex}
+              onChange={e => {
+                const idx = Number(e.target.value);
+                if (hasUnsavedChanges) handleSave();
+                setCurrentGroupIndex(idx);
+              }}
+              title={`Jump to group ${currentGroupIndex + 1} of ${groupArray.length}`}
+            />
+          )}
 
           {/* Download CSV — quick access below nav */}
           {onDownloadCSV && (
