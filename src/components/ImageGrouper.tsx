@@ -1405,7 +1405,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
    * Existing grouping is completely replaced by this operation.
    */
   const applyAutoGrouping = (n: number) => {
-    if (n < 2 || n > 50) return;
+    if (n < 1 || n > 50) return;
 
     // Sort ALL items by filename in natural (numeric) ascending order
     const sorted = [...groupedItems].sort((a, b) => naturalCompare(nameKey(a), nameKey(b)));
@@ -2136,18 +2136,18 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           )}
 
           {/* ── Auto-group by N ─────────────────────────────────────────────── */}
-          <div className="auto-group-control" title="Auto-group images by sequential filename order. Type how many photos you took per item, then click Apply.">
+          <div className="auto-group-control" title="Auto-group images by sequential filename order. Set how many photos you took per item, then click Apply.">
             <span className="auto-group-label">📸 Photos/item:</span>
             <input
               type="number"
-              min={2}
+              min={1}
               max={50}
               value={autoGroupN}
               onChange={e => setAutoGroupN(e.target.value)}
               onKeyDown={e => {
                 if (e.key === 'Enter') {
                   const n = parseInt(autoGroupN, 10);
-                  if (!isNaN(n) && n >= 2 && n <= 50) applyAutoGrouping(n);
+                  if (!isNaN(n) && n >= 1 && n <= 50) applyAutoGrouping(n);
                 }
               }}
               className="auto-group-input"
@@ -2157,17 +2157,28 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               className="sort-btn auto-group-btn"
               onClick={() => {
                 const n = parseInt(autoGroupN, 10);
-                if (isNaN(n) || n < 2 || n > 50) {
-                  alert('Enter a number between 2 and 50');
+                if (isNaN(n) || n < 1 || n > 50) {
+                  alert('Enter a number between 1 and 50');
                   return;
                 }
-                if (!confirm(`Auto-group all ${groupedItems.length} images into sets of ${n}?\n\nThis will replace all current grouping. You can undo by refreshing.`)) return;
+                if (!confirm(`Auto-group all ${groupedItems.length} images into sets of ${n}?\n\nThis will replace all current grouping. You can undo with ⌘Z.`)) return;
                 applyAutoGrouping(n);
               }}
               title={`Group all images into sets of ${autoGroupN} by filename order`}
             >
               Apply
             </button>
+            {/* Quick-pick slider: 1–10 */}
+            <input
+              type="range"
+              min={1}
+              max={10}
+              step={1}
+              value={Math.min(Math.max(parseInt(autoGroupN, 10) || 1, 1), 10)}
+              onChange={e => setAutoGroupN(e.target.value)}
+              className="auto-group-slider"
+              title="Quick-set photos per item (1–10)"
+            />
           </div>
 
           {/* ── Columns per row slider ──────────────────────────────────────── */}
