@@ -214,6 +214,19 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const pickCursorRef = useRef(0); // position in filename-sorted ungrouped list
   // Re-assigned every render so it always captures the latest autoGroupN value
   const advancePickSelectionRef = useRef<(items: ClothingItem[]) => void>(() => {});
+  // Set by createGroupFromSelected when pick mode is on; consumed by the
+  // post-render useEffect below — guarantees selection runs AFTER React flushes
+  // all state updates (commitUpdate + onGrouped chain).
+  const pendingPickItemsRef = useRef<ClothingItem[] | null>(null);
+
+  // Consume pending pick selection after every render (no deps — intentional).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!pendingPickItemsRef.current) return;
+    const items = pendingPickItemsRef.current;
+    pendingPickItemsRef.current = null;
+    advancePickSelectionRef.current(items);
+  });
 
   // When N changes while pick mode is active, immediately re-select from the
   // current cursor position so the highlighted images update in real time.
@@ -1372,13 +1385,12 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     } catch (err) {
       console.error('[createGroup] commitUpdate threw — state may be inconsistent:', err);
     }
-    // Pick mode: auto-advance to next N singletons.
-    // Pass `updated` directly — groupedItemsRef.current won't reflect the new
-    // grouping until after React re-renders, so we use the value we just computed.
+    // Pick mode: store updated items so the post-render useEffect can select
+    // the next N after React has fully flushed commitUpdate + onGrouped.
     if (pickModeRef.current) {
       pickCursorRef.current = 0;
-      const nextItems = updated; // already has grouped items merged in
-      setTimeout(() => advancePickSelectionRef.current(nextItems), 0);
+      updateSelection(new Set()); // clear current highlight immediately
+      pendingPickItemsRef.current = updated;
     } else {
       updateSelection(new Set());
     }
