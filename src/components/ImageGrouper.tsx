@@ -877,8 +877,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // IMPORTANT: Do NOT clear selection when the user clicks inside the CategoryZones
   // panel (category-zone, preset buttons, etc.) — those clicks are meant to consume
   // the current selection (assign category / apply preset), not discard it.
+  // Also do NOT clear when pick mode is active — pick mode owns the selection lifecycle.
   useEffect(() => {
     const handler = (e: MouseEvent) => {
+      if (pickModeRef.current) return; // pick mode manages its own selection — never clear on click-outside
       const t = e.target as HTMLElement;
       const isSafeTarget = t.closest(
         '.single-item-card, .product-group-card, .group-header, .toolbar, button, [role="button"],' +
