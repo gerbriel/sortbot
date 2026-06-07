@@ -294,8 +294,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           // Common measurement word misrecognitions
           .replace(/\b(shows|shower|shoulder's|shoulders)\b(?=\s+\d)/gi, 'shoulder')
           .replace(/\b(waste|ways|waist's)\b(?=\s+\d)/gi, 'waist')
-          .replace(/\b(in seam|in-seam|unseam)\b/gi, 'inseam')
-          .replace(/\b(out seam|out-seam)\b/gi, 'outseam')
+          // inseam: many STT engines mis-hear it ("and seam", "in seem", "in steam", etc.)
+          .replace(/\b(in seam|in-seam|unseam|and seam|in seem|in steam|in-scene|in scene|in-team|inseams?)\b(?=\s+[\d])/gi, 'inseam')
+          .replace(/\b(in seam|in-seam|unseam|and seam|in seem|in steam)\b/gi, 'inseam')
+          .replace(/\b(out seam|out-seam|out seem|out-seem|outseams?)\b/gi, 'outseam')
           .replace(/\b(chest's|chess|jest)\b(?=\s+\d)/gi, 'chest')
           .replace(/\b(hip's|hips)\b(?=\s+\d)/gi, 'hip')
           .replace(/\b(sleeve's|sleeves)\b(?=\s+\d)/gi, 'sleeve')
@@ -368,43 +370,67 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           for (let si = 0; si < segments.length - 1; si++) {
             const seg = segments[si].trim();
             if (!seg) continue;
-
             const segLower = seg.toLowerCase();
-            // Find if this segment starts with a field keyword
-            let segField: string | null = null;
-            let segKeywordLen = 0;
+
+            // Find ALL keyword occurrences within this segment (word-boundary-aware).
+            // This lets a single period-bounded chunk like "width 18 length 28 period"
+            // correctly yield TWO separate field writes instead of one.
+            type KwHit = { pos: number; kw: string; fk: string };
+            const hits: KwHit[] = [];
             for (const [kw, fk] of Object.entries(VOICE_KEYWORD_TO_FIELD)) {
-              if (segLower.startsWith(kw + ' ') || segLower === kw) {
-                if (kw.length > segKeywordLen) {
-                  segField = fk; segKeywordLen = kw.length;
+              const idx = segLower.indexOf(kw);
+              if (idx === -1) continue;
+              const prevOk = idx === 0 || segLower[idx - 1] === ' ';
+              const nextOk = idx + kw.length >= segLower.length || segLower[idx + kw.length] === ' ';
+              if (prevOk && nextOk) hits.push({ pos: idx, kw, fk });
+            }
+            // Sort by position; prefer longer keyword at the same position
+            hits.sort((a, b) => a.pos - b.pos || b.kw.length - a.kw.length);
+            // Remove shorter keywords shadowed by a longer one at the same start
+            const kwHits = hits.filter((h, i) => i === 0 || h.pos >= hits[i - 1].pos + hits[i - 1].kw.length);
+
+            if (kwHits.length === 0) {
+              // No keyword — continuation of current active field, then "period" closes it
+              if (activeVoiceFieldRef.current) {
+                pendingFieldValueRef.current = (pendingFieldValueRef.current + ' ' + seg).trim();
+              }
+              const f = activeVoiceFieldRef.current;
+              const v = pendingFieldValueRef.current.trim();
+              if (f && v) applyTableFieldRef.current(f, v);
+              pendingFieldValueRef.current = '';
+              activeVoiceFieldRef.current = null;
+            } else {
+              // Handle any text before the first keyword
+              if (kwHits[0].pos > 0) {
+                // Text before first keyword continues the previously active field
+                const before = seg.slice(0, kwHits[0].pos).trim();
+                if (activeVoiceFieldRef.current && before) {
+                  pendingFieldValueRef.current = (pendingFieldValueRef.current + ' ' + before).trim();
                 }
+                const f = activeVoiceFieldRef.current;
+                const v = pendingFieldValueRef.current.trim();
+                if (f && v) applyTableFieldRef.current(f, v);
+              } else {
+                // Segment starts with a keyword — flush any prior pending field
+                const prevField = activeVoiceFieldRef.current;
+                const prevValue = pendingFieldValueRef.current.trim();
+                if (prevField && prevValue) applyTableFieldRef.current(prevField, prevValue);
               }
-            }
+              pendingFieldValueRef.current = '';
+              activeVoiceFieldRef.current = null;
 
-            if (segField) {
-              // Segment begins a new command — apply any previously pending field first
-              const prevField = activeVoiceFieldRef.current;
-              const prevValue = pendingFieldValueRef.current.trim();
-              if (prevField && prevValue) {
-                applyTableFieldRef.current(prevField, prevValue);
+              // Apply every keyword→value pair found in this segment.
+              // Each is closed by the trailing "period" (or by the next keyword in the segment).
+              for (let ki = 0; ki < kwHits.length; ki++) {
+                const { pos, kw, fk } = kwHits[ki];
+                const valueStart = pos + kw.length;
+                const valueEnd = ki + 1 < kwHits.length ? kwHits[ki + 1].pos : seg.length;
+                const value = seg.slice(valueStart, valueEnd).trim();
+                if (value) applyTableFieldRef.current(fk, value);
               }
-              // Now set up the new field from this segment
-              const value = seg.slice(segKeywordLen).trim();
-              pendingFieldValueRef.current = value;
-              activeVoiceFieldRef.current = segField;
-            } else if (activeVoiceFieldRef.current) {
-              // Continuation of the active field
-              pendingFieldValueRef.current = (pendingFieldValueRef.current + ' ' + seg).trim();
+              pendingFieldValueRef.current = '';
+              activeVoiceFieldRef.current = null;
             }
-
-            // Apply and clear — this segment's "period" closes the field
-            const fieldToApply = activeVoiceFieldRef.current;
-            const valueToApply = pendingFieldValueRef.current.trim();
-            if (fieldToApply && valueToApply) {
-              applyTableFieldRef.current(fieldToApply, valueToApply);
-            }
-            pendingFieldValueRef.current = '';
-            activeVoiceFieldRef.current = null;
           }
 
           // Handle trailing text after the last "period" — it may be a new keyword
