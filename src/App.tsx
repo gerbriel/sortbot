@@ -2608,7 +2608,7 @@ function App() {
                   onCategorized={handleImagesSorted}
                   compactMode
                   selectedItemIds={selectedGroupItems}
-                  onCategoryAssigned={() => { setSelectedGroupItems(new Set()); grouperActionsRef.current?.clearSelection(); }}
+                  onCategoryAssigned={() => { setSelectedGroupItems(new Set()); grouperActionsRef.current?.onCategoryAssigned(); }}
                 />
                 </GrouperErrorBoundary>
                 {/* Selection action buttons — rendered here so they stay visible while scrolling left panel */}
