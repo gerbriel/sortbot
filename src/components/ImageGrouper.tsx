@@ -215,6 +215,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // Re-assigned every render so it always captures the latest autoGroupN value
   const advancePickSelectionRef = useRef<(items: ClothingItem[]) => void>(() => {});
 
+  // When N changes while pick mode is active, immediately re-select from the
+  // current cursor position so the highlighted images update in real time.
+  useEffect(() => {
+    if (!pickModeRef.current) return;
+    // Reset cursor so new N selects from the top of the remaining ungrouped list
+    pickCursorRef.current = 0;
+    advancePickSelectionRef.current(groupedItemsRef.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoGroupN]);
+
   // Grid columns per row (2–12)
   const [columnsPerRow, setColumnsPerRow] = useState<number>(8);
 
