@@ -548,50 +548,24 @@ export const updateProduct = async (
 
 /**
  * Sync all preset/voice/manual field changes for a group of items back to the
- * products table. Looks up the existing product row by seo_title + batch_id
- * (or by image URL as fallback) and calls updateProduct.
+ * products table.
  *
- * This ensures preset fields survive a page reload on a different device.
+ * Uses the item's own ID as the product row key (product.id === item.id is the
+ * invariant established at upload time), so this works regardless of whether
+ * seoTitle is blank, and never silently skips due to a failed title lookup.
  */
 export const syncGroupFieldsToDatabase = async (
   groupItems: ClothingItem[],
-  batchId: string | null
+  _batchId: string | null   // kept for API compatibility; not used in lookup
 ): Promise<void> => {
   if (!groupItems.length) return;
 
   const representative = groupItems[0];
+  if (!representative.id) return;
 
   try {
-    // Try to find the product row: match by seo_title within this batch
-    let query = supabase
-      .from('products')
-      .select('id, seo_title')
-      .limit(1);
-
-    if (batchId) {
-      query = query.eq('batch_id', batchId);
-    }
-
-    if (representative.seoTitle) {
-      query = query.eq('seo_title', representative.seoTitle);
-    }
-
-    const { data: rows } = await query;
-    let productId = rows?.[0]?.id;
-
-    // Fallback: find by image URL from product_images
-    if (!productId && representative.preview) {
-      const { data: imgRows } = await supabase
-        .from('product_images')
-        .select('product_id')
-        .eq('image_url', representative.preview)
-        .limit(1);
-      productId = imgRows?.[0]?.product_id;
-    }
-
-    if (!productId) return; // Product hasn't been saved to DB yet — skip
-
-    await updateProduct(productId, representative);
+    // Direct lookup: product.id === item.id — always correct, no extra queries.
+    await updateProduct(representative.id, representative);
   } catch {
     // Silently fail — workflow_state blob is still the source of truth
   }

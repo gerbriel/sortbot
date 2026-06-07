@@ -152,8 +152,14 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   // Helper: build group array from items with groups-first ordering
   const buildGroupArray = (items: ClothingItem[]): ClothingItem[][] => {
+    const itemIds = new Set(items.map(i => i.id));
     const productGroups = items.reduce((groups, item, idx) => {
-      const groupId = item.productGroup || item.id;
+      // Validate productGroup: if it points to an ID that doesn't exist in this
+      // items array (stale reference from a DB-restored item or a different batch),
+      // treat the item as a singleton rather than silently merging it into a phantom group.
+      const groupId = (item.productGroup && itemIds.has(item.productGroup))
+        ? item.productGroup
+        : item.id;
       if (!groups[groupId]) groups[groupId] = { items: [], firstIdx: idx };
       groups[groupId].items.push(item);
       return groups;
@@ -889,22 +895,15 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Background save — pushes current field values to Supabase products table.
   // Called automatically on Next/Prev navigation and on group index change.
   // workflow_state blob is always kept in sync separately via onProcessed().
+  //
+  // Only syncs the CURRENT GROUP (the one the user just edited) — not all groups.
+  // Syncing all groups on every navigation caused N parallel DB calls (one per group)
+  // making every Next/Prev click noticeably slow on large batches.
   const handleSave = async () => {
-    log.pdg(`handleSave | items=${processedItems.length} batchId=${batchId ?? 'none'}`);
+    log.pdg(`handleSave | group=${currentGroupIndex} groupSize=${currentGroup.length} batchId=${batchId ?? 'none'}`);
+    if (!currentGroup.length) { setHasUnsavedChanges(false); return; }
     try {
-      // Group items by productGroup
-      const groups: Record<string, ClothingItem[]> = {};
-      processedItems.forEach(item => {
-        const gid = item.productGroup || item.id;
-        if (!groups[gid]) groups[gid] = [];
-        groups[gid].push(item);
-      });
-      // Sync every group to Supabase in parallel
-      await Promise.all(
-        Object.values(groups).map(groupItems =>
-          syncGroupFieldsToDatabase(groupItems, batchId ?? null)
-        )
-      );
+      await syncGroupFieldsToDatabase(currentGroup, batchId ?? null);
       setHasUnsavedChanges(false);
     } catch {
       // Silently fail — workflow_state blob is the source of truth
