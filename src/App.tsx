@@ -2387,7 +2387,7 @@ function App() {
         <div className="header-content">
           <div>
             <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <ShoppingBag size={32} /> Sortbot - AI Clothing Sorting & Export
+              <ShoppingBag size={32} /> Sortbot - Clothing Sorting & Export
             </h1>
             <p className="header-subtitle">Upload, sort, describe, and export to Shopify</p>
           </div>

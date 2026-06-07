@@ -2292,9 +2292,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       ? 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)'
                       : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
                   }}
-                  title="Re-extract all fields from voice + description, then regenerate AI description"
+                  title="Re-extract all fields from voice + description, then regenerate listing"
                 >
-                  {isGenerating ? '🧠 Regenerating…' : '🔄 Regenerate AI Description'}
+                  {isGenerating ? '🧠 Regenerating…' : '🔄 Regenerate Description'}
                 </button>
                 <button
                   className="button"
