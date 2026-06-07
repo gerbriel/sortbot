@@ -208,6 +208,12 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
   // Auto-group state — number of photos per product
   const [autoGroupN, setAutoGroupN] = useState<string>('4');
+  // Pick-mode — auto-selects next N singletons after each manual group action
+  const [pickMode, setPickMode] = useState(false);
+  const pickModeRef = useRef(false);
+  const pickCursorRef = useRef(0); // position in filename-sorted ungrouped list
+  // Re-assigned every render so it always captures the latest autoGroupN value
+  const advancePickSelectionRef = useRef<(items: ClothingItem[]) => void>(() => {});
 
   // Grid columns per row (2–12)
   const [columnsPerRow, setColumnsPerRow] = useState<number>(8);
@@ -1356,7 +1362,12 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     } catch (err) {
       console.error('[createGroup] commitUpdate threw — state may be inconsistent:', err);
     }
-    updateSelection(new Set());
+    // Pick mode: auto-advance to next N singletons; otherwise just clear selection
+    if (pickModeRef.current) {
+      advancePickSelectionRef.current(updated);
+    } else {
+      updateSelection(new Set());
+    }
   };
 
   // Ungroup selected items
@@ -1774,6 +1785,25 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const naturalCompare = (a: string, b: string) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 
+  // Pick-mode helper — updated every render so autoGroupN is always current
+  advancePickSelectionRef.current = (currentItems: ClothingItem[]) => {
+    const n = Math.max(1, parseInt(autoGroupN, 10) || 1);
+    const sorted = [...currentItems].sort((a, b) => naturalCompare(nameKey(a), nameKey(b)));
+    const ungrouped = sorted.filter(i => !i.productGroup || i.productGroup === i.id);
+    const cursor = pickCursorRef.current;
+    const slice = ungrouped.slice(cursor, cursor + n);
+    if (slice.length === 0) {
+      // No more ungrouped items — turn off pick mode
+      setPickMode(false);
+      pickModeRef.current = false;
+      pickCursorRef.current = 0;
+      updateSelection(new Set());
+      return;
+    }
+    updateSelection(new Set(slice.map(i => i.id)));
+    pickCursorRef.current = cursor + slice.length;
+  };
+
   // ── Memoized derived data — only recomputes when groupedItems / sortOrder /
   //    filters / manualOrder actually change, not on hover/scroll/selection. ──
   const { multiItemGroups, singleItems, uniqueFilterDates, uniqueFilterCategories } = useMemo(() => {
@@ -2167,6 +2197,28 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               title={`Group all images into sets of ${autoGroupN} by filename order`}
             >
               Apply
+            </button>
+            <button
+              className={`sort-btn pick-mode-btn${pickMode ? ' pick-mode-active' : ''}`}
+              onClick={() => {
+                const next = !pickMode;
+                setPickMode(next);
+                pickModeRef.current = next;
+                if (next) {
+                  // Turning on: start from beginning of ungrouped list
+                  pickCursorRef.current = 0;
+                  advancePickSelectionRef.current(groupedItemsRef.current);
+                } else {
+                  // Turning off: clear selection and reset cursor
+                  pickCursorRef.current = 0;
+                  updateSelection(new Set());
+                }
+              }}
+              title={pickMode
+                ? `Pick mode ON — selecting ${autoGroupN} at a time. Click to turn off.`
+                : `Pick mode: auto-select next ${autoGroupN} ungrouped images for manual grouping`}
+            >
+              {pickMode ? '🟢 Pick' : '⬜ Pick'}
             </button>
             {/* Quick-pick slider: 1–10 */}
             <input
