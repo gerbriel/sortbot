@@ -1789,7 +1789,14 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   advancePickSelectionRef.current = (currentItems: ClothingItem[]) => {
     const n = Math.max(1, parseInt(autoGroupN, 10) || 1);
     const sorted = [...currentItems].sort((a, b) => naturalCompare(nameKey(a), nameKey(b)));
-    const ungrouped = sorted.filter(i => !i.productGroup || i.productGroup === i.id);
+    // "Ungrouped" = items that are singletons (no other item shares their productGroup).
+    // This matches exactly what the grid shows in the "Individual Items" section.
+    const groupFreq = new Map<string, number>();
+    currentItems.forEach(i => {
+      const gid = i.productGroup || i.id;
+      groupFreq.set(gid, (groupFreq.get(gid) || 0) + 1);
+    });
+    const ungrouped = sorted.filter(i => (groupFreq.get(i.productGroup || i.id) ?? 0) === 1);
     const cursor = pickCursorRef.current;
     const slice = ungrouped.slice(cursor, cursor + n);
     if (slice.length === 0) {
