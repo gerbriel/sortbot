@@ -216,20 +216,23 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const pickCursorRef = useRef(0); // position in filename-sorted ungrouped list
   // Re-assigned every render so it always captures the latest autoGroupN value
   const advancePickSelectionRef = useRef<(items: ClothingItem[]) => void>(() => {});
-  // Set by createGroupFromSelected when pick mode is on; consumed by the
-  // post-render useEffect below — guarantees selection runs AFTER React flushes
-  // all state updates (commitUpdate + onGrouped chain).
-  const pendingPickItemsRef = useRef<ClothingItem[] | null>(null);
+  // Set to true when pick mode needs to advance (after group or category action).
+  // Consumed by useEffect([groupedItems, pendingPick]) below — this guarantees the
+  // advance runs only after groupedItems state is fully flushed (including the
+  // initializeItems metadata sync triggered by category assignment via App.tsx).
+  const [pendingPick, setPendingPick] = useState(false);
 
-  // Consume pending pick selection after every render (no deps — intentional).
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Fire only when BOTH pendingPick is true AND groupedItems has updated.
+  // This is the only way to guarantee category changes have propagated through
+  // App.tsx → items prop → initializeItems → setGroupedItems before we re-select.
   useEffect(() => {
-    if (!pendingPickItemsRef.current) return;
-    const items = pendingPickItemsRef.current;
-    pendingPickItemsRef.current = null;
-    console.log(`[PICK] post-render effect firing | items=${items.length} pickMode=${pickModeRef.current}`);
-    advancePickSelectionRef.current(items);
-  });
+    if (!pendingPick) return;
+    if (!pickModeRef.current) { setPendingPick(false); return; }
+    console.log(`[PICK] pendingPick effect | groupedItems=${groupedItems.length} pickMode=true`);
+    setPendingPick(false);
+    advancePickSelectionRef.current(groupedItems);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupedItems, pendingPick]);
 
   // When N changes while pick mode is active, immediately re-select from the
   // current cursor position so the highlighted images update in real time.
@@ -1391,13 +1394,12 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     } catch (err) {
       console.error('[createGroup] commitUpdate threw — state may be inconsistent:', err);
     }
-    // Pick mode: store updated items so the post-render useEffect can select
-    // the next N after React has fully flushed commitUpdate + onGrouped.
+    // Pick mode: signal that selection should advance once groupedItems flushes.
     if (pickModeRef.current) {
       pickCursorRef.current = 0;
-      console.log(`[PICK] createGroupFromSelected — setting pendingPickItems | updatedTotal=${updated.length}`);
-      updateSelection(new Set()); // clear current highlight immediately
-      pendingPickItemsRef.current = updated;
+      console.log(`[PICK] createGroupFromSelected — setting pendingPick`);
+      updateSelection(new Set());
+      setPendingPick(true);
     } else {
       updateSelection(new Set());
     }
@@ -1966,11 +1968,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       onCategoryAssigned: () => {
         console.log(`[PICK] onCategoryAssigned called | pickMode=${pickModeRef.current}`);
         if (!pickModeRef.current) { updateSelection(new Set()); return; }
-        // Category was just applied to the current selection.
-        // Advance pick mode to the next N singletons (same as after manual grouping).
+        // Category applied — signal advance; useEffect([groupedItems, pendingPick])
+        // will fire once initializeItems has synced the category into groupedItems.
         pickCursorRef.current = 0;
         updateSelection(new Set());
-        pendingPickItemsRef.current = groupedItemsRef.current;
+        setPendingPick(true);
       },
     });
   // createGroupFromSelected now reads via refs so it's safe to keep a stable dep here;
