@@ -1374,6 +1374,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     }
     // Pick mode: auto-advance to next N singletons; otherwise just clear selection
     if (pickModeRef.current) {
+      pickCursorRef.current = 0; // grouped items left the list — restart from top of new ungrouped list
       advancePickSelectionRef.current(updated);
     } else {
       updateSelection(new Set());
