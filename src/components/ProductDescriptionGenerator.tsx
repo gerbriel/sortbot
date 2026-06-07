@@ -125,7 +125,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       const saved = localStorage.getItem('sortbot_magnifier_settings');
       if (saved) return JSON.parse(saved);
     } catch { /* ignore */ }
-    return { size: 360, zoom: 5, enabled: true };
+    return { size: 480, zoom: 6, enabled: true };
   });
   const updateMagnifierSettings = (patch: Partial<typeof magnifierSettings>) => {
     setMagnifierSettings(prev => {
@@ -1786,7 +1786,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               <input
                 type="range"
                 min={160}
-                max={520}
+                max={700}
                 step={40}
                 value={magnifierSettings.size}
                 disabled={!magnifierSettings.enabled}
