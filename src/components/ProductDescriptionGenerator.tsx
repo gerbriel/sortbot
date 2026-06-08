@@ -666,59 +666,85 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   useEffect(() => {
     const applyPresetsToAllGroups = async () => {
       if (availablePresets.length === 0) return;
-      
+
+      // Collect patches as a Map<itemId, updatedItem> so we can apply them
+      // via functional update (prevents stale-closure from overwriting freshly
+      // DB-hydrated seoTitle / voiceDescription / productType).
+      const patches = new Map<string, ClothingItem>();
+
+      // Read the CURRENT items snapshot at the time the async work starts.
+      // We'll use a functional update below so concurrent state changes are safe.
+      const snapshot = processedItemsRef.current;
+
       // Group items by productGroup
-      const productGroups = processedItems.reduce((groups, item) => {
+      const productGroups = snapshot.reduce((groups, item) => {
         const groupId = item.productGroup || item.id;
-        if (!groups[groupId]) {
-          groups[groupId] = [];
-        }
+        if (!groups[groupId]) groups[groupId] = [];
         groups[groupId].push(item);
         return groups;
       }, {} as Record<string, ClothingItem[]>);
 
-      let hasChanges = false;
-      const updatedItems = [...processedItems];
-
       // Apply presets to each group that has a category but no preset data
       for (const [, groupItems] of Object.entries(productGroups)) {
         const firstItem = groupItems[0];
-        
+
         // Skip if no category assigned
         if (!firstItem.category) continue;
-        
+
+        // Skip if productType is a DB-persisted override (differs from category).
+        // This is the same signal used by the per-group auto-apply effect so we
+        // never clobber a manually-selected override on reload.
+        const hasProductTypeOverride = groupItems.some(item =>
+          item.productType &&
+          item.productType.toLowerCase() !== (item.category || '').toLowerCase()
+        );
+        if (hasProductTypeOverride) continue;
+
         // Check if preset is already applied for this category
         const hasPresetData = groupItems.some(item => item._presetData);
         const presetCategory = groupItems.find(item => item._presetData)?._presetData?.productType;
         const isSameCategory = presetCategory?.toLowerCase() === firstItem.category?.toLowerCase();
-        const hasPresetFields = groupItems.some(item => 
+        const hasPresetFields = groupItems.some(item =>
           item.policies || item.shipsFrom || item.gender || item.whoMadeIt
         );
-        
-        // Skip if preset already applied for this category
+
+        // Skip if preset already applied for this exact category
         if (hasPresetData && hasPresetFields && isSameCategory) continue;
 
         try {
           // Apply preset to this group
           const updatedGroup = await applyPresetToProductGroup(groupItems, firstItem.category);
-          
-          // Update items in the array
-          updatedGroup.forEach((updatedItem) => {
-            const itemIndex = updatedItems.findIndex(item => item.id === updatedItem.id);
-            if (itemIndex !== -1) {
-              updatedItems[itemIndex] = updatedItem;
-              hasChanges = true;
-            }
-          });
+          updatedGroup.forEach((updatedItem) => patches.set(updatedItem.id, updatedItem));
         } catch (error) {
           // Silently fail for this group, continue with others
         }
       }
 
-      // Only update state if there were actual changes
-      if (hasChanges) {
-        setProcessedItems(updatedItems);
-      }
+      if (patches.size === 0) return;
+
+      // Functional update: merge patches onto the LATEST state so we never
+      // overwrite fields (seoTitle, voiceDescription, productType override) that
+      // arrived via DB hydration after this async task started.
+      setProcessedItems(prev => {
+        const next = prev.map(item => {
+          const patch = patches.get(item.id);
+          if (!patch) return item;
+          // Re-check override on the LATEST item (prev), not the stale snapshot.
+          const latestHasOverride =
+            item.productType &&
+            item.productType.toLowerCase() !== (item.category || '').toLowerCase();
+          if (latestHasOverride) return item; // skip — DB-hydrated override arrived
+          // Preserve freshly-hydrated seoTitle / voiceDescription / generatedDescription
+          // (patch was built from the older snapshot and may have empty strings here).
+          return {
+            ...patch,
+            seoTitle:              item.seoTitle              || patch.seoTitle,
+            voiceDescription:      item.voiceDescription      || patch.voiceDescription,
+            generatedDescription:  item.generatedDescription  || patch.generatedDescription,
+          };
+        });
+        return next;
+      });
     };
 
     applyPresetsToAllGroups();
