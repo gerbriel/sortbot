@@ -661,7 +661,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       }
 
       try {
-        const updatedGroup = await applyPresetToProductGroup(currentGroup, currentItem.category);
+        // categoryChanged=true means the group was re-categorized in Step 2.
+        // Use force mode so stale preset-owned fields from the OLD category
+        // (style, gender, tags, policies, etc.) are replaced by the new preset.
+        const categoryChanged = !isSameCategory && hasPresetData;
+        const updatedGroup = await applyPresetToProductGroup(currentGroup, currentItem.category, categoryChanged);
         
         // Use functional update so we never clobber fields set by voice extraction
         // in a concurrent async operation (e.g. recording stop happening at the same time).
@@ -727,7 +731,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
       const allUpdatedItems: ClothingItem[] = [];
       for (const group of groupsToUpdate) {
-        const updatedGroup = await applyPresetToProductGroup(group, preset.product_type || preset.category_name);
+        // force=true: user explicitly chose this preset, so reset stale preset-owned
+        // fields (style, gender, tags, policies, etc.) and apply fresh values.
+        // Voice/manual fields (brand, size, color, measurements, title) are kept.
+        const updatedGroup = applyPresetDirectly(group, preset.product_type || preset.category_name, preset, true);
         allUpdatedItems.push(...updatedGroup);
       }
 
