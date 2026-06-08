@@ -1,7 +1,7 @@
 .comprehensive-product-form {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 0.6rem;
 }
 
 /* Flat section — no accordion, always visible */
@@ -9,26 +9,26 @@
   border: 1px solid var(--shopify-gray-200);
   border-radius: 10px;
   background: white;
-  padding: 1rem 1.25rem 1.25rem;
+  padding: 0.6rem 0.75rem 0.75rem;
 }
 
 .form-section-title {
-  margin: 0 0 0.9rem 0;
-  font-size: 14px;
+  margin: 0 0 0.5rem 0;
+  font-size: 0.65rem;
   font-weight: 700;
   color: var(--shopify-gray-700);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   border-bottom: 1px solid var(--shopify-gray-100);
-  padding-bottom: 0.5rem;
+  padding-bottom: 0.3rem;
 }
 
 /* 3-column row */
 .fields-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 0.75rem 1rem;
-  margin-bottom: 0.75rem;
+  gap: 0.4rem 0.6rem;
+  margin-bottom: 0.4rem;
 }
 
 .fields-row:last-child {
@@ -48,19 +48,21 @@
 .info-item label {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-weight: 500;
-  margin-bottom: 0.5rem;
-  color: var(--shopify-gray-700);
-  font-size: 14px;
+  gap: 0.3rem;
+  font-weight: 700;
+  margin-bottom: 0.2rem;
+  color: #6366f1;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .info-input {
   width: 100%;
-  padding: 0.625rem;
+  padding: 0.3rem 0.4rem;
   border: 1px solid var(--shopify-gray-300);
-  border-radius: 6px;
-  font-size: 14px;
+  border-radius: 4px;
+  font-size: 0.78rem;
   transition: all 0.2s;
 }
 
@@ -79,7 +81,7 @@
 .preset-badge {
   display: inline-flex;
   align-items: center;
-  font-size: 11px;
+  font-size: 0.65rem;
   font-weight: 600;
   color: var(--shopify-blue-600);
   background: var(--shopify-blue-50);
@@ -93,15 +95,15 @@
 /* Measurements Grid */
 .measurements-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.4rem;
 }
 
 /* Button Styles */
 .button {
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
-  font-size: 14px;
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
