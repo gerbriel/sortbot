@@ -2573,7 +2573,7 @@ function App() {
             <div style={{
               display: 'grid',
               gridTemplateColumns: '1fr 227px',
-              gap: '1.5rem',
+              gap: '3.5rem',
               alignItems: 'start',
             }} className="step2-split">
               {/* Left: Group images — ImageGrouper manages its own internal sidebar+scroll */}
