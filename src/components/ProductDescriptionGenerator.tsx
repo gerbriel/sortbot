@@ -864,7 +864,40 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           const updated = [...prev];
           updatedGroup.forEach((updatedItem) => {
             const itemIndex = updated.findIndex(item => item.id === updatedItem.id);
-            if (itemIndex !== -1) updated[itemIndex] = updatedItem;
+            if (itemIndex !== -1) {
+              const prevItem = prev[itemIndex];
+              // applyPresetToProductGroup was called with a possibly-stale currentGroup
+              // (pre-hydration). Prefer the LATEST prev values for all user-entered /
+              // DB-hydrated fields so we never overwrite brand/size/flaws/etc. that
+              // arrived via DB hydration after the async fetch started.
+              updated[itemIndex] = {
+                ...updatedItem,
+                seoTitle:             prevItem.seoTitle             || updatedItem.seoTitle,
+                voiceDescription:     prevItem.voiceDescription     || updatedItem.voiceDescription,
+                generatedDescription: prevItem.generatedDescription || updatedItem.generatedDescription,
+                brand:          prevItem.brand          || updatedItem.brand,
+                size:           prevItem.size           || updatedItem.size,
+                color:          prevItem.color          || updatedItem.color,
+                secondaryColor: prevItem.secondaryColor || updatedItem.secondaryColor,
+                material:       prevItem.material       || updatedItem.material,
+                era:            prevItem.era            || updatedItem.era,
+                condition:      prevItem.condition      || updatedItem.condition,
+                flaws:          prevItem.flaws          || updatedItem.flaws,
+                care:           prevItem.care           || updatedItem.care,
+                measurements:   prevItem.measurements   || updatedItem.measurements,
+                modelName:      prevItem.modelName      || updatedItem.modelName,
+                modelNumber:    prevItem.modelNumber    || updatedItem.modelNumber,
+                price:          prevItem.price          || updatedItem.price,
+                compareAtPrice: prevItem.compareAtPrice || updatedItem.compareAtPrice,
+                sku:            prevItem.sku            || updatedItem.sku,
+                barcode:        prevItem.barcode        || updatedItem.barcode,
+                // Preserve a DB-hydrated productType override (differs from category)
+                productType: (
+                  prevItem.productType &&
+                  prevItem.productType.toLowerCase() !== (prevItem.category || '').toLowerCase()
+                ) ? prevItem.productType : updatedItem.productType,
+              };
+            }
           });
           return updated;
         });
@@ -913,7 +946,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     setAppliedPresetLabel(resolvedLabel);
     setPresetSearchQuery('');
     setPresetSearchOpen(false);
-  }, [currentGroupIndex, availablePresets]); // Re-run when presets load so lookup works on first mount
+  }, [currentGroupIndex, availablePresets, currentItem?.productType]); // Re-run when presets load or hydration restores productType
 
   // Apply manual preset override
   const handleApplyPreset = async (presetId: string) => {
