@@ -800,9 +800,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     }
   }, [currentGroupIndex, currentItem?.category, availablePresets, selectedPresetId]); // Watch category + manual preset changes
 
-  // Keep the preset search label in sync when the user navigates to a different group
+  // Keep the preset search label + selectedPresetId in sync when navigating groups.
+  // Restores the manually-chosen override after page refresh because _presetData.presetId
+  // is persisted to the DB and comes back via mergeDB hydration.
   useEffect(() => {
     setAppliedPresetLabel(currentItem?._presetData?.displayName || '');
+    setSelectedPresetId(currentItem?._presetData?.presetId || '');
     setPresetSearchQuery('');
     setPresetSearchOpen(false);
   }, [currentGroupIndex]); // eslint-disable-line react-hooks/exhaustive-deps
