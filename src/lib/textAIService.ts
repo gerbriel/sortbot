@@ -1168,7 +1168,7 @@ function generateTitleFromFields(context: ProductContext): string {
 
   const catStr = catRaw; // convenience alias
 
-  const isTee        = /tees?|t[-\s]?shirts?|tshirts?/.test(catStr);
+  const isTee        = /\btees?\b|\bt[-\s]?shirts?\b|\btshirts?\b/.test(catStr);
   const isShirt      = /\bshirts?\b/.test(catStr) && !isTee;
   const isSweatshirt = /sweatshirts?|crewnecks?/.test(catStr) && !/hoodie/.test(catStr);
   const isHoodie     = /hoodies?/.test(catStr);
