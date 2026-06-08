@@ -917,6 +917,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   prevItem.productType &&
                   prevItem.productType.toLowerCase() !== (prevItem.category || '').toLowerCase()
                 ) ? prevItem.productType : updatedItem.productType,
+                // Preserve a DB-hydrated appliedPresetId so hydration wins over auto-apply
+                appliedPresetId: prevItem.appliedPresetId || updatedItem.appliedPresetId,
               };
             }
           });
