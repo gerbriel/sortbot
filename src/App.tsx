@@ -2572,7 +2572,7 @@ function App() {
             {/* Split pane: ImageGrouper left, CategoryZones right */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 340px',
+              gridTemplateColumns: '1fr 227px',
               gap: '1.5rem',
               alignItems: 'start',
             }} className="step2-split">
