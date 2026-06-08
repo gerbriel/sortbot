@@ -738,35 +738,37 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         item.policies || item.shipsFrom || item.gender || item.whoMadeIt
       );
 
-      // Find the category-default preset and any preset matching productType
-      const defaultPresetForCategory = availablePresets.find(p =>
-        p.is_active && p.is_default &&
-        (p.product_type?.toLowerCase() === currentItem.category?.toLowerCase() ||
-         p.category_name.toLowerCase() === currentItem.category?.toLowerCase())
-      );
-      const productTypePreset = currentItem.productType
+      // Direct string comparison: if productType differs from category, it's a manual
+      // override saved to DB. No preset-ID comparison needed — that was the bug (both
+      // lookups could resolve to the same preset when category_name matched loosely).
+      const productTypeIsOverride =
+        !!currentItem.productType &&
+        currentItem.productType.toLowerCase() !== currentItem.category.toLowerCase();
+      const productTypePreset = productTypeIsOverride
         ? availablePresets.find(p =>
             p.is_active &&
             (p.product_type?.toLowerCase() === currentItem.productType!.toLowerCase() ||
              p.category_name.toLowerCase() === currentItem.productType!.toLowerCase())
           )
         : undefined;
-      // productType encodes a manual override when it differs from the category default
-      const hasProductTypeOverride =
-        !!productTypePreset &&
-        !!defaultPresetForCategory &&
-        productTypePreset.id !== defaultPresetForCategory.id;
+
+      // Convenience for logging
+      const defaultPresetForCategory = availablePresets.find(p =>
+        p.is_active && p.is_default &&
+        (p.product_type?.toLowerCase() === currentItem.category?.toLowerCase() ||
+         p.category_name.toLowerCase() === currentItem.category?.toLowerCase())
+      );
 
       console.log('[PRESET AUTO-APPLY] group', currentGroupIndex, {
         itemId: currentItem.id,
         category: currentItem.category,
         productType: currentItem.productType,
+        productTypeIsOverride,
         hasPresetData,
         presetCategory,
         isSameCategory,
         hasPresetFields,
         selectedPresetId,
-        hasProductTypeOverride,
         productTypePresetName: productTypePreset?.display_name,
         defaultPresetName: defaultPresetForCategory?.display_name,
       });
@@ -786,11 +788,16 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         return;
       }
 
-      // productType override persisted to DB — don't clobber with category default
-      if (hasProductTypeOverride) {
-        console.log('[PRESET AUTO-APPLY] skip — productType encodes override:', productTypePreset!.display_name);
-        setSelectedPresetId(productTypePreset!.id);
-        setAppliedPresetLabel(productTypePreset!.display_name);
+      // productType override persisted to DB — don't clobber with category default.
+      // Even if no preset found for productType, still skip to avoid stomping the override.
+      if (productTypeIsOverride) {
+        if (productTypePreset) {
+          console.log('[PRESET AUTO-APPLY] skip — productType encodes override:', productTypePreset.display_name);
+          setSelectedPresetId(productTypePreset.id);
+          setAppliedPresetLabel(productTypePreset.display_name);
+        } else {
+          console.log('[PRESET AUTO-APPLY] skip — productType override present but no matching preset found for:', currentItem.productType);
+        }
         return;
       }
 
