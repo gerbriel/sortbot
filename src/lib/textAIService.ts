@@ -959,9 +959,9 @@ const TITLE_SYNONYMS: string[][] = [
   ['teal', 'teal blue', 'cyan', 'aqua', 'turquoise'],
   ['maroon', 'burgundy', 'wine', 'oxblood', 'dark red'],
   // SIZE shorthands
-  ['small', 'sm', 's size'],
-  ['medium', 'med', 'm size'],
-  ['large', 'lg', 'l size'],
+  ['small', 'sm'],
+  ['medium', 'med'],
+  ['large', 'lg'],
   ['xl', 'extra large', 'xlarge'],
   ['xxl', '2xl', 'double xl'],
   ['xxxl', '3xl', 'triple xl'],
