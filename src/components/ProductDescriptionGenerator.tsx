@@ -655,8 +655,16 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         item.whoMadeIt
       );
       
-      // Only skip if preset exists, fields are filled, AND it's the same category
+      // Skip if preset exists and fields are filled for the same category
       if (hasPresetData && hasPresetFields && isSameCategory) {
+        return;
+      }
+
+      // Skip auto-apply if the user has manually selected a preset that is already applied —
+      // prevents auto-apply from overwriting an explicit manual override.
+      const manualPresetApplied = selectedPresetId &&
+        currentGroup.some(item => item._presetData?.presetId === selectedPresetId);
+      if (manualPresetApplied && isSameCategory) {
         return;
       }
 
@@ -700,7 +708,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     if (availablePresets.length > 0) {
       autoApplyDefaultPreset();
     }
-  }, [currentGroupIndex, currentItem?.category, availablePresets]); // Watch category changes too!
+  }, [currentGroupIndex, currentItem?.category, availablePresets, selectedPresetId]); // Watch category + manual preset changes
 
   // Keep the preset search label in sync when the user navigates to a different group
   useEffect(() => {
@@ -864,18 +872,19 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           // wasn't mentioned it comes back undefined and the spread is a no-op.
           brand: '',
           color: '',
-          size: '',
+          // Use actual item size so voice re-extraction never produces garbled values
+          size: latestItem.size || '',
           material: '',
           condition: undefined,
           era: '',
           style: '',
           gender: '',
-          // Prefer the preset's product_type over a potentially stale item.productType
-          category: (latestItem as any)._presetData?.productType || latestItem.productType,
+          // Use the actual item category (from Step 2) as the primary source
+          category: latestItem.category || (latestItem as any)._presetData?.productType || latestItem.productType || '',
           presetTags: (latestItem as any)._presetData?.default_tags || [],
           measurements: undefined,
           flaws: '',
-          care: '',
+          care: ''
         });
 
         const extractedFields = aiResult.extractedFields || {};
@@ -1132,18 +1141,19 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         // Pass empty strings for all fields so voice/desc always wins
         brand: '',
         color: '',
-        size: '',
+        // Use actual item size so voice re-extraction never produces garbled values
+        size: refreshedItem.size || '',
         material: '',
         condition: undefined,
         era: '',
         style: '',
         gender: '',
-        // Prefer the preset's product_type over a potentially stale item.productType
-        category: (refreshedItem as any)._presetData?.productType || refreshedItem.productType,
+        // Use the actual item category (from Step 2) as the primary source
+        category: refreshedItem.category || (refreshedItem as any)._presetData?.productType || refreshedItem.productType || '',
         presetTags: (refreshedItem as any)._presetData?.default_tags || [],
         measurements: undefined,
         flaws: '',
-        care: '',
+        care: ''
       });
 
       const extractedFields = aiResult.extractedFields || {};
