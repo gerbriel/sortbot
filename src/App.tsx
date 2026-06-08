@@ -865,8 +865,8 @@ function App() {
                           preview:                   resolvedPreview,
                           generatedDescription:      htmlDescToPlain(p.description ?? '') || item.generatedDescription || '',
                           voiceDescription:          p.voice_description   ?? item.voiceDescription   ?? '',
-                          // Strip legacy "sz" artifact from auto-generated titles saved before the fix
-                          seoTitle:                  (p.seo_title || item.seoTitle || '').replace(/\bsz\s+/gi, '').replace(/\bsize\s+sz\s*/gi, '').trim(),
+                          // Clear title entirely if it contains the garbled sz artifact — will be regenerated cleanly
+                          seoTitle:                  (() => { const t = p.seo_title || item.seoTitle || ''; return /\bsz\b/i.test(t) ? '' : t; })(),
                           seoDescription:            p.seo_description     || item.seoDescription      || '',
                           tags:                      p.tags?.length        ? p.tags                    : (item.tags || []),
                           brand:                     p.vendor              || item.brand               || '',
@@ -2009,7 +2009,8 @@ function App() {
             productGroup: p.product_group || p.id,
             voiceDescription:          p.voice_description   || '',
             generatedDescription:      htmlDescToPlain(p.description || ''),
-            seoTitle:                  (p.seo_title || '').replace(/\bsz\s+/gi, '').replace(/\bsize\s+sz\s*/gi, '').trim(),
+            // Clear title entirely if it contains the garbled sz artifact
+            seoTitle:                  (() => { const t = p.seo_title || ''; return /\bsz\b/i.test(t) ? '' : t; })(),
             seoDescription:            p.seo_description     || '',
             tags:                      p.tags                || [],
             brand:                     p.vendor              || '',
@@ -2097,7 +2098,8 @@ function App() {
               // capturedAt: not stored in DB — will be undefined for gap-filled items
               voiceDescription:          p.voice_description   || '',
               generatedDescription:      htmlDescToPlain(p.description || ''),
-              seoTitle:                  (p.seo_title || '').replace(/\bsz\s+/gi, '').replace(/\bsize\s+sz\s*/gi, '').trim(),
+              // Clear title entirely if it contains the garbled sz artifact
+              seoTitle:                  (() => { const t = p.seo_title || ''; return /\bsz\b/i.test(t) ? '' : t; })(),
               seoDescription:            p.seo_description     || '',
               tags:                      p.tags                || [],
               brand:                     p.vendor              || '',
@@ -2215,7 +2217,8 @@ function App() {
               productGroup:             savedProduct.product_group       || item.productGroup       || item.id,
               voiceDescription:         savedProduct.voice_description   ?? item.voiceDescription   ?? '',
               generatedDescription:     htmlDescToPlain(savedProduct.description ?? item.generatedDescription ?? ''),
-              seoTitle:                 ((savedProduct.seo_title || item.seoTitle || '').replace(/\bsz\s+/gi, '').replace(/\bsize\s+sz\s*/gi, '').trim()),
+              // Clear title entirely if it contains the garbled sz artifact
+              seoTitle:                 (() => { const t = savedProduct.seo_title || item.seoTitle || ''; return /\bsz\b/i.test(t) ? '' : t; })(),
               seoDescription:           savedProduct.seo_description     || item.seoDescription,
               tags:                     savedProduct.tags?.length        ? savedProduct.tags        : (item.tags || []),
               // Shopify fields
