@@ -852,7 +852,25 @@ function App() {
                           (item.seoTitle ? byTitle.get(item.seoTitle.trim()) : undefined) ??
                           (item.preview  ? byImgUrl.get(item.preview)        : undefined) ??
                           (item.imageUrls?.[0] ? byImgUrl.get(item.imageUrls[0]) : undefined);
-                        if (!p) return item;
+                        if (!p) {
+                          console.warn('[HYDRATE] mergeDB: no DB record found for item', item.id, 'seoTitle:', item.seoTitle);
+                          return item;
+                        }
+                        console.log('[HYDRATE] mergeDB MATCH item.id:', item.id, '=> DB row', {
+                          p_seo_title: p.seo_title,
+                          p_description_snippet: p.description?.slice(0, 60),
+                          p_voice_description: p.voice_description?.slice(0, 60),
+                          p_vendor: p.vendor,
+                          p_size: p.size,
+                          p_color: p.color,
+                          p_price: p.price,
+                          p_condition: p.condition,
+                          p_era: p.era,
+                          p_style: p.style,
+                          p_gender: p.gender,
+                          p_material: p.material,
+                          p_measurements: p.measurements,
+                        });
                         const dbImageUrls: string[] = (p.product_images || [])
                           .sort((a: any, b: any) => a.position - b.position)
                           .map((img: any) => img.image_url)
