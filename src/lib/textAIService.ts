@@ -959,12 +959,12 @@ const TITLE_SYNONYMS: string[][] = [
   ['teal', 'teal blue', 'cyan', 'aqua', 'turquoise'],
   ['maroon', 'burgundy', 'wine', 'oxblood', 'dark red'],
   // SIZE shorthands
-  ['small', 'sm', 'sz small', 'size small', 's size'],
-  ['medium', 'med', 'sz medium', 'size medium', 'm size'],
-  ['large', 'lg', 'sz large', 'size large', 'l size'],
-  ['xl', 'extra large', 'sz xl', 'size xl', 'xlarge'],
-  ['xxl', '2xl', 'double xl', 'sz xxl', 'size xxl'],
-  ['xxxl', '3xl', 'triple xl', 'sz xxxl', 'size 3xl'],
+  ['small', 'sm', 's size'],
+  ['medium', 'med', 'm size'],
+  ['large', 'lg', 'l size'],
+  ['xl', 'extra large', 'xlarge'],
+  ['xxl', '2xl', 'double xl'],
+  ['xxxl', '3xl', 'triple xl'],
   // DECADE / ERA
   ['90s', 'nineties', 'mid 90s', 'late 90s', 'early 90s'],
   ['2000s', 'y2k era', 'early 2000s', 'mid 2000s', '00s'],

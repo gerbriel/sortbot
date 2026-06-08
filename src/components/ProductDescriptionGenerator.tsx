@@ -73,6 +73,21 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Fires 2s after the last processedItems change so a page refresh never loses
   // voiceDescription, generatedDescription, seoTitle, or any typed field values.
   const productSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Direct save ref — holds latest group to save, set by user edits, consumed by debouncedDirectSave.
+  // This completely bypasses isResettingRef so the feedback loop (edit→onProcessed→prop→reset→block) never kills the save.
+  const pendingSaveGroupRef = useRef<ClothingItem[] | null>(null);
+
+  const debouncedDirectSave = (group: ClothingItem[]) => {
+    pendingSaveGroupRef.current = group;
+    if (productSaveTimerRef.current) clearTimeout(productSaveTimerRef.current);
+    productSaveTimerRef.current = setTimeout(() => {
+      const g = pendingSaveGroupRef.current;
+      if (g && g.length > 0) {
+        syncGroupFieldsToDatabase(g, batchId ?? null).catch(() => {});
+        pendingSaveGroupRef.current = null;
+      }
+    }, 800);
+  };
 
   // Voice command table
   const [voiceMode, setVoiceMode] = useState<'table' | 'text'>('table');
@@ -220,11 +235,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   }, [processedItems]);
 
   // Debounced product-table save — fires 500ms after the last processedItems change.
-  // This ensures voiceDescription, generatedDescription, seoTitle, and all other
-  // typed fields survive a page refresh even if the user never navigates away.
+  // isResettingRef check intentionally removed: a prop-reset saves DB data back to DB (no-op)
+  // and removing it ensures ComprehensiveProductForm edits are always persisted.
   useEffect(() => {
     if (!hasMountedRef.current) return;
-    if (isResettingRef.current) return;
     if (productSaveTimerRef.current) clearTimeout(productSaveTimerRef.current);
     productSaveTimerRef.current = setTimeout(() => {
       const group = buildGroupArray(processedItems)[currentGroupIndex];
@@ -1094,6 +1108,27 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       updated = { ...updated, voiceDescription: buildVoiceTextFromItem(updated) };
       return updated;
     }));
+
+    // Immediately schedule a direct save — bypasses the processedItems→onProcessed→prop feedback loop
+    // that was causing isResettingRef to block the debounce save effect.
+    const updatedGroup = currentGroup.map(groupItem => {
+      const item = processedItems.find(i => i.id === groupItem.id) ?? groupItem;
+      if (!targetIds.has(item.id)) return item;
+      let updated: ClothingItem;
+      if (fieldKey.startsWith('meas_')) {
+        const measKey = fieldKey.slice(5);
+        updated = { ...item, measurements: { ...(item.measurements || {}), [measKey]: value } };
+      } else if (fieldKey === 'price') {
+        const directNum = parseFloat(value.replace(/[^0-9.]/g, ''));
+        updated = { ...item, price: isNaN(directNum) ? undefined : directNum };
+      } else if (fieldKey === 'tags') {
+        updated = { ...item, tags: value.split(/,\s*/).filter(Boolean) };
+      } else {
+        updated = { ...item, [fieldKey]: value };
+      }
+      return { ...updated, voiceDescription: buildVoiceTextFromItem(updated) };
+    });
+    debouncedDirectSave(updatedGroup);
   };
 
   // Keep applyTableFieldRef current every render
