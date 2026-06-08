@@ -724,91 +724,134 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     applyPresetsToAllGroups();
   }, [availablePresets]); // Run when presets load
 
-  // Auto-apply default preset when current group changes OR when category changes
+  // Auto-apply default preset when current group changes OR when category changes.
+  // SKIP if productType already encodes a manual override (productType is saved to DB
+  // and restored by mergeDB, so it survives refresh even when _presetData is absent).
   useEffect(() => {
     const autoApplyDefaultPreset = async () => {
-      if (!currentItem || !currentItem.category) {
-        return;
-      }
-      
-      // Check if the preset is already applied for THIS category
-      // Compare the category stored in _presetData with the current category
+      if (!currentItem || !currentItem.category) return;
+
       const hasPresetData = currentGroup.some(item => item._presetData);
       const presetCategory = currentGroup.find(item => item._presetData)?._presetData?.productType;
       const isSameCategory = presetCategory?.toLowerCase() === currentItem.category?.toLowerCase();
-      
-      // Check if key fields are actually filled
-      const hasPresetFields = currentGroup.some(item => 
-        item.policies || 
-        item.shipsFrom || 
-        item.gender || 
-        item.whoMadeIt
+      const hasPresetFields = currentGroup.some(item =>
+        item.policies || item.shipsFrom || item.gender || item.whoMadeIt
       );
-      
-      // Skip if preset exists and fields are filled for the same category
+
+      // Find the category-default preset and any preset matching productType
+      const defaultPresetForCategory = availablePresets.find(p =>
+        p.is_active && p.is_default &&
+        (p.product_type?.toLowerCase() === currentItem.category?.toLowerCase() ||
+         p.category_name.toLowerCase() === currentItem.category?.toLowerCase())
+      );
+      const productTypePreset = currentItem.productType
+        ? availablePresets.find(p =>
+            p.is_active &&
+            (p.product_type?.toLowerCase() === currentItem.productType!.toLowerCase() ||
+             p.category_name.toLowerCase() === currentItem.productType!.toLowerCase())
+          )
+        : undefined;
+      // productType encodes a manual override when it differs from the category default
+      const hasProductTypeOverride =
+        !!productTypePreset &&
+        !!defaultPresetForCategory &&
+        productTypePreset.id !== defaultPresetForCategory.id;
+
+      console.log('[PRESET AUTO-APPLY] group', currentGroupIndex, {
+        itemId: currentItem.id,
+        category: currentItem.category,
+        productType: currentItem.productType,
+        hasPresetData,
+        presetCategory,
+        isSameCategory,
+        hasPresetFields,
+        selectedPresetId,
+        hasProductTypeOverride,
+        productTypePresetName: productTypePreset?.display_name,
+        defaultPresetName: defaultPresetForCategory?.display_name,
+      });
+
+      // Already applied for this exact category — nothing to do
       if (hasPresetData && hasPresetFields && isSameCategory) {
+        console.log('[PRESET AUTO-APPLY] skip — already applied for category');
         return;
       }
 
-      // Skip auto-apply if the user has manually selected a preset that is already applied —
-      // prevents auto-apply from overwriting an explicit manual override.
-      const manualPresetApplied = selectedPresetId &&
+      // Manual override in-memory (selectedPresetId set this session)
+      const manualPresetApplied =
+        selectedPresetId &&
         currentGroup.some(item => item._presetData?.presetId === selectedPresetId);
       if (manualPresetApplied && isSameCategory) {
+        console.log('[PRESET AUTO-APPLY] skip — in-memory selectedPresetId override');
+        return;
+      }
+
+      // productType override persisted to DB — don't clobber with category default
+      if (hasProductTypeOverride) {
+        console.log('[PRESET AUTO-APPLY] skip — productType encodes override:', productTypePreset!.display_name);
+        setSelectedPresetId(productTypePreset!.id);
+        setAppliedPresetLabel(productTypePreset!.display_name);
         return;
       }
 
       try {
-        // categoryChanged=true means the group was re-categorized in Step 2.
-        // Use force mode so stale preset-owned fields from the OLD category
-        // (style, gender, tags, policies, etc.) are replaced by the new preset.
         const categoryChanged = !isSameCategory && hasPresetData;
+        console.log('[PRESET AUTO-APPLY] applying default preset for category:', currentItem.category, 'categoryChanged:', categoryChanged);
         const updatedGroup = await applyPresetToProductGroup(currentGroup, currentItem.category, categoryChanged);
-        
-        // Use functional update so we never clobber fields set by voice extraction
-        // in a concurrent async operation (e.g. recording stop happening at the same time).
         setProcessedItems(prev => {
           const updated = [...prev];
           updatedGroup.forEach((updatedItem) => {
             const itemIndex = updated.findIndex(item => item.id === updatedItem.id);
-            if (itemIndex !== -1) {
-              updated[itemIndex] = updatedItem;
-            }
+            if (itemIndex !== -1) updated[itemIndex] = updatedItem;
           });
           return updated;
         });
-        
-        // Find and set the default preset ID in the dropdown
-        const defaultPreset = availablePresets.find(p => 
-          (p.product_type?.toLowerCase() === currentItem.category?.toLowerCase() || 
-           p.category_name.toLowerCase() === currentItem.category?.toLowerCase()) &&
-          p.is_default && 
-          p.is_active
-        );
-        
-        if (defaultPreset) {
-          setSelectedPresetId(defaultPreset.id);
-          setAppliedPresetLabel(defaultPreset.display_name);
+        if (defaultPresetForCategory) {
+          setSelectedPresetId(defaultPresetForCategory.id);
+          setAppliedPresetLabel(defaultPresetForCategory.display_name);
         }
       } catch (error) {
         // Silently fail auto-apply
       }
     };
 
-    if (availablePresets.length > 0) {
-      autoApplyDefaultPreset();
-    }
+    if (availablePresets.length > 0) autoApplyDefaultPreset();
   }, [currentGroupIndex, currentItem?.category, availablePresets, selectedPresetId]); // Watch category + manual preset changes
 
   // Keep the preset search label + selectedPresetId in sync when navigating groups.
-  // Restores the manually-chosen override after page refresh because _presetData.presetId
-  // is persisted to the DB and comes back via mergeDB hydration.
+  // Persistence chain after refresh (highest priority first):
+  //   1. _presetData.presetId  — set in-memory when preset was applied this session
+  //   2. productType preset lookup — productType IS written to DB (product_type col)
+  //      so it survives refresh and can be matched back to the right preset
+  //   3. empty string — no preset selected
   useEffect(() => {
-    setAppliedPresetLabel(currentItem?._presetData?.displayName || '');
-    setSelectedPresetId(currentItem?._presetData?.presetId || '');
+    const fromPresetData = currentItem?._presetData?.presetId || '';
+    const fromProductType = fromPresetData
+      ? ''
+      : availablePresets.find(p =>
+          p.is_active &&
+          (p.product_type?.toLowerCase() === currentItem?.productType?.toLowerCase() ||
+           p.category_name.toLowerCase() === currentItem?.productType?.toLowerCase())
+        )?.id || '';
+    const resolvedId    = fromPresetData || fromProductType;
+    const resolvedLabel = currentItem?._presetData?.displayName ||
+      availablePresets.find(p => p.id === resolvedId)?.display_name || '';
+
+    console.log('[PRESET NAV] group', currentGroupIndex, {
+      itemId: currentItem?.id,
+      productType: currentItem?.productType,
+      presetDataId: fromPresetData,
+      productTypeLookupId: fromProductType,
+      resolvedId,
+      resolvedLabel,
+      availablePresetsCount: availablePresets.length,
+    });
+
+    setSelectedPresetId(resolvedId);
+    setAppliedPresetLabel(resolvedLabel);
     setPresetSearchQuery('');
     setPresetSearchOpen(false);
-  }, [currentGroupIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentGroupIndex, availablePresets]); // Re-run when presets load so lookup works on first mount
 
   // Apply manual preset override
   const handleApplyPreset = async (presetId: string) => {
@@ -1220,24 +1263,44 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       {
         const freshPresets = await getCategoryPresets();
 
-        // 1. If the user manually selected an override preset, ALWAYS use that one.
-        // 2. Otherwise fall back to the default preset for item.category.
-        const matchingPreset =
-          (selectedPresetId
-            ? freshPresets.find(p => p.id === selectedPresetId && p.is_active)
-            : null) ??
-          (item.category
-            ? freshPresets.find(p =>
-                p.is_active && p.is_default &&
-                (p.product_type?.toLowerCase() === item.category!.toLowerCase() ||
-                 p.category_name.toLowerCase() === item.category!.toLowerCase())
-              ) ??
-              freshPresets.find(p =>
-                p.is_active &&
-                (p.product_type?.toLowerCase() === item.category!.toLowerCase() ||
-                 p.category_name.toLowerCase() === item.category!.toLowerCase())
-              )
-            : null);
+        // Priority order for preset to use during regeneration:
+        // 1. selectedPresetId — in-memory manual override (set this session, or restored by nav effect)
+        // 2. item.productType lookup — productType is saved to DB so it survives refresh
+        // 3. default preset for item.category — category-level fallback
+        const bySelectedId = selectedPresetId
+          ? freshPresets.find(p => p.id === selectedPresetId && p.is_active)
+          : null;
+        const byProductType = !bySelectedId && item.productType
+          ? freshPresets.find(p =>
+              p.is_active &&
+              (p.product_type?.toLowerCase() === item.productType!.toLowerCase() ||
+               p.category_name.toLowerCase() === item.productType!.toLowerCase())
+            )
+          : null;
+        const byCategory = (!bySelectedId && !byProductType && item.category)
+          ? freshPresets.find(p =>
+              p.is_active && p.is_default &&
+              (p.product_type?.toLowerCase() === item.category!.toLowerCase() ||
+               p.category_name.toLowerCase() === item.category!.toLowerCase())
+            ) ??
+            freshPresets.find(p =>
+              p.is_active &&
+              (p.product_type?.toLowerCase() === item.category!.toLowerCase() ||
+               p.category_name.toLowerCase() === item.category!.toLowerCase())
+            )
+          : null;
+        const matchingPreset = bySelectedId ?? byProductType ?? byCategory ?? null;
+
+        console.log('[PRESET REGEN] Step 0 preset resolution', {
+          itemId: item.id,
+          category: item.category,
+          productType: item.productType,
+          selectedPresetId,
+          bySelectedIdName: bySelectedId?.display_name,
+          byProductTypeName: byProductType?.display_name,
+          byCategoryName: byCategory?.display_name,
+          resolvedPresetName: matchingPreset?.display_name,
+        });
 
         if (matchingPreset) {
           // Use the matched preset's productType as the authoritative category for title/tag generation.
@@ -2528,8 +2591,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               </div>
             )}
 
-            {/* Category Preset Applied Indicator */}
-            {currentItem._presetData && (
+            {/* Category Preset Applied Indicator — shows when preset is applied either
+                in-memory (_presetData) or restored post-refresh via productType lookup
+                (appliedPresetLabel is set by the nav effect in both cases) */}
+            {(currentItem._presetData || appliedPresetLabel) && (
               <div style={{
                 marginBottom: '1.5rem',
                 padding: '1rem',
@@ -2541,8 +2606,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   ✓ Category Preset Applied
                 </h4>
                 <div style={{ fontSize: '0.9rem', display: 'grid', gap: '0.5rem' }}>
-                  <div><strong>Category:</strong> {currentItem._presetData.displayName}</div>
-                  {currentItem._presetData.description && (
+                  <div><strong>Category:</strong> {currentItem._presetData?.displayName || appliedPresetLabel}</div>
+                  {currentItem._presetData?.description && (
                     <div style={{ color: '#666', fontStyle: 'italic' }}>{currentItem._presetData.description}</div>
                   )}
                   <div style={{ fontSize: '0.85rem', color: '#059669', marginTop: '0.5rem' }}>
