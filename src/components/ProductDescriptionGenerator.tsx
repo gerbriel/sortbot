@@ -741,13 +741,35 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             item.productType &&
             item.productType.toLowerCase() !== (item.category || '').toLowerCase();
           if (latestHasOverride) return item; // skip — DB-hydrated override arrived
-          // Preserve freshly-hydrated seoTitle / voiceDescription / generatedDescription
-          // (patch was built from the older snapshot and may have empty strings here).
+          // The patch was built from a stale pre-hydration snapshot, so any field
+          // that was undefined in the snapshot but populated by DB hydration will
+          // be undefined in patch. We must prefer the LATEST item value for ALL
+          // user-entered / DB-hydrated fields, not just seoTitle/voiceDescription.
           return {
             ...patch,
-            seoTitle:              item.seoTitle              || patch.seoTitle,
-            voiceDescription:      item.voiceDescription      || patch.voiceDescription,
-            generatedDescription:  item.generatedDescription  || patch.generatedDescription,
+            // Text content (user-generated / AI-generated)
+            seoTitle:             item.seoTitle             || patch.seoTitle,
+            voiceDescription:     item.voiceDescription     || patch.voiceDescription,
+            generatedDescription: item.generatedDescription || patch.generatedDescription,
+            // Identity / vendor fields — DB-hydrated, never overwrite with stale snapshot
+            brand:            item.brand            || patch.brand,
+            // Voice-entered product attributes
+            size:             item.size             || patch.size,
+            color:            item.color            || patch.color,
+            secondaryColor:   item.secondaryColor   || patch.secondaryColor,
+            material:         item.material         || patch.material,
+            era:              item.era              || patch.era,
+            condition:        item.condition        || patch.condition,
+            flaws:            item.flaws            || patch.flaws,
+            care:             item.care             || patch.care,
+            measurements:     item.measurements     || patch.measurements,
+            modelName:        item.modelName        || patch.modelName,
+            modelNumber:      item.modelNumber      || patch.modelNumber,
+            // Pricing / inventory — user-entered or fetched
+            price:            item.price            || patch.price,
+            compareAtPrice:   item.compareAtPrice   || patch.compareAtPrice,
+            sku:              item.sku              || patch.sku,
+            barcode:          item.barcode          || patch.barcode,
           };
         });
         return next;
