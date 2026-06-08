@@ -856,13 +856,24 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         return;
       }
 
-      // On reload, preset-owned fields (policies, shipsFrom, gender, whoMadeIt) are
-      // already present from DB — the user's last preset choice is persisted there.
-      // Skip re-applying the default so we don't overwrite a manually-selected
-      // non-default preset (when both default and chosen preset share the same productType
-      // so productTypeIsOverride above doesn't catch it).
+      // DB-persisted appliedPresetId: exact identity of the last-applied preset.
+      // This is the primary guard for same-category preset switches (e.g. applying
+      // "Mens Sweatshirts" when "Kids Sweatshirts" is the default for 'Sweatshirts').
+      if (!hasPresetData && currentItem?.appliedPresetId) {
+        const dbPreset = availablePresets.find(p => p.id === currentItem.appliedPresetId && p.is_active);
+        if (dbPreset) {
+          console.log('[PRESET AUTO-APPLY] skip — appliedPresetId from DB:', dbPreset.display_name);
+          setSelectedPresetId(currentItem.appliedPresetId);
+          setAppliedPresetLabel(dbPreset.display_name);
+          return;
+        }
+      }
+
+      // Fallback: no appliedPresetId (older saved items). If preset-owned fields
+      // (policies, shipsFrom, gender, whoMadeIt) are present, a preset was previously
+      // applied — skip auto-apply to avoid overwriting those values.
       if (!hasPresetData && hasPresetFields) {
-        console.log('[PRESET AUTO-APPLY] skip — preset fields already persisted from prior session');
+        console.log('[PRESET AUTO-APPLY] skip — preset fields persisted from prior session (legacy guard)');
         return;
       }
 
@@ -931,14 +942,18 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   //   3. empty string — no preset selected
   useEffect(() => {
     const fromPresetData = currentItem?._presetData?.presetId || '';
-    const fromProductType = fromPresetData
+    // DB-persisted preset ID — primary persistence signal after reload
+    const fromAppliedPreset = (!fromPresetData && currentItem?.appliedPresetId)
+      ? (availablePresets.find(p => p.id === currentItem.appliedPresetId && p.is_active)?.id || '')
+      : '';
+    const fromProductType = (fromPresetData || fromAppliedPreset)
       ? ''
       : availablePresets.find(p =>
           p.is_active &&
           (p.product_type?.toLowerCase() === currentItem?.productType?.toLowerCase() ||
            p.category_name.toLowerCase() === currentItem?.productType?.toLowerCase())
         )?.id || '';
-    const resolvedId    = fromPresetData || fromProductType;
+    const resolvedId    = fromPresetData || fromAppliedPreset || fromProductType;
     const resolvedLabel = currentItem?._presetData?.displayName ||
       availablePresets.find(p => p.id === resolvedId)?.display_name || '';
 

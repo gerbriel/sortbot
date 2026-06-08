@@ -526,6 +526,7 @@ export const updateProduct = async (
     if (updates.unitPriceBaseMeasure !== undefined)  patch.unit_price_base_measure = updates.unitPriceBaseMeasure;
     if (updates.unitPriceBaseMeasureUnit !== undefined) patch.unit_price_base_measure_unit = updates.unitPriceBaseMeasureUnit;
     if (updates.brandCategory !== undefined)         patch.brand_category      = updates.brandCategory;
+    if (updates.appliedPresetId !== undefined)       patch.applied_preset_id   = updates.appliedPresetId;
 
     if (Object.keys(patch).length === 0) {
       console.log('[SAVE] updateProduct: patch is empty, nothing to write for id:', productId);
