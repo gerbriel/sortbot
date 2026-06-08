@@ -1189,8 +1189,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           updated[idx] = {
             ...it,
             generatedDescription: finalDescription,
-            // Only set AI-suggested title if the item doesn't already have one (don't overwrite manual entries)
-            ...(aiResult.suggestedTitle && !it.seoTitle && { seoTitle: aiResult.suggestedTitle }),
+            // Sync seoTitle with freshly generated title (always overwrite AI-generated titles;
+            // user can type in the title field directly if they want a custom value)
+            ...(aiResult.suggestedTitle && { seoTitle: aiResult.suggestedTitle }),
             ...(!it.seoDescription && finalDescription && { seoDescription: smartSeoTruncate(finalDescription) }),
             ...(extractedFields.brand        && { brand:           extractedFields.brand }),
             ...(extractedFields.modelName    && { modelName:       extractedFields.modelName }),

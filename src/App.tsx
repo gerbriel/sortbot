@@ -834,10 +834,12 @@ function App() {
                       return;
                     }
                     log.app(`startup restore | DB hydration | merging ${dbProds.length} products into live state`);
-                    // O(1) lookup maps
+                    // O(1) lookup maps — byId is primary (most reliable)
+                    const byId    = new Map<string, any>();
                     const byTitle = new Map<string, any>();
                     const byImgUrl = new Map<string, any>();
                     for (const p of dbProds) {
+                      if (p.id)       byId.set(p.id, p);
                       if (p.seo_title) byTitle.set(p.seo_title.trim(), p);
                       for (const img of (p.product_images || [])) {
                         if (img.image_url) byImgUrl.set(img.image_url, p);
@@ -846,6 +848,7 @@ function App() {
                     const mergeDB = (arr: ClothingItem[]): ClothingItem[] =>
                       arr.map((item) => {
                         const p: any =
+                          byId.get(item.id) ??
                           (item.seoTitle ? byTitle.get(item.seoTitle.trim()) : undefined) ??
                           (item.preview  ? byImgUrl.get(item.preview)        : undefined) ??
                           (item.imageUrls?.[0] ? byImgUrl.get(item.imageUrls[0]) : undefined);
@@ -862,7 +865,8 @@ function App() {
                           preview:                   resolvedPreview,
                           generatedDescription:      htmlDescToPlain(p.description ?? '') || item.generatedDescription || '',
                           voiceDescription:          p.voice_description   ?? item.voiceDescription   ?? '',
-                          seoTitle:                  p.seo_title           || item.seoTitle            || '',
+                          // Strip legacy "sz" artifact from auto-generated titles saved before the fix
+                          seoTitle:                  (p.seo_title || item.seoTitle || '').replace(/\bsz\s+/gi, '').replace(/\bsize\s+sz\s*/gi, '').trim(),
                           seoDescription:            p.seo_description     || item.seoDescription      || '',
                           tags:                      p.tags?.length        ? p.tags                    : (item.tags || []),
                           brand:                     p.vendor              || item.brand               || '',
@@ -2005,7 +2009,7 @@ function App() {
             productGroup: p.product_group || p.id,
             voiceDescription:          p.voice_description   || '',
             generatedDescription:      htmlDescToPlain(p.description || ''),
-            seoTitle:                  p.seo_title           || '',
+            seoTitle:                  (p.seo_title || '').replace(/\bsz\s+/gi, '').replace(/\bsize\s+sz\s*/gi, '').trim(),
             seoDescription:            p.seo_description     || '',
             tags:                      p.tags                || [],
             brand:                     p.vendor              || '',
@@ -2093,7 +2097,7 @@ function App() {
               // capturedAt: not stored in DB — will be undefined for gap-filled items
               voiceDescription:          p.voice_description   || '',
               generatedDescription:      htmlDescToPlain(p.description || ''),
-              seoTitle:                  p.seo_title           || '',
+              seoTitle:                  (p.seo_title || '').replace(/\bsz\s+/gi, '').replace(/\bsize\s+sz\s*/gi, '').trim(),
               seoDescription:            p.seo_description     || '',
               tags:                      p.tags                || [],
               brand:                     p.vendor              || '',
@@ -2211,7 +2215,7 @@ function App() {
               productGroup:             savedProduct.product_group       || item.productGroup       || item.id,
               voiceDescription:         savedProduct.voice_description   ?? item.voiceDescription   ?? '',
               generatedDescription:     htmlDescToPlain(savedProduct.description ?? item.generatedDescription ?? ''),
-              seoTitle:                 savedProduct.seo_title           || item.seoTitle,
+              seoTitle:                 ((savedProduct.seo_title || item.seoTitle || '').replace(/\bsz\s+/gi, '').replace(/\bsize\s+sz\s*/gi, '').trim()),
               seoDescription:           savedProduct.seo_description     || item.seoDescription,
               tags:                     savedProduct.tags?.length        ? savedProduct.tags        : (item.tags || []),
               // Shopify fields
