@@ -527,7 +527,12 @@ export const updateProduct = async (
     if (updates.unitPriceBaseMeasureUnit !== undefined) patch.unit_price_base_measure_unit = updates.unitPriceBaseMeasureUnit;
     if (updates.brandCategory !== undefined)         patch.brand_category      = updates.brandCategory;
 
-    if (Object.keys(patch).length === 0) return true; // Nothing to update
+    if (Object.keys(patch).length === 0) {
+      console.log('[SAVE] updateProduct: patch is empty, nothing to write for id:', productId);
+      return true;
+    }
+
+    console.log('[SAVE] updateProduct patching id:', productId, 'keys:', Object.keys(patch), 'patch:', patch);
 
     const { error } = await supabase
       .from('products')
@@ -535,13 +540,14 @@ export const updateProduct = async (
       .eq('id', productId);
 
     if (error) {
-      console.error('updateProduct error:', error);
+      console.error('[SAVE] updateProduct error:', error);
       return false;
     }
 
+    console.log('[SAVE] updateProduct SUCCESS for id:', productId);
     return true;
   } catch (error) {
-    console.error('updateProduct exception:', error);
+    console.error('[SAVE] updateProduct exception:', error);
     return false;
   }
 };
@@ -563,10 +569,23 @@ export const syncGroupFieldsToDatabase = async (
   const representative = groupItems[0];
   if (!representative.id) return;
 
+  console.log('[SAVE] syncGroupFieldsToDatabase called', {
+    id: representative.id,
+    seoTitle: representative.seoTitle,
+    voiceDescription: representative.voiceDescription?.slice(0, 60),
+    generatedDescription: representative.generatedDescription?.slice(0, 60),
+    brand: representative.brand,
+    size: representative.size,
+    color: representative.color,
+    price: representative.price,
+  });
+
   try {
     // Direct lookup: product.id === item.id — always correct, no extra queries.
-    await updateProduct(representative.id, representative);
-  } catch {
+    const ok = await updateProduct(representative.id, representative);
+    console.log('[SAVE] updateProduct result:', ok, 'id:', representative.id);
+  } catch (e) {
+    console.error('[SAVE] syncGroupFieldsToDatabase THREW:', e);
     // Silently fail — workflow_state blob is still the source of truth
   }
 };

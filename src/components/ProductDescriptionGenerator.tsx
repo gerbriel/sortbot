@@ -78,13 +78,25 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const pendingSaveGroupRef = useRef<ClothingItem[] | null>(null);
 
   const debouncedDirectSave = (group: ClothingItem[]) => {
+    console.log('[PDG] debouncedDirectSave SCHEDULED', {
+      id: group[0]?.id,
+      seoTitle: group[0]?.seoTitle,
+      voiceDescription: group[0]?.voiceDescription?.slice(0, 60),
+      generatedDescription: group[0]?.generatedDescription?.slice(0, 60),
+      brand: group[0]?.brand,
+      size: group[0]?.size,
+      price: group[0]?.price,
+    });
     pendingSaveGroupRef.current = group;
     if (productSaveTimerRef.current) clearTimeout(productSaveTimerRef.current);
     productSaveTimerRef.current = setTimeout(() => {
       const g = pendingSaveGroupRef.current;
       if (g && g.length > 0) {
-        syncGroupFieldsToDatabase(g, batchId ?? null).catch(() => {});
+        console.log('[PDG] debouncedDirectSave FIRING for id:', g[0]?.id);
+        syncGroupFieldsToDatabase(g, batchId ?? null).catch((e) => console.error('[PDG] debouncedDirectSave syncGroupFields threw:', e));
         pendingSaveGroupRef.current = null;
+      } else {
+        console.warn('[PDG] debouncedDirectSave fired but pendingSaveGroupRef was empty/null');
       }
     }, 800);
   };
@@ -213,14 +225,19 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     }
     // Skip sync-back when we just reset from incoming props (avoids writing stale data back up)
     if (isResettingRef.current) {
+      console.log('[PDG] onProcessed sync-back: SKIPPED (isResettingRef=true), clearing flag');
       isResettingRef.current = false;
       return;
     }
     // Don't write back if internal state is out of sync with the prop —
     // the sync effect (below) hasn't run yet and will correct it next render.
-    if (processedItems.length !== items.length) return;
+    if (processedItems.length !== items.length) {
+      console.log('[PDG] onProcessed sync-back: SKIPPED (length mismatch)');
+      return;
+    }
     
     // Subsequent updates - sync to parent
+    console.log('[PDG] onProcessed sync-back: CALLING onProcessed, item[0].seoTitle=', processedItems[0]?.seoTitle);
     onProcessed(processedItems);
   // onProcessed intentionally omitted — it's a stable callback from the parent and
   // including it causes this effect to re-fire on every App render (new function reference).
@@ -238,12 +255,24 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // isResettingRef check intentionally removed: a prop-reset saves DB data back to DB (no-op)
   // and removing it ensures ComprehensiveProductForm edits are always persisted.
   useEffect(() => {
-    if (!hasMountedRef.current) return;
+    if (!hasMountedRef.current) {
+      console.log('[PDG] processedItems debounce effect: skipping (not mounted)');
+      return;
+    }
+    console.log('[PDG] processedItems debounce effect: scheduling save, isResetting=', isResettingRef.current);
     if (productSaveTimerRef.current) clearTimeout(productSaveTimerRef.current);
     productSaveTimerRef.current = setTimeout(() => {
       const group = buildGroupArray(processedItems)[currentGroupIndex];
       if (group && group.length > 0) {
-        syncGroupFieldsToDatabase(group, batchId ?? null).catch(() => {/* silent */});
+        console.log('[PDG] processedItems debounce effect FIRED → syncGroupFields', {
+          id: group[0]?.id,
+          seoTitle: group[0]?.seoTitle,
+          voiceDescription: group[0]?.voiceDescription?.slice(0, 60),
+          brand: group[0]?.brand,
+        });
+        syncGroupFieldsToDatabase(group, batchId ?? null).catch((e) => console.error('[PDG] debounce effect syncGroupFields threw:', e));
+      } else {
+        console.warn('[PDG] processedItems debounce effect fired but group is empty at index', currentGroupIndex);
       }
     }, 500);
     return () => {
@@ -292,6 +321,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const shouldSync = shouldReset || structureChanged;
 
     if (shouldSync) {
+      console.log('[PDG] prop-sync effect: shouldSync=true', { shouldReset, batchChanged, lengthChanged, firstIdChanged, structureChanged, isResettingBefore: isResettingRef.current });
       isResettingRef.current = true;
       setProcessedItems(items);
       if (shouldReset) {
@@ -300,6 +330,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       previousItemsLengthRef.current = items.length;
       previousBatchIdRef.current = batchId;
       previousItemsRefRef.current = items;
+    } else {
+      console.log('[PDG] prop-sync effect: no change detected, skipping sync');
     }
   }, [items, batchId]);
 
@@ -1065,6 +1097,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   /** Handle a cell edit from the VoiceCommandTable — updates fields AND rebuilds voiceDescription */
   const handleTableFieldChange = (fieldKey: string, value: string) => {
+    console.log('[PDG] handleTableFieldChange', { fieldKey, value, currentGroupIndex, isResetting: isResettingRef.current });
     const latestItems = processedItemsRef.current;
     const latestGroupArray = buildGroupArray(latestItems);
     const latestGroup = latestGroupArray[currentGroupIndex] || [];
@@ -1127,6 +1160,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         updated = { ...item, [fieldKey]: value };
       }
       return { ...updated, voiceDescription: buildVoiceTextFromItem(updated) };
+    });
+    console.log('[PDG] handleTableFieldChange → debouncedDirectSave with updatedGroup[0]:', {
+      id: updatedGroup[0]?.id,
+      [fieldKey]: (updatedGroup[0] as any)[fieldKey],
     });
     debouncedDirectSave(updatedGroup);
   };
@@ -1232,6 +1269,15 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         care: ''
       });
 
+      console.log('[REGEN] aiResult', {
+        suggestedTitle: aiResult.suggestedTitle,
+        description: aiResult.description?.slice(0, 80),
+        extractedFields: aiResult.extractedFields,
+        voiceTextUsed: voiceText?.slice(0, 80),
+        refreshedItemSeoTitle: refreshedItem.seoTitle,
+        refreshedItemCategory: refreshedItem.category,
+      });
+
       const extractedFields = aiResult.extractedFields || {};
       const finalDescription = aiResult.description;
 
@@ -1279,7 +1325,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           ...(aiResult.suggestedTitle && { seoTitle: aiResult.suggestedTitle }),
         };
       });
-      syncGroupFieldsToDatabase(updatedGroupForSave, batchId ?? null).catch(() => {});
+      console.log('[REGEN] Flushing to DB immediately:', {
+        id: updatedGroupForSave[0]?.id,
+        seoTitle: updatedGroupForSave[0]?.seoTitle,
+        generatedDescription: updatedGroupForSave[0]?.generatedDescription?.slice(0, 80),
+      });
+      syncGroupFieldsToDatabase(updatedGroupForSave, batchId ?? null).catch((e) => console.error('[REGEN] immediate save threw:', e));
     } catch (error) {
       console.error('Regenerate all failed:', error);
     } finally {
