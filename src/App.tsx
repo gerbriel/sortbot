@@ -62,6 +62,7 @@ export interface ClothingItem {
   brandCategory?: BrandCategory; // Extended 160+ category system
   productGroup?: string; // For grouping multiple images of same product
   voiceDescription?: string;
+  customDescription?: string; // Voice-dictated freeform note injected into AI description
   generatedDescription?: string;
   descriptionEdited?: boolean; // true when user has manually edited the AI description
   storagePath?: string; // Supabase Storage path for deletion

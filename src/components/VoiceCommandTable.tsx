@@ -11,6 +11,7 @@ interface VoiceCommandTableProps {
 
 // ── Field definitions ──────────────────────────────────────────────────────
 const TITLE_FIELD = { label: 'title', key: 'seoTitle', placeholder: 'Vintage Nike Tee…', getValue: (i: ClothingItem) => i.seoTitle || '' };
+const DESCRIPTION_FIELD = { label: 'description', key: 'customDescription', placeholder: 'e.g. Great for layering, rare colourway…', getValue: (i: ClothingItem) => (i as any).customDescription || '' };
 
 // Three rows of columns, grouped by category
 const ROWS: { label: string; key: string; placeholder: string; getValue: (item: ClothingItem) => string }[][] = [
@@ -80,6 +81,8 @@ export const VOICE_KEYWORD_TO_FIELD: Record<string, string> = {
   'flaws': 'flaws',
   'flaw': 'flaws',
   'care': 'care',
+  'description': 'customDescription',
+  'note': 'customDescription',
   'width': 'meas_width',
   'length': 'meas_length',
   'chest': 'meas_chest',
@@ -110,6 +113,34 @@ const VoiceCommandTable: React.FC<VoiceCommandTableProps> = ({
         <div className="vct-grid vct-grid--full">
           {(() => {
             const col = TITLE_FIELD;
+            const isActive = activeField === col.key;
+            const rawValue = col.getValue(currentItem);
+            const displayValue = isActive && isRecording && interimValue ? interimValue : rawValue;
+            return (
+              <div className={`vct-col${isActive ? ' vct-col--active' : ''}${rawValue ? ' vct-col--filled' : ''}`}>
+                <div className="vct-header">
+                  {isActive && isRecording && <span className="vct-listening-dot" />}
+                  {col.label}
+                </div>
+                <input
+                  className={`vct-cell${isActive && isRecording ? ' vct-cell--listening' : ''}`}
+                  value={displayValue}
+                  placeholder={col.placeholder}
+                  onChange={e => onChange(col.key, e.target.value)}
+                  onKeyDown={e => e.stopPropagation()}
+                />
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+
+      {/* Description — full-width row */}
+      <div className="vct-row-group vct-row-group--title">
+        <div className="vct-row-label">Description</div>
+        <div className="vct-grid vct-grid--full">
+          {(() => {
+            const col = DESCRIPTION_FIELD;
             const isActive = activeField === col.key;
             const rawValue = col.getValue(currentItem);
             const displayValue = isActive && isRecording && interimValue ? interimValue : rawValue;

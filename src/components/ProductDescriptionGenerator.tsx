@@ -1250,6 +1250,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     if (item.tags?.length) add('tags', item.tags.join(', '));
     add('flaws',    item.flaws);
     add('care',     item.care);
+    if ((item as any).customDescription) add('description', (item as any).customDescription);
     const m = item.measurements as any;
     if (m) {
       add('chest',       m.chest);
@@ -1468,6 +1469,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         // always reflects the preset, not the raw Step-2 category which may differ.
         category: (refreshedItem as any)._presetData?.productType || refreshedItem.category || refreshedItem.productType || '',
         presetTags: (refreshedItem as any)._presetData?.default_tags || [],
+        customDescription: (refreshedItem as any).customDescription || '',
         measurements: undefined,
         flaws: '',
         care: ''
@@ -1508,6 +1510,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             ...(extractedFields.gender       && { gender:          extractedFields.gender as 'Men' | 'Women' | 'Unisex' | 'Kids' }),
             ...(extractedFields.measurements && { measurements:    extractedFields.measurements }),
             ...(extractedFields.price        && { price:           parseFloat(extractedFields.price) || undefined }),
+            ...(extractedFields.customDescription && { customDescription: extractedFields.customDescription }),
             ...(extractedFields.flaws        && { flaws:           extractedFields.flaws }),
             ...(extractedFields.care         && { care:            extractedFields.care }),
             ...(extractedFields.seoTitle     && !it.seoTitle && { seoTitle: extractedFields.seoTitle }),
