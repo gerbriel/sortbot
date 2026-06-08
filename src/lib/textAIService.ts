@@ -811,14 +811,12 @@ export const generateProductDescription = async (
 function createFallbackDescription(context: ProductContext): AIGeneratedContent {
   let description = '';
 
-  // Generate the structured SEO title from fields — used both as the suggested
-  // title (for items without a title) and as the fallback description opener.
+  // Generate the structured SEO title from fields — always auto-generated, never
+  // pulled from the existing seoTitle (which would cause a double prefix).
   const suggestedTitle = generateTitleFromFields(context);
 
-  // PART 1: Opener line — if the user already has a manually-typed title, use
-  // that verbatim so we never inject garbled auto-generated text into their description.
-  const opener = context.title ? context.title : (suggestedTitle || 'Vintage clothing item');
-  description += opener;
+  // PART 1: Opener line — the full formatted title (already contains size + Vintage / Y2K)
+  description += suggestedTitle || 'Vintage clothing item';
 
   description += '\n\n';
 
