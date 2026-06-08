@@ -69,6 +69,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const [appliedPresetLabel, setAppliedPresetLabel] = useState('');
   const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  // Debounce timer for auto-saving current group fields to the products table.
+  // Fires 2s after the last processedItems change so a page refresh never loses
+  // voiceDescription, generatedDescription, seoTitle, or any typed field values.
+  const productSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Voice command table
   const [voiceMode, setVoiceMode] = useState<'table' | 'text'>('table');
@@ -213,6 +217,25 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     if (!hasMountedRef.current) return;
     if (isResettingRef.current) return;
     setHasUnsavedChanges(true);
+  }, [processedItems]);
+
+  // Debounced product-table save — fires 2s after the last processedItems change.
+  // This ensures voiceDescription, generatedDescription, seoTitle, and all other
+  // typed fields survive a page refresh even if the user never navigates away.
+  useEffect(() => {
+    if (!hasMountedRef.current) return;
+    if (isResettingRef.current) return;
+    if (productSaveTimerRef.current) clearTimeout(productSaveTimerRef.current);
+    productSaveTimerRef.current = setTimeout(() => {
+      const group = buildGroupArray(processedItems)[currentGroupIndex];
+      if (group && group.length > 0) {
+        syncGroupFieldsToDatabase(group, batchId ?? null).catch(() => {/* silent */});
+      }
+    }, 2000);
+    return () => {
+      if (productSaveTimerRef.current) clearTimeout(productSaveTimerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [processedItems]);
 
   // Update local state when items prop changes (e.g., opening a different batch)
