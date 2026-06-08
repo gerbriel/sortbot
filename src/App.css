@@ -16,7 +16,7 @@
 }
 
 .header-content {
-  max-width: 1600px;
+  width: 100%;
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -52,7 +52,7 @@
 }
 
 .app-header-content {
-  max-width: 1600px;
+  width: 100%;
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -85,7 +85,7 @@
 
 /* Main Content Area */
 .app-main {
-  max-width: 1600px;
+  width: 100%;
   margin: 0 auto;
   padding: var(--space-4) var(--space-3);
   display: flex;
