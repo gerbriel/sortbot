@@ -969,8 +969,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           era: '',
           style: '',
           gender: '',
-          // Use the actual item category (from Step 2) as the primary source
-          category: latestItem.category || (latestItem as any)._presetData?.productType || latestItem.productType || '',
+          // Prefer the applied preset's productType so item type (sweatshirt vs tee etc.)
+          // always reflects the preset, not the raw Step-2 category which may differ.
+          category: (latestItem as any)._presetData?.productType || latestItem.category || latestItem.productType || '',
           presetTags: (latestItem as any)._presetData?.default_tags || [],
           measurements: undefined,
           flaws: '',
@@ -1264,8 +1265,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         era: '',
         style: '',
         gender: '',
-        // Use the actual item category (from Step 2) as the primary source
-        category: refreshedItem.category || (refreshedItem as any)._presetData?.productType || refreshedItem.productType || '',
+        // Prefer the applied preset's productType so item type (sweatshirt vs tee etc.)
+        // always reflects the preset, not the raw Step-2 category which may differ.
+        category: (refreshedItem as any)._presetData?.productType || refreshedItem.category || refreshedItem.productType || '',
         presetTags: (refreshedItem as any)._presetData?.default_tags || [],
         measurements: undefined,
         flaws: '',

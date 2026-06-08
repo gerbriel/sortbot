@@ -971,7 +971,7 @@ const TITLE_SYNONYMS: string[][] = [
   ['80s', 'eighties', 'mid 80s', 'late 80s', 'early 80s'],
   ['70s', 'seventies', 'mid 70s', 'late 70s', 'early 70s'],
   // ITEM suffix variants (for fitTo60 padding)
-  ['t-shirt', 'tee shirt', 'graphic tee', 'cotton tee', 'crewneck tee'],
+  ['t-shirt', 'tee shirt', 'graphic tee', 'cotton tee', 'solid tee'],
   ['sweatshirt', 'crewneck sweatshirt', 'crew sweatshirt', 'fleece sweatshirt', 'pullover sweatshirt'],
   ['hoodie', 'hooded sweatshirt', 'hooded fleece', 'zip hoodie', 'pull hoodie'],
   ['jacket', 'outerwear jacket', 'shell jacket', 'sport jacket', 'light jacket'],
