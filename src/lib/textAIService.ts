@@ -1210,6 +1210,50 @@ function generateTitleFromFields(context: ProductContext): string {
   // Accessories skip the size prefix
   if (isAccessory) displaySize = '';
 
+  // ── Custom-description title path ─────────────────────────────────────────
+  // When the user dictated a freeform description, extract key words from it
+  // and build: "{SIZE} - Vintage Y2K {BRAND} {desc keywords}" capped at 60 chars.
+  // Falls through to the normal structured-fields formula if no description present.
+  if (context.customDescription) {
+    const STOP_WORDS = new Set([
+      'a','an','the','and','or','for','of','in','to','is','are','was','were',
+      'be','been','with','without','that','this','these','those','very','quite',
+      'just','also','has','have','had','it','its','lot','lots','colored','coloured',
+      'great','nice','perfect','really','super','some','so','how','all','on','at',
+      'by','as','up','out','from','into','about',
+    ]);
+    let descText = (context.customDescription)
+      .toLowerCase()
+      .replace(/\bperiod\b/gi, '')           // strip voice delimiter
+      .replace(/^[xsml\d]+[\s\-]+/i, '')     // strip leading size prefix ("L -", "XL-")
+      .replace(/\bvintage\b|\by2k\b/gi, '')  // already in ERA prefix
+      .replace(/[,;:.!?()\-\/]/g, ' ')       // strip punctuation
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    // Remove brand name to avoid duplication
+    if (BRAND) {
+      descText = descText
+        .replace(new RegExp('\\b' + BRAND.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi'), '')
+        .replace(/\s{2,}/g, ' ').trim();
+    }
+    // Split, filter stop words, dedupe while preserving order
+    const rawWords = descText.split(/\s+/).filter(w => w.length > 1 && !STOP_WORDS.has(w));
+    const seen = new Set<string>();
+    const unique: string[] = [];
+    for (const w of rawWords) { if (!seen.has(w)) { seen.add(w); unique.push(w); } }
+    // Assemble with 60-char word-boundary cap
+    const base = displaySize
+      ? `${displaySize} - Vintage Y2K${BRAND ? ` ${BRAND}` : ''}`
+      : `Vintage Y2K${BRAND ? ` ${BRAND}` : ''}`;
+    let customTitle = base;
+    for (const w of unique) {
+      const next = `${customTitle} ${w}`;
+      if (next.length > 60) break;
+      customTitle = next;
+    }
+    return customTitle.replace(/\s{2,}/g, ' ').trim();
+  }
+
   // ── Helpers ────────────────────────────────────────────────────────────────
   // Join non-empty tokens with a single space
   const j = (...parts: string[]) => parts.filter(Boolean).join(' ');
