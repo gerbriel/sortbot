@@ -722,6 +722,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
       if (patches.size === 0) return;
 
+      // Mark as resetting so the onProcessed sync-back effect treats this update
+      // as a structured initialization (like prop-sync) rather than a user edit.
+      // Without this, onProcessed propagates the stale seoTitle/voiceDescription
+      // back to App.tsx, which then re-pushes the stale data down, triggering a
+      // second debounce save that overwrites the DB-hydrated fields.
+      isResettingRef.current = true;
+
       // Functional update: merge patches onto the LATEST state so we never
       // overwrite fields (seoTitle, voiceDescription, productType override) that
       // arrived via DB hydration after this async task started.
