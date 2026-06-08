@@ -901,7 +901,8 @@ const TITLE_SYNONYMS: string[][] = [
   ['boxy', 'boxy fit', 'boxy cut', 'boxy silhouette', 'square cut'],
   // STYLE — closures / construction
   ['zip up', 'full zip', 'zippered', 'zip front', 'front zip'],
-  ['pullover', 'overhead', 'pull on', 'no zip'],
+  // NOTE: 'pullover' intentionally omitted here — it lives in item-type groups only
+  // (e.g. 'pullover sweatshirt') to avoid swapping it onto non-pullover items.
   ['button up', 'button down', 'buttoned', 'front button', 'snap button'],
   ['snap', 'snap closure', 'snap front', 'press stud', 'popper'],
   ['lace up', 'laced', 'drawstring', 'tie front', 'tie waist'],
@@ -970,25 +971,66 @@ const TITLE_SYNONYMS: string[][] = [
   ['2000s', 'y2k era', 'early 2000s', 'mid 2000s', '00s'],
   ['80s', 'eighties', 'mid 80s', 'late 80s', 'early 80s'],
   ['70s', 'seventies', 'mid 70s', 'late 70s', 'early 70s'],
-  // ITEM suffix variants (for fitTo60 padding)
+];
+
+/**
+ * ITEM_TYPE_SYNONYM_GROUPS — synonyms keyed strictly per garment type.
+ *
+ * These are intentionally SEPARATE from TITLE_SYNONYMS so that fitTo60()
+ * can load ONLY the single group whose canonical term appears in the title.
+ * This prevents cross-contamination — e.g. "sweatshirt" can never be swapped
+ * to "graphic tee" even after many fitTo60 passes.
+ *
+ * Rules for each group:
+ *  - The CANONICAL term (first entry) must be the exact word/phrase the
+ *    title-generation formulas output (e.g. 'sweatshirt', 'trucker hat').
+ *  - No canonical term may appear as a plain sub-word in another group's
+ *    canonical (e.g. avoid bare 'fitted' because 'slim fit' ≠ 'fitted cap').
+ *  - Womens / youth variants get their OWN group so they only swap with
+ *    other same-gender variants.
+ */
+const ITEM_TYPE_SYNONYM_GROUPS: string[][] = [
+  // ── Tops — unisex/mens ────────────────────────────────────────────────────
   ['t-shirt', 'tee shirt', 'graphic tee', 'cotton tee', 'solid tee'],
   ['sweatshirt', 'crewneck sweatshirt', 'crew sweatshirt', 'fleece sweatshirt', 'pullover sweatshirt'],
-  ['hoodie', 'hooded sweatshirt', 'hooded fleece', 'zip hoodie', 'pull hoodie'],
+  ['hoodie', 'hooded sweatshirt', 'hooded fleece', 'zip hoodie', 'pullover hoodie'],
+  ['shirt', 'woven shirt', 'long sleeve shirt', 'short sleeve shirt', 'cotton shirt'],
+  ['jersey', 'sport jersey', 'mesh jersey', 'athletic jersey', 'game jersey'],
+  // ── Tops — womens ─────────────────────────────────────────────────────────
+  ['womens t-shirt', 'womens tee', 'ladies tee', 'womens graphic tee', 'womens cotton tee'],
+  ['womens sweatshirt', 'ladies sweatshirt', 'womens crewneck', 'ladies crewneck', 'womens crew sweatshirt'],
+  ['womens hoodie', 'ladies hoodie', 'womens zip hoodie', 'womens fleece hoodie', 'womens pullover hoodie'],
+  ['womens top', 'ladies top', 'womens blouse', 'womens knit top', 'ladies blouse'],
+  ['womens bodysuit', 'ladies bodysuit', 'snap bodysuit', 'womens one piece', 'fitted bodysuit'],
+  // ── Tops — youth/kids ─────────────────────────────────────────────────────
+  ['youth t-shirt', 'kids tee', 'youth tee', 'kids t-shirt', 'youth graphic tee'],
+  ['youth sweatshirt', 'kids sweatshirt', 'youth crewneck', 'kids crewneck', 'youth fleece sweatshirt'],
+  ['youth hoodie', 'kids hoodie', 'youth zip hoodie', 'kids zip hoodie', 'youth pullover hoodie'],
+  // ── Outerwear ─────────────────────────────────────────────────────────────
   ['jacket', 'outerwear jacket', 'shell jacket', 'sport jacket', 'light jacket'],
+  // ── Bottoms — unisex/mens ─────────────────────────────────────────────────
   ['jeans', 'denim jeans', 'blue jeans', 'jean pants', 'denim pants'],
-  ['pants', 'trousers', 'slacks', 'bottoms', 'long pants'],
-  ['shorts', 'short pants', 'sport shorts', 'casual shorts', 'gym shorts'],
-  ['hat', 'ball cap', 'sport cap', 'logo cap', 'dad hat'],
-  ['snapback', 'snapback cap', 'snap cap', 'snap back hat', 'adjustable cap'],
-  ['fitted', 'fitted cap', 'fitted hat', 'structured cap', 'closed back cap'],
-  ['trucker', 'trucker hat', 'trucker cap', 'mesh back hat', 'foam front hat'],
-  ['beanie', 'knit beanie', 'knit cap', 'winter beanie', 'cuffed beanie'],
-  ['bucket hat', 'bucket cap', 'sun hat', 'wide brim hat', 'cotton bucket'],
-  ['visor', 'sun visor', 'sport visor', 'open top cap', 'tennis visor'],
-  ['cap', 'baseball cap', 'sport cap', 'logo cap', 'adjustable hat'],
-  // ITEM — skirt/dress length
-  ['mini', 'micro mini', 'short hem', 'above knee', 'mini length'],
-  ['midi', 'mid length', 'knee length', 'below knee', 'midi length'],
+  ['pants', 'trousers', 'slacks', 'dress pants', 'chino pants'],
+  ['shorts', 'sport shorts', 'casual shorts', 'gym shorts', 'athletic shorts'],
+  // ── Bottoms — womens ──────────────────────────────────────────────────────
+  ['womens jeans', 'ladies jeans', 'womens denim jeans', 'ladies denim jeans', 'womens skinny jeans'],
+  ['womens pants', 'ladies pants', 'womens trousers', 'ladies trousers', 'womens slacks'],
+  ['womens shorts', 'ladies shorts', 'womens cutoff shorts', 'womens gym shorts', 'ladies sport shorts'],
+  ['womens skirt', 'ladies skirt', 'womens mini skirt', 'womens midi skirt', 'ladies midi skirt'],
+  ['womens dress', 'ladies dress', 'womens midi dress', 'womens mini dress', 'womens sundress'],
+  // ── Bottoms — youth/kids ──────────────────────────────────────────────────
+  ['youth pants', 'kids pants', 'youth joggers', 'kids joggers', 'youth sweatpants'],
+  ['youth shorts', 'kids shorts', 'youth sport shorts', 'kids sport shorts', 'youth gym shorts'],
+  // ── Headwear ──────────────────────────────────────────────────────────────
+  // Canonical terms must be multi-word where needed to avoid partial-word matches
+  // e.g. 'fitted cap' not bare 'fitted' (would collide with style 'fitted cut')
+  ['snapback', 'snapback cap', 'snap back cap', 'adjustable snapback', 'snap cap'],
+  ['fitted cap', 'structured cap', 'closed back cap', 'fitted baseball cap', 'new era cap'],
+  ['trucker hat', 'trucker cap', 'mesh back hat', 'foam front hat', 'mesh trucker cap'],
+  ['beanie', 'knit beanie', 'winter beanie', 'cuffed beanie', 'knit skull cap'],
+  ['bucket hat', 'bucket cap', 'wide brim hat', 'cotton bucket hat', 'unstructured bucket hat'],
+  ['visor', 'sun visor', 'sport visor', 'tennis visor', 'open top visor'],
+  ['hat', 'ball cap', 'sport cap', 'logo hat', 'adjustable hat'],
 ];
 
 // dedupeTitle: remove repeated words from an assembled title (case-insensitive).
@@ -1010,10 +1052,38 @@ function dedupeTitle(title: string): string {
 // fitTo60: after assembling a title, greedily swap synonyms across all tokens
 // to get as close to 60 characters as possible (never cuts mid-word).
 // When multiple swaps are within RANDOM_TOLERANCE chars of the best, picks randomly.
+//
+// Cross-contamination prevention: item-type synonyms (ITEM_TYPE_SYNONYM_GROUPS) are
+// kept in a separate list. fitTo60 scans the title to find the ONE group whose
+// canonical term is present, then builds effective synonyms as:
+//   TITLE_SYNONYMS (general)  +  that single matched item-type group
+// This means "sweatshirt" titles can only ever swap within the sweatshirt group —
+// they can never accidentally gain "graphic tee" or "trucker hat" variants.
 function fitTo60(title: string): string {
   const TARGET = 60;
   const RANDOM_TOLERANCE = 3; // chars — candidates within this range of best are randomized
   let current = title.replace(/\s{2,}/g, ' ').trim();
+
+  // ── Find the single item-type synonym group active in this title ───────────
+  // Scan groups longest-canonical-first so "fitted cap" beats bare "hat" on overlap.
+  const sortedItemGroups = [...ITEM_TYPE_SYNONYM_GROUPS].sort(
+    (a, b) => b[0].length - a[0].length
+  );
+  let activeItemGroup: string[] | null = null;
+  for (const group of sortedItemGroups) {
+    const canonical = group[0];
+    const escaped = canonical.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`, 'i');
+    if (re.test(current)) {
+      activeItemGroup = group;
+      break;
+    }
+  }
+
+  // ── Build effective synonym list: general + (at most) one item-type group ──
+  const effectiveSynonyms: string[][] = activeItemGroup
+    ? [...TITLE_SYNONYMS, activeItemGroup]
+    : TITLE_SYNONYMS;
 
   for (let pass = 0; pass < 30; pass++) {
     const len = current.length;
@@ -1022,7 +1092,7 @@ function fitTo60(title: string): string {
     let bestDiff = Math.abs(len - TARGET);
     const topCandidates: string[] = [];
 
-    for (const group of TITLE_SYNONYMS) {
+    for (const group of effectiveSynonyms) {
       // Find which member of this group appears in the current title
       let matchedWord = '';
       let matchedRe: RegExp | null = null;
