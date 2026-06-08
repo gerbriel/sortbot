@@ -39,18 +39,26 @@ function interpolateSeoTemplate(
 /**
  * Apply a preset object directly to items (no network fetch).
  * Use this when the caller already has the preset in hand.
+ *
+ * force=true → used when the user explicitly switches presets;
+ * overwrites ALL preset-owned fields so the new preset's defaults
+ * take full effect.  Voice-entered fields (brand, size, color,
+ * material, era, flaws, care, measurements, title, price, condition)
+ * are always kept regardless.
  */
 export function applyPresetDirectly(
   items: ClothingItem[],
   categoryName: string,
-  preset: CategoryPreset
+  preset: CategoryPreset,
+  force = false
 ): ClothingItem[] {
-  return applyPresetFields(items, categoryName, preset);
+  return applyPresetFields(items, categoryName, preset, force);
 }
 
 export async function applyPresetToProductGroup(
   items: ClothingItem[],
-  categoryName: string
+  categoryName: string,
+  force = false
 ): Promise<ClothingItem[]> {
   try {
     // Get all presets for the user
@@ -84,7 +92,7 @@ export async function applyPresetToProductGroup(
       }));
     }
     
-    return applyPresetFields(items, categoryName, preset);
+    return applyPresetFields(items, categoryName, preset, force);
   } catch (error) {
     console.error('Error applying preset to product group:', error);
     return items;
@@ -95,18 +103,27 @@ export async function applyPresetToProductGroup(
  * Core field-mapping logic — shared by both the async (fetch) and sync (direct) paths.
  *
  * Apply preset values to items with priority hierarchy:
- * 1. Voice Dictation / manual entry (highest priority — already set on item)
+ * 1. Voice Dictation / manual entry (highest priority — always kept)
  * 2. Category Preset values
  * 3. Empty (lowest priority)
  *
- * Use pattern: item.field || preset.field || undefined
- * This ensures voice/manual entry is never overwritten
+ * Normal mode:  item.field || preset.field  — never overwrites existing values.
+ * Force mode:   preset.field || item.field  for "preset-owned" fields;
+ *               used when the user explicitly switches presets so stale
+ *               values from the old preset are replaced.  Voice-entered
+ *               fields are always kept.
  */
 function applyPresetFields(
   items: ClothingItem[],
   categoryName: string,
-  preset: CategoryPreset
+  preset: CategoryPreset,
+  force = false
 ): ClothingItem[] {
+  // Fields that are purely voice/manual — never overwritten even in force mode.
+  // Everything else is considered "preset-owned" and will be reset when force=true.
+  const pick = <T>(itemVal: T, presetVal: T): T =>
+    force ? (presetVal ?? itemVal) : (itemVal || presetVal);
+
   return items.map(item => ({
       ...item,
       
@@ -114,32 +131,30 @@ function applyPresetFields(
       category: categoryName,
       
       // ======= PRICING =======
+      // Voice-entered: keep item value. Preset-owned: use pick() so force resets them.
       price: item.price || preset.suggested_price_min || undefined,
-      compareAtPrice: item.compareAtPrice || preset.compare_at_price || undefined,
-      costPerItem: item.costPerItem || preset.cost_per_item || undefined,
+      compareAtPrice: pick(item.compareAtPrice, preset.compare_at_price) || undefined,
+      costPerItem: pick(item.costPerItem, preset.cost_per_item) || undefined,
       
       // ======= BASIC PRODUCT INFO =======
-      // If the item already has a real seoTitle (not a raw template), keep it.
-      // Otherwise interpolate the preset template with actual field values.
+      // seoTitle and brand are voice/manual — never force-overwritten.
       seoTitle: (() => {
         if (item.seoTitle && !/\{[a-z]+\}/i.test(item.seoTitle)) {
           return item.seoTitle; // Real title already set
         }
         if (preset.seo_title_template) {
-          // Use item's brand/model from voice OR from the preset template interpolation
           const interpolated = interpolateSeoTemplate(preset.seo_title_template, item, preset);
           return interpolated || undefined;
         }
         return undefined;
       })(),
       brand: item.brand || undefined,
-      // productType = short label used in Shopify "Type" column (e.g. "T-Shirts", "Hoodies")
-      productType: item.productType || preset.product_type || undefined,
-      // shopifyProductType = full taxonomy path for "Standardized Product Type" column
-      // (e.g. "Apparel & Accessories > Clothing > Clothing Tops > T-Shirts")
-      shopifyProductType: item.shopifyProductType || preset.shopify_product_type || undefined,
+      // productType / shopifyProductType are preset-owned
+      productType: pick(item.productType, preset.product_type) || undefined,
+      shopifyProductType: pick(item.shopifyProductType, preset.shopify_product_type) || undefined,
       
       // ======= PRODUCT DETAILS =======
+      // Voice-entered fields: keep item value first
       material: item.material || preset.default_material || undefined,
       color: item.color || preset.color || undefined,
       secondaryColor: item.secondaryColor || preset.secondary_color || undefined,
@@ -149,14 +164,13 @@ function applyPresetFields(
       care: item.care || preset.default_care_instructions || undefined,
       condition: item.condition || preset.typical_condition as any || undefined,
       
-      // Tags: merge preset default_tags and seo_keywords with existing tags
-      tags: item.tags || [
-        ...(preset.default_tags || []),
-        ...(preset.seo_keywords || [])
-      ].filter((tag, index, self) => self.indexOf(tag) === index), // Remove duplicates
+      // Tags: preset-owned — pick() so force gives fresh preset tags
+      tags: force
+        ? [...(preset.default_tags || []), ...(preset.seo_keywords || [])].filter((t, i, a) => a.indexOf(t) === i)
+        : (item.tags || [...(preset.default_tags || []), ...(preset.seo_keywords || [])].filter((t, i, a) => a.indexOf(t) === i)),
       
       // ======= MEASUREMENTS =======
-      // If preset has default measurements template, apply them
+      // Voice-entered: keep item measurements; only fill blanks from preset
       ...(preset.default_measurements && !item.measurements?.width ? {
         measurements: {
           ...item.measurements,
@@ -171,36 +185,40 @@ function applyPresetFields(
       } : {}),
       
       // ======= INVENTORY & SKU =======
-      sku: item.sku || (preset.sku_prefix ? `${preset.sku_prefix}${item.id.slice(0, 8)}` : undefined),
-      barcode: item.barcode || preset.barcode_prefix || undefined,
-      inventoryQuantity: item.inventoryQuantity || preset.default_inventory_quantity || undefined,
+      sku: pick(item.sku, preset.sku_prefix ? `${preset.sku_prefix}${item.id.slice(0, 8)}` : undefined) || undefined,
+      barcode: pick(item.barcode, preset.barcode_prefix) || undefined,
+      inventoryQuantity: pick(item.inventoryQuantity, preset.default_inventory_quantity) || undefined,
       
       // ======= SHIPPING & PACKAGING =======
-      weightValue: item.weightValue || preset.default_weight_value || undefined,
-      packageDimensions: item.packageDimensions || preset.package_dimensions || undefined,
-      parcelSize: item.parcelSize || preset.parcel_size || undefined,
-      shipsFrom: item.shipsFrom || preset.ships_from || undefined,
-      continueSellingOutOfStock: item.continueSellingOutOfStock ?? preset.continue_selling_out_of_stock,
-      requiresShipping: item.requiresShipping ?? preset.requires_shipping,
+      weightValue: pick(item.weightValue, preset.default_weight_value) || undefined,
+      packageDimensions: pick(item.packageDimensions, preset.package_dimensions) || undefined,
+      parcelSize: pick(item.parcelSize, preset.parcel_size) || undefined,
+      shipsFrom: pick(item.shipsFrom, preset.ships_from) || undefined,
+      continueSellingOutOfStock: force
+        ? (preset.continue_selling_out_of_stock ?? item.continueSellingOutOfStock)
+        : (item.continueSellingOutOfStock ?? preset.continue_selling_out_of_stock),
+      requiresShipping: force
+        ? (preset.requires_shipping ?? item.requiresShipping)
+        : (item.requiresShipping ?? preset.requires_shipping),
       
-      // ======= PRODUCT CLASSIFICATION =======
-      sizeType: item.sizeType || preset.size_type || undefined,
-      style: item.style || preset.style || undefined,
-      gender: item.gender || preset.gender || undefined,
-      ageGroup: item.ageGroup || preset.age_group || undefined,
+      // ======= PRODUCT CLASSIFICATION — preset-owned =======
+      sizeType: pick(item.sizeType, preset.size_type) || undefined,
+      style: pick(item.style, preset.style) || undefined,
+      gender: pick(item.gender, preset.gender) || undefined,
+      ageGroup: pick(item.ageGroup, preset.age_group) || undefined,
       
-      // ======= POLICIES & MARKETPLACE =======
-      policies: item.policies || preset.policies || undefined,
-      renewalOptions: item.renewalOptions || preset.renewal_options || undefined,
-      whoMadeIt: item.whoMadeIt || preset.who_made_it || undefined,
-      whatIsIt: item.whatIsIt || preset.what_is_it || undefined,
-      listingType: item.listingType || preset.listing_type || undefined,
-      discountedShipping: item.discountedShipping || preset.discounted_shipping || undefined,
+      // ======= POLICIES & MARKETPLACE — preset-owned =======
+      policies: pick(item.policies, preset.policies) || undefined,
+      renewalOptions: pick(item.renewalOptions, preset.renewal_options) || undefined,
+      whoMadeIt: pick(item.whoMadeIt, preset.who_made_it) || undefined,
+      whatIsIt: pick(item.whatIsIt, preset.what_is_it) || undefined,
+      listingType: pick(item.listingType, preset.listing_type) || undefined,
+      discountedShipping: pick(item.discountedShipping, preset.discounted_shipping) || undefined,
       
-      // ======= MARKETING & SEO =======
-      customLabel0: item.customLabel0 || preset.custom_label_0 || undefined,
-      seoDescription: item.seoDescription || preset.seo_description || undefined,
-      mpn: item.mpn || preset.mpn_prefix || undefined,
+      // ======= MARKETING & SEO — preset-owned =======
+      customLabel0: pick(item.customLabel0, preset.custom_label_0) || undefined,
+      seoDescription: pick(item.seoDescription, preset.seo_description) || undefined,
+      mpn: pick(item.mpn, preset.mpn_prefix) || undefined,
       
       // ======= STATUS & PUBLISHING =======
       status: item.status || preset.default_status || 'Active',
