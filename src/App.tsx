@@ -167,6 +167,10 @@ export interface ClothingItem {
   imageRotation?: number; // degrees, clockwise
   crop?: { x: number; y: number; w: number; h: number }; // percentages (0-100) relative to image
 
+  // Which category preset was last applied (preset.id). Persisted to DB as applied_preset_id.
+  // Survives reload and is the primary signal for PRESET NAV + autoApplyDefaultPreset.
+  appliedPresetId?: string;
+
   // Original-image cache — preserved when a crop is applied so the user can revert.
   // Set on the FIRST crop; unchanged by subsequent re-crops (always points to the
   // very first upload).  Cleared once "Clear originals cache" is run.
@@ -927,6 +931,7 @@ function App() {
                           discountedShipping:        p.discounted_shipping || item.discountedShipping   || '',
                           mpn:                       p.mpn                 || item.mpn                 || '',
                           customLabel0:              p.custom_label_0      || item.customLabel0        || '',
+                          appliedPresetId:           p.applied_preset_id   || item.appliedPresetId     || '',
                         };
                       });
                     setUploadedImages(prev => mergeDB(prev));

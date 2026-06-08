@@ -232,7 +232,9 @@ function applyPresetFields(
       unitPriceBaseMeasureUnit: item.unitPriceBaseMeasureUnit || preset.unit_price_base_measure_unit || undefined,
       
       // ======= PRESET METADATA =======
-      // Store preset data for reference in AI generation
+      // Persisted ID — survives reload so PRESET NAV shows the correct label
+      appliedPresetId: preset.id,
+      // In-memory preset data for reference in AI generation
       _presetData: {
         presetId: preset.id,
         categoryName: preset.category_name,

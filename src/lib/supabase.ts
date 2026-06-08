@@ -71,6 +71,7 @@ export interface Database {
           unit_price_base_measure: string | null;
           unit_price_base_measure_unit: string | null;
           brand_category: string | null;
+          applied_preset_id: string | null;
           seo_title: string | null;
           seo_description: string | null;
           voice_description: string | null;
