@@ -219,7 +219,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     setHasUnsavedChanges(true);
   }, [processedItems]);
 
-  // Debounced product-table save — fires 2s after the last processedItems change.
+  // Debounced product-table save — fires 500ms after the last processedItems change.
   // This ensures voiceDescription, generatedDescription, seoTitle, and all other
   // typed fields survive a page refresh even if the user never navigates away.
   useEffect(() => {
@@ -231,12 +231,30 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       if (group && group.length > 0) {
         syncGroupFieldsToDatabase(group, batchId ?? null).catch(() => {/* silent */});
       }
-    }, 2000);
+    }, 500);
     return () => {
       if (productSaveTimerRef.current) clearTimeout(productSaveTimerRef.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [processedItems]);
+
+  // Flush pending save on page unload so a quick refresh never loses data
+  useEffect(() => {
+    const flushOnUnload = () => {
+      if (productSaveTimerRef.current) {
+        clearTimeout(productSaveTimerRef.current);
+        productSaveTimerRef.current = null;
+      }
+      const group = buildGroupArray(processedItems)[currentGroupIndex];
+      if (group && group.length > 0) {
+        // Use sendBeacon-friendly sync approach: fire-and-forget
+        syncGroupFieldsToDatabase(group, batchId ?? null).catch(() => {});
+      }
+    };
+    window.addEventListener('beforeunload', flushOnUnload);
+    return () => window.removeEventListener('beforeunload', flushOnUnload);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [processedItems, currentGroupIndex, batchId]);
 
   // Update local state when items prop changes (e.g., opening a different batch)
   // Reset whenever batchId changes, or items array reference/length/content changes
@@ -1216,6 +1234,17 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         });
         return updated;
       });
+      // Immediately flush to DB so a page refresh never loses the generated description
+      const updatedGroupForSave = currentGroup.map(gi => {
+        const found = targetIds.has(gi.id);
+        if (!found) return gi;
+        return {
+          ...gi,
+          generatedDescription: finalDescription,
+          ...(aiResult.suggestedTitle && { seoTitle: aiResult.suggestedTitle }),
+        };
+      });
+      syncGroupFieldsToDatabase(updatedGroupForSave, batchId ?? null).catch(() => {});
     } catch (error) {
       console.error('Regenerate all failed:', error);
     } finally {
