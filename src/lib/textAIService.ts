@@ -30,6 +30,7 @@ export function smartSeoTruncate(text: string, target = 320, flex = 40): string 
 
 interface ProductContext {
   voiceDescription?: string;
+  customDescription?: string; // Voice-dictated note injected after the title line
   title?: string;  // Pre-existing product title to use as the description opener
   brand?: string;
   color?: string;
@@ -71,6 +72,7 @@ export interface AIGeneratedContent {
     care?: string;
     tags?: string[];
     seoTitle?: string;
+    customDescription?: string;
   };
 }
 
@@ -122,7 +124,7 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   // Example: "brand quicksilver size xl period" → primary regex captures
   // "quicksilver size xl" → trimmed to "quicksilver" before "size xl".
   const FIELD_BOUNDARY_RE =
-    /^(.*?)\b(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\s+\w/i;
+    /^(.*?)\b(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title|description)\s+\w/i;
 
   function extractCommand(pattern: RegExp): string | null {
     const match = voiceDesc.match(pattern);
@@ -131,6 +133,14 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
     const boundary = val.match(FIELD_BOUNDARY_RE);
     return boundary ? (boundary[1].trim() || null) : val;
   }
+
+  // ── DESCRIPTION (freeform note) ─────────────────────────────────────────
+  let descriptionCmd = extractCommand(/\bdescription\s+(.+?)\s+period\b/i);
+  if (!descriptionCmd) {
+    const m = voiceDesc.match(/\bdescription\s+(.+?)(?=\s+(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    if (m) descriptionCmd = m[1].trim();
+  }
+  if (descriptionCmd) extracted.customDescription = descriptionCmd;
 
   // ── BRAND ────────────────────────────────────────────────────────────────
   // ── BRAND ──────────────────────────────────────────────────────────────────
@@ -777,6 +787,7 @@ export const generateProductDescription = async (
   const mergedContext = {
     ...context,
     // Only use extracted if field is empty
+    customDescription: context.customDescription || extracted.customDescription,
     brand: context.brand || extracted.brand,
     color: context.color || extracted.color,
     secondaryColor: context.secondaryColor || extracted.secondaryColor,
@@ -819,6 +830,12 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
   description += suggestedTitle || 'Vintage clothing item';
 
   description += '\n\n';
+
+  // PART 1b: Custom description note (voice-dictated) — injected right after title
+  if (context.customDescription) {
+    description += context.customDescription.trim();
+    description += '\n\n';
+  }
 
   // PART 2: Size and measurements with symbols (ONLY if provided in fields)
   if (context.size || (context.measurements && Object.keys(context.measurements).length > 0)) {
