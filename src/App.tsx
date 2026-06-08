@@ -825,7 +825,7 @@ function App() {
                 // the products table after the UI is already visible. Fire-and-forget.
                 (async () => {
                   try {
-                    const hydrateSelect = `id, description, seo_title, seo_description, voice_description, vendor, product_category, product_type, tags, published, status, size, color, secondary_color, price, compare_at_price, cost_per_item, sku, barcode, inventory_quantity, weight_value, requires_shipping, continue_selling_out_of_stock, package_dimensions, parcel_size, ships_from, condition, flaws, material, era, care_instructions, measurements, model_name, model_number, size_type, style, gender, age_group, policies, renewal_options, who_made_it, what_is_it, listing_type, discounted_shipping, mpn, custom_label_0, product_group, product_images(image_url, storage_path, position, original_name)`;
+                    const hydrateSelect = `id, description, seo_title, seo_description, voice_description, vendor, product_category, product_type, tags, published, status, size, color, secondary_color, price, compare_at_price, cost_per_item, sku, barcode, inventory_quantity, weight_value, requires_shipping, continue_selling_out_of_stock, package_dimensions, parcel_size, ships_from, condition, flaws, material, era, care_instructions, measurements, model_name, model_number, size_type, style, gender, age_group, policies, renewal_options, who_made_it, what_is_it, listing_type, discounted_shipping, mpn, custom_label_0, product_group, applied_preset_id, product_images(image_url, storage_path, position, original_name)`;
                     const { data: dbProds } = await supabase
                       .from('products')
                       .select(hydrateSelect)
