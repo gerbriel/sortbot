@@ -856,6 +856,16 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         return;
       }
 
+      // On reload, preset-owned fields (policies, shipsFrom, gender, whoMadeIt) are
+      // already present from DB — the user's last preset choice is persisted there.
+      // Skip re-applying the default so we don't overwrite a manually-selected
+      // non-default preset (when both default and chosen preset share the same productType
+      // so productTypeIsOverride above doesn't catch it).
+      if (!hasPresetData && hasPresetFields) {
+        console.log('[PRESET AUTO-APPLY] skip — preset fields already persisted from prior session');
+        return;
+      }
+
       try {
         const categoryChanged = !isSameCategory && hasPresetData;
         console.log('[PRESET AUTO-APPLY] applying default preset for category:', currentItem.category, 'categoryChanged:', categoryChanged);
