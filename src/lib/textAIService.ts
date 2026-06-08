@@ -1221,6 +1221,7 @@ function generateTitleFromFields(context: ProductContext): string {
       'just','also','has','have','had','it','its','lot','lots','colored','coloured',
       'great','nice','perfect','really','super','some','so','how','all','on','at',
       'by','as','up','out','from','into','about',
+      'style','essential','classic','original','iconic','authentic',
     ]);
     let descText = (context.customDescription)
       .toLowerCase()
