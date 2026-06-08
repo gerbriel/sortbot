@@ -310,8 +310,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     // item already in the list, or applying a preset to already-categorized items.
     // Without this, PDG's internal state stays stale (shows old category/preset fields)
     // until the user navigates away and back, appearing as a "requires refresh" bug.
-    const structureKey = items.map(i => `${i.id}:${i.category ?? ''}:${i.productGroup ?? ''}`).join('|');
-    const prevStructureKey = previousItemsRefRef.current.map(i => `${i.id}:${i.category ?? ''}:${i.productGroup ?? ''}`).join('|');
+    // Also include seoTitle+voiceDescription as sentinels so DB hydration (mergeDB in App.tsx)
+    // triggers a sync — mergeDB only changes those fields, not category/productGroup, so without
+    // them the prop-sync never fires and PDG's internal state stays pre-hydration (empty).
+    const structureKey = items.map(i => `${i.id}:${i.category ?? ''}:${i.productGroup ?? ''}:${i.seoTitle ?? ''}:${!!i.voiceDescription}`).join('|');
+    const prevStructureKey = previousItemsRefRef.current.map(i => `${i.id}:${i.category ?? ''}:${i.productGroup ?? ''}:${i.seoTitle ?? ''}:${!!i.voiceDescription}`).join('|');
     const structureChanged = structureKey !== prevStructureKey;
 
     // Major changes (batch switch, new items, reordered) reset navigation to group 0.
