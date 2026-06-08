@@ -956,8 +956,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
            p.category_name.toLowerCase() === currentItem?.productType?.toLowerCase())
         )?.id || '';
     const resolvedId    = fromPresetData || fromAppliedPreset || fromProductType;
-    const resolvedLabel = currentItem?._presetData?.displayName ||
-      availablePresets.find(p => p.id === resolvedId)?.display_name || '';
+    const resolvedLabel = availablePresets.find(p => p.id === resolvedId)?.display_name ||
+      currentItem?._presetData?.displayName || '';
 
     console.log('[PRESET NAV] group', currentGroupIndex, {
       itemId: currentItem?.id,
@@ -2728,10 +2728,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   ✓ Category Preset Applied
                 </h4>
                 <div style={{ fontSize: '0.9rem', display: 'grid', gap: '0.5rem' }}>
-                  <div><strong>Category:</strong> {currentItem._presetData?.displayName || appliedPresetLabel}</div>
-                  {currentItem._presetData?.description && (
-                    <div style={{ color: '#666', fontStyle: 'italic' }}>{currentItem._presetData.description}</div>
-                  )}
+                  <div><strong>Category:</strong> {appliedPresetLabel || currentItem._presetData?.displayName}</div>
+                  {(() => {
+                    const activePreset = availablePresets.find(p => p.id === selectedPresetId);
+                    const desc = activePreset?.description || currentItem._presetData?.description;
+                    return desc ? <div style={{ color: '#666', fontStyle: 'italic' }}>{desc}</div> : null;
+                  })()}
                   <div style={{ fontSize: '0.85rem', color: '#059669', marginTop: '0.5rem' }}>
                     📋 Form fields have been pre-filled with preset defaults. You can edit any field to override.
                   </div>
