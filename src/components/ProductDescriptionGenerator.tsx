@@ -1212,23 +1212,34 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     try {
       // ── Step 0: Re-apply the category preset (fresh from DB) so any changes
       //   made in Step 3 (Presets Manager) are picked up before AI generation.
-      //   Only fills fields that are still empty — won't overwrite manual entries.
+      //   Priority: manually selected override (selectedPresetId) → default for item.category.
       let latestGroup = group;
-      if (item.category) {
+      {
         const freshPresets = await getCategoryPresets();
+
+        // 1. If the user manually selected an override preset, ALWAYS use that one.
+        // 2. Otherwise fall back to the default preset for item.category.
         const matchingPreset =
-          freshPresets.find(p =>
-            p.is_active && p.is_default &&
-            (p.product_type?.toLowerCase() === item.category!.toLowerCase() ||
-             p.category_name.toLowerCase() === item.category!.toLowerCase())
-          ) ||
-          freshPresets.find(p =>
-            p.is_active &&
-            (p.product_type?.toLowerCase() === item.category!.toLowerCase() ||
-             p.category_name.toLowerCase() === item.category!.toLowerCase())
-          );
+          (selectedPresetId
+            ? freshPresets.find(p => p.id === selectedPresetId && p.is_active)
+            : null) ??
+          (item.category
+            ? freshPresets.find(p =>
+                p.is_active && p.is_default &&
+                (p.product_type?.toLowerCase() === item.category!.toLowerCase() ||
+                 p.category_name.toLowerCase() === item.category!.toLowerCase())
+              ) ??
+              freshPresets.find(p =>
+                p.is_active &&
+                (p.product_type?.toLowerCase() === item.category!.toLowerCase() ||
+                 p.category_name.toLowerCase() === item.category!.toLowerCase())
+              )
+            : null);
+
         if (matchingPreset) {
-          latestGroup = applyPresetDirectly(group, item.category, matchingPreset);
+          // Use the matched preset's productType as the authoritative category for title/tag generation.
+          const effectiveCategory = matchingPreset.product_type || matchingPreset.category_name || item.category || '';
+          latestGroup = applyPresetDirectly(group, effectiveCategory, matchingPreset);
           // Flush the preset-refreshed items back into state so the form reflects them
           setProcessedItems(prev => {
             const updated = [...prev];
