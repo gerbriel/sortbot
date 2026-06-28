@@ -32,6 +32,8 @@ export interface WorkflowBatch {
     groupedImages?: ClothingItem[];
     sortedImages?: ClothingItem[];
     processedItems?: ClothingItem[] | SlimItem[];
+    lastEditedBy?: string;   // email of the user who last saved this batch
+    lastEditedAt?: string;   // ISO timestamp of the last save
   };
   thumbnail_url?: string;
   created_at: string;
@@ -39,6 +41,9 @@ export interface WorkflowBatch {
   last_opened_at?: string;
   tags?: string[];
   notes?: string;
+  // Surfaced from workflow_state JSONB for the Library list (collaborative edit note).
+  lastEditedBy?: string;
+  lastEditedAt?: string;
 }
 
 /**
@@ -79,7 +84,7 @@ export async function fetchWorkflowBatchesMeta(): Promise<Omit<WorkflowBatch, 'w
     if (!user) return [];
     const { data, error } = await supabase
       .from('workflow_batches')
-      .select('id, user_id, batch_name, batch_number, current_step, is_completed, total_images, product_groups_count, categorized_count, processed_count, saved_products_count, created_at, updated_at')
+      .select('id, user_id, batch_name, batch_number, current_step, is_completed, total_images, product_groups_count, categorized_count, processed_count, saved_products_count, created_at, updated_at, lastEditedBy:workflow_state->>lastEditedBy, lastEditedAt:workflow_state->>lastEditedAt')
       .order('updated_at', { ascending: false });
     if (error) throw error;
     log.service(`fetchWorkflowBatchesMeta | rows=${(data || []).length}`);

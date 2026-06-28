@@ -1773,6 +1773,10 @@ function App() {
         groupedImages:  [] as ClothingItem[],
         sortedImages:   [] as ClothingItem[],
         processedItems: slim(live),
+        // Stamp who last edited this batch (collaborative workspace) so the Library
+        // can show "last edited by X".
+        lastEditedBy:   user?.email ?? undefined,
+        lastEditedAt:   new Date().toISOString(),
       };
 
       try {
