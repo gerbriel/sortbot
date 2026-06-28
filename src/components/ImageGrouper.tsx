@@ -1470,8 +1470,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const applyAutoGrouping = (n: number) => {
     if (n < 1 || n > 50) return;
 
-    // Sort ALL items by filename in natural (numeric) ascending order
-    const sorted = [...groupedItems].sort((a, b) => naturalCompare(nameKey(a), nameKey(b)));
+    // Sort ALL items: named files by filename (natural order), unnamed files by capturedAt, then id.
+    // Named files always come before unnamed so camera-roll photos group correctly.
+    const sorted = [...groupedItems].sort((a, b) => {
+      const aHasName = !!a.originalName;
+      const bHasName = !!b.originalName;
+      if (aHasName && bHasName) return naturalCompare(nameKey(a), nameKey(b));
+      if (aHasName) return -1;
+      if (bHasName) return 1;
+      return (a.capturedAt ?? 0) - (b.capturedAt ?? 0);
+    });
 
     log.grouper(`applyAutoGrouping | n=${n} total=${sorted.length} chunks=${Math.ceil(sorted.length / n)}`);
 
@@ -1891,6 +1899,19 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     });
     const entries = Object.entries(grps);
 
+    // Sort items WITHIN a group by filename first so the representative (index 0) is
+    // always the first-shot image, regardless of workflow_state insertion order.
+    const sortGroupItems = (its: ClothingItem[]): ClothingItem[] =>
+      [...its].sort((a, b) => {
+        // Named files first, sorted naturally; fallback to capturedAt, then id
+        const aHasName = !!a.originalName;
+        const bHasName = !!b.originalName;
+        if (aHasName && bHasName) return naturalCompare(nameKey(a), nameKey(b));
+        if (aHasName) return -1;
+        if (bHasName) return 1;
+        return (a.capturedAt ?? 0) - (b.capturedAt ?? 0);
+      });
+
     const sortArr = (arr: ClothingItem[]): ClothingItem[] => {
       const copy = [...arr];
       switch (sortOrder) {
@@ -1901,7 +1922,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       }
     };
     const sortGroups = (es: [string, ClothingItem[]][]): [string, ClothingItem[]][] => {
-      const copy = [...es];
+      // Sort items within every group first so representative is always consistent
+      const withSorted: [string, ClothingItem[]][] = es.map(([gid, its]) => [gid, sortGroupItems(its)]);
+      const copy = [...withSorted];
       switch (sortOrder) {
         case 'date-asc':
           return copy.sort(([, a], [, b]) => Math.min(...a.map(i => i.capturedAt ?? 0)) - Math.min(...b.map(i => i.capturedAt ?? 0)));

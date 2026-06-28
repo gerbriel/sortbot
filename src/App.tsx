@@ -2194,29 +2194,42 @@ function App() {
       restoredProcessedItems = baseItems;
       if (baseItems.length > 0 && productsToUse && productsToUse.length > 0) {
         // Build O(1) lookup Maps — avoids O(n²) .find() inside .map() for large batches.
+        // productsByGroup is the ONLY collision-free key: saveBatchToDatabase writes exactly
+        // one products row per unique product_group, so matching item.productGroup → product
+        // never mismatches. Title and image_url are unreliable fallbacks (group members share
+        // a title; URLs can change between sessions) and must never run before the group match.
+        const productsByGroup = new Map<string, any>();
         const productsByTitle = new Map<string, any>();
         const productsByImageUrl = new Map<string, any>();
         for (const p of productsToUse) {
+          const g = p.product_group || p.id;
+          if (g && !productsByGroup.has(g)) productsByGroup.set(g, p);
           if (p.seo_title) productsByTitle.set(p.seo_title.trim(), p);
           for (const img of (p.product_images || [])) {
             if (img.image_url) productsByImageUrl.set(img.image_url, p);
           }
         }
 
-        restoredProcessedItems = baseItems.map((item: ClothingItem, index: number) => {
-          // Try to match by seoTitle first (most reliable for our use case)
-          let savedProduct: any = item.seoTitle ? productsByTitle.get(item.seoTitle.trim()) : undefined;
-          
-          // Fallback: match by image URL (preview)
+        restoredProcessedItems = baseItems.map((item: ClothingItem) => {
+          // Match by productGroup FIRST — the only collision-free key. This is what
+          // prevents the "mixed up images" bug: matching by shared title or by list
+          // position pulled the wrong product, whose images then overwrote this item's.
+          let savedProduct: any = productsByGroup.get(item.productGroup || item.id);
+
+          // Fallback: match by this item's own image URL (still per-item reliable).
           if (!savedProduct && item.preview) {
             savedProduct = productsByImageUrl.get(item.preview);
           }
-          
-          // Fallback: match by position in batch (if all else fails)
-          if (!savedProduct && index < productsToUse.length) {
-            savedProduct = productsToUse[index];
+
+          // Last resort: match by title. Group members share a title so this can be
+          // wrong, but it only runs when group + image both failed, and (below) we no
+          // longer let a matched product overwrite this item's own image.
+          if (!savedProduct && item.seoTitle) {
+            savedProduct = productsByTitle.get(item.seoTitle.trim());
           }
-          
+          // NOTE: the old position-index fallback (productsToUse[index]) was removed —
+          // it aligned two differently-ordered lists and bled unrelated products' data.
+
           if (savedProduct) {
             // DB row wins — it was written by an explicit Save which is authoritative.
             // workflow_state (item) is the fallback for fields not yet in the DB.
@@ -2229,8 +2242,18 @@ function App() {
             const dbOriginalName: string | undefined = (savedProduct.product_images || [])
               .sort((a: any, b: any) => a.position - b.position)
               .find((img: any) => img.original_name)?.original_name ?? undefined;
-            const resolvedImageUrls = dbImageUrls.length ? dbImageUrls : (item.imageUrls?.length ? item.imageUrls : []);
-            const resolvedPreview = resolvedImageUrls[0] || item.preview ||
+            // CRITICAL: prefer THIS item's own image. savedProduct is matched at the GROUP
+            // level, so its product_images is the whole group's photo list — using it here
+            // would make every member of a group show the same (first) image. Each item keeps
+            // its own photo (workflow_state preserves storagePath/imageUrls per item); the
+            // DB group list is only a fallback for items that have no image of their own.
+            const ownImageUrls: string[] = item.imageUrls?.length
+              ? item.imageUrls
+              : (item.storagePath
+                  ? [supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl]
+                  : []);
+            const resolvedImageUrls = ownImageUrls.length ? ownImageUrls : dbImageUrls;
+            const resolvedPreview = item.preview || resolvedImageUrls[0] ||
               (item.storagePath ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl : '');
             return {
               ...item,
