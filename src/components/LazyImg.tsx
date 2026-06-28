@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { log } from '../lib/debugLogger';
-import { supabase } from '../lib/supabase';
 
 /**
  * Lazy-loading image with shimmer skeleton placeholder.
@@ -54,21 +53,13 @@ const LazyImg: React.FC<{
       log.img(`load failed after ${MAX_RETRIES} retries | src=${src.split('/').pop()}`);
       setLoaded(true);
       setErrored(true);
-      // Delete the orphaned product_images row so this broken URL doesn't
-      // resurrect itself on next page load.
-      const STORAGE_PREFIX = '/storage/v1/object/public/product-images/';
-      const base = src.split('?')[0];
-      const idx = base.indexOf(STORAGE_PREFIX);
-      if (idx !== -1) {
-        const storagePath = base.slice(idx + STORAGE_PREFIX.length);
-        supabase.from('product_images').delete().eq('storage_path', storagePath).then(({ error }) => {
-          if (error) {
-            console.warn('[img] failed to delete orphaned product_images row:', storagePath, error.message);
-          } else {
-            console.log('[img] 🗑️ deleted orphaned product_images row:', storagePath);
-          }
-        });
-      }
+      // NOTE: We intentionally do NOT delete the product_images row here.
+      // An <img> error fires on transient failures (network blips, QUIC resets,
+      // CDN hiccups, brief 400s) — not just genuinely-missing files. Deleting the
+      // DB row on a render-time error permanently destroys an image reference that
+      // may still exist in storage, and in the shared workspace every viewer's
+      // transient failure compounds the loss. Show a placeholder and move on;
+      // real orphan cleanup must be a deliberate, file-existence-verified action.
     }
   };
 
