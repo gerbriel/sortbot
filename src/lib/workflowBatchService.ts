@@ -326,7 +326,29 @@ export async function autoSaveWorkflowBatch(
         // Update succeeded
         return batchId;
       } else if (!updateError && (!updated || updated.length === 0)) {
-        // Batch was deleted — create a fresh one
+        // UPDATE affected 0 rows. Two very different causes:
+        //  (a) the batch row was genuinely DELETED → create a fresh one.
+        //  (b) the row still EXISTS but RLS blocked our UPDATE because we don't own it.
+        //      Shared workspace: anyone can open/SELECT any batch, but only the owner
+        //      can UPDATE. Creating a new batch here would silently FORK the batch into
+        //      a duplicate under the current user — the exact duplicate-spawning bug.
+        // SELECT is open to all authenticated users, so it finds the row in case (b)
+        // but returns nothing in case (a) — that's how we tell them apart.
+        const { data: existing } = await supabase
+          .from('workflow_batches')
+          .select('id')
+          .eq('id', batchId)
+          .maybeSingle();
+        if (existing) {
+          // Case (b): batch exists but isn't ours — do NOT fork a duplicate.
+          // Keep pointing at the same batch; this edit just won't persist.
+          console.warn(
+            `autoSaveWorkflowBatch: batch ${batchId} exists but UPDATE affected 0 rows ` +
+            `(not owned by current user) — skipping save, NOT creating a duplicate`,
+          );
+          return batchId;
+        }
+        // Case (a): genuinely gone — create a fresh one.
         console.warn(`Batch ${batchId} no longer exists, creating new batch`);
         const batch = await createWorkflowBatch(batchNumber, workflowState, stats);
         return batch?.id || null;
