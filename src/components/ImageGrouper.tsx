@@ -7,33 +7,20 @@ import { log } from '../lib/debugLogger';
 import './ImageGrouper.css';
 import './ProductDescriptionGenerator.css'; // crop-fs-* styles shared with PDG
 
-// Buckets prefix for parsing storage paths out of public URLs
-const STORAGE_PUBLIC_PREFIX = '/storage/v1/object/public/product-images/';
-
 /** Retry a failed image load up to 3 times with exponential backoff + cache-bust.
  *  Stores attempt count on the element itself via data-retry so no React state is needed.
  *  Called as onError handler on bare <img> tags that can't use LazyImg.
- *  After all retries are exhausted the broken product_images row is deleted from
- *  the DB so it never poisons the session again on next reload. */
+ *  After retries are exhausted we just show the broken placeholder — we do NOT delete
+ *  the product_images row, because an <img> error also fires on transient failures and
+ *  deleting on render-time error permanently destroys references to files that may
+ *  still exist (and compounds across viewers in the shared workspace). */
 function retryImg(e: React.SyntheticEvent<HTMLImageElement>) {
   const img = e.currentTarget;
   const attempt = parseInt(img.dataset.retry ?? '0', 10);
   if (attempt >= 3) {
     const rawSrc = (img.dataset.src ?? img.src).split('?')[0];
     log.img(`load failed after 3 retries | src=${rawSrc.split('/').pop()}`);
-    // Extract storage_path from the public URL and delete the orphaned DB row.
-    const idx = rawSrc.indexOf(STORAGE_PUBLIC_PREFIX);
-    if (idx !== -1) {
-      const storagePath = rawSrc.slice(idx + STORAGE_PUBLIC_PREFIX.length);
-      supabase.from('product_images').delete().eq('storage_path', storagePath).then(({ error }) => {
-        if (error) {
-          console.warn('[img] failed to delete orphaned product_images row:', storagePath, error.message);
-        } else {
-          console.log('[img] 🗑️ deleted orphaned product_images row for missing file:', storagePath);
-        }
-      });
-    }
-    return; // show broken placeholder
+    return; // show broken placeholder — no destructive DB delete
   }
   img.dataset.retry = String(attempt + 1);
   const delay = 500 * Math.pow(3, attempt); // 500ms, 1500ms, 4500ms

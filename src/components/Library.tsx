@@ -17,7 +17,6 @@ import { log } from '../lib/debugLogger';
 import './Library.css';
 
 // ── Lazy-loading image with skeleton shimmer placeholder ──────────────────────
-const STORAGE_PREFIX = '/storage/v1/object/public/product-images/';
 const LazyImg: React.FC<{ src: string; alt: string; className?: string }> = ({ src, alt, className }) => {
   const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
@@ -35,15 +34,9 @@ const LazyImg: React.FC<{ src: string; alt: string; className?: string }> = ({ s
   const handleError = () => {
     setLoaded(true);
     setErrored(true);
-    // Clean up orphaned DB row so it never reappears after reload
-    const base = src.split('?')[0];
-    const idx = base.indexOf(STORAGE_PREFIX);
-    if (idx !== -1) {
-      const storagePath = base.slice(idx + STORAGE_PREFIX.length);
-      supabase.from('product_images').delete().eq('storage_path', storagePath).then(({ error }) => {
-        if (!error) console.log('[img] 🗑️ deleted orphaned product_images row:', storagePath);
-      });
-    }
+    // Do NOT delete the product_images row on an <img> error — errors fire on
+    // transient failures too, and deleting permanently destroys a reference to a
+    // file that may still exist. Just show the broken placeholder.
   };
 
   return (

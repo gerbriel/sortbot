@@ -668,12 +668,19 @@ function App() {
               // originalName was tracked in workflow_state.
               const itemsMissingName = liveItems.filter((i: any) => !i.originalName);
               if (itemsMissingName.length > 0) {
-                const { data: nameRows } = await supabase
-                  .from('product_images')
-                  .select('product_id, original_name')
-                  .in('product_id', itemsMissingName.map((i: any) => i.id))
-                  .not('original_name', 'is', null)
-                  .order('position', { ascending: true });
+                // Chunk the product_id IN() list — PostgREST returns a 400 when the URL
+                // gets too long (~794+ IDs). Large batches (800+ images) hit this.
+                const missingNameIds = itemsMissingName.map((i: any) => i.id);
+                const nameRows: any[] = [];
+                for (let ci = 0; ci < missingNameIds.length; ci += 100) {
+                  const { data } = await supabase
+                    .from('product_images')
+                    .select('product_id, original_name')
+                    .in('product_id', missingNameIds.slice(ci, ci + 100))
+                    .not('original_name', 'is', null)
+                    .order('position', { ascending: true });
+                  if (data) nameRows.push(...data);
+                }
                 if (nameRows && nameRows.length > 0) {
                   const nameMap = new Map<string, string>();
                   for (const row of nameRows) {
@@ -704,12 +711,19 @@ function App() {
                 )];
                 log.app(`startup restore | DB fallback | missingIds=${missingIds.length} distinctGroups=${missingGroupIds.length} sampleIds=${missingIds.slice(0,3).join(',')}`);
 
-                // Primary: look up product_images directly by product_id
-                const { data: dbImages, error: dbImgErr } = await supabase
-                  .from('product_images')
-                  .select('product_id, image_url, storage_path, position, original_name')
-                  .in('product_id', missingIds)
-                  .order('position', { ascending: true });
+                // Primary: look up product_images directly by product_id.
+                // Chunked to stay under PostgREST's URL-length limit on large batches.
+                const dbImages: any[] = [];
+                let dbImgErr: any = null;
+                for (let ci = 0; ci < missingIds.length; ci += 100) {
+                  const { data, error } = await supabase
+                    .from('product_images')
+                    .select('product_id, image_url, storage_path, position, original_name')
+                    .in('product_id', missingIds.slice(ci, ci + 100))
+                    .order('position', { ascending: true });
+                  if (error) dbImgErr = error;
+                  if (data) dbImages.push(...data);
+                }
                 log.app(`startup restore | DB fallback stage1 | rows=${dbImages?.length ?? 0}${dbImgErr ? ` err=${dbImgErr.message}` : ''}`);
 
                 // Secondary: for items still missing, look up their productGroup peers in product_images.
