@@ -1,7 +1,7 @@
-import { forwardRef, useImperativeHandle } from 'react';
+import { forwardRef, useImperativeHandle, useEffect, useState } from 'react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
-import { smartSeoTruncate } from '../lib/textAIService';
+import { smartSeoTruncate, primaryMaterial } from '../lib/textAIService';
 import './GoogleSheetExporter.css';
 
 /**
@@ -94,7 +94,9 @@ function resolveColorGid(color: string | undefined): string {
 
 function resolveFabricGid(material: string | undefined): string {
   if (!material) return '';
-  return FABRIC_GID_MAP[material.toLowerCase().trim()] || '';
+  // Strip percentage composition (e.g. "50% Cotton 25% Nylon") → "Cotton" before GID lookup
+  const clean = primaryMaterial(material).toLowerCase().trim();
+  return FABRIC_GID_MAP[clean] || FABRIC_GID_MAP[material.toLowerCase().trim()] || '';
 }
 
 function resolveGenderGid(gender: string | undefined): string {
@@ -319,6 +321,60 @@ export interface GoogleSheetExporterHandle {
 const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExporterProps>(
   ({ items, compactMode = false }, ref) => {
 
+  // Titles of products that ALREADY exist in the DB from OTHER batches (a proxy for
+  // "already uploaded to Shopify"). Used to suffix this export's titles/handles so a new
+  // upload never collides with an existing product. Excludes the current batch's own items
+  // so re-exporting the same batch keeps identical titles (Shopify updates, not duplicates).
+  const [existingTitles, setExistingTitles] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // Current batch's product ids + group ids — these must NOT count as "existing".
+      const ownKeys = new Set<string>();
+      for (const i of items) { ownKeys.add(i.id); if (i.productGroup) ownKeys.add(i.productGroup); }
+      // Current batch's own titles — excluded from the Shopify set so re-exporting a batch
+      // that was already uploaded keeps identical titles (Shopify updates, not duplicates).
+      const ownTitles = new Set<string>();
+      for (const i of items) { const t = (i.seoTitle || '').trim().toLowerCase(); if (t) ownTitles.add(t); }
+
+      const titles = new Set<string>();
+
+      // Source 1 — app's own products table (paginated; PostgREST caps at 1000 rows).
+      const PAGE = 1000;
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from('products')
+          .select('seo_title, id, product_group')
+          .not('seo_title', 'is', null)
+          .range(from, from + PAGE - 1);
+        if (error || !data || data.length === 0) break;
+        for (const r of data as Array<{ seo_title: string | null; id: string; product_group: string | null }>) {
+          if (ownKeys.has(r.id) || (r.product_group && ownKeys.has(r.product_group))) continue;
+          const t = (r.seo_title || '').trim().toLowerCase();
+          if (t) titles.add(t);
+        }
+        if (data.length < PAGE) break;
+      }
+
+      // Source 2 — live Shopify catalog via the shopify-titles Edge Function. Best-effort:
+      // if the function isn't deployed or errors, we silently fall back to Source 1 only.
+      try {
+        const { data: sh, error: shErr } = await supabase.functions.invoke('shopify-titles');
+        if (!shErr && sh && Array.isArray(sh.titles)) {
+          for (const raw of sh.titles as string[]) {
+            const t = (raw || '').trim().toLowerCase();
+            if (t && !ownTitles.has(t)) titles.add(t);
+          }
+        }
+      } catch { /* Shopify read unavailable — DB cross-reference still applies */ }
+
+      if (!cancelled) setExistingTitles(titles);
+    })();
+    return () => { cancelled = true; };
+    // Re-fetch only when the SET of items changes (not on every field keystroke).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.length]);
+
   // Group items by productGroup - each group is ONE product
   const productGroups = items.reduce((groups, item) => {
     const groupId = item.productGroup || item.id; // If no group, item becomes its own product
@@ -331,8 +387,22 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
 
   // Build products, then deduplicate titles/handles in a second pass
   const rawProducts = Object.values(productGroups).map(group => {
-    // Use the first item in the group as the base product data
-    const productData = group[0];
+    // Coalesce fields across the WHOLE group so the exported product never depends on
+    // which item happens to be group[0]. For each field, take the first member that has a
+    // non-empty value. This fixes price / brand / size / condition / measurements showing
+    // blank or stale values when the representative item was missing data another member had.
+    const isBlank = (v: unknown) =>
+      v === undefined || v === null || v === '' ||
+      (Array.isArray(v) && v.length === 0) ||
+      (typeof v === 'object' && v !== null && !Array.isArray(v) && Object.keys(v).length === 0);
+    const productData = group.reduce((acc, it) => {
+      const a = acc as unknown as Record<string, unknown>;
+      const i = it as unknown as Record<string, unknown>;
+      for (const k in i) {
+        if (isBlank(a[k]) && !isBlank(i[k])) a[k] = i[k];
+      }
+      return acc;
+    }, { ...group[0] } as ClothingItem);
 
     // Find the best seoTitle from any item in the group:
     // prefer a real title (no unresolved {tokens}) over a raw template
@@ -374,28 +444,21 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
     };
   });
 
-  // Second pass: make every title and URL handle unique.
-  // If two products share the same title, append " 2", " 3", etc.
-  const titleCounts: Record<string, number> = {};
-  const titleSeen: Record<string, number> = {};
-  rawProducts.forEach(p => {
-    const key = (p.seoTitle || '').toLowerCase();
-    titleCounts[key] = (titleCounts[key] || 0) + 1;
-  });
-
+  // Second pass: make every title unique against BOTH (a) other products in this export
+  // and (b) titles that already exist in the DB from other batches (existingTitles).
+  // A single running used-set, seeded with the existing titles, handles both: the first
+  // unused title stays as-is; any collision gets " 2", " 3", … until free. This guarantees
+  // no duplicate titles in the file AND no conflict with an already-uploaded product.
+  const usedTitles = new Set<string>(existingTitles);
   const products = rawProducts.map((p, idx) => {
-    const baseTitle = p.seoTitle || `product-${idx + 1}`;
-    const key = baseTitle.toLowerCase();
-    let uniqueTitle = baseTitle;
-
-    if (titleCounts[key] > 1) {
-      titleSeen[key] = (titleSeen[key] || 0) + 1;
-      if (titleSeen[key] > 1) {
-        uniqueTitle = `${baseTitle} ${titleSeen[key]}`;
-      }
+    const baseTitle = (p.seoTitle && p.seoTitle.trim()) || `product-${idx + 1}`;
+    let candidate = baseTitle;
+    let n = 2;
+    while (usedTitles.has(candidate.toLowerCase())) {
+      candidate = `${baseTitle} ${n++}`;
     }
-
-    return { ...p, seoTitle: uniqueTitle };
+    usedTitles.add(candidate.toLowerCase());
+    return { ...p, seoTitle: candidate };
   });
 
   // Build a clean, display-ready title for a product — shared by preview table and CSV export
@@ -409,7 +472,32 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
     return strippedTitle;
   };
 
+  // Products with no price or a price of 0 — Shopify requires a real price, so block export.
+  const invalidPricedProducts = products
+    .map((p, idx) => ({ p, idx }))
+    .filter(({ p }) => {
+      const n = p.price == null ? NaN : parseFloat(String(p.price));
+      return isNaN(n) || n <= 0;
+    });
+
   const handleDownloadCSV = () => {
+    // Block export until every product has a real price (> 0).
+    if (invalidPricedProducts.length > 0) {
+      const names = invalidPricedProducts
+        .slice(0, 10)
+        .map(({ p, idx }) => `• ${buildCleanTitle(p, idx)}`)
+        .join('\n');
+      const more = invalidPricedProducts.length > 10
+        ? `\n…and ${invalidPricedProducts.length - 10} more`
+        : '';
+      alert(
+        `Cannot export — ${invalidPricedProducts.length} ` +
+        `product${invalidPricedProducts.length > 1 ? 's have' : ' has'} a price of $0 or no price set.\n` +
+        `Set a price in Step 3 for:\n\n${names}${more}`
+      );
+      return;
+    }
+
     // Column order matches Shopify's own product export format exactly
     const headers = [
       'Handle',
@@ -685,6 +773,26 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                 <span className="stat-label">Categories</span>
               </div>
             </div>
+
+            {invalidPricedProducts.length > 0 && (
+              <div style={{
+                marginTop: '0.75rem', padding: '0.75rem 1rem', borderRadius: 8,
+                background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c',
+                fontSize: '0.85rem', fontWeight: 600,
+              }}>
+                🚫 Export blocked — {invalidPricedProducts.length} product
+                {invalidPricedProducts.length > 1 ? 's have' : ' has'} no price (or $0).
+                Set a price in Step 3 before exporting:
+                <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.2rem', fontWeight: 500 }}>
+                  {invalidPricedProducts.slice(0, 8).map(({ p, idx }) => (
+                    <li key={p.id || idx}>{buildCleanTitle(p, idx)}</li>
+                  ))}
+                  {invalidPricedProducts.length > 8 && (
+                    <li>…and {invalidPricedProducts.length - 8} more</li>
+                  )}
+                </ul>
+              </div>
+            )}
           </div>
 
           <div className="export-preview">

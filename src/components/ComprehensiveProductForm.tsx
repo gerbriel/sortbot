@@ -134,8 +134,8 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
         </div>
         <div className="fields-row">
           <div className="info-item">
-            <label>Product Type: <PresetBadge show={isFromPreset('productType')} /></label>
-            <input type="text" value={currentItem.productType || ''} onChange={(e) => updateGroupField('productType', e.target.value)} placeholder="e.g., Graphic Tee, Hoodie" className={`info-input${req(currentItem.productType)}`} />
+            <label>Type (Garment): <PresetBadge show={isFromPreset('productType')} /></label>
+            <input type="text" value={currentItem.productType || ''} onChange={(e) => updateGroupField('productType', e.target.value)} placeholder="e.g., Sweater, Hoodie, Pants" className={`info-input${req(currentItem.productType)}`} />
           </div>
           <div className="info-item">
             <label>Model Name:</label>

@@ -69,6 +69,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const [appliedPresetLabel, setAppliedPresetLabel] = useState('');
   const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [duplicateTitleWarning, setDuplicateTitleWarning] = useState(false);
   // Debounce timer for auto-saving current group fields to the products table.
   // Fires 2s after the last processedItems change so a page refresh never loses
   // voiceDescription, generatedDescription, seoTitle, or any typed field values.
@@ -1253,8 +1254,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     if ((item as any).customDescription) add('description', (item as any).customDescription);
     const m = item.measurements as any;
     if (m) {
-      add('chest',       m.chest);
-      add('width',       m.width);
+      add('width',       m.width || m.chest);
       add('length',      m.length);
       add('waist',       m.waist);
       add('hip',         m.hip);
@@ -1455,24 +1455,25 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       const aiResult = await generateProductDescription({
         voiceDescription: voiceText || undefined,
         title: refreshedItem.seoTitle || '',
-        // Pass empty strings for all fields so voice/desc always wins
-        brand: '',
-        color: '',
-        // Use actual item size so voice re-extraction never produces garbled values
-        size: refreshedItem.size || '',
-        material: '',
-        condition: undefined,
-        era: '',
-        style: '',
-        gender: '',
+        // Pass actual item fields as fallbacks — voice extraction wins via merge order in textAIService
+        brand:     refreshedItem.brand     || '',
+        color:     refreshedItem.color     || '',
+        size:      refreshedItem.size      || '',
+        material:  refreshedItem.material  || '',
+        condition: refreshedItem.condition as any || undefined,
+        era:       refreshedItem.era       || '',
+        style:     refreshedItem.style     || '',
+        gender:    refreshedItem.gender    || '',
+        modelName: refreshedItem.modelName || '',
+        type:      refreshedItem.productType || '',
         // Prefer the applied preset's productType so item type (sweatshirt vs tee etc.)
         // always reflects the preset, not the raw Step-2 category which may differ.
         category: (refreshedItem as any)._presetData?.productType || refreshedItem.category || refreshedItem.productType || '',
         presetTags: (refreshedItem as any)._presetData?.default_tags || [],
-        customDescription: (refreshedItem as any).customDescription || '',
-        measurements: undefined,
-        flaws: '',
-        care: ''
+        customDescription: refreshedItem.customDescription || '',
+        measurements: refreshedItem.measurements || undefined,
+        flaws: refreshedItem.flaws || '',
+        care:  refreshedItem.care  || ''
       });
 
       console.log('[REGEN] aiResult', {
@@ -1915,7 +1916,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     return () => cancelAnimationFrame(id);
   }, [cropModal.open, lightboxSrc, measureCropImg]);
 
-  // Keyboard: close lightbox or crop modal on Escape
+  // Keyboard: close lightbox or crop modal on Escape; Enter toggles voice recording
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -1926,10 +1927,42 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         if (e.key === 'ArrowLeft') { e.preventDefault(); navigateLightbox(-1); }
         if (e.key === 'ArrowRight') { e.preventDefault(); navigateLightbox(1); }
       }
+      // Enter/Return toggles voice recording when not focused on a text input
+      if (e.key === 'Enter' && !lightboxSrc && !cropModal.open) {
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+          e.preventDefault();
+          if (isRecording) {
+            handleStopRecording();
+          } else {
+            handleStartRecording();
+          }
+        }
+      }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [lightboxSrc, lightboxItemId, lightboxPool, cropModal.open]);
+  }, [lightboxSrc, lightboxItemId, lightboxPool, cropModal.open, isRecording, isTransitioning]);
+
+  // Duplicate title check — debounced, cross-batch Supabase query
+  useEffect(() => {
+    const title = currentItem?.seoTitle?.trim();
+    if (!title) { setDuplicateTitleWarning(false); return; }
+    const currentId = currentItem?.id;
+    const t = setTimeout(async () => {
+      try {
+        const { supabase } = await import('../lib/supabase');
+        let query = supabase
+          .from('products')
+          .select('id')
+          .ilike('seo_title', title);
+        if (currentId) query = query.neq('id', currentId);
+        const { data } = await query.limit(1);
+        setDuplicateTitleWarning(!!(data && data.length > 0));
+      } catch { setDuplicateTitleWarning(false); }
+    }, 800);
+    return () => clearTimeout(t);
+  }, [currentItem?.seoTitle, currentItem?.id]);
 
   // Guard: no items ready yet (nothing categorized)
   // NOTE: This must come AFTER all hook declarations above (React rules of hooks)
@@ -2521,7 +2554,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                         const ti = v('title');     if (ti) fields.seoTitle = ti;
 
                         const meas: any = {};
-                        const mch = measV('chest');          if (mch) meas.chest = mch;
+                        const mch = measV('chest');          if (mch) meas.width = meas.width || mch;
                         const mw  = measV('width');          if (mw)  meas.width = mw;
                         const ml  = measV('length');         if (ml)  meas.length = ml;
                         const mwa = measV('waist');          if (mwa) meas.waist = mwa;
@@ -2617,6 +2650,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               {!currentItem.seoTitle && (
                 <p style={{ fontSize: '0.78rem', color: '#6b7280', margin: '0.25rem 0 0' }}>
                   Preview from current fields — type to override, or hit Generate to lock it in
+                </p>
+              )}
+              {duplicateTitleWarning && (
+                <p style={{ fontSize: '0.78rem', color: '#dc2626', margin: '0.25rem 0 0', fontWeight: 600 }}>
+                  ⚠️ Duplicate title — this title already exists in another batch on Shopify
                 </p>
               )}
             </div>

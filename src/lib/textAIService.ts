@@ -40,6 +40,7 @@ interface ProductContext {
   condition?: string;
   era?: string;
   style?: string;
+  type?: string;   // Garment type (e.g., "Sweater", "Hoodie") from productType field
   category?: string;
   measurements?: Record<string, string>;
   flaws?: string;
@@ -65,6 +66,7 @@ export interface AIGeneratedContent {
     condition?: string;
     era?: string;
     style?: string;
+    type?: string;       // Garment type from "type X period" voice command
     gender?: string;
     measurements?: Record<string, string>;
     price?: string;
@@ -124,7 +126,7 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   // Example: "brand quicksilver size xl period" → primary regex captures
   // "quicksilver size xl" → trimmed to "quicksilver" before "size xl".
   const FIELD_BOUNDARY_RE =
-    /^(.*?)\b(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title|description)\s+\w/i;
+    /^(.*?)\b(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|type|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title|description)\s+\w/i;
 
   function extractCommand(pattern: RegExp): string | null {
     const match = voiceDesc.match(pattern);
@@ -197,8 +199,8 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   }
   if (colorCmd) {
     const parts = colorCmd.split(/\s+and\s+|\s*\/\s*/i).filter(Boolean);
-    extracted.color = toTitleCase(parts[0]);
-    if (parts[1] && !extracted.secondaryColor) extracted.secondaryColor = toTitleCase(parts[1]);
+    extracted.color = toTitleCase(stripColorModifiers(parts[0]));
+    if (parts[1] && !extracted.secondaryColor) extracted.secondaryColor = toTitleCase(stripColorModifiers(parts[1]));
     void NEXT_FIELD; // used in fallback regexes above
   }
 
@@ -208,7 +210,11 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
     const m = voiceDesc.match(/\b(?:material|fabric)\s+(.+?)(?=\s+(?:brand|model|size|colou?r|secondary|second|accent|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
     if (m) materialCmd = m[1].trim();
   }
-  if (materialCmd) extracted.material = toTitleCase(materialCmd);
+  if (materialCmd) {
+    // Store only the primary material name (strips "50% " prefix) so Shopify fabric GID lookup works.
+    // The full composition string is kept in the raw voice text and surfaced in the AI description.
+    extracted.material = toTitleCase(primaryMaterial(materialCmd));
+  }
 
   // ── CONDITION ─────────────────────────────────────────────────────────────
   let condRaw = extractCommand(/\bcondition\s+(.+?)\s+period\b/i);
@@ -233,6 +239,14 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
     if (m) styleCmd = m[1].trim();
   }
   if (styleCmd) extracted.style = toTitleCase(styleCmd);
+
+  // ── TYPE (garment type) ───────────────────────────────────────────────────
+  let typeCmd = extractCommand(/\btype\s+(.+?)\s+period\b/i);
+  if (!typeCmd) {
+    const m = voiceDesc.match(/\btype\s+(.+?)(?=\s+(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    if (m) typeCmd = m[1].trim();
+  }
+  if (typeCmd) extracted.type = toTitleCase(typeCmd);
 
   // ── GENDER ────────────────────────────────────────────────────────────────
   let genderCmd = extractCommand(/\bgender\s+(.+?)\s+period\b/i);
@@ -286,6 +300,9 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
 
   const widthCmd = extractCommand(/\bwidth\s+(.+?)\s+period\b/i);
   if (widthCmd) measurements['width'] = widthCmd.replace(/[^0-9.]/g, '');
+  // chest and pit-to-pit both route to width
+  const chestCmd = extractCommand(/\b(?:chest|pit\s*(?:to|2)?\s*pit|p2p)\s+(.+?)\s+period\b/i);
+  if (chestCmd && !measurements['width']) measurements['width'] = chestCmd.replace(/[^0-9.]/g, '');
 
   const lengthCmd = extractCommand(/\blength\s+(.+?)\s+period\b/i);
   if (lengthCmd) measurements['length'] = lengthCmd.replace(/[^0-9.]/g, '');
@@ -510,8 +527,8 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
       const secMatch = lower.match(new RegExp(`\\b${colorFound.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b\\s+(?:and\\s+)?(\\w+(?:\\s+\\w+)?)`, 'i'));
       const potentialSec = secMatch ? secMatch[1].trim() : null;
       const secColor = potentialSec && sortedColorWords.find(c => c.toLowerCase() === potentialSec.toLowerCase()) ? potentialSec : null;
-      extracted.color = toTitleCase(colorFound);
-      if (secColor) extracted.secondaryColor = toTitleCase(secColor);
+      extracted.color = toTitleCase(stripColorModifiers(colorFound));
+      if (secColor) extracted.secondaryColor = toTitleCase(stripColorModifiers(secColor));
     }
   }
 
@@ -629,8 +646,8 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
 export function formatVoiceTranscript(voiceDesc: string): string {
   const FIELD_TRIGGERS = [
     'brand', 'model', 'size', 'colo(?:u?r)?', 'material', 'fabric',
-    'condition', 'era', 'style', 'gender', 'price',
-    'flaws?', 'care', 'width', 'length', 'waist', 'shoulder', 'sleeve',
+    'condition', 'era', 'style', 'type', 'gender', 'price',
+    'flaws?', 'care', 'width', 'chest', 'pit\s*(?:to|2)?\s*pit', 'p2p', 'length', 'waist', 'shoulder', 'sleeve',
     'inseam', 'outseam', 'leg\\s+opening', 'tags?', 'title',
     // secondary/second/accent accept an optional " color" suffix
     'secondary(?:\\s+colou?r?)?', 'second(?:\\s+colou?r?)?', 'accent(?:\\s+colou?r?)?',
@@ -651,8 +668,8 @@ export function formatVoiceTranscript(voiceDesc: string): string {
 export function stripVoiceCommands(voiceDesc: string): string {
   const FIELD_TRIGGERS = [
     'brand', 'model', 'size', 'colo(?:u?r)?', 'material', 'fabric',
-    'condition', 'era', 'style', 'gender', 'price',
-    'flaws?', 'care', 'width', 'length', 'waist', 'shoulder', 'sleeve',
+    'condition', 'era', 'style', 'type', 'gender', 'price',
+    'flaws?', 'care', 'width', 'chest', 'pit\s*(?:to|2)?\s*pit', 'p2p', 'length', 'waist', 'shoulder', 'sleeve',
     'inseam', 'outseam', 'leg\\s+opening', 'tags?', 'title',
     'secondary(?:\\s+colou?r?)?', 'second(?:\\s+colou?r?)?', 'accent(?:\\s+colou?r?)?',
   ].join('|');
@@ -678,6 +695,14 @@ export function stripVoiceCommands(voiceDesc: string): string {
 }
 
 // ── Normalizer helpers ────────────────────────────────────────────────────────
+
+/** Strip descriptor adjectives from a color phrase: "Faded Out White" → "White" */
+function stripColorModifiers(raw: string): string {
+  return raw
+    .replace(/\b(?:faded\s+out|faded|washed\s+out|washed|sun[\s-]?faded|acid[\s-]?washed|slightly|very|super|deep|dark|light|bright|pale|dusty|muted|soft|rich|heathered?|over[\s-]?dyed)\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
 
 function normalizeCondition(raw: string): string {
   const c = raw.toLowerCase().replace(/\bperiod\b/gi, '').trim();
@@ -721,6 +746,19 @@ function toTitleCase(str: string): string {
     .trim();
 }
 
+/**
+ * Extract the primary (first) material name from a composition string.
+ * "50% Cotton 25% Nylon 25% Rayon" → "Cotton"
+ * "Cotton" → "Cotton"
+ */
+export function primaryMaterial(raw: string): string {
+  if (!raw) return '';
+  // Strip a leading percentage like "50% " then take the first word(s) up to the next digit/percent
+  const stripped = raw.replace(/^\d+\s*%\s*/i, '');
+  const firstMat = stripped.match(/^([A-Za-z][A-Za-z\s\-]*?)(?=\s*\d|\s*%|$)/);
+  return firstMat ? firstMat[1].trim() : raw.trim();
+}
+
 function normalizeSizeValue(raw: string): string {
   const trimmed = raw.trim();
 
@@ -738,19 +776,21 @@ function normalizeSizeValue(raw: string): string {
     // XS
     extrasmall: 'XS', xsmall: 'XS', xs: 'XS',
     xxsmall: 'XXS', extraextrasmall: 'XXS', doubleextrasmall: 'XXS', xxs: 'XXS',
-    xxxsmall: '3XS', tripleextrasmall: '3XS', xxxs: '3XS',
+    xxxsmall: 'XXXS', tripleextrasmall: 'XXXS', extraextraextrasmall: 'XXXS', xxxs: 'XXXS',
     // S / M / L
     small: 'S', s: 'S',
     medium: 'M', m: 'M',
     large: 'L', l: 'L',
     // XL
     extralarge: 'XL', xlarge: 'XL', xl: 'XL',
-    // XXL
+    // XXL — accept "extra extra large", "double extra large", "double x large", "xx large", "2xl"
     xxlarge: 'XXL', extraextralarge: 'XXL', doubleextralarge: 'XXL',
+    doublexlarge: 'XXL', extraxlarge: 'XXL',
     '2xlarge': 'XXL', '2xl': 'XXL', xxl: 'XXL',
-    // 3XL
-    xxxlarge: '3XL', tripleextralarge: '3XL',
-    '3xlarge': '3XL', '3xl': '3XL', xxxl: '3XL',
+    // XXXL — accept "triple extra large", "extra extra extra large", "3xl", "triple x large"
+    xxxlarge: 'XXXL', tripleextralarge: 'XXXL',
+    extraextraextralarge: 'XXXL', triplexlarge: 'XXXL',
+    '3xlarge': 'XXXL', '3xl': 'XXXL', xxxl: 'XXXL',
     // 4XL
     '4xlarge': '4XL', '4xl': '4XL', xxxxl: '4XL', quadrupleextralarge: '4XL',
     // 5XL
@@ -783,26 +823,27 @@ export const generateProductDescription = async (
     ? extractFieldsFromVoice(context.voiceDescription, context.category) 
     : {};
   
-  // Merge extracted with provided context (provided takes precedence)
+  // Merge extracted with provided context — voice-extracted fields win over passed-in form values
+  // so regenerate always reflects the latest voice content, with form values as fallback.
   const mergedContext = {
     ...context,
-    // Only use extracted if field is empty
-    customDescription: context.customDescription || extracted.customDescription,
-    brand: context.brand || extracted.brand,
-    color: context.color || extracted.color,
-    secondaryColor: context.secondaryColor || extracted.secondaryColor,
-    size: context.size || extracted.size,
-    material: context.material || extracted.material,
-    condition: context.condition || extracted.condition,
-    era: context.era || extracted.era,
-    style: context.style || extracted.style,
-    flaws: context.flaws || extracted.flaws,
-    care: context.care || extracted.care,
-    modelName: context.modelName || extracted.modelName,
-    gender: context.gender || extracted.gender,
-    price: context.price || extracted.price,
-    tags: context.tags || extracted.tags,
-    measurements: context.measurements || extracted.measurements,
+    customDescription: extracted.customDescription || context.customDescription,
+    brand:             extracted.brand             || context.brand,
+    color:             extracted.color             || context.color,
+    secondaryColor:    extracted.secondaryColor    || context.secondaryColor,
+    size:              extracted.size              || context.size,
+    material:          extracted.material          || context.material,
+    condition:         extracted.condition         || context.condition,
+    era:               extracted.era               || context.era,
+    style:             extracted.style             || context.style,
+    type:              extracted.type              || context.type,
+    flaws:             extracted.flaws             || context.flaws,
+    care:              extracted.care              || context.care,
+    modelName:         extracted.modelName         || context.modelName,
+    gender:            extracted.gender            || context.gender,
+    price:             extracted.price             || context.price,
+    tags:              extracted.tags              || context.tags,
+    measurements:      extracted.measurements      || context.measurements,
   };
   
   const result = createFallbackDescription(mergedContext);
@@ -866,6 +907,23 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
     
     description += '\n';
   }
+
+  // PART 3b: Material composition — show full "50% Cotton 25% Nylon 25% Rayon" if available
+  {
+    const voiceMatMatch = (context.voiceDescription || '')
+      .match(/\b(?:material|fabric)\s+(.+?)\s+period\b/i);
+    const rawMaterial = voiceMatMatch ? voiceMatMatch[1].trim() : context.material || '';
+    if (rawMaterial) {
+      description += `Material: ${toTitleCase(rawMaterial)}\n\n`;
+    }
+  }
+
+  // PART 4b: Washing disclosure + condition
+  description += 'Every Garment goes through a thorough washing process before being photographed.\n';
+  if (context.condition) {
+    description += `Condition: ${context.condition}\n`;
+  }
+  description += '\n';
 
   // PART 5: Call to action
   description += 'BUNDLE AND SAVE!!!!!!\n\n';
@@ -1157,9 +1215,10 @@ function generateTitleFromFields(context: ProductContext): string {
   const SIZE    = dedupeTitle(clean(context.size));
   const BRAND   = clean(context.brand);   // do NOT dedupe — proper noun (e.g. "American Vintage")
   const STYLE   = dedupeTitle(clean(context.style));
-  const COLOR   = dedupeTitle(clean(context.color));
-  const MATERIAL = dedupeTitle(clean(context.material));
   const SUBJECT  = clean(context.modelName); // do NOT dedupe — proper noun (band/team/artist name)
+  // TYPE from productType/type field: the specific garment noun ("Crewneck", "Cargos", etc.)
+  // It replaces or refines the auto-detected item word in the title formula.
+  const TYPE    = dedupeTitle(clean(context.type));
 
   // ERA is always "Vintage Y2K" in this app (the constant prefix)
   const ERA = 'Vintage Y2K';
@@ -1226,25 +1285,26 @@ function generateTitleFromFields(context: ProductContext): string {
       .toLowerCase()
       .replace(/\bperiod\b/gi, '')           // strip voice delimiter
       .replace(/^[xsml\d]+[\s\-]+/i, '')     // strip leading size prefix ("L -", "XL-")
-      .replace(/\bvintage\b|\by2k\b/gi, '')  // already in ERA prefix
       .replace(/[,;:.!?()\-\/]/g, ' ')       // strip punctuation
       .replace(/\s{2,}/g, ' ')
       .trim();
-    // Remove brand name to avoid duplication
+    // Remove brand name BEFORE stripping "vintage" so "American Vintage" is removed as a unit,
+    // not mangled into "American" first.
     if (BRAND) {
       descText = descText
         .replace(new RegExp('\\b' + BRAND.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi'), '')
         .replace(/\s{2,}/g, ' ').trim();
     }
+    descText = descText.replace(/\bvintage\b|\by2k\b/gi, '').replace(/\s{2,}/g, ' ').trim();
     // Split, filter stop words, dedupe while preserving order
     const rawWords = descText.split(/\s+/).filter(w => w.length > 1 && !STOP_WORDS.has(w));
     const seen = new Set<string>();
     const unique: string[] = [];
     for (const w of rawWords) { if (!seen.has(w)) { seen.add(w); unique.push(w); } }
-    // Assemble with 60-char word-boundary cap
+    // Assemble with 60-char word-boundary cap — size, ERA, brand, TYPE, then description keywords
     const base = displaySize
-      ? `${displaySize} - Vintage Y2K${BRAND ? ` ${BRAND}` : ''}`
-      : `Vintage Y2K${BRAND ? ` ${BRAND}` : ''}`;
+      ? `${displaySize} - Vintage Y2K${BRAND ? ` ${BRAND}` : ''}${TYPE ? ` ${TYPE}` : ''}`
+      : `Vintage Y2K${BRAND ? ` ${BRAND}` : ''}${TYPE ? ` ${TYPE}` : ''}`;
     let customTitle = base;
     for (const w of unique) {
       const next = `${customTitle} ${w}`;
@@ -1271,7 +1331,6 @@ function generateTitleFromFields(context: ProductContext): string {
   let v: number;
   if (SUBJECT && !BRAND)      v = 2;          // subject-only scenario
   else if (SUBJECT && BRAND)  v = Math.random() < 0.5 ? 2 : 1;
-  else if (COLOR && MATERIAL) v = 3;
   else if (!STYLE && !DECADE) v = 6;          // minimal fallback
   else v = Math.floor(Math.random() * 4) + 1; // V1-V4 for most cases
 
@@ -1280,91 +1339,91 @@ function generateTitleFromFields(context: ProductContext): string {
 
   // ── TEES ──────────────────────────────────────────────────────────────────
   if (isTee) {
-    const item = isWomens ? 'womens t-shirt' : isKids ? 'youth t-shirt' : 't-shirt';
+    const item = TYPE || (isWomens ? 'womens t-shirt' : isKids ? 'youth t-shirt' : 't-shirt');
     if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
     else if (v === 2) title = asm(displaySize, ERA, SUBJECT, BRAND, DECADE, item);
-    else if (v === 3) title = asm(displaySize, ERA, BRAND, COLOR, MATERIAL, DECADE, item);
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
     else if (v === 4) title = asm(displaySize, ERA, BRAND, STYLE, item);
     else if (v === 5) title = asm(displaySize, ERA, BRAND, DECADE, item);
     else              title = asm(displaySize, ERA, SUBJECT, STYLE, DECADE, item);
   }
   // ── SHIRTS ────────────────────────────────────────────────────────────────
   else if (isShirt) {
-    const item = isWomens ? 'womens shirt' : isKids ? 'youth shirt' : 'shirt';
+    const item = TYPE || (isWomens ? 'womens shirt' : isKids ? 'youth shirt' : 'shirt');
     if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
-    else if (v === 2) title = asm(displaySize, ERA, BRAND, MATERIAL, STYLE, DECADE, item);
-    else if (v === 3) title = asm(displaySize, ERA, BRAND, COLOR, STYLE, DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
     else if (v === 4) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
     else if (v === 5) title = asm(displaySize, ERA, BRAND, DECADE, item);
     else              title = asm(displaySize, ERA, SUBJECT, BRAND, STYLE, item);
   }
   // ── SWEATSHIRTS ───────────────────────────────────────────────────────────
   else if (isSweatshirt) {
-    const item = isWomens ? 'womens sweatshirt' : isKids ? 'youth sweatshirt' : 'sweatshirt';
+    const item = TYPE || (isWomens ? 'womens sweatshirt' : isKids ? 'youth sweatshirt' : 'sweatshirt');
     if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
     else if (v === 2) title = asm(displaySize, ERA, SUBJECT, BRAND, DECADE, item);
-    else if (v === 3) title = asm(displaySize, ERA, BRAND, MATERIAL, STYLE, DECADE, item);
-    else if (v === 4) title = asm(displaySize, ERA, BRAND, COLOR, 'heavyweight', DECADE, item);
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
+    else if (v === 4) title = asm(displaySize, ERA, BRAND, 'heavyweight', DECADE, item);
     else if (v === 5) title = asm(displaySize, ERA, BRAND, STYLE, item);
     else              title = asm(displaySize, ERA, SUBJECT, BRAND, DECADE, item);
   }
   // ── HOODIES ───────────────────────────────────────────────────────────────
   else if (isHoodie) {
-    const item = isWomens ? 'womens hoodie' : isKids ? 'youth hoodie' : 'hoodie';
+    const item = TYPE || (isWomens ? 'womens hoodie' : isKids ? 'youth hoodie' : 'hoodie');
     if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
-    else if (v === 2) title = asm(displaySize, ERA, BRAND, MATERIAL, STYLE, DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
     else if (v === 3) title = asm(displaySize, ERA, BRAND, STYLE, 'zip up', DECADE, item);
-    else if (v === 4) title = asm(displaySize, ERA, BRAND, COLOR, 'pullover', DECADE, item);
+    else if (v === 4) title = asm(displaySize, ERA, BRAND, 'pullover', DECADE, item);
     else if (v === 5) title = asm(displaySize, ERA, SUBJECT, STYLE, DECADE, item);
     else              title = asm(displaySize, ERA, BRAND, DECADE, item);
   }
   // ── JACKETS ───────────────────────────────────────────────────────────────
   else if (isJacket) {
-    const item = isWomens ? 'womens jacket' : isKids ? 'youth jacket' : 'jacket';
+    const item = TYPE || (isWomens ? 'womens jacket' : isKids ? 'youth jacket' : 'jacket');
     if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
-    else if (v === 2) title = asm(displaySize, ERA, BRAND, MATERIAL, STYLE, DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
     else if (v === 3) title = asm(displaySize, ERA, SUBJECT, STYLE, DECADE, item);
     else if (v === 4) title = asm(displaySize, ERA, BRAND, STYLE, 'workwear', DECADE, item);
-    else if (v === 5) title = asm(displaySize, ERA, BRAND, COLOR, STYLE, DECADE, item);
+    else if (v === 5) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
     else              title = asm(displaySize, ERA, BRAND, DECADE, item);
   }
   // ── PANTS ─────────────────────────────────────────────────────────────────
   else if (isPants) {
-    const item = isWomens ? 'womens pants' : isKids ? 'youth pants' : 'pants';
+    const item = TYPE || (isWomens ? 'womens pants' : isKids ? 'youth pants' : 'pants');
     if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
-    else if (v === 2) title = asm(displaySize, ERA, BRAND, MATERIAL, STYLE, DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
     else if (v === 3) title = asm(displaySize, ERA, BRAND, 'baggy', STYLE, DECADE, item);
-    else if (v === 4) title = asm(displaySize, ERA, BRAND, COLOR, MATERIAL, DECADE, item);
+    else if (v === 4) title = asm(displaySize, ERA, BRAND, DECADE, item);
     else if (v === 5) title = asm(displaySize, ERA, BRAND, DECADE, item);
     else              title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
   }
   // ── JEANS ─────────────────────────────────────────────────────────────────
   else if (isJeans) {
-    const item = isWomens ? 'womens jeans' : isKids ? 'youth jeans' : 'jeans';
+    const item = TYPE || (isWomens ? 'womens jeans' : isKids ? 'youth jeans' : 'jeans');
     if      (v === 1) title = asm(displaySize, ERA, BRAND, SUBJECT, STYLE, DECADE, item);
-    else if (v === 2) title = asm(displaySize, ERA, BRAND, COLOR, STYLE, DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
     else if (v === 3) title = asm(displaySize, ERA, BRAND, 'baggy', STYLE, DECADE, item);
     else if (v === 4) title = asm(displaySize, ERA, BRAND, DECADE, item);
     else if (v === 5) title = asm(displaySize, ERA, BRAND, 'faded', DECADE, item);
-    else              title = asm(displaySize, ERA, BRAND, STYLE, MATERIAL, 'carpenter', DECADE, item);
+    else              title = asm(displaySize, ERA, BRAND, STYLE, 'carpenter', DECADE, item);
   }
   // ── SHORTS ────────────────────────────────────────────────────────────────
   else if (isShorts) {
-    const item = isWomens ? 'womens shorts' : isKids ? 'youth shorts' : 'shorts';
+    const item = TYPE || (isWomens ? 'womens shorts' : isKids ? 'youth shorts' : 'shorts');
     if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
-    else if (v === 2) title = asm(displaySize, ERA, BRAND, MATERIAL, STYLE, DECADE, item);
-    else if (v === 3) title = asm(displaySize, ERA, BRAND, COLOR, STYLE, DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
     else if (v === 4) title = asm(displaySize, ERA, BRAND, STYLE, 'hip hop', DECADE, item);
     else if (v === 5) title = asm(displaySize, ERA, BRAND, DECADE, item);
     else              title = asm(displaySize, ERA, SUBJECT, STYLE, DECADE, item);
   }
   // ── JERSEYS ───────────────────────────────────────────────────────────────
   else if (isJersey) {
-    const item = 'jersey';
+    const item = TYPE || 'jersey';
     if      (v === 1) title = asm(displaySize, ERA, SUBJECT, BRAND, DECADE, item);
     else if (v === 2) title = asm(displaySize, ERA, SUBJECT, STYLE, DECADE, item);
     else if (v === 3) title = asm(displaySize, ERA, BRAND, STYLE, SUBJECT, DECADE, item);
-    else if (v === 4) title = asm(displaySize, ERA, SUBJECT, COLOR, DECADE, item);
+    else if (v === 4) title = asm(displaySize, ERA, SUBJECT, DECADE, item);
     else if (v === 5) title = asm(displaySize, ERA, SUBJECT, DECADE, item);
     else              title = asm(displaySize, ERA, SUBJECT, BRAND, STYLE, item);
   }
@@ -1383,66 +1442,70 @@ function generateTitleFromFields(context: ProductContext): string {
       isTrucker ? 'trucker'  :
       isBucket  ? 'bucket hat':
       isVisor   ? 'visor'    : 'hat';
-    const hatWord = isWomens ? `womens ${hatBase}` : hatBase;
+    const hatWord = TYPE || (isWomens ? `womens ${hatBase}` : hatBase);
     if      (v === 1) title = asm(displaySize, ERA, SUBJECT, STYLE, DECADE, hatWord);
     else if (v === 2) title = asm(displaySize, ERA, BRAND,   STYLE, DECADE, hatWord);
     else if (v === 3) title = asm(displaySize, ERA, SUBJECT, BRAND, STYLE, DECADE, hatWord);
-    else if (v === 4) title = asm(displaySize, ERA, SUBJECT, MATERIAL, STYLE, DECADE, hatWord);
+    else if (v === 4) title = asm(displaySize, ERA, SUBJECT, STYLE, DECADE, hatWord);
     else if (v === 5) title = asm(displaySize, ERA, BRAND,   STYLE, DECADE, hatWord);
     else              title = asm(displaySize, ERA, SUBJECT, DECADE, hatWord);
   }
   // ── ACCESSORIES / BAGS ────────────────────────────────────────────────────
   else if (isAccessory) {
-    const item = isWomens ? 'womens bag' : 'bag';
+    const item = TYPE || (isWomens ? 'womens bag' : 'bag');
     if      (v === 1) title = asm('', ERA, BRAND,   STYLE,    DECADE, item);
-    else if (v === 2) title = asm('', ERA, BRAND,   COLOR,    MATERIAL, DECADE, item);
+    else if (v === 2) title = asm('', ERA, BRAND,   STYLE,    DECADE, item);
     else if (v === 3) title = asm('', ERA, SUBJECT, STYLE,    DECADE, item);
-    else if (v === 4) title = asm('', ERA, BRAND,   MATERIAL, DECADE, item);
-    else if (v === 5) title = asm('', ERA, BRAND,   STYLE,    COLOR, item);
+    else if (v === 4) title = asm('', ERA, BRAND,   DECADE, item);
+    else if (v === 5) title = asm('', ERA, BRAND,   STYLE,    item);
     else              title = asm('', ERA, SUBJECT, STYLE,    'accessory');
   }
   // ── SKIRTS ────────────────────────────────────────────────────────────────
   else if (isSkirt) {
-    if      (v === 1) title = asm(displaySize, ERA, BRAND, MATERIAL, STYLE, DECADE, 'womens skirt');
-    else if (v === 2) title = asm(displaySize, ERA, BRAND, COLOR,    MATERIAL, DECADE, 'womens skirt');
-    else if (v === 3) title = asm(displaySize, ERA, BRAND, STYLE,    DECADE, 'womens skirt');
-    else if (v === 4) title = asm(displaySize, ERA, BRAND, DECADE, 'womens skirt');
-    else if (v === 5) title = asm(displaySize, ERA, SUBJECT, STYLE, DECADE, 'womens skirt');
-    else              title = asm(displaySize, ERA, BRAND, MATERIAL, 'mini', DECADE, 'womens skirt');
+    const item = TYPE || 'womens skirt';
+    if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, STYLE,    DECADE, item);
+    else if (v === 4) title = asm(displaySize, ERA, BRAND, DECADE, item);
+    else if (v === 5) title = asm(displaySize, ERA, SUBJECT, STYLE, DECADE, item);
+    else              title = asm(displaySize, ERA, BRAND, 'mini', DECADE, item);
   }
   // ── DRESSES ───────────────────────────────────────────────────────────────
   else if (isDress) {
-    if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE,    DECADE, 'womens dress');
-    else if (v === 2) title = asm(displaySize, ERA, BRAND, COLOR,    MATERIAL, DECADE, 'womens dress');
-    else if (v === 3) title = asm(displaySize, ERA, SUBJECT, STYLE,  DECADE, 'womens dress');
-    else if (v === 4) title = asm(displaySize, ERA, BRAND, STYLE,    'midi', DECADE, 'womens dress');
-    else if (v === 5) title = asm(displaySize, ERA, BRAND, DECADE, 'womens dress');
-    else              title = asm(displaySize, ERA, BRAND, COLOR,    STYLE, 'womens dress');
+    const item = TYPE || 'womens dress';
+    if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE,    DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
+    else if (v === 3) title = asm(displaySize, ERA, SUBJECT, STYLE,  DECADE, item);
+    else if (v === 4) title = asm(displaySize, ERA, BRAND, STYLE,    'midi', DECADE, item);
+    else if (v === 5) title = asm(displaySize, ERA, BRAND, DECADE, item);
+    else              title = asm(displaySize, ERA, BRAND, STYLE, item);
   }
   // ── BODYSUITS ─────────────────────────────────────────────────────────────
   else if (isBodysuit) {
-    if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE,    DECADE, 'womens bodysuit');
-    else if (v === 2) title = asm(displaySize, ERA, BRAND, COLOR,    MATERIAL, DECADE, 'womens bodysuit');
-    else if (v === 3) title = asm(displaySize, ERA, BRAND, STYLE,    COLOR, 'womens bodysuit');
-    else if (v === 4) title = asm(displaySize, ERA, BRAND, DECADE, 'womens bodysuit');
-    else if (v === 5) title = asm(displaySize, ERA, BRAND, MATERIAL, DECADE, 'womens bodysuit');
-    else              title = asm(displaySize, ERA, BRAND, COLOR,    'snap', DECADE, 'womens bodysuit');
+    const item = TYPE || 'womens bodysuit';
+    if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE,    DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, STYLE,    DECADE, item);
+    else if (v === 4) title = asm(displaySize, ERA, BRAND, DECADE, item);
+    else if (v === 5) title = asm(displaySize, ERA, BRAND, DECADE, item);
+    else              title = asm(displaySize, ERA, BRAND, 'snap', DECADE, item);
   }
   // ── TOPS (women) ──────────────────────────────────────────────────────────
   else if (isTop) {
-    if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE,    DECADE, 'womens top');
-    else if (v === 2) title = asm(displaySize, ERA, BRAND, MATERIAL, STYLE, DECADE, 'womens top');
-    else if (v === 3) title = asm(displaySize, ERA, BRAND, COLOR,    STYLE, DECADE, 'womens top');
-    else if (v === 4) title = asm(displaySize, ERA, BRAND, DECADE, 'womens top');
-    else if (v === 5) title = asm(displaySize, ERA, SUBJECT, STYLE,  DECADE, 'womens top');
-    else              title = asm(displaySize, ERA, BRAND, MATERIAL, COLOR, 'womens top');
+    const item = TYPE || 'womens top';
+    if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE,    DECADE, item);
+    else if (v === 2) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
+    else if (v === 4) title = asm(displaySize, ERA, BRAND, DECADE, item);
+    else if (v === 5) title = asm(displaySize, ERA, SUBJECT, STYLE,  DECADE, item);
+    else              title = asm(displaySize, ERA, BRAND, STYLE, item);
   }
   // ── GENERIC FALLBACK ──────────────────────────────────────────────────────
   else {
-    const item = clean(context.category) || 'item';
+    const item = TYPE || clean(context.category) || 'item';
     if      (v === 1) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
     else if (v === 2) title = asm(displaySize, ERA, SUBJECT, BRAND, DECADE, item);
-    else if (v === 3) title = asm(displaySize, ERA, BRAND, COLOR, STYLE, DECADE, item);
+    else if (v === 3) title = asm(displaySize, ERA, BRAND, STYLE, DECADE, item);
     else              title = asm(displaySize, ERA, BRAND, DECADE, item);
   }
 
@@ -1676,24 +1739,35 @@ function generateTagsFromFields(context: ProductContext): string[] {
     if (context.brand) tags.push(context.brand);
     if (context.color) tags.push(...context.color.split(/[\s\/]+/).filter(Boolean));
     if (context.style) tags.push(context.style);
-    return Array.from(new Set(tags)).slice(0, 8);
+    const result = Array.from(new Set(tags)).slice(0, 8);
+    if (result.length < 4) result.push(...pullTagsFromDescription(context));
+    return Array.from(new Set(result)).slice(0, 8);
   }
 
-  // Last resort: build from filled fields
+  // Last resort: build from filled fields — no size, no material
   const tags: string[] = [];
-  if (context.era) {
-    const eraParts = context.era.split(/[\s\/]+/).filter(Boolean);
-    tags.push(...eraParts);
-  }
+  if (context.era) tags.push(...context.era.split(/[\s\/]+/).filter(Boolean));
   if (context.brand) tags.push(context.brand);
   if (context.category) tags.push(context.category);
-  if (context.color) {
-    const colorParts = context.color.split(/[\s\/]+/).filter(Boolean);
-    tags.push(...colorParts);
-  }
-  if (context.size) tags.push(context.size);
+  if (context.color) tags.push(...context.color.split(/[\s\/]+/).filter(Boolean));
   if (context.style) tags.push(context.style);
-  if (context.material) tags.push(context.material);
+  if (tags.length < 4) tags.push(...pullTagsFromDescription(context));
 
   return Array.from(new Set(tags)).slice(0, 8);
+}
+
+function pullTagsFromDescription(context: ProductContext): string[] {
+  // 'vintage' and 'retro' intentionally excluded — every item is vintage,
+  // so they add no SEO value and collide with brand names like "American Vintage".
+  const AESTHETIC_WORDS = [
+    'y2k', 'streetwear', 'grunge', 'skate', 'surf', 'hip hop',
+    'embroidered', 'graphic', 'spellout', 'band tee', 'rap', 'bootleg', 'workwear',
+    'athletic', 'western', 'biker', 'preppy', 'indie', 'alternative', 'collegiate',
+  ];
+  let src = [context.voiceDescription, context.customDescription].filter(Boolean).join(' ').toLowerCase();
+  // Strip brand name so words within a brand (e.g. "Vintage" in "American Vintage") don't false-match
+  if (context.brand) {
+    src = src.replace(new RegExp('\\b' + context.brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi'), '');
+  }
+  return AESTHETIC_WORDS.filter(w => src.includes(w));
 }
