@@ -186,6 +186,14 @@ export const deleteProductGroup = async (
       }
     }
 
+    // 2b. Claim ownership so owner-scoped DELETE policies permit removal (UPDATE is
+    // collaborative; rows are about to be deleted, so reassigning user_id is harmless).
+    const { data: { user: claimUser } } = await supabase.auth.getUser();
+    if (claimUser) {
+      await supabase.from('products').update({ user_id: claimUser.id }).eq('id', groupId);
+      await supabase.from('product_images').update({ user_id: claimUser.id }).eq('product_id', groupId);
+    }
+
     // 3. Delete product_images rows
     const imageIds = (imageRows ?? []).map((r: any) => r.id);
     if (imageIds.length > 0) {

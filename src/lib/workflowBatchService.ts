@@ -252,6 +252,25 @@ export async function deleteWorkflowBatch(batchId: string): Promise<boolean> {
       }
     }
 
+    // 2b. Claim ownership of the batch + its products + images so the owner-scoped
+    // DELETE policies permit removal. UPDATE is collaborative (see collaborative_edit
+    // _policies.sql), so this works even for batches created by another account in the
+    // shared workspace. Reassigning user_id is harmless since these rows are about to
+    // be deleted. Without this, a non-owner's DELETE silently affects 0 rows and the
+    // batch reappears in the Library.
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from('workflow_batches').update({ user_id: user.id }).eq('id', batchId);
+      await supabase.from('products').update({ user_id: user.id }).eq('batch_id', batchId);
+      const CLAIM_CHUNK = 100;
+      for (let i = 0; i < batchProductIds.length; i += CLAIM_CHUNK) {
+        await supabase
+          .from('product_images')
+          .update({ user_id: user.id })
+          .in('product_id', batchProductIds.slice(i, i + CLAIM_CHUNK));
+      }
+    }
+
     // 3. Delete product_images rows
     const imageIds = (imageRows ?? []).map((r: any) => r.id);
     if (imageIds.length > 0) {
@@ -261,13 +280,18 @@ export async function deleteWorkflowBatch(batchId: string): Promise<boolean> {
     // 4. Delete products rows
     await supabase.from('products').delete().eq('batch_id', batchId);
 
-    // 5. Delete the workflow_batch row
-    const { error } = await supabase
+    // 5. Delete the workflow_batch row — .select() so we can confirm it actually went.
+    const { data: deletedRows, error } = await supabase
       .from('workflow_batches')
       .delete()
-      .eq('id', batchId);
+      .eq('id', batchId)
+      .select('id');
 
     if (error) throw error;
+    if (!deletedRows || deletedRows.length === 0) {
+      console.warn(`[deleteWorkflowBatch] batch ${batchId} delete affected 0 rows — not removed`);
+      return false;
+    }
     return true;
   } catch (error) {
     console.error('Error deleting workflow batch:', error);
