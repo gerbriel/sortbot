@@ -11,6 +11,7 @@ import {
 } from '../lib/libraryService';
 import { fetchWorkflowBatchesMeta } from '../lib/workflowBatchService';
 import { supabase } from '../lib/supabase';
+import { filterUnreferencedStoragePaths } from '../lib/storageSafety';
 import { Folder, Calendar, Image, Layers, Tag, ArrowRight, Trash2, X, Grid3x3, Package, Edit2, Copy, Check, Search, Plus, Merge, ChevronDown, ChevronRight, Wrench } from 'lucide-react';
 import type { ClothingItem } from '../App';
 import { log } from '../lib/debugLogger';
@@ -1605,10 +1606,17 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         // ── Step 2: delete storage files ──────────────────────────────────
         const storagePaths = (imgRows ?? []).map((r: any) => r.storage_path).filter(Boolean) as string[];
         if (storagePaths.length > 0) {
-          const { error: storageErr } = await supabase.storage.from('product-images').remove(storagePaths);
+          // Only delete files no OTHER batch/product still references (duplicates share files).
+          const safePaths = await filterUnreferencedStoragePaths(storagePaths, productIds);
+          if (isDebugging && safePaths.length < storagePaths.length) {
+            addTrace('warn', 'storage.remove guard', `kept ${storagePaths.length - safePaths.length} file(s) referenced elsewhere`);
+          }
+          const { error: storageErr } = safePaths.length > 0
+            ? await supabase.storage.from('product-images').remove(safePaths)
+            : { error: null };
           if (isDebugging) {
             if (storageErr) addTrace('error', 'storage.remove', `ERROR: ${storageErr.message}`);
-            else addTrace('ok', 'storage.remove', `removed ${storagePaths.length} files`);
+            else addTrace('ok', 'storage.remove', `removed ${safePaths.length} files`);
           }
         } else if (isDebugging) {
           addTrace('info', 'storage.remove', 'no storage paths — skipped');
@@ -1699,8 +1707,12 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
             .from('product_images').select('id, storage_path').in('id', chunk);
           const orphanPaths = (orphanRows ?? []).map((r: any) => r.storage_path).filter(Boolean) as string[];
           if (orphanPaths.length > 0) {
-            await supabase.storage.from('product-images').remove(orphanPaths);
-            if (isDebugging) addTrace('ok', 'orphan storage.remove', `removed ${orphanPaths.length} files`);
+            // Guard: skip files still referenced by any product outside this deletion.
+            const safeOrphanPaths = await filterUnreferencedStoragePaths(orphanPaths, productIds);
+            if (safeOrphanPaths.length > 0) {
+              await supabase.storage.from('product-images').remove(safeOrphanPaths);
+            }
+            if (isDebugging) addTrace('ok', 'orphan storage.remove', `removed ${safeOrphanPaths.length} of ${orphanPaths.length} files`);
           }
 
           const { data: delOrphanData, error: delOrphanErr } = await supabase

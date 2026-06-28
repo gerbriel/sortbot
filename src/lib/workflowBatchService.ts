@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import type { ClothingItem } from '../App';
 import { log } from './debugLogger';
+import { filterUnreferencedStoragePaths } from './storageSafety';
 
 /**
  * Minimal item stored in workflow_state — only what's needed to restore
@@ -205,13 +206,12 @@ export async function removeItemsFromWorkflowBatch(
 export async function deleteWorkflowBatch(batchId: string): Promise<boolean> {
   try {
     // 1. Collect storage paths for all images belonging to this batch's products
+    const batchProductIds =
+      (await supabase.from('products').select('id').eq('batch_id', batchId)).data?.map((r: any) => r.id) ?? [];
     const { data: imageRows } = await supabase
       .from('product_images')
       .select('id, storage_path')
-      .in(
-        'product_id',
-        (await supabase.from('products').select('id').eq('batch_id', batchId)).data?.map((r: any) => r.id) ?? []
-      );
+      .in('product_id', batchProductIds);
 
     // 1b. Also collect originalStoragePath values cached in the workflow_state JSON
     // (these are NOT stored as product_images rows — they're backup copies of pre-crop
@@ -229,13 +229,22 @@ export async function deleteWorkflowBatch(batchId: string): Promise<boolean> {
       .map((i: any) => i.originalStoragePath)
       .filter(Boolean) as string[];
 
-    // 2. Delete files from Storage (live images + cached originals)
+    // 2. Delete files from Storage (live images + cached originals) — but ONLY files
+    // that no OTHER batch's product_images row still references. Duplicated batches
+    // share storage files, so deleting blindly would orphan another batch's images.
     const storagePaths = (imageRows ?? [])
       .map((r: any) => r.storage_path)
       .filter(Boolean) as string[];
     const allPaths = [...new Set([...storagePaths, ...originalPaths])];
     if (allPaths.length > 0) {
-      await supabase.storage.from('product-images').remove(allPaths);
+      const safePaths = await filterUnreferencedStoragePaths(allPaths, batchProductIds);
+      const sharedCount = allPaths.length - safePaths.length;
+      if (sharedCount > 0) {
+        console.warn(`[deleteWorkflowBatch] kept ${sharedCount} storage file(s) still referenced by other batches`);
+      }
+      if (safePaths.length > 0) {
+        await supabase.storage.from('product-images').remove(safePaths);
+      }
     }
 
     // 3. Delete product_images rows

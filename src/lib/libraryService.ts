@@ -8,6 +8,7 @@ import { supabase } from './supabase';
 import { fetchWorkflowBatches, updateWorkflowBatch, deleteWorkflowBatch } from './workflowBatchService';
 import type { WorkflowBatch } from './workflowBatchService';
 import { log } from './debugLogger';
+import { filterUnreferencedStoragePaths } from './storageSafety';
 
 // ============================================================================
 // FETCH SAVED PRODUCTS AND IMAGES FROM DATABASE
@@ -169,12 +170,20 @@ export const deleteProductGroup = async (
       .select('id, storage_path')
       .eq('product_id', groupId);
 
-    // 2. Delete files from Storage
+    // 2. Delete files from Storage — but only files no OTHER product still references.
+    // Duplicated batches share storage files; deleting blindly orphans another's images.
     const storagePaths = (imageRows ?? [])
       .map((r: any) => r.storage_path)
       .filter(Boolean) as string[];
     if (storagePaths.length > 0) {
-      await supabase.storage.from('product-images').remove(storagePaths);
+      const safePaths = await filterUnreferencedStoragePaths(storagePaths, [groupId]);
+      const sharedCount = storagePaths.length - safePaths.length;
+      if (sharedCount > 0) {
+        console.warn(`[deleteProductGroup] kept ${sharedCount} storage file(s) still referenced by other products`);
+      }
+      if (safePaths.length > 0) {
+        await supabase.storage.from('product-images').remove(safePaths);
+      }
     }
 
     // 3. Delete product_images rows
