@@ -12,7 +12,7 @@ import {
 import { fetchWorkflowBatchesMeta } from '../lib/workflowBatchService';
 import { supabase } from '../lib/supabase';
 import { filterUnreferencedStoragePaths } from '../lib/storageSafety';
-import { Folder, Calendar, Image, Layers, Tag, ArrowRight, Trash2, X, Grid3x3, Package, Edit2, Copy, Check, Search, Plus, Merge, ChevronDown, ChevronRight, Wrench } from 'lucide-react';
+import { Folder, Calendar, Image, Layers, Tag, ArrowRight, Trash2, X, Grid3x3, Package, Edit2, Copy, Check, Search, Plus, Merge, ChevronDown, ChevronRight, Wrench, User } from 'lucide-react';
 import type { ClothingItem } from '../App';
 import { log } from '../lib/debugLogger';
 import './Library.css';
@@ -2410,6 +2410,16 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
                 <Layers size={14} />
                 <span>{liveGroupCount} {liveGroupCount === 1 ? 'group' : 'groups'}</span>
               </div>
+              {(() => {
+                const editedBy = (batch as any).lastEditedBy || (batch.workflow_state as any)?.lastEditedBy;
+                if (!editedBy) return null;
+                return (
+                  <div className="meta-row" style={{ color: '#64748b', fontSize: '0.78rem' }} title={`Last edited by ${editedBy}`}>
+                    <User size={13} />
+                    <span>edited by {editedBy}</span>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Progress Bar */}
