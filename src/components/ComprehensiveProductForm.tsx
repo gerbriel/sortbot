@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ClothingItem } from '../App';
+import { normalizeSizeValue } from '../lib/textAIService';
 import './ComprehensiveProductForm.css';
 
 interface ComprehensiveProductFormProps {
@@ -83,7 +84,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
           </div>
           <div className="info-item">
             <label>Size:</label>
-            <input type="text" value={currentItem.size || ''} onChange={(e) => updateGroupField('size', e.target.value)} placeholder="e.g., M, L, XL" className={`info-input${req(currentItem.size)}`} />
+            <input type="text" value={currentItem.size || ''} onChange={(e) => updateGroupField('size', e.target.value)} onBlur={(e) => { const norm = normalizeSizeValue(e.target.value); if (norm && norm !== e.target.value) updateGroupField('size', norm); }} placeholder="e.g., M, L, XL" className={`info-input${req(currentItem.size)}`} />
           </div>
           <div className="info-item">
             <label>Condition:</label>

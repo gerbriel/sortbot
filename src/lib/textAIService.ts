@@ -759,7 +759,7 @@ export function primaryMaterial(raw: string): string {
   return firstMat ? firstMat[1].trim() : raw.trim();
 }
 
-function normalizeSizeValue(raw: string): string {
+export function normalizeSizeValue(raw: string): string {
   const trimmed = raw.trim();
 
   // OSFA / One Size Fits All → "OSFA"
@@ -881,7 +881,7 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
   // PART 2: Size and measurements with symbols (ONLY if provided in fields)
   if (context.size || (context.measurements && Object.keys(context.measurements).length > 0)) {
     if (context.size) {
-      description += `✠ SIZE- ${context.size}\n`;
+      description += `✠ SIZE- ${normalizeSizeValue(context.size)}\n`;
     }
     
     // Add width and length if available
@@ -1212,7 +1212,9 @@ function generateTitleFromFields(context: ProductContext): string {
     (s || '').replace(/\bperiod\b/gi, '').replace(/\s{2,}/g, ' ').trim();
 
   // ── Filled tokens — dedupe internal repeated words, but preserve proper nouns ─
-  const SIZE    = dedupeTitle(clean(context.size));
+  // Normalize size to letter form (XL/XXL/XXXL) so spelled-out values ("extra large",
+  // "double extra large") never reach the title, even on legacy/typed data.
+  const SIZE    = context.size ? normalizeSizeValue(clean(context.size)) : '';
   const BRAND   = clean(context.brand);   // do NOT dedupe — proper noun (e.g. "American Vintage")
   const STYLE   = dedupeTitle(clean(context.style));
   const SUBJECT  = clean(context.modelName); // do NOT dedupe — proper noun (band/team/artist name)
