@@ -1845,17 +1845,18 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         default:          return naturalCompare(nameKey(a), nameKey(b));
       }
     });
-    // "Ungrouped & uncategorized" = singletons that haven't been assigned a category yet.
-    // Must exclude BOTH already-grouped items (multi-item productGroup) AND already-
-    // categorized items (category field set) — category assignment doesn't change
-    // productGroup, so without this check categorized singletons stay in the pool forever.
+    // Pick pool = any SINGLETON (item whose productGroup is unique to itself).
+    // We intentionally do NOT exclude categorized items: a very common workflow is to
+    // group everything, ungroup to crop (categories are kept), then re-group — in which
+    // case every item is a *categorized singleton* and must still be pickable. Excluding
+    // categorized items here made pick mode select nothing and silently turn off.
     const groupFreq = new Map<string, number>();
     currentItems.forEach(i => {
       const gid = i.productGroup || i.id;
       groupFreq.set(gid, (groupFreq.get(gid) || 0) + 1);
     });
     const ungrouped = sorted.filter(i =>
-      (groupFreq.get(i.productGroup || i.id) ?? 0) === 1 && !i.category
+      (groupFreq.get(i.productGroup || i.id) ?? 0) === 1
     );
     const cursor = pickCursorRef.current;
     const slice = ungrouped.slice(cursor, cursor + n);
