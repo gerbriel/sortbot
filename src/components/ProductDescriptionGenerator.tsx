@@ -10,10 +10,14 @@ import { syncGroupFieldsToDatabase } from '../lib/productService';
 import LazyImg from './LazyImg';
 import { log } from '../lib/debugLogger';
 import VoiceCommandTable, { VOICE_KEYWORD_TO_FIELD } from './VoiceCommandTable';
+import { useStoreItemArray, liveArrayRef } from '../lib/workflowStore';
 import './ProductDescriptionGenerator.css';
 
+// Live view into the store — replaces the old per-render processedItems mirror.
+// .current always reads the CURRENT full item list (async handlers can't go stale).
+const processedItemsRef = liveArrayRef('processedItems');
+
 interface ProductDescriptionGeneratorProps {
-  items: ClothingItem[];
   onProcessed: (items: ClothingItem[]) => void;
   onDownloadCSV?: () => void;
   batchId?: string | null;
@@ -48,13 +52,18 @@ interface SpeechRecognitionErrorEvent extends Event {
   message: string;
 }
 
-const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = ({ 
-  items, 
+const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = ({
   onProcessed,
   onDownloadCSV,
   batchId,
 }) => {
-  const [processedItems, setProcessedItems] = useState<ClothingItem[]>(items);
+  // Stage 2b: processedItems lives in workflowStore — the SAME list App.tsx
+  // reads/writes. This is the FULL item list (uncategorized singles included);
+  // the Step-3 visibility filter is applied inside buildGroupArray. All 26
+  // targeted setProcessedItems call sites work unchanged against the full list.
+  // The old duplicated local copy, the items-prop sync effect, and the
+  // isResettingRef suppression dance are gone — there is one homework sheet now.
+  const [processedItems, setProcessedItems] = useStoreItemArray('processedItems');
   const [currentGroupIndex, setCurrentGroupIndex] = useState(0);
 
   const [isRecording, setIsRecording] = useState(false);
@@ -74,8 +83,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Fires 2s after the last processedItems change so a page refresh never loses
   // voiceDescription, generatedDescription, seoTitle, or any typed field values.
   const productSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Direct save ref — holds latest group to save, set by user edits, consumed by debouncedDirectSave.
-  // This completely bypasses isResettingRef so the feedback loop (edit→onProcessed→prop→reset→block) never kills the save.
+  // Direct save ref — holds latest group to save, set by user edits, consumed by
+  // debouncedDirectSave. (Historically this bypassed the isResettingRef feedback
+  // loop; that loop no longer exists — kept because it's still the most direct
+  // per-edit DB save path.)
   const pendingSaveGroupRef = useRef<ClothingItem[] | null>(null);
 
   const debouncedDirectSave = (group: ClothingItem[]) => {
@@ -173,17 +184,23 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const lastClickTimeRef = useRef(0);
   const buttonStateTransitionRef = useRef(0);
   const hasMountedRef = useRef(false); // Track if component has mounted
-  const previousItemsLengthRef = useRef(0); // Track items array length for batch changes
-  const previousBatchIdRef = useRef<string | null | undefined>(undefined); // Track batchId for batch switches
-  const previousItemsRefRef = useRef<ClothingItem[]>([]); // Track items reference for any-change detection
-  const isResettingRef = useRef(false); // Track when we're mid-reset to suppress sync-back
-  // Always-current snapshot of processedItems so async handlers (handleStopRecording)
-  // aren't trapped by stale closure state from before the last onresult update.
-  const processedItemsRef = useRef<ClothingItem[]>(processedItems);
-  useEffect(() => { processedItemsRef.current = processedItems; }, [processedItems]);
+  // Stage 2b: previousItemsLengthRef / previousBatchIdRef / previousItemsRefRef /
+  // isResettingRef / the processedItemsRef mirror are all GONE — they existed to
+  // keep the duplicated local copy in sync with the items prop. The store is the
+  // single source of truth now; processedItemsRef (module-level) reads it live.
 
-  // Helper: build group array from items with groups-first ordering
-  const buildGroupArray = (items: ClothingItem[]): ClothingItem[][] => {
+  // Helper: build the DISPLAY group array with groups-first ordering.
+  // Applies the Step-3 visibility rule (commit 0922eca) — previously App.tsx
+  // pre-filtered the items prop; now PDG reads the FULL store list, so the
+  // filter lives here: only categorized items and true multi-image groups are
+  // shown/navigable. Uncategorized singles stay in the store untouched.
+  const buildGroupArray = (allItems: ClothingItem[]): ClothingItem[][] => {
+    const groupCounts: Record<string, number> = {};
+    for (const i of allItems) {
+      const g = i.productGroup || i.id;
+      groupCounts[g] = (groupCounts[g] || 0) + 1;
+    }
+    const items = allItems.filter(i => i.category || (groupCounts[i.productGroup || i.id] || 0) > 1);
     const itemIds = new Set(items.map(i => i.id));
     const productGroups = items.reduce((groups, item, idx) => {
       // Validate productGroup: if it points to an ID that doesn't exist in this
@@ -216,29 +233,20 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const currentItem = currentGroup[0];
     
     return { groupArray, currentGroup, currentItem };
-  }, [processedItems, currentGroupIndex]);  // Auto-sync processedItems back to parent for auto-save
-  // Skip on initial mount to avoid overwriting loaded descriptions
+  }, [processedItems, currentGroupIndex]);
+
+  // Notify App that items changed so it schedules the workflow_state auto-save.
+  // Stage 2b: the store is the single source of truth — this callback carries
+  // the already-current full list purely as an auto-save trigger. The old
+  // isResettingRef / length-mismatch suppression guards are gone because the
+  // feedback loop they guarded against (edit → onProcessed → prop → reset)
+  // no longer exists: there is no prop and no local copy to reset.
   useEffect(() => {
     if (!hasMountedRef.current) {
       // First render - just mark as mounted, don't sync
       hasMountedRef.current = true;
       return;
     }
-    // Skip sync-back when we just reset from incoming props (avoids writing stale data back up)
-    if (isResettingRef.current) {
-      console.log('[PDG] onProcessed sync-back: SKIPPED (isResettingRef=true), clearing flag');
-      isResettingRef.current = false;
-      return;
-    }
-    // Don't write back if internal state is out of sync with the prop —
-    // the sync effect (below) hasn't run yet and will correct it next render.
-    if (processedItems.length !== items.length) {
-      console.log('[PDG] onProcessed sync-back: SKIPPED (length mismatch)');
-      return;
-    }
-    
-    // Subsequent updates - sync to parent
-    console.log('[PDG] onProcessed sync-back: CALLING onProcessed, item[0].seoTitle=', processedItems[0]?.seoTitle);
     onProcessed(processedItems);
   // onProcessed intentionally omitted — it's a stable callback from the parent and
   // including it causes this effect to re-fire on every App render (new function reference).
@@ -248,7 +256,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Mark unsaved changes whenever processedItems mutates after mount
   useEffect(() => {
     if (!hasMountedRef.current) return;
-    if (isResettingRef.current) return;
     setHasUnsavedChanges(true);
   }, [processedItems]);
 
@@ -260,7 +267,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       console.log('[PDG] processedItems debounce effect: skipping (not mounted)');
       return;
     }
-    console.log('[PDG] processedItems debounce effect: scheduling save, isResetting=', isResettingRef.current);
+    console.log('[PDG] processedItems debounce effect: scheduling save');
     if (productSaveTimerRef.current) clearTimeout(productSaveTimerRef.current);
     productSaveTimerRef.current = setTimeout(() => {
       const group = buildGroupArray(processedItems)[currentGroupIndex];
@@ -297,47 +304,20 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     };
     window.addEventListener('beforeunload', flushOnUnload);
     return () => window.removeEventListener('beforeunload', flushOnUnload);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [processedItems, currentGroupIndex, batchId]);
 
-  // Update local state when items prop changes (e.g., opening a different batch)
-  // Reset whenever batchId changes, or items array reference/length/content changes
+  // Stage 2b: the prop-sync effect (batchChanged/lengthChanged/structureKey
+  // heuristics + isResettingRef) is GONE — PDG reads the store directly, so
+  // App-side changes (grouping, categorizing, DB hydration) are visible on the
+  // next render with no sync machinery. Batch switches remount this component
+  // via key={currentBatchId} in App.tsx, which resets navigation to group 0.
+  // Safety net: clamp the group index if the group list shrinks while mounted
+  // (e.g. items deleted in Step 2), so navigation never points past the end.
   useEffect(() => {
-    const batchChanged = batchId !== previousBatchIdRef.current;
-    const lengthChanged = items.length !== previousItemsLengthRef.current;
-    // Also detect same-length but different content (e.g. re-group same number of items)
-    const firstIdChanged = items[0]?.id !== previousItemsRefRef.current[0]?.id;
-    // Detect category or productGroup changes on existing items — e.g. re-categorizing an
-    // item already in the list, or applying a preset to already-categorized items.
-    // Without this, PDG's internal state stays stale (shows old category/preset fields)
-    // until the user navigates away and back, appearing as a "requires refresh" bug.
-    // Also include seoTitle+voiceDescription as sentinels so DB hydration (mergeDB in App.tsx)
-    // triggers a sync — mergeDB only changes those fields, not category/productGroup, so without
-    // them the prop-sync never fires and PDG's internal state stays pre-hydration (empty).
-    const structureKey = items.map(i => `${i.id}:${i.category ?? ''}:${i.productGroup ?? ''}:${i.seoTitle ?? ''}:${!!i.voiceDescription}`).join('|');
-    const prevStructureKey = previousItemsRefRef.current.map(i => `${i.id}:${i.category ?? ''}:${i.productGroup ?? ''}:${i.seoTitle ?? ''}:${!!i.voiceDescription}`).join('|');
-    const structureChanged = structureKey !== prevStructureKey;
-
-    // Major changes (batch switch, new items, reordered) reset navigation to group 0.
-    // Structure-only changes (re-categorize, preset apply) silently sync without disrupting
-    // the user's current position in the group list.
-    const shouldReset = batchChanged || lengthChanged || firstIdChanged;
-    const shouldSync = shouldReset || structureChanged;
-
-    if (shouldSync) {
-      console.log('[PDG] prop-sync effect: shouldSync=true', { shouldReset, batchChanged, lengthChanged, firstIdChanged, structureChanged, isResettingBefore: isResettingRef.current });
-      isResettingRef.current = true;
-      setProcessedItems(items);
-      if (shouldReset) {
-        setCurrentGroupIndex(0); // Only reset navigation for major changes
-      }
-      previousItemsLengthRef.current = items.length;
-      previousBatchIdRef.current = batchId;
-      previousItemsRefRef.current = items;
-    } else {
-      console.log('[PDG] prop-sync effect: no change detected, skipping sync');
+    if (groupArray.length > 0 && currentGroupIndex > groupArray.length - 1) {
+      setCurrentGroupIndex(groupArray.length - 1);
     }
-  }, [items, batchId]);
+  }, [groupArray.length, currentGroupIndex]);
 
   useEffect(() => {
     // Check if browser supports Speech Recognition
@@ -648,7 +628,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         }
       }
     };
-  }, [currentGroupIndex]);
+    // setProcessedItems is a stable store setter — listed to satisfy exhaustive-deps.
+  }, [currentGroupIndex, setProcessedItems]);
 
   // Load available presets on mount
   useEffect(() => {
@@ -723,12 +704,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
       if (patches.size === 0) return;
 
-      // Mark as resetting so the onProcessed sync-back effect treats this update
-      // as a structured initialization (like prop-sync) rather than a user edit.
-      // Without this, onProcessed propagates the stale seoTitle/voiceDescription
-      // back to App.tsx, which then re-pushes the stale data down, triggering a
-      // second debounce save that overwrites the DB-hydrated fields.
-      isResettingRef.current = true;
+      // (isResettingRef suppression removed — the edit→onProcessed→prop→reset
+      // feedback loop it guarded against no longer exists; the store is the
+      // single source of truth and this functional update merges onto it.)
 
       // Functional update: merge patches onto the LATEST state so we never
       // overwrite fields (seoTitle, voiceDescription, productType override) that
@@ -778,7 +756,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     };
 
     applyPresetsToAllGroups();
-  }, [availablePresets]); // Run when presets load
+    // setProcessedItems is a stable store setter — listed to satisfy exhaustive-deps.
+  }, [availablePresets, setProcessedItems]); // Run when presets load
 
   // Auto-apply default preset when current group changes OR when category changes.
   // SKIP if productType already encodes a manual override (productType is saved to DB
@@ -1270,7 +1249,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   /** Handle a cell edit from the VoiceCommandTable — updates fields AND rebuilds voiceDescription */
   const handleTableFieldChange = (fieldKey: string, value: string) => {
-    console.log('[PDG] handleTableFieldChange', { fieldKey, value, currentGroupIndex, isResetting: isResettingRef.current });
+    console.log('[PDG] handleTableFieldChange', { fieldKey, value, currentGroupIndex });
     const latestItems = processedItemsRef.current;
     const latestGroupArray = buildGroupArray(latestItems);
     const latestGroup = latestGroupArray[currentGroupIndex] || [];

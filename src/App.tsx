@@ -455,13 +455,13 @@ function App() {
         }
       }
     }, 150);
-  }, []);
+    // Store setters have stable identity (workflowStore) — listed to satisfy exhaustive-deps.
+  }, [setUploadedImages, setGroupedImages, setSortedImages, setProcessedItems]);
 
   // Fetch storage usage once the user is known
   useEffect(() => {
     if (!user) return;
     fetchStorageUsage(user.id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // Register restored workflow items in products + product_images so Library sees them.
@@ -1711,34 +1711,16 @@ function App() {
   const handleItemsProcessed = (items: ClothingItem[]) => {
     log.pdg(`handleItemsProcessed | items=${items.length}`);
 
-    // PDG only receives a filtered subset of processedItems (categorized/grouped items).
-    // Merge updates back into the FULL processedItems array so uncategorized singles
-    // (which are hidden from Step 3 but still part of the batch) are not lost.
-    const updatedById = new Map(items.map(i => [i.id, i]));
-    const prevItems = processedItemsRef.current;
-    const merged = prevItems.map(existing =>
-      updatedById.has(existing.id) ? updatedById.get(existing.id)! : existing
-    );
-    // Also include any items PDG added that weren't in prev (shouldn't happen, but be safe)
-    const prevIds = new Set(prevItems.map(i => i.id));
-    for (const item of items) {
-      if (!prevIds.has(item.id)) merged.push(item);
-    }
-
-    setProcessedItems(merged);
-
-    // Auto-save workflow state — read live arrays from refs, not the closure,
-    // so rapid PDG edits always save the latest groupedImages/sortedImages.
-    // Pass the freshly-merged list directly so the auto-save includes all items
-    // (processedItemsRef.current still has the old value until the next render).
+    // Stage 2b: PDG reads/writes workflowStore directly — `items` IS the full,
+    // already-current store list (uncategorized singles included). The old
+    // filtered-subset merge + setProcessedItems are gone; this callback only
+    // schedules the workflow_state auto-save.
     autoSaveWorkflow({
       uploadedImages: uploadedImagesRef.current,
       groupedImages: groupedImagesRef.current,
       sortedImages: sortedImagesRef.current,
-      processedItems: merged,
+      processedItems: items,
     });
-
-    // Broadcast action for real-time collaboration
   };
 
   // Auto-save workflow state to batch (debounced — 2 s after last call)
@@ -2844,15 +2826,6 @@ function App() {
             })()}
             <ProductDescriptionGenerator
               key={currentBatchId ?? 'new'}
-              items={(() => {
-                // Only pass items that are ready for Step 3:
-                // — items with a category preset applied, OR
-                // — items that are part of a true multi-image group (grouped but not yet categorized)
-                // Singles with no category are excluded — they should go back to Step 2 first.
-                const groupCounts: Record<string, number> = {};
-                processedItems.forEach(i => { const k = i.productGroup || i.id; groupCounts[k] = (groupCounts[k] || 0) + 1; });
-                return processedItems.filter(i => i.category || groupCounts[i.productGroup || i.id] > 1);
-              })()}
               onProcessed={handleItemsProcessed}
               onDownloadCSV={() => exporterRef.current?.downloadCSV()}
               batchId={currentBatchId}
