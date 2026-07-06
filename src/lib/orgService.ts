@@ -220,10 +220,36 @@ export async function revokeInvite(inviteId: string): Promise<boolean> {
   return true;
 }
 
-/** Remove a member from the org (admin/owner only, enforced by RLS). */
+/** Remove a member from the org (admin/owner only, enforced by RLS).
+ *  Also used to leave a workspace — the delete policy allows self-removal. */
 export async function removeMember(orgId: string, userId: string): Promise<boolean> {
   const { error } = await supabase
     .from('org_members').delete().eq('org_id', orgId).eq('user_id', userId);
   if (error) { log.error(`removeMember | ${error.message}`); return false; }
   return true;
+}
+
+/** Rename the workspace (admin/owner only, enforced by RLS). The `.select()`
+ *  check catches RLS-blocked updates, which return 0 rows without an error. */
+export async function renameOrganization(orgId: string, name: string): Promise<{ ok: boolean; error?: string }> {
+  const cleaned = name.trim();
+  if (!cleaned) return { ok: false, error: 'Name cannot be empty.' };
+  if (cleaned.length > 60) return { ok: false, error: 'Keep the name under 60 characters.' };
+  const { data, error } = await supabase
+    .from('organizations').update({ name: cleaned }).eq('id', orgId).select('id');
+  if (error) { log.error(`renameOrganization | ${error.message}`); return { ok: false, error: error.message }; }
+  if (!data || data.length === 0) return { ok: false, error: 'You do not have permission to rename this workspace.' };
+  return { ok: true };
+}
+
+/** Change a member's role (admin/owner only, enforced by RLS). The caller is
+ *  responsible for the last-owner guard — the DB happily allows zero owners. */
+export async function updateMemberRole(orgId: string, userId: string, role: OrgRole): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('org_members')
+    .update({ role })
+    .eq('org_id', orgId).eq('user_id', userId)
+    .select('user_id');
+  if (error) { log.error(`updateMemberRole | ${error.message}`); return false; }
+  return !!data && data.length > 0;
 }
