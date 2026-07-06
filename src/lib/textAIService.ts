@@ -1057,13 +1057,10 @@ const TITLE_SYNONYMS: string[][] = [
   ['pink', 'hot pink', 'bubblegum pink', 'blush', 'rose pink'],
   ['teal', 'teal blue', 'cyan', 'aqua', 'turquoise'],
   ['maroon', 'burgundy', 'wine', 'oxblood', 'dark red'],
-  // SIZE shorthands
-  ['small', 'sm'],
-  ['medium', 'med'],
-  ['large', 'lg'],
-  ['xl', 'extra large', 'xlarge'],
-  ['xxl', '2xl', 'double xl'],
-  ['xxxl', '3xl', 'triple xl'],
+  // SIZE groups removed on purpose: sizes reach titles as letter symbols (XL/XXL)
+  // via normalizeSizeValue, and any swap here can only respell them ("extra lg")
+  // — violating the sizes-always-letter-symbols rule (commit 28e9d9b). Locked in
+  // by textAIService.test.ts.
   // DECADE / ERA
   ['90s', 'nineties', 'mid 90s', 'late 90s', 'early 90s'],
   ['2000s', 'y2k era', 'early 2000s', 'mid 2000s', '00s'],
@@ -1183,14 +1180,23 @@ function fitTo60(title: string): string {
     ? [...TITLE_SYNONYMS, activeItemGroup]
     : TITLE_SYNONYMS;
 
+  // Each synonym group may be used at most ONCE per title. Without this lock,
+  // a replacement that still contains its own group's canonical word gets
+  // re-swapped on the next pass and the swaps compound into gibberish:
+  // '90s' → 'early 90s' → 'early mid 90s' → 'early mid late nineties'.
+  // (Same failure family as the historic "extra l size" corruption, 58376d2.)
+  const usedGroups = new Set<number>();
+
   for (let pass = 0; pass < 30; pass++) {
     const len = current.length;
     if (len === TARGET) break;
 
     let bestDiff = Math.abs(len - TARGET);
-    const topCandidates: string[] = [];
+    const topCandidates: { text: string; groupIdx: number }[] = [];
 
-    for (const group of effectiveSynonyms) {
+    for (let groupIdx = 0; groupIdx < effectiveSynonyms.length; groupIdx++) {
+      if (usedGroups.has(groupIdx)) continue;
+      const group = effectiveSynonyms[groupIdx];
       // Find which member of this group appears in the current title
       let matchedWord = '';
       let matchedRe: RegExp | null = null;
@@ -1215,16 +1221,18 @@ function fitTo60(title: string): string {
         if (diff < bestDiff) {
           bestDiff = diff;
           topCandidates.length = 0;
-          topCandidates.push(candidate);
+          topCandidates.push({ text: candidate, groupIdx });
         } else if (diff <= bestDiff + RANDOM_TOLERANCE) {
-          topCandidates.push(candidate);
+          topCandidates.push({ text: candidate, groupIdx });
         }
       }
     }
 
     if (topCandidates.length === 0) break;
     // Pick randomly among near-best candidates for title variety
-    current = topCandidates[Math.floor(Math.random() * topCandidates.length)];
+    const chosen = topCandidates[Math.floor(Math.random() * topCandidates.length)];
+    current = chosen.text;
+    usedGroups.add(chosen.groupIdx);
   }
 
   return current;

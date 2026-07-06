@@ -1,0 +1,32 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`generateProductDescription — golden output > matches the golden description for a fully-populated context 1`] = `
+{
+  "description": "XL - Vintage Y2K Nike early 90s Tee
+
+✠ SIZE- XL
+✠ Width- 18
+✠ Length- 26
+
+Material: Cotton
+
+Every Garment goes through a thorough washing process before being photographed.
+Condition: Good
+
+BUNDLE AND SAVE!!!!!!
+
+#90s #nike #tees #red
+
+* We note major imperfections—minor signs of age or wear may not be listed, adding to the vintage character.
+* High-quality piece, perfect for streetwear.
+* Ships next day.
+* All sales final.",
+  "suggestedTags": [
+    "90s",
+    "Nike",
+    "tees",
+    "Red",
+  ],
+  "suggestedTitle": "XL - Vintage Y2K Nike early 90s Tee",
+}
+`;
