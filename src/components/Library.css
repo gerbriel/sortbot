@@ -1510,3 +1510,33 @@
   stroke: #ef4444;
   stroke-width: 2;
 }
+
+/* ── Delete-failure banner ─────────────────────────────────────────────── */
+.library-delete-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.5rem 1.25rem 0;
+  padding: 0.6rem 0.9rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #b91c1c;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.library-delete-error-dismiss {
+  background: none;
+  border: none;
+  color: #b91c1c;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+
+.library-delete-error-dismiss:hover {
+  background: #fee2e2;
+}
