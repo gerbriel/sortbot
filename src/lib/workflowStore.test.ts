@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { workflowStore } from './workflowStore';
+import { workflowStore, liveArrayRef } from './workflowStore';
 import type { ClothingItem } from '../App';
 
 const item = (id: string): ClothingItem => ({ id } as unknown as ClothingItem);
@@ -47,6 +47,27 @@ describe('workflowStore (dependency-free shared store)', () => {
     unsub();
     workflowStore.setState({ currentBatchId: 'z' });
     expect(calls).toBe(2);
+  });
+
+  it('liveArrayRef.current always reads the CURRENT store state (ref-mirror replacement)', () => {
+    const ref = liveArrayRef('processedItems');
+    expect(ref.current).toEqual([]);
+    workflowStore.setState({ processedItems: [item('a')] });
+    expect(ref.current.map(i => i.id)).toEqual(['a']);       // fresh immediately — no render needed
+    workflowStore.setState(prev => ({ processedItems: [...prev.processedItems, item('b')] }));
+    expect(ref.current.map(i => i.id)).toEqual(['a', 'b']);
+    // Same ref object keeps working across resets (stable identity, safe to close over)
+    workflowStore.reset();
+    expect(ref.current).toEqual([]);
+  });
+
+  it('liveArrayRef sees updates from inside an async callback (the stale-closure killer)', async () => {
+    const ref = liveArrayRef('uploadedImages');
+    const readLater = new Promise<number>(resolve => {
+      setTimeout(() => resolve(ref.current.length), 0);
+    });
+    workflowStore.setState({ uploadedImages: [item('x'), item('y')] });
+    expect(await readLater).toBe(2);
   });
 
   it('reset clears everything (sign-out / active-batch deletion)', () => {

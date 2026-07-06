@@ -83,3 +83,45 @@ export function useWorkflowStore<T>(selector: (s: WorkflowStoreState) => T): T {
     () => selector(state),
   );
 }
+
+// ── useState-compatible adapters (Stage 2 migration shims) ──────────────────
+// These let App.tsx move its four item arrays into the store WITHOUT touching
+// any of its ~100 call sites: the setter accepts both a value and a functional
+// update, exactly like React's setState. Setter identities are stable forever.
+
+export type ItemArrayKey = 'uploadedImages' | 'groupedImages' | 'sortedImages' | 'processedItems';
+
+type ItemArraySetter = (update: ClothingItem[] | ((prev: ClothingItem[]) => ClothingItem[])) => void;
+
+const itemArraySetters = new Map<ItemArrayKey, ItemArraySetter>();
+
+function setterFor(key: ItemArrayKey): ItemArraySetter {
+  let s = itemArraySetters.get(key);
+  if (!s) {
+    s = (update) => {
+      workflowStore.setState(prev => ({
+        [key]: typeof update === 'function' ? update(prev[key]) : update,
+      }));
+    };
+    itemArraySetters.set(key, s);
+  }
+  return s;
+}
+
+/** Drop-in replacement for `useState<ClothingItem[]>([])` backed by the store. */
+export function useStoreItemArray(key: ItemArrayKey): [ClothingItem[], ItemArraySetter] {
+  const value = useWorkflowStore(s => s[key]);
+  return [value, setterFor(key)];
+}
+
+/** Live, read-only view with a `.current` getter — replaces the ref-mirror
+ *  pattern. Unlike the old mirrors (updated on render), `.current` ALWAYS
+ *  reads the store's live state, so async callbacks can never see stale data.
+ *  Identity is stable; safe to close over. */
+export function liveArrayRef(key: ItemArrayKey): { readonly current: ClothingItem[] } {
+  return {
+    get current() {
+      return state[key];
+    },
+  };
+}
