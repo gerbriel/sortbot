@@ -124,8 +124,8 @@ Ordered so that each phase de-risks the next. Rough sizing assumes current solo 
    - ImageGrouper → `useRubberBand`, `usePickMode`, `useGrouperShortcuts`, `GrouperSidebar.tsx`, `GroupCard.tsx`
    - Library → **`libraryData.ts` first** (the two-pass loadAll merge as a pure, unit-testable function — highest value), then per-tab components
 4. **Demote the JSONB scribbled note** (after step 2, ~2–3 weeks incl. soak):
-   a. Additive migration: columns for everything only `slim()` preserves today — `captured_at`, `image_rotation`, `crop` jsonb, `original_storage_path`, `description_edited` on products/product_images.
-   b. Dual-write phase: existing product writes extended to the new columns; workflow_state keeps saving as today.
+   a. ✅ **done July 2026** — `stage4_slim_fields.sql`: `captured_at` + `original_storage_path` on product_images, `description_edited` on products (`transforms` jsonb already existed for rotation/crop).
+   b. ✅ **done July 2026** — all three `product_images` write paths share `imageRowSync.buildProductImageRow` (transforms now written everywhere, not just Save Batch); `description_edited` flows through save + the PDG debounced update; everything feature-detected so the code shipped before the SQL ran. **Soak clock starts when the migration is run.**
    c. Flip restore priority: build items from products+product_images first, workflow_state as legacy fallback (today it's the reverse). Old batches stay readable forever via the fallback.
    d. Stop writing the blob; `workflow_batches` becomes metadata only. The gap-fill cap, ±24h orphan window, and stolen-row deletion — the scariest heuristics in the app — all become dead code, because there's no second copy left to reconcile.
 

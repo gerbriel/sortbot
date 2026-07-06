@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import type { ClothingItem } from '../App';
 import { createTransformedFile } from './imageTransforms';
+import { buildTransforms, stage4ColumnsAvailable } from './imageRowSync';
 
 /**
  * Return the public CDN URL for a storage path.
@@ -120,6 +121,8 @@ export const saveProductToDatabase = async (
   groupImages: ClothingItem[],
   batchId?: string
 ): Promise<string | null> => {
+  // Stage 4 dual-write: are the new columns available yet? (cached probe)
+  const stage4 = await stage4ColumnsAvailable();
   // Guard: if userId is missing, fetch from auth session
   let resolvedUserId = userId;
   if (!resolvedUserId) {
@@ -223,6 +226,9 @@ export const saveProductToDatabase = async (
         
         // Brand Category
         brand_category: product.brandCategory || '',
+
+        // Stage 4 dual-write — only once the stage4_slim_fields migration ran
+        ...(stage4 ? { description_edited: !!product.descriptionEdited } : {}),
         
         // SEO
         seo_title: product.seoTitle || '',
@@ -285,7 +291,6 @@ export const saveProductToDatabase = async (
       // actual composite unique constraint, so an early-uploaded row is updated in-place
       // rather than creating a duplicate. storage_path has no unique constraint.
       if (imageUrl && storagePath) {
-        const transforms = item.crop || item.imageRotation ? { rotation: item.imageRotation || 0, crop: item.crop || null } : null;
         const { error: imageError } = await supabase
           .from('product_images')
           .upsert(
@@ -296,7 +301,12 @@ export const saveProductToDatabase = async (
               storage_path: storagePath,
               position: i,
               alt_text: `${product.seoTitle || 'Product'} - Image ${i + 1}`,
-              transforms: transforms,
+              transforms: buildTransforms(item),
+              // Stage 4 dual-write — gated until the migration has been run
+              ...(stage4 ? {
+                captured_at: item.capturedAt ?? null,
+                original_storage_path: item.originalStoragePath ?? null,
+              } : {}),
             },
             { onConflict: 'product_id,image_url', ignoreDuplicates: false }
           );
@@ -446,6 +456,8 @@ export const updateProduct = async (
   updates: Partial<ClothingItem>
 ): Promise<boolean> => {
   try {
+    // Stage 4 dual-write: are the new columns available yet? (cached probe)
+    const stage4 = await stage4ColumnsAvailable();
     // Build url_handle if seoTitle changed
     const urlHandle = updates.seoTitle
       ? updates.seoTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
@@ -526,6 +538,8 @@ export const updateProduct = async (
     if (updates.unitPriceBaseMeasure !== undefined)  patch.unit_price_base_measure = updates.unitPriceBaseMeasure;
     if (updates.unitPriceBaseMeasureUnit !== undefined) patch.unit_price_base_measure_unit = updates.unitPriceBaseMeasureUnit;
     if (updates.brandCategory !== undefined)         patch.brand_category      = updates.brandCategory;
+    // Stage 4 dual-write — gated until the migration has been run
+    if (stage4 && updates.descriptionEdited !== undefined) patch.description_edited = updates.descriptionEdited;
     // Only write applied_preset_id when we have a real UUID — never overwrite with '' which would clear the DB value
     if (updates.appliedPresetId)                     patch.applied_preset_id   = updates.appliedPresetId;
 

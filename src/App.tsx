@@ -19,6 +19,7 @@ import { saveBatchToDatabase, getThumbnailUrl } from './lib/productService';
 import { autoSaveWorkflowBatch, markBatchConfirmed, type WorkflowBatch } from './lib/workflowBatchService';
 import { ensureOrganization, type Organization, type OrgRole } from './lib/orgService';
 import { slimForWorkflowState, ultraSlimForBackup } from './lib/slimItems';
+import { buildProductImageRow, stage4ColumnsAvailable } from './lib/imageRowSync';
 import { useStoreItemArray, liveArrayRef } from './lib/workflowStore';
 
 // Live read-only views into workflowStore — replace the old ref-mirror pattern.
@@ -510,21 +511,16 @@ function App() {
       // Build product_images rows. For image_url: prefer imageUrls[0], fall back to getPublicUrl(storagePath).
       // storage_path may be null for legacy items — that's fine, the column is nullable.
       // Conflict key: (product_id, image_url) — matches the existing composite unique constraint.
+      // Stage 4 dual-write: rows include transforms + captured_at + original_storage_path
+      // (the latter two only once the stage4_slim_fields migration has been run).
+      const stage4 = await stage4ColumnsAvailable();
       const productImageRows = registerable.flatMap((item, idx) => {
         const imageUrl = item.imageUrls?.[0] ||
           (item.storagePath
             ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
             : null);
         if (!imageUrl) return []; // no image_url available at all — skip
-        return [{
-          image_url: imageUrl,
-          storage_path: item.storagePath ?? null,
-          product_id: item.id,
-          user_id: activeUser.id,
-          position: idx,
-          alt_text: item.seoTitle || 'Uploaded image',
-          original_name: item.originalName ?? null,
-        }];
+        return [buildProductImageRow(item, activeUser.id, idx, imageUrl, stage4)];
       });
       if (productImageRows.length > 0) {
         // Delete-then-insert strategy: wipe ALL product_images rows for the
@@ -1425,16 +1421,12 @@ function App() {
         { onConflict: 'id', ignoreDuplicates: true }
       );
       // Upsert product_images rows; ignore duplicate rows (already uploaded)
+      // Stage 4 dual-write: same shared row builder as registerItemsInDB.
+      const stage4Upload = await stage4ColumnsAvailable();
       const { error: imgErr2 } = await supabase.from('product_images').upsert(
-        uploadedItems.map((item, idx) => ({
-          image_url: item.imageUrls![0],
-          storage_path: item.storagePath!,
-          product_id: item.id,
-          user_id: user.id,
-          position: idx,
-          alt_text: item.seoTitle || 'Uploaded image',
-          original_name: item.originalName ?? null,
-        })),
+        uploadedItems.map((item, idx) =>
+          buildProductImageRow(item, user.id, idx, item.imageUrls![0], stage4Upload)
+        ),
         // ignoreDuplicates: true — never overwrite/conflict with registerItemsInDB's
         // delete-then-insert strategy. This write is best-effort to keep the Library
         // in sync immediately; the authoritative write is in registerItemsInDB.
