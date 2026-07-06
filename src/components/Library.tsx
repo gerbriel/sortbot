@@ -89,6 +89,7 @@ interface LibraryProps {
   userId: string;
   onClose: () => void;
   onOpenBatch: (batch: WorkflowBatch) => void;
+  onBatchDeleted?: (batchId: string) => void; // notify parent so an active-batch delete tears the session down (prevents auto-save resurrection)
   refreshTrigger?: number; // increment from parent to force a reload
   currentBatchId?: string | null; // currently active batch — shown as "Active" with Add More option
 }
@@ -106,16 +107,20 @@ function cleanTitle(raw: string | undefined | null, fallback = 'Untitled Product
   return cleaned || fallback;
 }
 
-export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, refreshTrigger, currentBatchId }) => {
+export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, onBatchDeleted, refreshTrigger, currentBatchId }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('batches');
   const [batches, setBatches] = useState<WorkflowBatch[]>([]);
   const [productGroups, setProductGroups] = useState<ProductGroup[]>([]);
   const [images, setImages] = useState<ImageRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  
+
   // Deletion progress state
   const [deletingItem, setDeletingItem] = useState<{id: string, type: 'batch' | 'group' | 'image', progress: number} | null>(null);
+  // User-visible message when a delete did NOT go through (e.g. RLS blocked it).
+  // Previously failures were silent: the animation finished, nothing happened,
+  // and the batch was still there — "it just won't delete".
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Batch repair state
   const [repairingBatch, setRepairingBatch] = useState<string | null>(null);
@@ -911,11 +916,20 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
     // Actually delete
     const success = await deleteWorkflowBatch(batchId);
     if (success) {
+      setDeleteError(null);
       setBatches(batches.filter(b => b.id !== batchId));
+      // Tell the app — if this was the ACTIVE batch, the session must be torn down
+      // so auto-save can't write the deleted batch's content back to the DB.
+      onBatchDeleted?.(batchId);
       // Reload all data so images and product groups counts reflect the deletion
       await loadAll();
+    } else {
+      setDeleteError(
+        'Delete failed — the batch was NOT removed. Refresh and try again; if it keeps failing, ' +
+        'the database delete policy is blocking it (see collaborative_edit_policies.sql).'
+      );
     }
-    
+
     setDeletingItem(null);
   };
 
@@ -1820,13 +1834,26 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
     
     // Delete items one by one with progress updates
     if (viewMode === 'batches') {
+      const deletedIds = new Set<string>();
       for (const batchId of items) {
-        await deleteWorkflowBatch(batchId);
+        const ok = await deleteWorkflowBatch(batchId);
+        if (ok) {
+          deletedIds.add(batchId);
+          onBatchDeleted?.(batchId);
+        }
         deletedCount++;
         const progress = (deletedCount / totalItems) * 100;
         setDeletingItem({id: 'bulk', type: itemType, progress});
       }
-      setBatches(batches.filter(b => !selectedItems.has(b.id)));
+      // Only remove the batches that actually deleted; surface the rest.
+      setBatches(batches.filter(b => !deletedIds.has(b.id)));
+      const failedCount = items.length - deletedIds.size;
+      setDeleteError(
+        failedCount > 0
+          ? `${failedCount} of ${items.length} batch${items.length !== 1 ? 'es' : ''} could NOT be deleted ` +
+            '(database delete policy blocked them — see collaborative_edit_policies.sql).'
+          : null
+      );
     } else if (viewMode === 'groups') {
       for (const groupId of items) {
         await deleteProductGroup(groupId);
@@ -1960,6 +1987,14 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
             <X size={20} />
           </button>
         </div>
+
+        {/* Delete-failure banner — deletes must never fail silently */}
+        {deleteError && (
+          <div className="library-delete-error" role="alert">
+            <span>⚠️ {deleteError}</span>
+            <button className="library-delete-error-dismiss" onClick={() => setDeleteError(null)} aria-label="Dismiss">✕</button>
+          </div>
+        )}
 
         {/* Deletion Progress Overlay */}
         {deletingItem && (

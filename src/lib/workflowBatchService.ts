@@ -46,6 +46,44 @@ export interface WorkflowBatch {
   lastEditedAt?: string;
 }
 
+// ── Deleted-batch tombstones ─────────────────────────────────────────────────
+// Once a batch is confirmed deleted, its id goes here (memory + localStorage).
+// autoSaveWorkflowBatch checks this so a session that still holds the batch in
+// memory can never resurrect it — the root cause of "I deleted the batch and it
+// came back": auto-save saw the row missing and re-created it with the same content.
+const TOMBSTONES_KEY = 'sortbot_deleted_batch_ids';
+const deletedBatchIds = new Set<string>((() => {
+  try {
+    const v = JSON.parse(localStorage.getItem(TOMBSTONES_KEY) || '[]');
+    return Array.isArray(v) ? (v as string[]) : [];
+  } catch { return []; }
+})());
+
+export function markBatchDeleted(batchId: string): void {
+  deletedBatchIds.add(batchId);
+  try {
+    // Keep the persisted list bounded — 200 most recent is far more than enough.
+    localStorage.setItem(TOMBSTONES_KEY, JSON.stringify([...deletedBatchIds].slice(-200)));
+  } catch { /* localStorage unavailable — in-memory set still protects this session */ }
+}
+
+export function isBatchDeleted(batchId: string | null | undefined): boolean {
+  return !!batchId && deletedBatchIds.has(batchId);
+}
+
+// Batches whose row this session has CONFIRMED exists in the DB (a successful
+// UPDATE or fetch). If a confirmed batch's row later vanishes, it was deleted —
+// possibly by ANOTHER user in the shared workspace, so the local tombstone set
+// won't know about it. In that case auto-save must NOT re-create it.
+const confirmedBatchIds = new Set<string>();
+
+/** Call when a batch row has been fetched/opened successfully outside this module
+ *  (App.tsx startup restore and handleOpenBatch fetch rows directly). */
+export function markBatchConfirmed(batchId: string): void {
+  confirmedBatchIds.add(batchId);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * Fetch all workflow batches (collaborative - all users see all batches)
  */
@@ -292,6 +330,8 @@ export async function deleteWorkflowBatch(batchId: string): Promise<boolean> {
       console.warn(`[deleteWorkflowBatch] batch ${batchId} delete affected 0 rows — not removed`);
       return false;
     }
+    // Tombstone the id so no auto-save in this browser can ever re-create it.
+    markBatchDeleted(batchId);
     return true;
   } catch (error) {
     console.error('Error deleting workflow batch:', error);
@@ -312,10 +352,13 @@ export async function getWorkflowBatch(batchId: string): Promise<WorkflowBatch |
 
     if (error) throw error;
     if (!data) return null;
-    
+
+    // Row confirmed to exist — if it later vanishes, auto-save treats it as deleted.
+    confirmedBatchIds.add(batchId);
+
     // Update last_opened_at
     await updateWorkflowBatch(batchId, {});
-    
+
     return data;
   } catch (error) {
     console.error('Error fetching workflow batch:', error);
@@ -333,6 +376,12 @@ export async function autoSaveWorkflowBatch(
   workflowState: WorkflowBatch['workflow_state']
 ): Promise<string | null> {
   try {
+    // Never write to (or resurrect) a batch this browser knows was deleted.
+    if (isBatchDeleted(batchId)) {
+      console.warn(`autoSaveWorkflowBatch: batch ${batchId} was deleted — skipping save (no resurrection)`);
+      return null;
+    }
+
     const stats = calculateWorkflowStats(workflowState);
     const currentStep = determineCurrentStep(workflowState);
 
@@ -352,7 +401,8 @@ export async function autoSaveWorkflowBatch(
         .select('id');
 
       if (!updateError && updated && updated.length > 0) {
-        // Update succeeded
+        // Update succeeded — remember that this row is known to exist.
+        confirmedBatchIds.add(batchId);
         return batchId;
       } else if (!updateError && (!updated || updated.length === 0)) {
         // UPDATE affected 0 rows. Two very different causes:
@@ -371,14 +421,30 @@ export async function autoSaveWorkflowBatch(
         if (existing) {
           // Case (b): batch exists but isn't ours — do NOT fork a duplicate.
           // Keep pointing at the same batch; this edit just won't persist.
+          confirmedBatchIds.add(batchId);
           console.warn(
             `autoSaveWorkflowBatch: batch ${batchId} exists but UPDATE affected 0 rows ` +
             `(not owned by current user) — skipping save, NOT creating a duplicate`,
           );
           return batchId;
         }
-        // Case (a): genuinely gone — create a fresh one.
-        console.warn(`Batch ${batchId} no longer exists, creating new batch`);
+        // Case (a): the row is genuinely gone. Two sub-cases:
+        //  (a1) This session previously CONFIRMED the row existed → it was deleted
+        //       (possibly by another user in the shared workspace). Re-creating it
+        //       is exactly the "deleted batch keeps coming back" bug — tombstone it
+        //       and drop the save instead.
+        //  (a2) The row was never confirmed in this session → the stub INSERT at
+        //       upload time likely failed (offline blip). Creating a fresh row here
+        //       is the legitimate recovery path for brand-new batches.
+        if (confirmedBatchIds.has(batchId)) {
+          console.warn(
+            `autoSaveWorkflowBatch: batch ${batchId} existed earlier this session but is now gone ` +
+            `— treating as deleted, NOT re-creating it`,
+          );
+          markBatchDeleted(batchId);
+          return null;
+        }
+        console.warn(`Batch ${batchId} never confirmed and not found — creating new batch (stub insert recovery)`);
         const batch = await createWorkflowBatch(batchNumber, workflowState, stats);
         return batch?.id || null;
       } else {
