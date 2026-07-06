@@ -346,7 +346,7 @@
 /* ── Pricing ── */
 .ld-pricing { max-width: 1040px; margin: 80px auto 0; padding: 0 24px; }
 .ld-pricing h2 { text-align: center; font-size: 28px; }
-.ld-pricing-sub { text-align: center; color: #6b7280; font-size: 15px; max-width: 560px; margin: 10px auto 30px; }
+.landing .ld-pricing-sub { text-align: center; color: #6b7280; font-size: 15px; max-width: 560px; margin: 10px auto 30px; }
 
 .ld-tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; align-items: stretch; }
 
@@ -394,7 +394,7 @@
 
 .ld-tier li svg { flex: 0 0 auto; margin-top: 3px; color: #059669; }
 
-.ld-pricing-note { text-align: center; font-size: 12px; color: #9ca3af; margin-top: 18px; }
+.landing .ld-pricing-note { text-align: center; font-size: 12px; color: #9ca3af; margin-top: 18px; }
 
 /* ── Signup ── */
 .ld-signup {
@@ -408,7 +408,7 @@
 }
 
 .ld-signup h2 { font-size: 28px; text-align: center; }
-.ld-signup-sub { text-align: center; color: #6b7280; margin: 10px auto 24px; max-width: 520px; font-size: 15px; }
+.landing .ld-signup-sub { text-align: center; color: #6b7280; margin: 10px auto 24px; max-width: 520px; font-size: 15px; }
 
 .ld-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
 @media (max-width: 560px) { .ld-form-row { grid-template-columns: 1fr; } }
@@ -442,12 +442,12 @@
 
 .ld-signup button[type="submit"]:disabled { opacity: 0.65; cursor: default; }
 
-.ld-form-msg { margin-top: 13px; text-align: center; font-size: 14px; }
+.landing .ld-form-msg { margin-top: 13px; text-align: center; font-size: 14px; }
 .ld-form-msg--ok { color: #047857; font-weight: 700; }
 .ld-form-msg--err { color: #b91c1c; font-weight: 700; }
 
-.ld-signup-login { text-align: center; margin-top: 16px; font-size: 14px; color: #6b7280; }
-.ld-signup-login button {
+.landing .ld-signup-login { text-align: center; margin-top: 16px; font-size: 14px; color: #6b7280; }
+.landing .ld-signup-login button {
   background: none;
   border: none;
   color: #4f46e5;
@@ -470,3 +470,84 @@
   padding: 3px 10px;
   margin-bottom: 12px;
 }
+
+/* variants of the prefixed classes */
+.landing .ld-form-msg--ok { color: #047857; font-weight: 700; }
+.landing .ld-form-msg--err { color: #b91c1c; font-weight: 700; }
+
+/* ── Preset mock panel ── */
+.mock-preset-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  background: #059669;
+  border-radius: 999px;
+  padding: 5px 12px;
+  margin-bottom: 12px;
+}
+
+.mock-preset-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.mock-preset-rows div {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.mock-preset-rows label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; font-weight: 700; }
+.mock-preset-rows b { font-size: 13px; color: #111827; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.mock-preset-apply {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 9px;
+  border-radius: 8px;
+}
+
+/* ── Labor math band ── */
+.ld-math {
+  max-width: 1040px;
+  margin: 80px auto 0;
+  padding: 36px 24px;
+  background: #eef2ff;
+  border-radius: 20px;
+  text-align: center;
+}
+
+.ld-math h2 { font-size: 28px; color: #111827; }
+
+.landing .ld-math-sub {
+  max-width: 640px;
+  margin: 12px auto 26px;
+  color: #4b5563;
+  font-size: 15px;
+}
+
+.ld-math-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+
+.ld-math-grid > div {
+  background: #fff;
+  border: 1px solid #c7d2fe;
+  border-radius: 14px;
+  padding: 22px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.ld-math-grid strong { font-size: 22px; color: #4f46e5; }
+.ld-math-grid p { font-size: 13px; color: #6b7280; }
