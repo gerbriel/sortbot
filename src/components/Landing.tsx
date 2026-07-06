@@ -80,7 +80,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
           <a href="#signup" className="ld-btn-primary">Request beta access</a>
           <a href="#tour" className="ld-btn-ghost">See how it works</a>
         </div>
-        <p className="ld-hero-note">Free during the beta · no card required · founding shops lock in preferred pricing</p>
+        <p className="ld-hero-note">Free during the beta · no card required · founding shops lock in 30% off for life</p>
       </header>
 
       {/* ── Stats strip ── */}
@@ -205,7 +205,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
       <section className="ld-founding">
         <h2>Why join as a founding shop?</h2>
         <div className="ld-founding-grid">
-          <div><span className="ld-ic"><BadgeDollarSign size={22} /></span><h3>Free during beta</h3><p>Full product, unlimited listings, no card. When paid plans launch, founding shops lock in preferred pricing for good.</p></div>
+          <div><span className="ld-ic"><BadgeDollarSign size={22} /></span><h3>Free during beta</h3><p>Full product, unlimited listings, no card. When paid plans launch, founding shops lock in 30% off any tier — for life.</p></div>
           <div><span className="ld-ic"><MessageSquare size={22} /></span><h3>A direct line to the builders</h3><p>Beta shops shape the roadmap. The last three features shipped came straight from a reseller's feedback.</p></div>
           <div><span className="ld-ic"><Users size={22} /></span><h3>Your whole team, day one</h3><p>Private workspace with email invites — your photographer, describer, and VA all working the same rack.</p></div>
           <div><span className="ld-ic"><Package size={22} /></span><h3>Your data stays yours</h3><p>Everything exports to plain CSV any time. No lock-in, no hostage inventory.</p></div>
@@ -216,43 +216,49 @@ export default function Landing({ onLoginClick }: LandingProps) {
       <section className="ld-pricing" id="pricing">
         <h2>Simple pricing when we launch</h2>
         <p className="ld-pricing-sub">
-          Everything is <strong>free during the beta</strong>. Planned launch pricing below —
-          founding shops keep preferred pricing on any tier, for good.
+          Everything is <strong>free during the beta</strong> — and founding shops lock in
+          <strong> 30% off for life</strong> on any tier when paid plans launch.
         </p>
         <div className="ld-tiers">
           <div className="ld-tier">
-            <h3>Solo</h3>
-            <div className="ld-tier-price">$29<span>/mo</span></div>
+            <h3>Starter</h3>
+            <div className="ld-tier-price">$49<span>/mo</span></div>
+            <div className="ld-tier-founder">Founding shops: $34/mo for life</div>
             <ul>
-              <li><Check size={14} /> Up to 150 listings / month</li>
+              <li><Check size={14} /> Up to 200 listings / month</li>
               <li><Check size={14} /> Full workflow: group, voice, export</li>
               <li><Check size={14} /> Shopify-ready CSV with taxonomy</li>
-              <li><Check size={14} /> 1 workspace</li>
+              <li><Check size={14} /> 2 teammates</li>
             </ul>
           </div>
           <div className="ld-tier ld-tier--featured">
             <div className="ld-tier-badge">Most popular</div>
-            <h3>Team</h3>
-            <div className="ld-tier-price">$79<span>/mo</span></div>
+            <h3>Pro</h3>
+            <div className="ld-tier-price">$129<span>/mo</span></div>
+            <div className="ld-tier-founder">Founding shops: $89/mo for life</div>
             <ul>
-              <li><Check size={14} /> Up to 600 listings / month</li>
+              <li><Check size={14} /> Up to 750 listings / month</li>
               <li><Check size={14} /> Unlimited teammates in one workspace</li>
-              <li><Check size={14} /> Duplicate-title checks against your store</li>
+              <li><Check size={14} /> Duplicate-title checks against your live store</li>
               <li><Check size={14} /> Priority support</li>
             </ul>
           </div>
           <div className="ld-tier">
-            <h3>Volume</h3>
-            <div className="ld-tier-price">$149<span>/mo</span></div>
+            <h3>Studio</h3>
+            <div className="ld-tier-price">$299<span>/mo</span></div>
+            <div className="ld-tier-founder">Founding shops: $209/mo for life</div>
             <ul>
-              <li><Check size={14} /> Unlimited listings</li>
+              <li><Check size={14} /> Up to 2,000 listings / month (fair use)</li>
               <li><Check size={14} /> Unlimited teammates</li>
-              <li><Check size={14} /> Early access to new features</li>
               <li><Check size={14} /> Onboarding session for your team</li>
+              <li><Check size={14} /> Early access to new features</li>
             </ul>
           </div>
         </div>
-        <p className="ld-pricing-note">Planned launch pricing — subject to change before general availability. Beta shops are grandfathered onto preferred rates.</p>
+        <p className="ld-pricing-note">
+          Planned launch pricing — subject to change before general availability.
+          Listings beyond your tier: $0.20 each. Annual billing: 2 months free.
+        </p>
       </section>
 
       {/* ── Signup ── */}
