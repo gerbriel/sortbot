@@ -161,3 +161,36 @@
   font-size: 0.78rem;
   color: #9ca3af;
 }
+
+/* ── Beta requests (Founding Workspace admins) ─────────────────────────── */
+.beta-request-row { align-items: flex-start; }
+
+.beta-request-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+
+.beta-request-meta {
+  font-size: 0.75rem;
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.beta-request-actions { display: flex; gap: 0.35rem; }
+
+.beta-approve, .beta-deny {
+  border: none;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+}
+
+.beta-approve { background: #059669; color: #fff; }
+.beta-approve:hover:not(:disabled) { background: #047857; }
+.beta-deny { background: #fee2e2; color: #b91c1c; }
+.beta-deny:hover:not(:disabled) { background: #fecaca; }
+.beta-approve:disabled, .beta-deny:disabled { opacity: 0.5; cursor: default; }
+
+.beta-status-approved { background: #d1fae5; color: #065f46; }
+.beta-status-denied   { background: #fee2e2; color: #b91c1c; }

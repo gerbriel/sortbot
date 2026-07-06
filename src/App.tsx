@@ -29,6 +29,7 @@ const groupedImagesRef   = liveArrayRef('groupedImages');
 const processedItemsRef  = liveArrayRef('processedItems');
 const uploadedImagesRef  = liveArrayRef('uploadedImages');
 import OrgPanel from './components/OrgPanel';
+import WaitlistGate from './components/WaitlistGate';
 import { getCategoryPresets } from './lib/categoryPresetsService';
 import { applyPresetDirectly } from './lib/applyPresetToGroup';
 import type { BrandCategory } from './lib/brandCategorySystem';
@@ -229,6 +230,9 @@ function App() {
   const [currentOrg, setCurrentOrg] = useState<Organization | null>(null);
   const [orgRole, setOrgRole] = useState<OrgRole>('member');
   const [showOrgPanel, setShowOrgPanel] = useState(false);
+  // Private beta: non-null → signed in but not approved yet; the waitlist
+  // screen replaces the dashboard (RLS already hides all data regardless).
+  const [betaWaitlist, setBetaWaitlist] = useState<'none' | 'pending' | 'denied' | null>(null);
   // The four item arrays live in workflowStore — the single source of truth
   // (refactor Stage 2). useStoreItemArray keeps the exact useState API, so
   // every setter call site (value AND functional-update forms) is unchanged.
@@ -1106,15 +1110,20 @@ function App() {
   // hasn't been run, ensureOrganization returns legacy mode and currentOrg
   // stays null — no org UI renders and the app behaves exactly as before.
   useEffect(() => {
-    if (!user) { setCurrentOrg(null); setShowOrgPanel(false); return; }
+    if (!user) { setCurrentOrg(null); setShowOrgPanel(false); setBetaWaitlist(null); return; }
     let cancelled = false;
     ensureOrganization(user).then(res => {
       if (cancelled) return;
       if (res.mode === 'org') {
         setCurrentOrg(res.org);
         setOrgRole(res.role);
+        setBetaWaitlist(null);
+      } else if (res.mode === 'waitlist') {
+        setCurrentOrg(null);
+        setBetaWaitlist(res.betaStatus);
       } else {
         setCurrentOrg(null);
+        setBetaWaitlist(null);
       }
     });
     return () => { cancelled = true; };
@@ -1279,6 +1288,18 @@ function App() {
 
   if (!user) {
     return <Auth onAuthenticated={() => {}} />;
+  }
+
+  // Private beta gate — signed in but not approved: waitlist screen, no dashboard.
+  if (betaWaitlist) {
+    return (
+      <WaitlistGate
+        status={betaWaitlist}
+        email={user.email ?? ''}
+        onSignOut={handleSignOut}
+        onRequested={() => setBetaWaitlist('pending')}
+      />
+    );
   }
 
   const handleImagesUploaded = async (items: ClothingItem[]) => {

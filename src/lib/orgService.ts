@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import type { User } from '@supabase/supabase-js';
 import { log } from './debugLogger';
 import { initializeDefaultCategories } from './categoriesService';
+import { getMyBetaSignup } from './betaService';
 
 /**
  * orgService — multi-org tenancy bootstrap and workspace management.
@@ -42,7 +43,11 @@ export interface OrgInviteRow {
 
 export type OrgBootstrapResult =
   | { mode: 'org'; org: Organization; role: OrgRole }
-  | { mode: 'legacy' }; // tenancy migration not applied — shared-workspace behavior
+  | { mode: 'legacy' } // tenancy migration not applied — shared-workspace behavior
+  // Private beta gate: signed in, no workspace, and their beta request is
+  // not (yet) approved. The app shows the waitlist screen instead of the
+  // dashboard. Never applies to existing members or invited teammates.
+  | { mode: 'waitlist'; betaStatus: 'none' | 'pending' | 'denied' };
 
 /**
  * Resolve the signed-in user's workspace, in order:
@@ -136,10 +141,26 @@ async function ensureOrganizationInner(user: User): Promise<OrgBootstrapResult> 
       }
     }
 
-    // 4. Fresh personal workspace
-    const name = `${(user.email || 'My').split('@')[0]}'s workspace`;
+    // 4. Beta gate — brand-new users only get a workspace once a Founding
+    //    Workspace admin approves their beta request. If the beta_signups
+    //    migration hasn't been run ('unavailable'), skip the gate entirely
+    //    (pre-beta behavior). Members and invitees never reach this point.
+    const beta = await getMyBetaSignup();
+    if (beta.status === 'none' || beta.status === 'pending' || beta.status === 'denied') {
+      log.auth(`ensureOrganization | waitlist (betaStatus=${beta.status})`);
+      return { mode: 'waitlist', betaStatus: beta.status };
+    }
+
+    // 5. Approved (or gate unavailable) → fresh workspace. Approved beta shops
+    //    get their requested shop name and plan='beta' — the future billing
+    //    migration targets these rows precisely (WHERE plan='beta').
+    const name = beta.status === 'approved' && beta.row?.org_name
+      ? beta.row.org_name
+      : `${(user.email || 'My').split('@')[0]}'s workspace`;
     const { data: org, error: orgErr } = await supabase
-      .from('organizations').insert({ name }).select().single();
+      .from('organizations')
+      .insert(beta.status === 'approved' ? { name, plan: 'beta' } : { name })
+      .select().single();
     if (orgErr || !org) {
       log.error(`ensureOrganization | org create failed: ${orgErr?.message}`);
       return { mode: 'legacy' };
