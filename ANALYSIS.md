@@ -117,7 +117,7 @@ Ordered so that each phase de-risks the next. Rough sizing assumes current solo 
 
 ### God components + duplicated state — strangler-fig, never a rewrite
 1. **Safety net first** (Phase 0 tests) — refactoring 12,000 lines without tests is gambling.
-2. **One source of truth for items** — introduce a single workflow store (Zustand, ~1 KB, or a ~50-line hand-rolled subscribe store; needs dependency approval) holding the four item arrays + currentBatchId. First consumer: `ProductDescriptionGenerator` drops its local `processedItems` copy, `isResettingRef`, and the structureKey sync effect — PDG becomes fully controlled. Because `store.getState()` reads live state inside any async callback, the entire `xxxRef` mirror pattern (App.tsx §14.14) and its stale-closure bug class die with it.
+2. **One source of truth for items** — ✅ **done July 2026 (dependency-free)**: hand-rolled `workflowStore` on `useSyncExternalStore`; Stage 2a moved App's four arrays behind `useState`-compatible adapters and replaced the ref mirrors with live views; Stage 2b retired PDG's duplicate `processedItems` copy, `isResettingRef`, the structureKey sync effect, and App's filtered-subset merge. The stale-closure bug class is dead by construction.
 3. **Extract along existing seams, one PR each, zero behavior change:**
    - App.tsx → `batchLifecycle.ts` (handleOpenBatch + startup restore + registerItemsInDB), `useAutoSave`, toast system → App becomes layout + wiring (~600 lines)
    - PDG → `useSpeechRecognition`, `useCropTool`, `Lightbox`, group-nav hook
