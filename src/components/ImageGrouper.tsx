@@ -2398,218 +2398,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             />
           </div>
 
-          {/* ── Photo tools — ONE place for rotate/crop/revert/delete on selected
-                photos. The old per-photo hover buttons are gone. ─────────────── */}
-          <div className="auto-group-control" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.35rem' }}>
-            <span className="auto-group-label" style={{ marginBottom: '0.1rem' }}>Photo tools</span>
-
-            {/* Pick mode: lets you select photos INSIDE group cards too */}
-            <button
-              className={`rotate-btn photo-pick-toggle${photoSelectMode ? ' photo-pick-toggle--on' : ''}`}
-              title={photoSelectMode
-                ? 'Pick mode ON — click photos (even inside groups) to select them, then use the tools below. Click to turn off.'
-                : 'Turn on to click-select photos (even inside groups), then rotate/crop/revert/delete them from here'}
-              onClick={(e) => {
-                e.stopPropagation();
-                const next = !photoSelectMode;
-                setPhotoSelectMode(next);
-                photoSelectModeRef.current = next;
-                if (!next) updateSelection(new Set());
-              }}
-            >
-              {photoSelectMode ? '🎯 Picking photos… (click to stop)' : '🎯 Pick photos'}
-            </button>
-
-            {/* Rotate selected */}
-            <div style={{ display: 'flex', gap: '0.35rem', width: '100%' }}>
-              <button
-                className="rotate-btn"
-                disabled={selectedItems.size === 0}
-                title={selectedItems.size > 0 ? `Rotate ${selectedItems.size} selected left` : 'Select photos first'}
-                style={{ flex: 1, fontSize: '0.72rem', padding: '0.3rem 0.4rem', height: 'auto', opacity: selectedItems.size === 0 ? 0.45 : 1 }}
-                onClick={(e) => { e.stopPropagation(); rotateSelected(-90); }}
-              >
-                ⟲ Rotate {selectedItems.size > 0 ? selectedItems.size : ''}
-              </button>
-              <button
-                className="rotate-btn"
-                disabled={selectedItems.size === 0}
-                title={selectedItems.size > 0 ? `Rotate ${selectedItems.size} selected right` : 'Select photos first'}
-                style={{ flex: 1, fontSize: '0.72rem', padding: '0.3rem 0.4rem', height: 'auto', opacity: selectedItems.size === 0 ? 0.45 : 1 }}
-                onClick={(e) => { e.stopPropagation(); rotateSelected(90); }}
-              >
-                ⟳ Rotate {selectedItems.size > 0 ? selectedItems.size : ''}
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-              <button
-                className="rotate-btn"
-                title="Select one image first, then click to copy its rotation"
-                style={{ fontSize: '0.72rem', padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem', height: 'auto', background: copiedRotation !== null ? '#6366f1' : undefined, color: copiedRotation !== null ? '#fff' : undefined }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const firstId = [...selectedItems][0];
-                  const source = firstId ? groupedItems.find(i => i.id === firstId) : null;
-                  if (!source) { alert('Select an image first to copy its rotation.'); return; }
-                  setCopiedRotation(source.imageRotation || 0);
-                  // Deselect the source so user can now select targets
-                  setSelectedItems(new Set());
-                }}
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.27"/>
-                </svg>
-                Copy Rot
-              </button>
-              <button
-                className="rotate-btn"
-                title="Select one image first, then click to copy its crop"
-                style={{ fontSize: '0.72rem', padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem', height: 'auto', background: copiedCrop !== undefined ? '#6366f1' : undefined, color: copiedCrop !== undefined ? '#fff' : undefined }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const firstId = [...selectedItems][0];
-                  const source = firstId ? groupedItems.find(i => i.id === firstId) : null;
-                  if (!source) { alert('Select an image first to copy its crop.'); return; }
-                  setCopiedCrop(source.crop ?? null);
-                  // Deselect the source so user can now select targets
-                  setSelectedItems(new Set());
-                }}
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="6 2 6 6 2 6"/><polyline points="18 22 18 18 22 18"/>
-                  <path d="M6 6h12v12H6z" strokeDasharray="2 2"/>
-                </svg>
-                Copy Crop
-              </button>
-            </div>
-
-            {/* Status + Paste — shown once something is in clipboard */}
-            {(copiedRotation !== null || copiedCrop !== undefined) && (
-              <div style={{ fontSize: '0.67rem', color: '#e0e7ff', lineHeight: 1.4, marginTop: '0.1rem' }}>
-                <div>
-                  {copiedRotation !== null && copiedCrop !== undefined
-                    ? 'Rot + crop copied'
-                    : copiedRotation !== null
-                    ? 'Rotation copied'
-                    : 'Crop copied'}
-                  {' · '}
-                  <button onClick={() => { setCopiedRotation(null); setCopiedCrop(undefined); }}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c4b5fd', fontSize: '0.72rem', padding: 0 }}>
-                    clear
-                  </button>
-                </div>
-                <div style={{ color: '#c4b5fd', marginTop: '0.15rem' }}>
-                  {selectedItems.size > 0
-                    ? `${selectedItems.size} image${selectedItems.size > 1 ? 's' : ''} selected`
-                    : 'Now select target images →'}
-                </div>
-                {selectedItems.size > 0 && (
-                  <button
-                    className="rotate-btn"
-                    title="Paste to all selected images"
-                    style={{
-                      marginTop: '0.3rem',
-                      fontSize: '0.72rem', padding: '0.3rem 0.6rem',
-                      display: 'flex', alignItems: 'center', gap: '0.25rem',
-                      height: 'auto', background: '#6366f1', color: '#fff', width: '100%',
-                      justifyContent: 'center',
-                    }}
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      const targetIds = [...selectedItems];
-                      console.log('[paste] Paste-to-selected clicked — selectedItems:', targetIds.length, 'copiedCrop:', copiedCrop, 'copiedRotation:', copiedRotation);
-                      setSelectedItems(new Set());
-                      if (copiedCrop !== undefined && copiedCrop !== null) {
-                        await runCropBatchPaste(targetIds, copiedCrop, copiedRotation);
-                      } else {
-                        // Rotation only — just update state
-                        const updated = groupedItems.map(i => {
-                          if (!targetIds.includes(i.id)) return i;
-                          return { ...i, ...(copiedRotation !== null ? { imageRotation: copiedRotation } : {}) };
-                        });
-                        setGroupedItems(updated);
-                        onGrouped(updated);
-                      }
-                    }}
-                  >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                    </svg>
-                    Paste to selected
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          {/* Photo tools moved to the .photo-toolbar pinned above the image grid. */}
         </div>
 
-        {/* ── Delete selected ── */}
-        {selectedItems.size > 0 && (
-          <div style={{ padding: '0 0.5rem', marginTop: '0.5rem' }}>
-            <button
-              onClick={handleDeleteSelected}
-              className="rotate-btn"
-              title={`Delete ${selectedItems.size} selected image${selectedItems.size > 1 ? 's' : ''}`}
-              style={{
-                width: '100%', fontSize: '0.72rem',
-                padding: '0.3rem 0.6rem', height: 'auto',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem',
-                background: '#dc2626', color: '#fff', border: 'none', borderRadius: 6,
-                cursor: 'pointer',
-              }}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-              </svg>
-              Delete {selectedItems.size} selected
-            </button>
-          </div>
-        )}
-
-        {/* ── Revert selected to originals ── */}
-        {selectedItems.size > 0 && groupedItems.some(i => selectedItems.has(i.id) && i.originalStoragePath) && (
-          <div style={{ padding: '0 0.5rem', marginTop: '0.4rem' }}>
-            <button
-              className="rotate-btn"
-              title="Revert selected cropped images back to their original un-cropped versions"
-              onClick={() => revertToOriginalBatch([...selectedItems])}
-              style={{
-                width: '100%', fontSize: '0.72rem',
-                padding: '0.3rem 0.6rem', height: 'auto',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem',
-                background: '#b45309', color: '#fff', border: 'none', borderRadius: 6,
-                cursor: 'pointer',
-              }}
-            >
-              ↺ Revert {groupedItems.filter(i => selectedItems.has(i.id) && i.originalStoragePath).length} to original
-            </button>
-          </div>
-        )}
-
-        {/* ── Clear originals cache ── */}
-        {groupedItems.some(i => i.originalStoragePath) && (
-          <div style={{ padding: '0 0.5rem', marginTop: '0.4rem' }}>
-            <button
-              className="rotate-btn"
-              title="Free up storage by permanently deleting cached original images. Revert will no longer be possible."
-              onClick={() => clearOriginalsCache(selectedItems.size > 0 && groupedItems.some(i => selectedItems.has(i.id) && i.originalStoragePath) ? 'selected' : 'all')}
-              style={{
-                width: '100%', fontSize: '0.68rem',
-                padding: '0.25rem 0.6rem', height: 'auto',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem',
-                background: 'transparent', color: '#f87171', border: '1px solid #7f1d1d', borderRadius: 6,
-                cursor: 'pointer',
-              }}
-            >
-              🗑 Clear {
-                selectedItems.size > 0 && groupedItems.some(i => selectedItems.has(i.id) && i.originalStoragePath)
-                  ? `${groupedItems.filter(i => selectedItems.has(i.id) && i.originalStoragePath).length} selected`
-                  : `${groupedItems.filter(i => i.originalStoragePath).length} all`
-              } originals cache
-            </button>
-          </div>
-        )}
+        {/* Delete / Revert / Clear-originals moved to the .photo-toolbar. */}
 
         {/* ── Keyboard shortcuts cheat sheet ── */}
         <div className="keyboard-cheatsheet">
@@ -2628,6 +2420,162 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
       {/* ── Image grid — scrollable content to the right of the sidebar ── */}
       <div className="grouper-scroll-content" ref={scrollContentRef}>
+
+      {/* ── Photo tools toolbar — ONE place for all photo actions, pinned above
+            the photo grid (sticky while scrolling). Pick photos → act on them. ── */}
+      <div className="photo-toolbar">
+        <button
+          className={`ptb-btn photo-pick-toggle${photoSelectMode ? ' photo-pick-toggle--on' : ''}`}
+          title={photoSelectMode
+            ? 'Pick mode ON — click photos (even inside groups) to select them, then use the tools here. Click to turn off.'
+            : 'Turn on to click-select photos (even inside groups), then rotate/crop/revert/delete them from this toolbar'}
+          onClick={(e) => {
+            e.stopPropagation();
+            const next = !photoSelectMode;
+            setPhotoSelectMode(next);
+            photoSelectModeRef.current = next;
+            if (!next) updateSelection(new Set());
+          }}
+        >
+          {photoSelectMode ? '🎯 Picking… (stop)' : '🎯 Pick photos'}
+        </button>
+
+        <span className="ptb-divider" />
+
+        <button
+          className="ptb-btn"
+          disabled={selectedItems.size === 0}
+          title={selectedItems.size > 0 ? `Rotate ${selectedItems.size} selected left` : 'Select photos first'}
+          onClick={(e) => { e.stopPropagation(); rotateSelected(-90); }}
+        >
+          ⟲ Rotate{selectedItems.size > 0 ? ` ${selectedItems.size}` : ''}
+        </button>
+        <button
+          className="ptb-btn"
+          disabled={selectedItems.size === 0}
+          title={selectedItems.size > 0 ? `Rotate ${selectedItems.size} selected right` : 'Select photos first'}
+          onClick={(e) => { e.stopPropagation(); rotateSelected(90); }}
+        >
+          ⟳ Rotate{selectedItems.size > 0 ? ` ${selectedItems.size}` : ''}
+        </button>
+
+        <span className="ptb-divider" />
+
+        <button
+          className={`ptb-btn${copiedRotation !== null ? ' ptb-btn--active' : ''}`}
+          title="Select one image first, then click to copy its rotation"
+          onClick={(e) => {
+            e.stopPropagation();
+            const firstId = [...selectedItems][0];
+            const source = firstId ? groupedItems.find(i => i.id === firstId) : null;
+            if (!source) { alert('Select an image first to copy its rotation.'); return; }
+            setCopiedRotation(source.imageRotation || 0);
+            // Deselect the source so user can now select targets
+            setSelectedItems(new Set());
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.27"/>
+          </svg>
+          Copy Rot
+        </button>
+        <button
+          className={`ptb-btn${copiedCrop !== undefined ? ' ptb-btn--active' : ''}`}
+          title="Select one image first, then click to copy its crop"
+          onClick={(e) => {
+            e.stopPropagation();
+            const firstId = [...selectedItems][0];
+            const source = firstId ? groupedItems.find(i => i.id === firstId) : null;
+            if (!source) { alert('Select an image first to copy its crop.'); return; }
+            setCopiedCrop(source.crop ?? null);
+            // Deselect the source so user can now select targets
+            setSelectedItems(new Set());
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 2 6 6 2 6"/><polyline points="18 22 18 18 22 18"/>
+            <path d="M6 6h12v12H6z" strokeDasharray="2 2"/>
+          </svg>
+          Copy Crop
+        </button>
+
+        {(copiedRotation !== null || copiedCrop !== undefined) && (
+          <>
+            <span className="ptb-status">
+              {copiedRotation !== null && copiedCrop !== undefined
+                ? 'Rot + crop copied'
+                : copiedRotation !== null
+                ? 'Rotation copied'
+                : 'Crop copied'}
+              {' · '}
+              <button className="ptb-link" onClick={() => { setCopiedRotation(null); setCopiedCrop(undefined); }}>
+                clear
+              </button>
+              {selectedItems.size === 0 && <em> — now select target photos</em>}
+            </span>
+            {selectedItems.size > 0 && (
+              <button
+                className="ptb-btn ptb-btn--primary"
+                title="Paste to all selected images"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const targetIds = [...selectedItems];
+                  console.log('[paste] Paste-to-selected clicked — selectedItems:', targetIds.length, 'copiedCrop:', copiedCrop, 'copiedRotation:', copiedRotation);
+                  setSelectedItems(new Set());
+                  if (copiedCrop !== undefined && copiedCrop !== null) {
+                    await runCropBatchPaste(targetIds, copiedCrop, copiedRotation);
+                  } else {
+                    // Rotation only — just update state
+                    const updated = groupedItems.map(i => {
+                      if (!targetIds.includes(i.id)) return i;
+                      return { ...i, ...(copiedRotation !== null ? { imageRotation: copiedRotation } : {}) };
+                    });
+                    setGroupedItems(updated);
+                    onGrouped(updated);
+                  }
+                }}
+              >
+                📋 Paste to {selectedItems.size}
+              </button>
+            )}
+          </>
+        )}
+
+        {selectedItems.size > 0 && groupedItems.some(i => selectedItems.has(i.id) && i.originalStoragePath) && (
+          <button
+            className="ptb-btn ptb-btn--warn"
+            title="Revert selected cropped images back to their original un-cropped versions"
+            onClick={() => revertToOriginalBatch([...selectedItems])}
+          >
+            ↺ Revert {groupedItems.filter(i => selectedItems.has(i.id) && i.originalStoragePath).length}
+          </button>
+        )}
+
+        {selectedItems.size > 0 && (
+          <button
+            className="ptb-btn ptb-btn--danger"
+            title={`Delete ${selectedItems.size} selected image${selectedItems.size > 1 ? 's' : ''}`}
+            onClick={handleDeleteSelected}
+          >
+            🗑 Delete {selectedItems.size}
+          </button>
+        )}
+
+        {groupedItems.some(i => i.originalStoragePath) && (
+          <button
+            className="ptb-btn ptb-btn--ghost"
+            style={{ marginLeft: 'auto' }}
+            title="Free up storage by permanently deleting cached original images. Revert will no longer be possible."
+            onClick={() => clearOriginalsCache(selectedItems.size > 0 && groupedItems.some(i => selectedItems.has(i.id) && i.originalStoragePath) ? 'selected' : 'all')}
+          >
+            Clear {
+              selectedItems.size > 0 && groupedItems.some(i => selectedItems.has(i.id) && i.originalStoragePath)
+                ? `${groupedItems.filter(i => selectedItems.has(i.id) && i.originalStoragePath).length} selected`
+                : `${groupedItems.filter(i => i.originalStoragePath).length} all`
+            } originals
+          </button>
+        )}
+      </div>
 
       {/* Individual Items Section - Always Visible Drop Zone */}
       <div 
