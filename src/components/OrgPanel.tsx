@@ -4,6 +4,7 @@ import {
   fetchOrgMembers, fetchOrgInvites, inviteToOrg, revokeInvite, removeMember,
   type Organization, type OrgRole, type OrgMemberRow, type OrgInviteRow,
 } from '../lib/orgService';
+import { fetchBetaSignups, setBetaStatus, type BetaSignupRow } from '../lib/betaService';
 import './OrgPanel.css';
 
 interface OrgPanelProps {
@@ -27,13 +28,33 @@ export default function OrgPanel({ org, myRole, myUserId, onClose }: OrgPanelPro
   const [busy, setBusy] = useState(false);
 
   const isAdmin = myRole === 'owner' || myRole === 'admin';
+  // Beta waitlist management lives with the Founding Workspace admins only.
+  const isBetaAdmin = isAdmin && org.slug === 'founding';
+  const [betaSignups, setBetaSignups] = useState<BetaSignupRow[]>([]);
 
   const reload = async () => {
     setLoading(true);
-    const [m, i] = await Promise.all([fetchOrgMembers(org.id), fetchOrgInvites(org.id)]);
+    const [m, i, b] = await Promise.all([
+      fetchOrgMembers(org.id),
+      fetchOrgInvites(org.id),
+      isBetaAdmin ? fetchBetaSignups() : Promise.resolve([] as BetaSignupRow[]),
+    ]);
     setMembers(m);
     setInvites(isAdmin ? i : []);
+    setBetaSignups(b);
     setLoading(false);
+  };
+
+  const handleBetaDecision = async (id: string, status: 'approved' | 'denied') => {
+    if (busy) return;
+    setBusy(true);
+    const ok = await setBetaStatus(id, status);
+    if (!ok) setNotice('Could not update the request — check your permissions.');
+    else setNotice(status === 'approved'
+      ? 'Approved ✓ — their workspace is created automatically the next time they sign in. Let them know by email!'
+      : 'Denied — they will see the “at capacity” message.');
+    await reload();
+    setBusy(false);
   };
 
   useEffect(() => {
@@ -140,6 +161,42 @@ export default function OrgPanel({ org, myRole, myUserId, onClose }: OrgPanelPro
                 </ul>
               </>
             )}
+          </>
+        )}
+
+        {isBetaAdmin && !loading && (
+          <>
+            <h3 className="org-section-title">
+              Beta requests ({betaSignups.filter(s => s.status === 'pending').length} pending)
+            </h3>
+            {betaSignups.length === 0 && (
+              <p className="org-panel-loading">No requests yet — share the landing page: <code>/beta.html</code></p>
+            )}
+            <ul className="org-member-list">
+              {betaSignups
+                .slice()
+                .sort((a, b) => (a.status === 'pending' ? -1 : 1) - (b.status === 'pending' ? -1 : 1))
+                .map(s => (
+                  <li key={s.id} className="org-member-row beta-request-row">
+                    <div className="beta-request-info">
+                      <span className="org-member-email">
+                        <strong>{s.org_name}</strong> · {s.contact_name} · {s.email}
+                      </span>
+                      <span className="beta-request-meta">
+                        {[s.store_url, s.volume && `${s.volume}/wk`, s.notes].filter(Boolean).join(' · ') || '—'}
+                      </span>
+                    </div>
+                    {s.status === 'pending' ? (
+                      <span className="beta-request-actions">
+                        <button className="beta-approve" disabled={busy} onClick={() => handleBetaDecision(s.id, 'approved')}>Approve</button>
+                        <button className="beta-deny" disabled={busy} onClick={() => handleBetaDecision(s.id, 'denied')}>Deny</button>
+                      </span>
+                    ) : (
+                      <span className={`org-role-badge beta-status-${s.status}`}>{s.status}</span>
+                    )}
+                  </li>
+                ))}
+            </ul>
           </>
         )}
 

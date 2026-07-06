@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sortbot — Photograph the rack in the morning. Listings live by lunch.</title>
+    <meta name="description" content="Sortbot turns a camera roll of vintage clothing photos into Shopify-ready listings — grouping, voice descriptions, and export in one flow. Request beta access for your shop." />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛍️</text></svg>" />
+  </head>
+  <body>
+    <div id="beta-root">
+      <!-- ── Hero ─────────────────────────────────────────────────────────── -->
+      <header class="hero">
+        <div class="hero-inner">
+          <div class="brand">🛍️ Sortbot <span class="beta-chip">BETA</span></div>
+          <h1>Photograph the rack in the morning.<br />Listings live by lunch.</h1>
+          <p class="hero-sub">
+            Sortbot turns a camera roll of vintage clothing photos into Shopify-ready
+            listings — group the angles, dictate the details, export the file. Built by
+            resellers listing hundreds of pieces a week.
+          </p>
+          <a class="hero-cta" href="#signup">Request beta access ↓</a>
+        </div>
+      </header>
+
+      <!-- ── Value props ──────────────────────────────────────────────────── -->
+      <section class="features">
+        <div class="feature">
+          <div class="feature-icon">📸</div>
+          <h3>Dump the whole shoot</h3>
+          <p>Drop hundreds of photos at once — folders, ZIPs, phone exports. Shot-time
+          ordering and auto-grouping turn a pile into products in minutes.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🎤</div>
+          <h3>Talk, don't type</h3>
+          <p>Hold the garment and speak: “brand Nike, size large, width 18.” Sortbot
+          fills the fields, builds the SEO title, and writes the listing.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🛍️</div>
+          <h3>Shopify-ready in one click</h3>
+          <p>A 63-column import file with taxonomy, metafields, and images — with titles
+          checked against your live store so nothing collides.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">👥</div>
+          <h3>Your whole team, one workspace</h3>
+          <p>Everyone works the same rack together — grouping, describing, and exporting
+          in a shared private workspace with email invites.</p>
+        </div>
+      </section>
+
+      <!-- ── How it works ─────────────────────────────────────────────────── -->
+      <section class="how">
+        <h2>How it works</h2>
+        <ol class="how-steps">
+          <li><strong>Upload</strong> — drag in the day's shoot; photos compress and upload resumably, even on slow connections.</li>
+          <li><strong>Group</strong> — auto-group by photos-per-item, or rapid-fire pick mode; drag onto categories with presets that pre-fill shipping and SEO.</li>
+          <li><strong>Describe</strong> — dictate per listing; fields, measurements, and the description write themselves.</li>
+          <li><strong>Export</strong> — download the Shopify CSV (or hand it to your VA) and import. Done before lunch.</li>
+        </ol>
+      </section>
+
+      <!-- ── Signup ───────────────────────────────────────────────────────── -->
+      <section class="signup" id="signup">
+        <h2>Request beta access</h2>
+        <p class="signup-sub">
+          We're onboarding a small number of shops. Tell us about yours — we review
+          every request and email you when your workspace is approved.
+          <strong>Sortbot is free during the beta</strong>, and founding shops get
+          preferred pricing when paid plans launch.
+        </p>
+        <form id="beta-form" novalidate>
+          <div class="form-row">
+            <label>Shop / organization name *
+              <input name="org_name" type="text" required maxlength="120" placeholder="Rack City Vintage" />
+            </label>
+            <label>Your name *
+              <input name="contact_name" type="text" required maxlength="120" placeholder="Sam Reseller" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label>Email *
+              <input name="email" type="email" required maxlength="200" placeholder="you@shop.com" />
+            </label>
+            <label>Shopify store / website
+              <input name="store_url" type="text" maxlength="300" placeholder="rackcity.myshopify.com" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label>Listings per week
+              <select name="volume">
+                <option value="">Select…</option>
+                <option>Under 25</option>
+                <option>25–100</option>
+                <option>100–300</option>
+                <option>300+</option>
+              </select>
+            </label>
+            <label>Anything else?
+              <input name="notes" type="text" maxlength="500" placeholder="What's slowing your listing down today?" />
+            </label>
+          </div>
+          <button type="submit" id="beta-submit">Request access</button>
+          <p id="beta-msg" class="form-msg" role="status"></p>
+        </form>
+      </section>
+
+      <footer class="footer">
+        <p>Sortbot · built for vintage resellers · beta access is reviewed and approved by hand</p>
+      </footer>
+    </div>
+    <script type="module" src="/src/beta/main.ts"></script>
+  </body>
+</html>
