@@ -1260,3 +1260,118 @@
   from { opacity: 0; }
   to   { opacity: 1; }
 }
+
+/* ── Group select bar + ⋯ actions menu ─────────────────────────────────── */
+/* The bar is one big click target for selecting the group; all actions
+   (copy/paste crop, ungroup, delete) live in the ⋯ dropdown. */
+.group-select-bar {
+  gap: 0.4rem;
+  padding: 0.3rem 0.35rem !important;
+  margin: -0.15rem -0.15rem 0.3rem !important;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+}
+
+.group-select-bar:hover {
+  background: rgba(102, 126, 234, 0.12);
+}
+
+.group-select-bar.all-selected {
+  background: rgba(102, 126, 234, 0.18);
+}
+
+.group-select-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border: 2px solid #667eea;
+  border-radius: 50%;
+  background: white;
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.group-select-bar.all-selected .group-select-check {
+  background: #667eea;
+}
+
+.group-select-bar.some-selected .group-select-check {
+  color: #667eea;
+}
+
+.group-menu-wrap {
+  position: relative;
+  margin-left: auto;
+}
+
+.group-menu-btn {
+  width: 26px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: rgba(102, 126, 234, 0.15);
+  color: #4f46e5;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.group-menu-btn:hover {
+  background: rgba(102, 126, 234, 0.3);
+}
+
+.group-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  min-width: 130px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(17, 24, 39, 0.18);
+  padding: 0.25rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.group-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: #1f2937;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.group-menu-item:hover:not(:disabled) {
+  background: #eef2ff;
+}
+
+.group-menu-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.group-menu-item--danger {
+  color: #dc2626;
+}
+
+.group-menu-item--danger:hover:not(:disabled) {
+  background: #fef2f2;
+}

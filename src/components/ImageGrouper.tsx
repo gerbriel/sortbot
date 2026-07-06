@@ -161,6 +161,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const [draggedItem, setDraggedItem] = useState<ClothingItem | null>(null);
   const [draggedFromGroup, setDraggedFromGroup] = useState<string | null>(null);
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
+  // Which group's ⋯ actions menu is open (Copy/Paste crop, Ungroup, Delete)
+  const [openMenuGroupId, setOpenMenuGroupId] = useState<string | null>(null);
 
   // Photo reorder drag state (within a group)
   const [draggedPhotoId, setDraggedPhotoId] = useState<string | null>(null);
@@ -1407,6 +1409,52 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     } else {
       updateSelection(new Set());
     }
+  };
+
+  // Close the ⋯ group menu when clicking anywhere outside it
+  useEffect(() => {
+    if (!openMenuGroupId) return;
+    const close = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('.group-menu-wrap')) setOpenMenuGroupId(null);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [openMenuGroupId]);
+
+  // Ungroup ONE group (⋯ menu action) — same semantics as selecting the group
+  // and clicking "Ungroup Selected": members become singles, category cleared.
+  const ungroupGroup = (groupId: string) => {
+    log.grouper(`ungroupGroup | groupId=${groupId}`);
+    const memberIds = new Set(
+      groupedItemsRef.current
+        .filter(i => (i.productGroup || i.id) === groupId)
+        .map(i => i.id)
+    );
+    const updated = groupedItemsRef.current.map(item =>
+      memberIds.has(item.id)
+        ? { ...item, productGroup: item.id, category: undefined }
+        : item
+    );
+    try {
+      commitUpdate(updated);
+    } catch (err) {
+      console.error('[ungroupGroup] commitUpdate threw:', err);
+    }
+    updateSelection(new Set([...selectedItemsRef.current].filter(id => !memberIds.has(id))));
+  };
+
+  // Delete ONE group's images entirely (⋯ menu action; was the header × button)
+  const deleteGroup = async (items: ClothingItem[]) => {
+    if (!confirm(`Delete all ${items.length} images in this group? This cannot be undone.`)) return;
+    const storagePaths = items.map(i => i.storagePath).filter(Boolean) as string[];
+    const deletedIds = items.map(i => i.id);
+    await Promise.all(storagePaths.map(p => deleteImageFromStorage(p)));
+    if (storagePaths.length > 0) await supabase.from('product_images').delete().in('storage_path', storagePaths);
+    if (deletedIds.length > 0) await supabase.from('products').delete().in('id', deletedIds);
+    const updated = groupedItemsRef.current.filter(i => !deletedIds.includes(i.id));
+    commitUpdate(updated, true); // delete is permanent — skip history
+    updateSelection(new Set([...selectedItemsRef.current].filter(id => !deletedIds.includes(id))));
+    onImageDeleted?.();
   };
 
   // Ungroup selected items
@@ -2832,9 +2880,12 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   // Handle selection on mousedown so dragging still registers the selection
                   // even if the drag cancels the subsequent click event.
                   e.stopPropagation();
-                  if (!(e.target as HTMLElement).closest('button')) {
-                    toggleGroupSelection(groupId, items);
-                  }
+                  const t = e.target as HTMLElement;
+                  // Selection target = the select bar + card padding ONLY. Photos are
+                  // for drag-reorder / double-click lightbox, and buttons/menu do their
+                  // own thing — clicking those must never toggle the group selection.
+                  if (t.closest('button') || t.closest('.group-images') || t.closest('.group-menu-wrap')) return;
+                  toggleGroupSelection(groupId, items);
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -2844,80 +2895,95 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     <span className="category-label">{items[0].category}</span>
                   </div>
                 )}
+                {/* Select bar — the whole bar (except the ⋯ menu) toggles group selection.
+                    Actions live in the ⋯ dropdown so the bar is one big, safe click target
+                    and the destructive delete is never a stray top-right × anymore. */}
                 <div
-                  className={`group-header${items.every(i => selectedItems.has(i.id)) ? ' all-selected' : items.some(i => selectedItems.has(i.id)) ? ' some-selected' : ''}`}
+                  className={`group-header group-select-bar${items.every(i => selectedItems.has(i.id)) ? ' all-selected' : items.some(i => selectedItems.has(i.id)) ? ' some-selected' : ''}`}
                   style={{ cursor: 'pointer', userSelect: 'none' }}
                   title="Click to select/deselect this group"
                 >
+                  <span className="group-select-check" aria-hidden="true">
+                    {items.every(i => selectedItems.has(i.id)) ? <Check size={13} /> : items.some(i => selectedItems.has(i.id)) ? '–' : ''}
+                  </span>
                   <span className="group-badge">
                     {items.length} images
                   </span>
                   {items[0].category && (
                     <span className="category-badge">{items[0].category}</span>
                   )}
-                  {/* Group-level selection indicator */}
-                  {items.every(i => selectedItems.has(i.id)) && (
-                    <div className="group-selected-indicator"><Check size={14} /></div>
-                  )}
-                  {/* Copy crop from first cropped image in this group */}
-                  <button
-                    className="delete-image-btn"
-                    title={items.some(i => i.crop) ? 'Copy crop from this group' : 'No crop set on any image in this group'}
-                    style={{
-                      marginLeft: 4, borderRadius: 6, border: 'none',
-                      padding: '0.15rem 0.42rem', fontSize: '0.68rem', cursor: 'pointer', fontWeight: 600,
-                      background: copiedCrop !== undefined && items.some(i => i.id === ([...selectedItems][0]) && i.crop)
-                        ? '#6366f1' : 'rgba(99,102,241,0.18)',
-                      color: '#c4b5fd',
-                      opacity: items.some(i => i.crop) ? 1 : 0.4,
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const source = items.find(i => i.crop) ?? items[0];
-                      setCopiedCrop(source.crop ?? null);
-                      setCopiedRotation(source.imageRotation ?? null);
-                    }}
-                  >
-                    Copy
-                  </button>
-                  {/* Paste crop to entire group — only visible when a crop is in clipboard */}
-                  {copiedCrop !== undefined && copiedCrop !== null && (
+                  <div className="group-menu-wrap" onMouseDown={(e) => e.stopPropagation()}>
                     <button
-                      className="delete-image-btn"
-                      title="Paste copied crop to all images in this group"
-                      style={{ marginLeft: 2, background: '#6366f1', color: '#fff', borderRadius: 6, border: 'none', padding: '0.15rem 0.42rem', fontSize: '0.68rem', cursor: 'pointer', fontWeight: 600 }}
-                      onClick={async (e) => {
+                      className="group-menu-btn"
+                      title="Group actions"
+                      aria-haspopup="menu"
+                      aria-expanded={openMenuGroupId === groupId}
+                      onClick={(e) => {
                         e.stopPropagation();
-                        const ids = items.map(i => i.id);
-                        console.log('[paste] Group Paste clicked — groupId:', groupId, 'items:', ids.length, 'copiedCrop:', copiedCrop, 'copiedRotation:', copiedRotation);
-                        console.log('[paste] item storagePathes:', items.map(i => i.storagePath));
-                        await runCropBatchPaste(ids, copiedCrop!, copiedRotation);
+                        setOpenMenuGroupId(openMenuGroupId === groupId ? null : groupId);
                       }}
                     >
-                      Paste
+                      ⋯
                     </button>
-                  )}
-                  {/* Delete entire group button */}
-                  <button
-                    className="delete-image-btn group-delete-btn"
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      if (!confirm(`Delete all ${items.length} images in this group? This cannot be undone.`)) return;
-                      const storagePaths = items.map(i => i.storagePath).filter(Boolean) as string[];
-                      const deletedIds = items.map(i => i.id);
-                      await Promise.all(storagePaths.map(p => deleteImageFromStorage(p)));
-                      if (storagePaths.length > 0) await supabase.from('product_images').delete().in('storage_path', storagePaths);
-                      if (deletedIds.length > 0) await supabase.from('products').delete().in('id', deletedIds);
-                      const updated = groupedItems.filter(i => !deletedIds.includes(i.id));
-                      commitUpdate(updated, true); // delete is permanent — skip history
-                      updateSelection(new Set([...selectedItems].filter(id => !deletedIds.includes(id))));
-                      onImageDeleted?.();
-                    }}
-                    title="Delete this entire group"
-                    style={{ marginLeft: 'auto' }}
-                  >
-                    ×
-                  </button>
+                    {openMenuGroupId === groupId && (
+                      <div className="group-menu" role="menu">
+                        <button
+                          className="group-menu-item"
+                          role="menuitem"
+                          disabled={!items.some(i => i.crop)}
+                          title={items.some(i => i.crop) ? 'Copy crop from this group' : 'No crop set on any image in this group'}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const source = items.find(i => i.crop) ?? items[0];
+                            setCopiedCrop(source.crop ?? null);
+                            setCopiedRotation(source.imageRotation ?? null);
+                            setOpenMenuGroupId(null);
+                          }}
+                        >
+                          Copy crop
+                        </button>
+                        <button
+                          className="group-menu-item"
+                          role="menuitem"
+                          disabled={copiedCrop === undefined || copiedCrop === null}
+                          title={copiedCrop != null ? 'Paste copied crop to all images in this group' : 'Copy a crop first'}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (copiedCrop == null) return;
+                            setOpenMenuGroupId(null);
+                            const ids = items.map(i => i.id);
+                            await runCropBatchPaste(ids, copiedCrop, copiedRotation);
+                          }}
+                        >
+                          Paste crop
+                        </button>
+                        <button
+                          className="group-menu-item"
+                          role="menuitem"
+                          title="Split this group back into individual images"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMenuGroupId(null);
+                            ungroupGroup(groupId);
+                          }}
+                        >
+                          Ungroup
+                        </button>
+                        <button
+                          className="group-menu-item group-menu-item--danger"
+                          role="menuitem"
+                          title="Delete this entire group"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            setOpenMenuGroupId(null);
+                            await deleteGroup(items);
+                          }}
+                        >
+                          Delete group…
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="group-images">
                   {items.map((item) => (
