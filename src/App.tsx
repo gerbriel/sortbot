@@ -18,6 +18,7 @@ import CategoriesManager from './components/CategoriesManager';
 import { saveBatchToDatabase, getThumbnailUrl } from './lib/productService';
 import { autoSaveWorkflowBatch, markBatchConfirmed, type WorkflowBatch } from './lib/workflowBatchService';
 import { ensureOrganization, type Organization, type OrgRole } from './lib/orgService';
+import { slimForWorkflowState, ultraSlimForBackup } from './lib/slimItems';
 import OrgPanel from './components/OrgPanel';
 import { getCategoryPresets } from './lib/categoryPresetsService';
 import { applyPresetDirectly } from './lib/applyPresetToGroup';
@@ -1752,15 +1753,7 @@ function App() {
     try {
       // Only the fields that are NOT in the products/product_images tables — we cannot
       // recover these from any DB query, so they must survive a page refresh here.
-      const ultraSlim = (item: ClothingItem) => ({
-        id:                  item.id,
-        storagePath:         item.storagePath,
-        productGroup:        item.productGroup,
-        category:            item.category,
-        capturedAt:          item.capturedAt,
-        imageRotation:       item.imageRotation,
-        crop:                item.crop,
-      });
+      // (ultraSlimForBackup — extracted to lib/slimItems.ts, tested there.)
       const liveNow =
         workflowState.processedItems.length > 0 ? workflowState.processedItems :
         workflowState.sortedImages.length    > 0 ? workflowState.sortedImages    :
@@ -1770,7 +1763,7 @@ function App() {
         localStorage.setItem('sortbot_workflow_backup', JSON.stringify({
           batchId:   currentBatchIdRef.current,
           savedAt:   Date.now(),
-          items:     liveNow.map(ultraSlim),
+          items:     liveNow.map(ultraSlimForBackup),
         }));
       }
     } catch { /* localStorage full or unavailable — skip */ }
@@ -1798,25 +1791,8 @@ function App() {
       autoSaveInFlightRef.current = true;
 
       // True slim — only the fields that CANNOT be recovered from the products/product_images
-      // DB tables. All text content (generatedDescription, voiceDescription, seoTitle, price,
-      // tags, etc.) lives in products and is merged back in handleOpenBatch / startup hydration.
-      // This reduces the workflow_state blob by ~10x (2000 items: ~10 MB → ~800 KB).
-      const slim = (items: ClothingItem[]): any[] => items.map(item => ({
-        id:                  item.id,
-        storagePath:         item.storagePath,
-        imageUrls:           item.imageUrls,
-        thumbnailUrl:        item.thumbnailUrl,
-        productGroup:        item.productGroup,
-        category:            item.category,
-        capturedAt:          item.capturedAt,
-        originalName:        item.originalName,
-        imageRotation:       item.imageRotation,
-        crop:                item.crop,
-        originalStoragePath: item.originalStoragePath,
-        originalUrl:         item.originalUrl,
-        brandCategory:       item.brandCategory,
-        descriptionEdited:   item.descriptionEdited,
-      }));
+      // DB tables (slimForWorkflowState — extracted to lib/slimItems.ts, tested there).
+      const slim = slimForWorkflowState;
 
       // Only persist ONE list — the most progressed one — to avoid 4x duplication.
       // On restore, all four arrays are set from this single list.
