@@ -30,6 +30,7 @@ const processedItemsRef  = liveArrayRef('processedItems');
 const uploadedImagesRef  = liveArrayRef('uploadedImages');
 import OrgPanel from './components/OrgPanel';
 import WaitlistGate from './components/WaitlistGate';
+import Landing from './components/Landing';
 import { getCategoryPresets } from './lib/categoryPresetsService';
 import { applyPresetDirectly } from './lib/applyPresetToGroup';
 import type { BrandCategory } from './lib/brandCategorySystem';
@@ -233,6 +234,9 @@ function App() {
   // Private beta: non-null → signed in but not approved yet; the waitlist
   // screen replaces the dashboard (RLS already hides all data regardless).
   const [betaWaitlist, setBetaWaitlist] = useState<'none' | 'pending' | 'denied' | null>(null);
+  // Logged-out visitors see the marketing landing at the main URL; "Log in"
+  // switches to the Auth screen. Logged-in users skip both (session restore).
+  const [showLogin, setShowLogin] = useState(false);
   // The four item arrays live in workflowStore — the single source of truth
   // (refactor Stage 2). useStoreItemArray keeps the exact useState API, so
   // every setter call site (value AND functional-update forms) is unchanged.
@@ -1287,7 +1291,26 @@ function App() {
   }
 
   if (!user) {
-    return <Auth onAuthenticated={() => {}} />;
+    // Marketing landing is the front door; Auth only when "Log in" is clicked.
+    if (!showLogin) {
+      return <Landing onLoginClick={() => setShowLogin(true)} />;
+    }
+    return (
+      <div style={{ position: 'relative' }}>
+        <button
+          onClick={() => setShowLogin(false)}
+          style={{
+            position: 'absolute', top: 16, left: 16, zIndex: 10,
+            background: 'rgba(255,255,255,0.9)', border: '1px solid #d1d5db',
+            borderRadius: 8, padding: '8px 14px', fontSize: 14, fontWeight: 700,
+            color: '#374151', cursor: 'pointer',
+          }}
+        >
+          ← Back
+        </button>
+        <Auth onAuthenticated={() => {}} />
+      </div>
+    );
   }
 
   // Private beta gate — signed in but not approved: waitlist screen, no dashboard.
