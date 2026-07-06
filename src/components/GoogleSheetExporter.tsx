@@ -1,8 +1,12 @@
 import { forwardRef, useImperativeHandle, useEffect, useState } from 'react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
-import { smartSeoTruncate, primaryMaterial } from '../lib/textAIService';
+import { smartSeoTruncate, primaryMaterial, normalizeSizeValue } from '../lib/textAIService';
 import './GoogleSheetExporter.css';
+
+/** Clean base size for CSV/titles/alt-text — strips any "(fits like …)" note,
+ *  which belongs only in the description SIZE line. */
+const baseSize = (s?: string): string => (s ? normalizeSizeValue(s) : '');
 
 /**
  * Returns a full https:// Supabase public URL for an item, or '' if unavailable.
@@ -385,8 +389,30 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
     return groups;
   }, {} as Record<string, ClothingItem[]>);
 
+  // Order the CSV rows by when the photos were taken (earliest capturedAt of each
+  // group's members), matching Step 2's default ↑ Date sort — so products land in
+  // Shopify in shoot/grouping order instead of the scrambled processedItems order
+  // (which drifts across merges, gap-fills, and restores during a session).
+  // Tiebreak: original filename in natural order (DSC02175 < DSC02176), same as
+  // the Step 2 name sort. Items WITHIN a group keep their existing order so the
+  // primary image (position 0) is never changed by the export.
+  const groupCaptureKey = (group: ClothingItem[]): number => {
+    const times = group
+      .map(i => i.capturedAt)
+      .filter((t): t is number => typeof t === 'number' && t > 0);
+    return times.length ? Math.min(...times) : Number.MAX_SAFE_INTEGER;
+  };
+  const orderedGroups = Object.values(productGroups).sort((a, b) => {
+    const ka = groupCaptureKey(a);
+    const kb = groupCaptureKey(b);
+    if (ka !== kb) return ka - kb;
+    const na = a[0]?.originalName || a[0]?.storagePath || '';
+    const nb = b[0]?.originalName || b[0]?.storagePath || '';
+    return na.localeCompare(nb, undefined, { numeric: true });
+  });
+
   // Build products, then deduplicate titles/handles in a second pass
-  const rawProducts = Object.values(productGroups).map(group => {
+  const rawProducts = orderedGroups.map(group => {
     // Coalesce fields across the WHOLE group so the exported product never depends on
     // which item happens to be group[0]. For each field, take the first member that has a
     // non-empty value. This fixes price / brand / size / condition / measurements showing
@@ -418,7 +444,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       if (src.modelName) parts.push(src.modelName);
       if (src.color) parts.push(src.color);
       if (src.category) parts.push(src.category);
-      if (src.size) parts.push(`(${src.size})`);
+      if (src.size) parts.push(`(${baseSize(src.size)})`);
       const built = parts.filter(Boolean).join(' ');
       // If we have nothing distinctive, fall back to the filename (minus extension)
       // so every product gets a unique title/handle even without AI-generated data.
@@ -625,7 +651,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       // Build image alt text: "Title - Color - Size"
       const altParts = [cleanTitle];
       if (primaryColor && !cleanTitle.toLowerCase().includes(primaryColor.toLowerCase())) altParts.push(primaryColor);
-      if (product.size) altParts.push(product.size);
+      if (product.size) altParts.push(baseSize(product.size));
       const imageAltText = altParts.filter(Boolean).join(' - ');
 
       // Build a URL handle unique within this export
@@ -698,7 +724,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         product.taxCode || '',                                           // Variant Tax Code
         String(product.costPerItem || '0.00'),                          // Cost per item
         (product.status || 'active').toLowerCase(),                       // Status
-        product.size || '',                                              // Size (product.metafields.custom.size)
+        baseSize(product.size) || '',                                    // Size (product.metafields.custom.size)
         product.condition || '',                                         // Condition (product.metafields.custom.condition)
         product.parcelSize || '',                                        // Parcel Size (product.metafields.custom.parcel_size)
         product.packageDimensions || '',                                 // Package Dimensions (product.metafields.custom.package_dimensions)
@@ -866,7 +892,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                     const variantGrams = isNaN(rawWeight) ? '' : String(rawWeight);
                     const altParts = [cleanTitle];
                     if (primaryColor && !cleanTitle.toLowerCase().includes(primaryColor.toLowerCase())) altParts.push(primaryColor);
-                    if (product.size) altParts.push(product.size);
+                    if (product.size) altParts.push(baseSize(product.size));
                     const imageAltText = altParts.filter(Boolean).join(' - ');
                     const tr = (v: string | undefined | null, maxLen = 40) => {
                       const s = v ?? '—';
@@ -917,7 +943,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       product.taxCode || '',                                         // Variant Tax Code
                       String(product.costPerItem || '0.00'),                       // Cost per item
                       (product.status || 'active').toLowerCase(),                    // Status
-                      product.size || '',                                            // Size (custom.size)
+                      baseSize(product.size) || '',                                  // Size (custom.size)
                       product.condition || '',                                       // Condition (custom.condition)
                       product.parcelSize || '',                                      // Parcel Size (custom.parcel_size)
                       product.packageDimensions || '',                               // Package Dimensions (custom.package_dimensions)
