@@ -459,3 +459,14 @@
 
 /* ── Footer ── */
 .ld-footer { text-align: center; color: #9ca3af; font-size: 13px; padding: 56px 16px 32px; }
+
+.ld-tier-founder {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 800;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: 999px;
+  padding: 3px 10px;
+  margin-bottom: 12px;
+}
