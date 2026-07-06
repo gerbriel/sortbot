@@ -31,3 +31,6 @@ dist-ssr
 
 # Supabase CLI local cache/metadata
 supabase/.temp/
+
+# pasted console-debug dumps
+consolelog.md

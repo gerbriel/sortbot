@@ -1,209 +1,115 @@
-# SortBot — AI Clothing Sorting & Export App
+# Sortbot — Vintage Clothing Listing Workflow
 
-A React web application for sorting, grouping, and exporting clothing product images with AI-powered descriptions, voice transcription, and Shopify-ready CSV export.
+Sortbot is a web app for vintage clothing resellers. Upload a batch of clothing photos, group the multi-angle shots of each item, assign categories, dictate a description per listing, and export a Shopify-ready product CSV — hundreds of listings per session.
+
+**Live app:** https://gerbriel.github.io/sortbot (deployed from `main` via GitHub Actions)
+
+> **Contributors / AI agents:** read [CLAUDE.md](CLAUDE.md) first. It is the authoritative codebase reference — architecture, data model, invariants, and a long list of things that look wrong but are deliberate.
 
 ---
 
 ## Features
 
-- 📤 **Batch Image Upload** — Drag-and-drop upload of 100+ images at once
-- 📦 **Product Grouping** — Group multiple images of the same product together in Step 2
-- 🏷️ **Category Assignment** — Drag product groups onto category zones to assign and auto-apply presets
-- 🎤 **Voice Descriptions** — Record audio, transcribe with Web Speech API, and generate AI product info
-- 🤖 **AI Product Generation** — Auto-generate SEO titles, descriptions, tags, pricing, and policies
-- 💾 **Supabase Backend** — Images, products, and batches persisted to Supabase (Postgres + Storage)
-- 📚 **Library View** — Browse all saved images, product groups, and batches with search and drag-to-reassign
-- 🛍️ **Shopify CSV Export** — Download a Shopify-compatible CSV for direct product import
-- 🔄 **Workflow State** — Auto-saves progress so you can resume any batch
-
----
+- 📤 **Batch upload** — drag-drop files, folders, or ZIPs. Images are canvas-compressed (max 2000 px, JPEG 0.88) and uploaded to Supabase Storage over TUS resumable uploads (survives connection drops mid-batch).
+- 📅 **EXIF-aware ordering** — shot time (`DateTimeOriginal`) read on upload; Step 2 sorts/filters by capture date or original filename.
+- 📦 **Grouping (Step 2)** — rubber-band multi-select, keyboard shortcuts (`Cmd+Enter` group, `Cmd+A`/`Cmd+Shift+A`/`Cmd+D` selection), auto-group by N photos per item, and **pick mode** (auto-selects the next N ungrouped photos for rapid grouping).
+- 🏷️ **Categories + presets** — drag groups onto category zones; presets auto-fill shipping, measurements, SEO title templates, and Shopify taxonomy. Per-group preset overrides persist across reloads.
+- 🎤 **Voice descriptions (Step 3)** — Web Speech API dictation with field commands (`"brand Nike period"`, `"size large period"`, `"width 18 period"`, `"type crewneck period"`, `"description ... period"`).
+- ✍️ **Title/tag engine** — builds ≤60-char SEO titles from garment type, brand, and description keywords; sizes always render as letter symbols (XL/XXL); category-aware synonym swapping prevents cross-category contamination.
+- ✂️ **Crop tool** — crop/zoom any photo in Step 3, then copy the crop and paste it across many items; re-encoded images re-upload to the same storage path.
+- 🛍️ **Shopify CSV export (Step 4)** — 63-column Shopify import format, group-wide field coalescing, $0-price export block, and title/handle dedup against the export itself, the app's own database, **and the live Shopify catalog** (via the `shopify-titles` Supabase Edge Function).
+- 💾 **Auto-save + session restore** — work-in-progress persists to Supabase every 2 s; reload restores the active batch.
+- 📚 **Library** — browse all batches/groups/images, rename, duplicate, delete (with shared-storage-file reference guard), reopen any batch. Batch cards show who last edited them.
+- 👥 **Shared workspace** — all authenticated users see and can edit all batches (Supabase RLS collaborative policies).
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 18 + TypeScript |
-| Build | Vite |
-| Backend / DB | Supabase (Postgres, Storage, Auth) |
-| Styling | CSS3 (component-scoped) |
-| Speech | Web Speech API |
-| AI | OpenAI API (GPT-4o) |
+| Frontend | React 19 + TypeScript 5.9 |
+| Build | Vite 7 |
+| Backend / DB | Supabase (Postgres + RLS, Storage, Auth, one Deno Edge Function) |
+| Uploads | tus-js-client (resumable, 6 MB chunks) |
+| Styling | Plain CSS, component-scoped files |
+| Speech | Web Speech API (Chrome/Edge) |
+| Images | Canvas compression, exifr (EXIF), Service Worker CDN cache |
 | Icons | Lucide React |
 
----
+There is no application server — the app is a static SPA talking directly to Supabase. The only server-side code is `supabase/functions/shopify-titles` (reads existing Shopify product titles for export dedup; Admin token stays server-side).
 
 ## Getting Started
 
 ### Prerequisites
 
 - Node.js 18+
-- A [Supabase](https://supabase.com/) project
-- An [OpenAI](https://platform.openai.com/) API key
+- A [Supabase](https://supabase.com/) project (Postgres + Storage bucket `product-images`)
 
-### Installation
+### Install & Run
 
 ```bash
 git clone https://github.com/gerbriel/sortbot.git
 cd sortbot
 npm install
+cp .env.example .env   # fill in the two Supabase values
+npm run dev            # http://localhost:5173
 ```
 
 ### Environment Variables
 
-Create a `.env` file in the root:
-
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
-VITE_OPENAI_API_KEY=your-openai-api-key
+# optional
+VITE_STORAGE_LIMIT_GB=100   # storage meter denominator (1 = free tier)
 ```
 
-### Development
+The two Supabase variables are required — the app throws on load without them. Everything else in `.env.example` is legacy/optional (see CLAUDE.md §4).
+
+### Shopify title dedup (optional)
+
+To enable live duplicate-title checking against your Shopify store at export time:
 
 ```bash
-npm run dev
+supabase secrets set SHOPIFY_STORE=my-store SHOPIFY_ADMIN_TOKEN=shpat_...
+supabase functions deploy shopify-titles
 ```
 
-App runs at `http://localhost:5173`
+Without this, the exporter silently falls back to deduping against its own database only.
 
-### Production Build
+### Build / Lint
 
 ```bash
-npm run build
+npm run build    # tsc -b && vite build → dist/
+npm run lint
+npm run preview
 ```
 
----
+There are currently **no automated tests**.
 
 ## Workflow
 
-### Step 1 — Upload Images
-- Drag and drop or click to select clothing images (JPG, PNG, WEBP)
-- Images are uploaded to Supabase Storage
+1. **Upload** — drop images/folders/ZIPs. Compression + TUS upload + EXIF read happen automatically. Storage meter and compression tools live here.
+2. **Group & Categorize** — group each item's photos (manually, auto-group by N, or pick mode), then drag groups onto category zones. Presets apply automatically.
+3. **Describe** — navigate listing-by-listing; dictate or type; Generate Description builds the title, tags, and Shopify-style description; edit any of the ~50 fields. Everything auto-saves.
+4. **Export** — review the 63-column preview, then download the Shopify import CSV. Export blocks if any product is missing a price.
 
-### Step 2 — Group & Categorize
-- Images appear as individual items
-- Select multiple images and click **Group Selected** to create a multi-image product group
-- Drag a group card onto a **Category Zone** (right panel) to assign a category and auto-apply its preset (title template, tags, price, policies)
-- Single items can also be dragged to a category zone
-- Stats bar shows: multi-image groups · singles · total listings · total images
+## Database
 
-### Step 3 — Add Voice Descriptions & Generate Product Info
-- Navigate listings with **Prev / Next**
-- Click **Start Recording** and describe the product aloud
-- Transcription appears in real time
-- Click **Generate Product Info** to use AI to produce:
-  - SEO title
-  - Product description
-  - Tags
-  - Price
-  - Policies
-- Edit any field manually
-- Click **Save Changes** to persist
-
-### Step 4 — Review & Export
-- See a summary: Total Products · Priced Items · Categories
-- Preview all items in Shopify table format
-- Click **Download CSV** to export a Shopify-compatible CSV
-
-### Step 5 — Save & Export
-- Products and images are saved to Supabase
-- Batch progress is tracked (0–100%)
-
----
-
-## Library
-
-Access the **Library** from the main dashboard to manage all your saved data across three tabs:
-
-| Tab | Shows |
-|-----|-------|
-| **Images** | All saved images, grouped by batch → product group |
-| **Product Groups** | All product groups, grouped by batch |
-| **Batches** | All workflow batches as cards with image/group counts |
-
-### Library Features
-- **Search** across titles, categories, and batch names
-- **Rubber-band multi-select** — click and drag to select multiple items
-- **Drag to reassign** — drag images between product groups, or drag groups between batches
-- **Empty batches** show as drop targets in all three tabs
-- **Unassigned section** at the bottom for items with no batch
-- **Delete** individual images, groups, or entire batches
-- **Duplicate** a batch
-- **Rename** a batch inline
-- **Open** a batch to resume working on it
-
----
-
-## Project Structure
-
-```
-sortingapp/
-├── src/
-│   ├── components/
-│   │   ├── ImageUpload.tsx               # Step 1: drag-and-drop upload
-│   │   ├── ImageGrouper.tsx              # Step 2: group & categorize
-│   │   ├── CategoryZones.tsx             # Step 2: category drop zones
-│   │   ├── ProductDescriptionGenerator.tsx  # Step 3: voice + AI
-│   │   ├── SavedProducts.tsx             # Step 4: review & export
-│   │   ├── Library.tsx                   # Library view (all tabs)
-│   │   ├── LazyImg.tsx                   # Lazy-loading image component
-│   │   └── CategoryPresetsManager.tsx    # Manage category presets
-│   ├── lib/
-│   │   ├── supabaseClient.ts             # Supabase client
-│   │   ├── libraryService.ts             # Fetch saved images/products
-│   │   ├── workflowBatchService.ts       # Batch CRUD
-│   │   ├── categoriesService.ts          # Category management
-│   │   ├── applyPresetToGroup.ts         # Apply category preset to group
-│   │   └── saveBatchToDatabase.ts        # Persist batch to Supabase
-│   ├── App.tsx                           # Root component & workflow state
-│   ├── App.css                           # Global styles
-│   └── main.tsx                          # Entry point
-├── supabase/
-│   └── migrations/                       # DB schema migrations
-├── .github/
-│   └── copilot-instructions.md           # AI assistant instructions
-├── .env                                  # Local env vars (not committed)
-├── .env.example                          # Env template
-└── package.json
-```
-
----
-
-## Database Schema (Supabase)
-
-| Table | Purpose |
-|-------|---------|
-| `workflow_batches` | Batches with name, workflow_state JSON, progress |
-| `products` | Saved product groups (title, category, price, tags, etc.) |
-| `product_images` | Individual images linked to products |
-| `categories` | User-defined categories with emoji, color, sort order |
-| `category_presets` | Presets per category (title template, tags, price, policies) |
-
----
-
-## Category Presets
-
-Each category can have a preset that auto-fills:
-- Title template (e.g. `{brand} {model} Hat - Vintage`)
-- Tags
-- Price
-- Product type
-- Policies
-
-When a product group is dragged onto a category zone, the preset is applied automatically. Unfilled `{brand}` / `{model}` tokens are cleaned up in the Library display.
-
----
+Supabase tables: `workflow_batches` (session state as JSONB), `products`, `product_images`, `categories`, `category_presets`. Authoritative TypeScript definitions in `src/lib/supabase.ts`; schema/migration SQL in `supabase/migrations/` (**read the warnings in CLAUDE.md before running any of them**).
 
 ## Browser Support
 
 | Feature | Chrome | Edge | Safari | Firefox |
 |---------|--------|------|--------|---------|
-| Voice recording | ✅ | ✅ | ✅ | ⚠️ Limited |
-| Full app | ✅ | ✅ | ✅ | ✅ |
+| Voice recording | ✅ | ✅ | ⚠️ Partial | ❌ |
+| Everything else | ✅ | ✅ | ✅ | ✅ |
 
----
+## Project Docs
+
+- [CLAUDE.md](CLAUDE.md) — full codebase reference (read before contributing)
+- [CHANGELOG.md](CHANGELOG.md) — release history
+- [ANALYSIS.md](ANALYSIS.md) — strengths/weaknesses assessment and the multi-org SaaS scaling roadmap
 
 ## License
 
 MIT
-

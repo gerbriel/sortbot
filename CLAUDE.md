@@ -28,6 +28,7 @@ Sortbot is a web app for vintage clothing resellers. Users upload batches of clo
 | `react-dropzone` | ^14.4.0 | Drag-and-drop file upload zone in Step 1. |
 | `jszip` | ^3.10.1 | Extract images from ZIP files in ImageUpload. |
 | `exifr` | ^7.1.3 | JPEG EXIF parsing. Used in `ImageUpload.tsx` to read `DateTimeOriginal` for shot-time sort order. |
+| `tus-js-client` | ^4.3.1 | Resumable uploads to Supabase Storage via the TUS protocol (`src/lib/tusUpload.ts`). 6 MB chunks; survives connection drops mid-file — chosen for large batches (380–1500 images) on slow/rural connections. |
 | `eslint` | ^9.39.1 | Linting. Config in `eslint.config.js`. |
 | `@vitejs/plugin-react` | ^5.1.1 | Vite plugin enabling React JSX transform and Fast Refresh. |
 
@@ -74,6 +75,9 @@ npm run preview
 | `VITE_GOOGLE_API_KEY` | Optional | Referenced in `.env.example` only. Not found in `src/`. | Dead variable. |
 | `VITE_APP_PASSWORD` | Optional | Referenced in `.env.example` only. Not found in `src/`. | Dead variable — password protection not implemented. |
 | `VITE_DISABLE_AUTH` | Optional | Referenced in `.env.example` only. Not found in `src/`. | Dead variable. |
+| `VITE_STORAGE_LIMIT_GB` | Optional | `src/App.tsx` (storage meter) | Denominator for the storage usage meter. Defaults to `100` (Pro plan) if unset. Set to `1` for free tier. |
+
+**Supabase Edge Function secrets** (server-side, set via `supabase secrets set`, NOT in `.env`): `SHOPIFY_STORE` and `SHOPIFY_ADMIN_TOKEN` — consumed by `supabase/functions/shopify-titles/index.ts`. The Admin token must never appear in client code or `VITE_*` vars.
 
 ---
 
@@ -82,7 +86,7 @@ npm run preview
 ```
 sortingapp/
 ├── src/
-│   ├── App.tsx                    # Root component. Owns ALL global state. ~2310 lines. Orchestrates all 4 steps.
+│   ├── App.tsx                    # Root component. Owns ALL global state. ~2890 lines. Orchestrates all 4 steps.
 │   ├── App.css                    # Global app styles.
 │   ├── main.tsx                   # Entry point. Renders <App /> in StrictMode.
 │   ├── index.css                  # Base CSS reset and body styles.
@@ -92,17 +96,20 @@ sortingapp/
 │   │   ├── Auth.css
 │   │   ├── ImageUpload.tsx        # Step 1. Drag-drop, folder, and ZIP import. Uploads to Supabase Storage. Uses `forwardRef` — exports `ImageUploadHandle` interface with `triggerFolder()`, `triggerZip()`, `isBusy`. Import Folder / Import ZIP buttons live in App.tsx Step 1 header (not inside this component).
 │   │   ├── ImageUpload.css
-│   │   ├── ImageGrouper.tsx       # Step 2 left panel. Multi-select, rubber-band, group/ungroup, delete.
+│   │   ├── ImageGrouper.tsx       # Step 2 left panel. ~3120 lines. Multi-select, rubber-band, group/ungroup, delete, sort/filter sidebar, pick mode, auto-group, keyboard shortcuts.
 │   │   ├── ImageGrouper.css
+│   │   ├── ImageSorter.tsx        # UNUSED legacy component. Not rendered in App.tsx.
+│   │   ├── ImageSorter.css
 │   │   ├── CategoryZones.tsx      # Step 2 right panel. Drag groups onto categories. Loads categories from DB.
 │   │   ├── CategoryZones.css
-│   │   ├── ProductDescriptionGenerator.tsx  # Step 3. Voice recording, AI generation, field editing. No Save button (auto-saved via Next/Prev). Finish button exports CSV. Has cursor-following magnifier lens on main preview image.
+│   │   ├── ProductDescriptionGenerator.tsx  # Step 3. ~3060 lines. Voice recording, AI generation, field editing, crop/zoom tool with copy-paste crop across items, magnifier lens, debounced (500ms) auto-save to products table with beforeunload flush. No Save button (auto-saved via Next/Prev). Finish button exports CSV.
 │   │   ├── ProductDescriptionGenerator.css
+│   │   ├── VoiceCommandTable.tsx  # Step 3 keyword→field reference table with inline cell editing. Exports VOICE_KEYWORD_TO_FIELD map. Rendered inside PDG.
 │   │   ├── ComprehensiveProductForm.tsx     # Sub-form within Step 3 for all product fields. No local state.
 │   │   ├── ComprehensiveProductForm.css
 │   │   ├── GoogleSheetExporter.tsx          # Step 4. Generates Shopify-format CSV and triggers download. Contains SHOPIFY_CATEGORY_MAP (6 entries) that maps short internal category names (e.g. "tees") to full Shopify taxonomy path strings.
 │   │   ├── GoogleSheetExporter.css
-│   │   ├── Library.tsx            # Modal overlay. Shows all batches, groups, images. 2478 lines. Batches displayed newest-first (client-side sort by updated_at DESC after fetch).
+│   │   ├── Library.tsx            # Modal overlay. Shows all batches, groups, images. ~3030 lines. Batches displayed newest-first (client-side sort by updated_at DESC after fetch). Batch cards show "edited by <email>". Delete claims ownership (UPDATE user_id) before deleting since DELETE RLS stays owner-scoped.
 │   │   ├── Library.css
 │   │   ├── CategoriesManager.tsx  # Modal for CRUD on user categories.
 │   │   ├── CategoriesManager.css
@@ -137,7 +144,10 @@ sortingapp/
 │   │   ├── categoryPresetsService.ts  # CRUD for category_presets table.
 │   │   ├── applyPresetToGroup.ts  # Applies a CategoryPreset to a ClothingItem array. SEO title template interpolation.
 │   │   ├── categories.ts          # Category type + DEFAULT_CATEGORIES constant (7 defaults).
-│   │   ├── textAIService.ts       # Core AI service. extractFieldsFromVoice(), generateProductDescription(). 841 lines.
+│   │   ├── textAIService.ts       # Core AI service. extractFieldsFromVoice(), generateProductDescription(), title/tag engine (fitTo60, ITEM_TYPE_SYNONYM_GROUPS), size normalization (letter symbols XL/XXL). ~1775 lines.
+│   │   ├── imageTransforms.ts     # Canvas crop/transform engine for the Step 3 crop tool. createTransformedFile() re-encodes at 92% JPEG. In-memory HTMLImageElement session cache (unbounded, tab-lifetime) so paste-crop over hundreds of images never re-fetches from CDN.
+│   │   ├── tusUpload.ts           # TUS resumable upload to Supabase Storage (tus-js-client). 6 MB chunks, auth token passed so Storage RLS applies. Used by ImageUpload via dynamic import.
+│   │   ├── storageSafety.ts       # filterUnreferencedStoragePaths() — reference-count guard before deleting storage files. Duplicated batches share storage files; this prevents deleting a file another batch still references. Fails safe (keeps file) on lookup errors. MUST be called before the product_images rows are deleted.
 │   │   ├── brandCategorySystem.ts # 160+ brand/category taxonomy. BrandCategory type + MODEL_DATABASE.
 │   │   ├── brandMatcher.ts        # Matches voice description text to brands + models using BRAND_DNA databases.
 │   │   ├── vintagePatternEngine.ts  # 5000+ brand/team cultural knowledge base. BRAND_DNA Record. 1443 lines.
@@ -153,9 +163,19 @@ sortingapp/
 │       └── api.ts                 # OpenAI fetch wrapper + mock fallback for generateProductDetails(). 521 lines. Not the active description path.
 ├── supabase/
 │   ├── schema.sql                 # Original schema (may be outdated — not all columns present here).
-│   └── migrations/                # 25+ migration SQL files. Many are one-off fixes. NOT tracked by Supabase CLI.
-│       └── shared_workspace_rls.sql  # ⚠️ DANGER: Sets "all users see all rows" SELECT policies. Has been run in Supabase dashboard.
-├── public/                        # Static public assets served by Vite.
+│   ├── functions/
+│   │   └── shopify-titles/index.ts  # Deno Edge Function. Reads all product titles+handles from the Shopify Admin GraphQL API (paginated 250/page, 200-page cap) so the CSV exporter can avoid title/handle collisions with already-uploaded products. Admin token lives server-side only (SHOPIFY_STORE / SHOPIFY_ADMIN_TOKEN secrets). verify_jwt ON. The ONLY server-side code in the app.
+│   └── migrations/                # 30+ migration SQL files. Many are one-off fixes. NOT tracked by Supabase CLI.
+│       ├── shared_workspace_rls.sql  # ⚠️ DANGER: Sets "all users see all rows" SELECT policies. Has been run in Supabase dashboard.
+│       ├── collaborative_edit_policies.sql  # ⚠️ DANGER: Makes INSERT/UPDATE permissive for ANY authenticated user on workflow_batches/products/product_images (DELETE stays owner-scoped). Fixes duplicate-batch forking when editing someone else's batch. Idempotent; rollback SQL at bottom. Run manually in SQL Editor.
+│       └── multi_org_tenancy.sql     # ⚠️ DANGER (but additive): multi-org tenancy. Creates organizations/org_members/org_invites, adds org_id to the 5 data tables, backfills ALL existing rows + users into a "Founding Workspace", sets org_id DEFAULT, and REPLACES all policies on the 5 tables with org-membership RLS. No deletes, idempotent, rollback at bottom. Supersedes shared_workspace_rls + collaborative_edit_policies once run. TAKE A DB BACKUP FIRST. Client code auto-detects whether it has run (orgService legacy mode).
+├── scripts/                       # Node one-off maintenance scripts (run with `node scripts/<name>.mjs`). Not part of the app build.
+│   ├── cleanup-orphaned-storage.mjs   # Deletes storage files not referenced by product_images OR any workflow_state (in-flight batches protected).
+│   ├── fetch-taxonomy.mjs             # Fetches Shopify taxonomy categories (Apparel/Footwear/Bags) via Admin GraphQL. Needs SHOPIFY_STORE/SHOPIFY_ADMIN_TOKEN env.
+│   ├── fetch-metaobject-gids.mjs      # Fetches Shopify metaobject GIDs (color-pattern, fabric, target-gender) to paste into GoogleSheetExporter.tsx.
+│   ├── update-presets.mjs             # One-off preset updater.
+│   └── update-presets.sql
+├── public/                        # Static public assets served by Vite. Includes sw.js (Service Worker image cache).
 ├── dist/                          # Build output. Generated by `npm run build`. Do not edit.
 ├── .env                           # Local environment variables. NOT committed.
 ├── .env.example                   # Template for env vars.
@@ -173,13 +193,13 @@ sortingapp/
 ├── run-categories-migration.sh    # Shell script for categories migration. Not part of app.
 ├── database_migration_csv_fields.sql  # Ad-hoc migration SQL at root. Not in supabase/migrations/.
 ├── fix_orphaned_product.sql       # Ad-hoc fix SQL at root. Not in supabase/migrations/.
-├── fix_security_warnings.sql      # Supabase linter security fixes: SECURITY INVOKER on all 8 functions, scoped RLS policies (auth.uid()=user_id on all 7 tables + export_batch_items via subquery), storage bucket listing fix, comment re leaked-password protection. Idempotent (DROP IF EXISTS throughout). Run manually in Supabase SQL Editor.
-├── fix_security_warnings.sql      # Supabase linter security fixes: SECURITY INVOKER on all functions, scoped RLS policies (auth.uid()=user_id on all 7 tables), storage bucket listing fix. Safe to re-run (idempotent DROP IF EXISTS). Must be run manually in Supabase SQL Editor. Section 5 note: leaked password protection must be enabled manually in Dashboard → Auth → Email.
+├── fix_security_warnings.sql      # Supabase linter security fixes: SECURITY INVOKER on all 8 functions, scoped RLS policies (auth.uid()=user_id on all 7 tables + export_batch_items via subquery), storage bucket listing fix, comment re leaked-password protection. Idempotent (DROP IF EXISTS throughout). Run manually in Supabase SQL Editor. NOTE: partially superseded by collaborative_edit_policies.sql for INSERT/UPDATE on the 3 workflow tables.
+├── ADD_APPLIED_PRESET_ID.sql      # Ad-hoc migration at root: adds applied_preset_id column to products (persists which preset was applied so the preset label survives reload).
 ├── test-db-connection.html        # Standalone HTML test file. Not part of app.
 └── proxy.log                      # Log file from huggingface-proxy. In .gitignore — never committed.
 ```
 
-**Dead/unused components** (exist in `components/` but not rendered in `App.tsx`, each marked with `// UNUSED` banner): `SavedProducts.tsx`, `TestLlamaVision.tsx`, `LiveWorkspaceSelector.tsx`, `RemoteCursors.tsx`, `AISettings.tsx`.
+**Dead/unused components** (exist in `components/` but not rendered in `App.tsx`, each marked with `// UNUSED` banner): `SavedProducts.tsx`, `TestLlamaVision.tsx`, `LiveWorkspaceSelector.tsx`, `RemoteCursors.tsx`, `AISettings.tsx`, `ImageSorter.tsx`.
 
 ---
 
@@ -255,7 +275,7 @@ This app has **no router**. It is a single-page application with no URL routing.
 | `alt_text` | TEXT | |
 | `original_name` | TEXT | Original upload filename (e.g. `DSC02175.jpg`). Nullable; NULL for rows created before migration `add_original_name_to_product_images.sql`. Used for name-sort in Step 2 and displayed on Step 2 cards. |
 
-**⚠️ Write strategy (critical):** `registerItemsInDB` in App.tsx uses **delete-then-insert** (not upsert) to keep product_images in sync. It deletes ALL rows for the product IDs in the batch, then inserts fresh. This prevents stale row accumulation when storage URLs change between sessions.
+**⚠️ Write strategy (critical):** `registerItemsInDB` in App.tsx uses a **hybrid delete-then-upsert** to keep product_images in sync: (1) pre-fetches existing `original_name` values so the wipe doesn't erase backfilled filenames, (2) deletes ALL rows for the product IDs in the batch (chunked 100/query), (3) re-inserts via `upsert(..., { onConflict: 'product_id,image_url', ignoreDuplicates: true })` so a concurrent racing call skips instead of throwing 409. The delete prevents stale row accumulation when storage URLs change between sessions. The `products` upsert above it uses `ignoreDuplicates: true` on `id` so it can NEVER steal `batch_id` from another batch (see gap-fill cap notes in §11).
 
 #### `categories`
 | Column | Type | Notes |
@@ -331,8 +351,17 @@ All state lives in `App.tsx`. There is no global store (no Redux, no Zustand, no
 - **Database:** Postgres via PostgREST. Tables: `workflow_batches`, `products`, `product_images`, `categories`, `category_presets`.
 - **Storage:** Bucket `product-images`. Path pattern: `{userId}/{productId}/{timestamp}-{random}.{ext}`. Public bucket.
 - **Realtime:** Presence channel `workspace-presence` used in `useUserPresence` and `LiveWorkspaceSelector`. Not wired into App.tsx in current code.
-- **RLS:** `shared_workspace_rls.sql` has been run. All authenticated users can SELECT all rows. Users can only INSERT/UPDATE/DELETE their own rows (user_id check). The app does NOT add `.eq('user_id', ...)` filters on reads — it relies entirely on RLS.
-- **Quirks:** PostgREST caps rows at 1000 per request. `fetchSavedProducts` and `fetchSavedImages` paginate with `range()` to bypass this.
+- **RLS (tenancy pending):** `supabase/migrations/multi_org_tenancy.sql` exists but may not have been run yet. Once run, it REPLACES everything below with org-membership policies (`org_id IN (SELECT user_org_ids())` on all five data tables) — users see and edit only their own workspace's rows. The client auto-detects which state the DB is in (`orgService.ensureOrganization` returns `legacy` mode when the org tables don't exist) so the same build works before and after. The description below is the PRE-tenancy state:
+- **RLS (legacy/current state):** `shared_workspace_rls.sql` opened SELECT to all authenticated users. `collaborative_edit_policies.sql` (June 2026) additionally opens INSERT and UPDATE on `workflow_batches`, `products`, and `product_images` to any authenticated user — this fixed the duplicate-batch fork that happened when a non-owner's auto-save UPDATE was RLS-blocked (0 rows updated → INSERT new batch). **DELETE stays owner-scoped** (`auth.uid() = user_id`); the app works around this by "claiming ownership" (UPDATE `user_id` to the current user, chunked) before deleting another user's batch/listing (commit `308ce2a`). Client code is forward-compatible: it works owner-only if the collab migration hasn't been run. The app does NOT add `.eq('user_id', ...)` filters on reads — it relies entirely on RLS.
+- **Edge Functions:** `shopify-titles` (the only one). Invoked from `GoogleSheetExporter.tsx` via `supabase.functions.invoke('shopify-titles')`, best-effort with silent fallback if not deployed.
+- **Quirks:** PostgREST caps rows at 1000 per request. `fetchSavedProducts` and `fetchSavedImages` paginate with `range()` to bypass this. Large `IN()` lists must be chunked (~100 IDs) to avoid URL-length 400s.
+
+### Shopify Admin API (read-only, via Edge Function)
+- `supabase/functions/shopify-titles/index.ts` pulls every existing product title + handle from the store's Admin GraphQL API (`2024-10`), paginated 250/page with a 200-page cap.
+- Purpose: `GoogleSheetExporter.tsx` builds an `existingTitles` set from (1) the app's own `products` table and (2) the live Shopify catalog, and deduplicates CSV export titles/handles against both — prevents Shopify import collisions.
+- Secrets: `SHOPIFY_STORE`, `SHOPIFY_ADMIN_TOKEN` (Supabase secrets, server-side only). CORS is open but `verify_jwt` is ON, so only signed-in app users can invoke.
+- There is NO write path to Shopify yet — publishing still happens via CSV import.
+- `scripts/fetch-taxonomy.mjs` and `scripts/fetch-metaobject-gids.mjs` are one-off local Node scripts hitting the same Admin API for taxonomy/metaobject data pasted into the exporter.
 
 ### Hugging Face / Llama Vision
 - Calls `http://localhost:3001/api/llama-vision` (local proxy).
@@ -361,7 +390,7 @@ All state lives in `App.tsx`. There is no global store (no Redux, no Zustand, no
 1. User drops images, selects a folder (`webkitdirectory`), or drops/selects a ZIP.
 2. ZIPs are extracted via JSZip, preserving `lastModified` from zip entry dates.
 3. Files are sorted by `lastModified` (capture date order).
-4. Images are uploaded to Supabase Storage in chunks of 10, in parallel within each chunk.
+4. Each image is canvas-compressed (max 2000 px, JPEG 0.88) then uploaded to Supabase Storage via TUS resumable upload (`tusUpload.ts`, dynamic import) in chunks of 10, in parallel within each chunk.
 5. Storage path: `{userId}/{productId}/{timestamp}-{random}.{ext}`.
 6. Each image becomes a `ClothingItem` with `{ id, file, preview (CDN URL), imageUrls: [url], storagePath }`.
 7. `onImagesUploaded` fires → App.tsx appends to `uploadedImages`, creates a new `batchId` if none exists, upserts stub rows to `products` and `product_images`.
@@ -411,11 +440,12 @@ All state lives in `App.tsx`. There is no global store (no Redux, no Zustand, no
 
 **CSV Export (GoogleSheetExporter):**
 - Groups items by `productGroup`.
+- **Field coalescing:** for each field, takes the first non-blank value across the WHOLE group (not just `group[0]`) — price/brand/size never depend on which item happens to be the representative.
 - Builds one product row per group, with multiple `Image Src` columns for multi-image products.
-- Deduplicates titles with sequential suffixes (" 2", " 3", etc.).
+- **Export integrity gates:** export is blocked (alert + banner) if any product has $0 / no price.
+- **Title/handle dedup, three sources:** within the export itself (sequential suffixes " 2", " 3"), against the app's own `products` table (paginated), and against the live Shopify catalog via the `shopify-titles` Edge Function (best-effort; silently skipped if not deployed).
 - Strips unresolved `{token}` placeholders from all fields.
-- Outputs Shopify product import CSV format.
-- **Does not call any API.** Pure client-side CSV generation.
+- Outputs Shopify product import CSV format (63 columns).
 
 ### Library
 **Files:** `Library.tsx` (2478 lines), `libraryService.ts`, `workflowBatchService.ts`
@@ -467,8 +497,8 @@ Strips `file`, `preview`, and `_presetData` before saving to `workflow_state`. T
 ### `autoSaveWorkflow` saves ONLY ONE LIST
 The auto-save stores only the most-progressed list as `processedItems`, with the other three arrays set to `[]`. The fallback chain on restore is: `processedItems → sortedImages → groupedImages → uploadedImages`. Never break this chain. If you add a new array to `workflow_state`, you must also add it to the fallback chain in `handleOpenBatch` and startup restore.
 
-### `registerItemsInDB` uses delete-then-insert
-`product_images` rows for a batch are **deleted** before inserting fresh ones. This prevents stale row accumulation from sessions where the public URL changed. Do NOT change this back to upsert without understanding why it was changed. See commit `a14876d`.
+### `registerItemsInDB` uses hybrid delete-then-upsert
+`product_images` rows for a batch are **deleted** before re-inserting fresh ones (via `upsert` with `ignoreDuplicates: true` on `(product_id, image_url)` so concurrent calls don't 409). This prevents stale row accumulation from sessions where the public URL changed. Before the delete, existing `original_name` values are pre-fetched and merged into the new rows so backfilled filenames survive the wipe. The `products` upsert uses `ignoreDuplicates: true` on `id` — it must NEVER overwrite `batch_id` (doing so "stole" items across batches and made gap-fill grow unboundedly). Do NOT change any of this without understanding why. See commits `a14876d`, `8ab4e6a`, `7d146ec`.
 
 **Chunk size (`DELETE_CHUNK_SIZE = 100`):** The delete is done in chunks of 100 product IDs at a time. PostgREST has a URL length limit that causes a 400 error when `IN(...)` clause exceeds ~794 IDs. Chunking prevents this. Do NOT remove the chunking loop.
 
@@ -497,7 +527,7 @@ Products with `batch_id = null` surface in Library's Images view under a separat
 
 ## 12. Component Dependency Map
 
-### `App.tsx` (1380 lines)
+### `App.tsx` (~2890 lines)
 The root of everything. It is doing far too much:
 - Auth management
 - Batch lifecycle (create, restore, save, clear)
@@ -510,20 +540,22 @@ The root of everything. It is doing far too much:
 **What depends on App.tsx:** Every component.
 **What App.tsx depends on:** `workflowBatchService`, `productService`, `supabase` directly, all step components.
 
-### `ProductDescriptionGenerator.tsx` (1616 lines)
+### `ProductDescriptionGenerator.tsx` (~3060 lines)
 Also doing too much:
 - Voice recording lifecycle
 - AI generation
 - Per-item field editing (ComprehensiveProductForm embedded)
 - Group navigation
-- Preset application
-- DB sync on every change (`syncGroupFieldsToDatabase`)
+- Preset application + per-group preset override (`selectedPresetId`, persisted via `applied_preset_id` / `productType` DB columns)
+- DB sync on every change (`syncGroupFieldsToDatabase`) + debounced 500 ms auto-save with `beforeunload` flush
 - Photo reorder within a group
-- Lightbox
+- Crop/zoom tool with copy-crop → paste-crop across many items (canvas re-encode + re-upload to same storagePath)
+- Lightbox + magnifier lens
+- VoiceCommandTable rendering and cell-edit handling
 
 **Risk:** Has its own internal `processedItems` state that must stay in sync with App.tsx. Changes here can silently diverge if `isResettingRef` logic is broken.
 
-### `Library.tsx` (2478 lines)
+### `Library.tsx` (~3030 lines)
 Standalone modal. Fetches its own data independently of App.tsx state. Communicates back via `onOpenBatch` callback only.
 
 **Risk:** `loadAll` is complex. The two-pass imageList build has subtle ordering dependencies. The `isLoadingRef` guard means a forced mount call and a refreshTrigger call can race if both fire in the same render.
@@ -564,9 +596,9 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 - No user-facing error toasts for most failures — errors are silent.
 
 ### Two Conflicting Patterns for DB Writes
-- `registerItemsInDB`: delete-then-insert for `product_images`.
+- `registerItemsInDB`: hybrid delete-then-upsert for `product_images` (delete chunked, then `upsert` with `ignoreDuplicates: true`).
 - `handleImagesUploaded` upload path: upsert with `ignoreDuplicates: true` for `product_images`.
-- **Follow the delete-then-insert pattern** for writes that happen after a full restore/open. Use upsert with `ignoreDuplicates: true` only for fresh first-time upload writes where no stale rows can exist.
+- **Follow the hybrid pattern** for writes that happen after a full restore/open. Use plain upsert with `ignoreDuplicates: true` only for fresh first-time upload writes where no stale rows can exist.
 
 ---
 
@@ -598,7 +630,11 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 
 14. **Ref mirror pattern is now canonical for all async handlers in App.tsx.** `sortedImagesRef`, `groupedImagesRef`, `uploadedImagesRef`, and `processedItemsRef` are updated every render. Any NEW handler added to App.tsx that reads these arrays inside an async callback or `setTimeout` MUST read from the ref (e.g. `sortedImagesRef.current`) not the state variable, to avoid the same stale-closure category-overwrite bug fixed in commit `aae35fc`. `handleApplyPreset` was also fixed to use refs (commit `993c0cf`) — it had the same bug where grouping then immediately applying a preset would use pre-group stale state.
 
-15. **`capturedAt` is not stored in any DB column — gap-filled items have no date.** `capturedAt` is EXIF data kept only in `workflow_state.processedItems`. Items gap-filled from the DB (present in `product_images` but absent from `workflow_state`, e.g. loose images dropped by a corrupted batch) will have `capturedAt: undefined` when a batch is opened, so their Step 2 cards show no date label. Recovery: open the batch from Library → go to Step 1 → click the yellow "📷 Fix Sort Order (EXIF rescan)" button. It downloads each image, reads EXIF DateTimeOriginal, and patches `capturedAt` in memory, which auto-saves to `workflow_state`. After that, dates appear on cards and persist across reloads.
+15. **Raw `console.log` calls have crept back in** (~100 across `ImageGrouper.tsx` `[PICK]`, `App.tsx`, `ProductDescriptionGenerator.tsx` persistence paths, `imageTransforms.ts` `[imgCache]`, `tusUpload.ts` `[tus]`) despite the earlier removal sweep (commit `9021611`) and the `debugLogger.ts` convention. Most were added during the June 2026 preset-persistence debugging (commit `ab7d48e`). They log unconditionally in production. Cleanup candidate: route them through `log.X()` categories.
+
+16. **Base font-size is 9 px** (commit `0eae362`) — set to replicate the user's preferred 67% zoom look at 100% zoom. All `rem` values in the app are relative to this. Any new CSS using `rem` will appear ~2/3 the size you'd expect from default 16 px assumptions.
+
+17. **`capturedAt` is not stored in any DB column — gap-filled items have no date.** `capturedAt` is EXIF data kept only in `workflow_state.processedItems`. Items gap-filled from the DB (present in `product_images` but absent from `workflow_state`, e.g. loose images dropped by a corrupted batch) will have `capturedAt: undefined` when a batch is opened, so their Step 2 cards show no date label. Recovery: open the batch from Library → go to Step 1 → click the yellow "📷 Fix Sort Order (EXIF rescan)" button. It downloads each image, reads EXIF DateTimeOriginal, and patches `capturedAt` in memory, which auto-saves to `workflow_state`. After that, dates appear on cards and persist across reloads.
 
 ---
 
@@ -636,7 +672,7 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 - ✅ Cursor-following magnifier lens on main preview image in Step 3 — circular 200×200px `.magnifier-lens` (position fixed, pointer-events none) follows cursor over the `preview-image-wrap` div, showing a 3× zoomed region via CSS `background-image`/`background-position`/`background-size: 300%`
 - ✅ Category preset picker in Step 2 right sidebar — when items are selected, a green pill-button per active preset appears below the grouper action buttons; clicking applies the preset (category, shipping defaults, SEO template) to all selected items via `handleApplyPreset` → `applyPresetToProductGroup` → `handleImagesSorted`; presets loaded from DB on login and refreshed when `CategoryPresetsManager` modal closes (commit `0530e9f`)
 - ✅ `initializeItems` stale-closure fix in `ImageGrouper.tsx` — added `groupedItemsRef` (ref mirror of `groupedItems` state) so the `useEffect([items])` always reads live local state; previously the stale closure caused every group/ungroup action to see `existingIds` as empty, falsely treating all items as "new" and re-triggering the loading spinner (commit `fe22a7e`)
-- ✅ All `console.log` calls removed from entire codebase (174 calls across 8 files: `App.tsx`, `Library.tsx`, `ImageGrouper.tsx`, `ImageUpload.tsx`, `ProductDescriptionGenerator.tsx`, `ImageSorter.tsx`, `workflowBatchService.ts`, `libraryService.ts`). Variables that existed solely to feed removed log calls also cleaned up (`withStoragePath`, `withImageUrls`, `imgCount`, `action`, `count`, `multiCount`, `wfItems`). (commit `9021611`)
+- ⚠️ All `console.log` calls removed from entire codebase — **since regressed**; see Known Bugs #15 (174 calls across 8 files: `App.tsx`, `Library.tsx`, `ImageGrouper.tsx`, `ImageUpload.tsx`, `ProductDescriptionGenerator.tsx`, `ImageSorter.tsx`, `workflowBatchService.ts`, `libraryService.ts`). Variables that existed solely to feed removed log calls also cleaned up (`withStoragePath`, `withImageUrls`, `imgCount`, `action`, `count`, `multiCount`, `wfItems`). (commit `9021611`)
 - ✅ Centralized debug logger (`src/lib/debugLogger.ts`) — single module with `dbg()`, `log.X()` category wrappers (`log.app`, `log.library`, `log.grouper`, `log.upload`, `log.pdg`, `log.sorter`, `log.service`, `log.db`, `log.auth`, `log.dom`, `log.error`), `setDebugEnabled()`, `isDebugEnabled()`. Zero-cost when disabled (`window.__SORTBOT_DEBUG__` guard). When enabled: attaches DOM event listeners for click, dblclick, contextmenu, mousedown/up/move (100ms throttle), keydown/up, dragstart/over/enter/leave/drop/dragend, scroll (throttled), selectionchange, focusin/out, input, change. State persisted to localStorage key `sortbot_debug_enabled`. Debug toggle button (🐛 Bug icon) rendered as a fixed bottom-left corner overlay (position fixed, z-index 9999) — amber when ON, grey when OFF — NOT in the header. Log calls instrumented in: `App.tsx` (8 handlers), `ImageGrouper.tsx` (7 call sites), `ImageUpload.tsx` (processFiles + upload complete), `ProductDescriptionGenerator.tsx` (applyPreset, startRecording, stopRecording, save, clearTranscript, thumbDrag, next/prev/finish), `Library.tsx` (loadAll, all CRUD handlers, itemClick, dragStart, dropImageOntoGroup, dropGroupOntoBatch), `workflowBatchService.ts` (fetchWorkflowBatches), `libraryService.ts` (fetchSavedProducts, fetchSavedImages). Category colour system: App=#6366f1, Library=#0ea5e9, Grouper=#f59e0b, Upload=#10b981, PDG=#ec4899, Sorter=#8b5cf6, Service=#64748b, DB=#0284c7, Auth=#7c3aed, DOM=#94a3b8, Error=#ef4444. (commits `fc59d7d`, `ace3a41`)
 - ✅ CategoryZones fully instrumented with debug logging — category drop, click-assign, clear category, group reorder, photo reorder (commit `6f3062a`)
 - ✅ ImageGrouper selection clicks instrumented with debug logging — click-select, shift+click range, group-card click (commit `c11f8b5`)
@@ -715,6 +751,32 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 - ✅ **Vertical sidebar collapses to horizontal top bar on mobile** (commit `aa99c50`) — `@media (max-width: 768px)` in `ImageGrouper.css` reverts the sidebar layout: `.image-grouper-container` switches back to `flex-direction: column`, `.grouper-header` becomes `width: 100%; height: auto; position: static` (full-width horizontal bar), stats/filter/auto-group controls revert to `flex-direction: row`; tablet breakpoint (`max-width: 1024px and min-width: 769px`) shrinks sidebar to `160px` with tighter padding in `App.css`
 - ✅ **Step 2 right panel mobile responsiveness** (commit `8ebc7ea`) — CategoryZones right panel in Step 2 had `position: sticky; height: 75vh; overflow-y: auto` as React inline styles, which CSS `@media` queries could not override; moved to a `.step2-right-panel` CSS class in `App.css`; `@media (max-width: 1024px)` resets it to `position: static; height: auto; overflow-y: visible` so panels stack correctly on tablet/mobile; `@media (max-width: 480px)` hides `.step2-split .step-description` and shrinks action button text; `step2-split` grid still declares `1fr 340px` inline but is overridden with `!important` in CSS at ≤1024px
 
+### June–July 2026 (post-June-10 CLAUDE.md update)
+
+- ✅ **UI density pass** (commits `0eae362`, `4d2f71d`, `4c788bf`, `5354909`, `83cfc9d`, `bd7e8e4`) — base font-size set to **9px** (matches the user's preferred 67%-zoom look at 100%); Step 2 right sidebar narrowed to 227px; image-grid gutters equalized at 3rem/3.5rem; `ComprehensiveProductForm` scaled to match `VoiceCommandTable` sizing; shortcut cheatsheet fonts doubled
+- ✅ **Preset persistence saga** (~15 commits, `3ab0e96` → `cc4be33`) — the per-group preset override now survives page refresh end-to-end: `applied_preset_id` column added to `products` (root-level `ADD_APPLIED_PRESET_ID.sql`) and included in `hydrateSelect`; `selectedPresetId` restored from `_presetData.presetId` on group navigation; preset override detection uses direct string comparison on `productType` (loose matching collapsed two presets to the same ID); auto-apply is skipped when preset fields were already persisted in a prior session; `isResettingRef` set before `applyPresetsToAllGroups` to stop an `onProcessed` feedback loop; brand/size/color/price preserved through all auto-apply merges; force-apply when the user explicitly switches preset or re-categorizes a group; green preset box always shows the currently active preset
+- ✅ **Field persistence hardening** (commits `73dc736`, `29a2fcf`, `840c337`, `aef0e6a`, `f75de6f`) — PDG now saves to the `products` table via a **500 ms debounced direct save** that bypasses the `isResettingRef` feedback loop, plus a `beforeunload` flush; hydration lookup is **byId** (was positional); `structureKey` expanded to include `seoTitle`+`voiceDescription` so DB hydration triggers PDG prop-sync; sz-corrupted titles stripped on load
+- ✅ **Title/tag/voice engine overhaul** (commits `0b56d07`, `6b6f9c1`, `58376d2`, `3a70b52`, `b4e6c0d`) — `ITEM_TYPE_SYNONYM_GROUPS` separated from `TITLE_SYNONYMS`; `fitTo60` self-detects the active garment type and only swaps synonyms within that one group (prevents cross-category title contamination, e.g. sweatshirt titles absorbing "crewneck tee"); "l size"/"m size"/"s size" synonyms removed ("extra l size" corruption); word-boundary on `isTee` regex; color/material dropped from title formulas ({size}- prefix retained); generic description-sourced tags (surf/skate/embroidered…) excluding size/material/condition; new **"Type" (garment) field** flows into the title with voice command `"type X period"`; material split into primary material (for Shopify GID) vs full composition (description); color modifier stripping ("Faded Out White" → White); washing-process disclosure line before condition; chest AND pit-to-pit/p2p both route to width
+- ✅ **Sizes always letter symbols** (commits `3a70b52`, `28e9d9b`) — size normalization accepts many spoken forms and always renders letter format (`XL`, `XXL`, `XXXL`), never spelled out
+- ✅ **Voice "description" field + description-based titles** (commits `9c1106d`, `9c1d866`, `0c96397`, `ef7514f`) — spoken `"description ... period"` captured as its own field, injected after the title in AI output; when present, the title is built from description keywords with a stop-word filter (grammatical filler only — descriptive words are kept)
+- ✅ **User-typed title respected** (commits `109dc2a`, `62a3e51`, `4b350f1`) — a manually entered seoTitle is used as the description opener verbatim and is never overwritten by Regenerate; the auto-generated opener (size + Vintage prefix) still applies in the description body when no manual title exists
+- ✅ **CSV export integrity** (commit `3a70b52`) — group-wide field coalescing (first non-blank value across the whole group per field); export hard-blocked with alert + banner when any product has $0/no price; titles unique within the export AND against existing titles from the app DB + live Shopify
+- ✅ **Shopify duplicate-title cross-reference — first Edge Function** (commit `3a70b52`) — `supabase/functions/shopify-titles/index.ts` (Deno) reads all product titles/handles from the Shopify Admin GraphQL API server-side (Admin token as Supabase secret, never in the client bundle); invoked best-effort from `GoogleSheetExporter.tsx`; silent fallback to DB-only dedup when not deployed
+- ✅ **Grouper restore fix — match by productGroup** (commit `3a70b52`) — `handleOpenBatch` previously matched restored items to DB products by shared title/list-position, bleeding the wrong product's images/fields across items on reopen; now matches by `productGroup` (collision-free); each item keeps its OWN photo; the dangerous position-index fallback was removed
+- ✅ **Shared-file storage guard** (commit `de9f8a9`, `src/lib/storageSafety.ts`) — duplicated batches share storage files (a duplicate's workflow_state references the original's paths); deletes now call `filterUnreferencedStoragePaths()` which keeps any path still referenced by a product outside the deletion set; fails safe (keeps files) on lookup errors; must run BEFORE the product_images rows are deleted
+- ✅ **Image-load errors no longer delete DB rows** (commit `7d146ec`) — transient CDN/load failures were triggering product_images row deletion; deletion-on-error removed; large `IN()` queries chunked
+- ✅ **Auto-save never forks a duplicate batch when RLS-blocked** (commit `050a7bf`) — when editing someone else's batch pre-collab-migration, the UPDATE returned 0 rows and the code created a new batch; now detects the RLS-blocked case and does not fork
+- ✅ **Last-edited-by** (commit `2440569`) — auto-save stamps `lastEditedBy` (email) + `lastEditedAt` into `workflow_state`; `fetchWorkflowBatchesMeta` surfaces them cheaply via JSONB sub-key projection (`workflow_state->>lastEditedBy`) without pulling the heavy blob; Library batch cards show "edited by <email>"
+- ✅ **Collaborative-edit RLS migration** (`supabase/migrations/collaborative_edit_policies.sql`) — INSERT/UPDATE opened to any authenticated user on the 3 workflow tables; DELETE stays owner-scoped; idempotent with rollback SQL included; client code is forward-compatible (works owner-only until the migration is run)
+- ✅ **Delete any batch/listing** (commit `308ce2a`) — since DELETE RLS stays owner-scoped, Library now "claims ownership" (chunked `UPDATE user_id = auth.uid()`) on products before deleting another user's batch or listing
+- ✅ **Pick mode** (feature + fix `f5a23b3`) — `🟢/⬜ Pick` toggle in the Step 2 sidebar auto-selects the next N ungrouped images (N = the Photos/item value, quick-set slider 1–10) so the user can rapid-fire group; pick mode owns the selection lifecycle (click-outside deselect is suppressed); after each group action it advances to the next N; pool is ANY ungrouped singleton **regardless of category** — the earlier categorized-singleton exclusion broke the ungroup→crop→regroup flow by silently turning pick mode off
+- ✅ **Columns-per-row slider** — `⊞ Columns` range input (2–12) in the Step 2 sidebar controls grid density
+- ✅ **Batch delete persistence — no more resurrection** (July 2026) — users reported deleted batches "coming back" on refresh or not deleting at all. Three-part fix: (1) **tombstone registry** in `workflowBatchService.ts` (`markBatchDeleted`/`isBatchDeleted`, persisted to localStorage key `sortbot_deleted_batch_ids`, capped 200) — `autoSaveWorkflowBatch` refuses to write to a tombstoned id, and `deleteWorkflowBatch` tombstones on confirmed row deletion; (2) **confirmed-batch set** (`markBatchConfirmed`, called from startup restore, `handleOpenBatch`, `getWorkflowBatch`, and successful auto-save UPDATEs) — when an auto-save UPDATE affects 0 rows and the row is gone, a batch that was previously CONFIRMED is treated as deleted (tombstone + skip) instead of re-created; only never-confirmed batches (failed stub INSERT recovery) still get re-created; (3) **`onBatchDeleted` callback** Library → App.tsx (`handleBatchDeleted`) — deleting the ACTIVE batch now cancels pending debounce timers (`autoSaveTimerRef`, `groupUpsertTimerRef`, `chunkTimerRef`), clears all four item arrays, and removes `sortbot_current_batch_id`/`sortbot_workflow_backup` from localStorage. Also: **delete failures are no longer silent** — Library shows a dismissible red `.library-delete-error` banner when `deleteWorkflowBatch` returns false (RLS-blocked), and bulk delete only removes the batches that actually deleted, reporting the failed count
+- ✅ **Voice "fits like" size note** (July 2026) — `"size large fits like period"` → size stored as `L (fits like)`; `"size large fits like medium period"` → `L (fits like M)` (leading articles stripped: "fits like a medium" → M). `normalizeSizeValue(raw, { keepFitsLike?: boolean })` splits off the `(fits like …)` note, normalizes base and target to letter symbols, and re-attaches the note only when `keepFitsLike` is passed. The note renders in the description `✠ SIZE-` line and the Step 3 size form field; titles, CSV size metafield columns, image alt text, and auto-title fallbacks all strip it via the default (a `baseSize()` helper wraps the five `product.size` sites in `GoogleSheetExporter.tsx`)
+- ✅ **CSV export rows in shoot order** (July 2026) — export rows (and the preview table) were in `processedItems` array order, which drifts across merges/gap-fills/restores, so products landed in Shopify scattered; `GoogleSheetExporter.tsx` now sorts groups by earliest `capturedAt` of each group's members (matching Step 2's default ↑ Date sort), tiebreak by `originalName` natural order; within-group image order (primary image, positions) is untouched
+- ✅ **Multi-org tenancy — code complete, migration pending** (July 2026) — `supabase/migrations/multi_org_tenancy.sql` creates `organizations`/`org_members`/`org_invites` (+ SECURITY DEFINER helpers `user_org_ids()`, `default_org_id()`, `is_org_admin()`, `org_has_members()`, `invited_role()`), adds nullable `org_id` to the 5 data tables with `DEFAULT default_org_id()` (so NO client insert needs to pass org_id), backfills every existing row and every existing auth user into a "Founding Workspace" (UPDATE-only — zero data loss; existing users see exactly what they saw before), and swaps all policies on the 5 tables to org-membership RLS (categories/presets additionally readable when `org_id IS NULL` for future system rows). Client: `src/lib/orgService.ts` `ensureOrganization()` resolves membership → pending invite (auto-join with invited role) → self-repair of a creator-orphaned org → create personal workspace + seed default categories; **any error returns `{ mode: 'legacy' }`** so the identical build runs correctly against a pre-migration DB; concurrent calls deduped via an in-flight promise (StrictMode). `OrgPanel.tsx` modal (header button shows org name): member list w/ roles, admin invite-by-email (invitee joins on next sign-in), revoke invite, remove member. The app's "no `.eq('user_id')` filters — RLS decides" pattern means zero query changes were needed anywhere else. NOT yet done: private storage bucket / signed URLs (bucket still public), per-org Shopify secrets, org switcher for multi-org users (first org wins)
+- ✅ **Group card select bar + ⋯ actions menu** (July 2026) — the group card's crowded header (Copy/Paste/× buttons squeezed next to the badges, × at the natural click spot, no per-group ungroup at all) replaced with: (1) a full-width **select bar** (`.group-select-bar`, keeps the `group-header` class so rubber-band/deselect selectors still match) with a check circle — the whole bar toggles group selection; (2) a **⋯ dropdown** (`.group-menu-wrap`/`.group-menu`, `openMenuGroupId` state, closes on outside mousedown) holding Copy crop, Paste crop (disabled until a crop is copied), **Ungroup** (new per-group action via `ungroupGroup()` — same semantics as Ungroup Selected: members become singles, category cleared), and Delete group… (moved into `deleteGroup()` helper, same confirm + storage/DB cleanup as the old × button); (3) **photos no longer toggle selection** — the card-level `onMouseDown` skips targets inside `.group-images`, so thumbnails are purely drag-to-reorder + double-click lightbox (this also fixes double-click on a photo leaving the group in a half-toggled selection state)
+
 ---
 
 ## 16. What's In Progress or Missing
@@ -737,6 +799,10 @@ Direct Supabase client calls in service files (`src/lib/`). No React Query, no S
 | Sync Fields from Description | Done | "🔁 Sync Fields from Description" button added in Step 3 below the description textarea — re-parses edited description text back into structured fields (size, brand, color, etc.) via `generateProductDescription`. |
 | Library tally live sync | Partial | Tab counts (images/groups/batches) don't update live when edits happen in Steps 2–4 until Library is re-opened or refreshTrigger fires. |
 | Shopify taxonomy map coverage | Partial | `SHOPIFY_CATEGORY_MAP` in `GoogleSheetExporter.tsx` maps only 6 short category names. System presets now use full Shopify taxonomy paths as `shopify_product_type` (seeded via `seed_gender_category_presets.sql`), but the CSV exporter reads `item.shopifyProductType` from preset-applied data — ensure preset application writes `shopifyProductType` through to items for full coverage. |
+| Shopify read integration (dup-title cross-ref) | Done (needs deploy + secrets) | `shopify-titles` Edge Function reads existing titles/handles. Requires `supabase functions deploy shopify-titles` + `SHOPIFY_STORE`/`SHOPIFY_ADMIN_TOKEN` secrets. Exporter falls back silently to DB-only dedup if absent. |
+| Shopify WRITE integration (direct publish, no CSV) | Missing | Products still reach Shopify via manual CSV import. A `productSet`/`productCreate` mutation path through an Edge Function would remove the CSV step entirely. Single-store only today (one global secret pair — no per-user/per-org store config). |
+| Multi-org / multi-tenant support | **Built — migration not yet run** | `multi_org_tenancy.sql` (org tables + org-scoped RLS + additive backfill into a Founding Workspace) + `orgService.ts` (bootstrap with legacy fallback, invite accept, personal-workspace creation w/ seeded categories) + `OrgPanel.tsx` (members/invites UI) + App.tsx wiring (header Workspace button). Safe deploy order: ship code first (legacy mode), then run the migration in the SQL Editor after a DB backup. Storage bucket remains public and Shopify secret remains global — Phase 1b/2 in ANALYSIS.md. |
+| Collaborative-edit migration status | Verify in dashboard | `collaborative_edit_policies.sql` must be run manually; client code works either way (owner-only until run). Confirm which state production is in before debugging duplicate-batch reports. |
 
 ---
 
@@ -749,8 +815,11 @@ Run these commands and confirm all pass:
 npm run build
 # (runs tsc -b && vite build — any type error fails the build)
 
-# 2. Lint must have zero errors
+# 2. Lint must introduce zero NEW errors
 npm run lint
+# ⚠️ Current baseline (July 2026): ~310 pre-existing errors (244 @typescript-eslint/no-explicit-any,
+# 28 no-unused-vars, ~17 react-hooks v7 render-purity errors, 13 no-useless-escape). Do not add to
+# the count; burning it down is tracked in ANALYSIS.md Phase 0.
 
 # 3. Manual smoke test checklist:
 # - Can sign in
@@ -774,7 +843,7 @@ npm run lint
 
 2. **Do not run `supabase/migrations/shared_workspace_rls.sql` again** unless intentionally changing the shared workspace policy. It drops existing per-user SELECT policies and replaces them with "all authenticated users see all rows."
 
-3. **Do not change `registerItemsInDB` back to upsert for `product_images`.** The delete-then-insert strategy prevents stale row accumulation. This was a deliberate fix after rows inflated from 816 to 1747.
+3. **Do not remove the delete phase from `registerItemsInDB`'s `product_images` write, and do not let its `products` upsert overwrite `batch_id`.** The current hybrid (delete chunked → upsert `ignoreDuplicates: true`) prevents both stale-row accumulation (rows inflated 816 → 1747 in the pure-upsert era) and cross-batch `batch_id` theft (the `ignoreDuplicates: false` era). Also keep the `original_name` pre-fetch that runs before the delete.
 
 4. **Do not add new arrays to `workflow_state`** without updating the restore fallback chain in BOTH `handleOpenBatch` AND the startup restore `useEffect`. Forgetting either will silently discard that data on reload.
 
@@ -797,3 +866,7 @@ npm run lint
 13. **Do not re-add an "Assign to batch" button for unassigned/orphaned products in Library.** It was built and removed (commits `ae548ae`, `3488a6f`, `1f4ff75`). Assigning `batch_id=null` rows to any batch triggers the gap-fill safety cap in `handleOpenBatch` → those rows are immediately deleted → they reappear as unassigned → the user assigns again → infinite loop. The only safe operation for these rows is deletion.
 
 14. **Do not change the gap-fill cleanup from DELETE to `UPDATE batch_id=null`.** Nullifying stolen batch IDs just puts them back in the Library Unassigned section. They get deleted on the next open anyway. DELETE is the correct and final operation.
+
+15. **Do not delete storage files without going through `filterUnreferencedStoragePaths()` (`src/lib/storageSafety.ts`), and always call it BEFORE deleting the corresponding `product_images` rows.** Duplicated batches share storage files; a naive delete wipes images out from under the surviving batch (this destroyed a real batch — see commit `de9f8a9`). Calling it after the row delete makes every file look unreferenced.
+
+16. **Do not put the Shopify Admin token anywhere in client code or `VITE_*` env vars.** It has full store read/write. It lives only as a Supabase Edge Function secret (`SHOPIFY_ADMIN_TOKEN`), consumed by `supabase/functions/shopify-titles/index.ts`.

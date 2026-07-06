@@ -1,6 +1,51 @@
-# Changelog - AI Sorting App
+# Changelog — Sortbot
 
-## [Latest] - Natural Product Descriptions Update
+## 2026-07 (current) — Title Engine, Export Integrity & Collaboration
+
+### Title / Tags / Voice Engine Overhaul
+- Category-aware synonym system: `fitTo60` detects the active garment type and only swaps synonyms within that group — no more sweatshirt titles absorbing tee terms
+- New voice **"type"** (garment) and **"description"** fields; titles built from description keywords when a spoken description exists
+- Sizes always render as letter symbols (XL / XXL / XXXL); many spoken size forms normalized
+- Color/material dropped from title formulas; color modifiers stripped ("Faded Out White" → White); material split into primary (Shopify GID) vs full composition (description)
+- User-typed titles are respected: used as the description opener and never overwritten by Regenerate
+
+### Export Integrity & Shopify Cross-Reference
+- Group-wide field coalescing — exported price/brand/size no longer depend on which photo happens to lead the group
+- Export blocks (alert + banner) when any product has no price
+- Titles/handles deduplicated against the export, the app's own database, **and the live Shopify catalog** via the new `shopify-titles` Supabase Edge Function (first server-side code; Admin token stays server-side)
+
+### Collaboration
+- `collaborative_edit_policies.sql`: any authenticated user can INSERT/UPDATE workflow tables (DELETE stays owner-scoped) — editing someone else's batch saves in place instead of forking a duplicate
+- Library batch cards show "edited by <email>" (`lastEditedBy`/`lastEditedAt` stamped on auto-save)
+- Batch/listing delete works on any batch (claims ownership before delete)
+
+### Reliability
+- Shared-storage-file guard (`storageSafety.ts`): deleting a batch no longer wipes files still referenced by a duplicated batch
+- Batch reopen matches items by `productGroup` (was title/position — bled wrong images across products)
+- Preset overrides persist across reloads (`applied_preset_id` column); 500 ms debounced field saves + `beforeunload` flush
+- Image load errors no longer delete database rows; pick mode works with categorized singletons (ungroup→crop→regroup flow)
+
+### UI
+- Pick mode (auto-select next N ungrouped photos) + 1–10 quick-pick slider; columns-per-row slider (2–12)
+- Density pass: 9 px base font (67%-zoom look at 100%), narrower right sidebar, rebalanced gutters
+
+## 2026 H1 — Scale & Workflow Hardening (summary)
+
+- TUS resumable uploads (6 MB chunks) for large batches on unreliable connections
+- Canvas compression on upload (max 2000 px / JPEG 0.88) + bucket-wide recompression tools (~2.3 GB reclaimed)
+- Crop/zoom tool in Step 3 with copy-crop → paste-crop across items; in-memory image cache
+- EXIF `DateTimeOriginal` capture ordering + rescan backfill; original filename persistence and name sort
+- Step 2: vertical sidebar, sort/filter bars, auto-group by N, select-all shortcuts, `Cmd+Enter` grouping
+- Library: gap-fill recovery for corrupted batches, orphan cleanup, dedup fixes, newest-first sort
+- Service Worker CDN image cache (stale-while-revalidate, 7-day TTL)
+- Centralized debug logger with per-category colors and DOM event tracing
+- Voice command table with inline editing; Shopify taxonomy mapping in CSV export
+
+See `CLAUDE.md` §15 for the exhaustive commit-by-commit record.
+
+---
+
+## [2025] - Natural Product Descriptions Update
 
 ### 🎯 Major Changes
 
