@@ -1378,8 +1378,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     }
     log.grouper(`createGroup | selected=${selected.size}`);
 
-    const groupId = crypto.randomUUID();
     const grouped = items.filter(i => selected.has(i.id));
+    // Leader convention (CLAUDE.md §11): the group id is the FIRST member's item
+    // id — not a fresh UUID. Fresh UUIDs broke Step 3's group navigation (every
+    // item became its own listing) because nothing validated as the group leader.
+    const groupId = grouped[0].id;
     console.group(`%c[ImageGrouper] GROUP CREATED (${grouped.length} items → group ${groupId.slice(0,8)})`, 'color:#f59e0b;font-weight:bold');
     console.table(grouped.map(i => ({
       id:       i.id.slice(0,8),
@@ -1518,9 +1521,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
     log.grouper(`applyAutoGrouping | n=${n} total=${sorted.length} chunks=${Math.ceil(sorted.length / n)}`);
 
-    // Pre-generate a stable group UUID per chunk (one per product)
+    // Group id per chunk = the FIRST item of the chunk's id (leader convention,
+    // CLAUDE.md §11). Fresh UUIDs here broke Step 3's per-group navigation.
     const numChunks = Math.ceil(sorted.length / n);
-    const chunkIds = Array.from({ length: numChunks }, () => crypto.randomUUID());
+    const chunkIds = Array.from({ length: numChunks }, (_, c) => sorted[c * n].id);
 
     const updated: ClothingItem[] = sorted.map((item, i) => ({
       ...item,

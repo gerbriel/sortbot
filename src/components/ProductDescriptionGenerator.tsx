@@ -11,6 +11,7 @@ import LazyImg from './LazyImg';
 import { log } from '../lib/debugLogger';
 import VoiceCommandTable, { VOICE_KEYWORD_TO_FIELD } from './VoiceCommandTable';
 import { useStoreItemArray, liveArrayRef } from '../lib/workflowStore';
+import { buildGroupArray } from '../lib/grouping';
 import './ProductDescriptionGenerator.css';
 
 // Live view into the store — replaces the old per-render processedItems mirror.
@@ -189,42 +190,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // keep the duplicated local copy in sync with the items prop. The store is the
   // single source of truth now; processedItemsRef (module-level) reads it live.
 
-  // Helper: build the DISPLAY group array with groups-first ordering.
-  // Applies the Step-3 visibility rule (commit 0922eca) — previously App.tsx
-  // pre-filtered the items prop; now PDG reads the FULL store list, so the
-  // filter lives here: only categorized items and true multi-image groups are
-  // shown/navigable. Uncategorized singles stay in the store untouched.
-  const buildGroupArray = (allItems: ClothingItem[]): ClothingItem[][] => {
-    const groupCounts: Record<string, number> = {};
-    for (const i of allItems) {
-      const g = i.productGroup || i.id;
-      groupCounts[g] = (groupCounts[g] || 0) + 1;
-    }
-    const items = allItems.filter(i => i.category || (groupCounts[i.productGroup || i.id] || 0) > 1);
-    const itemIds = new Set(items.map(i => i.id));
-    const productGroups = items.reduce((groups, item, idx) => {
-      // Validate productGroup: if it points to an ID that doesn't exist in this
-      // items array (stale reference from a DB-restored item or a different batch),
-      // treat the item as a singleton rather than silently merging it into a phantom group.
-      const groupId = (item.productGroup && itemIds.has(item.productGroup))
-        ? item.productGroup
-        : item.id;
-      if (!groups[groupId]) groups[groupId] = { items: [], firstIdx: idx };
-      groups[groupId].items.push(item);
-      return groups;
-    }, {} as Record<string, { items: ClothingItem[]; firstIdx: number }>);
-    // Sort: multi-item groups first, then singles — stable tiebreaker is the index
-    // of the first photo in that group within the original items array, so order
-    // never shuffles when processedItems state updates.
-    return Object.values(productGroups)
-      .sort((a, b) => {
-        const aMulti = a.items.length > 1 ? 0 : 1;
-        const bMulti = b.items.length > 1 ? 0 : 1;
-        if (aMulti !== bMulti) return aMulti - bMulti;
-        return a.firstIdx - b.firstIdx; // stable tiebreaker
-      })
-      .map(g => g.items);
-  };
+  // buildGroupArray moved to lib/grouping.ts (tested there). It applies the
+  // Step-3 visibility filter AND the tolerant group-id rule that accepts both
+  // leader-id groups and fresh-UUID groups — the fix for Next/Prev cycling
+  // per-image instead of per-product-group.
 
   // Memoize group calculation to avoid unnecessary recalculations
   const { groupArray, currentGroup, currentItem } = useMemo(() => {
@@ -2070,7 +2039,62 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
       <div className="product-editor">
         <div className="product-preview">
-          {/* Scrollable area — image, thumbnails, magnifier controls. Height varies; nav buttons below stay fixed. */}
+          {/* Navigation — moved to the TOP of the column (user request): Prev/Next,
+              group slider, and Download CSV are reachable without scrolling. */}
+          <div className="preview-nav-controls">
+            <button
+              className="button button-secondary"
+              onClick={handlePrevious}
+              disabled={currentGroupIndex === 0}
+            >
+              ← Prev
+            </button>
+            <span className="preview-nav-counter">
+              {currentGroupIndex + 1} / {groupArray.length}
+            </span>
+            {currentGroupIndex < groupArray.length - 1 ? (
+              <button className="button" onClick={handleNext}>
+                Next →
+              </button>
+            ) : (
+              <button className="button button-secondary" onClick={handleFinish}>
+                Finish ✓
+              </button>
+            )}
+          </div>
+          {groupArray.length > 1 && (
+            <input
+              type="range"
+              className="group-nav-slider"
+              min={0}
+              max={groupArray.length - 1}
+              step={1}
+              value={currentGroupIndex}
+              onChange={e => {
+                const idx = Number(e.target.value);
+                if (hasUnsavedChanges) handleSave();
+                setCurrentGroupIndex(idx);
+              }}
+              title={`Jump to group ${currentGroupIndex + 1} of ${groupArray.length}`}
+            />
+          )}
+          {onDownloadCSV && (
+            <button
+              className="button"
+              onClick={onDownloadCSV}
+              style={{
+                margin: '0.5rem 0',
+                width: '100%',
+                justifyContent: 'center',
+                fontSize: '0.8125rem',
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              }}
+            >
+              💾 Download CSV
+            </button>
+          )}
+
+          {/* Scrollable area — image, thumbnails, magnifier controls. */}
           <div className="preview-scroll-area">
           <div
             className="preview-image-wrap"
@@ -2184,62 +2208,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             </label>
           </div>
           </div>{/* end preview-scroll-area */}
-
-          {/* Navigation — cycles through product groups */}
-          <div className="preview-nav-controls">
-            <button
-              className="button button-secondary"
-              onClick={handlePrevious}
-              disabled={currentGroupIndex === 0}
-            >
-              ← Prev
-            </button>
-            <span className="preview-nav-counter">
-              {currentGroupIndex + 1} / {groupArray.length}
-            </span>
-            {currentGroupIndex < groupArray.length - 1 ? (
-              <button className="button" onClick={handleNext}>
-                Next →
-              </button>
-            ) : (
-              <button className="button button-secondary" onClick={handleFinish}>
-                Finish ✓
-              </button>
-            )}
-          </div>
-          {groupArray.length > 1 && (
-            <input
-              type="range"
-              className="group-nav-slider"
-              min={0}
-              max={groupArray.length - 1}
-              step={1}
-              value={currentGroupIndex}
-              onChange={e => {
-                const idx = Number(e.target.value);
-                if (hasUnsavedChanges) handleSave();
-                setCurrentGroupIndex(idx);
-              }}
-              title={`Jump to group ${currentGroupIndex + 1} of ${groupArray.length}`}
-            />
-          )}
-
-          {/* Download CSV — quick access below nav */}
-          {onDownloadCSV && (
-            <button
-              className="button"
-              onClick={onDownloadCSV}
-              style={{
-                marginTop: '0.5rem',
-                width: '100%',
-                justifyContent: 'center',
-                fontSize: '0.8125rem',
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-              }}
-            >
-              💾 Download CSV
-            </button>
-          )}
         </div>
 
         <div className="product-form">
