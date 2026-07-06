@@ -82,13 +82,27 @@ export async function fetchBetaSignups(): Promise<BetaSignupRow[]> {
   return (data ?? []) as BetaSignupRow[];
 }
 
-/** Approve or deny a request — Founding Workspace admins only (RLS). */
-export async function setBetaStatus(id: string, status: 'approved' | 'denied'): Promise<boolean> {
+/** Approve, deny, or reopen (back to pending) a request — Founding Workspace
+ *  admins only (RLS). Reopening clears the review stamp. Note: reopening an
+ *  approved request does NOT remove a workspace that was already created on
+ *  their first sign-in — the gate only applies to users without one. */
+export async function setBetaStatus(id: string, status: 'approved' | 'denied' | 'pending'): Promise<boolean> {
   const { data: { user } } = await supabase.auth.getUser();
-  const { error } = await supabase
+  const patch = status === 'pending'
+    ? { status, reviewed_by: null, reviewed_at: null }
+    : { status, reviewed_by: user?.id ?? null, reviewed_at: new Date().toISOString() };
+  const { data, error } = await supabase
     .from('beta_signups')
-    .update({ status, reviewed_by: user?.id ?? null, reviewed_at: new Date().toISOString() })
-    .eq('id', id);
+    .update(patch)
+    .eq('id', id)
+    .select('id');
   if (error) { log.error(`setBetaStatus | ${error.message}`); return false; }
+  return !!data && data.length > 0; // RLS-blocked updates return 0 rows, no error
+}
+
+/** Permanently delete a request (spam, duplicates) — Founding admins only (RLS). */
+export async function deleteBetaSignup(id: string): Promise<boolean> {
+  const { error } = await supabase.from('beta_signups').delete().eq('id', id);
+  if (error) { log.error(`deleteBetaSignup | ${error.message}`); return false; }
   return true;
 }

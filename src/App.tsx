@@ -2931,6 +2931,14 @@ function App() {
           myRole={orgRole}
           myUserId={user.id}
           onClose={() => setShowOrgPanel(false)}
+          onOrgUpdated={(org) => setCurrentOrg(org)}
+          onMyRoleChanged={(role) => setOrgRole(role)}
+          onLeftWorkspace={() => {
+            // Membership is gone; reload so ensureOrganization re-bootstraps
+            // into their next org (or the waitlist / a fresh workspace).
+            setShowOrgPanel(false);
+            window.location.reload();
+          }}
         />
       )}
 

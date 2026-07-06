@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Users, X } from 'lucide-react';
+import { Users, X, Pencil, Check, Copy, LogOut, Trash2, RotateCcw, Mail, Search } from 'lucide-react';
 import {
   fetchOrgMembers, fetchOrgInvites, inviteToOrg, revokeInvite, removeMember,
+  renameOrganization, updateMemberRole,
   type Organization, type OrgRole, type OrgMemberRow, type OrgInviteRow,
 } from '../lib/orgService';
-import { fetchBetaSignups, setBetaStatus, type BetaSignupRow } from '../lib/betaService';
+import { fetchBetaSignups, setBetaStatus, deleteBetaSignup, type BetaSignupRow } from '../lib/betaService';
 import './OrgPanel.css';
 
 interface OrgPanelProps {
@@ -12,13 +13,25 @@ interface OrgPanelProps {
   myRole: OrgRole;
   myUserId: string;
   onClose: () => void;
+  /** Fired after a successful rename so App can refresh the header button. */
+  onOrgUpdated?: (org: Organization) => void;
+  /** Fired when the signed-in user's own role changes (promote/demote self). */
+  onMyRoleChanged?: (role: OrgRole) => void;
+  /** Fired after the user leaves the workspace — App should re-bootstrap. */
+  onLeftWorkspace?: () => void;
 }
 
+type BetaFilter = 'pending' | 'approved' | 'denied' | 'all';
+
+const fmtDate = (iso: string | null | undefined) =>
+  iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+
 /**
- * Workspace panel — shows who is in the org, lets admins invite teammates by
- * email (they join automatically on their next sign-in) and remove members.
+ * Workspace panel — members with role management, email invites (join on next
+ * sign-in), workspace rename, leave workspace, and (Founding admins only) the
+ * beta request queue with approve/deny/reopen/delete, filtering, and search.
  */
-export default function OrgPanel({ org, myRole, myUserId, onClose }: OrgPanelProps) {
+export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated, onMyRoleChanged, onLeftWorkspace }: OrgPanelProps) {
   const [members, setMembers] = useState<OrgMemberRow[]>([]);
   const [invites, setInvites] = useState<OrgInviteRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,14 +39,31 @@ export default function OrgPanel({ org, myRole, myUserId, onClose }: OrgPanelPro
   const [inviteRole, setInviteRole] = useState<OrgRole>('member');
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Inline two-step confirm (no native confirm() — Do Not #12). Holds a key
+  // like `remove:<userId>`, `leave`, or `beta-delete:<id>`; second click acts.
+  const [confirmKey, setConfirmKey] = useState<string | null>(null);
+
+  // Workspace rename
+  const [displayName, setDisplayName] = useState(org.name);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(org.name);
+  useEffect(() => { setDisplayName(org.name); }, [org.name]);
 
   const isAdmin = myRole === 'owner' || myRole === 'admin';
+  const isOwner = myRole === 'owner';
+  const ownerCount = members.filter(m => m.role === 'owner').length;
+  // Leaving is blocked for the last owner and for the only member (their data
+  // would be stranded in a workspace nobody can reach).
+  const canLeave = members.length > 1 && !(isOwner && ownerCount <= 1);
+
   // Beta waitlist management lives with the Founding Workspace admins only.
   const isBetaAdmin = isAdmin && org.slug === 'founding';
   const [betaSignups, setBetaSignups] = useState<BetaSignupRow[]>([]);
+  const [betaFilter, setBetaFilter] = useState<BetaFilter>('all');
+  const [betaSearch, setBetaSearch] = useState('');
 
-  const reload = async () => {
-    setLoading(true);
+  const reload = async (silent = false) => {
+    if (!silent) setLoading(true);
     const [m, i, b] = await Promise.all([
       fetchOrgMembers(org.id),
       fetchOrgInvites(org.id),
@@ -45,32 +75,85 @@ export default function OrgPanel({ org, myRole, myUserId, onClose }: OrgPanelPro
     setLoading(false);
   };
 
-  const handleBetaDecision = async (id: string, status: 'approved' | 'denied') => {
-    if (busy) return;
-    setBusy(true);
-    const ok = await setBetaStatus(id, status);
-    if (!ok) setNotice('Could not update the request — check your permissions.');
-    else setNotice(status === 'approved'
-      ? 'Approved ✓ — their workspace is created automatically the next time they sign in. Let them know by email!'
-      : 'Denied — they will see the “at capacity” message.');
-    await reload();
-    setBusy(false);
-  };
-
   useEffect(() => {
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [org.id]);
 
+  const appUrl = `${window.location.origin}${import.meta.env.BASE_URL || '/'}`;
+
+  // ── Workspace rename ──────────────────────────────────────────────────────
+  const handleRenameSave = async () => {
+    if (busy) return;
+    setBusy(true);
+    setNotice(null);
+    const res = await renameOrganization(org.id, nameDraft);
+    if (res.ok) {
+      const cleaned = nameDraft.trim();
+      setDisplayName(cleaned);
+      setEditingName(false);
+      setNotice('Workspace renamed.');
+      onOrgUpdated?.({ ...org, name: cleaned });
+    } else {
+      setNotice(`Rename failed: ${res.error}`);
+    }
+    setBusy(false);
+  };
+
+  // ── Members ───────────────────────────────────────────────────────────────
+  const handleRoleChange = async (m: OrgMemberRow, newRole: OrgRole) => {
+    if (busy || newRole === m.role) return;
+    if (m.role === 'owner' && newRole !== 'owner' && ownerCount <= 1) {
+      setNotice('A workspace needs at least one owner. Make someone else an owner first.');
+      return;
+    }
+    setBusy(true);
+    setNotice(null);
+    const ok = await updateMemberRole(org.id, m.user_id, newRole);
+    if (!ok) {
+      setNotice('Role change failed — you may not have permission.');
+    } else {
+      setNotice(`${m.email || 'Member'} is now ${newRole === 'owner' ? 'an owner' : newRole === 'admin' ? 'an admin' : 'a member'}.`);
+      if (m.user_id === myUserId) onMyRoleChanged?.(newRole);
+    }
+    await reload(true);
+    setBusy(false);
+  };
+
+  const handleRemove = async (userId: string) => {
+    if (busy) return;
+    setBusy(true);
+    setConfirmKey(null);
+    const ok = await removeMember(org.id, userId);
+    if (!ok) setNotice('Remove failed — you may not have permission.');
+    await reload(true);
+    setBusy(false);
+  };
+
+  const handleLeave = async () => {
+    if (busy) return;
+    setBusy(true);
+    setConfirmKey(null);
+    const ok = await removeMember(org.id, myUserId);
+    setBusy(false);
+    if (ok) {
+      onLeftWorkspace?.();
+      onClose();
+    } else {
+      setNotice('Could not leave the workspace — try again.');
+    }
+  };
+
+  // ── Invites ───────────────────────────────────────────────────────────────
   const handleInvite = async () => {
     if (busy) return;
     setBusy(true);
     setNotice(null);
     const res = await inviteToOrg(org.id, inviteEmail, inviteRole);
     if (res.ok) {
-      setNotice(`Invited ${inviteEmail.trim().toLowerCase()} — they'll join automatically the next time they sign in (or when they sign up).`);
+      setNotice(`Invited ${inviteEmail.trim().toLowerCase()}. No email is sent automatically — use the copy button next to the invite to send them the link.`);
       setInviteEmail('');
-      await reload();
+      await reload(true);
     } else {
       setNotice(`Invite failed: ${res.error}`);
     }
@@ -81,19 +164,64 @@ export default function OrgPanel({ org, myRole, myUserId, onClose }: OrgPanelPro
     if (busy) return;
     setBusy(true);
     await revokeInvite(inviteId);
-    await reload();
+    await reload(true);
     setBusy(false);
   };
 
-  const handleRemove = async (userId: string, email: string | null) => {
+  const handleCopyInvite = async (inv: OrgInviteRow) => {
+    const msg = `You're invited to the "${displayName}" workspace on Sortbot.\n\nSign in (or create an account) at ${appUrl} using this email address: ${inv.email}\n\nYou'll join the workspace automatically.`;
+    try {
+      await navigator.clipboard.writeText(msg);
+      setNotice('Invite message copied. Paste it into an email or text to your teammate.');
+    } catch {
+      setNotice(msg); // clipboard blocked — surface the text so it can be copied manually
+    }
+  };
+
+  // ── Beta requests ─────────────────────────────────────────────────────────
+  const handleBetaDecision = async (id: string, status: 'approved' | 'denied' | 'pending') => {
     if (busy) return;
-    if (!window.confirm(`Remove ${email || 'this member'} from "${org.name}"? They will lose access to this workspace's batches and products.`)) return;
     setBusy(true);
-    const ok = await removeMember(org.id, userId);
-    if (!ok) setNotice('Remove failed — you may not have permission.');
-    await reload();
+    const ok = await setBetaStatus(id, status);
+    if (!ok) setNotice('Could not update the request — check your permissions.');
+    else if (status === 'approved') setNotice('Approved ✓ — their workspace is created automatically the next time they sign in. Use the mail button to send them a welcome note.');
+    else if (status === 'denied') setNotice('Denied — they will see the “at capacity” message.');
+    else setNotice('Moved back to pending. If they already signed in and got a workspace, it stays — the gate only applies before the first sign-in.');
+    await reload(true);
     setBusy(false);
   };
+
+  const handleBetaDelete = async (id: string) => {
+    if (busy) return;
+    setBusy(true);
+    setConfirmKey(null);
+    const ok = await deleteBetaSignup(id);
+    if (!ok) setNotice('Delete failed — check your permissions.');
+    await reload(true);
+    setBusy(false);
+  };
+
+  const mailtoWelcome = (s: BetaSignupRow) => {
+    const subject = encodeURIComponent('Your Sortbot beta access is ready');
+    const body = encodeURIComponent(
+      `Hi ${s.contact_name},\n\nYour beta request for ${s.org_name} is approved. Sign in at ${appUrl} with this email address and your workspace will be ready.\n\nWelcome aboard!`
+    );
+    return `mailto:${s.email}?subject=${subject}&body=${body}`;
+  };
+
+  const betaCounts = {
+    pending: betaSignups.filter(s => s.status === 'pending').length,
+    approved: betaSignups.filter(s => s.status === 'approved').length,
+    denied: betaSignups.filter(s => s.status === 'denied').length,
+  };
+  const q = betaSearch.trim().toLowerCase();
+  const visibleSignups = betaSignups
+    .filter(s => betaFilter === 'all' || s.status === betaFilter)
+    .filter(s => !q || [s.org_name, s.contact_name, s.email, s.store_url ?? ''].some(v => v.toLowerCase().includes(q)))
+    .sort((a, b) => {
+      if ((a.status === 'pending') !== (b.status === 'pending')) return a.status === 'pending' ? -1 : 1;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
 
   return (
     <div className="org-panel-overlay" onClick={onClose}>
@@ -101,7 +229,33 @@ export default function OrgPanel({ org, myRole, myUserId, onClose }: OrgPanelPro
         <div className="org-panel-header">
           <div className="org-panel-title">
             <Users size={20} />
-            <h2>{org.name}</h2>
+            {editingName ? (
+              <span className="org-rename-form">
+                <input
+                  value={nameDraft}
+                  maxLength={60}
+                  autoFocus
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleRenameSave();
+                    if (e.key === 'Escape') setEditingName(false);
+                  }}
+                />
+                <button className="org-icon-btn" title="Save name" disabled={busy || !nameDraft.trim()} onClick={handleRenameSave}><Check size={14} /></button>
+                <button className="org-icon-btn" title="Cancel" disabled={busy} onClick={() => setEditingName(false)}><X size={14} /></button>
+              </span>
+            ) : (
+              <>
+                <h2>{displayName}</h2>
+                {org.plan && org.plan !== 'free' && <span className="org-plan-badge">{org.plan}</span>}
+                {isAdmin && (
+                  <button className="org-icon-btn" title="Rename workspace"
+                    onClick={() => { setNameDraft(displayName); setEditingName(true); }}>
+                    <Pencil size={13} />
+                  </button>
+                )}
+              </>
+            )}
             <span className={`org-role-badge org-role-${myRole}`}>{myRole}</span>
           </div>
           <button className="org-panel-close" onClick={onClose} aria-label="Close"><X size={18} /></button>
@@ -136,11 +290,35 @@ export default function OrgPanel({ org, myRole, myUserId, onClose }: OrgPanelPro
             <ul className="org-member-list">
               {members.map(m => (
                 <li key={m.user_id} className="org-member-row">
-                  <span className="org-member-email">{m.email || m.user_id.slice(0, 8)}{m.user_id === myUserId ? ' (you)' : ''}</span>
-                  <span className={`org-role-badge org-role-${m.role}`}>{m.role}</span>
+                  <span className="org-member-email">
+                    {m.email || m.user_id.slice(0, 8)}{m.user_id === myUserId ? ' (you)' : ''}
+                    <span className="org-member-date">joined {fmtDate(m.created_at)}</span>
+                  </span>
+                  {isAdmin && (isOwner || m.role !== 'owner') ? (
+                    <select
+                      className="org-role-select"
+                      value={m.role}
+                      disabled={busy}
+                      title="Change role"
+                      onChange={(e) => handleRoleChange(m, e.target.value as OrgRole)}
+                    >
+                      {isOwner && <option value="owner">Owner</option>}
+                      <option value="admin">Admin</option>
+                      <option value="member">Member</option>
+                    </select>
+                  ) : (
+                    <span className={`org-role-badge org-role-${m.role}`}>{m.role}</span>
+                  )}
                   {isAdmin && m.user_id !== myUserId && (
-                    <button className="org-member-remove" disabled={busy} title="Remove from workspace"
-                      onClick={() => handleRemove(m.user_id, m.email)}>Remove</button>
+                    confirmKey === `remove:${m.user_id}` ? (
+                      <span className="org-confirm-actions">
+                        <button className="org-confirm-yes" disabled={busy} onClick={() => handleRemove(m.user_id)}>Confirm</button>
+                        <button className="org-confirm-no" disabled={busy} onClick={() => setConfirmKey(null)}>Cancel</button>
+                      </span>
+                    ) : (
+                      <button className="org-member-remove" disabled={busy} title="Remove from workspace"
+                        onClick={() => setConfirmKey(`remove:${m.user_id}`)}>Remove</button>
+                    )
                   )}
                 </li>
               ))}
@@ -152,8 +330,13 @@ export default function OrgPanel({ org, myRole, myUserId, onClose }: OrgPanelPro
                 <ul className="org-member-list">
                   {invites.map(inv => (
                     <li key={inv.id} className="org-member-row">
-                      <span className="org-member-email">{inv.email}</span>
+                      <span className="org-member-email">
+                        {inv.email}
+                        <span className="org-member-date">invited {fmtDate(inv.created_at)}</span>
+                      </span>
                       <span className={`org-role-badge org-role-${inv.role}`}>{inv.role}</span>
+                      <button className="org-icon-btn" title="Copy invite message to send them" disabled={busy}
+                        onClick={() => handleCopyInvite(inv)}><Copy size={13} /></button>
                       <button className="org-member-remove" disabled={busy} title="Revoke invite"
                         onClick={() => handleRevoke(inv.id)}>Revoke</button>
                     </li>
@@ -167,37 +350,101 @@ export default function OrgPanel({ org, myRole, myUserId, onClose }: OrgPanelPro
         {isBetaAdmin && !loading && (
           <>
             <h3 className="org-section-title">
-              Beta requests ({betaSignups.filter(s => s.status === 'pending').length} pending)
+              Beta requests ({betaCounts.pending} pending)
             </h3>
-            {betaSignups.length === 0 && (
-              <p className="org-panel-loading">No requests yet — share the landing page: <code>/beta.html</code></p>
-            )}
-            <ul className="org-member-list">
-              {betaSignups
-                .slice()
-                .sort((a, b) => (a.status === 'pending' ? -1 : 1) - (b.status === 'pending' ? -1 : 1))
-                .map(s => (
-                  <li key={s.id} className="org-member-row beta-request-row">
-                    <div className="beta-request-info">
-                      <span className="org-member-email">
-                        <strong>{s.org_name}</strong> · {s.contact_name} · {s.email}
-                      </span>
-                      <span className="beta-request-meta">
-                        {[s.store_url, s.volume && `${s.volume}/wk`, s.notes].filter(Boolean).join(' · ') || '—'}
-                      </span>
-                    </div>
-                    {s.status === 'pending' ? (
+            {betaSignups.length === 0 ? (
+              <p className="org-panel-loading">No requests yet — share the landing page with shops you want in.</p>
+            ) : (
+              <>
+                <div className="beta-toolbar">
+                  <div className="beta-filter-chips">
+                    {(['pending', 'approved', 'denied', 'all'] as const).map(f => (
+                      <button
+                        key={f}
+                        className={`beta-chip ${betaFilter === f ? 'beta-chip--active' : ''}`}
+                        onClick={() => setBetaFilter(f)}
+                      >
+                        {f === 'all' ? `All ${betaSignups.length}` : `${f[0].toUpperCase()}${f.slice(1)} ${betaCounts[f]}`}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="beta-search">
+                    <Search size={13} />
+                    <input
+                      placeholder="Search name, email, store"
+                      value={betaSearch}
+                      onChange={(e) => setBetaSearch(e.target.value)}
+                    />
+                  </div>
+                </div>
+                {visibleSignups.length === 0 && (
+                  <p className="org-panel-loading">Nothing matches this filter.</p>
+                )}
+                <ul className="org-member-list">
+                  {visibleSignups.map(s => (
+                    <li key={s.id} className="org-member-row beta-request-row">
+                      <div className="beta-request-info">
+                        <span className="org-member-email">
+                          <strong>{s.org_name}</strong> · {s.contact_name} · <a className="beta-email-link" href={`mailto:${s.email}`}>{s.email}</a>
+                        </span>
+                        {(s.store_url || s.volume || s.notes) && (
+                          <span className="beta-request-meta">
+                            {[s.store_url, s.volume && `${s.volume}/wk`, s.notes].filter(Boolean).join(' · ')}
+                          </span>
+                        )}
+                        <span className="beta-request-dates">
+                          requested {fmtDate(s.created_at)}
+                          {s.reviewed_at ? ` · reviewed ${fmtDate(s.reviewed_at)}` : ''}
+                        </span>
+                      </div>
                       <span className="beta-request-actions">
-                        <button className="beta-approve" disabled={busy} onClick={() => handleBetaDecision(s.id, 'approved')}>Approve</button>
-                        <button className="beta-deny" disabled={busy} onClick={() => handleBetaDecision(s.id, 'denied')}>Deny</button>
+                        {s.status === 'pending' ? (
+                          <>
+                            <button className="beta-approve" disabled={busy} onClick={() => handleBetaDecision(s.id, 'approved')}>Approve</button>
+                            <button className="beta-deny" disabled={busy} onClick={() => handleBetaDecision(s.id, 'denied')}>Deny</button>
+                          </>
+                        ) : (
+                          <>
+                            <span className={`org-role-badge beta-status-${s.status}`}>{s.status}</span>
+                            {s.status === 'approved' && (
+                              <a className="org-icon-btn" href={mailtoWelcome(s)} title="Compose welcome email"><Mail size={13} /></a>
+                            )}
+                            <button className="org-icon-btn" title="Move back to pending" disabled={busy}
+                              onClick={() => handleBetaDecision(s.id, 'pending')}><RotateCcw size={13} /></button>
+                            {confirmKey === `beta-delete:${s.id}` ? (
+                              <span className="org-confirm-actions">
+                                <button className="org-confirm-yes" disabled={busy} onClick={() => handleBetaDelete(s.id)}>Delete</button>
+                                <button className="org-confirm-no" disabled={busy} onClick={() => setConfirmKey(null)}>Cancel</button>
+                              </span>
+                            ) : (
+                              <button className="org-icon-btn org-icon-danger" title="Delete request" disabled={busy}
+                                onClick={() => setConfirmKey(`beta-delete:${s.id}`)}><Trash2 size={13} /></button>
+                            )}
+                          </>
+                        )}
                       </span>
-                    ) : (
-                      <span className={`org-role-badge beta-status-${s.status}`}>{s.status}</span>
-                    )}
-                  </li>
-                ))}
-            </ul>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </>
+        )}
+
+        {!loading && canLeave && (
+          <div className="org-leave-section">
+            {confirmKey === 'leave' ? (
+              <span className="org-confirm-actions">
+                <span className="org-leave-warning">You'll lose access to everything in this workspace.</span>
+                <button className="org-confirm-yes" disabled={busy} onClick={handleLeave}>Leave workspace</button>
+                <button className="org-confirm-no" disabled={busy} onClick={() => setConfirmKey(null)}>Cancel</button>
+              </span>
+            ) : (
+              <button className="org-leave-btn" disabled={busy} onClick={() => setConfirmKey('leave')}>
+                <LogOut size={13} /> Leave this workspace
+              </button>
+            )}
+          </div>
         )}
 
         <p className="org-panel-footnote">
