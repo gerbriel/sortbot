@@ -77,7 +77,7 @@ Storage was at 310% of the 1 GB free tier before compression; the public bucket 
 Ordered so that each phase de-risks the next. Rough sizing assumes current solo + AI-assisted pace.
 
 ### Phase 0 — Stabilize the foundation *(before any external user)*
-1. **Test harness:** ✅ **started July 2026** — Vitest + 39 characterization tests over the voice/size/title engine (incl. golden description snapshot), preset priority hierarchy, and delete tombstones; caught two real title-corruption bugs on day one. Still open: `slim()`/restore roundtrip and grouping invariants (need the Stage 3 extractions to become importable), CSV row builder golden (needs the CSV builder extracted from `GoogleSheetExporter.tsx`), Playwright smoke run.
+1. **Test harness:** ✅ **62 tests as of July 2026** — Vitest characterization tests over the voice/size/title engine (incl. golden description snapshot), preset priority hierarchy, delete tombstones, the `slim()` save→reload contract, the Shopify CSV builder (golden two-product CSV + header/handle/taxonomy rules), and the new workflowStore. Caught two real title-corruption bugs on day one. Still open: grouping invariants (inside ImageGrouper), Library `loadAll` (next extraction), Playwright smoke run.
 2. **Observability:** Sentry (or GlitchTip) + a React error boundary around each step; route stray `console.log`s through `debugLogger`.
 3. **Repo/ops hygiene:** move root SQL into `supabase/migrations/`; adopt `supabase db push`/CLI migration tracking; add a staging Supabase project. (`consolelog.md` already removed.)
 4. **Hosting:** move to Vercel/Netlify/Cloudflare Pages with a custom domain. Kills the `/sortbot/` base-path complexity and unlocks preview deploys.
