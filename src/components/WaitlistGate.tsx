@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ShoppingBag } from 'lucide-react';
 import { requestBetaAccess } from '../lib/betaService';
 import './WaitlistGate.css';
 
@@ -37,11 +38,11 @@ export default function WaitlistGate({ status, email, onSignOut, onRequested }: 
   return (
     <div className="waitlist-gate">
       <div className="waitlist-card">
-        <div className="waitlist-brand">🛍️ Sortbot <span className="waitlist-chip">BETA</span></div>
+        <div className="waitlist-brand"><ShoppingBag size={20} /> Sortbot <span className="waitlist-chip">BETA</span></div>
 
         {status === 'pending' && (
           <>
-            <h1>You're on the list ✓</h1>
+            <h1>You're on the list</h1>
             <p>
               Your beta request is in review. We approve shops by hand and will email
               <strong> {email}</strong> as soon as your workspace is ready.

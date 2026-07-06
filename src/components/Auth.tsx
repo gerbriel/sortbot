@@ -74,8 +74,8 @@ const Auth: React.FC<AuthProps> = ({ onAuthenticated }) => {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-header">
-          <h1>🛍️ Sortbot</h1>
-          <p>AI-Powered Product Listing Generator</p>
+          <h1>Sortbot</h1>
+          <p>From camera roll to Shopify-ready listings</p>
         </div>
 
         <form onSubmit={handleAuth} className="auth-form">
@@ -83,7 +83,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthenticated }) => {
 
           {error && (
             <div className="auth-error">
-              ⚠️ {error}{' '}
+              {error}{' '}
               {isOutageError && (
                 <a href="https://status.supabase.com" target="_blank" rel="noreferrer" style={{ color: 'inherit', fontWeight: 600, whiteSpace: 'nowrap' }}>
                   Check status.supabase.com ↗
@@ -94,7 +94,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthenticated }) => {
 
           {message && (
             <div className="auth-message">
-              ✓ {message}
+              {message}
             </div>
           )}
 
@@ -181,7 +181,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthenticated }) => {
         </form>
 
         <div className="auth-footer">
-          <p>🔒 Secure authentication powered by Supabase</p>
+          <p>Secure authentication powered by Supabase</p>
           <p>Your data is private and isolated to your account</p>
         </div>
       </div>
