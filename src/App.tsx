@@ -19,6 +19,15 @@ import { saveBatchToDatabase, getThumbnailUrl } from './lib/productService';
 import { autoSaveWorkflowBatch, markBatchConfirmed, type WorkflowBatch } from './lib/workflowBatchService';
 import { ensureOrganization, type Organization, type OrgRole } from './lib/orgService';
 import { slimForWorkflowState, ultraSlimForBackup } from './lib/slimItems';
+import { useStoreItemArray, liveArrayRef } from './lib/workflowStore';
+
+// Live read-only views into workflowStore — replace the old ref-mirror pattern.
+// .current always reads the CURRENT store state (assigned nowhere, stale never).
+// Module-level so their identity is stable across renders.
+const sortedImagesRef    = liveArrayRef('sortedImages');
+const groupedImagesRef   = liveArrayRef('groupedImages');
+const processedItemsRef  = liveArrayRef('processedItems');
+const uploadedImagesRef  = liveArrayRef('uploadedImages');
 import OrgPanel from './components/OrgPanel';
 import { getCategoryPresets } from './lib/categoryPresetsService';
 import { applyPresetDirectly } from './lib/applyPresetToGroup';
@@ -220,10 +229,13 @@ function App() {
   const [currentOrg, setCurrentOrg] = useState<Organization | null>(null);
   const [orgRole, setOrgRole] = useState<OrgRole>('member');
   const [showOrgPanel, setShowOrgPanel] = useState(false);
-  const [uploadedImages, setUploadedImages] = useState<ClothingItem[]>([]);
-  const [sortedImages, setSortedImages] = useState<ClothingItem[]>([]);
-  const [groupedImages, setGroupedImages] = useState<ClothingItem[]>([]);
-  const [processedItems, setProcessedItems] = useState<ClothingItem[]>([]);
+  // The four item arrays live in workflowStore — the single source of truth
+  // (refactor Stage 2). useStoreItemArray keeps the exact useState API, so
+  // every setter call site (value AND functional-update forms) is unchanged.
+  const [uploadedImages, setUploadedImages] = useStoreItemArray('uploadedImages');
+  const [sortedImages, setSortedImages] = useStoreItemArray('sortedImages');
+  const [groupedImages, setGroupedImages] = useStoreItemArray('groupedImages');
+  const [processedItems, setProcessedItems] = useStoreItemArray('processedItems');
   const [selectedGroupItems, setSelectedGroupItems] = useState<Set<string>>(new Set());
   const [grouperActions, setGrouperActions] = useState<GrouperActions | null>(null);
   // Ref mirror so onCategoryAssigned closures always call the current clearSelection
@@ -331,16 +343,9 @@ function App() {
   // upload and causes a second O(n) re-render per 150ms debounce flush.
   const isUploadingRef = useRef(false);
 
-  // Ref mirrors of the four item arrays so async handlers always read live state
-  // without capturing stale closures. Updated every render.
-  const sortedImagesRef = useRef<ClothingItem[]>([]);
-  sortedImagesRef.current = sortedImages;
-  const groupedImagesRef = useRef<ClothingItem[]>([]);
-  groupedImagesRef.current = groupedImages;
-  const processedItemsRef = useRef<ClothingItem[]>([]);
-  processedItemsRef.current = processedItems;
-  const uploadedImagesRef = useRef<ClothingItem[]>([]);
-  uploadedImagesRef.current = uploadedImages;
+  // NOTE: the old per-render ref mirrors of the four item arrays are gone —
+  // sortedImagesRef & co. are now module-level LIVE views into workflowStore
+  // (see liveArrayRef imports at the top of this file).
   const [currentBatchNumber, setCurrentBatchNumber] = useState<string>(() => {
     return localStorage.getItem('sortbot_current_batch_number') || `batch-${Date.now()}`;
   });
