@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, Component, type ReactN
 import exifr from 'exifr';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
-import { Tag, Settings, Package, ShoppingBag, Link2, Scissors, X, Trash2, Bug } from 'lucide-react';
+import { Tag, Settings, Package, ShoppingBag, Link2, Scissors, X, Trash2, Bug, Users } from 'lucide-react';
 import { log, setDebugEnabled, isDebugEnabled } from './lib/debugLogger';
 import Auth from './components/Auth';
 import ImageUpload, { type ImageUploadHandle } from './components/ImageUpload';
@@ -16,7 +16,9 @@ import { Library } from './components/Library';
 import CategoryPresetsManager from './components/CategoryPresetsManager';
 import CategoriesManager from './components/CategoriesManager';
 import { saveBatchToDatabase, getThumbnailUrl } from './lib/productService';
-import { autoSaveWorkflowBatch, type WorkflowBatch } from './lib/workflowBatchService';
+import { autoSaveWorkflowBatch, markBatchConfirmed, type WorkflowBatch } from './lib/workflowBatchService';
+import { ensureOrganization, type Organization, type OrgRole } from './lib/orgService';
+import OrgPanel from './components/OrgPanel';
 import { getCategoryPresets } from './lib/categoryPresetsService';
 import { applyPresetDirectly } from './lib/applyPresetToGroup';
 import type { BrandCategory } from './lib/brandCategorySystem';
@@ -211,6 +213,12 @@ class GrouperErrorBoundary extends Component<{ children: ReactNode }, GrouperBou
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  // Multi-org tenancy: the signed-in user's workspace. null = not resolved yet
+  // OR the tenancy migration hasn't been run (legacy shared-workspace mode —
+  // the app works exactly as before and no org UI is shown).
+  const [currentOrg, setCurrentOrg] = useState<Organization | null>(null);
+  const [orgRole, setOrgRole] = useState<OrgRole>('member');
+  const [showOrgPanel, setShowOrgPanel] = useState(false);
   const [uploadedImages, setUploadedImages] = useState<ClothingItem[]>([]);
   const [sortedImages, setSortedImages] = useState<ClothingItem[]>([]);
   const [groupedImages, setGroupedImages] = useState<ClothingItem[]>([]);
@@ -612,6 +620,7 @@ function App() {
             // so any autoSave that fires in the next 2s updates this batch instead of creating a new orphan.
             currentBatchIdRef.current = savedBatchId;
             setCurrentBatchId(savedBatchId);
+            markBatchConfirmed(savedBatchId); // row verified — if it vanishes later, it was deleted (never re-create)
 
             if (batch.workflow_state) {
               const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state;
@@ -1087,10 +1096,31 @@ function App() {
     })();
   }, [user]);
 
+  // Resolve the user's workspace once per sign-in. If the tenancy migration
+  // hasn't been run, ensureOrganization returns legacy mode and currentOrg
+  // stays null — no org UI renders and the app behaves exactly as before.
+  useEffect(() => {
+    if (!user) { setCurrentOrg(null); setShowOrgPanel(false); return; }
+    let cancelled = false;
+    ensureOrganization(user).then(res => {
+      if (cancelled) return;
+      if (res.mode === 'org') {
+        setCurrentOrg(res.org);
+        setOrgRole(res.role);
+      } else {
+        setCurrentOrg(null);
+      }
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
   const handleSignOut = async () => {
     log.auth('handleSignOut');
     await supabase.auth.signOut();
     setUser(null);
+    setCurrentOrg(null);
+    setShowOrgPanel(false);
     // Reset all data
     setUploadedImages([]);
     setSortedImages([]);
@@ -1202,6 +1232,34 @@ function App() {
       pendingChunkRef.current = [];
       if (chunkTimerRef.current) { clearTimeout(chunkTimerRef.current); chunkTimerRef.current = null; }
     }
+  };
+
+  // Called by Library after a batch is successfully deleted. If it was the ACTIVE
+  // batch, tear the session down completely: cancel pending debounced saves and
+  // drop all in-memory items. Without this, the still-loaded session auto-saves
+  // the deleted batch's content right back into the DB (the "deleted batch
+  // returns" bug) — the service-level tombstone blocks the write, but the UI
+  // would still show a batch that no longer exists.
+  const handleBatchDeleted = (batchId: string) => {
+    const isActive = batchId === currentBatchIdRef.current;
+    log.app(`handleBatchDeleted | batchId=${batchId} active=${isActive}`);
+    if (!isActive) return;
+    if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null; }
+    if (groupUpsertTimerRef.current) { clearTimeout(groupUpsertTimerRef.current); groupUpsertTimerRef.current = null; }
+    if (chunkTimerRef.current) { clearTimeout(chunkTimerRef.current); chunkTimerRef.current = null; }
+    pendingChunkRef.current = [];
+    isUploadingRef.current = false;
+    batchRowInsertedRef.current = false;
+    currentBatchIdRef.current = null;
+    setCurrentBatchId(null);
+    setCurrentBatchNumber(`batch-${Date.now()}`);
+    localStorage.removeItem('sortbot_current_batch_id');
+    localStorage.removeItem('sortbot_current_batch_number');
+    localStorage.removeItem('sortbot_workflow_backup');
+    setUploadedImages([]);
+    setGroupedImages([]);
+    setSortedImages([]);
+    setProcessedItems([]);
   };
 
   if (loading) {
@@ -1841,6 +1899,7 @@ function App() {
     const isAlreadyActiveBatch = batch.id === currentBatchIdRef.current;
     currentBatchIdRef.current = batch.id;
     batchRowInsertedRef.current = true;
+    markBatchConfirmed(batch.id); // row verified — if it vanishes later, it was deleted (never re-create)
     pendingChunkRef.current = [];
     if (chunkTimerRef.current) { clearTimeout(chunkTimerRef.current); chunkTimerRef.current = null; }
     setCurrentBatchId(batch.id);
@@ -2488,6 +2547,17 @@ function App() {
             >
               <Package size={18} /> Library
             </button>
+            {currentOrg && (
+              <button
+                onClick={() => setShowOrgPanel(true)}
+                className="button button-secondary"
+                style={{ marginRight: '12px', display: 'flex', alignItems: 'center', gap: '0.5rem', maxWidth: '220px' }}
+                title="Workspace — members & invites"
+              >
+                <Users size={18} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentOrg.name}</span>
+              </button>
+            )}
             <span className="user-email">{user.email}</span>
             <button onClick={handleSignOut} className="button button-secondary">
               Sign Out
@@ -2859,17 +2929,28 @@ function App() {
 
       {/* Category Presets Modal */}
       {showCategoryPresets && (
-        <CategoryPresetsManager 
-          onClose={() => setShowCategoryPresets(false)} 
+        <CategoryPresetsManager
+          onClose={() => setShowCategoryPresets(false)}
+        />
+      )}
+
+      {/* Workspace (org members & invites) Modal */}
+      {showOrgPanel && currentOrg && user && (
+        <OrgPanel
+          org={currentOrg}
+          myRole={orgRole}
+          myUserId={user.id}
+          onClose={() => setShowOrgPanel(false)}
         />
       )}
 
       {/* Library Modal */}
       {showLibrary && user && (
-        <Library 
-          userId={user.id} 
+        <Library
+          userId={user.id}
           onClose={() => setShowLibrary(false)}
           onOpenBatch={handleOpenBatch}
+          onBatchDeleted={handleBatchDeleted}
           refreshTrigger={libraryRefreshTrigger}
           currentBatchId={currentBatchId}
         />
