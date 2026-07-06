@@ -1376,17 +1376,79 @@
   background: #fef2f2;
 }
 
-/* ── Photo tools (sidebar cluster) ─────────────────────────────────────── */
-.photo-pick-toggle {
-  width: 100%;
+/* ── Photo tools toolbar — pinned above the photo grid ─────────────────── */
+.photo-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.45rem 0.6rem;
+  margin-bottom: 0.75rem;
+  background: #ffffff;
+  border: 1px solid #c7d2fe;
+  border-radius: 10px;
+  box-shadow: 0 3px 12px rgba(79, 70, 229, 0.12);
+}
+
+.ptb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.32rem 0.6rem;
+  border: 1px solid #c7d2fe;
+  border-radius: 7px;
+  background: #eef2ff;
+  color: #3730a3;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ptb-btn:hover:not(:disabled) { background: #e0e7ff; }
+.ptb-btn:disabled { opacity: 0.4; cursor: default; }
+
+.ptb-btn--active  { background: #6366f1; border-color: #6366f1; color: #fff; }
+.ptb-btn--primary { background: #6366f1; border-color: #6366f1; color: #fff; }
+.ptb-btn--primary:hover:not(:disabled) { background: #4f46e5; }
+.ptb-btn--warn    { background: #b45309; border-color: #b45309; color: #fff; }
+.ptb-btn--warn:hover:not(:disabled) { background: #92400e; }
+.ptb-btn--danger  { background: #dc2626; border-color: #dc2626; color: #fff; }
+.ptb-btn--danger:hover:not(:disabled) { background: #b91c1c; }
+.ptb-btn--ghost   { background: transparent; border-color: #fecaca; color: #b91c1c; font-size: 0.7rem; }
+.ptb-btn--ghost:hover:not(:disabled) { background: #fef2f2; }
+
+.ptb-divider {
+  width: 1px;
+  height: 20px;
+  background: #e0e7ff;
+}
+
+.ptb-status {
   font-size: 0.72rem;
-  padding: 0.3rem 0.5rem;
-  height: auto;
-  border-radius: 6px;
+  color: #4338ca;
+  font-weight: 600;
+}
+
+.ptb-status em { font-style: normal; color: #6b7280; font-weight: 500; }
+
+.ptb-link {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #6366f1;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0;
+  text-decoration: underline;
 }
 
 .photo-pick-toggle--on {
   background: #10b981 !important;
+  border-color: #10b981 !important;
   color: #fff !important;
   box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.35);
 }
