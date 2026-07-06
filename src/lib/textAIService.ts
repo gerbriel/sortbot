@@ -169,9 +169,12 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   // ── SIZE ──────────────────────────────────────────────────────────────────
   // Accept: "size large period", "size 32 period", "size extra large period"
   // Also accept: "size: large" (colon variant from some STT engines)
+  // "fits like" note: "size large fits like period" → "L (fits like)";
+  // "size large fits like medium period" → "L (fits like M)". The note renders in
+  // the description SIZE line only — titles/CSV strip it via normalizeSizeValue's default.
   const sizeRaw = extractCommand(/\bsize[:\s]+(.+?)\s+period\b/i);
   if (sizeRaw) {
-    extracted.size = normalizeSizeValue(sizeRaw);
+    extracted.size = normalizeSizeValue(sizeRaw, { keepFitsLike: true });
   }
 
   // ── COLOR ─────────────────────────────────────────────────────────────────
@@ -759,12 +762,31 @@ export function primaryMaterial(raw: string): string {
   return firstMat ? firstMat[1].trim() : raw.trim();
 }
 
-export function normalizeSizeValue(raw: string): string {
-  const trimmed = raw.trim();
+export function normalizeSizeValue(raw: string, opts?: { keepFitsLike?: boolean }): string {
+  // ── "(fits like …)" note ────────────────────────────────────────────────
+  // Spoken as "size large fits like period" or "size large fits like medium period",
+  // or already stored as "L (fits like M)". The note is preserved ONLY where
+  // explicitly requested (description SIZE line, the size form field) — titles,
+  // CSV size columns, and Shopify fields always get the clean base size.
+  // NOTE: this must run BEFORE the OSFA check — "fits like" contains the word
+  // sequence "size fits" nowhere, but "one size fits all" must not be split here,
+  // so we require the note to come AFTER some base text or a "(" delimiter.
+  let fitsNote: string | null = null;
+  let base = raw;
+  const fitsMatch = raw.match(/^(.+?)[\s,]*\(?\s*fits\s+like\s*:?\s*([^)]*?)\s*\)?\s*$/i);
+  if (fitsMatch && !/^one[\s-]?size/i.test(raw.trim()) && !/\bosfa\b/i.test(raw)) {
+    base = fitsMatch[1].trim();
+    // Strip leading articles so "fits like a medium" → "M", not "A"
+    const target = fitsMatch[2].trim().replace(/^(?:a|an)\s+/i, '');
+    fitsNote = target ? ` (fits like ${normalizeSizeValue(target)})` : ' (fits like)';
+  }
+  const withNote = (size: string) => (opts?.keepFitsLike && fitsNote ? `${size}${fitsNote}` : size);
+
+  const trimmed = base.trim();
 
   // OSFA / One Size Fits All → "OSFA"
   if (/\b(osfa|one[\s-]?size[\s-]?fits[\s-]?all|one[\s-]?size[\s-]?fits[\s-]?most|one[\s-]?size|os)\b/i.test(trimmed)) {
-    return 'OSFA';
+    return withNote('OSFA');
   }
 
   // Collapse whitespace/hyphens and lowercase the whole string first so that
@@ -800,13 +822,13 @@ export function normalizeSizeValue(raw: string): string {
   };
 
   // Try the full collapsed string first (handles "extra large", "extra extra small", etc.)
-  if (map[collapsed]) return map[collapsed];
+  if (map[collapsed]) return withNote(map[collapsed]);
 
   // Fall back to just the first space/slash-separated token for numeric sizes
   // like "32", "32x30", "10.5" that don't need multi-word handling
   const first = trimmed.split(/[\s/]+/)[0];
   const firstCollapsed = first.toLowerCase().replace(/[\s-]+/g, '');
-  return map[firstCollapsed] || first.toUpperCase();
+  return withNote(map[firstCollapsed] || first.toUpperCase());
 }
 
 /**
@@ -881,7 +903,8 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
   // PART 2: Size and measurements with symbols (ONLY if provided in fields)
   if (context.size || (context.measurements && Object.keys(context.measurements).length > 0)) {
     if (context.size) {
-      description += `✠ SIZE- ${normalizeSizeValue(context.size)}\n`;
+      // keepFitsLike — the "(fits like …)" note belongs in the description SIZE line
+      description += `✠ SIZE- ${normalizeSizeValue(context.size, { keepFitsLike: true })}\n`;
     }
     
     // Add width and length if available
