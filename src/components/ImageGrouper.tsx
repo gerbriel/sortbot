@@ -163,6 +163,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
   // Which group's ⋯ actions menu is open (Copy/Paste crop, Ungroup, Delete)
   const [openMenuGroupId, setOpenMenuGroupId] = useState<string | null>(null);
+  // Photo tools pick mode — when ON, clicking any photo (including photos INSIDE
+  // group cards) toggles its selection so the sidebar Photo tools (rotate/crop/
+  // revert/delete) can act on it. Replaces the old per-photo hover buttons.
+  const [photoSelectMode, setPhotoSelectMode] = useState(false);
+  const photoSelectModeRef = useRef(false);
 
   // Photo reorder drag state (within a group)
   const [draggedPhotoId, setDraggedPhotoId] = useState<string | null>(null);
@@ -872,6 +877,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (pickModeRef.current) return; // pick mode manages its own selection — never clear on click-outside
+      if (photoSelectModeRef.current) return; // photo pick mode: user is building a selection — never clear on click-outside
       const t = e.target as HTMLElement;
       const isSafeTarget = t.closest(
         '.single-item-card, .product-group-card, .group-header, .toolbar, button, [role="button"],' +
@@ -1460,6 +1466,26 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     onImageDeleted?.();
   };
 
+  // Rotate every selected photo by ±90° (sidebar Photo tools — replaces the
+  // old per-photo ⟲/⟳ hover buttons; works on singles AND group photos).
+  const rotateSelected = (delta: 90 | -90) => {
+    const ids = selectedItemsRef.current;
+    if (ids.size === 0) return;
+    log.grouper(`rotateSelected | delta=${delta} count=${ids.size}`);
+    const updated = groupedItemsRef.current.map(i =>
+      ids.has(i.id) ? { ...i, imageRotation: ((i.imageRotation || 0) + delta) % 360 } : i
+    );
+    setGroupedItems(updated);
+    onGrouped(updated);
+  };
+
+  // Toggle one photo's selection (pick mode — used by photos inside group cards)
+  const togglePhotoPick = (itemId: string) => {
+    const next = new Set(selectedItemsRef.current);
+    if (next.has(itemId)) next.delete(itemId); else next.add(itemId);
+    updateSelection(next);
+  };
+
   // Ungroup selected items
   const ungroupSelected = () => {
     if (selectedItems.size === 0) {
@@ -1819,31 +1845,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   };
 
   // Delete image handler
-  const handleDeleteImage = async (item: ClothingItem) => {
-    if (!confirm('Delete this image? This cannot be undone.')) return;
-    log.grouper(`deleteImage | item=${item.id} storagePath=${item.storagePath}`);
-
-    // Delete from storage if it was uploaded
-    if (item.storagePath) {
-      await deleteImageFromStorage(item.storagePath);
-      // Delete the product_images row
-      await supabase.from('product_images').delete().eq('storage_path', item.storagePath);
-    }
-    // Delete the products row (cleans up orphaned DB entries)
-    await supabase.from('products').delete().eq('id', item.id);
-
-    // Remove from UI — delete doesn't go on undo stack (can't un-delete)
-    const updated = groupedItems.filter(i => i.id !== item.id);
-    commitUpdate(updated, true); // skipHistory=true — delete is permanent
-    setUploadedImages(prev => {
-      const next = new Set(prev);
-      next.delete(item.id);
-      return next;
-    });
-
-    // Notify parent that a real DB change happened — Library should refresh
-    onImageDeleted?.();
-  };
+  // (Single-photo handleDeleteImage removed with the per-photo × button —
+  //  deletion now goes through handleDeleteSelected in the Photo tools cluster.)
 
   // Bulk delete selected items
   const handleDeleteSelected = async () => {
@@ -2395,9 +2398,50 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             />
           </div>
 
-          {/* ── Format painter copy buttons ──────────────────────────────────── */}
+          {/* ── Photo tools — ONE place for rotate/crop/revert/delete on selected
+                photos. The old per-photo hover buttons are gone. ─────────────── */}
           <div className="auto-group-control" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.35rem' }}>
-            <span className="auto-group-label" style={{ marginBottom: '0.1rem' }}>Format Painter</span>
+            <span className="auto-group-label" style={{ marginBottom: '0.1rem' }}>Photo tools</span>
+
+            {/* Pick mode: lets you select photos INSIDE group cards too */}
+            <button
+              className={`rotate-btn photo-pick-toggle${photoSelectMode ? ' photo-pick-toggle--on' : ''}`}
+              title={photoSelectMode
+                ? 'Pick mode ON — click photos (even inside groups) to select them, then use the tools below. Click to turn off.'
+                : 'Turn on to click-select photos (even inside groups), then rotate/crop/revert/delete them from here'}
+              onClick={(e) => {
+                e.stopPropagation();
+                const next = !photoSelectMode;
+                setPhotoSelectMode(next);
+                photoSelectModeRef.current = next;
+                if (!next) updateSelection(new Set());
+              }}
+            >
+              {photoSelectMode ? '🎯 Picking photos… (click to stop)' : '🎯 Pick photos'}
+            </button>
+
+            {/* Rotate selected */}
+            <div style={{ display: 'flex', gap: '0.35rem', width: '100%' }}>
+              <button
+                className="rotate-btn"
+                disabled={selectedItems.size === 0}
+                title={selectedItems.size > 0 ? `Rotate ${selectedItems.size} selected left` : 'Select photos first'}
+                style={{ flex: 1, fontSize: '0.72rem', padding: '0.3rem 0.4rem', height: 'auto', opacity: selectedItems.size === 0 ? 0.45 : 1 }}
+                onClick={(e) => { e.stopPropagation(); rotateSelected(-90); }}
+              >
+                ⟲ Rotate {selectedItems.size > 0 ? selectedItems.size : ''}
+              </button>
+              <button
+                className="rotate-btn"
+                disabled={selectedItems.size === 0}
+                title={selectedItems.size > 0 ? `Rotate ${selectedItems.size} selected right` : 'Select photos first'}
+                style={{ flex: 1, fontSize: '0.72rem', padding: '0.3rem 0.4rem', height: 'auto', opacity: selectedItems.size === 0 ? 0.45 : 1 }}
+                onClick={(e) => { e.stopPropagation(); rotateSelected(90); }}
+              >
+                ⟳ Rotate {selectedItems.size > 0 ? selectedItems.size : ''}
+              </button>
+            </div>
+
             <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
               <button
                 className="rotate-btn"
@@ -2717,63 +2761,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                         onError={retryImg}
                         style={{ transform: `rotate(${item.imageRotation || 0}deg)` }}
                       />
-                      <div className="image-controls">
-                        <button
-                          className="rotate-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const updated = groupedItems.map(i => i.id === item.id ? { ...i, imageRotation: ((i.imageRotation || 0) - 90) % 360 } : i);
-                            setGroupedItems(updated);
-                            onGrouped(updated);
-                          }}
-                          title="Rotate left"
-                        >⟲</button>
-                        <button
-                          className="rotate-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const updated = groupedItems.map(i => i.id === item.id ? { ...i, imageRotation: ((i.imageRotation || 0) + 90) % 360 } : i);
-                            setGroupedItems(updated);
-                            onGrouped(updated);
-                          }}
-                          title="Rotate right"
-                        >⟳</button>
-                        {selectedItems.has(item.id) && selectedItems.size > 1 && (<>
-                          <button
-                            className="rotate-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const ids = [...selectedItems];
-                              const updated = groupedItems.map(i => ids.includes(i.id) ? { ...i, imageRotation: ((i.imageRotation || 0) - 90) % 360 } : i);
-                              setGroupedItems(updated);
-                              onGrouped(updated);
-                            }}
-                            title={`Rotate all ${selectedItems.size} selected left`}
-                            style={{ fontSize: '0.6rem', padding: '0 0.25rem' }}
-                          >⟲ All</button>
-                          <button
-                            className="rotate-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const ids = [...selectedItems];
-                              const updated = groupedItems.map(i => ids.includes(i.id) ? { ...i, imageRotation: ((i.imageRotation || 0) + 90) % 360 } : i);
-                              setGroupedItems(updated);
-                              onGrouped(updated);
-                            }}
-                            title={`Rotate all ${selectedItems.size} selected right`}
-                            style={{ fontSize: '0.6rem', padding: '0 0.25rem' }}
-                          >⟳ All</button>
-                        </>)}
-                        {/* Revert-to-original — only visible when this image has been cropped */}
-                        {item.originalStoragePath && (
-                          <button
-                            className="rotate-btn"
-                            title="Revert to original (un-cropped) image"
-                            style={{ fontSize: '0.6rem', padding: '0 0.25rem', background: '#b45309', color: '#fff' }}
-                            onClick={(e) => { e.stopPropagation(); revertToOriginal(item.id); }}
-                          >↺ Orig</button>
-                        )}
-                      </div>
+                      {/* Per-photo rotate/revert hover buttons removed — all photo
+                          actions live in the sidebar Photo tools cluster now. */}
                     </div>
                   ) : (
                     <div className="lazy-skeleton lazy-skeleton--error" aria-hidden="true" />
@@ -2781,16 +2770,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   {selectedItems.has(item.id) && (
                     <div className="selection-indicator"><Check size={20} /></div>
                   )}
-                  <button
-                    className="delete-image-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteImage(item);
-                    }}
-                    title="Delete image"
-                  >
-                    ×
-                  </button>
+                  {/* Per-photo × delete removed — select photos and use the sidebar
+                      "Delete N selected" button instead. */}
                   {item.category && (
                     <div className="item-info">
                       <span className="category-badge">{item.category}</span>
@@ -2994,15 +2975,20 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     <div
                       key={item.id}
                       data-item-id={item.id}
-                      className={`group-image-item ${dragOverPhotoId === item.id && draggedPhotoGroupId === groupId ? 'photo-drag-over' : ''} ${draggedPhotoId === item.id ? 'photo-dragging' : ''}`}
-                      draggable
+                      className={`group-image-item ${dragOverPhotoId === item.id && draggedPhotoGroupId === groupId ? 'photo-drag-over' : ''} ${draggedPhotoId === item.id ? 'photo-dragging' : ''} ${photoSelectMode && selectedItems.has(item.id) ? 'photo-picked' : ''}`}
+                      draggable={!photoSelectMode}
                       onDragStart={(e) => { e.stopPropagation(); handlePhotoDragStart(e, item, groupId); }}
                       onDragOver={(e) => handlePhotoDragOver(e, item.id, groupId)}
                       onDrop={(e) => handlePhotoDrop(e, item.id, groupId)}
                       onDragEnd={handlePhotoDragEnd}
                       onDragLeave={() => setDragOverPhotoId(null)}
                       onDoubleClick={(e) => { e.stopPropagation(); openLightboxForItem((e.currentTarget as HTMLElement).dataset.itemId!); }}
-                      onClick={(e) => e.stopPropagation()} // don't bubble to group-level toggle
+                      onClick={(e) => {
+                        e.stopPropagation(); // don't bubble to group-level toggle
+                        // Pick mode: clicking a photo inside a group selects it for
+                        // the sidebar Photo tools (rotate/crop/revert/delete).
+                        if (photoSelectModeRef.current) togglePhotoPick(item.id);
+                      }}
                     >
                       {(item.thumbnailUrl || item.preview || item.imageUrls?.[0]) ? (
                         <>
@@ -3015,14 +3001,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                             onError={retryImg}
                             style={{ transform: `rotate(${item.imageRotation || 0}deg)` }}
                           />
-                          {item.originalStoragePath && (
-                            <button
-                              className="rotate-btn"
-                              title="Revert to original (un-cropped) image"
-                              style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '0.55rem', padding: '0 0.2rem', background: '#b45309', color: '#fff', zIndex: 10 }}
-                              onClick={(e) => { e.stopPropagation(); revertToOriginal(item.id); }}
-                            >↺ Orig</button>
-                          )}
                         </>
                       ) : (
                         <div className="lazy-skeleton lazy-skeleton--error" aria-hidden="true" />

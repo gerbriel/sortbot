@@ -1375,3 +1375,29 @@
 .group-menu-item--danger:hover:not(:disabled) {
   background: #fef2f2;
 }
+
+/* ── Photo tools (sidebar cluster) ─────────────────────────────────────── */
+.photo-pick-toggle {
+  width: 100%;
+  font-size: 0.72rem;
+  padding: 0.3rem 0.5rem;
+  height: auto;
+  border-radius: 6px;
+}
+
+.photo-pick-toggle--on {
+  background: #10b981 !important;
+  color: #fff !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.35);
+}
+
+/* Photo selected via pick mode — visible ring on photos inside group cards */
+.group-image-item.photo-picked {
+  outline: 3px solid #6366f1;
+  outline-offset: -3px;
+  border-radius: 6px;
+}
+
+.group-image-item.photo-picked img {
+  opacity: 0.85;
+}
