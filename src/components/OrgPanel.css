@@ -437,3 +437,32 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── Shopify connection ─────────────────────────────────────────────────── */
+.shopify-conn-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.2rem;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 0.9rem;
+}
+
+.shopify-conn-row .org-member-email {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  white-space: normal;
+}
+
+.shopify-conn-row .org-member-date { flex-basis: 100%; }
+
+.shopify-conn-help {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  color: #6b7280;
+  line-height: 1.45;
+}
+
+.shopify-conn-form .org-invite-form { margin-bottom: 0.4rem; }
