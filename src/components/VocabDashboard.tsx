@@ -48,6 +48,7 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
   // Built-in brand library (the hardcoded BRAND_DNA knowledge base) — loaded
   // lazily so its several-hundred-KB of data never enters the main bundle.
   const [builtins, setBuiltins] = useState<BuiltinBrandEntry[] | null>(null);
+  const [showAllBuiltins, setShowAllBuiltins] = useState(false);
   useEffect(() => {
     if (tab !== 'brands' || builtins !== null) return;
     let cancelled = false;
@@ -154,7 +155,7 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
   const matchingBuiltins = (builtins ?? []).filter(
     e => !q || e.brand.toLowerCase().includes(q) || e.keywords.some(k => k.includes(q))
   );
-  const visibleBuiltins = matchingBuiltins.slice(0, BUILTIN_RENDER_CAP);
+  const visibleBuiltins = showAllBuiltins ? matchingBuiltins : matchingBuiltins.slice(0, BUILTIN_RENDER_CAP);
 
   const handleImportBuiltin = (entry: BuiltinBrandEntry) => run(
     () => createBrandKeywords(entry.brand, entry.keywords),
@@ -202,15 +203,16 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
             </p>
             {!models ? (
               <p className="vocab-loading">Loading model database…</p>
-            ) : (
+            ) : (() => {
+              const filteredModels = models.filter(mo => !q
+                || mo.brand.toLowerCase().includes(q)
+                || mo.modelName.toLowerCase().includes(q)
+                || (mo.modelNumber ?? '').toLowerCase().includes(q)
+                || mo.keywords.some(k => k.toLowerCase().includes(q))
+                || mo.identifyingFeatures.some(f => f.toLowerCase().includes(q)));
+              return (
               <ul className="vocab-list">
-                {models
-                  .filter(mo => !q
-                    || mo.brand.toLowerCase().includes(q)
-                    || mo.modelName.toLowerCase().includes(q)
-                    || (mo.modelNumber ?? '').toLowerCase().includes(q)
-                    || mo.keywords.some(k => k.toLowerCase().includes(q))
-                    || mo.identifyingFeatures.some(f => f.toLowerCase().includes(q)))
+                {filteredModels
                   .map(mo => (
                     <li key={mo.key} className="vocab-row vocab-row--builtin vocab-model-row">
                       <div className="vocab-model-info">
@@ -231,11 +233,12 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
                       </div>
                     </li>
                   ))}
-                {models.filter(mo => !q || mo.brand.toLowerCase().includes(q) || mo.modelName.toLowerCase().includes(q)).length === 0 && q !== '' && (
+                {filteredModels.length === 0 && (
                   <p className="vocab-loading">No models match.</p>
                 )}
               </ul>
-            )}
+              );
+            })()}
           </>
         ) : tab === 'chips' ? (
           <>
@@ -354,8 +357,13 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
               The knowledge base already shipped with the app — read only. Copy a brand up into
               your editable list to use or tweak its words; edited copies always win.
               {builtins && matchingBuiltins.length > visibleBuiltins.length
-                ? ` Showing ${visibleBuiltins.length} of ${matchingBuiltins.length} — use search to narrow.`
+                ? ` Showing ${visibleBuiltins.length} of ${matchingBuiltins.length}.`
                 : ''}
+              {builtins && matchingBuiltins.length > BUILTIN_RENDER_CAP && (
+                <button className="vocab-showall-btn" onClick={() => setShowAllBuiltins(v => !v)}>
+                  {showAllBuiltins ? 'Show fewer' : `Show all ${matchingBuiltins.length}`}
+                </button>
+              )}
             </p>
             {!builtins ? (
               <p className="vocab-loading">Loading built-in library…</p>

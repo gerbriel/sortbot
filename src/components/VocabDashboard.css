@@ -321,3 +321,17 @@
   font-size: 0.68rem;
   color: #9ca3af;
 }
+
+.vocab-showall-btn {
+  margin-left: 0.4rem;
+  background: none;
+  border: 1px solid #c7d2fe;
+  color: #4338ca;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.1rem 0.55rem;
+  cursor: pointer;
+}
+
+.vocab-showall-btn:hover { background: #eef2ff; }
