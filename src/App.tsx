@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, Component, type ReactN
 import exifr from 'exifr';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
-import { Tag, Settings, Package, ShoppingBag, Link2, Scissors, X, Trash2, Bug, Users } from 'lucide-react';
+import { Tag, Settings, Package, ShoppingBag, Link2, Scissors, X, Trash2, Bug, Users, BookMarked } from 'lucide-react';
 import { log, setDebugEnabled, isDebugEnabled } from './lib/debugLogger';
 import Auth from './components/Auth';
 import ImageUpload, { type ImageUploadHandle } from './components/ImageUpload';
@@ -30,6 +30,7 @@ const groupedImagesRef   = liveArrayRef('groupedImages');
 const processedItemsRef  = liveArrayRef('processedItems');
 const uploadedImagesRef  = liveArrayRef('uploadedImages');
 import OrgPanel from './components/OrgPanel';
+import VocabDashboard from './components/VocabDashboard';
 import WaitlistGate from './components/WaitlistGate';
 import Landing from './components/Landing';
 import { getCategoryPresets } from './lib/categoryPresetsService';
@@ -232,6 +233,8 @@ function App() {
   const [currentOrg, setCurrentOrg] = useState<Organization | null>(null);
   const [orgRole, setOrgRole] = useState<OrgRole>('member');
   const [showOrgPanel, setShowOrgPanel] = useState(false);
+  // Founder-only vocabulary dashboard (chips + brand keywords, global content)
+  const [showVocabDashboard, setShowVocabDashboard] = useState(false);
   // Private beta: non-null → signed in but not approved yet; the waitlist
   // screen replaces the dashboard (RLS already hides all data regardless).
   const [betaWaitlist, setBetaWaitlist] = useState<'none' | 'pending' | 'denied' | null>(null);
@@ -2557,6 +2560,16 @@ function App() {
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentOrg.name}</span>
               </button>
             )}
+            {currentOrg?.slug === 'founding' && (orgRole === 'owner' || orgRole === 'admin') && (
+              <button
+                onClick={() => setShowVocabDashboard(true)}
+                className="button button-secondary"
+                style={{ marginRight: '12px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                title="Vocabulary — curate quick keyword chips and brand keywords (all workspaces)"
+              >
+                <BookMarked size={18} /> Vocabulary
+              </button>
+            )}
             <span className="user-email">{user.email}</span>
             <button onClick={handleSignOut} className="button button-secondary">
               Sign Out
@@ -2940,6 +2953,11 @@ function App() {
             window.location.reload();
           }}
         />
+      )}
+
+      {/* Vocabulary dashboard (founding admins only — chips + brand keywords) */}
+      {showVocabDashboard && currentOrg?.slug === 'founding' && (orgRole === 'owner' || orgRole === 'admin') && (
+        <VocabDashboard onClose={() => setShowVocabDashboard(false)} />
       )}
 
       {/* Library Modal */}

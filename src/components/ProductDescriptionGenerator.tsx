@@ -12,6 +12,7 @@ import { log } from '../lib/debugLogger';
 import VoiceCommandTable, { VOICE_KEYWORD_TO_FIELD } from './VoiceCommandTable';
 import { useStoreItemArray, liveArrayRef } from '../lib/workflowStore';
 import { buildGroupArray } from '../lib/grouping';
+import { fetchActiveChips, getBrandTerms } from '../lib/vocabService';
 import './ProductDescriptionGenerator.css';
 
 // Live view into the store — replaces the old per-render processedItems mirror.
@@ -1334,6 +1335,20 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   applyTableFieldRef.current = handleTableFieldChange;
 
   // ── Quick descriptor keyword chips ─────────────────────────────────────
+  // Founder-curated from the descriptor_chips table; hardcoded list is the
+  // fallback when the table is missing (migration not run) or empty.
+  const [chipDefs, setChipDefs] = useState<{ label: string; output: string }[]>(
+    DESCRIPTOR_KEYWORDS.map(k => ({ label: k, output: k }))
+  );
+  useEffect(() => {
+    let cancelled = false;
+    fetchActiveChips().then(res => {
+      if (cancelled || res.status !== 'ok' || res.chips.length === 0) return;
+      setChipDefs(res.chips.map(c => ({ label: c.label, output: c.output_text || c.label })));
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   const descriptorActive = (kw: string): boolean => {
     const cur = (currentItem?.customDescription || '');
     const esc = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1467,6 +1482,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         return; // Nothing to work with
       }
 
+      // Founder-curated brand words (brand_keywords table) — merged into the
+      // generated tags like preset tags. Best-effort; [] when absent/unavailable.
+      const brandTerms = await getBrandTerms(refreshedItem.brand);
+
       const aiResult = await generateProductDescription({
         voiceDescription: voiceText || undefined,
         title: refreshedItem.seoTitle || '',
@@ -1485,6 +1504,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         // always reflects the preset, not the raw Step-2 category which may differ.
         category: (refreshedItem as any)._presetData?.productType || refreshedItem.category || refreshedItem.productType || '',
         presetTags: (refreshedItem as any)._presetData?.default_tags || [],
+        brandTerms,
         customDescription: refreshedItem.customDescription || '',
         measurements: refreshedItem.measurements || undefined,
         flaws: refreshedItem.flaws || '',
@@ -2459,17 +2479,17 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   description field (no need to know or dictate the vocabulary) */}
               <div className="descriptor-chips">
                 <span className="descriptor-chips-label">Quick keywords</span>
-                {DESCRIPTOR_KEYWORDS.map(kw => {
-                  const active = descriptorActive(kw);
+                {chipDefs.map(chip => {
+                  const active = descriptorActive(chip.output);
                   return (
                     <button
-                      key={kw}
+                      key={chip.label}
                       type="button"
                       className={`descriptor-chip ${active ? 'descriptor-chip--on' : ''}`}
-                      onClick={() => toggleDescriptorKeyword(kw)}
-                      title={active ? `Remove "${kw}" from the description` : `Add "${kw}" to the description`}
+                      onClick={() => toggleDescriptorKeyword(chip.output)}
+                      title={active ? `Remove "${chip.output}" from the description` : `Add "${chip.output}" to the description`}
                     >
-                      {kw}
+                      {chip.label}
                     </button>
                   );
                 })}
