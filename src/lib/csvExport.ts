@@ -473,9 +473,17 @@ export function buildShopifyCsvRows(products: ExportProduct[], gidOverrides?: Gi
     const vendor = product.brand || '';
     const catKey = product.category?.toLowerCase() ?? '';
 
-    // Only use taxonomy paths from the map — never pass raw category names to Shopify (they'll fail validation)
-    const productCategory = resolveCategoryPath(catKey);
-    const productType = resolveProductType(catKey);
+    // Preset-applied shopifyProductType wins when set: a full taxonomy path
+    // (contains '>') feeds Product Category with Type derived from its last
+    // segment; a short value feeds Type only. Otherwise fall back to the
+    // category-name maps — never pass raw category names to Shopify (they'll
+    // fail validation).
+    const presetShopifyType = (product.shopifyProductType || '').trim();
+    const presetIsPath = presetShopifyType.includes('>');
+    const productCategory = (presetIsPath ? presetShopifyType : '') || resolveCategoryPath(catKey);
+    const productType =
+      (presetIsPath ? presetShopifyType.split('>').pop()!.trim() : presetShopifyType)
+      || resolveProductType(catKey);
 
     // Tags: extract #hashtags from generated description first, fall back to product.tags array
     const hashtagsFromDesc = (product.generatedDescription || '')

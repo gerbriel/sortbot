@@ -196,3 +196,18 @@ input[type="number"].info-input::-webkit-outer-spin-button {
   box-shadow: 0 0 0 2px rgba(92, 106, 196, 0.3) !important;
   animation: none;
 }
+
+/* "needed" badge — preset's measurement template expects this field and it's empty */
+.measurement-needed-badge {
+  display: inline-block;
+  margin-left: 0.3rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 10px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  vertical-align: middle;
+}

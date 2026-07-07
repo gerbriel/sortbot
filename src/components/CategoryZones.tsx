@@ -187,13 +187,20 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     }
   };
 
-  // Find the best matching preset from already-loaded `presets` state — no network fetch needed
+  // Find the best matching preset from already-loaded `presets` state — no network
+  // fetch needed. Matching mirrors applyPresetToProductGroup: product_type first
+  // (default preset preferred), then category_name, then the auto-created
+  // "<category>_default_<rand>" naming from createCategory. NO wild fallback —
+  // a category with no matching preset gets plain category assignment instead
+  // of another category's defaults.
   const findPreset = (categoryName: string): import('../lib/categoryPresets').CategoryPreset | undefined => {
     const lower = categoryName.toLowerCase();
+    const active = presets.filter(p => p.is_active !== false);
     return (
-      presets.find(p => (p.category_name ?? p.product_type ?? '').toLowerCase() === lower) ||
-      presets.find(p => (p.category_name ?? p.product_type ?? '').toLowerCase().includes(lower)) ||
-      presets.find(p => p.is_default)
+      active.find(p => p.product_type?.toLowerCase() === lower && p.is_default) ||
+      active.find(p => p.product_type?.toLowerCase() === lower) ||
+      active.find(p => p.category_name.toLowerCase() === lower) ||
+      active.find(p => p.category_name.toLowerCase().startsWith(`${lower}_default`))
     );
   };
 

@@ -338,8 +338,15 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                   {products.map((product, idx) => {
                     const cleanTitle = buildCleanTitle(product, idx);
                     const catKey = product.category?.toLowerCase() ?? '';
-                    const productCategory = resolveCategoryPath(catKey);
-                    const productType = resolveProductType(catKey);
+                    // Same precedence as buildShopifyCsvRows: preset-applied
+                    // shopifyProductType wins (full path → category column,
+                    // last segment → Type), category-name maps as fallback.
+                    const presetShopifyType = (product.shopifyProductType || '').trim();
+                    const presetIsPath = presetShopifyType.includes('>');
+                    const productCategory = (presetIsPath ? presetShopifyType : '') || resolveCategoryPath(catKey);
+                    const productType =
+                      (presetIsPath ? presetShopifyType.split('>').pop()!.trim() : presetShopifyType)
+                      || resolveProductType(catKey);
                     const vendor = product.brand || '';
                     const previewHashtags = (product.generatedDescription || '')
                       .match(/#(\w+)/g)?.map((t: string) => t.slice(1)) || [];

@@ -113,6 +113,17 @@ export async function applyPresetToProductGroup(
  *               values from the old preset are replaced.  Voice-entered
  *               fields are always kept.
  */
+// Item weightValue is stored in GRAMS (the CSV writes it as-is with unit 'g').
+// Presets store the value in whatever unit the author picked — convert here.
+const WEIGHT_UNIT_TO_GRAMS: Record<string, number> = { g: 1, kg: 1000, oz: 28.3495, lb: 453.592 };
+
+function presetWeightInGrams(preset: CategoryPreset): string | undefined {
+  const raw = parseFloat(preset.default_weight_value ?? '');
+  if (isNaN(raw)) return undefined;
+  const factor = WEIGHT_UNIT_TO_GRAMS[preset.default_weight_unit ?? 'g'] ?? 1;
+  return String(Math.round(raw * factor));
+}
+
 function applyPresetFields(
   items: ClothingItem[],
   categoryName: string,
@@ -124,6 +135,8 @@ function applyPresetFields(
   const pick = <T>(itemVal: T, presetVal: T): T =>
     force ? (presetVal ?? itemVal) : (itemVal || presetVal);
 
+  const presetWeight = presetWeightInGrams(preset);
+
   return items.map(item => ({
       ...item,
       
@@ -133,7 +146,9 @@ function applyPresetFields(
       // ======= PRICING =======
       // Voice-entered: keep item value. Preset-owned: use pick() so force resets them.
       price: item.price || preset.suggested_price_min || undefined,
-      compareAtPrice: pick(item.compareAtPrice, preset.compare_at_price) || undefined,
+      // compare_at_price wins; suggested_price_max is its fallback default
+      // (the "was" price a discounted listing shows).
+      compareAtPrice: pick(item.compareAtPrice, preset.compare_at_price ?? preset.suggested_price_max) || undefined,
       costPerItem: pick(item.costPerItem, preset.cost_per_item) || undefined,
       
       // ======= BASIC PRODUCT INFO =======
@@ -148,7 +163,9 @@ function applyPresetFields(
         }
         return undefined;
       })(),
-      brand: item.brand || undefined,
+      // brand is voice/manual first; preset vendor is its default (flows to the
+      // CSV Vendor column, which reads product.brand)
+      brand: item.brand || preset.vendor || undefined,
       // productType / shopifyProductType are preset-owned
       productType: pick(item.productType, preset.product_type) || undefined,
       shopifyProductType: pick(item.shopifyProductType, preset.shopify_product_type) || undefined,
@@ -190,7 +207,8 @@ function applyPresetFields(
       inventoryQuantity: pick(item.inventoryQuantity, preset.default_inventory_quantity) || undefined,
       
       // ======= SHIPPING & PACKAGING =======
-      weightValue: pick(item.weightValue, preset.default_weight_value) || undefined,
+      // Preset weight converted to grams (item.weightValue is always grams)
+      weightValue: pick(item.weightValue, presetWeight) || undefined,
       packageDimensions: pick(item.packageDimensions, preset.package_dimensions) || undefined,
       parcelSize: pick(item.parcelSize, preset.parcel_size) || undefined,
       shipsFrom: pick(item.shipsFrom, preset.ships_from) || undefined,
