@@ -4,7 +4,7 @@ import {
   fetchAllChips, createChip, updateChip, deleteChip,
   fetchAllBrandKeywords, createBrandKeywords, updateBrandKeywords, deleteBrandKeywords,
   fetchAllModels, createModel, updateModel, deleteModel,
-  parseKeywordList,
+  parseKeywordList, termMatchesChip,
   type DescriptorChip, type BrandKeywordRow, type ModelRow, type ModelInput,
 } from '../lib/vocabService';
 // type-only imports — the heavy BRAND_DNA / MODEL_DATABASE data is loaded
@@ -176,6 +176,26 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
     () => createBrandKeywords(entry.brand, entry.keywords),
     `${entry.brand} copied to your editable list above.`,
   );
+
+  // ── Brand keyword coverage (Chips tab) ────────────────────────────────────
+  // Every distinct word across the ACTIVE editable brand entries, with how
+  // many brands use it and whether an active chip already covers it (same
+  // loose matching Step 3 uses). Uncovered words get a one-click "make chip".
+  const brandWordCoverage = (() => {
+    const counts = new Map<string, number>();
+    brands.forEach(b => {
+      if (!b.is_active) return;
+      new Set(b.keywords.map(k => k.toLowerCase().trim()).filter(Boolean))
+        .forEach(w => counts.set(w, (counts.get(w) ?? 0) + 1));
+    });
+    return Array.from(counts.entries())
+      .map(([word, count]) => ({
+        word,
+        count,
+        covered: chips.some(c => c.is_active && termMatchesChip(word, c.label, c.output_text || c.label)),
+      }))
+      .sort((a, b) => Number(a.covered) - Number(b.covered) || b.count - a.count || a.word.localeCompare(b.word));
+  })();
 
   // ── Models: form save / edit / import ─────────────────────────────────────
   const modelFormToInput = (): Omit<ModelInput, 'is_active'> => ({
@@ -472,6 +492,41 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
               ))}
               {visibleChips.length === 0 && <p className="vocab-loading">No chips match.</p>}
             </ul>
+
+            {brandWordCoverage.length > 0 && (
+              <>
+                <h3 className="vocab-builtin-title">
+                  Brand keyword coverage ({brandWordCoverage.filter(w => !w.covered).length} without a chip)
+                </h3>
+                <p className="vocab-help">
+                  Every word your brand entries output, and whether a chip already covers it —
+                  promote the uncovered ones so they're one tap away for every listing, not just
+                  listings of that brand.
+                </p>
+                <div className="vocab-coverage-wrap">
+                  {brandWordCoverage
+                    .filter(w => !q || w.word.includes(q))
+                    .map(w => (
+                      <span key={w.word} className={`vocab-coverage-pill ${w.covered ? 'vocab-coverage-pill--covered' : ''}`}>
+                        {w.word}
+                        <span className="vocab-coverage-count" title={`Used by ${w.count} brand${w.count === 1 ? '' : 's'}`}>{w.count}</span>
+                        {w.covered ? (
+                          <Check size={11} className="vocab-coverage-check" />
+                        ) : (
+                          <button
+                            className="vocab-coverage-make"
+                            title={`Make "${w.word}" a quick keyword chip`}
+                            disabled={busy}
+                            onClick={() => run(() => createChip(w.word), `"${w.word}" is now a chip — it shows in Step 3 for every workspace.`)}
+                          >
+                            <Plus size={11} /> chip
+                          </button>
+                        )}
+                      </span>
+                    ))}
+                </div>
+              </>
+            )}
           </>
         ) : (
           <>
