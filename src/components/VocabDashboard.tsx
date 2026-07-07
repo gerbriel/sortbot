@@ -3,8 +3,9 @@ import { BookMarked, X, Plus, Pencil, Check, Trash2, Search } from 'lucide-react
 import {
   fetchAllChips, createChip, updateChip, deleteChip,
   fetchAllBrandKeywords, createBrandKeywords, updateBrandKeywords, deleteBrandKeywords,
+  fetchAllModels, createModel, updateModel, deleteModel,
   parseKeywordList,
-  type DescriptorChip, type BrandKeywordRow,
+  type DescriptorChip, type BrandKeywordRow, type ModelRow, type ModelInput,
 } from '../lib/vocabService';
 // type-only imports — the heavy BRAND_DNA / MODEL_DATABASE data is loaded
 // dynamically when its tab opens (see the lazy-load effects below)
@@ -58,38 +59,52 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
     return () => { cancelled = true; };
   }, [tab, builtins]);
 
-  // Model knowledge base (MODEL_DATABASE: Levi's 501 etc. with identifying
-  // features, price ranges, collectibility) — read-only reference, lazy-loaded.
-  const [models, setModels] = useState<(ModelContext & { key: string })[] | null>(null);
+  // Built-in model knowledge base (MODEL_DATABASE: Levi's 501 etc.) —
+  // read-only reference importable into the editable table, lazy-loaded.
+  const [builtinModels, setBuiltinModels] = useState<(ModelContext & { key: string })[] | null>(null);
   useEffect(() => {
-    if (tab !== 'models' || models !== null) return;
+    if (tab !== 'models' || builtinModels !== null) return;
     let cancelled = false;
     import('../lib/brandCategorySystem').then(m => {
       if (cancelled) return;
       const list = Object.entries(m.MODEL_DATABASE)
         .map(([key, v]) => ({ key, ...v }))
         .sort((a, b) => a.brand.localeCompare(b.brand) || a.modelName.localeCompare(b.modelName));
-      setModels(list);
+      setBuiltinModels(list);
     });
     return () => { cancelled = true; };
-  }, [tab, models]);
+  }, [tab, builtinModels]);
+
+  // Editable models (vocab_models table) + the add/edit form
+  const [dbModels, setDbModels] = useState<ModelRow[]>([]);
+  const emptyModelForm = {
+    brand: '', model_name: '', model_number: '', category: '', year: '',
+    price_min: '', price_max: '', collectibility: '', features: '', keywords: '',
+    discontinued: false,
+  };
+  const [modelForm, setModelForm] = useState(emptyModelForm);
+  const [modelEditId, setModelEditId] = useState<string | null>(null);
+  const setMF = (key: keyof typeof emptyModelForm, value: string | boolean) =>
+    setModelForm(f => ({ ...f, [key]: value }));
 
   // Used by action handlers (never synchronously inside an effect — the
   // initial load below awaits before any setState to satisfy render purity).
   const reload = async () => {
-    const [c, b] = await Promise.all([fetchAllChips(), fetchAllBrandKeywords()]);
+    const [c, b, m] = await Promise.all([fetchAllChips(), fetchAllBrandKeywords(), fetchAllModels()]);
     setChips(c);
     setBrands(b);
+    setDbModels(m);
     setLoading(false);
   };
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [c, b] = await Promise.all([fetchAllChips(), fetchAllBrandKeywords()]);
+      const [c, b, m] = await Promise.all([fetchAllChips(), fetchAllBrandKeywords(), fetchAllModels()]);
       if (cancelled) return;
       setChips(c);
       setBrands(b);
+      setDbModels(m);
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -162,6 +177,75 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
     `${entry.brand} copied to your editable list above.`,
   );
 
+  // ── Models: form save / edit / import ─────────────────────────────────────
+  const modelFormToInput = (): Omit<ModelInput, 'is_active'> => ({
+    brand: modelForm.brand.trim(),
+    model_name: modelForm.model_name.trim(),
+    model_number: modelForm.model_number.trim() || null,
+    category: modelForm.category.trim() || null,
+    year_introduced: modelForm.year.trim() ? (parseInt(modelForm.year, 10) || null) : null,
+    discontinued: modelForm.discontinued,
+    keywords: parseKeywordList(modelForm.keywords),
+    identifying_features: modelForm.features.split(',').map(s => s.trim()).filter(Boolean),
+    price_min: modelForm.price_min.trim() ? (parseFloat(modelForm.price_min) || null) : null,
+    price_max: modelForm.price_max.trim() ? (parseFloat(modelForm.price_max) || null) : null,
+    collectibility: modelForm.collectibility.trim()
+      ? Math.min(10, Math.max(1, parseInt(modelForm.collectibility, 10) || 1))
+      : null,
+  });
+
+  const handleSaveModel = () => run(
+    () => {
+      const input = modelFormToInput();
+      const op = modelEditId
+        ? updateModel(modelEditId, input)
+        : createModel({ ...input, is_active: true });
+      return op.then(r => {
+        if (r.ok) { setModelForm(emptyModelForm); setModelEditId(null); }
+        return r;
+      });
+    },
+    modelEditId ? 'Model updated.' : 'Model added.',
+  );
+
+  const startEditModel = (m: ModelRow) => {
+    setModelEditId(m.id);
+    setModelForm({
+      brand: m.brand,
+      model_name: m.model_name,
+      model_number: m.model_number ?? '',
+      category: m.category ?? '',
+      year: m.year_introduced != null ? String(m.year_introduced) : '',
+      price_min: m.price_min != null ? String(m.price_min) : '',
+      price_max: m.price_max != null ? String(m.price_max) : '',
+      collectibility: m.collectibility != null ? String(m.collectibility) : '',
+      features: m.identifying_features.join(', '),
+      keywords: m.keywords.join(', '),
+      discontinued: m.discontinued,
+    });
+    setConfirmDeleteId(null);
+  };
+
+  const handleImportBuiltinModel = (mo: ModelContext & { key: string }) => run(
+    () => createModel({
+      brand: mo.brand,
+      model_name: mo.modelName,
+      model_number: mo.modelNumber ?? null,
+      category: String(mo.category),
+      year_introduced: mo.yearIntroduced ?? null,
+      discontinued: !!mo.discontinued,
+      keywords: mo.keywords.map(k => k.toLowerCase()),
+      identifying_features: mo.identifyingFeatures,
+      price_min: mo.priceRange[0],
+      price_max: mo.priceRange[1],
+      collectibility: mo.collectibility,
+      is_active: true,
+    }),
+    `${mo.brand} ${mo.modelName} copied to your editable list above.`,
+  );
+
+  const dbModelKeys = new Set(dbModels.map(m => `${m.brand.toLowerCase()}|${m.model_name.toLowerCase()}`));
+
   return (
     <div className="vocab-overlay" onClick={onClose}>
       <div className="vocab-panel" onClick={(e) => e.stopPropagation()}>
@@ -182,7 +266,7 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
             Brand keywords ({brands.length})
           </button>
           <button className={`vocab-tab ${tab === 'models' ? 'vocab-tab--on' : ''}`} onClick={() => { setTab('models'); setEditId(null); setConfirmDeleteId(null); }}>
-            Models ({models ? models.length : '…'})
+            Models ({dbModels.length})
           </button>
           <div className="vocab-search">
             <Search size={13} />
@@ -197,14 +281,101 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
         ) : tab === 'models' ? (
           <>
             <p className="vocab-help">
-              The model knowledge base — read only. It powers model matching today and is the
-              checklist for the future photo scanning feature (identifying features, price
-              ranges, collectibility).
+              The model knowledge base — the recognition checklist and pricing data for the
+              future photo scanning feature. Add models as you handle notable items;
+              features and keywords are comma separated.
             </p>
-            {!models ? (
+
+            <div className="vocab-model-form">
+              <label className="vocab-mf-field"><span>Brand</span>
+                <input value={modelForm.brand} onChange={(e) => setMF('brand', e.target.value)} placeholder="Levi's" /></label>
+              <label className="vocab-mf-field"><span>Model name</span>
+                <input value={modelForm.model_name} onChange={(e) => setMF('model_name', e.target.value)} placeholder="501 Original Fit" /></label>
+              <label className="vocab-mf-field"><span>Model number</span>
+                <input value={modelForm.model_number} onChange={(e) => setMF('model_number', e.target.value)} placeholder="501" /></label>
+              <label className="vocab-mf-field"><span>Category</span>
+                <input value={modelForm.category} onChange={(e) => setMF('category', e.target.value)} placeholder="heritage-denim" /></label>
+              <label className="vocab-mf-field"><span>Year introduced</span>
+                <input value={modelForm.year} onChange={(e) => setMF('year', e.target.value)} placeholder="1873" inputMode="numeric" /></label>
+              <label className="vocab-mf-field"><span>Collectibility (1–10)</span>
+                <input value={modelForm.collectibility} onChange={(e) => setMF('collectibility', e.target.value)} placeholder="10" inputMode="numeric" /></label>
+              <label className="vocab-mf-field"><span>Price min ($)</span>
+                <input value={modelForm.price_min} onChange={(e) => setMF('price_min', e.target.value)} placeholder="60" inputMode="decimal" /></label>
+              <label className="vocab-mf-field"><span>Price max ($)</span>
+                <input value={modelForm.price_max} onChange={(e) => setMF('price_max', e.target.value)} placeholder="300" inputMode="decimal" /></label>
+              <label className="vocab-mf-field vocab-mf-check"><span>Discontinued</span>
+                <input type="checkbox" checked={modelForm.discontinued} onChange={(e) => setMF('discontinued', e.target.checked)} /></label>
+              <label className="vocab-mf-field vocab-mf-wide"><span>Identifying features (comma separated)</span>
+                <input value={modelForm.features} onChange={(e) => setMF('features', e.target.value)} placeholder="button fly, red tab, arcuate stitching" /></label>
+              <label className="vocab-mf-field vocab-mf-wide"><span>Keywords (comma separated)</span>
+                <input value={modelForm.keywords} onChange={(e) => setMF('keywords', e.target.value)} placeholder="501, original fit, selvedge" /></label>
+              <div className="vocab-mf-actions">
+                <button className="vocab-add-btn" disabled={busy || !modelForm.brand.trim() || !modelForm.model_name.trim()} onClick={handleSaveModel}>
+                  {modelEditId ? <><Check size={13} /> Save model</> : <><Plus size={13} /> Add model</>}
+                </button>
+                {modelEditId && (
+                  <button className="vocab-confirm-no" disabled={busy}
+                    onClick={() => { setModelEditId(null); setModelForm(emptyModelForm); }}>Cancel edit</button>
+                )}
+              </div>
+            </div>
+
+            <ul className="vocab-list">
+              {dbModels
+                .filter(m => !q
+                  || m.brand.toLowerCase().includes(q)
+                  || m.model_name.toLowerCase().includes(q)
+                  || (m.model_number ?? '').toLowerCase().includes(q)
+                  || m.keywords.some(k => k.includes(q))
+                  || m.identifying_features.some(f => f.toLowerCase().includes(q)))
+                .map(m => (
+                  <li key={m.id} className={`vocab-row vocab-model-row ${!m.is_active ? 'vocab-row--off' : ''}`}>
+                    <div className="vocab-model-info">
+                      <span>
+                        <span className="vocab-brand-name">{m.brand} {m.model_name}</span>
+                        {m.model_number ? <span className="vocab-model-number">#{m.model_number}</span> : null}
+                        {m.discontinued ? <span className="vocab-model-number">discontinued</span> : null}
+                      </span>
+                      <span className="vocab-row-detail" title={m.identifying_features.join(', ')}>
+                        {m.identifying_features.join(', ') || <span className="vocab-muted">no features listed</span>}
+                      </span>
+                      <span className="vocab-model-meta">
+                        {m.category ?? '—'}
+                        {m.year_introduced ? ` · since ${m.year_introduced}` : ''}
+                        {m.price_min != null && m.price_max != null ? ` · $${m.price_min}–$${m.price_max}` : ''}
+                        {m.collectibility != null ? ` · collectibility ${m.collectibility}/10` : ''}
+                      </span>
+                    </div>
+                    <label className="vocab-toggle" title={m.is_active ? 'Active' : 'Disabled'}>
+                      <input type="checkbox" checked={m.is_active} disabled={busy}
+                        onChange={() => run(() => updateModel(m.id, { is_active: !m.is_active }), m.is_active ? 'Model disabled.' : 'Model active again.')} />
+                      {m.is_active ? 'on' : 'off'}
+                    </label>
+                    <button className="vocab-icon-btn" title="Edit" disabled={busy} onClick={() => startEditModel(m)}><Pencil size={13} /></button>
+                    {confirmDeleteId === m.id ? (
+                      <span className="vocab-confirm">
+                        <button className="vocab-confirm-yes" disabled={busy}
+                          onClick={() => { setConfirmDeleteId(null); run(() => deleteModel(m.id), 'Model deleted.'); }}>Delete</button>
+                        <button className="vocab-confirm-no" disabled={busy} onClick={() => setConfirmDeleteId(null)}>Cancel</button>
+                      </span>
+                    ) : (
+                      <button className="vocab-icon-btn vocab-icon-danger" title="Delete model" disabled={busy} onClick={() => setConfirmDeleteId(m.id)}><Trash2 size={13} /></button>
+                    )}
+                  </li>
+                ))}
+              {dbModels.length === 0 && <p className="vocab-loading">No editable models yet — add one above or copy from the built-in library below.</p>}
+            </ul>
+
+            <h3 className="vocab-builtin-title">
+              Built-in model library ({builtinModels ? builtinModels.length : '…'})
+            </h3>
+            <p className="vocab-help">
+              Read only. Copy a model up into your editable list to use or tweak it.
+            </p>
+            {!builtinModels ? (
               <p className="vocab-loading">Loading model database…</p>
             ) : (() => {
-              const filteredModels = models.filter(mo => !q
+              const filteredModels = builtinModels.filter(mo => !q
                 || mo.brand.toLowerCase().includes(q)
                 || mo.modelName.toLowerCase().includes(q)
                 || (mo.modelNumber ?? '').toLowerCase().includes(q)
@@ -231,6 +402,12 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
                           {` · collectibility ${mo.collectibility}/10`}
                         </span>
                       </div>
+                      {dbModelKeys.has(`${mo.brand.toLowerCase()}|${mo.modelName.toLowerCase()}`) ? (
+                        <span className="vocab-customized-badge">customized</span>
+                      ) : (
+                        <button className="vocab-icon-btn" title="Copy to your editable list" disabled={busy}
+                          onClick={() => handleImportBuiltinModel(mo)}><Plus size={13} /></button>
+                      )}
                     </li>
                   ))}
                 {filteredModels.length === 0 && (
