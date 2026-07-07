@@ -117,14 +117,23 @@ export async function getBrandTerms(brand: string | undefined): Promise<string[]
   }
 }
 
-/** ALL brand keyword rows for the founder dashboard. */
+/** ALL brand keyword rows for the founder dashboard. Paginated — PostgREST
+ *  caps a single request at 1000 rows and the built-in library alone has 917
+ *  importable brands, so one page would silently truncate the list. */
 export async function fetchAllBrandKeywords(): Promise<BrandKeywordRow[]> {
-  const { data, error } = await supabase
-    .from('brand_keywords')
-    .select('id, brand, keywords, is_active')
-    .order('brand', { ascending: true });
-  if (error) { log.error(`fetchAllBrandKeywords | ${error.message}`); return []; }
-  return (data ?? []) as BrandKeywordRow[];
+  const PAGE = 1000;
+  const all: BrandKeywordRow[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('brand_keywords')
+      .select('id, brand, keywords, is_active')
+      .order('brand', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) { log.error(`fetchAllBrandKeywords | ${error.message}`); return all; }
+    all.push(...((data ?? []) as BrandKeywordRow[]));
+    if (!data || data.length < PAGE) break;
+  }
+  return all;
 }
 
 /** Comma/space-separated input → clean keyword array. */
