@@ -99,7 +99,11 @@ export async function deleteChip(id: string): Promise<boolean> {
 
 // ── Brand keywords ──────────────────────────────────────────────────────────
 
-/** Founder-curated words for ONE brand (case-insensitive), for tag generation. */
+/** Words for ONE brand (case-insensitive), for tag generation and Step 3
+ *  suggestions. Precedence: an edited row always wins (including a DISABLED
+ *  row, which means "off" — no built-in fallback for it); brands with no
+ *  edited row fall back to the built-in 917-brand library, which is lazy
+ *  loaded as its own chunk on first use. */
 export async function getBrandTerms(brand: string | undefined): Promise<string[]> {
   const cleaned = (brand ?? '').trim();
   if (!cleaned) return [];
@@ -109,9 +113,15 @@ export async function getBrandTerms(brand: string | undefined): Promise<string[]
       .select('keywords, is_active')
       .ilike('brand', cleaned)
       .limit(1);
-    if (error || !data || data.length === 0) return [];
-    const row = data[0] as { keywords: string[]; is_active: boolean };
-    return row.is_active ? (row.keywords ?? []) : [];
+    if (!error && data && data.length > 0) {
+      const row = data[0] as { keywords: string[]; is_active: boolean };
+      return row.is_active ? (row.keywords ?? []) : [];
+    }
+    // No edited row (or table missing) → built-in library fallback
+    const mod = await import('./builtinBrandVocab');
+    const lower = cleaned.toLowerCase();
+    const entry = mod.getBuiltinBrandVocab().find(e => e.brand.toLowerCase() === lower);
+    return entry?.keywords ?? [];
   } catch {
     return [];
   }

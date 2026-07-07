@@ -47,17 +47,16 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Built-in brand library (the hardcoded BRAND_DNA knowledge base) — loaded
-  // lazily so its several-hundred-KB of data never enters the main bundle.
+  // when the dashboard opens (lazily as its own chunk, never in the main
+  // bundle). Both the Brands tab and the Chips tab's coverage view use it.
   const [builtins, setBuiltins] = useState<BuiltinBrandEntry[] | null>(null);
-  const [showAllBuiltins, setShowAllBuiltins] = useState(false);
   useEffect(() => {
-    if (tab !== 'brands' || builtins !== null) return;
     let cancelled = false;
     import('../lib/builtinBrandVocab').then(m => {
       if (!cancelled) setBuiltins(m.getBuiltinBrandVocab());
     });
     return () => { cancelled = true; };
-  }, [tab, builtins]);
+  }, []);
 
   // Built-in model knowledge base (MODEL_DATABASE: Levi's 501 etc.) —
   // read-only reference importable into the editable table, lazy-loaded.
@@ -162,15 +161,14 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
   const visibleChips = chips.filter(c => !q || c.label.includes(q) || (c.output_text ?? '').toLowerCase().includes(q));
   const visibleBrands = brands.filter(b => !q || b.brand.toLowerCase().includes(q) || b.keywords.some(k => k.includes(q)));
 
-  // Built-in library: filter by the same search box; cap the render so 5,000
-  // rows never mount at once. Brands already copied to the editable table get
-  // a "customized" badge instead of the import button.
+  // Built-in library: ALL entries render by default; the search box filters.
+  // Brands already copied to the editable table get a "customized" badge
+  // instead of the import button.
   const editableBrandSet = new Set(brands.map(b => b.brand.toLowerCase()));
-  const BUILTIN_RENDER_CAP = q ? 100 : 50;
   const matchingBuiltins = (builtins ?? []).filter(
     e => !q || e.brand.toLowerCase().includes(q) || e.keywords.some(k => k.includes(q))
   );
-  const visibleBuiltins = showAllBuiltins ? matchingBuiltins : matchingBuiltins.slice(0, BUILTIN_RENDER_CAP);
+  const visibleBuiltins = matchingBuiltins;
 
   const handleImportBuiltin = (entry: BuiltinBrandEntry) => run(
     () => createBrandKeywords(entry.brand, entry.keywords),
@@ -183,11 +181,17 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
   // loose matching Step 3 uses). Uncovered words get a one-click "make chip".
   const brandWordCoverage = (() => {
     const counts = new Map<string, number>();
-    // ALL brand entries count, active or not — the founder curates against
-    // the full word universe regardless of which brands are toggled on.
-    brands.forEach(b => {
-      new Set(b.keywords.map(k => k.toLowerCase().trim()).filter(Boolean))
+    const addWords = (keywords: string[]) =>
+      new Set(keywords.map(k => k.toLowerCase().trim()).filter(Boolean))
         .forEach(w => counts.set(w, (counts.get(w) ?? 0) + 1));
+    // ALL editable entries count, active or not — the founder curates against
+    // the full word universe regardless of which brands are toggled on.
+    brands.forEach(b => addWords(b.keywords));
+    // The built-in library counts too (its words are live for every
+    // workspace); customized brands are skipped so they aren't double-counted.
+    const editableSet = new Set(brands.map(b => b.brand.toLowerCase()));
+    (builtins ?? []).forEach(e => {
+      if (!editableSet.has(e.brand.toLowerCase())) addWords(e.keywords);
     });
     return Array.from(counts.entries())
       .map(([word, count]) => ({
@@ -494,15 +498,18 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
               {visibleChips.length === 0 && <p className="vocab-loading">No chips match.</p>}
             </ul>
 
+            {builtins === null && (
+              <p className="vocab-loading">Loading brand keyword coverage…</p>
+            )}
             {brandWordCoverage.length > 0 && (
               <>
                 <h3 className="vocab-builtin-title">
                   Brand keyword coverage ({brandWordCoverage.filter(w => !w.covered).length} without a chip)
                 </h3>
                 <p className="vocab-help">
-                  Every word your brand entries output, and whether a chip already covers it —
-                  promote the uncovered ones so they're one tap away for every listing, not just
-                  listings of that brand.
+                  Every word the brand keywords output — your edited entries AND the built-in
+                  library — and whether a chip already covers it. Promote the uncovered ones so
+                  they're one tap away on every listing, not just listings of that brand.
                 </p>
                 <div className="vocab-coverage-wrap">
                   {brandWordCoverage
@@ -587,16 +594,9 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
               Built-in brand library ({builtins ? matchingBuiltins.length : '…'})
             </h3>
             <p className="vocab-help">
-              The knowledge base already shipped with the app — read only. Copy a brand up into
-              your editable list to use or tweak its words; edited copies always win.
-              {builtins && matchingBuiltins.length > visibleBuiltins.length
-                ? ` Showing ${visibleBuiltins.length} of ${matchingBuiltins.length}.`
-                : ''}
-              {builtins && matchingBuiltins.length > BUILTIN_RENDER_CAP && (
-                <button className="vocab-showall-btn" onClick={() => setShowAllBuiltins(v => !v)}>
-                  {showAllBuiltins ? 'Show fewer' : `Show all ${matchingBuiltins.length}`}
-                </button>
-              )}
+              The knowledge base already shipped with the app — its words are live for every
+              workspace out of the box. Copy a brand up into your editable list to tweak its
+              words; edited copies always win.
             </p>
             {!builtins ? (
               <p className="vocab-loading">Loading built-in library…</p>
