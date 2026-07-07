@@ -381,3 +381,57 @@
   gap: 0.4rem;
   align-items: center;
 }
+
+/* ── Brand keyword coverage (Chips tab) ─────────────────────────────────── */
+.vocab-coverage-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.4rem;
+}
+
+.vocab-coverage-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
+  border-radius: 20px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.vocab-coverage-pill--covered {
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.vocab-coverage-count {
+  font-size: 0.62rem;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.07);
+  border-radius: 10px;
+  padding: 0 0.3rem;
+}
+
+.vocab-coverage-check { color: #059669; }
+
+.vocab-coverage-make {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  border: 1px solid #f59e0b;
+  background: #fff;
+  color: #92400e;
+  border-radius: 12px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.05rem 0.4rem;
+  cursor: pointer;
+}
+
+.vocab-coverage-make:hover:not(:disabled) { background: #fef3c7; }
+.vocab-coverage-make:disabled { opacity: 0.5; cursor: default; }

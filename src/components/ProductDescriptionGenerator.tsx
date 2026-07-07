@@ -12,7 +12,7 @@ import { log } from '../lib/debugLogger';
 import VoiceCommandTable, { VOICE_KEYWORD_TO_FIELD } from './VoiceCommandTable';
 import { useStoreItemArray, liveArrayRef } from '../lib/workflowStore';
 import { buildGroupArray } from '../lib/grouping';
-import { fetchActiveChips, getBrandTerms } from '../lib/vocabService';
+import { fetchActiveChips, getBrandTerms, termMatchesChip } from '../lib/vocabService';
 import type { DescriptionSettings } from '../lib/descriptionSettings';
 import './ProductDescriptionGenerator.css';
 
@@ -1373,19 +1373,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     return () => { cancelled = true; };
   }, [currentBrandLower]);
 
-  // "Related" is deliberately loose: exact word match OR one word starting
-  // with the other (≥4 chars) — so brand word "skate" suggests chip "skater".
-  const wordsRelated = (a: string, b: string): boolean =>
-    a === b || (a.length >= 4 && b.startsWith(a)) || (b.length >= 4 && a.startsWith(b));
-
-  const termRelatesToChip = (term: string, chip: { label: string; output: string }): boolean => {
-    const chipWords = `${chip.label} ${chip.output}`.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-    return term.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
-      .some(tw => chipWords.some(cw => wordsRelated(tw, cw)));
-  };
-
+  // Matching lives in vocabService (termMatchesChip / wordsRelated) so Step 3
+  // and the dashboard's coverage view agree on what counts as related.
   const isChipSuggested = (chip: { label: string; output: string }): boolean =>
-    brandTermsForChips.length > 0 && brandTermsForChips.some(term => termRelatesToChip(term, chip));
+    brandTermsForChips.length > 0 && brandTermsForChips.some(term => termMatchesChip(term, chip.label, chip.output));
 
   // Every brand word is represented in the chip row EXACTLY ONCE: terms that
   // relate to an existing chip highlight that chip; terms with no chip
@@ -1393,7 +1384,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const brandOnlyChips: { label: string; output: string }[] = Array.from(new Set(
     brandTermsForChips.map(t => t.trim().toLowerCase()).filter(Boolean)
   ))
-    .filter(term => !chipDefs.some(chip => termRelatesToChip(term, chip)))
+    .filter(term => !chipDefs.some(chip => termMatchesChip(term, chip.label, chip.output)))
     .map(term => ({ label: term, output: term }));
 
   const descriptorActive = (kw: string): boolean => {

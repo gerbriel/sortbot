@@ -143,6 +143,21 @@ export function parseKeywordList(raw: string): string[] {
   ));
 }
 
+/** "Related" is deliberately loose: exact word match OR one word starting with
+ *  the other (≥4 chars) — so brand word "skate" relates to chip "skater".
+ *  Shared by Step 3's chip suggestions and the dashboard's coverage view so
+ *  both agree on what counts as covered. */
+export function wordsRelated(a: string, b: string): boolean {
+  return a === b || (a.length >= 4 && b.startsWith(a)) || (b.length >= 4 && a.startsWith(b));
+}
+
+/** Does a brand term relate to a chip (by label or output text)? */
+export function termMatchesChip(term: string, chipLabel: string, chipOutput: string): boolean {
+  const chipWords = `${chipLabel} ${chipOutput}`.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  return term.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+    .some(tw => chipWords.some(cw => wordsRelated(tw, cw)));
+}
+
 export async function createBrandKeywords(brand: string, keywords: string[]): Promise<{ ok: boolean; error?: string }> {
   const cleaned = brand.trim();
   if (!cleaned) return { ok: false, error: 'Brand name cannot be empty.' };
