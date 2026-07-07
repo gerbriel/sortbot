@@ -1354,6 +1354,38 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     return () => { cancelled = true; };
   }, []);
 
+  // Brand → suggested chips: when the current item's brand has founder-curated
+  // words (brand_keywords table), chips whose label/output relates to those
+  // words float to the front as suggestions. Cached per brand for the session.
+  const [brandTermsForChips, setBrandTermsForChips] = useState<string[]>([]);
+  const brandTermsCacheRef = useRef<Map<string, string[]>>(new Map());
+  const currentBrandLower = (currentItem?.brand || '').trim().toLowerCase();
+  useEffect(() => {
+    if (!currentBrandLower) { setBrandTermsForChips([]); return; }
+    const cached = brandTermsCacheRef.current.get(currentBrandLower);
+    if (cached) { setBrandTermsForChips(cached); return; }
+    let cancelled = false;
+    getBrandTerms(currentBrandLower).then(terms => {
+      if (cancelled) return;
+      brandTermsCacheRef.current.set(currentBrandLower, terms);
+      setBrandTermsForChips(terms);
+    });
+    return () => { cancelled = true; };
+  }, [currentBrandLower]);
+
+  // "Related" is deliberately loose: exact word match OR one word starting
+  // with the other (≥4 chars) — so brand word "skate" suggests chip "skater".
+  const wordsRelated = (a: string, b: string): boolean =>
+    a === b || (a.length >= 4 && b.startsWith(a)) || (b.length >= 4 && a.startsWith(b));
+
+  const isChipSuggested = (chip: { label: string; output: string }): boolean => {
+    if (brandTermsForChips.length === 0) return false;
+    const chipWords = `${chip.label} ${chip.output}`.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    return brandTermsForChips.some(term =>
+      term.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+        .some(tw => chipWords.some(cw => wordsRelated(tw, cw))));
+  };
+
   const descriptorActive = (kw: string): boolean => {
     const cur = (currentItem?.customDescription || '');
     const esc = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -2485,20 +2517,40 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   description field (no need to know or dictate the vocabulary) */}
               <div className="descriptor-chips">
                 <span className="descriptor-chips-label">Quick keywords</span>
-                {chipDefs.map(chip => {
-                  const active = descriptorActive(chip.output);
+                {(() => {
+                  // Suggested chips (related to the brand's curated words) first,
+                  // stable order within each group.
+                  const withFlags = chipDefs.map(chip => ({ chip, suggested: isChipSuggested(chip) }));
+                  const anySuggested = withFlags.some(w => w.suggested);
+                  const ordered = [...withFlags].sort((a, b) => Number(b.suggested) - Number(a.suggested));
                   return (
-                    <button
-                      key={chip.label}
-                      type="button"
-                      className={`descriptor-chip ${active ? 'descriptor-chip--on' : ''}`}
-                      onClick={() => toggleDescriptorKeyword(chip.output)}
-                      title={active ? `Remove "${chip.output}" from the description` : `Add "${chip.output}" to the description`}
-                    >
-                      {chip.label}
-                    </button>
+                    <>
+                      {anySuggested && currentItem?.brand && (
+                        <span className="descriptor-chips-hint">✦ suggested for {currentItem.brand}</span>
+                      )}
+                      {ordered.map(({ chip, suggested }) => {
+                        const active = descriptorActive(chip.output);
+                        return (
+                          <button
+                            key={chip.label}
+                            type="button"
+                            className={`descriptor-chip ${active ? 'descriptor-chip--on' : ''} ${suggested ? 'descriptor-chip--suggested' : ''}`}
+                            onClick={() => toggleDescriptorKeyword(chip.output)}
+                            title={
+                              active
+                                ? `Remove "${chip.output}" from the description`
+                                : suggested
+                                  ? `Suggested — matches ${currentItem?.brand}'s keywords. Add "${chip.output}" to the description`
+                                  : `Add "${chip.output}" to the description`
+                            }
+                          >
+                            {chip.label}
+                          </button>
+                        );
+                      })}
+                    </>
                   );
-                })}
+                })()}
               </div>
 
               {voiceMode === 'table' ? (
