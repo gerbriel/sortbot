@@ -163,9 +163,10 @@ function applyPresetFields(
         }
         return undefined;
       })(),
-      // brand is voice/manual first; preset vendor is its default (flows to the
-      // CSV Vendor column, which reads product.brand)
-      brand: item.brand || preset.vendor || undefined,
+      // brand is the GARMENT's brand — voice/manual only. (preset.vendor is
+      // NOT a brand default: the CSV Vendor column is the seller name, which
+      // comes from the org-level vendorName setting, not from items.)
+      brand: item.brand || undefined,
       // productType / shopifyProductType are preset-owned
       productType: pick(item.productType, preset.product_type) || undefined,
       shopifyProductType: pick(item.shopifyProductType, preset.shopify_product_type) || undefined,

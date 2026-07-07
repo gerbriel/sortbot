@@ -113,6 +113,32 @@ describe('taxonomy resolution', () => {
   });
 });
 
+describe('Vendor column — seller name, not garment brand', () => {
+  const vendorCol = SHOPIFY_CSV_HEADERS.indexOf('Vendor');
+
+  it('uses the workspace vendor name for every row when provided', () => {
+    const rows = buildShopifyCsvRows(
+      [
+        product({ id: 'a', seoTitle: 'Tee', price: 10, brand: 'Nike', imageUrls: ['https://x/1.jpg'] }),
+        product({ id: 'b', seoTitle: 'Cap', price: 15, brand: 'Carhartt', imageUrls: ['https://x/2.jpg'] }),
+      ],
+      undefined,
+      'C&D Vintage',
+    );
+    expect(rows[0][vendorCol]).toBe('C&D Vintage');
+    // find the second product's main row (first row of product b)
+    const bRow = rows.find(r => r[vendorCol] && r !== rows[0] && r[vendorCol] !== '');
+    expect(bRow?.[vendorCol]).toBe('C&D Vintage');
+  });
+
+  it('falls back to the garment brand when no vendor name is provided (legacy)', () => {
+    const [row] = buildShopifyCsvRows([
+      product({ id: 'a', seoTitle: 'Tee', price: 10, brand: 'Nike', imageUrls: ['https://x/1.jpg'] }),
+    ]);
+    expect(row[vendorCol]).toBe('Nike');
+  });
+});
+
 describe('preset shopifyProductType → CSV taxonomy columns', () => {
   const h = SHOPIFY_CSV_HEADERS;
   const catCol = h.indexOf('Product Category');

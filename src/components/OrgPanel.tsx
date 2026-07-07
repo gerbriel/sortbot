@@ -96,6 +96,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   const [descClosing, setDescClosing] = useState(DEFAULT_DESCRIPTION_SETTINGS.closingLine);
   const [descDisclaimers, setDescDisclaimers] = useState(DEFAULT_DESCRIPTION_SETTINGS.disclaimerLines.join('\n'));
   const [descHashtags, setDescHashtags] = useState(DEFAULT_DESCRIPTION_SETTINGS.includeHashtags);
+  const [descVendor, setDescVendor] = useState(DEFAULT_DESCRIPTION_SETTINGS.vendorName);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -107,6 +108,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
       setDescClosing(s.closingLine);
       setDescDisclaimers(s.disclaimerLines.join('\n'));
       setDescHashtags(s.includeHashtags);
+      setDescVendor(s.vendorName);
       setDescLoaded(true);
     });
     return () => { cancelled = true; };
@@ -122,6 +124,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
       washingLine: descWashing.trim(),
       closingLine: descClosing.trim(),
       includeHashtags: descHashtags,
+      vendorName: descVendor.trim(),
       disclaimerLines: descDisclaimers.split('\n').map(l => l.trim()).filter(Boolean),
     };
     const res = await saveOrgDescriptionSettings(org.id, settings);
@@ -140,6 +143,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
     setDescClosing(DEFAULT_DESCRIPTION_SETTINGS.closingLine);
     setDescDisclaimers(DEFAULT_DESCRIPTION_SETTINGS.disclaimerLines.join('\n'));
     setDescHashtags(DEFAULT_DESCRIPTION_SETTINGS.includeHashtags);
+    setDescVendor(DEFAULT_DESCRIPTION_SETTINGS.vendorName);
     setNotice('Reset to the default format — click Save format to apply it.');
   };
 
@@ -582,6 +586,11 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
               Leave a line empty to leave it out of your descriptions.
             </p>
             <div className="desc-settings-form">
+              <label className="desc-settings-field">
+                <span>Vendor name (Shopify CSV Vendor column — your shop, not the garment brand)</span>
+                <input value={descVendor} placeholder={org.slug === 'founding' ? 'C&D Vintage' : org.name}
+                  onChange={(e) => setDescVendor(e.target.value)} />
+              </label>
               <label className="desc-settings-field desc-settings-field--narrow">
                 <span>Measurement symbol</span>
                 <input value={descSymbol} maxLength={4}

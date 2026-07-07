@@ -125,14 +125,14 @@ describe('applyPresetDirectly — field wiring (July 2026 audit fixes)', () => {
     expect(own.weightValue).toBe('300');
   });
 
-  it('uses preset vendor as the default brand (voice/manual brand wins)', () => {
-    const [fromPreset] = applyPresetDirectly([makeItem()], 'tees',
-      makePreset({ vendor: 'Thrift Haus' }));
-    expect(fromPreset.brand).toBe('Thrift Haus');
+  it('preset vendor NEVER becomes the item brand (Vendor is the seller, set at export time)', () => {
+    const [out] = applyPresetDirectly([makeItem()], 'tees',
+      makePreset({ vendor: 'C&D Vintage' }));
+    expect(out.brand).toBeUndefined();
 
-    const [voiceWins] = applyPresetDirectly([makeItem({ brand: 'Nike' })], 'tees',
-      makePreset({ vendor: 'Thrift Haus' }));
-    expect(voiceWins.brand).toBe('Nike');
+    const [voiceKept] = applyPresetDirectly([makeItem({ brand: 'Nike' })], 'tees',
+      makePreset({ vendor: 'C&D Vintage' }));
+    expect(voiceKept.brand).toBe('Nike');
   });
 
   it('falls back to suggested_price_max for compare-at when compare_at_price is unset', () => {
