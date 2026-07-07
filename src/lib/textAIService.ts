@@ -109,10 +109,14 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   // has already inserted \n before each trigger word.
   // Also normalize "." back to " period" so that transcripts where the period
   // delimiter was already converted to a dot (display format) still parse correctly.
-  const voiceDesc = rawVoiceDesc
+  // `let` because the matched "description … period" span is scrubbed out
+  // before the other Pass-1 commands run (see the DESCRIPTION block below).
+  let voiceDesc = rawVoiceDesc
     .replace(/\n/g, ' ')
     .replace(/\.(?=\s|$)/g, ' period')
     .replace(/\s{2,}/g, ' ');
+  // Lowercased FULL text (description included) — Pass 2's color/material/etc.
+  // word scanning should still see description words.
   const lower = voiceDesc.toLowerCase();
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -137,10 +141,25 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   }
 
   // ── DESCRIPTION (freeform note) ─────────────────────────────────────────
-  let descriptionCmd = extractCommand(/\bdescription\s+(.+?)\s+period\b/i);
-  if (!descriptionCmd) {
+  // Deliberately NOT using extractCommand here: natural narration is full of
+  // words that double as field triggers ("style", "sleeve", "length", "care"…)
+  // and the FIELD_BOUNDARY_RE guard was chopping descriptions at the first one.
+  // "description … period" captures EVERYTHING up to the first "period".
+  let descriptionCmd: string | null = null;
+  const descMatch = voiceDesc.match(/\bdescription\s+(.+?)\s+period\b/i);
+  if (descMatch) {
+    descriptionCmd = descMatch[1].trim();
+    // Scrub the description span so its words ("long sleeve", "boxy style"…)
+    // can't be picked up as field commands by the extractors below.
+    voiceDesc = voiceDesc.replace(descMatch[0], ' ').replace(/\s{2,}/g, ' ');
+  } else {
+    // No closing "period" (recording cut off) — fall back to the keyword
+    // boundary so a following command can't bleed in.
     const m = voiceDesc.match(/\bdescription\s+(.+?)(?=\s+(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
-    if (m) descriptionCmd = m[1].trim();
+    if (m) {
+      descriptionCmd = m[1].trim();
+      voiceDesc = voiceDesc.replace(m[0], ' ').replace(/\s{2,}/g, ' ');
+    }
   }
   if (descriptionCmd) extracted.customDescription = descriptionCmd;
 

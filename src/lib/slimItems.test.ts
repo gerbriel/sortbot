@@ -29,6 +29,7 @@ const fullItem = (): ClothingItem =>
     originalStoragePath: 'user/prod/orig.jpg',
     originalUrl: 'https://cdn/orig.jpg',
     descriptionEdited: true,
+    customDescription: 'faded, boxy, single stitch',
   } as unknown as ClothingItem);
 
 describe('slimForWorkflowState (Supabase workflow_state blob)', () => {
@@ -49,6 +50,7 @@ describe('slimForWorkflowState (Supabase workflow_state blob)', () => {
       originalUrl: 'https://cdn/orig.jpg',
       brandCategory: undefined,
       descriptionEdited: true,
+      customDescription: 'faded, boxy, single stitch',
     });
   });
 

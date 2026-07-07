@@ -18,6 +18,19 @@ import './ProductDescriptionGenerator.css';
 // .current always reads the CURRENT full item list (async handlers can't go stale).
 const processedItemsRef = liveArrayRef('processedItems');
 
+// Quick descriptor keywords — one tap adds proven resale keywords to the
+// item's description field, so the seller doesn't have to know (or dictate)
+// the vocabulary. They flow into the generated description, the title keyword
+// engine, and the description-sourced tags exactly like spoken words.
+const DESCRIPTOR_KEYWORDS = [
+  'faded', 'distressed', 'boxy', 'oversized', 'cropped', 'baggy',
+  'graphic', 'embroidered', 'single stitch', 'double stitch',
+  'streetwear', 'skater', 'grunge', 'y2k', 'workwear', 'sports',
+  'hooded', 'zip up', 'quarter zip', 'snap button', 'color block',
+  'plaid', 'flannel', 'striped', 'tie dye', 'camo',
+  'heavyweight', 'lightweight', 'made in usa', 'deadstock', 'rare',
+];
+
 interface ProductDescriptionGeneratorProps {
   onProcessed: (items: ClothingItem[]) => void;
   onDownloadCSV?: () => void;
@@ -271,8 +284,15 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         syncGroupFieldsToDatabase(group, batchId ?? null).catch(() => {});
       }
     };
+    // beforeunload alone is unreliable on back-button navigation and mobile
+    // (bfcache freezes the page without firing it) — pagehide is the dependable
+    // signal, so listen to both. flushOnUnload is idempotent.
     window.addEventListener('beforeunload', flushOnUnload);
-    return () => window.removeEventListener('beforeunload', flushOnUnload);
+    window.addEventListener('pagehide', flushOnUnload);
+    return () => {
+      window.removeEventListener('beforeunload', flushOnUnload);
+      window.removeEventListener('pagehide', flushOnUnload);
+    };
   }, [processedItems, currentGroupIndex, batchId]);
 
   // Stage 2b: the prop-sync effect (batchChanged/lengthChanged/structureKey
@@ -412,6 +432,17 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             if (!seg) continue;
             const segLower = seg.toLowerCase();
 
+            // DESCRIPTION MODE: while dictating a description, every word up to
+            // the closing "period" is narration — words like "sleeve", "style",
+            // "length" must NOT be treated as new field commands mid-sentence.
+            if (activeVoiceFieldRef.current === 'customDescription') {
+              const v = (pendingFieldValueRef.current + ' ' + seg).trim();
+              if (v) applyTableFieldRef.current('customDescription', v);
+              pendingFieldValueRef.current = '';
+              activeVoiceFieldRef.current = null;
+              continue;
+            }
+
             // Find ALL keyword occurrences within this segment (word-boundary-aware).
             // This lets a single period-bounded chunk like "width 18 length 28 period"
             // correctly yield TWO separate field writes instead of one.
@@ -461,12 +492,17 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
               // Apply every keyword→value pair found in this segment.
               // Each is closed by the trailing "period" (or by the next keyword in the segment).
+              // EXCEPTION: "description" swallows the REST of the segment — its
+              // value runs to the closing "period", so narration words that
+              // double as field keywords never chop it up.
               for (let ki = 0; ki < kwHits.length; ki++) {
                 const { pos, kw, fk } = kwHits[ki];
                 const valueStart = pos + kw.length;
-                const valueEnd = ki + 1 < kwHits.length ? kwHits[ki + 1].pos : seg.length;
+                const isDescription = fk === 'customDescription';
+                const valueEnd = (!isDescription && ki + 1 < kwHits.length) ? kwHits[ki + 1].pos : seg.length;
                 const value = seg.slice(valueStart, valueEnd).trim();
                 if (value) applyTableFieldRef.current(fk, value);
+                if (isDescription) break; // everything after belonged to the description
               }
               pendingFieldValueRef.current = '';
               activeVoiceFieldRef.current = null;
@@ -495,6 +531,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           } else {
             setActiveVoiceField(null);
           }
+        } else if (activeVoiceFieldRef.current === 'customDescription') {
+          // Mid-description, no period yet — keyword lookalikes ("sleeve",
+          // "style"…) are narration; keep accumulating until "period".
+          pendingFieldValueRef.current = (pendingFieldValueRef.current + ' ' + final.trim()).trim();
         } else if (lastKey) {
           // No period in chunk — new keyword detected, start accumulating value
           const afterKeyword = final.slice(lastPos + lastKeyword.length).trim();
@@ -509,17 +549,21 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         // Don't restart automatically - continuous mode handles this
       } else {
         setInterimTranscript(interim);
-        // Real-time column highlighting from interim text
-        const interimLower = interim.toLowerCase();
-        let lastPos = -1;
-        let lastKey: string | null = null;
-        for (const [keyword, fieldKey] of Object.entries(VOICE_KEYWORD_TO_FIELD)) {
-          const idx = interimLower.lastIndexOf(keyword);
-          if (idx > lastPos) { lastPos = idx; lastKey = fieldKey; }
-        }
-        if (lastKey) {
-          activeVoiceFieldRef.current = lastKey;
-          setActiveVoiceField(lastKey);
+        // Real-time column highlighting from interim text. Never switch away
+        // from an in-progress description — its narration words ("sleeve",
+        // "style"…) are not commands until "period" closes it.
+        if (activeVoiceFieldRef.current !== 'customDescription') {
+          const interimLower = interim.toLowerCase();
+          let lastPos = -1;
+          let lastKey: string | null = null;
+          for (const [keyword, fieldKey] of Object.entries(VOICE_KEYWORD_TO_FIELD)) {
+            const idx = interimLower.lastIndexOf(keyword);
+            if (idx > lastPos) { lastPos = idx; lastKey = fieldKey; }
+          }
+          if (lastKey) {
+            activeVoiceFieldRef.current = lastKey;
+            setActiveVoiceField(lastKey);
+          }
         }
       }
     };
@@ -1179,41 +1223,38 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     setInterimTranscript('');
   };
 
-  /** Serialize item fields into voice-description "field value period" lines */
-  const buildVoiceTextFromItem = (item: ClothingItem): string => {
-    const lines: string[] = [];
-    const add = (label: string, val: string | number | undefined | null) => {
-      if (val !== undefined && val !== null && String(val).trim()) lines.push(`${label} ${String(val).trim()} period`);
-    };
-    add('title',    item.seoTitle);
-    add('brand',    item.brand);
-    add('size',     item.size);
-    add('color',    item.color);
-    if (item.secondaryColor) add('second color', item.secondaryColor);
-    add('condition', item.condition);
-    add('price',    item.price);
-    add('era',      item.era);
-    add('style',    item.style);
-    add('gender',   item.gender);
-    add('material', item.material);
-    if (item.tags?.length) add('tags', item.tags.join(', '));
-    add('flaws',    item.flaws);
-    add('care',     item.care);
-    if ((item as any).customDescription) add('description', (item as any).customDescription);
-    const m = item.measurements as any;
-    if (m) {
-      add('width',       m.width || m.chest);
-      add('length',      m.length);
-      add('waist',       m.waist);
-      add('hip',         m.hip);
-      add('rise',        m.rise);
-      add('inseam',      m.inseam);
-      add('outseam',     m.outseam);
-      add('leg opening', m.leg_opening);
-      add('sleeve',      m.sleeve);
-      add('shoulder',    m.shoulder);
+  /** fieldKey → the spoken label used in "label value period" transcript lines. */
+  const FIELD_TO_VOICE_LABEL: Record<string, string> = {
+    seoTitle: 'title', brand: 'brand', size: 'size', color: 'color',
+    secondaryColor: 'second color', condition: 'condition', price: 'price',
+    era: 'era', style: 'style', gender: 'gender', material: 'material',
+    tags: 'tags', flaws: 'flaws', care: 'care', customDescription: 'description',
+    meas_width: 'width', meas_length: 'length', meas_chest: 'chest',
+    meas_waist: 'waist', meas_hip: 'hip', meas_rise: 'rise',
+    meas_inseam: 'inseam', meas_outseam: 'outseam', meas_leg: 'leg opening',
+    meas_sleeve: 'sleeve', meas_shoulder: 'shoulder',
+  };
+
+  /**
+   * Surgically sync ONE field edit into the voice transcript: update the
+   * existing "label value period" line if present, else append one. Everything
+   * else in the transcript — especially freeform narration — is left intact.
+   * (The old approach rebuilt the WHOLE transcript from structured fields,
+   * which silently deleted any narration the moment a field changed.)
+   */
+  const patchVoiceLine = (text: string, fieldKey: string, value: string): string => {
+    const label = FIELD_TO_VOICE_LABEL[fieldKey];
+    if (!label) return text;
+    const val = value.trim();
+    const esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const lineRe = new RegExp(`^${esc}\\s+.*?(?:\\bperiod\\b|\\.)\\s*$`, 'im');
+    if (!val) {
+      // Field cleared — drop its stale line so Regenerate can't resurrect it
+      return text.replace(lineRe, '').replace(/\n{2,}/g, '\n').trim();
     }
-    return lines.join('\n');
+    const newLine = `${label} ${val} period`;
+    if (lineRe.test(text)) return text.replace(lineRe, newLine);
+    return text.trim() ? `${text.trimEnd()}\n${newLine}` : newLine;
   };
 
   /** Handle a cell edit from the VoiceCommandTable — updates fields AND rebuilds voiceDescription */
@@ -1258,8 +1299,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       } else {
         updated = { ...item, [fieldKey]: value };
       }
-      // Sync back to voiceDescription text
-      updated = { ...updated, voiceDescription: buildVoiceTextFromItem(updated) };
+      // Sync this ONE edit into the transcript, preserving all narration
+      updated = { ...updated, voiceDescription: patchVoiceLine(updated.voiceDescription || '', fieldKey, value) };
       return updated;
     }));
 
@@ -1280,7 +1321,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       } else {
         updated = { ...item, [fieldKey]: value };
       }
-      return { ...updated, voiceDescription: buildVoiceTextFromItem(updated) };
+      return { ...updated, voiceDescription: patchVoiceLine(updated.voiceDescription || '', fieldKey, value) };
     });
     console.log('[PDG] handleTableFieldChange → debouncedDirectSave with updatedGroup[0]:', {
       id: updatedGroup[0]?.id,
@@ -1291,6 +1332,32 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   // Keep applyTableFieldRef current every render
   applyTableFieldRef.current = handleTableFieldChange;
+
+  // ── Quick descriptor keyword chips ─────────────────────────────────────
+  const descriptorActive = (kw: string): boolean => {
+    const cur = (currentItem?.customDescription || '');
+    const esc = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?:^|[^a-z])${esc}(?:[^a-z]|$)`, 'i').test(cur);
+  };
+
+  const toggleDescriptorKeyword = (kw: string) => {
+    const current = currentItem?.customDescription || '';
+    const esc = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let next: string;
+    if (descriptorActive(kw)) {
+      next = current
+        .replace(new RegExp(`\\s*,?\\s*\\b${esc}\\b`, 'ig'), '')
+        .replace(/^\s*,\s*/, '')
+        .replace(/\s*,(\s*,)+/g, ',')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    } else {
+      next = current.trim() ? `${current.trim().replace(/,\s*$/, '')}, ${kw}` : kw;
+    }
+    // Reuses the normal field-edit path: group-wide update, transcript line
+    // patch, debounced direct save — chips are just a fast way to type.
+    handleTableFieldChange('customDescription', next);
+  };
 
   // Banned phrases to filter from AI descriptions
 
@@ -2386,6 +2453,26 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     ))}
                   </div>
                 </div>
+              </div>
+
+              {/* Quick keywords — tap to add/remove resale descriptors from the
+                  description field (no need to know or dictate the vocabulary) */}
+              <div className="descriptor-chips">
+                <span className="descriptor-chips-label">Quick keywords</span>
+                {DESCRIPTOR_KEYWORDS.map(kw => {
+                  const active = descriptorActive(kw);
+                  return (
+                    <button
+                      key={kw}
+                      type="button"
+                      className={`descriptor-chip ${active ? 'descriptor-chip--on' : ''}`}
+                      onClick={() => toggleDescriptorKeyword(kw)}
+                      title={active ? `Remove "${kw}" from the description` : `Add "${kw}" to the description`}
+                    >
+                      {kw}
+                    </button>
+                  );
+                })}
               </div>
 
               {voiceMode === 'table' ? (

@@ -1242,3 +1242,41 @@
   animation: none;
 }
 
+
+/* ── Quick descriptor keyword chips ─────────────────────────────────────── */
+.descriptor-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0.5rem 0;
+}
+
+.descriptor-chips-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-right: 0.2rem;
+}
+
+.descriptor-chip {
+  border: 1px solid #c7d2fe;
+  background: #eef2ff;
+  color: #4338ca;
+  border-radius: 20px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.descriptor-chip:hover { background: #e0e7ff; }
+
+.descriptor-chip--on {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  color: #fff;
+}
