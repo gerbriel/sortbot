@@ -113,6 +113,47 @@ describe('taxonomy resolution', () => {
   });
 });
 
+describe('per-store GID overrides', () => {
+  const h = SHOPIFY_CSV_HEADERS;
+  const colorCol = h.indexOf('Color (product.metafields.shopify.color-pattern)');
+  const genderCol = h.indexOf('Target gender (product.metafields.shopify.target-gender)');
+
+  it('uses the hardcoded founding-store GIDs when no overrides are passed', () => {
+    const [row] = buildShopifyCsvRows([
+      product({ id: 'a', seoTitle: 'Tee', price: 10, color: 'Black', imageUrls: ['https://x/1.jpg'] }),
+    ]);
+    expect(row[colorCol]).toBe('gid://shopify/Metaobject/155011809465');
+  });
+
+  it('uses the override GID for the connected store instead of the hardcoded one', () => {
+    const [row] = buildShopifyCsvRows(
+      [product({ id: 'a', seoTitle: 'Tee', price: 10, color: 'Black', gender: 'Men', imageUrls: ['https://x/1.jpg'] })],
+      { color: { black: 'gid://shopify/Metaobject/999001' }, gender: { male: 'gid://shopify/Metaobject/999002' } },
+    );
+    expect(row[colorCol]).toBe('gid://shopify/Metaobject/999001');
+    expect(row[genderCol]).toBe('gid://shopify/Metaobject/999002'); // "men" alias → male
+  });
+
+  it('resolves color aliases against the override map (cream → beige)', () => {
+    const [row] = buildShopifyCsvRows(
+      [product({ id: 'a', seoTitle: 'Tee', price: 10, color: 'Cream', imageUrls: ['https://x/1.jpg'] })],
+      { color: { beige: 'gid://shopify/Metaobject/999003' } },
+    );
+    expect(row[colorCol]).toBe('gid://shopify/Metaobject/999003');
+  });
+
+  it('never falls back to a foreign hardcoded GID when overrides are present', () => {
+    // "Black" exists in the hardcoded map but not in this store's override map —
+    // the column must be blank (Shopify leaves the metafield unset), not the
+    // founding store's GID which would not resolve in the connected store.
+    const [row] = buildShopifyCsvRows(
+      [product({ id: 'a', seoTitle: 'Tee', price: 10, color: 'Black', imageUrls: ['https://x/1.jpg'] })],
+      { color: { red: 'gid://shopify/Metaobject/999004' } },
+    );
+    expect(row[colorCol]).toBe('');
+  });
+});
+
 describe('escapeCsvValue', () => {
   it('quotes values containing commas, quotes, or newlines', () => {
     expect(escapeCsvValue('a,b')).toBe('"a,b"');

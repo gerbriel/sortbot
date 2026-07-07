@@ -193,7 +193,67 @@ Deno.serve(async (req: Request) => {
       if (!cursor) break;
     }
 
-    return json({ titles, handles, count: titles.length, source: resolved.source });
+    // Best-effort metaobject GID maps (color-pattern / fabric / target-gender)
+    // so each store's CSV carries ITS OWN metafield GIDs — metaobject ids are
+    // store-specific, the client's hardcoded maps only fit the founding store.
+    // Requires the token to have the read_metaobjects scope; on any failure the
+    // key is simply omitted and the exporter keeps its hardcoded maps.
+    let metaobjects: Record<string, Record<string, string>> | undefined;
+    try {
+      const moQuery = `
+        {
+          metaobjectDefinitions(first: 50) {
+            edges {
+              node {
+                type
+                metaobjects(first: 250) {
+                  edges { node { id displayName } }
+                }
+              }
+            }
+          }
+        }`;
+      const moResp = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": resolved.token,
+        },
+        body: JSON.stringify({ query: moQuery }),
+      });
+      if (moResp.ok) {
+        const moPayload = await moResp.json();
+        const defs = moPayload?.data?.metaobjectDefinitions?.edges ?? [];
+        const maps: Record<string, Record<string, string>> = {};
+        for (const edge of defs) {
+          const def = edge?.node;
+          const t = String(def?.type ?? "").toLowerCase();
+          const bucket = t.includes("color") ? "color"
+            : t.includes("fabric") ? "fabric"
+            : t.includes("gender") ? "gender"
+            : null;
+          if (!bucket) continue;
+          const map: Record<string, string> = maps[bucket] ?? {};
+          for (const moEdge of def?.metaobjects?.edges ?? []) {
+            const label = moEdge?.node?.displayName;
+            const id = moEdge?.node?.id;
+            if (label && id) map[String(label).toLowerCase()] = String(id);
+          }
+          if (Object.keys(map).length > 0) maps[bucket] = map;
+        }
+        if (Object.keys(maps).length > 0) metaobjects = maps;
+      }
+    } catch (_moErr) {
+      // scope missing / API hiccup → omit metaobjects, titles still returned
+    }
+
+    return json({
+      titles,
+      handles,
+      count: titles.length,
+      source: resolved.source,
+      ...(metaobjects ? { metaobjects } : {}),
+    });
   } catch (err) {
     return json({ error: "Fetch failed", detail: String(err) }, 500);
   }

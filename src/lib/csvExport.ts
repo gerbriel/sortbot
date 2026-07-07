@@ -81,21 +81,52 @@ const GENDER_GID_MAP: Record<string, string> = {
   'womens':  'gid://shopify/Metaobject/128362578105',
 };
 
-export function resolveColorGid(color: string | undefined): string {
-  if (!color) return '';
-  return COLOR_GID_MAP[color.toLowerCase().trim()] || '';
+/**
+ * Per-store GID overrides — fetched live from the workspace's connected store
+ * via the shopify-titles Edge Function (metaobjects key). Maps are keyed by
+ * metaobject displayName, lowercased. When overrides are present the hardcoded
+ * maps above are NOT used as a fallback: a foreign store's GID is worse than a
+ * blank (Shopify simply leaves the metafield unset on blank).
+ */
+export interface GidOverrides {
+  color?: Record<string, string>;
+  fabric?: Record<string, string>;
+  gender?: Record<string, string>;
 }
 
-export function resolveFabricGid(material: string | undefined): string {
+// Alias → canonical metaobject label. Mirrors the alias entries baked into the
+// hardcoded maps above so overrides keyed by canonical labels still match.
+const COLOR_ALIASES: Record<string, string> = {
+  'cream': 'beige', 'tan': 'beige', 'olive': 'green', 'maroon': 'red',
+  'burgundy': 'red', 'grey': 'gray', 'silver': 'gray',
+  'camo': 'camouflage', 'tiedye': 'tie-dye',
+};
+const GENDER_ALIASES: Record<string, string> = {
+  'men': 'male', 'mens': 'male', 'unisex': 'other',
+  'women': 'female', 'womens': 'female',
+};
+
+export function resolveColorGid(color: string | undefined, overrides?: Record<string, string>): string {
+  if (!color) return '';
+  const key = color.toLowerCase().trim();
+  if (overrides) return overrides[key] || overrides[COLOR_ALIASES[key] ?? ''] || '';
+  return COLOR_GID_MAP[key] || '';
+}
+
+export function resolveFabricGid(material: string | undefined, overrides?: Record<string, string>): string {
   if (!material) return '';
   // Strip percentage composition (e.g. "50% Cotton 25% Nylon") → "Cotton" before GID lookup
   const clean = primaryMaterial(material).toLowerCase().trim();
-  return FABRIC_GID_MAP[clean] || FABRIC_GID_MAP[material.toLowerCase().trim()] || '';
+  const raw = material.toLowerCase().trim();
+  if (overrides) return overrides[clean] || overrides[raw] || '';
+  return FABRIC_GID_MAP[clean] || FABRIC_GID_MAP[raw] || '';
 }
 
-export function resolveGenderGid(gender: string | undefined): string {
+export function resolveGenderGid(gender: string | undefined, overrides?: Record<string, string>): string {
   if (!gender) return '';
-  return GENDER_GID_MAP[gender.toLowerCase().trim()] || '';
+  const key = gender.toLowerCase().trim();
+  if (overrides) return overrides[key] || overrides[GENDER_ALIASES[key] ?? ''] || '';
+  return GENDER_GID_MAP[key] || '';
 }
 
 /**
@@ -433,7 +464,7 @@ export const escapeCsvValue = (value: unknown): string => {
  * products. The caller is responsible for the price gate (no $0 products)
  * and for title dedup — this function is pure formatting.
  */
-export function buildShopifyCsvRows(products: ExportProduct[]): string[][] {
+export function buildShopifyCsvRows(products: ExportProduct[], gidOverrides?: GidOverrides): string[][] {
   const headers = SHOPIFY_CSV_HEADERS;
   const rows: string[][] = [];
   const usedHandles = new Set<string>();
@@ -523,9 +554,9 @@ export function buildShopifyCsvRows(products: ExportProduct[]): string[][] {
       'false',                                                         // Gift Card
       cleanTitle,                                                      // SEO Title
       product.seoDescription || (product.generatedDescription ? smartSeoTruncate(product.generatedDescription) : ''), // SEO Description
-      resolveColorGid(primaryColor),                                   // Color (product.metafields.shopify.color-pattern)
-      resolveFabricGid(product.material),                              // Fabric (product.metafields.shopify.fabric)
-      resolveGenderGid(product.gender),                                // Target gender (product.metafields.shopify.target-gender)
+      resolveColorGid(primaryColor, gidOverrides?.color),              // Color (product.metafields.shopify.color-pattern)
+      resolveFabricGid(product.material, gidOverrides?.fabric),        // Fabric (product.metafields.shopify.fabric)
+      resolveGenderGid(product.gender, gidOverrides?.gender),          // Target gender (product.metafields.shopify.target-gender)
       '',                                                              // Complementary products
       '',                                                              // Related products
       '',                                                              // Related products settings
@@ -559,9 +590,9 @@ export function buildShopifyCsvRows(products: ExportProduct[]): string[][] {
 }
 
 /** Full CSV text: escaped header line + escaped data rows. */
-export function buildShopifyCsv(products: ExportProduct[]): string {
+export function buildShopifyCsv(products: ExportProduct[], gidOverrides?: GidOverrides): string {
   return [
     SHOPIFY_CSV_HEADERS.map(escapeCsvValue).join(','),
-    ...buildShopifyCsvRows(products).map(row => row.map(escapeCsvValue).join(',')),
+    ...buildShopifyCsvRows(products, gidOverrides).map(row => row.map(escapeCsvValue).join(',')),
   ].join('\n');
 }
