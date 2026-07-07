@@ -295,3 +295,29 @@
   color: #065f46;
   white-space: nowrap;
 }
+
+/* ── Model knowledge base ───────────────────────────────────────────────── */
+.vocab-model-row { align-items: flex-start; }
+
+.vocab-model-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.vocab-model-number {
+  margin-left: 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 10px;
+  padding: 0.08rem 0.4rem;
+}
+
+.vocab-model-meta {
+  font-size: 0.68rem;
+  color: #9ca3af;
+}
