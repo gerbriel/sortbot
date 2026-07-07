@@ -238,6 +238,13 @@ function App() {
   const [showVocabDashboard, setShowVocabDashboard] = useState(false);
   // Per-workspace description format — fetched with the org, passed to Step 3
   const [orgDescSettings, setOrgDescSettings] = useState<DescriptionSettings | null>(null);
+  // CSV Vendor column = the SELLER: explicit setting → founding default
+  // "C&D Vintage" → workspace name. Undefined (legacy mode) → exporter falls
+  // back to the garment brand, the pre-tenancy behavior.
+  const resolvedVendorName =
+    orgDescSettings?.vendorName?.trim()
+    || (currentOrg?.slug === 'founding' ? 'C&D Vintage' : currentOrg?.name)
+    || undefined;
   // Private beta: non-null → signed in but not approved yet; the waitlist
   // screen replaces the dashboard (RLS already hides all data regardless).
   const [betaWaitlist, setBetaWaitlist] = useState<'none' | 'pending' | 'denied' | null>(null);
@@ -2920,7 +2927,7 @@ function App() {
 
                 <div className="export-section">
                   <h3>Export Options</h3>
-                  <GoogleSheetExporter ref={exporterRef} items={(() => {
+                  <GoogleSheetExporter ref={exporterRef} vendorName={resolvedVendorName} items={(() => {
                     const groupCounts: Record<string, number> = {};
                     processedItems.forEach(i => { const k = i.productGroup || i.id; groupCounts[k] = (groupCounts[k] || 0) + 1; });
                     return processedItems.filter(i => i.category || groupCounts[i.productGroup || i.id] > 1);

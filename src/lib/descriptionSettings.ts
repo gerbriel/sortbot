@@ -23,6 +23,10 @@ export interface DescriptionSettings {
   includeHashtags: boolean;
   /** Closing disclaimer lines, one per array entry. Empty array = omitted. */
   disclaimerLines: string[];
+  /** The shop/reseller name written to the Shopify CSV Vendor column.
+   *  Empty → App falls back to the workspace name ("C&D Vintage" for the
+   *  Founding Workspace). This is the SELLER, not the garment's brand. */
+  vendorName: string;
 }
 
 export const DEFAULT_DESCRIPTION_SETTINGS: DescriptionSettings = {
@@ -30,6 +34,7 @@ export const DEFAULT_DESCRIPTION_SETTINGS: DescriptionSettings = {
   washingLine: 'Every Garment goes through a thorough washing process before being photographed.',
   closingLine: 'BUNDLE AND SAVE!!!!!!',
   includeHashtags: true,
+  vendorName: '',
   disclaimerLines: [
     '* We note major imperfections—minor signs of age or wear may not be listed, adding to the vintage character.',
     '* High-quality piece, perfect for streetwear.',

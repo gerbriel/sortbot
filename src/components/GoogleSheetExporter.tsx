@@ -34,6 +34,9 @@ function resolvePublicUrl(item: ClothingItem): string {
 interface GoogleSheetExporterProps {
   items: ClothingItem[];
   compactMode?: boolean;
+  /** Seller name for the CSV Vendor column (workspace/reseller, e.g.
+   *  "C&D Vintage") — NOT the garment's brand. Empty → falls back to brand. */
+  vendorName?: string;
 }
 
 export interface GoogleSheetExporterHandle {
@@ -41,7 +44,7 @@ export interface GoogleSheetExporterHandle {
 }
 
 const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExporterProps>(
-  ({ items, compactMode = false }, ref) => {
+  ({ items, compactMode = false, vendorName }, ref) => {
 
   // Titles of products that ALREADY exist in the DB from OTHER batches (a proxy for
   // "already uploaded to Shopify"). Used to suffix this export's titles/handles so a new
@@ -241,7 +244,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       return;
     }
 
-    const csvContent = buildShopifyCsv(products, gidOverrides ?? undefined);
+    const csvContent = buildShopifyCsv(products, gidOverrides ?? undefined, vendorName);
 
     // Create and download the file
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -347,7 +350,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                     const productType =
                       (presetIsPath ? presetShopifyType.split('>').pop()!.trim() : presetShopifyType)
                       || resolveProductType(catKey);
-                    const vendor = product.brand || '';
+                    const vendor = vendorName?.trim() || product.brand || '';
                     const previewHashtags = (product.generatedDescription || '')
                       .match(/#(\w+)/g)?.map((t: string) => t.slice(1)) || [];
                     const tags = previewHashtags.length > 0

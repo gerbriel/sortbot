@@ -464,13 +464,16 @@ export const escapeCsvValue = (value: unknown): string => {
  * products. The caller is responsible for the price gate (no $0 products)
  * and for title dedup — this function is pure formatting.
  */
-export function buildShopifyCsvRows(products: ExportProduct[], gidOverrides?: GidOverrides): string[][] {
+export function buildShopifyCsvRows(products: ExportProduct[], gidOverrides?: GidOverrides, vendorName?: string): string[][] {
   const headers = SHOPIFY_CSV_HEADERS;
   const rows: string[][] = [];
   const usedHandles = new Set<string>();
 
   products.forEach((product, idx) => {
-    const vendor = product.brand || '';
+    // Vendor is the SELLER (workspace/reseller name, e.g. "C&D Vintage"), not
+    // the garment's brand. Falls back to brand only when no vendor name is
+    // provided (pre-tenancy/legacy behavior).
+    const vendor = vendorName?.trim() || product.brand || '';
     const catKey = product.category?.toLowerCase() ?? '';
 
     // Preset-applied shopifyProductType wins when set: a full taxonomy path
@@ -598,9 +601,9 @@ export function buildShopifyCsvRows(products: ExportProduct[], gidOverrides?: Gi
 }
 
 /** Full CSV text: escaped header line + escaped data rows. */
-export function buildShopifyCsv(products: ExportProduct[], gidOverrides?: GidOverrides): string {
+export function buildShopifyCsv(products: ExportProduct[], gidOverrides?: GidOverrides, vendorName?: string): string {
   return [
     SHOPIFY_CSV_HEADERS.map(escapeCsvValue).join(','),
-    ...buildShopifyCsvRows(products, gidOverrides).map(row => row.map(escapeCsvValue).join(',')),
+    ...buildShopifyCsvRows(products, gidOverrides, vendorName).map(row => row.map(escapeCsvValue).join(',')),
   ].join('\n');
 }
