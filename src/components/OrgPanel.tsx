@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, X, Pencil, Check, Copy, LogOut, Trash2, RotateCcw, Mail, Search, ChevronRight, ChevronDown, Building2 } from 'lucide-react';
+import { Users, X, Pencil, Check, Copy, LogOut, Trash2, RotateCcw, Mail, Search, ChevronRight, ChevronDown, Building2, ShoppingBag } from 'lucide-react';
 import {
   fetchOrgMembers, fetchOrgInvites, inviteToOrg, revokeInvite, removeMember,
   renameOrganization, updateMemberRole, fetchMemberActivity,
@@ -9,6 +9,10 @@ import {
   fetchBetaSignups, setBetaStatus, deleteBetaSignup, fetchBetaOrgDirectory,
   type BetaSignupRow, type BetaOrgDirectoryRow,
 } from '../lib/betaService';
+import {
+  getShopifyConnection, saveShopifyConnection, deleteShopifyConnection,
+  type ShopifyConnectionStatus,
+} from '../lib/shopifyConnectionService';
 import './OrgPanel.css';
 
 interface OrgPanelProps {
@@ -71,6 +75,12 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
   const [memberActivity, setMemberActivity] = useState<Record<string, MemberActivity | 'loading'>>({});
 
+  // Per-org Shopify connection (token is write-only — see shopifyConnectionService)
+  const [shopifyConn, setShopifyConn] = useState<ShopifyConnectionStatus | null>(null);
+  const [shopifyDomain, setShopifyDomain] = useState('');
+  const [shopifyToken, setShopifyToken] = useState('');
+  const [editingShopify, setEditingShopify] = useState(false);
+
   const toggleMember = (userId: string) => {
     const next = expandedMemberId === userId ? null : userId;
     setExpandedMemberId(next);
@@ -84,16 +94,18 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
 
   const reload = async (silent = false) => {
     if (!silent) setLoading(true);
-    const [m, i, b, dirs] = await Promise.all([
+    const [m, i, b, dirs, shp] = await Promise.all([
       fetchOrgMembers(org.id),
       fetchOrgInvites(org.id),
       isBetaAdmin ? fetchBetaSignups() : Promise.resolve([] as BetaSignupRow[]),
       isBetaAdmin ? fetchBetaOrgDirectory() : Promise.resolve([] as BetaOrgDirectoryRow[]),
+      isAdmin ? getShopifyConnection(org.id) : Promise.resolve<ShopifyConnectionStatus>({ status: 'none' }),
     ]);
     setMembers(m);
     setInvites(isAdmin ? i : []);
     setBetaSignups(b);
     setBetaOrgs(dirs);
+    setShopifyConn(shp);
     setLoading(false);
   };
 
@@ -198,6 +210,37 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
     } catch {
       setNotice(msg); // clipboard blocked — surface the text so it can be copied manually
     }
+  };
+
+  // ── Shopify connection ────────────────────────────────────────────────────
+  const handleShopifySave = async () => {
+    if (busy) return;
+    setBusy(true);
+    setNotice(null);
+    const res = await saveShopifyConnection(org.id, shopifyDomain, shopifyToken);
+    if (res.ok) {
+      setNotice('Shopify connected. CSV exports now check titles against this store’s catalog.');
+      setShopifyToken('');
+      setEditingShopify(false);
+      setShopifyConn(await getShopifyConnection(org.id));
+    } else {
+      setNotice(`Shopify connection failed: ${res.error}`);
+    }
+    setBusy(false);
+  };
+
+  const handleShopifyDisconnect = async () => {
+    if (busy) return;
+    setBusy(true);
+    setConfirmKey(null);
+    const ok = await deleteShopifyConnection(org.id);
+    if (ok) {
+      setNotice('Shopify disconnected. Exports fall back to checking the app database only.');
+      setShopifyConn({ status: 'none' });
+    } else {
+      setNotice('Disconnect failed — check your permissions.');
+    }
+    setBusy(false);
   };
 
   // ── Beta requests ─────────────────────────────────────────────────────────
@@ -403,6 +446,66 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
                   ))}
                 </ul>
               </>
+            )}
+          </>
+        )}
+
+        {isAdmin && !loading && shopifyConn && shopifyConn.status !== 'unavailable' && (
+          <>
+            <h3 className="org-section-title">Shopify connection</h3>
+            {shopifyConn.status === 'connected' && !editingShopify ? (
+              <div className="shopify-conn-row">
+                <span className="org-member-email">
+                  <ShoppingBag size={13} /> <strong>{shopifyConn.info.store_domain}</strong>
+                  <span className="org-member-date">
+                    connected {fmtDate(shopifyConn.info.updated_at)} · token stored server side, never shown again
+                  </span>
+                </span>
+                <button className="org-icon-btn" title="Replace store or token" disabled={busy}
+                  onClick={() => {
+                    setShopifyDomain(shopifyConn.info.store_domain);
+                    setShopifyToken('');
+                    setEditingShopify(true);
+                  }}><Pencil size={13} /></button>
+                {confirmKey === 'shopify-disconnect' ? (
+                  <span className="org-confirm-actions">
+                    <button className="org-confirm-yes" disabled={busy} onClick={handleShopifyDisconnect}>Disconnect</button>
+                    <button className="org-confirm-no" disabled={busy} onClick={() => setConfirmKey(null)}>Cancel</button>
+                  </span>
+                ) : (
+                  <button className="org-member-remove" disabled={busy} title="Disconnect this store"
+                    onClick={() => setConfirmKey('shopify-disconnect')}>Disconnect</button>
+                )}
+              </div>
+            ) : (
+              <div className="shopify-conn-form">
+                <p className="shopify-conn-help">
+                  Connect your store so CSV exports check for title collisions against your own catalog.
+                  In Shopify: Settings → Apps and sales channels → Develop apps → create an app with the
+                  <strong> read_products</strong> scope, then paste the Admin API token here. The token is
+                  stored server side and can never be read back from the browser.
+                </p>
+                <div className="org-invite-form">
+                  <input
+                    placeholder="my-store.myshopify.com"
+                    value={shopifyDomain}
+                    onChange={(e) => setShopifyDomain(e.target.value)}
+                  />
+                  <input
+                    type="password"
+                    placeholder="shpat_…"
+                    autoComplete="off"
+                    value={shopifyToken}
+                    onChange={(e) => setShopifyToken(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleShopifySave(); }}
+                  />
+                  <button className="org-invite-btn" disabled={busy || !shopifyDomain.trim() || !shopifyToken.trim()}
+                    onClick={handleShopifySave}>Connect</button>
+                  {editingShopify && (
+                    <button className="org-confirm-no" disabled={busy} onClick={() => setEditingShopify(false)}>Cancel</button>
+                  )}
+                </div>
+              </div>
             )}
           </>
         )}
