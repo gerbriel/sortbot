@@ -18,6 +18,7 @@ import CategoriesManager from './components/CategoriesManager';
 import { saveBatchToDatabase, getThumbnailUrl } from './lib/productService';
 import { autoSaveWorkflowBatch, markBatchConfirmed, type WorkflowBatch } from './lib/workflowBatchService';
 import { ensureOrganization, type Organization, type OrgRole } from './lib/orgService';
+import { getOrgDescriptionSettings, type DescriptionSettings } from './lib/descriptionSettings';
 import { slimForWorkflowState, ultraSlimForBackup } from './lib/slimItems';
 import { buildProductImageRow, stage4ColumnsAvailable } from './lib/imageRowSync';
 import { useStoreItemArray, liveArrayRef } from './lib/workflowStore';
@@ -235,6 +236,8 @@ function App() {
   const [showOrgPanel, setShowOrgPanel] = useState(false);
   // Founder-only vocabulary dashboard (chips + brand keywords, global content)
   const [showVocabDashboard, setShowVocabDashboard] = useState(false);
+  // Per-workspace description format — fetched with the org, passed to Step 3
+  const [orgDescSettings, setOrgDescSettings] = useState<DescriptionSettings | null>(null);
   // Private beta: non-null → signed in but not approved yet; the waitlist
   // screen replaces the dashboard (RLS already hides all data regardless).
   const [betaWaitlist, setBetaWaitlist] = useState<'none' | 'pending' | 'denied' | null>(null);
@@ -1121,6 +1124,11 @@ function App() {
         setCurrentOrg(res.org);
         setOrgRole(res.role);
         setBetaWaitlist(null);
+        // Per-workspace description format (defaults if the migration or the
+        // setting doesn't exist yet)
+        getOrgDescriptionSettings(res.org.id).then(s => {
+          if (!cancelled) setOrgDescSettings(s);
+        });
       } else if (res.mode === 'waitlist') {
         setCurrentOrg(null);
         setBetaWaitlist(res.betaStatus);
@@ -2878,6 +2886,7 @@ function App() {
               onProcessed={handleItemsProcessed}
               onDownloadCSV={() => exporterRef.current?.downloadCSV()}
               batchId={currentBatchId}
+              descriptionSettings={orgDescSettings}
             />
           </section>
         )}
@@ -2952,6 +2961,7 @@ function App() {
             setShowOrgPanel(false);
             window.location.reload();
           }}
+          onDescriptionSettingsChanged={(s) => setOrgDescSettings(s)}
         />
       )}
 

@@ -13,6 +13,7 @@ import VoiceCommandTable, { VOICE_KEYWORD_TO_FIELD } from './VoiceCommandTable';
 import { useStoreItemArray, liveArrayRef } from '../lib/workflowStore';
 import { buildGroupArray } from '../lib/grouping';
 import { fetchActiveChips, getBrandTerms } from '../lib/vocabService';
+import type { DescriptionSettings } from '../lib/descriptionSettings';
 import './ProductDescriptionGenerator.css';
 
 // Live view into the store — replaces the old per-render processedItems mirror.
@@ -36,6 +37,9 @@ interface ProductDescriptionGeneratorProps {
   onProcessed: (items: ClothingItem[]) => void;
   onDownloadCSV?: () => void;
   batchId?: string | null;
+  /** Per-workspace description format (organizations.description_settings);
+   *  null → defaults. Passed into the generator on every Generate. */
+  descriptionSettings?: DescriptionSettings | null;
 }
 
 // Web Speech API types
@@ -71,6 +75,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   onProcessed,
   onDownloadCSV,
   batchId,
+  descriptionSettings,
 }) => {
   // Stage 2b: processedItems lives in workflowStore — the SAME list App.tsx
   // reads/writes. This is the FULL item list (uncategorized singles included);
@@ -1505,6 +1510,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         category: (refreshedItem as any)._presetData?.productType || refreshedItem.category || refreshedItem.productType || '',
         presetTags: (refreshedItem as any)._presetData?.default_tags || [],
         brandTerms,
+        descriptionSettings: descriptionSettings ?? undefined,
         customDescription: refreshedItem.customDescription || '',
         measurements: refreshedItem.measurements || undefined,
         flaws: refreshedItem.flaws || '',
@@ -2713,10 +2719,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               )}
             </div>
 
-            {/* AI Description — sits directly below the voice box */}
+            {/* Generated description — sits directly below the voice box */}
             <div style={{ marginTop: '0.75rem' }}>
               <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem' }}>
-                AI Generated Description:
+                Generated Description:
               </label>
               <textarea
                 value={currentItem.generatedDescription}
@@ -2765,7 +2771,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     });
                     setProcessedItems(updated);
                   }}
-                  title="Clear the AI generated description"
+                  title="Clear the generated description"
                   style={{
                     background: 'transparent',
                     border: '1px solid #d1d5db',
@@ -2781,7 +2787,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 </button>
               </div>
               <p style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: '0.35rem', marginBottom: 0 }}>
-                Reads voice &amp; description → updates all fields → writes new AI description
+                Reads voice &amp; description → updates all fields → writes a new description
               </p>
             </div>
             

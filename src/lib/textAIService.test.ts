@@ -136,6 +136,32 @@ describe('generateProductDescription — voice command extraction', () => {
     expect(entries.find(e => e.startsWith('sleeve'))).toBeUndefined();
   });
 
+  it('applies per-workspace description settings (symbol, lines, hashtags)', async () => {
+    const result = await generateProductDescription({
+      brand: 'Nike',
+      size: 'XL',
+      measurements: { Width: '18' },
+      condition: 'Good',
+      category: 'tees',
+      descriptionSettings: {
+        measurementPrefix: '•',
+        washingLine: 'All items steam cleaned before shipping.',
+        closingLine: 'FREE SHIPPING ON BUNDLES',
+        includeHashtags: false,
+        disclaimerLines: ['* Ships within 48 hours.'],
+      },
+    });
+    expect(result.description).toContain('• SIZE- XL');
+    expect(result.description).toContain('• Width- 18');
+    expect(result.description).toContain('All items steam cleaned before shipping.');
+    expect(result.description).toContain('FREE SHIPPING ON BUNDLES');
+    expect(result.description).toContain('* Ships within 48 hours.');
+    expect(result.description).not.toContain('✠');
+    expect(result.description).not.toContain('BUNDLE AND SAVE');
+    expect(result.description).not.toMatch(/#\w+/);
+    expect((result.suggestedTags ?? []).length).toBeGreaterThan(0); // tags still computed for CSV
+  });
+
   it('merges founder-curated brandTerms into the generated tags', async () => {
     const result = await generateProductDescription({
       brand: 'Harley Davidson',

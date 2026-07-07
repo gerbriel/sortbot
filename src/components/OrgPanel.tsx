@@ -13,6 +13,10 @@ import {
   getShopifyConnection, saveShopifyConnection, deleteShopifyConnection,
   type ShopifyConnectionStatus,
 } from '../lib/shopifyConnectionService';
+import {
+  getOrgDescriptionSettings, saveOrgDescriptionSettings,
+  DEFAULT_DESCRIPTION_SETTINGS, type DescriptionSettings,
+} from '../lib/descriptionSettings';
 import './OrgPanel.css';
 
 interface OrgPanelProps {
@@ -26,6 +30,9 @@ interface OrgPanelProps {
   onMyRoleChanged?: (role: OrgRole) => void;
   /** Fired after the user leaves the workspace — App should re-bootstrap. */
   onLeftWorkspace?: () => void;
+  /** Fired after description format settings are saved so App can refresh
+   *  what it passes to Step 3's generator. */
+  onDescriptionSettingsChanged?: (settings: DescriptionSettings) => void;
 }
 
 type BetaFilter = 'pending' | 'approved' | 'denied' | 'all';
@@ -38,7 +45,7 @@ const fmtDate = (iso: string | null | undefined) =>
  * sign-in), workspace rename, leave workspace, and (Founding admins only) the
  * beta request queue with approve/deny/reopen/delete, filtering, and search.
  */
-export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated, onMyRoleChanged, onLeftWorkspace }: OrgPanelProps) {
+export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated, onMyRoleChanged, onLeftWorkspace, onDescriptionSettingsChanged }: OrgPanelProps) {
   const [members, setMembers] = useState<OrgMemberRow[]>([]);
   const [invites, setInvites] = useState<OrgInviteRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,6 +87,61 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   const [shopifyDomain, setShopifyDomain] = useState('');
   const [shopifyToken, setShopifyToken] = useState('');
   const [editingShopify, setEditingShopify] = useState(false);
+
+  // Listing description format (loaded ONCE — action reloads must not clobber
+  // unsaved edits in the form below)
+  const [descLoaded, setDescLoaded] = useState(false);
+  const [descSymbol, setDescSymbol] = useState(DEFAULT_DESCRIPTION_SETTINGS.measurementPrefix);
+  const [descWashing, setDescWashing] = useState(DEFAULT_DESCRIPTION_SETTINGS.washingLine);
+  const [descClosing, setDescClosing] = useState(DEFAULT_DESCRIPTION_SETTINGS.closingLine);
+  const [descDisclaimers, setDescDisclaimers] = useState(DEFAULT_DESCRIPTION_SETTINGS.disclaimerLines.join('\n'));
+  const [descHashtags, setDescHashtags] = useState(DEFAULT_DESCRIPTION_SETTINGS.includeHashtags);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    getOrgDescriptionSettings(org.id).then(s => {
+      if (cancelled) return;
+      setDescSymbol(s.measurementPrefix);
+      setDescWashing(s.washingLine);
+      setDescClosing(s.closingLine);
+      setDescDisclaimers(s.disclaimerLines.join('\n'));
+      setDescHashtags(s.includeHashtags);
+      setDescLoaded(true);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [org.id]);
+
+  const handleSaveDescSettings = async () => {
+    if (busy) return;
+    setBusy(true);
+    setNotice(null);
+    const settings: DescriptionSettings = {
+      measurementPrefix: descSymbol.trim() || DEFAULT_DESCRIPTION_SETTINGS.measurementPrefix,
+      washingLine: descWashing.trim(),
+      closingLine: descClosing.trim(),
+      includeHashtags: descHashtags,
+      disclaimerLines: descDisclaimers.split('\n').map(l => l.trim()).filter(Boolean),
+    };
+    const res = await saveOrgDescriptionSettings(org.id, settings);
+    if (res.ok) {
+      setNotice('Description format saved — it applies to every listing this workspace generates from now on.');
+      onDescriptionSettingsChanged?.(settings);
+    } else {
+      setNotice(`Save failed: ${res.error}`);
+    }
+    setBusy(false);
+  };
+
+  const handleResetDescSettings = () => {
+    setDescSymbol(DEFAULT_DESCRIPTION_SETTINGS.measurementPrefix);
+    setDescWashing(DEFAULT_DESCRIPTION_SETTINGS.washingLine);
+    setDescClosing(DEFAULT_DESCRIPTION_SETTINGS.closingLine);
+    setDescDisclaimers(DEFAULT_DESCRIPTION_SETTINGS.disclaimerLines.join('\n'));
+    setDescHashtags(DEFAULT_DESCRIPTION_SETTINGS.includeHashtags);
+    setNotice('Reset to the default format — click Save format to apply it.');
+  };
 
   const toggleMember = (userId: string) => {
     const next = expandedMemberId === userId ? null : userId;
@@ -509,6 +571,47 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
                 </div>
               </div>
             )}
+          </>
+        )}
+
+        {isAdmin && !loading && descLoaded && (
+          <>
+            <h3 className="org-section-title">Listing description format</h3>
+            <p className="shopify-conn-help">
+              How generated descriptions read for everyone in this workspace.
+              Leave a line empty to leave it out of your descriptions.
+            </p>
+            <div className="desc-settings-form">
+              <label className="desc-settings-field desc-settings-field--narrow">
+                <span>Measurement symbol</span>
+                <input value={descSymbol} maxLength={4}
+                  onChange={(e) => setDescSymbol(e.target.value)} />
+              </label>
+              <label className="desc-settings-field">
+                <span>Garment prep line</span>
+                <input value={descWashing} placeholder="e.g. All items washed before shipping"
+                  onChange={(e) => setDescWashing(e.target.value)} />
+              </label>
+              <label className="desc-settings-field">
+                <span>Closing line</span>
+                <input value={descClosing} placeholder="e.g. BUNDLE AND SAVE"
+                  onChange={(e) => setDescClosing(e.target.value)} />
+              </label>
+              <label className="desc-settings-field">
+                <span>Closing disclaimers (one per line)</span>
+                <textarea rows={4} value={descDisclaimers}
+                  onChange={(e) => setDescDisclaimers(e.target.value)} />
+              </label>
+              <label className="desc-settings-check">
+                <input type="checkbox" checked={descHashtags}
+                  onChange={(e) => setDescHashtags(e.target.checked)} />
+                Include #hashtags at the end
+              </label>
+              <div className="desc-settings-actions">
+                <button className="org-invite-btn" disabled={busy} onClick={handleSaveDescSettings}>Save format</button>
+                <button className="org-confirm-no" disabled={busy} onClick={handleResetDescSettings}>Reset to defaults</button>
+              </div>
+            </div>
           </>
         )}
 

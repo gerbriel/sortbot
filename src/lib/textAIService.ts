@@ -4,6 +4,7 @@
  */
 
 import { COLOR_WORDS_LIST } from './colorDatabase';
+import { resolveDescriptionSettings, type DescriptionSettings } from './descriptionSettings';
 
 /**
  * Truncate a string for SEO description without cutting mid-word or mid-sentence.
@@ -51,6 +52,7 @@ interface ProductContext {
   tags?: string[];
   presetTags?: string[];  // default_tags from the matched category preset
   brandTerms?: string[];  // founder-curated words for this brand (brand_keywords table)
+  descriptionSettings?: Partial<DescriptionSettings> | null; // per-workspace format
 }
 
 export interface AIGeneratedContent {
@@ -903,6 +905,8 @@ export const generateProductDescription = async (
  * ONLY uses what's explicitly in fields - no assumptions!
  */
 function createFallbackDescription(context: ProductContext): AIGeneratedContent {
+  // Per-workspace format preferences; defaults reproduce today's output exactly.
+  const ds = resolveDescriptionSettings(context.descriptionSettings);
   let description = '';
 
   // Generate the structured SEO title from fields — always auto-generated, never
@@ -924,26 +928,26 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
   if (context.size || (context.measurements && Object.keys(context.measurements).length > 0)) {
     if (context.size) {
       // keepFitsLike — the "(fits like …)" note belongs in the description SIZE line
-      description += `✠ SIZE- ${normalizeSizeValue(context.size, { keepFitsLike: true })}\n`;
+      description += `${ds.measurementPrefix} SIZE- ${normalizeSizeValue(context.size, { keepFitsLike: true })}\n`;
     }
-    
+
     // Add width and length if available
     if (context.measurements) {
       const width = context.measurements['Width'] || context.measurements['width'];
       const length = context.measurements['Length'] || context.measurements['length'];
-      
+
       if (width) {
-        description += `✠ Width- ${width}\n`;
+        description += `${ds.measurementPrefix} Width- ${width}\n`;
       }
       if (length) {
-        description += `✠ Length- ${length}\n`;
+        description += `${ds.measurementPrefix} Length- ${length}\n`;
       }
-      
+
       // Add other measurements
       Object.entries(context.measurements).forEach(([key, value]) => {
         const lowerKey = key.toLowerCase();
         if (value && lowerKey !== 'width' && lowerKey !== 'length') {
-          description += `✠ ${key}- ${value}\n`;
+          description += `${ds.measurementPrefix} ${key}- ${value}\n`;
         }
       });
     }
@@ -961,28 +965,35 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
     }
   }
 
-  // PART 4b: Washing disclosure + condition
-  description += 'Every Garment goes through a thorough washing process before being photographed.\n';
+  // PART 4b: Garment-prep disclosure + condition (line customizable per workspace)
+  if (ds.washingLine) {
+    description += `${ds.washingLine}\n`;
+  }
   if (context.condition) {
     description += `Condition: ${context.condition}\n`;
   }
   description += '\n';
 
-  // PART 5: Call to action
-  description += 'BUNDLE AND SAVE!!!!!!\n\n';
+  // PART 5: Call to action (customizable per workspace; empty = omitted)
+  if (ds.closingLine) {
+    description += `${ds.closingLine}\n\n`;
+  }
 
-  // PART 6: Tags — prefer hashtags found in voice description, fall back to field-based tags
+  // PART 6: Tags — prefer hashtags found in voice description, fall back to
+  // field-based tags. Always computed (they feed suggestedTags / the CSV);
+  // the setting only controls whether #hashtags render in the description.
   const tags = generateTagsFromFields(context);
-  if (tags.length > 0) {
+  if (ds.includeHashtags && tags.length > 0) {
     description += tags.map(tag => `#${tag.toLowerCase().replace(/\s+/g, '')}`).join(' ');
     description += '\n\n';
   }
 
-  // PART 7: Standard disclaimers
-  description += '* We note major imperfections—minor signs of age or wear may not be listed, adding to the vintage character.\n';
-  description += '* High-quality piece, perfect for streetwear.\n';
-  description += '* Ships next day.\n';
-  description += '* All sales final.';
+  // PART 7: Disclaimers (customizable per workspace; empty list = omitted)
+  if (ds.disclaimerLines.length > 0) {
+    description += ds.disclaimerLines.join('\n');
+  } else {
+    description = description.trimEnd();
+  }
 
   return {
     description,
