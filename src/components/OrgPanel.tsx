@@ -480,10 +480,12 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
             ) : (
               <div className="shopify-conn-form">
                 <p className="shopify-conn-help">
-                  Connect your store so CSV exports check for title collisions against your own catalog.
+                  Connect your store so CSV exports check for title collisions against your own catalog
+                  and carry your store’s color, fabric, and gender metafield ids.
                   In Shopify: Settings → Apps and sales channels → Develop apps → create an app with the
-                  <strong> read_products</strong> scope, then paste the Admin API token here. The token is
-                  stored server side and can never be read back from the browser.
+                  <strong> read_products</strong> and <strong>read_metaobjects</strong> scopes, then paste
+                  the Admin API token here. The token is stored server side and can never be read back
+                  from the browser.
                 </p>
                 <div className="org-invite-form">
                   <input

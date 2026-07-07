@@ -6,6 +6,7 @@ import {
   baseSize, stripUnresolvedTokens, buildCleanTitle, buildShopifyCsv,
   resolveCategoryPath, resolveProductType,
   resolveColorGid, resolveFabricGid, resolveGenderGid,
+  type GidOverrides,
 } from '../lib/csvExport';
 import './GoogleSheetExporter.css';
 
@@ -47,6 +48,9 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
   // upload never collides with an existing product. Excludes the current batch's own items
   // so re-exporting the same batch keeps identical titles (Shopify updates, not duplicates).
   const [existingTitles, setExistingTitles] = useState<Set<string>>(new Set());
+  // Per-store metaobject GID maps (color/fabric/gender) from the workspace's
+  // connected Shopify store. null → the hardcoded founding-store maps apply.
+  const [gidOverrides, setGidOverrides] = useState<GidOverrides | null>(null);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -86,6 +90,13 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
             const t = (raw || '').trim().toLowerCase();
             if (t && !ownTitles.has(t)) titles.add(t);
           }
+        }
+        // Per-store metaobject GID maps — when present, they replace the
+        // hardcoded founding-store maps so this store's CSV carries GIDs that
+        // actually resolve in ITS catalog (metaobject ids are store-specific).
+        if (!shErr && sh && typeof sh.metaobjects === 'object' && sh.metaobjects && !cancelled) {
+          const mo = sh.metaobjects as GidOverrides;
+          if (mo.color || mo.fabric || mo.gender) setGidOverrides(mo);
         }
       } catch { /* Shopify read unavailable — DB cross-reference still applies */ }
 
@@ -230,7 +241,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       return;
     }
 
-    const csvContent = buildShopifyCsv(products);
+    const csvContent = buildShopifyCsv(products, gidOverrides ?? undefined);
 
     // Create and download the file
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -383,9 +394,9 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       'false',                                                       // Gift Card
                       cleanTitle,                                                    // SEO Title
                       product.seoDescription || (product.generatedDescription ? smartSeoTruncate(product.generatedDescription) : ''), // SEO Description
-                      resolveColorGid(primaryColor),                                 // Color metafield (GID)
-                      resolveFabricGid(product.material),                            // Fabric metafield (GID)
-                      resolveGenderGid(product.gender),                              // Target gender metafield (GID)
+                      resolveColorGid(primaryColor, gidOverrides?.color),            // Color metafield (GID)
+                      resolveFabricGid(product.material, gidOverrides?.fabric),      // Fabric metafield (GID)
+                      resolveGenderGid(product.gender, gidOverrides?.gender),        // Target gender metafield (GID)
                       '','','','',                                                   // Recommendation metafields
                       '',                                                            // Variant Image
                       'g',                                                           // Variant Weight Unit
