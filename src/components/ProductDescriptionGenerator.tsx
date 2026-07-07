@@ -1378,13 +1378,23 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const wordsRelated = (a: string, b: string): boolean =>
     a === b || (a.length >= 4 && b.startsWith(a)) || (b.length >= 4 && a.startsWith(b));
 
-  const isChipSuggested = (chip: { label: string; output: string }): boolean => {
-    if (brandTermsForChips.length === 0) return false;
+  const termRelatesToChip = (term: string, chip: { label: string; output: string }): boolean => {
     const chipWords = `${chip.label} ${chip.output}`.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-    return brandTermsForChips.some(term =>
-      term.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
-        .some(tw => chipWords.some(cw => wordsRelated(tw, cw))));
+    return term.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+      .some(tw => chipWords.some(cw => wordsRelated(tw, cw)));
   };
+
+  const isChipSuggested = (chip: { label: string; output: string }): boolean =>
+    brandTermsForChips.length > 0 && brandTermsForChips.some(term => termRelatesToChip(term, chip));
+
+  // Every brand word is represented in the chip row EXACTLY ONCE: terms that
+  // relate to an existing chip highlight that chip; terms with no chip
+  // equivalent become their own tappable brand chips (deduped, lowercased).
+  const brandOnlyChips: { label: string; output: string }[] = Array.from(new Set(
+    brandTermsForChips.map(t => t.trim().toLowerCase()).filter(Boolean)
+  ))
+    .filter(term => !chipDefs.some(chip => termRelatesToChip(term, chip)))
+    .map(term => ({ label: term, output: term }));
 
   const descriptorActive = (kw: string): boolean => {
     const cur = (currentItem?.customDescription || '');
@@ -2518,21 +2528,25 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               <div className="descriptor-chips">
                 <span className="descriptor-chips-label">Quick keywords</span>
                 {(() => {
-                  // Suggested chips (related to the brand's curated words) first,
-                  // stable order within each group.
-                  const withFlags = chipDefs.map(chip => ({ chip, suggested: isChipSuggested(chip) }));
-                  const anySuggested = withFlags.some(w => w.suggested);
-                  const ordered = [...withFlags].sort((a, b) => Number(b.suggested) - Number(a.suggested));
+                  // Row order: the brand's own words first (terms with no chip
+                  // equivalent become chips of their own), then existing chips
+                  // related to the brand, then the rest — stable within groups.
+                  const withFlags = chipDefs.map(chip => ({ chip, suggested: isChipSuggested(chip), brandOnly: false }));
+                  const ordered = [
+                    ...brandOnlyChips.map(chip => ({ chip, suggested: true, brandOnly: true })),
+                    ...[...withFlags].sort((a, b) => Number(b.suggested) - Number(a.suggested)),
+                  ];
+                  const anySuggested = ordered.some(w => w.suggested);
                   return (
                     <>
                       {anySuggested && currentItem?.brand && (
                         <span className="descriptor-chips-hint">✦ suggested for {currentItem.brand}</span>
                       )}
-                      {ordered.map(({ chip, suggested }) => {
+                      {ordered.map(({ chip, suggested, brandOnly }) => {
                         const active = descriptorActive(chip.output);
                         return (
                           <button
-                            key={chip.label}
+                            key={brandOnly ? `brand:${chip.label}` : chip.label}
                             type="button"
                             className={`descriptor-chip ${active ? 'descriptor-chip--on' : ''} ${suggested ? 'descriptor-chip--suggested' : ''}`}
                             onClick={() => toggleDescriptorKeyword(chip.output)}
@@ -2540,7 +2554,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                               active
                                 ? `Remove "${chip.output}" from the description`
                                 : suggested
-                                  ? `Suggested — matches ${currentItem?.brand}'s keywords. Add "${chip.output}" to the description`
+                                  ? `From ${currentItem?.brand}'s keywords. Add "${chip.output}" to the description`
                                   : `Add "${chip.output}" to the description`
                             }
                           >
