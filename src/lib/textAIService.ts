@@ -50,6 +50,7 @@ interface ProductContext {
   price?: number;
   tags?: string[];
   presetTags?: string[];  // default_tags from the matched category preset
+  brandTerms?: string[];  // founder-curated words for this brand (brand_keywords table)
 }
 
 export interface AIGeneratedContent {
@@ -1768,25 +1769,28 @@ function generateTagsFromFields(context: ProductContext): string[] {
   );
 
   const presetTagsNorm = (context.presetTags || []).map((t: string) => t.toLowerCase().replace(/\s+/g, ''));
+  // Founder-curated brand words (brand_keywords table) — merged on every path,
+  // same treatment as preset tags.
+  const brandTermsNorm = (context.brandTerms || []).map((t: string) => t.toLowerCase().replace(/\s+/g, ''));
 
   // Primary: extract #hashtags from voice description
   const hashtagsFromVoice = (context.voiceDescription || '')
     .match(/#(\w+)/g)
     ?.map((t: string) => t.slice(1).toLowerCase()) || [];
   if (hashtagsFromVoice.length > 0) {
-    return Array.from(new Set([...titleSpecific, ...hashtagsFromVoice, ...presetTagsNorm])).slice(0, 8);
+    return Array.from(new Set([...titleSpecific, ...hashtagsFromVoice, ...presetTagsNorm, ...brandTermsNorm])).slice(0, 8);
   }
 
   // Secondary: explicit tags array (from voice "tags ... period" command),
   // always merged with preset tags so the product type stays accurate.
   if (context.tags && context.tags.length > 0) {
     const userTags = context.tags.map((t: string) => t.toLowerCase());
-    return Array.from(new Set([...titleSpecific, ...presetTagsNorm, ...userTags])).slice(0, 8);
+    return Array.from(new Set([...titleSpecific, ...presetTagsNorm, ...brandTermsNorm, ...userTags])).slice(0, 8);
   }
 
   // If we have preset tags or title-specific tags, build from those
-  if (titleSpecific.length > 0 || presetTagsNorm.length > 0) {
-    const tags: string[] = [...titleSpecific, ...presetTagsNorm];
+  if (titleSpecific.length > 0 || presetTagsNorm.length > 0 || brandTermsNorm.length > 0) {
+    const tags: string[] = [...titleSpecific, ...presetTagsNorm, ...brandTermsNorm];
     if (context.era) tags.push(...context.era.split(/[\s\/]+/).filter(Boolean));
     if (context.brand) tags.push(context.brand);
     if (context.color) tags.push(...context.color.split(/[\s\/]+/).filter(Boolean));
@@ -1797,7 +1801,7 @@ function generateTagsFromFields(context: ProductContext): string[] {
   }
 
   // Last resort: build from filled fields — no size, no material
-  const tags: string[] = [];
+  const tags: string[] = [...brandTermsNorm];
   if (context.era) tags.push(...context.era.split(/[\s\/]+/).filter(Boolean));
   if (context.brand) tags.push(context.brand);
   if (context.category) tags.push(context.category);

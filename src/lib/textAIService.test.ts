@@ -136,6 +136,17 @@ describe('generateProductDescription — voice command extraction', () => {
     expect(entries.find(e => e.startsWith('sleeve'))).toBeUndefined();
   });
 
+  it('merges founder-curated brandTerms into the generated tags', async () => {
+    const result = await generateProductDescription({
+      brand: 'Harley Davidson',
+      category: 'tees',
+      brandTerms: ['biker', 'moto', 'americana'],
+    });
+    const tags = (result.suggestedTags ?? []).map(t => t.toLowerCase());
+    expect(tags).toContain('biker');
+    expect(tags).toContain('moto');
+  });
+
   it('keeps suggested titles within 60 characters', async () => {
     const result = await generateProductDescription({
       brand: 'Abercrombie & Fitch',
