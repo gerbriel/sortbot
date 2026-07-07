@@ -53,6 +53,10 @@ interface ProductContext {
   presetTags?: string[];  // default_tags from the matched category preset
   brandTerms?: string[];  // founder-curated words for this brand (brand_keywords table)
   descriptionSettings?: Partial<DescriptionSettings> | null; // per-workspace format
+  /** Model-written selling paragraph (already validated by proseService).
+   *  Renders in place of the raw customDescription note; the keywords that
+   *  fed it still drive titles/tags. Absent → output unchanged. */
+  proseParagraph?: string;
 }
 
 export interface AIGeneratedContent {
@@ -918,8 +922,14 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
 
   description += '\n\n';
 
-  // PART 1b: Custom description note (voice-dictated) — injected right after title
-  if (context.customDescription) {
+  // PART 1b: Selling paragraph — the validated model-written prose when
+  // available, otherwise the raw custom description note (voice/chips).
+  // The prose was BUILT from those keywords, so it replaces the raw note
+  // rather than duplicating it.
+  if (context.proseParagraph) {
+    description += context.proseParagraph.trim();
+    description += '\n\n';
+  } else if (context.customDescription) {
     description += context.customDescription.trim();
     description += '\n\n';
   }

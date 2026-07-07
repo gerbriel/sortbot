@@ -162,6 +162,27 @@ describe('generateProductDescription — voice command extraction', () => {
     expect((result.suggestedTags ?? []).length).toBeGreaterThan(0); // tags still computed for CSV
   });
 
+  it('renders the validated prose paragraph in place of the raw keyword note', async () => {
+    const prose = 'Sun faded to perfection with the boxy nineties cut collectors hunt for, this piece layers clean and photographs even better.';
+    const result = await generateProductDescription({
+      brand: 'Nike',
+      category: 'tees',
+      customDescription: 'faded, boxy',
+      proseParagraph: prose,
+    });
+    expect(result.description).toContain(prose);
+    // the raw keyword note is replaced by the prose, not duplicated
+    expect(result.description).not.toContain('faded, boxy');
+
+    // without prose, the raw note renders exactly as before
+    const plain = await generateProductDescription({
+      brand: 'Nike',
+      category: 'tees',
+      customDescription: 'faded, boxy',
+    });
+    expect(plain.description).toContain('faded, boxy');
+  });
+
   it('merges founder-curated brandTerms into the generated tags', async () => {
     const result = await generateProductDescription({
       brand: 'Harley Davidson',
