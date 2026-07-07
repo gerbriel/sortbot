@@ -12,7 +12,7 @@ import { log } from '../lib/debugLogger';
 import VoiceCommandTable, { VOICE_KEYWORD_TO_FIELD } from './VoiceCommandTable';
 import { useStoreItemArray, liveArrayRef } from '../lib/workflowStore';
 import { buildGroupArray } from '../lib/grouping';
-import { fetchActiveChips, getBrandTerms, termMatchesChip } from '../lib/vocabService';
+import { fetchActiveChips, getBrandTerms, getAllBrandKeywordEntries, termMatchesChip, wordsRelated } from '../lib/vocabService';
 import type { DescriptionSettings } from '../lib/descriptionSettings';
 import './ProductDescriptionGenerator.css';
 
@@ -1373,18 +1373,44 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     return () => { cancelled = true; };
   }, [currentBrandLower]);
 
+  // Word-association graph: ALL active brand entries, loaded once per session.
+  // Any keyword the seller already used (tapped chip, dictated, typed) pulls
+  // in the OTHER keywords of every brand entry containing a related word —
+  // the "tangential" suggestions. Works with or without a brand being set.
+  const [allBrandEntries, setAllBrandEntries] = useState<{ brand: string; keywords: string[] }[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    getAllBrandKeywordEntries().then(entries => { if (!cancelled) setAllBrandEntries(entries); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const suggestedTerms = useMemo(() => {
+    const out = new Set(brandTermsForChips.map(t => t.trim().toLowerCase()).filter(Boolean));
+    const descWords = (currentItem?.customDescription || '')
+      .toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 3);
+    if (allBrandEntries.length > 0 && descWords.length > 0) {
+      for (const entry of allBrandEntries) {
+        const hit = entry.keywords.some(k =>
+          k.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+            .some(kw => descWords.some(dw => wordsRelated(kw, dw))));
+        if (hit) entry.keywords.forEach(k => out.add(k.toLowerCase().trim()));
+      }
+    }
+    return Array.from(out).filter(Boolean);
+  }, [brandTermsForChips, currentItem?.customDescription, allBrandEntries]);
+
   // Matching lives in vocabService (termMatchesChip / wordsRelated) so Step 3
   // and the dashboard's coverage view agree on what counts as related.
   const isChipSuggested = (chip: { label: string; output: string }): boolean =>
-    brandTermsForChips.length > 0 && brandTermsForChips.some(term => termMatchesChip(term, chip.label, chip.output));
+    suggestedTerms.length > 0 && suggestedTerms.some(term => termMatchesChip(term, chip.label, chip.output));
 
-  // Every brand word is represented in the chip row EXACTLY ONCE: terms that
-  // relate to an existing chip highlight that chip; terms with no chip
-  // equivalent become their own tappable brand chips (deduped, lowercased).
-  const brandOnlyChips: { label: string; output: string }[] = Array.from(new Set(
-    brandTermsForChips.map(t => t.trim().toLowerCase()).filter(Boolean)
-  ))
+  // Every suggested word is represented in the chip row EXACTLY ONCE: terms
+  // that relate to an existing chip highlight that chip; terms with no chip
+  // equivalent become their own tappable chips (deduped, capped so a chatty
+  // association graph can't flood the row).
+  const brandOnlyChips: { label: string; output: string }[] = suggestedTerms
     .filter(term => !chipDefs.some(chip => termMatchesChip(term, chip.label, chip.output)))
+    .slice(0, 12)
     .map(term => ({ label: term, output: term }));
 
   const descriptorActive = (kw: string): boolean => {
@@ -2530,8 +2556,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   const anySuggested = ordered.some(w => w.suggested);
                   return (
                     <>
-                      {anySuggested && currentItem?.brand && (
-                        <span className="descriptor-chips-hint">✦ suggested for {currentItem.brand}</span>
+                      {anySuggested && (
+                        <span className="descriptor-chips-hint">
+                          ✦ suggested{currentItem?.brand ? ` for ${currentItem.brand}` : ''}
+                        </span>
                       )}
                       {ordered.map(({ chip, suggested, brandOnly }) => {
                         const active = descriptorActive(chip.output);
@@ -2545,7 +2573,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                               active
                                 ? `Remove "${chip.output}" from the description`
                                 : suggested
-                                  ? `From ${currentItem?.brand}'s keywords. Add "${chip.output}" to the description`
+                                  ? `Suggested from your curated brand keywords. Add "${chip.output}" to the description`
                                   : `Add "${chip.output}" to the description`
                             }
                           >

@@ -158,6 +158,20 @@ export function termMatchesChip(term: string, chipLabel: string, chipOutput: str
     .some(tw => chipWords.some(cw => wordsRelated(tw, cw)));
 }
 
+/** ALL active brand keyword entries, cached for the session — Step 3 uses
+ *  them as a word-association graph: a keyword the seller already used pulls
+ *  in the OTHER keywords of every brand entry containing it (tangential
+ *  suggestions). Small, founder-curated table; one fetch per session. */
+let brandEntriesCache: { brand: string; keywords: string[] }[] | null = null;
+export async function getAllBrandKeywordEntries(): Promise<{ brand: string; keywords: string[] }[]> {
+  if (brandEntriesCache) return brandEntriesCache;
+  const rows = await fetchAllBrandKeywords(); // fails soft to []
+  brandEntriesCache = rows
+    .filter(r => r.is_active)
+    .map(r => ({ brand: r.brand, keywords: r.keywords }));
+  return brandEntriesCache;
+}
+
 export async function createBrandKeywords(brand: string, keywords: string[]): Promise<{ ok: boolean; error?: string }> {
   const cleaned = brand.trim();
   if (!cleaned) return { ok: false, error: 'Brand name cannot be empty.' };
