@@ -6,6 +6,9 @@ import {
   parseKeywordList,
   type DescriptorChip, type BrandKeywordRow,
 } from '../lib/vocabService';
+// type-only import — the heavy BRAND_DNA data itself is loaded dynamically
+// when the Brands tab opens (see the builtins effect below)
+import type { BuiltinBrandEntry } from '../lib/builtinBrandVocab';
 import './VocabDashboard.css';
 
 interface VocabDashboardProps {
@@ -40,6 +43,18 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
   const [draftA, setDraftA] = useState(''); // chip label / brand name
   const [draftB, setDraftB] = useState(''); // chip output / brand keywords
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // Built-in brand library (the hardcoded BRAND_DNA knowledge base) — loaded
+  // lazily so its several-hundred-KB of data never enters the main bundle.
+  const [builtins, setBuiltins] = useState<BuiltinBrandEntry[] | null>(null);
+  useEffect(() => {
+    if (tab !== 'brands' || builtins !== null) return;
+    let cancelled = false;
+    import('../lib/builtinBrandVocab').then(m => {
+      if (!cancelled) setBuiltins(m.getBuiltinBrandVocab());
+    });
+    return () => { cancelled = true; };
+  }, [tab, builtins]);
 
   // Used by action handlers (never synchronously inside an effect — the
   // initial load below awaits before any setState to satisfy render purity).
@@ -113,6 +128,21 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
   const q = search.trim().toLowerCase();
   const visibleChips = chips.filter(c => !q || c.label.includes(q) || (c.output_text ?? '').toLowerCase().includes(q));
   const visibleBrands = brands.filter(b => !q || b.brand.toLowerCase().includes(q) || b.keywords.some(k => k.includes(q)));
+
+  // Built-in library: filter by the same search box; cap the render so 5,000
+  // rows never mount at once. Brands already copied to the editable table get
+  // a "customized" badge instead of the import button.
+  const editableBrandSet = new Set(brands.map(b => b.brand.toLowerCase()));
+  const BUILTIN_RENDER_CAP = q ? 100 : 50;
+  const matchingBuiltins = (builtins ?? []).filter(
+    e => !q || e.brand.toLowerCase().includes(q) || e.keywords.some(k => k.includes(q))
+  );
+  const visibleBuiltins = matchingBuiltins.slice(0, BUILTIN_RENDER_CAP);
+
+  const handleImportBuiltin = (entry: BuiltinBrandEntry) => run(
+    () => createBrandKeywords(entry.brand, entry.keywords),
+    `${entry.brand} copied to your editable list above.`,
+  );
 
   return (
     <div className="vocab-overlay" onClick={onClose}>
@@ -252,6 +282,36 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
               ))}
               {visibleBrands.length === 0 && <p className="vocab-loading">No brand keywords yet — add the first one above.</p>}
             </ul>
+
+            <h3 className="vocab-builtin-title">
+              Built-in brand library ({builtins ? matchingBuiltins.length : '…'})
+            </h3>
+            <p className="vocab-help">
+              The knowledge base already shipped with the app — read only. Copy a brand up into
+              your editable list to use or tweak its words; edited copies always win.
+              {builtins && matchingBuiltins.length > visibleBuiltins.length
+                ? ` Showing ${visibleBuiltins.length} of ${matchingBuiltins.length} — use search to narrow.`
+                : ''}
+            </p>
+            {!builtins ? (
+              <p className="vocab-loading">Loading built-in library…</p>
+            ) : (
+              <ul className="vocab-list">
+                {visibleBuiltins.map(e => (
+                  <li key={e.brand} className="vocab-row vocab-row--builtin">
+                    <span className="vocab-brand-name">{e.brand}</span>
+                    <span className="vocab-row-detail">{e.keywords.join(', ')}</span>
+                    {editableBrandSet.has(e.brand.toLowerCase()) ? (
+                      <span className="vocab-customized-badge">customized</span>
+                    ) : (
+                      <button className="vocab-icon-btn" title="Copy to your editable list" disabled={busy}
+                        onClick={() => handleImportBuiltin(e)}><Plus size={13} /></button>
+                    )}
+                  </li>
+                ))}
+                {visibleBuiltins.length === 0 && <p className="vocab-loading">No built-in brands match.</p>}
+              </ul>
+            )}
           </>
         )}
 

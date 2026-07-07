@@ -272,3 +272,26 @@
   font-size: 0.72rem;
   color: #9ca3af;
 }
+
+/* ── Built-in brand library ─────────────────────────────────────────────── */
+.vocab-builtin-title {
+  margin: 1rem 0 0.25rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+}
+
+.vocab-row--builtin { background: #fafafa; }
+
+.vocab-customized-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.12rem 0.45rem;
+  border-radius: 20px;
+  background: #d1fae5;
+  color: #065f46;
+  white-space: nowrap;
+}
