@@ -100,6 +100,8 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   const [descDisclaimers, setDescDisclaimers] = useState(DEFAULT_DESCRIPTION_SETTINGS.disclaimerLines.join('\n'));
   const [descHashtags, setDescHashtags] = useState(DEFAULT_DESCRIPTION_SETTINGS.includeHashtags);
   const [descVendor, setDescVendor] = useState(DEFAULT_DESCRIPTION_SETTINGS.vendorName);
+  const [descProseEnabled, setDescProseEnabled] = useState(DEFAULT_DESCRIPTION_SETTINGS.proseEnabled);
+  const [descProseStyle, setDescProseStyle] = useState(DEFAULT_DESCRIPTION_SETTINGS.proseStyle);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -112,6 +114,8 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
       setDescDisclaimers(s.disclaimerLines.join('\n'));
       setDescHashtags(s.includeHashtags);
       setDescVendor(s.vendorName);
+      setDescProseEnabled(s.proseEnabled);
+      setDescProseStyle(s.proseStyle);
       setDescLoaded(true);
     });
     return () => { cancelled = true; };
@@ -128,6 +132,8 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
       closingLine: descClosing.trim(),
       includeHashtags: descHashtags,
       vendorName: descVendor.trim(),
+      proseEnabled: descProseEnabled,
+      proseStyle: descProseStyle.trim(),
       disclaimerLines: descDisclaimers.split('\n').map(l => l.trim()).filter(Boolean),
     };
     const res = await saveOrgDescriptionSettings(org.id, settings);
@@ -147,6 +153,8 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
     setDescDisclaimers(DEFAULT_DESCRIPTION_SETTINGS.disclaimerLines.join('\n'));
     setDescHashtags(DEFAULT_DESCRIPTION_SETTINGS.includeHashtags);
     setDescVendor(DEFAULT_DESCRIPTION_SETTINGS.vendorName);
+    setDescProseEnabled(DEFAULT_DESCRIPTION_SETTINGS.proseEnabled);
+    setDescProseStyle(DEFAULT_DESCRIPTION_SETTINGS.proseStyle);
     setNotice('Reset to the default format — click Save format to apply it.');
   };
 
@@ -635,6 +643,20 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
                   onChange={(e) => setDescHashtags(e.target.checked)} />
                 Include #hashtags at the end
               </label>
+              <label className="desc-settings-check">
+                <input type="checkbox" checked={descProseEnabled}
+                  onChange={(e) => setDescProseEnabled(e.target.checked)} />
+                Write a selling paragraph automatically (language model, checked before use;
+                falls back to the plain keyword note if unavailable)
+              </label>
+              {descProseEnabled && (
+                <label className="desc-settings-field">
+                  <span>Selling paragraph voice (style notes for the writer)</span>
+                  <textarea rows={2} value={descProseStyle}
+                    placeholder="e.g. Punchy streetwear voice, short sentences, no fluff"
+                    onChange={(e) => setDescProseStyle(e.target.value)} />
+                </label>
+              )}
               <div className="desc-settings-actions">
                 <button className="org-invite-btn" disabled={busy} onClick={handleSaveDescSettings}>Save format</button>
                 <button className="org-confirm-no" disabled={busy} onClick={handleResetDescSettings}>Reset to defaults</button>

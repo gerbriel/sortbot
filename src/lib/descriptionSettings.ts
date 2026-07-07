@@ -27,6 +27,12 @@ export interface DescriptionSettings {
    *  Empty → App falls back to the workspace name ("C&D Vintage" for the
    *  Founding Workspace). This is the SELLER, not the garment's brand. */
   vendorName: string;
+  /** Generate a model-written selling paragraph on Regenerate (generate-prose
+   *  Edge Function). Off by default — output is unchanged until enabled. */
+  proseEnabled: boolean;
+  /** Workspace voice notes passed to the model (e.g. "punchy streetwear
+   *  voice, short sentences"). Empty = model default voice. */
+  proseStyle: string;
 }
 
 export const DEFAULT_DESCRIPTION_SETTINGS: DescriptionSettings = {
@@ -35,6 +41,8 @@ export const DEFAULT_DESCRIPTION_SETTINGS: DescriptionSettings = {
   closingLine: 'BUNDLE AND SAVE!!!!!!',
   includeHashtags: true,
   vendorName: '',
+  proseEnabled: false,
+  proseStyle: '',
   disclaimerLines: [
     '* We note major imperfections—minor signs of age or wear may not be listed, adding to the vintage character.',
     '* High-quality piece, perfect for streetwear.',

@@ -13,6 +13,7 @@ import VoiceCommandTable, { VOICE_KEYWORD_TO_FIELD } from './VoiceCommandTable';
 import { useStoreItemArray, liveArrayRef } from '../lib/workflowStore';
 import { buildGroupArray } from '../lib/grouping';
 import { fetchActiveChips, getBrandTerms, getAllBrandKeywordEntries, termMatchesChip, wordsRelated } from '../lib/vocabService';
+import { requestProse } from '../lib/proseService';
 import type { DescriptionSettings } from '../lib/descriptionSettings';
 import './ProductDescriptionGenerator.css';
 
@@ -1546,9 +1547,30 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         return; // Nothing to work with
       }
 
-      // Founder-curated brand words (brand_keywords table) — merged into the
-      // generated tags like preset tags. Best-effort; [] when absent/unavailable.
-      const brandTerms = await getBrandTerms(refreshedItem.brand);
+      // Founder-curated brand words (merged into tags) and — when the
+      // workspace enables it — the model-written selling paragraph. Both
+      // best-effort; the paragraph is validated (length, banned phrases,
+      // numbers guard) and null on any failure, keeping today's output.
+      const proseFields: Record<string, string | undefined> = {
+        brand: refreshedItem.brand,
+        type: refreshedItem.productType || refreshedItem.category,
+        color: refreshedItem.color,
+        'secondary color': refreshedItem.secondaryColor,
+        size: refreshedItem.size,
+        era: refreshedItem.era,
+        material: refreshedItem.material,
+        condition: refreshedItem.condition,
+        style: refreshedItem.style,
+        gender: refreshedItem.gender,
+        keywords: refreshedItem.customDescription,
+        flaws: refreshedItem.flaws,
+      };
+      const [brandTerms, proseParagraph] = await Promise.all([
+        getBrandTerms(refreshedItem.brand),
+        descriptionSettings?.proseEnabled
+          ? requestProse(proseFields, descriptionSettings.proseStyle)
+          : Promise.resolve<string | null>(null),
+      ]);
 
       const aiResult = await generateProductDescription({
         voiceDescription: voiceText || undefined,
@@ -1570,6 +1592,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         presetTags: (refreshedItem as any)._presetData?.default_tags || [],
         brandTerms,
         descriptionSettings: descriptionSettings ?? undefined,
+        proseParagraph: proseParagraph ?? undefined,
         customDescription: refreshedItem.customDescription || '',
         measurements: refreshedItem.measurements || undefined,
         flaws: refreshedItem.flaws || '',
