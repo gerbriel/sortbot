@@ -6,9 +6,10 @@ import {
   parseKeywordList,
   type DescriptorChip, type BrandKeywordRow,
 } from '../lib/vocabService';
-// type-only import — the heavy BRAND_DNA data itself is loaded dynamically
-// when the Brands tab opens (see the builtins effect below)
+// type-only imports — the heavy BRAND_DNA / MODEL_DATABASE data is loaded
+// dynamically when its tab opens (see the lazy-load effects below)
 import type { BuiltinBrandEntry } from '../lib/builtinBrandVocab';
+import type { ModelContext } from '../lib/brandCategorySystem';
 import './VocabDashboard.css';
 
 interface VocabDashboardProps {
@@ -26,7 +27,7 @@ interface VocabDashboardProps {
  * Beta users see and use all of it; only founders can change it.
  */
 export default function VocabDashboard({ onClose }: VocabDashboardProps) {
-  const [tab, setTab] = useState<'chips' | 'brands'>('chips');
+  const [tab, setTab] = useState<'chips' | 'brands' | 'models'>('chips');
   const [chips, setChips] = useState<DescriptorChip[]>([]);
   const [brands, setBrands] = useState<BrandKeywordRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +56,22 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
     });
     return () => { cancelled = true; };
   }, [tab, builtins]);
+
+  // Model knowledge base (MODEL_DATABASE: Levi's 501 etc. with identifying
+  // features, price ranges, collectibility) — read-only reference, lazy-loaded.
+  const [models, setModels] = useState<(ModelContext & { key: string })[] | null>(null);
+  useEffect(() => {
+    if (tab !== 'models' || models !== null) return;
+    let cancelled = false;
+    import('../lib/brandCategorySystem').then(m => {
+      if (cancelled) return;
+      const list = Object.entries(m.MODEL_DATABASE)
+        .map(([key, v]) => ({ key, ...v }))
+        .sort((a, b) => a.brand.localeCompare(b.brand) || a.modelName.localeCompare(b.modelName));
+      setModels(list);
+    });
+    return () => { cancelled = true; };
+  }, [tab, models]);
 
   // Used by action handlers (never synchronously inside an effect — the
   // initial load below awaits before any setState to satisfy render purity).
@@ -163,6 +180,9 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
           <button className={`vocab-tab ${tab === 'brands' ? 'vocab-tab--on' : ''}`} onClick={() => { setTab('brands'); setEditId(null); setConfirmDeleteId(null); }}>
             Brand keywords ({brands.length})
           </button>
+          <button className={`vocab-tab ${tab === 'models' ? 'vocab-tab--on' : ''}`} onClick={() => { setTab('models'); setEditId(null); setConfirmDeleteId(null); }}>
+            Models ({models ? models.length : '…'})
+          </button>
           <div className="vocab-search">
             <Search size={13} />
             <input placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -173,6 +193,50 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
 
         {loading ? (
           <p className="vocab-loading">Loading vocabulary…</p>
+        ) : tab === 'models' ? (
+          <>
+            <p className="vocab-help">
+              The model knowledge base — read only. It powers model matching today and is the
+              checklist for the future photo scanning feature (identifying features, price
+              ranges, collectibility).
+            </p>
+            {!models ? (
+              <p className="vocab-loading">Loading model database…</p>
+            ) : (
+              <ul className="vocab-list">
+                {models
+                  .filter(mo => !q
+                    || mo.brand.toLowerCase().includes(q)
+                    || mo.modelName.toLowerCase().includes(q)
+                    || (mo.modelNumber ?? '').toLowerCase().includes(q)
+                    || mo.keywords.some(k => k.toLowerCase().includes(q))
+                    || mo.identifyingFeatures.some(f => f.toLowerCase().includes(q)))
+                  .map(mo => (
+                    <li key={mo.key} className="vocab-row vocab-row--builtin vocab-model-row">
+                      <div className="vocab-model-info">
+                        <span>
+                          <span className="vocab-brand-name">{mo.brand} {mo.modelName}</span>
+                          {mo.modelNumber ? <span className="vocab-model-number">#{mo.modelNumber}</span> : null}
+                          {mo.discontinued ? <span className="vocab-model-number">discontinued</span> : null}
+                        </span>
+                        <span className="vocab-row-detail" title={mo.identifyingFeatures.join(', ')}>
+                          {mo.identifyingFeatures.join(', ')}
+                        </span>
+                        <span className="vocab-model-meta">
+                          {String(mo.category)}
+                          {mo.yearIntroduced ? ` · since ${mo.yearIntroduced}` : ''}
+                          {` · $${mo.priceRange[0]}–$${mo.priceRange[1]}`}
+                          {` · collectibility ${mo.collectibility}/10`}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                {models.filter(mo => !q || mo.brand.toLowerCase().includes(q) || mo.modelName.toLowerCase().includes(q)).length === 0 && q !== '' && (
+                  <p className="vocab-loading">No models match.</p>
+                )}
+              </ul>
+            )}
+          </>
         ) : tab === 'chips' ? (
           <>
             <p className="vocab-help">
