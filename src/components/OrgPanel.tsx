@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Users, X, Pencil, Check, Copy, LogOut, Trash2, RotateCcw, Mail, Search } from 'lucide-react';
+import { Users, X, Pencil, Check, Copy, LogOut, Trash2, RotateCcw, Mail, Search, ChevronRight, ChevronDown, Building2 } from 'lucide-react';
 import {
   fetchOrgMembers, fetchOrgInvites, inviteToOrg, revokeInvite, removeMember,
-  renameOrganization, updateMemberRole,
-  type Organization, type OrgRole, type OrgMemberRow, type OrgInviteRow,
+  renameOrganization, updateMemberRole, fetchMemberActivity,
+  type Organization, type OrgRole, type OrgMemberRow, type OrgInviteRow, type MemberActivity,
 } from '../lib/orgService';
-import { fetchBetaSignups, setBetaStatus, deleteBetaSignup, type BetaSignupRow } from '../lib/betaService';
+import {
+  fetchBetaSignups, setBetaStatus, deleteBetaSignup, fetchBetaOrgDirectory,
+  type BetaSignupRow, type BetaOrgDirectoryRow,
+} from '../lib/betaService';
 import './OrgPanel.css';
 
 interface OrgPanelProps {
@@ -61,17 +64,36 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   const [betaSignups, setBetaSignups] = useState<BetaSignupRow[]>([]);
   const [betaFilter, setBetaFilter] = useState<BetaFilter>('all');
   const [betaSearch, setBetaSearch] = useState('');
+  // Aggregate directory of ALL workspaces (Founding admins; empty pre-migration)
+  const [betaOrgs, setBetaOrgs] = useState<BetaOrgDirectoryRow[]>([]);
+
+  // Click-to-expand member details (activity fetched lazily per member)
+  const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
+  const [memberActivity, setMemberActivity] = useState<Record<string, MemberActivity | 'loading'>>({});
+
+  const toggleMember = (userId: string) => {
+    const next = expandedMemberId === userId ? null : userId;
+    setExpandedMemberId(next);
+    if (next && !memberActivity[next]) {
+      setMemberActivity(prev => ({ ...prev, [next]: 'loading' }));
+      fetchMemberActivity(next).then(act =>
+        setMemberActivity(prev => ({ ...prev, [next]: act }))
+      );
+    }
+  };
 
   const reload = async (silent = false) => {
     if (!silent) setLoading(true);
-    const [m, i, b] = await Promise.all([
+    const [m, i, b, dirs] = await Promise.all([
       fetchOrgMembers(org.id),
       fetchOrgInvites(org.id),
       isBetaAdmin ? fetchBetaSignups() : Promise.resolve([] as BetaSignupRow[]),
+      isBetaAdmin ? fetchBetaOrgDirectory() : Promise.resolve([] as BetaOrgDirectoryRow[]),
     ]);
     setMembers(m);
     setInvites(isAdmin ? i : []);
     setBetaSignups(b);
+    setBetaOrgs(dirs);
     setLoading(false);
   };
 
@@ -288,40 +310,78 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
           <>
             <h3 className="org-section-title">Members ({members.length})</h3>
             <ul className="org-member-list">
-              {members.map(m => (
-                <li key={m.user_id} className="org-member-row">
-                  <span className="org-member-email">
-                    {m.email || m.user_id.slice(0, 8)}{m.user_id === myUserId ? ' (you)' : ''}
-                    <span className="org-member-date">joined {fmtDate(m.created_at)}</span>
-                  </span>
-                  {isAdmin && (isOwner || m.role !== 'owner') ? (
-                    <select
-                      className="org-role-select"
-                      value={m.role}
-                      disabled={busy}
-                      title="Change role"
-                      onChange={(e) => handleRoleChange(m, e.target.value as OrgRole)}
-                    >
-                      {isOwner && <option value="owner">Owner</option>}
-                      <option value="admin">Admin</option>
-                      <option value="member">Member</option>
-                    </select>
-                  ) : (
-                    <span className={`org-role-badge org-role-${m.role}`}>{m.role}</span>
-                  )}
-                  {isAdmin && m.user_id !== myUserId && (
-                    confirmKey === `remove:${m.user_id}` ? (
-                      <span className="org-confirm-actions">
-                        <button className="org-confirm-yes" disabled={busy} onClick={() => handleRemove(m.user_id)}>Confirm</button>
-                        <button className="org-confirm-no" disabled={busy} onClick={() => setConfirmKey(null)}>Cancel</button>
+              {members.map(m => {
+                const expanded = expandedMemberId === m.user_id;
+                const act = memberActivity[m.user_id];
+                const signup = isBetaAdmin && m.email
+                  ? betaSignups.find(s => s.email.toLowerCase() === m.email!.toLowerCase())
+                  : undefined;
+                return (
+                  <li key={m.user_id} className="org-member-row org-member-row--expandable">
+                    <div className="org-member-head">
+                      <button
+                        className="org-member-toggle"
+                        title={expanded ? 'Hide details' : 'Show details'}
+                        onClick={() => toggleMember(m.user_id)}
+                      >
+                        {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                      </button>
+                      <span className="org-member-email" role="button" onClick={() => toggleMember(m.user_id)}>
+                        {m.email || m.user_id.slice(0, 8)}{m.user_id === myUserId ? ' (you)' : ''}
+                        <span className="org-member-date">joined {fmtDate(m.created_at)}</span>
                       </span>
-                    ) : (
-                      <button className="org-member-remove" disabled={busy} title="Remove from workspace"
-                        onClick={() => setConfirmKey(`remove:${m.user_id}`)}>Remove</button>
-                    )
-                  )}
-                </li>
-              ))}
+                      {isAdmin && (isOwner || m.role !== 'owner') ? (
+                        <select
+                          className="org-role-select"
+                          value={m.role}
+                          disabled={busy}
+                          title="Change role"
+                          onChange={(e) => handleRoleChange(m, e.target.value as OrgRole)}
+                        >
+                          {isOwner && <option value="owner">Owner</option>}
+                          <option value="admin">Admin</option>
+                          <option value="member">Member</option>
+                        </select>
+                      ) : (
+                        <span className={`org-role-badge org-role-${m.role}`}>{m.role}</span>
+                      )}
+                      {isAdmin && m.user_id !== myUserId && (
+                        confirmKey === `remove:${m.user_id}` ? (
+                          <span className="org-confirm-actions">
+                            <button className="org-confirm-yes" disabled={busy} onClick={() => handleRemove(m.user_id)}>Confirm</button>
+                            <button className="org-confirm-no" disabled={busy} onClick={() => setConfirmKey(null)}>Cancel</button>
+                          </span>
+                        ) : (
+                          <button className="org-member-remove" disabled={busy} title="Remove from workspace"
+                            onClick={() => setConfirmKey(`remove:${m.user_id}`)}>Remove</button>
+                        )
+                      )}
+                    </div>
+                    {expanded && (
+                      <div className="org-member-detail">
+                        {act === 'loading' || !act ? (
+                          <span className="org-member-detail-loading">Loading activity…</span>
+                        ) : (
+                          <div className="org-member-stats">
+                            <span><strong>{act.batchCount}</strong> batch{act.batchCount === 1 ? '' : 'es'} created</span>
+                            <span><strong>{act.productCount}</strong> product{act.productCount === 1 ? '' : 's'} created</span>
+                            <span>last active {act.lastActive ? fmtDate(act.lastActive) : 'no activity yet'}</span>
+                          </div>
+                        )}
+                        {signup && (
+                          <div className="org-member-signup">
+                            Beta application: <strong>{signup.org_name}</strong> · {signup.contact_name}
+                            {signup.store_url ? <> · {signup.store_url}</> : null}
+                            {signup.volume ? <> · {signup.volume}/wk</> : null}
+                            {signup.notes ? <> · “{signup.notes}”</> : null}
+                            <span className={`org-role-badge beta-status-${signup.status}`}>{signup.status}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
 
             {isAdmin && invites.length > 0 && (
@@ -428,6 +488,40 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
                 </ul>
               </>
             )}
+          </>
+        )}
+
+        {isBetaAdmin && !loading && betaOrgs.length > 0 && (
+          <>
+            <h3 className="org-section-title">
+              Beta workspaces ({betaOrgs.length})
+            </h3>
+            <ul className="org-member-list">
+              {betaOrgs.map(o => (
+                <li key={o.org_id} className="org-member-row org-dir-row">
+                  <div className="org-dir-info">
+                    <span className="org-member-email">
+                      <Building2 size={13} />
+                      <strong>{o.name}</strong>
+                      {o.slug === 'founding' && <span className="org-role-badge org-role-owner">founding</span>}
+                      {o.plan && o.plan !== 'free' && <span className="org-plan-badge">{o.plan}</span>}
+                    </span>
+                    <span className="org-dir-stats">
+                      {o.member_count} member{o.member_count === 1 ? '' : 's'} · {o.batch_count} batch{o.batch_count === 1 ? '' : 'es'} · {o.product_count} product{o.product_count === 1 ? '' : 's'} · {o.image_count} image{o.image_count === 1 ? '' : 's'}
+                    </span>
+                    {o.member_emails.length > 0 && (
+                      <span className="org-dir-emails" title={o.member_emails.join(', ')}>
+                        {o.member_emails.join(', ')}
+                      </span>
+                    )}
+                    <span className="beta-request-dates">
+                      created {fmtDate(o.created_at)}
+                      {o.last_active ? ` · last active ${fmtDate(o.last_active)}` : ' · no activity yet'}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </>
         )}
 

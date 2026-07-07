@@ -381,3 +381,59 @@
 .beta-email-link:hover { text-decoration: underline; }
 
 .beta-request-actions { align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+
+/* ── Member expand + workspace directory ───────────────────────────────── */
+.org-member-row--expandable { flex-direction: column; align-items: stretch; gap: 0; }
+
+.org-member-head { display: flex; align-items: center; gap: 0.5rem; width: 100%; }
+
+.org-member-toggle {
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0.1rem;
+  display: inline-flex;
+  align-items: center;
+}
+
+.org-member-head .org-member-email { cursor: pointer; }
+
+.org-member-detail {
+  margin: 0.35rem 0 0.2rem 1.6rem;
+  padding: 0.5rem 0.7rem;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: #374151;
+}
+
+.org-member-stats { display: flex; flex-wrap: wrap; gap: 0.9rem; }
+.org-member-stats strong { color: #4f46e5; }
+
+.org-member-signup {
+  font-size: 0.8rem;
+  color: #4b5563;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.org-member-detail-loading { color: #9ca3af; }
+
+.org-dir-row { align-items: flex-start; }
+.org-dir-info { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; width: 100%; }
+.org-dir-info .org-member-email { display: flex; align-items: center; gap: 0.4rem; }
+.org-dir-stats { font-size: 0.8rem; color: #374151; }
+.org-dir-emails {
+  font-size: 0.76rem;
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

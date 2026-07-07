@@ -106,3 +106,36 @@ export async function deleteBetaSignup(id: string): Promise<boolean> {
   if (error) { log.error(`deleteBetaSignup | ${error.message}`); return false; }
   return true;
 }
+
+// ── Beta workspaces directory (Founding admins) ─────────────────────────────
+
+export interface BetaOrgDirectoryRow {
+  org_id: string;
+  name: string;
+  slug: string | null;
+  plan: string | null;
+  created_at: string;
+  member_count: number;
+  member_emails: string[];
+  batch_count: number;
+  product_count: number;
+  image_count: number;
+  last_active: string | null;
+}
+
+/** Aggregate stats for EVERY workspace (counts + member emails only — never
+ *  tenant data). Backed by the beta_org_directory() SECURITY DEFINER function;
+ *  non-admins and pre-migration environments get an empty array, which hides
+ *  the directory section entirely. */
+export async function fetchBetaOrgDirectory(): Promise<BetaOrgDirectoryRow[]> {
+  try {
+    const { data, error } = await supabase.rpc('beta_org_directory');
+    if (error) {
+      log.db(`beta_org_directory unavailable (${error.code ?? ''} ${error.message})`);
+      return [];
+    }
+    return (data ?? []) as BetaOrgDirectoryRow[];
+  } catch {
+    return [];
+  }
+}
