@@ -112,6 +112,30 @@ describe('generateProductDescription — voice command extraction', () => {
     expect(result.suggestedTitle ?? '').not.toMatch(/fits like/i);
   });
 
+  it('captures a full "description … period" phrase even when it contains field keywords', async () => {
+    // Natural narration is full of words that double as field triggers —
+    // "sleeve", "style", "length" must NOT chop the description apart.
+    const result = await generateProductDescription({
+      voiceDescription:
+        'description super faded long sleeve skater style period brand nike period',
+      category: 'tees',
+    });
+    expect(result.extractedFields?.customDescription).toBe('super faded long sleeve skater style');
+    expect(result.extractedFields?.brand).toBe('Nike');
+  });
+
+  it('description words never leak into other fields (sleeve inside narration ≠ sleeve measurement)', async () => {
+    const result = await generateProductDescription({
+      voiceDescription: 'description long sleeve heavyweight tee period width 18 period',
+      category: 'tees',
+    });
+    expect(result.extractedFields?.customDescription).toBe('long sleeve heavyweight tee');
+    const measurements = result.extractedFields?.measurements ?? {};
+    const entries = Object.entries(measurements).map(([k, v]) => `${k.toLowerCase()}:${v}`);
+    expect(entries).toContain('width:18');
+    expect(entries.find(e => e.startsWith('sleeve'))).toBeUndefined();
+  });
+
   it('keeps suggested titles within 60 characters', async () => {
     const result = await generateProductDescription({
       brand: 'Abercrombie & Fitch',

@@ -32,6 +32,7 @@ export interface SlimWorkflowItem {
   originalUrl?: string;
   brandCategory?: ClothingItem['brandCategory'];
   descriptionEdited?: boolean;
+  customDescription?: string;
 }
 
 export const slimForWorkflowState = (items: ClothingItem[]): SlimWorkflowItem[] =>
@@ -50,6 +51,9 @@ export const slimForWorkflowState = (items: ClothingItem[]): SlimWorkflowItem[] 
     originalUrl:         item.originalUrl,
     brandCategory:       item.brandCategory,
     descriptionEdited:   item.descriptionEdited,
+    // Voice/chip-entered freeform note — no products column holds it, so the
+    // workflow_state blob is its only home across reloads.
+    customDescription:   item.customDescription,
   }));
 
 /** What survives in the synchronous localStorage backup written on every
