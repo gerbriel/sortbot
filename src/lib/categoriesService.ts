@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import type { Category, CategoryInput } from './categories';
 import { createCategoryPreset } from './categoryPresetsService';
+import { DEFAULT_MEASUREMENT_TEMPLATES } from './categoryPresets';
 import type { CategoryPresetInput } from './categoryPresets';
 
 /**
@@ -214,15 +215,17 @@ export async function initializeDefaultCategories(): Promise<void> {
     return; // User already has categories
   }
 
-  // Insert default categories
+  // Insert default categories. templateKey → DEFAULT_MEASUREMENT_TEMPLATES
+  // entry used for the seeded default preset (which measurements the category
+  // expects in Step 3).
   const defaultCategories = [
-    { name: 'sweatshirts', display_name: 'Sweatshirts', emoji: '🧥', sort_order: 1 },
-    { name: 'outerwear', display_name: 'Outerwear', emoji: '🧥', sort_order: 2 },
-    { name: 'tees', display_name: 'Tees', emoji: '👕', sort_order: 3 },
-    { name: 'bottoms', display_name: 'Bottoms', emoji: '👖', sort_order: 4 },
-    { name: 'femme', display_name: 'Feminine', emoji: '👗', sort_order: 5 },
-    { name: 'hats', display_name: 'Hats', emoji: '🧢', sort_order: 6 },
-    { name: 'mystery boxes', display_name: 'Mystery Boxes', emoji: '📦', sort_order: 7 },
+    { name: 'sweatshirts', display_name: 'Sweatshirts', emoji: '🧥', sort_order: 1, templateKey: 'Sweatshirts' },
+    { name: 'outerwear', display_name: 'Outerwear', emoji: '🧥', sort_order: 2, templateKey: 'Outerwear' },
+    { name: 'tees', display_name: 'Tees', emoji: '👕', sort_order: 3, templateKey: 'Tees' },
+    { name: 'bottoms', display_name: 'Bottoms', emoji: '👖', sort_order: 4, templateKey: 'Bottoms' },
+    { name: 'femme', display_name: 'Feminine', emoji: '👗', sort_order: 5, templateKey: 'Tees' },
+    { name: 'hats', display_name: 'Hats', emoji: '🧢', sort_order: 6, templateKey: 'Hats' },
+    { name: 'mystery boxes', display_name: 'Mystery Boxes', emoji: '📦', sort_order: 7, templateKey: 'Accessories' },
   ];
 
   // Insert categories one by one to handle conflicts gracefully
@@ -241,6 +244,29 @@ export async function initializeDefaultCategories(): Promise<void> {
         });
     } catch (err) {
       // Ignore conflicts (category already exists)
+    }
+
+    // Seed a default preset alongside (same shape createCategory auto-creates)
+    // so a brand-new workspace's Step 2 preset buttons work out of the box.
+    // Best-effort — a missing preset never blocks category creation.
+    try {
+      const preset: CategoryPresetInput = {
+        category_name: `${cat.name}_default`,
+        display_name: `${cat.display_name} (Default)`,
+        description: `Default preset for ${cat.display_name}`,
+        product_type: cat.name,
+        default_weight_unit: 'lb',
+        requires_shipping: true,
+        is_active: true,
+        is_default: true,
+        measurement_template: DEFAULT_MEASUREMENT_TEMPLATES[cat.templateKey] ?? {
+          width: false, length: false, sleeve: false, shoulder: false,
+          waist: false, inseam: false, rise: false,
+        },
+      };
+      await createCategoryPreset(preset);
+    } catch {
+      // preset seeding is best-effort
     }
   }
 }

@@ -52,6 +52,27 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
     );
   };
 
+  // The preset's measurement template marks which measurements this category
+  // expects (the checkbox grid in the Presets manager). Flagged-and-empty gets
+  // a "needed" badge so the seller knows what to measure; nothing is hidden.
+  const measurementTemplate = currentItem._presetData?.measurementTemplate as
+    | Record<string, boolean>
+    | undefined;
+
+  // Plain render helper (not a component — components created during render
+  // violate the react-hooks purity rule).
+  const measurementNeeded = (field: string, value?: string) => {
+    if (!measurementTemplate?.[field] || value) return null;
+    return (
+      <span
+        className="measurement-needed-badge"
+        title={`The "${currentItem._presetData?.displayName}" preset expects this measurement`}
+      >
+        needed
+      </span>
+    );
+  };
+
   return (
     <div className="comprehensive-product-form">
 
@@ -168,35 +189,35 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
         <h3 className="form-section-title">📏 Measurements (inches)</h3>
         <div className="fields-row">
           <div className="info-item">
-            <label>Width ("):</label>
+            <label>Width ("): {measurementNeeded('width', currentItem.measurements?.width)}</label>
             <input type="text" value={currentItem.measurements?.width || ''} onChange={(e) => updateGroupField('measurements.width', e.target.value)} placeholder="e.g., 22" className={`info-input${req(currentItem.measurements?.width)}`} />
           </div>
           <div className="info-item">
-            <label>Length ("):</label>
+            <label>Length ("): {measurementNeeded('length', currentItem.measurements?.length)}</label>
             <input type="text" value={currentItem.measurements?.length || ''} onChange={(e) => updateGroupField('measurements.length', e.target.value)} placeholder="e.g., 28" className={`info-input${req(currentItem.measurements?.length)}`} />
           </div>
           <div className="info-item">
-            <label>Sleeve ("):</label>
+            <label>Sleeve ("): {measurementNeeded('sleeve', currentItem.measurements?.sleeve)}</label>
             <input type="text" value={currentItem.measurements?.sleeve || ''} onChange={(e) => updateGroupField('measurements.sleeve', e.target.value)} placeholder="e.g., 24" className={`info-input${req(currentItem.measurements?.sleeve)}`} />
           </div>
         </div>
         <div className="fields-row">
           <div className="info-item">
-            <label>Shoulder ("):</label>
+            <label>Shoulder ("): {measurementNeeded('shoulder', currentItem.measurements?.shoulder)}</label>
             <input type="text" value={currentItem.measurements?.shoulder || ''} onChange={(e) => updateGroupField('measurements.shoulder', e.target.value)} placeholder="e.g., 18" className={`info-input${req(currentItem.measurements?.shoulder)}`} />
           </div>
           <div className="info-item">
-            <label>Waist ("):</label>
+            <label>Waist ("): {measurementNeeded('waist', currentItem.measurements?.waist)}</label>
             <input type="text" value={currentItem.measurements?.waist || ''} onChange={(e) => updateGroupField('measurements.waist', e.target.value)} placeholder="e.g., 32" className={`info-input${req(currentItem.measurements?.waist)}`} />
           </div>
           <div className="info-item">
-            <label>Inseam ("):</label>
+            <label>Inseam ("): {measurementNeeded('inseam', currentItem.measurements?.inseam)}</label>
             <input type="text" value={currentItem.measurements?.inseam || ''} onChange={(e) => updateGroupField('measurements.inseam', e.target.value)} placeholder="e.g., 30" className={`info-input${req(currentItem.measurements?.inseam)}`} />
           </div>
         </div>
         <div className="fields-row">
           <div className="info-item">
-            <label>Rise ("):</label>
+            <label>Rise ("): {measurementNeeded('rise', currentItem.measurements?.rise)}</label>
             <input type="text" value={currentItem.measurements?.rise || ''} onChange={(e) => updateGroupField('measurements.rise', e.target.value)} placeholder="e.g., 11" className={`info-input${req(currentItem.measurements?.rise)}`} />
           </div>
           <div className="info-item">{/* spacer */}</div>

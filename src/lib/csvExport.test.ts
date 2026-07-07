@@ -113,6 +113,42 @@ describe('taxonomy resolution', () => {
   });
 });
 
+describe('preset shopifyProductType → CSV taxonomy columns', () => {
+  const h = SHOPIFY_CSV_HEADERS;
+  const catCol = h.indexOf('Product Category');
+  const typeCol = h.indexOf('Type');
+
+  it('a full taxonomy path feeds Product Category, Type gets the last segment', () => {
+    const [row] = buildShopifyCsvRows([
+      product({
+        id: 'a', seoTitle: 'Tee', price: 10, category: 'tees', imageUrls: ['https://x/1.jpg'],
+        shopifyProductType: 'Apparel & Accessories > Clothing > Clothing Tops > Polos',
+      } as never),
+    ]);
+    expect(row[catCol]).toBe('Apparel & Accessories > Clothing > Clothing Tops > Polos');
+    expect(row[typeCol]).toBe('Polos');
+  });
+
+  it('a short value feeds Type; Product Category falls back to the category map', () => {
+    const [row] = buildShopifyCsvRows([
+      product({
+        id: 'a', seoTitle: 'Tee', price: 10, category: 'tees', imageUrls: ['https://x/1.jpg'],
+        shopifyProductType: 'Band Tees',
+      } as never),
+    ]);
+    expect(row[typeCol]).toBe('Band Tees');
+    expect(row[catCol]).toBe('Apparel & Accessories > Clothing > Clothing Tops > T-Shirts');
+  });
+
+  it('absent → category-name maps drive both columns (unchanged behavior)', () => {
+    const [row] = buildShopifyCsvRows([
+      product({ id: 'a', seoTitle: 'Tee', price: 10, category: 'tees', imageUrls: ['https://x/1.jpg'] }),
+    ]);
+    expect(row[catCol]).toBe('Apparel & Accessories > Clothing > Clothing Tops > T-Shirts');
+    expect(row[typeCol]).toBeTruthy();
+  });
+});
+
 describe('per-store GID overrides', () => {
   const h = SHOPIFY_CSV_HEADERS;
   const colorCol = h.indexOf('Color (product.metafields.shopify.color-pattern)');

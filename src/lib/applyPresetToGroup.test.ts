@@ -104,3 +104,48 @@ describe('applyPresetDirectly', () => {
     expect(out.seoTitle).toBe('My Hand Written Title');
   });
 });
+
+describe('applyPresetDirectly — field wiring (July 2026 audit fixes)', () => {
+  it('converts preset weight to grams (item.weightValue is always grams)', () => {
+    const [lb] = applyPresetDirectly([makeItem()], 'tees',
+      makePreset({ default_weight_value: '1', default_weight_unit: 'lb' }));
+    expect(lb.weightValue).toBe('454'); // 1 lb ≈ 453.592 g, rounded
+
+    const [oz] = applyPresetDirectly([makeItem()], 'tees',
+      makePreset({ default_weight_value: '8', default_weight_unit: 'oz' }));
+    expect(oz.weightValue).toBe('227'); // 8 oz ≈ 226.8 g
+
+    const [g] = applyPresetDirectly([makeItem()], 'tees',
+      makePreset({ default_weight_value: '350', default_weight_unit: 'g' }));
+    expect(g.weightValue).toBe('350');
+
+    // Item's own weight (already grams) always wins
+    const [own] = applyPresetDirectly([makeItem({ weightValue: '300' })], 'tees',
+      makePreset({ default_weight_value: '1', default_weight_unit: 'lb' }));
+    expect(own.weightValue).toBe('300');
+  });
+
+  it('uses preset vendor as the default brand (voice/manual brand wins)', () => {
+    const [fromPreset] = applyPresetDirectly([makeItem()], 'tees',
+      makePreset({ vendor: 'Thrift Haus' }));
+    expect(fromPreset.brand).toBe('Thrift Haus');
+
+    const [voiceWins] = applyPresetDirectly([makeItem({ brand: 'Nike' })], 'tees',
+      makePreset({ vendor: 'Thrift Haus' }));
+    expect(voiceWins.brand).toBe('Nike');
+  });
+
+  it('falls back to suggested_price_max for compare-at when compare_at_price is unset', () => {
+    const [maxFallback] = applyPresetDirectly([makeItem()], 'tees',
+      makePreset({ suggested_price_max: 60 }));
+    expect(maxFallback.compareAtPrice).toBe(60);
+
+    const [explicitWins] = applyPresetDirectly([makeItem()], 'tees',
+      makePreset({ suggested_price_max: 60, compare_at_price: 80 }));
+    expect(explicitWins.compareAtPrice).toBe(80);
+
+    const [itemWins] = applyPresetDirectly([makeItem({ compareAtPrice: 45 })], 'tees',
+      makePreset({ suggested_price_max: 60 }));
+    expect(itemWins.compareAtPrice).toBe(45);
+  });
+});
