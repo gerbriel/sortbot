@@ -53,6 +53,9 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   const [inviteRole, setInviteRole] = useState<OrgRole>('member');
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Dashboard tabs — Members (everyone), Settings (org admins),
+  // Beta program (Founding admins)
+  const [panelTab, setPanelTab] = useState<'members' | 'settings' | 'beta'>('members');
   // Inline two-step confirm (no native confirm() — Do Not #12). Holds a key
   // like `remove:<userId>`, `leave`, or `beta-delete:<id>`; second click acts.
   const [confirmKey, setConfirmKey] = useState<string | null>(null);
@@ -394,7 +397,23 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
 
         {notice && <div className="org-panel-notice">{notice}</div>}
 
-        {isAdmin && (
+        <div className="org-tabs">
+          <button className={`org-tab ${panelTab === 'members' ? 'org-tab--on' : ''}`} onClick={() => setPanelTab('members')}>
+            Members ({members.length})
+          </button>
+          {isAdmin && (
+            <button className={`org-tab ${panelTab === 'settings' ? 'org-tab--on' : ''}`} onClick={() => setPanelTab('settings')}>
+              Settings
+            </button>
+          )}
+          {isBetaAdmin && (
+            <button className={`org-tab ${panelTab === 'beta' ? 'org-tab--on' : ''}`} onClick={() => setPanelTab('beta')}>
+              Beta program{betaCounts.pending > 0 ? ` (${betaCounts.pending})` : ''}
+            </button>
+          )}
+        </div>
+
+        {isAdmin && panelTab === 'members' && (
           <div className="org-invite-form">
             <input
               type="email"
@@ -413,7 +432,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
           </div>
         )}
 
-        {loading ? (
+        {panelTab === 'members' && (loading ? (
           <p className="org-panel-loading">Loading members…</p>
         ) : (
           <>
@@ -514,9 +533,9 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
               </>
             )}
           </>
-        )}
+        ))}
 
-        {isAdmin && !loading && shopifyConn && shopifyConn.status !== 'unavailable' && (
+        {panelTab === 'settings' && isAdmin && !loading && shopifyConn && shopifyConn.status !== 'unavailable' && (
           <>
             <h3 className="org-section-title">Shopify connection</h3>
             {shopifyConn.status === 'connected' && !editingShopify ? (
@@ -578,7 +597,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
           </>
         )}
 
-        {isAdmin && !loading && descLoaded && (
+        {panelTab === 'settings' && isAdmin && !loading && descLoaded && (
           <>
             <h3 className="org-section-title">Listing description format</h3>
             <p className="shopify-conn-help">
@@ -624,7 +643,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
           </>
         )}
 
-        {isBetaAdmin && !loading && (
+        {panelTab === 'beta' && isBetaAdmin && !loading && (
           <>
             <h3 className="org-section-title">
               Beta requests ({betaCounts.pending} pending)
@@ -708,7 +727,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
           </>
         )}
 
-        {isBetaAdmin && !loading && betaOrgs.length > 0 && (
+        {panelTab === 'beta' && isBetaAdmin && !loading && betaOrgs.length > 0 && (
           <>
             <h3 className="org-section-title">
               Beta workspaces ({betaOrgs.length})
@@ -742,7 +761,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
           </>
         )}
 
-        {!loading && canLeave && (
+        {panelTab === 'members' && !loading && canLeave && (
           <div className="org-leave-section">
             {confirmKey === 'leave' ? (
               <span className="org-confirm-actions">

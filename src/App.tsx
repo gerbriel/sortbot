@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, Component, type ReactN
 import exifr from 'exifr';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
-import { Tag, Settings, Package, ShoppingBag, Link2, Scissors, X, Trash2, Bug, Users, BookMarked } from 'lucide-react';
+import { Tag, Settings, Package, ShoppingBag, Link2, Scissors, X, Trash2, Bug, BookMarked } from 'lucide-react';
 import { log, setDebugEnabled, isDebugEnabled } from './lib/debugLogger';
 import Auth from './components/Auth';
 import ImageUpload, { type ImageUploadHandle } from './components/ImageUpload';
@@ -32,6 +32,7 @@ const processedItemsRef  = liveArrayRef('processedItems');
 const uploadedImagesRef  = liveArrayRef('uploadedImages');
 import OrgPanel from './components/OrgPanel';
 import VocabDashboard from './components/VocabDashboard';
+import WorkspaceMenu from './components/WorkspaceMenu';
 import WaitlistGate from './components/WaitlistGate';
 import Landing from './components/Landing';
 import { getCategoryPresets } from './lib/categoryPresetsService';
@@ -2564,17 +2565,6 @@ function App() {
             >
               <Package size={18} /> Library
             </button>
-            {currentOrg && (
-              <button
-                onClick={() => setShowOrgPanel(true)}
-                className="button button-secondary"
-                style={{ marginRight: '12px', display: 'flex', alignItems: 'center', gap: '0.5rem', maxWidth: '220px' }}
-                title="Workspace — members & invites"
-              >
-                <Users size={18} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentOrg.name}</span>
-              </button>
-            )}
             {currentOrg?.slug === 'founding' && (orgRole === 'owner' || orgRole === 'admin') && (
               <button
                 onClick={() => setShowVocabDashboard(true)}
@@ -2585,10 +2575,15 @@ function App() {
                 <BookMarked size={18} /> Vocabulary
               </button>
             )}
-            <span className="user-email">{user.email}</span>
-            <button onClick={handleSignOut} className="button button-secondary">
-              Sign Out
-            </button>
+            {/* Consolidated workspace/account control: identity + dashboard +
+                sign out live in the dropdown (replaced email + Sign Out). */}
+            <WorkspaceMenu
+              orgName={currentOrg?.name ?? null}
+              role={currentOrg ? orgRole : undefined}
+              email={user.email}
+              onOpenDashboard={currentOrg ? () => setShowOrgPanel(true) : undefined}
+              onSignOut={handleSignOut}
+            />
           </div>
         </div>
       </header>
