@@ -242,6 +242,39 @@ export async function renameOrganization(orgId: string, name: string): Promise<{
   return { ok: true };
 }
 
+/** A member's contribution inside the CURRENT workspace — computed from rows
+ *  the caller can already see (RLS keeps it scoped to shared orgs). */
+export interface MemberActivity {
+  batchCount: number;
+  productCount: number;
+  lastActive: string | null; // most recent batch update by this member
+}
+
+export async function fetchMemberActivity(userId: string): Promise<MemberActivity> {
+  try {
+    const [batches, products] = await Promise.all([
+      supabase
+        .from('workflow_batches')
+        .select('updated_at', { count: 'exact' })
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
+        .limit(1),
+      supabase
+        .from('products')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId),
+    ]);
+    return {
+      batchCount: batches.count ?? 0,
+      productCount: products.count ?? 0,
+      lastActive: (batches.data?.[0] as { updated_at?: string } | undefined)?.updated_at ?? null,
+    };
+  } catch (err) {
+    log.error(`fetchMemberActivity | ${String(err)}`);
+    return { batchCount: 0, productCount: 0, lastActive: null };
+  }
+}
+
 /** Change a member's role (admin/owner only, enforced by RLS). The caller is
  *  responsible for the last-owner guard — the DB happily allows zero owners. */
 export async function updateMemberRole(orgId: string, userId: string, role: OrgRole): Promise<boolean> {
