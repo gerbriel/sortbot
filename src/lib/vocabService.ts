@@ -173,3 +173,74 @@ export async function deleteBrandKeywords(id: string): Promise<boolean> {
   if (error) { log.error(`deleteBrandKeywords | ${error.message}`); return false; }
   return true;
 }
+
+// ── Models (vocab_models — the editable model knowledge base) ───────────────
+// Nothing consumes these rows yet: they're the growing knowledge base for the
+// future photo-scanning feature. Founders CRUD; everyone can read.
+
+export interface ModelRow {
+  id: string;
+  brand: string;
+  model_name: string;
+  model_number: string | null;
+  category: string | null;
+  year_introduced: number | null;
+  discontinued: boolean;
+  keywords: string[];
+  identifying_features: string[];
+  price_min: number | null;
+  price_max: number | null;
+  collectibility: number | null;
+  is_active: boolean;
+}
+
+export type ModelInput = Omit<ModelRow, 'id'>;
+
+/** ALL model rows for the founder dashboard. Paginated past the 1000-row cap.
+ *  Errors (e.g. migration not run) fail soft to an empty list. */
+export async function fetchAllModels(): Promise<ModelRow[]> {
+  const PAGE = 1000;
+  const all: ModelRow[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('vocab_models')
+      .select('*')
+      .order('brand', { ascending: true })
+      .order('model_name', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) { log.service(`fetchAllModels | ${error.code ?? ''} ${error.message}`); return all; }
+    all.push(...((data ?? []) as ModelRow[]));
+    if (!data || data.length < PAGE) break;
+  }
+  return all;
+}
+
+export async function createModel(input: ModelInput): Promise<{ ok: boolean; error?: string }> {
+  if (!input.brand.trim()) return { ok: false, error: 'Brand cannot be empty.' };
+  if (!input.model_name.trim()) return { ok: false, error: 'Model name cannot be empty.' };
+  const { error } = await supabase.from('vocab_models').insert({
+    ...input,
+    brand: input.brand.trim(),
+    model_name: input.model_name.trim(),
+  });
+  if (error) {
+    if (error.code === '23505') return { ok: false, error: `"${input.brand} ${input.model_name}" already exists — edit that row instead.` };
+    if (error.code === '42P01') return { ok: false, error: 'The models migration (vocab_models.sql) has not been run yet.' };
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
+export async function updateModel(id: string, patch: Partial<ModelInput>): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase
+    .from('vocab_models').update(patch).eq('id', id).select('id');
+  if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) return { ok: false, error: 'No permission to edit the vocabulary.' };
+  return { ok: true };
+}
+
+export async function deleteModel(id: string): Promise<boolean> {
+  const { error } = await supabase.from('vocab_models').delete().eq('id', id);
+  if (error) { log.error(`deleteModel | ${error.message}`); return false; }
+  return true;
+}
