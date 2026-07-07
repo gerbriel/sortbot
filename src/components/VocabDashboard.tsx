@@ -183,8 +183,9 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
   // loose matching Step 3 uses). Uncovered words get a one-click "make chip".
   const brandWordCoverage = (() => {
     const counts = new Map<string, number>();
+    // ALL brand entries count, active or not — the founder curates against
+    // the full word universe regardless of which brands are toggled on.
     brands.forEach(b => {
-      if (!b.is_active) return;
       new Set(b.keywords.map(k => k.toLowerCase().trim()).filter(Boolean))
         .forEach(w => counts.set(w, (counts.get(w) ?? 0) + 1));
     });
