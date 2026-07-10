@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { Booking, Gym } from '../types'
 import { hourLabel, money, todayIso, weekdayOf, longDay } from '../lib/format'
 import Icon from './Icon'
+import Checkout from './Checkout'
 
 interface BookingWidgetProps {
   gym: Gym
@@ -15,6 +16,7 @@ export default function BookingWidget({ gym, onBook }: BookingWidgetProps) {
   const [startHour, setStartHour] = useState(gym.openHour + 1)
   const [hours, setHours] = useState(1)
   const [lifters, setLifters] = useState(1)
+  const [pending, setPending] = useState<Booking | null>(null)
   const [confirmed, setConfirmed] = useState<Booking | null>(null)
 
   const startOptions = useMemo(() => {
@@ -51,8 +53,14 @@ export default function BookingWidget({ gym, onBook }: BookingWidgetProps) {
       total,
       createdAt: Date.now(),
     }
-    onBook(booking)
-    setConfirmed(booking)
+    setPending(booking)
+  }
+
+  function handlePaid() {
+    if (!pending) return
+    onBook(pending)
+    setConfirmed(pending)
+    setPending(null)
   }
 
   if (confirmed) {
@@ -90,6 +98,7 @@ export default function BookingWidget({ gym, onBook }: BookingWidgetProps) {
   }
 
   return (
+    <>
     <aside className="booking-card">
       <div className="booking-price">
         <span className="booking-price-amount">{money(gym.pricePerHour)}</span>
@@ -170,5 +179,17 @@ export default function BookingWidget({ gym, onBook }: BookingWidgetProps) {
         </div>
       )}
     </aside>
+
+    {pending && (
+      <Checkout
+        gym={gym}
+        booking={pending}
+        subtotal={subtotal}
+        serviceFee={serviceFee}
+        onPaid={handlePaid}
+        onClose={() => setPending(null)}
+      />
+    )}
+    </>
   )
 }
