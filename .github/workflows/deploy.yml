@@ -46,10 +46,15 @@ jobs:
         env:
           # Environment variables for build (using GitHub Secrets)
           # Add these in GitHub repo settings > Secrets and variables > Actions
+          #
+          # ⚠️  Vite inlines every VITE_* var into the PUBLIC bundle served from
+          # GitHub Pages. Only publishable values may be listed here. The Supabase
+          # anon key is public by design (RLS enforces access); a service_role key,
+          # a Shopify Admin token, or any provider API key must NEVER be added —
+          # it would be readable by every visitor. Server-side secrets belong in
+          # Supabase Edge Function secrets (`supabase secrets set ...`).
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          # Optional: Add VITE_OPENAI_API_KEY for AI features
-          VITE_OPENAI_API_KEY: ${{ secrets.VITE_OPENAI_API_KEY }}
           # Storage limit in GB (defaults to 100 for Pro plan if not set)
           VITE_STORAGE_LIMIT_GB: ${{ secrets.VITE_STORAGE_LIMIT_GB }}
       
