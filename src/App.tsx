@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, Component, type ReactN
 import exifr from 'exifr';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
-import { Tag, Settings, Package, ShoppingBag, Link2, Scissors, X, Trash2, Bug, BookMarked } from 'lucide-react';
+import { Tag, Settings, Package, ShoppingBag, Link2, Scissors, X, Trash2, Bug, BookMarked, KanbanSquare } from 'lucide-react';
 import { log, setDebugEnabled, isDebugEnabled } from './lib/debugLogger';
 import Auth from './components/Auth';
 import ImageUpload, { type ImageUploadHandle } from './components/ImageUpload';
@@ -32,6 +32,7 @@ const processedItemsRef  = liveArrayRef('processedItems');
 const uploadedImagesRef  = liveArrayRef('uploadedImages');
 import OrgPanel from './components/OrgPanel';
 import VocabDashboard from './components/VocabDashboard';
+import KanbanBoard from './components/KanbanBoard';
 import WorkspaceMenu from './components/WorkspaceMenu';
 import WaitlistGate from './components/WaitlistGate';
 import Landing from './components/Landing';
@@ -237,6 +238,8 @@ function App() {
   const [showOrgPanel, setShowOrgPanel] = useState(false);
   // Founder-only vocabulary dashboard (chips + brand keywords, global content)
   const [showVocabDashboard, setShowVocabDashboard] = useState(false);
+  // Team board — Founding Workspace members (any role) track features/todos
+  const [showKanban, setShowKanban] = useState(false);
   // Per-workspace description format — fetched with the org, passed to Step 3
   const [orgDescSettings, setOrgDescSettings] = useState<DescriptionSettings | null>(null);
   // CSV Vendor column = the SELLER: explicit setting → founding default
@@ -2575,6 +2578,16 @@ function App() {
                 <BookMarked size={18} /> Vocabulary
               </button>
             )}
+            {currentOrg?.slug === 'founding' && (
+              <button
+                onClick={() => setShowKanban(true)}
+                className="button button-secondary"
+                style={{ marginRight: '12px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                title="Board — features and todos for this workspace"
+              >
+                <KanbanSquare size={18} /> Board
+              </button>
+            )}
             {/* Consolidated workspace/account control: identity + dashboard +
                 sign out live in the dropdown (replaced email + Sign Out). */}
             <WorkspaceMenu
@@ -2970,6 +2983,17 @@ function App() {
       {/* Vocabulary dashboard (founding admins only — chips + brand keywords) */}
       {showVocabDashboard && currentOrg?.slug === 'founding' && (orgRole === 'owner' || orgRole === 'admin') && (
         <VocabDashboard onClose={() => setShowVocabDashboard(false)} />
+      )}
+
+      {/* Team board (Founding Workspace — EVERY member, not just admins: the
+          whole point is that anyone can add and pick up work) */}
+      {showKanban && currentOrg && user && currentOrg.slug === 'founding' && (
+        <KanbanBoard
+          orgId={currentOrg.id}
+          userId={user.id}
+          userEmail={user.email ?? null}
+          onClose={() => setShowKanban(false)}
+        />
       )}
 
       {/* Library Modal */}

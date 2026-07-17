@@ -544,3 +544,82 @@
   border-color: #c7d2fe;
   color: #3730a3;
 }
+
+/* ── Users tab (Founding admins) ─────────────────────────────────────────────
+   One row per account, stacking its workspace memberships underneath. */
+
+.fa-user-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
+  padding: 0.55rem 0.2rem;
+}
+
+.fa-user-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.fa-membership-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 1.1rem;
+  border-left: 2px solid #eef2ff;
+}
+
+.fa-membership-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.22rem 0;
+  font-size: 0.85rem;
+}
+
+.fa-ms-org {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fa-move-select,
+.fa-add-row select {
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  color: #4b5563;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.3rem;
+  cursor: pointer;
+}
+
+.fa-move-select:disabled,
+.fa-add-row select:disabled { opacity: 0.5; cursor: default; }
+
+/* Amber, because arming a move is a destination choice, not a confirmed one. */
+.fa-move-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #92400e;
+}
+
+.fa-add-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0 0.1rem 1.1rem;
+}
+
+.fa-audit-row { padding: 0.3rem 0.2rem; }
+.fa-audit-row .org-member-email {
+  font-size: 0.8rem;
+  color: #4b5563;
+  white-space: normal;
+}
+.fa-audit-list { max-height: 220px; overflow-y: auto; }

@@ -37,6 +37,7 @@ const COLOURS: Record<string, string> = {
   Auth:      '#7c3aed',
   DOM:       '#94a3b8',
   Img:       '#f97316',
+  Kanban:    '#14b8a6',
   Error:     '#ef4444',
 };
 
@@ -72,6 +73,7 @@ export const log = {
   auth:    (msg: string, ...d: unknown[]) => dbg('Auth',    msg, ...d),
   dom:     (msg: string, ...d: unknown[]) => dbg('DOM',     msg, ...d),
   img:     (msg: string, ...d: unknown[]) => dbg('Img',     msg, ...d),
+  kanban:  (msg: string, ...d: unknown[]) => dbg('Kanban',  msg, ...d),
   error:   (msg: string, ...d: unknown[]) => dbg('Error',   msg, ...d),
 };
 

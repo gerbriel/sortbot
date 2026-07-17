@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Users, X, Pencil, Check, Copy, LogOut, Trash2, RotateCcw, Mail, Search, ChevronRight, ChevronDown, Building2, ShoppingBag } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Users, X, Pencil, Check, Copy, LogOut, Trash2, RotateCcw, Mail, Search, ChevronRight, ChevronDown, Building2, ShoppingBag, UserCog, History } from 'lucide-react';
 import {
   fetchOrgMembers, fetchOrgInvites, inviteToOrg, revokeInvite, removeMember,
   renameOrganization, updateMemberRole, fetchMemberActivity,
@@ -9,6 +9,10 @@ import {
   fetchBetaSignups, setBetaStatus, deleteBetaSignup, fetchBetaOrgDirectory,
   type BetaSignupRow, type BetaOrgDirectoryRow,
 } from '../lib/betaService';
+import {
+  fetchAllUsers, setMembership, removeMembership, moveUser, fetchFoundingAudit,
+  type FoundingUserRow, type FoundingAuditRow,
+} from '../lib/foundingAdminService';
 import {
   getShopifyConnection, saveShopifyConnection, deleteShopifyConnection,
   type ShopifyConnectionStatus,
@@ -54,8 +58,8 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // Dashboard tabs — Members (everyone), Settings (org admins),
-  // Beta program (Founding admins)
-  const [panelTab, setPanelTab] = useState<'members' | 'settings' | 'beta'>('members');
+  // Beta program + Users (Founding admins)
+  const [panelTab, setPanelTab] = useState<'members' | 'settings' | 'beta' | 'users'>('members');
   // Inline two-step confirm (no native confirm() — Do Not #12). Holds a key
   // like `remove:<userId>`, `leave`, or `beta-delete:<id>`; second click acts.
   const [confirmKey, setConfirmKey] = useState<string | null>(null);
@@ -80,6 +84,17 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   const [betaSearch, setBetaSearch] = useState('');
   // Aggregate directory of ALL workspaces (Founding admins; empty pre-migration)
   const [betaOrgs, setBetaOrgs] = useState<BetaOrgDirectoryRow[]>([]);
+
+  // Cross-workspace user management (Founding admins; empty until
+  // founding_user_admin.sql is run, which hides the Users tab entirely).
+  const [allUsers, setAllUsers] = useState<FoundingUserRow[]>([]);
+  const [audit, setAudit] = useState<FoundingAuditRow[]>([]);
+  const [userSearch, setUserSearch] = useState('');
+  // Pending move, keyed `${userId}:${fromOrgId}` → target org id. Picking a
+  // destination arms the confirm; it does not move anyone on its own.
+  const [moveDraft, setMoveDraft] = useState<Record<string, string>>({});
+  // Pending "add to workspace", keyed by user id.
+  const [addDraft, setAddDraft] = useState<Record<string, { orgId: string; role: OrgRole }>>({});
 
   // Click-to-expand member details (activity fetched lazily per member)
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
@@ -171,18 +186,22 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
 
   const reload = async (silent = false) => {
     if (!silent) setLoading(true);
-    const [m, i, b, dirs, shp] = await Promise.all([
+    const [m, i, b, dirs, shp, users, aud] = await Promise.all([
       fetchOrgMembers(org.id),
       fetchOrgInvites(org.id),
       isBetaAdmin ? fetchBetaSignups() : Promise.resolve([] as BetaSignupRow[]),
       isBetaAdmin ? fetchBetaOrgDirectory() : Promise.resolve([] as BetaOrgDirectoryRow[]),
       isAdmin ? getShopifyConnection(org.id) : Promise.resolve<ShopifyConnectionStatus>({ status: 'none' }),
+      isBetaAdmin ? fetchAllUsers() : Promise.resolve([] as FoundingUserRow[]),
+      isBetaAdmin ? fetchFoundingAudit() : Promise.resolve([] as FoundingAuditRow[]),
     ]);
     setMembers(m);
     setInvites(isAdmin ? i : []);
     setBetaSignups(b);
     setBetaOrgs(dirs);
     setShopifyConn(shp);
+    setAllUsers(users);
+    setAudit(aud);
     setLoading(false);
   };
 
@@ -351,6 +370,99 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
     return `mailto:${s.email}?subject=${subject}&body=${body}`;
   };
 
+  // ── Cross-workspace user management (Founding admins) ─────────────────────
+  // Every workspace we can offer as a move/add destination. Sourced from the
+  // aggregate directory, with any org seen on a membership folded in so the
+  // dropdowns still work if beta_org_directory() is unavailable.
+  const orgOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    betaOrgs.forEach(o => map.set(o.org_id, o.name));
+    allUsers.forEach(u => u.memberships.forEach(ms => {
+      if (!map.has(ms.org_id)) map.set(ms.org_id, ms.org_name);
+    }));
+    return [...map].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [betaOrgs, allUsers]);
+
+  const orgNameOf = (id: string) => orgOptions.find(o => o.id === id)?.name ?? 'that workspace';
+
+  const uq = userSearch.trim().toLowerCase();
+  const matchingUsers = allUsers.filter(u =>
+    !uq || (u.email ?? '').toLowerCase().includes(uq)
+        || u.memberships.some(ms => ms.org_name.toLowerCase().includes(uq))
+  );
+  const USER_RENDER_CAP = 50;
+  const visibleUsers = matchingUsers.slice(0, USER_RENDER_CAP);
+
+  const clearMoveDraft = (key: string) =>
+    setMoveDraft(d => { const n = { ...d }; delete n[key]; return n; });
+
+  const handleSetMembership = async (u: FoundingUserRow, orgId: string, role: OrgRole) => {
+    if (busy) return;
+    setBusy(true);
+    setNotice(null);
+    const res = await setMembership(u.user_id, orgId, role);
+    if (res.ok) {
+      setNotice(`${u.email ?? 'That user'} is now ${role} in ${orgNameOf(orgId)}.`);
+      // Keep the header badge honest if they just changed their own role here.
+      if (u.user_id === myUserId && orgId === org.id) onMyRoleChanged?.(role);
+    } else {
+      setNotice(`Role change failed: ${res.error}`);
+    }
+    await reload(true);
+    setBusy(false);
+  };
+
+  const handleAddToOrg = async (u: FoundingUserRow) => {
+    const draft = addDraft[u.user_id];
+    if (busy || !draft?.orgId) return;
+    setBusy(true);
+    setNotice(null);
+    const res = await setMembership(u.user_id, draft.orgId, draft.role);
+    setNotice(res.ok
+      ? `Added ${u.email ?? 'that user'} to ${orgNameOf(draft.orgId)} as ${draft.role}. They'll see it next time they sign in.`
+      : `Add failed: ${res.error}`);
+    setAddDraft(d => { const n = { ...d }; delete n[u.user_id]; return n; });
+    await reload(true);
+    setBusy(false);
+  };
+
+  const handleRemoveMembership = async (u: FoundingUserRow, orgId: string) => {
+    if (busy) return;
+    setBusy(true);
+    setConfirmKey(null);
+    setNotice(null);
+    const res = await removeMembership(u.user_id, orgId);
+    setNotice(res.ok
+      ? `Removed ${u.email ?? 'that user'} from ${orgNameOf(orgId)}. That workspace keeps all of its batches and products.`
+      : `Remove failed: ${res.error}`);
+    await reload(true);
+    setBusy(false);
+  };
+
+  const handleMoveUser = async (u: FoundingUserRow, fromOrgId: string, toOrgId: string) => {
+    if (busy) return;
+    setBusy(true);
+    setNotice(null);
+    const res = await moveUser(u.user_id, fromOrgId, toOrgId);
+    setNotice(res.ok
+      ? `Moved ${u.email ?? 'that user'} to ${orgNameOf(toOrgId)}. Their batches stayed in ${orgNameOf(fromOrgId)} — move them back to restore access.`
+      : `Move failed: ${res.error}`);
+    clearMoveDraft(`${u.user_id}:${fromOrgId}`);
+    await reload(true);
+    setBusy(false);
+  };
+
+  const auditSummary = (a: FoundingAuditRow) => {
+    const who = a.target_email ?? 'a user';
+    switch (a.action) {
+      case 'add_member':    return `added ${who} to ${a.to_org_name} as ${a.role}`;
+      case 'set_role':      return `made ${who} ${a.role} in ${a.to_org_name}`;
+      case 'remove_member': return `removed ${who} from ${a.from_org_name}`;
+      case 'move_user':     return `moved ${who} from ${a.from_org_name} to ${a.to_org_name}`;
+      default:              return `${a.action} ${who}`;
+    }
+  };
+
   const betaCounts = {
     pending: betaSignups.filter(s => s.status === 'pending').length,
     approved: betaSignups.filter(s => s.status === 'approved').length,
@@ -417,6 +529,13 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
           {isBetaAdmin && (
             <button className={`org-tab ${panelTab === 'beta' ? 'org-tab--on' : ''}`} onClick={() => setPanelTab('beta')}>
               Beta program{betaCounts.pending > 0 ? ` (${betaCounts.pending})` : ''}
+            </button>
+          )}
+          {/* Hidden until founding_user_admin.sql is run — the RPC returns zero
+              rows before that, and there is always at least one user after. */}
+          {isBetaAdmin && allUsers.length > 0 && (
+            <button className={`org-tab ${panelTab === 'users' ? 'org-tab--on' : ''}`} onClick={() => setPanelTab('users')}>
+              Users ({allUsers.length})
             </button>
           )}
         </div>
@@ -780,6 +899,177 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
                 </li>
               ))}
             </ul>
+          </>
+        )}
+
+        {panelTab === 'users' && isBetaAdmin && !loading && (
+          <>
+            <h3 className="org-section-title">All users ({allUsers.length})</h3>
+            <p className="shopify-conn-help">
+              Every account across every workspace. Changing someone's workspace changes
+              what they can open — their batches, products, and images stay with the
+              workspace that has them today, so a move is always reversible by moving
+              them back. Every change here is logged below with your name on it.
+            </p>
+            <div className="beta-toolbar">
+              <div className="beta-search">
+                <Search size={13} />
+                <input
+                  placeholder="Search by email or workspace"
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                />
+              </div>
+            </div>
+            {matchingUsers.length === 0 && (
+              <p className="org-panel-loading">Nobody matches that search.</p>
+            )}
+            <ul className="org-member-list">
+              {visibleUsers.map(u => {
+                const joinable = orgOptions.filter(o => !u.memberships.some(ms => ms.org_id === o.id));
+                const draft = addDraft[u.user_id];
+                return (
+                  <li key={u.user_id} className="org-member-row fa-user-row">
+                    <div className="fa-user-head">
+                      <span className="org-member-email">
+                        <UserCog size={13} />
+                        <strong>{u.email ?? u.user_id.slice(0, 8)}</strong>
+                        {u.user_id === myUserId ? ' (you)' : ''}
+                        <span className="org-member-date">
+                          signed up {fmtDate(u.created_at)}
+                          {u.last_sign_in_at ? ` · last sign-in ${fmtDate(u.last_sign_in_at)}` : ' · never signed in'}
+                        </span>
+                      </span>
+                      {u.memberships.length === 0 && (
+                        <span className="org-role-badge beta-status-denied" title="Signed up but has no workspace — they see the waitlist screen.">
+                          no workspace
+                        </span>
+                      )}
+                    </div>
+
+                    {u.memberships.length > 0 && (
+                      <ul className="fa-membership-list">
+                        {u.memberships.map(ms => {
+                          const key = `${u.user_id}:${ms.org_id}`;
+                          const target = moveDraft[key];
+                          return (
+                            <li key={ms.org_id} className="fa-membership-row">
+                              <span className="fa-ms-org">
+                                <Building2 size={12} />
+                                {ms.org_name}
+                                {ms.org_slug === 'founding' && (
+                                  <span className="org-role-badge org-role-owner">founding</span>
+                                )}
+                              </span>
+                              <select
+                                className="org-role-select"
+                                value={ms.role}
+                                disabled={busy}
+                                title="Change their role in this workspace"
+                                onChange={(e) => handleSetMembership(u, ms.org_id, e.target.value as OrgRole)}
+                              >
+                                <option value="owner">Owner</option>
+                                <option value="admin">Admin</option>
+                                <option value="member">Member</option>
+                              </select>
+                              {target ? (
+                                <span className="org-confirm-actions">
+                                  <span className="fa-move-label">Move to {orgNameOf(target)}?</span>
+                                  <button className="org-confirm-yes" disabled={busy}
+                                    onClick={() => handleMoveUser(u, ms.org_id, target)}>Move</button>
+                                  <button className="org-confirm-no" disabled={busy}
+                                    onClick={() => clearMoveDraft(key)}>Cancel</button>
+                                </span>
+                              ) : (
+                                <select
+                                  className="fa-move-select"
+                                  value=""
+                                  disabled={busy || orgOptions.length < 2}
+                                  title="Move them to another workspace"
+                                  onChange={(e) => {
+                                    if (e.target.value) setMoveDraft(d => ({ ...d, [key]: e.target.value }));
+                                  }}
+                                >
+                                  <option value="">Move to…</option>
+                                  {orgOptions.filter(o => o.id !== ms.org_id).map(o => (
+                                    <option key={o.id} value={o.id}>{o.name}</option>
+                                  ))}
+                                </select>
+                              )}
+                              {confirmKey === `fa-remove:${key}` ? (
+                                <span className="org-confirm-actions">
+                                  <button className="org-confirm-yes" disabled={busy}
+                                    onClick={() => handleRemoveMembership(u, ms.org_id)}>Remove</button>
+                                  <button className="org-confirm-no" disabled={busy}
+                                    onClick={() => setConfirmKey(null)}>Cancel</button>
+                                </span>
+                              ) : (
+                                <button className="org-member-remove" disabled={busy}
+                                  title="Remove them from this workspace"
+                                  onClick={() => setConfirmKey(`fa-remove:${key}`)}>Remove</button>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+
+                    {joinable.length > 0 && (
+                      <div className="fa-add-row">
+                        <select
+                          value={draft?.orgId ?? ''}
+                          disabled={busy}
+                          onChange={(e) => setAddDraft(d => ({
+                            ...d,
+                            [u.user_id]: { orgId: e.target.value, role: d[u.user_id]?.role ?? 'member' },
+                          }))}
+                        >
+                          <option value="">Add to workspace…</option>
+                          {joinable.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                        </select>
+                        <select
+                          value={draft?.role ?? 'member'}
+                          disabled={busy || !draft?.orgId}
+                          onChange={(e) => setAddDraft(d => ({
+                            ...d,
+                            [u.user_id]: { orgId: d[u.user_id]?.orgId ?? '', role: e.target.value as OrgRole },
+                          }))}
+                        >
+                          <option value="member">Member</option>
+                          <option value="admin">Admin</option>
+                          <option value="owner">Owner</option>
+                        </select>
+                        <button className="org-invite-btn" disabled={busy || !draft?.orgId}
+                          onClick={() => handleAddToOrg(u)}>Add</button>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+            {matchingUsers.length > USER_RENDER_CAP && (
+              <p className="org-panel-loading">
+                Showing the first {USER_RENDER_CAP} of {matchingUsers.length} — search to narrow it down.
+              </p>
+            )}
+
+            {audit.length > 0 && (
+              <>
+                <h3 className="org-section-title">
+                  <History size={13} /> Recent user changes ({audit.length})
+                </h3>
+                <ul className="org-member-list fa-audit-list">
+                  {audit.map(a => (
+                    <li key={a.id} className="org-member-row fa-audit-row">
+                      <span className="org-member-email">
+                        <strong>{a.actor_email ?? 'someone'}</strong> {auditSummary(a)}
+                        <span className="org-member-date">{fmtDate(a.created_at)}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </>
         )}
 
