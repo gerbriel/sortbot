@@ -1,6 +1,7 @@
 /* Global scale — keeps everything proportional without browser zoom.
-   9px root is deliberate (commit 0eae362): it reproduces the 67%-zoom look the
-   team works at, at 100% zoom. EVERY rem in this app is relative to 9px. */
+   9px root (commit 0eae362) now ONLY drives the rem spacing grid — every
+   --space- and --radius- value is tuned to it. TYPE no longer flows from here:
+   --fs-* scale is absolute px and body sets the real text baseline. */
 html {
   font-size: 9px;
 }
@@ -128,25 +129,24 @@ html {
   --space-12: 3rem;
 
   /* ── Type scale ───────────────────────────────────────────────────────────
-     Steps 1-4 had drifted to 35 distinct font-size values — four of them inside
-     a 0.05rem band (0.8 / 0.8125 / 0.82 / 0.85), plus stray px values that
-     ignore the 9px root entirely and a handful of !important overrides. This is
-     the ramp everything snaps to.
+     DELIBERATELY IN px, NOT rem. The root is pinned at 9px (below), so a rem
+     type scale meant every size carried an invisible ×0.5625 and "1rem" meant
+     9px — which is how the app drifted to ~60 sizes, several of them under 7px.
+     Spacing/radius stay rem (they are tuned to that 9px grid and moving them
+     would reflow every layout); TYPE is absolute and now says what it means.
 
-     REMEMBER THE ROOT IS 9px, so 1rem = 9px. The px column below is what the
-     user actually sees — that is the number to reason about, not the rem.
-     Sizes were chosen to preserve the existing dense look (this app is meant to
-     read like it is at 67% zoom); only the sub-6.5px tiers were lifted, because
-     nothing below that is legible. */
-  --fs-2xs:  0.72rem;   /*  6.5px — badges, chips, micro-meta */
-  --fs-xs:   0.8rem;    /*  7.2px — captions, secondary meta */
-  --fs-sm:   0.88rem;   /*  7.9px — secondary UI text, dense table cells */
-  --fs-base: 1rem;      /*  9.0px — body, buttons, inputs (the default) */
-  --fs-md:   1.15rem;   /* 10.4px — emphasized body, card titles */
-  --fs-lg:   1.4rem;    /* 12.6px — section headings */
-  --fs-xl:   2rem;      /* 18.0px — step titles */
-  --fs-2xl:  2.5rem;    /* 22.5px — page headings */
-  --fs-3xl:  3rem;      /* 27.0px — hero */
+     These are conventional web-app sizes: 14px body, 13px secondary, 12px meta.
+     Changing a value here changes it everywhere — that is the point of having
+     unified all ~560 declarations onto these nine tokens. */
+  --fs-2xs:  11px;   /* badges, chips, micro-meta */
+  --fs-xs:   12px;   /* captions, secondary meta */
+  --fs-sm:   13px;   /* secondary UI text, dense table cells */
+  --fs-base: 14px;   /* body, buttons, inputs (the default) */
+  --fs-md:   16px;   /* emphasized body, card titles */
+  --fs-lg:   18px;   /* section headings */
+  --fs-xl:   22px;   /* step titles */
+  --fs-2xl:  28px;   /* page headings */
+  --fs-3xl:  36px;   /* hero */
 
   /* Line heights pair with the scale: tighter as type gets larger. */
   --lh-tight:   1.25;   /* headings */
@@ -194,6 +194,11 @@ body {
   min-height: 100vh;
   background-color: var(--ink-950);
   color: var(--text-primary);
+  /* The root is pinned at 9px for the rem SPACING grid. Without this, anything
+     without an explicit font-size inherits that 9px and renders unreadably
+     small. Body owns the real text baseline. */
+  font-size: var(--fs-base);
+  line-height: var(--lh-normal);
 }
 
 /* Selection picks up the accent — small detail, reads as considered. */
@@ -224,6 +229,12 @@ body {
 .lucide {
   flex-shrink: 0;
   vertical-align: -0.125em;
+  /* Sized in em so an icon always matches the text beside it. The size={N}
+     props in the TSX were picked against the old 9px-root type and would look
+     undersized now — this overrides them everywhere, so type and iconography
+     stay in proportion from one place. */
+  width: 1.15em;
+  height: 1.15em;
 }
 
 input::placeholder,
@@ -243,9 +254,9 @@ h1, h2, h3, h4, h5, h6 {
   margin-bottom: var(--space-4);
 }
 
-h1 { font-size: var(--fs-xl);     letter-spacing: -0.035em; font-weight: 650; }
-h2 { font-size: var(--fs-lg);   letter-spacing: -0.03em; }
-h3 { font-size: var(--fs-md);  letter-spacing: -0.025em; }
+h1 { font-size: var(--fs-2xl);    letter-spacing: -0.035em; font-weight: 650; }
+h2 { font-size: var(--fs-xl);   letter-spacing: -0.03em; }
+h3 { font-size: var(--fs-lg);  letter-spacing: -0.025em; }
 h4 { font-size: var(--fs-md); }
 h5 { font-size: var(--fs-base); }
 h6 { font-size: var(--fs-sm); }

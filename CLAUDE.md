@@ -58,22 +58,31 @@ The app had drifted to ~60 distinct font-size values app-wide (four inside a sin
 0.05rem band, mixed `px`/`rem`, `!important` overrides). All of them now snap to one
 9-step ramp defined in `index.css`:
 
-| Token | rem | **renders as** | use |
-|---|---|---|---|
-| `--fs-2xs` | 0.72 | 6.5px | badges, chips, micro-meta |
-| `--fs-xs` | 0.8 | 7.2px | captions, secondary meta |
-| `--fs-sm` | 0.88 | 7.9px | secondary UI text, dense cells |
-| `--fs-base` | 1 | 9.0px | body, buttons, inputs |
-| `--fs-md` | 1.15 | 10.4px | emphasized body, card titles |
-| `--fs-lg` | 1.4 | 12.6px | section headings |
-| `--fs-xl` | 2 | 18.0px | step titles |
-| `--fs-2xl` | 2.5 | 22.5px | page headings |
-| `--fs-3xl` | 3 | 27.0px | hero |
+| Token | size | use |
+|---|---|---|
+| `--fs-2xs` | 11px | badges, chips, micro-meta |
+| `--fs-xs` | 12px | captions, secondary meta |
+| `--fs-sm` | 13px | secondary UI text, dense cells |
+| `--fs-base` | 14px | body, buttons, inputs |
+| `--fs-md` | 16px | emphasized body, card titles |
+| `--fs-lg` | 18px | section headings |
+| `--fs-xl` | 22px | step titles |
+| `--fs-2xl` | 28px | page headings |
+| `--fs-3xl` | 36px | hero |
 
-**Reason in the px column, not the rem** — the root is 9px (§16 Known Bugs), so `1rem`
-is 9px and a stray `font-size: 12px` renders *larger* than `1rem`, not smaller. That
-inversion is what produced most of the original drift. Pair with `--lh-tight` /
-`--lh-snug` / `--lh-normal`.
+**The type scale is in px on purpose; spacing/radius stay rem.** The root is pinned at
+9px for the rem spacing grid (§16), which meant a rem type scale carried an invisible
+×0.5625 and `1rem` rendered as 9px — that inversion is how the app drifted to ~60 sizes,
+several under 7px, and why a stray `font-size: 12px` was *larger* than `1rem`. Type is
+now absolute and says what it means. Moving spacing to px would reflow every layout, so
+it stays rem. Pair sizes with `--lh-tight` / `--lh-snug` / `--lh-normal`.
+
+`body` sets `font-size: var(--fs-base)`. Without it, anything with no explicit size
+inherits the 9px root and renders unreadably small — body owns the real text baseline,
+`html` only owns the spacing grid.
+
+**Retuning the whole app is a 9-line change.** Every one of the ~560 font-size
+declarations resolves through these tokens, so sizing is adjusted here, never per-file.
 
 Applies to inline styles too: `style={{ fontSize: 'var(--fs-sm)' }}`, not a literal.
 
