@@ -20,7 +20,7 @@
 }
 
 .waitlist-brand {
-  font-size: 1.2rem;
+  font-size: var(--fs-md);
   font-weight: 800;
   color: var(--accent);
   display: flex;
@@ -31,7 +31,7 @@
 }
 
 .waitlist-chip {
-  font-size: 0.62rem;
+  font-size: var(--fs-2xs);
   font-weight: 800;
   /* BETA mark — gold is the founder/beta accent. Dark ink for the label:
      the gold fill is light, so dark-on-gold is the readable pairing. */
@@ -42,9 +42,9 @@
   letter-spacing: 0.08em;
 }
 
-.waitlist-card h1 { font-size: 1.45rem; color: var(--text-primary); margin-bottom: 0.6rem; }
+.waitlist-card h1 { font-size: var(--fs-lg); color: var(--text-primary); margin-bottom: 0.6rem; }
 /* body copy the user must actually read — secondary, never muted */
-.waitlist-card p { color: var(--text-secondary); font-size: 0.95rem; line-height: 1.55; }
+.waitlist-card p { color: var(--text-secondary); font-size: var(--fs-base); line-height: 1.55; }
 
 .waitlist-form { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 1.1rem; }
 
@@ -52,7 +52,7 @@
   padding: 0.65rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: 8px;
-  font-size: 0.95rem;
+  font-size: var(--fs-base);
   /* The global input background is --ink-850, the same step as this card, so
      the field would vanish into it. Recess it one step instead. */
   background: var(--ink-900);
@@ -66,7 +66,7 @@
   background: linear-gradient(135deg, var(--accent), var(--accent-press));
   color: var(--ink-950);
   font-weight: 800;
-  font-size: 1rem;
+  font-size: var(--fs-base);
   padding: 0.7rem;
   border: none;
   border-radius: 8px;
@@ -75,16 +75,16 @@
 
 .waitlist-form button:disabled { opacity: 0.6; cursor: default; }
 
-.waitlist-error { color: var(--danger); font-weight: 700; font-size: 0.85rem; margin-top: 0.4rem; }
+.waitlist-error { color: var(--danger); font-weight: 700; font-size: var(--fs-sm); margin-top: 0.4rem; }
 
-.waitlist-footnote { margin-top: 1.4rem; font-size: 0.78rem; color: var(--text-muted); }
+.waitlist-footnote { margin-top: 1.4rem; font-size: var(--fs-xs); color: var(--text-muted); }
 
 .waitlist-signout {
   margin-top: 0.9rem;
   background: none;
   border: none;
   color: var(--accent);
-  font-size: 0.82rem;
+  font-size: var(--fs-xs);
   font-weight: 700;
   cursor: pointer;
   text-decoration: underline;

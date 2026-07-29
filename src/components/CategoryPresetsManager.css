@@ -36,7 +36,7 @@
 
 .presets-header h2 {
   margin: 0;
-  font-size: 2rem;
+  font-size: var(--fs-xl);
   color: var(--text-primary);
 }
 
@@ -49,7 +49,7 @@
 .button-close {
   background: none;
   border: none;
-  font-size: 1.5rem;
+  font-size: var(--fs-lg);
   color: var(--text-secondary);
   cursor: pointer;
   padding: 0.5rem;
@@ -105,7 +105,7 @@
 
 .preset-header h3 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: var(--fs-md);
   color: var(--text-primary);
 }
 
@@ -114,14 +114,14 @@
   color: var(--info);
   padding: 0.25rem 0.75rem;
   border-radius: 12px;
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   font-weight: 500;
 }
 
 .preset-description {
   color: var(--text-secondary);
   margin-bottom: 1rem;
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
 }
 
 .preset-details {
@@ -136,7 +136,7 @@
 }
 
 .preset-detail {
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
 }
 
@@ -153,7 +153,7 @@
 .preset-actions button {
   flex: 1;
   padding: 0.5rem 1rem;
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
 }
 
 /* Form Modal */
@@ -186,7 +186,7 @@
 .preset-form-modal h3 {
   margin-top: 0;
   margin-bottom: 1.5rem;
-  font-size: 1.5rem;
+  font-size: var(--fs-lg);
   color: var(--text-primary);
 }
 
@@ -203,7 +203,7 @@
 .form-section h4 {
   margin-top: 0;
   margin-bottom: 1rem;
-  font-size: 1.125rem;
+  font-size: var(--fs-md);
   color: var(--text-primary);
 }
 
@@ -216,7 +216,7 @@
   margin-bottom: 0.5rem;
   font-weight: 500;
   color: var(--text-secondary);
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
 }
 
 .form-group input[type="text"],
@@ -227,7 +227,7 @@
   padding: 0.75rem;
   border: 1px solid var(--border);
   border-radius: 6px;
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
   background: var(--ink-850);
   color: var(--text-primary);
   transition: border-color 0.2s;
@@ -250,12 +250,12 @@
 .form-group small {
   display: block;
   margin-top: 0.25rem;
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
 }
 
 .form-hint {
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   margin-bottom: 1rem;
 }
@@ -316,7 +316,7 @@
 
 .form-actions button {
   padding: 0.75rem 1.5rem;
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
   min-width: 120px;
 }
 
@@ -328,7 +328,7 @@
   border: none;
   padding: 0.75rem 1.5rem;
   border-radius: 6px;
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
   transition: background 0.2s;
@@ -431,7 +431,7 @@
 
 .section-header-row h4 {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: var(--fs-base);
   color: var(--text-primary);
 }
 
@@ -446,7 +446,7 @@
   border-radius: 4px;
   cursor: pointer;
   padding: 0.2rem 0.4rem;
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   transition: all 0.15s;
 }
@@ -469,7 +469,7 @@
 
 .button-sm {
   padding: 0.35rem 0.75rem !important;
-  font-size: 0.82rem !important;
+  font-size: var(--fs-xs) !important;
 }
 
 /* Custom fields block */
@@ -488,7 +488,7 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.45rem 0.7rem;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
 }
 
 .custom-field-label {
@@ -502,13 +502,13 @@
   color: var(--accent);
   border-radius: 999px;
   padding: 0.1rem 0.55rem;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   font-weight: 500;
 }
 
 .custom-field-default {
   color: var(--text-secondary);
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   font-style: italic;
 }
 
@@ -549,7 +549,7 @@
 
 .field-modal-header h4 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: var(--fs-md);
   color: var(--text-primary);
 }
 

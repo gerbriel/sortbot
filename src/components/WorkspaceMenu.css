@@ -51,11 +51,11 @@
   gap: 0.4rem;
   font-weight: 700;
   color: var(--text-primary);
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
 }
 
 .wsmenu-role {
-  font-size: 0.62rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   text-transform: uppercase;
   padding: 0.1rem 0.4rem;
@@ -69,7 +69,7 @@
 .wsmenu-role-admin { background: var(--accent-dim); color: var(--accent); }
 
 .wsmenu-id-email {
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   /* identifies the signed-in account — secondary, not muted */
   color: var(--text-secondary);
   overflow: hidden;
@@ -86,7 +86,7 @@
   border: none;
   border-radius: 8px;
   padding: 0.45rem 0.6rem;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-primary);
   cursor: pointer;

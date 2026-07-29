@@ -1880,7 +1880,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
                 paddingBottom: '0.45rem',
                 border: '1px solid var(--border-control)',
                 borderRadius: '6px',
-                fontSize: '0.9rem',
+                fontSize: 'var(--fs-sm)',
                 outline: 'none',
                 boxSizing: 'border-box',
               }}
@@ -1893,7 +1893,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
                 display: 'flex', alignItems: 'center', gap: '0.3rem',
                 background: 'var(--accent)', color: 'var(--ink-950)', border: 'none',
                 borderRadius: '6px', padding: '0.45rem 0.85rem',
-                fontSize: '0.85rem', cursor: 'pointer', whiteSpace: 'nowrap',
+                fontSize: 'var(--fs-sm)', cursor: 'pointer', whiteSpace: 'nowrap',
               }}
               title="Create a new empty batch"
             >
@@ -2154,7 +2154,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
               <Folder size={16} className="folder-icon" />
               {currentBatchId === batch.id && (
                 <span style={{
-                  fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px',
+                  fontSize: 'var(--fs-2xs)', fontWeight: 700, padding: '1px 6px',
                   background: 'var(--success)', color: 'var(--ink-950)', borderRadius: 999,
                   letterSpacing: '0.03em', flexShrink: 0,
                 }}>● Active</span>
@@ -2217,7 +2217,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
                 const editedBy = (batch as any).lastEditedBy || (batch.workflow_state as any)?.lastEditedBy;
                 if (!editedBy) return null;
                 return (
-                  <div className="meta-row" style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }} title={`Last edited by ${editedBy}`}>
+                  <div className="meta-row" style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-xs)' }} title={`Last edited by ${editedBy}`}>
                     <User size={13} />
                     <span>edited by {editedBy}</span>
                   </div>
@@ -2689,7 +2689,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
                 </button>
                 {batchKey === 'no-batch' && (
                   <>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.25rem' }}>
+                    <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', marginLeft: '0.25rem' }}>
                       (orphaned duplicates — safe to delete)
                     </span>
                     <button
@@ -2718,7 +2718,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
                 if (groupEntries.length === 0 && batchProductGroups.length > 0) {
                   return (
-                    <div style={{ padding: '8px 24px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                    <div style={{ padding: '8px 24px', color: 'var(--text-muted)', fontSize: 'var(--fs-lg)' }}>
                       {batchProductGroups.map(g => (
                         <div key={g.id} className="image-group-section">
                           <div className="image-group-header" style={{ cursor: 'default' }}>
@@ -2734,7 +2734,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
                 if (groupEntries.length === 0) {
                   return (
-                    <div style={{ padding: '12px 24px', color: 'var(--text-muted)', fontSize: '13px', fontStyle: 'italic' }}>
+                    <div style={{ padding: '12px 24px', color: 'var(--text-muted)', fontSize: 'var(--fs-lg)', fontStyle: 'italic' }}>
                       No images in this batch yet
                     </div>
                   );

@@ -51,10 +51,10 @@
   color: var(--accent);
 }
 
-.kanban-title h2 { margin: 0; font-size: 1.15rem; color: var(--text-primary); }
+.kanban-title h2 { margin: 0; font-size: var(--fs-md); color: var(--text-primary); }
 
 .kanban-scope-badge {
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   text-transform: uppercase;
   padding: 0.12rem 0.45rem;
@@ -83,14 +83,14 @@
   color: var(--accent);
   border-radius: 8px;
   padding: 0.5rem 0.7rem;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   margin-bottom: 0.6rem;
   flex-shrink: 0;
 }
 
 .kanban-loading, .kanban-detail-hint, .kanban-lane-empty {
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   margin: 0.4rem 0;
 }
 
@@ -103,7 +103,7 @@
   border-radius: 8px;
   padding: 0.8rem 1rem;
   color: var(--warning);
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
 }
 
 .kanban-unavailable p { margin: 0 0 0.35rem; }
@@ -113,7 +113,7 @@
   background: var(--ink-900);
   padding: 0.05rem 0.3rem;
   border-radius: 4px;
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
 }
 
 /* ── Lanes ──────────────────────────────────────────────────────────────── */
@@ -151,11 +151,11 @@
   flex-shrink: 0;
 }
 
-.kanban-lane-name { font-size: 0.85rem; font-weight: 700; color: var(--text-primary); }
+.kanban-lane-name { font-size: var(--fs-sm); font-weight: 700; color: var(--text-primary); }
 .kanban-lane-name--done { color: var(--success); }
 
 .kanban-lane-count {
-  font-size: 0.7rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   color: var(--text-secondary); /* AA on the raised pill — muted would fall to ~3.8:1 */
   background: var(--ink-750);
@@ -181,7 +181,7 @@
   background: none;
   border: none;
   color: var(--text-secondary);
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   padding: 0.35rem 0.2rem;
   cursor: pointer;
@@ -209,10 +209,10 @@
 
 .kanban-card-top { display: flex; align-items: baseline; gap: 0.3rem; flex-wrap: wrap; }
 
-.kanban-card-title { font-size: 0.85rem; color: var(--text-primary); font-weight: 600; line-height: 1.35; }
+.kanban-card-title { font-size: var(--fs-sm); color: var(--text-primary); font-weight: 600; line-height: 1.35; }
 
 .kanban-epic-badge {
-  font-size: 0.6rem;
+  font-size: var(--fs-2xs);
   font-weight: 800;
   text-transform: uppercase;
   background: var(--warning-dim);
@@ -234,7 +234,7 @@
 .kanban-progress-fill { height: 100%; background: var(--accent); border-radius: 20px; }
 .kanban-progress-fill--done { background: var(--success); }
 
-.kanban-progress-label { font-size: 0.65rem; font-weight: 700; color: var(--text-secondary); }
+.kanban-progress-label { font-size: var(--fs-2xs); font-weight: 700; color: var(--text-secondary); }
 
 .kanban-card-foot {
   display: flex;
@@ -246,7 +246,7 @@
 
 .kanban-card-avatars { display: flex; gap: 0.15rem; margin-left: auto; }
 
-.kanban-comment-count { font-size: 0.62rem; color: var(--text-muted); font-weight: 600; }
+.kanban-comment-count { font-size: var(--fs-2xs); color: var(--text-muted); font-weight: 600; }
 
 /* ── Avatars, badges ────────────────────────────────────────────────────── */
 
@@ -259,15 +259,15 @@
   border-radius: 20px;
   background: var(--accent-dim);
   color: var(--accent);
-  font-size: 0.58rem;
+  font-size: var(--fs-2xs);
   font-weight: 800;
   flex-shrink: 0;
 }
 
-.kanban-avatar--sm { width: 15px; height: 15px; font-size: 0.52rem; }
+.kanban-avatar--sm { width: 15px; height: 15px; font-size: var(--fs-2xs); }
 
 .kanban-date-badge {
-  font-size: 0.62rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   border-radius: 4px;
   padding: 0.05rem 0.3rem;
@@ -314,7 +314,7 @@
   border: none;
   border-radius: 8px;
   font-weight: 700;
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -329,7 +329,7 @@
   color: var(--ink-950); /* danger is LIGHT on dark — label must be near-black */
   border: none;
   border-radius: 6px;
-  font-size: 0.7rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   padding: 0.2rem 0.55rem;
   cursor: pointer;
@@ -348,7 +348,7 @@
   border: 1px solid var(--border);
   color: var(--text-secondary);
   border-radius: 6px;
-  font-size: 0.7rem;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   padding: 0.2rem 0.55rem;
   cursor: pointer;
@@ -365,7 +365,7 @@
   border: 1px solid var(--danger);
   color: var(--danger);
   border-radius: 8px;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   font-weight: 700;
   padding: 0.3rem 0.6rem;
   cursor: pointer;
@@ -384,7 +384,7 @@
   padding: 0.4rem 0.55rem;
   border: 1px solid var(--border);
   border-radius: 8px;
-  font-size: 0.82rem;
+  font-size: var(--fs-xs);
   width: 100%;
 }
 
@@ -419,7 +419,7 @@
   border: 1px solid transparent;
   border-radius: 6px;
   padding: 0.25rem 0.35rem;
-  font-size: 1rem;
+  font-size: var(--fs-base);
   font-weight: 700;
   color: var(--text-primary);
   background: none;
@@ -440,20 +440,20 @@
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
 }
 
-.kanban-detail-byline { font-size: 0.7rem; color: var(--text-muted); }
+.kanban-detail-byline { font-size: var(--fs-2xs); color: var(--text-muted); }
 
 .kanban-detail-section { border-top: 1px solid var(--border-subtle); padding-top: 0.6rem; margin-bottom: 0.6rem; }
 
 /* Section labels are 0.7rem uppercase — too small to sit at --text-muted. */
 .kanban-detail-section h4 {
   margin: 0 0 0.4rem;
-  font-size: 0.7rem;
+  font-size: var(--fs-2xs);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -465,7 +465,7 @@
   padding: 0.45rem 0.6rem;
   border: 1px solid var(--border);
   border-radius: 8px;
-  font-size: 0.82rem;
+  font-size: var(--fs-xs);
   font-family: inherit;
   resize: vertical;
 }
@@ -473,19 +473,19 @@
 .kanban-date-row { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 
 .kanban-date-field { display: flex; flex-direction: column; gap: 0.15rem; }
-.kanban-date-field span { font-size: 0.65rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; }
+.kanban-date-field span { font-size: var(--fs-2xs); font-weight: 700; color: var(--text-secondary); text-transform: uppercase; }
 
 .kanban-date-field input {
   padding: 0.3rem 0.4rem;
   border: 1px solid var(--border);
   border-radius: 6px;
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   font-family: inherit;
 }
 
 .kanban-date-warn {
   margin: 0.35rem 0 0;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--danger);
 }
@@ -502,7 +502,7 @@
   border: 1px solid transparent;
   color: var(--text-secondary);
   border-radius: 20px;
-  font-size: 0.72rem;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   padding: 0.15rem 0.5rem 0.15rem 0.15rem;
   cursor: pointer;
@@ -525,10 +525,10 @@
   padding: 0.2rem 0;
 }
 
-.kanban-task-title { font-size: 0.82rem; color: var(--text-primary); flex: 1; }
+.kanban-task-title { font-size: var(--fs-xs); color: var(--text-primary); flex: 1; }
 .kanban-task-title--done { color: var(--text-muted); text-decoration: line-through; }
 
-.kanban-task-progress { font-size: 0.65rem; font-weight: 700; color: var(--text-secondary); }
+.kanban-task-progress { font-size: var(--fs-2xs); font-weight: 700; color: var(--text-secondary); }
 
 .kanban-task-detail {
   display: flex;
@@ -572,12 +572,12 @@
 
 .kanban-comment-head { display: flex; align-items: center; gap: 0.3rem; }
 
-.kanban-comment-author { font-size: 0.7rem; font-weight: 700; color: var(--text-secondary); }
-.kanban-comment-when { font-size: 0.62rem; color: var(--text-muted); margin-right: auto; }
+.kanban-comment-author { font-size: var(--fs-2xs); font-weight: 700; color: var(--text-secondary); }
+.kanban-comment-when { font-size: var(--fs-2xs); color: var(--text-muted); margin-right: auto; }
 
 .kanban-comment-body {
   margin: 0.2rem 0 0;
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   color: var(--text-primary);
   line-height: 1.4;
   white-space: pre-wrap;
@@ -614,7 +614,7 @@
   border: none;
   background: var(--ink-850);
   color: var(--text-secondary);
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   padding: 0.32rem 0.6rem;
   cursor: pointer;
@@ -657,7 +657,7 @@
 .kanban-atlas-search input {
   border: none;
   outline: none;
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   width: 100%;
   color: var(--text-primary);
   background: transparent;
@@ -668,7 +668,7 @@
 .kanban-atlas-lanechip {
   border: 1px solid transparent;
   border-radius: 20px;
-  font-size: 0.72rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   padding: 0.22rem 0.55rem;
   cursor: pointer;
@@ -679,7 +679,7 @@
 
 .kanban-atlas-lanechip-n { opacity: 0.75; font-weight: 600; }
 .kanban-atlas-lanechip--off { opacity: 0.35; text-decoration: line-through; }
-.kanban-atlas-showing { margin-left: auto; font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
+.kanban-atlas-showing { margin-left: auto; font-size: var(--fs-2xs); color: var(--text-muted); white-space: nowrap; }
 
 /* lane status colours — chips and card pills share these.
    Each status maps onto a semantic token pair, so the five states stay
@@ -701,7 +701,7 @@
 }
 
 .kanban-atlas-map-step { display: inline-flex; align-items: center; gap: 0.3rem; }
-.kanban-atlas-map-arrow { color: var(--text-faint); font-size: 0.8rem; }
+.kanban-atlas-map-arrow { color: var(--text-faint); font-size: var(--fs-xs); }
 
 .kanban-atlas-map-node {
   display: inline-flex;
@@ -711,7 +711,7 @@
   border-top: 3px solid var(--atlas-c, var(--accent));
   border-radius: 8px;
   background: var(--ink-850);
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text-primary);
   padding: 0.28rem 0.55rem;
@@ -766,14 +766,14 @@
 }
 
 .kanban-atlas-sec-step {
-  font-size: 0.62rem;
+  font-size: var(--fs-2xs);
   font-weight: 800;
   letter-spacing: 0.08em;
   color: var(--atlas-c, var(--accent));
 }
 
-.kanban-atlas-sec-head h3 { margin: 0; font-size: 0.95rem; color: var(--text-primary); }
-.kanban-atlas-sec-count { margin-left: auto; font-size: 0.72rem; color: var(--text-muted); }
+.kanban-atlas-sec-head h3 { margin: 0; font-size: var(--fs-base); color: var(--text-primary); }
+.kanban-atlas-sec-count { margin-left: auto; font-size: var(--fs-2xs); color: var(--text-muted); }
 
 /* atlas card rows */
 .kanban-atlas-card {
@@ -792,7 +792,7 @@
 .kanban-atlas-card-head { display: flex; align-items: center; gap: 0.4rem; }
 
 .kanban-atlas-card-name {
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   font-weight: 700;
   color: var(--text-primary);
   flex: 1;
@@ -807,7 +807,7 @@
 .kanban-atlas-lane-pill {
   border: none;
   border-radius: 20px;
-  font-size: 0.7rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   padding: 0.2rem 0.5rem;
   cursor: pointer;
@@ -820,7 +820,7 @@
 
 .kanban-atlas-desc {
   margin: 0.35rem 0 0;
-  font-size: 0.76rem;
+  font-size: var(--fs-xs);
   line-height: 1.45;
   color: var(--text-secondary);
   white-space: pre-line;
@@ -829,7 +829,7 @@
 .kanban-atlas-tasks { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.4rem; }
 
 .kanban-atlas-task {
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   color: var(--text-secondary);
   background: var(--ink-750);
   border-radius: 5px;
@@ -848,7 +848,7 @@
   gap: 0.15rem;
 }
 
-.kanban-atlas-wiring li { font-size: 0.7rem; color: var(--text-secondary); line-height: 1.4; }
+.kanban-atlas-wiring li { font-size: var(--fs-2xs); color: var(--text-secondary); line-height: 1.4; }
 .kanban-atlas-wiring b { color: var(--text-primary); font-weight: 700; }
 
-.kanban-atlas-empty { color: var(--text-muted); font-size: 0.8rem; padding: 1.5rem 0; text-align: center; }
+.kanban-atlas-empty { color: var(--text-muted); font-size: var(--fs-xs); padding: 1.5rem 0; text-align: center; }

@@ -684,7 +684,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
                 background: genderFilter === g ? 'var(--accent)' : 'var(--ink-850)',
                 color: genderFilter === g ? 'var(--ink-950)' : 'var(--text-secondary)',
                 fontWeight: 600,
-                fontSize: '0.8rem',
+                fontSize: 'var(--fs-xs)',
                 cursor: 'pointer',
                 transition: 'all 0.15s',
               }}
@@ -707,7 +707,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
               padding: '0.4rem 2rem 0.4rem 0.75rem',
               borderRadius: '8px',
               border: '1.5px solid var(--border-control)',
-              fontSize: '0.8rem',
+              fontSize: 'var(--fs-xs)',
               outline: 'none',
               boxSizing: 'border-box',
               // Was '#fff', which overrode the global dark input rule and left
@@ -730,7 +730,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
                 color: 'var(--text-muted)',
                 padding: 0,
                 lineHeight: 1,
-                fontSize: '1rem',
+                fontSize: 'var(--fs-base)',
               }}
               aria-label="Clear search"
             >×</button>
@@ -739,7 +739,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
 
         <h3><Tag size={13} style={{ flexShrink: 0 }} /> {compactMode ? 'Drop Here to Categorize' : 'Drag Groups Here to Categorize'}</h3>
         {compactMode && selectedItemIds && selectedItemIds.size > 0 && (
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0 0 0.5rem', textAlign: 'center' }}>
+          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', margin: '0 0 0.5rem', textAlign: 'center' }}>
             {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} selected — click a category to assign
           </p>
         )}

@@ -636,7 +636,7 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
                 background: genderFilter === g ? 'var(--accent)' : 'var(--ink-800)',
                 color: genderFilter === g ? 'var(--ink-950)' : 'var(--text-secondary)',
                 fontWeight: 600,
-                fontSize: '0.9rem',
+                fontSize: 'var(--fs-sm)',
                 cursor: 'pointer',
                 transition: 'all 0.15s',
               }}

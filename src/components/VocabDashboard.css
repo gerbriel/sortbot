@@ -34,10 +34,10 @@
   color: var(--accent);
 }
 
-.vocab-title h2 { margin: 0; font-size: 1.15rem; color: var(--text-primary); }
+.vocab-title h2 { margin: 0; font-size: var(--fs-md); color: var(--text-primary); }
 
 .vocab-scope-badge {
-  font-size: 0.62rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -71,7 +71,7 @@
   border: 1px solid transparent;
   color: var(--text-secondary);
   border-radius: 8px;
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   padding: 0.35rem 0.7rem;
   cursor: pointer;
@@ -102,7 +102,7 @@
   min-width: 0;
   border: none;
   outline: none;
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   color: var(--text-primary);
   background: transparent;
 }
@@ -113,13 +113,13 @@
   color: var(--accent);
   border-radius: 8px;
   padding: 0.5rem 0.7rem;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   margin-bottom: 0.6rem;
 }
 
 .vocab-help {
   margin: 0 0 0.6rem;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   /* Secondary, not muted — this is instructional copy the founder has to read. */
   color: var(--text-secondary);
   line-height: 1.5;
@@ -138,7 +138,7 @@
   padding: 0.45rem 0.6rem;
   border: 1px solid var(--border);
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
 }
 
 .vocab-add-btn {
@@ -152,7 +152,7 @@
   border: none;
   border-radius: 8px;
   font-weight: 700;
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -168,7 +168,7 @@
   gap: 0.5rem;
   padding: 0.4rem 0.2rem;
   border-bottom: 1px solid var(--border-subtle);
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
 }
 
 .vocab-row--off { opacity: 0.45; }
@@ -179,7 +179,7 @@
   color: var(--accent);
   border-radius: 20px;
   padding: 0.15rem 0.6rem;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -197,7 +197,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-secondary);
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
 }
 
 .vocab-muted { color: var(--text-muted); font-style: italic; }
@@ -206,7 +206,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 0.7rem;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
@@ -235,7 +235,7 @@
   padding: 0.3rem 0.5rem;
   border: 1px solid var(--accent-line);
   border-radius: 6px;
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   min-width: 110px;
 }
 
@@ -248,7 +248,7 @@
   color: var(--ink-950);
   border: none;
   border-radius: 6px;
-  font-size: 0.72rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   padding: 0.2rem 0.55rem;
   cursor: pointer;
@@ -263,7 +263,7 @@
   border: 1px solid var(--border);
   color: var(--text-secondary);
   border-radius: 6px;
-  font-size: 0.72rem;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   padding: 0.2rem 0.55rem;
   cursor: pointer;
@@ -271,18 +271,18 @@
 
 .vocab-confirm-no:hover:not(:disabled) { background: var(--ink-750); }
 
-.vocab-loading { color: var(--text-secondary); font-size: 0.85rem; }
+.vocab-loading { color: var(--text-secondary); font-size: var(--fs-sm); }
 
 .vocab-footnote {
   margin: 0.9rem 0 0;
-  font-size: 0.72rem;
+  font-size: var(--fs-2xs);
   color: var(--text-muted);
 }
 
 /* ── Built-in brand library ─────────────────────────────────────────────── */
 .vocab-builtin-title {
   margin: 1rem 0 0.25rem;
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
@@ -293,7 +293,7 @@
 .vocab-row--builtin { background: var(--ink-850); }
 
 .vocab-customized-badge {
-  font-size: 0.62rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -317,7 +317,7 @@
 
 .vocab-model-number {
   margin-left: 0.35rem;
-  font-size: 0.65rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   color: var(--text-secondary);
   background: var(--ink-750);
@@ -326,7 +326,7 @@
 }
 
 .vocab-model-meta {
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   color: var(--text-muted);
 }
 
@@ -349,7 +349,7 @@
 }
 
 .vocab-mf-field span {
-  font-size: 0.65rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -361,7 +361,7 @@
   padding: 0.35rem 0.5rem;
   border: 1px solid var(--border);
   border-radius: 8px;
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
 }
 
 .vocab-mf-check { justify-content: flex-end; }
@@ -393,7 +393,7 @@
   color: var(--warning);
   border-radius: 20px;
   padding: 0.15rem 0.5rem;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
 }
 
@@ -404,7 +404,7 @@
 }
 
 .vocab-coverage-count {
-  font-size: 0.62rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   /* --border is a translucent white film — the dark-mode inverse of the old
      rgba(0,0,0,.07) wash, so it tints whichever pill it sits inside. */
@@ -424,7 +424,7 @@
   background: var(--ink-900);
   color: var(--warning);
   border-radius: 12px;
-  font-size: 0.65rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   padding: 0.05rem 0.4rem;
   cursor: pointer;

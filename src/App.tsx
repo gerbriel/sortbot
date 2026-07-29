@@ -219,7 +219,7 @@ class GrouperErrorBoundary extends Component<{ children: ReactNode }, GrouperBou
       return (
         <div style={{ padding: '1rem', background: 'var(--danger-dim)', border: '1px solid var(--danger)', borderRadius: 8, minHeight: 200 }}>
           <strong style={{ color: 'var(--danger)' }}>Render error (please report this message):</strong>
-          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12, marginTop: 8 }}>{this.state.error.message}{'\n'}{this.state.error.stack}</pre>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 'var(--fs-lg)', marginTop: 8 }}>{this.state.error.message}{'\n'}{this.state.error.stack}</pre>
           <button onClick={() => this.setState({ error: null })} style={{ marginTop: 8 }}>Retry</button>
         </div>
       );
@@ -1321,7 +1321,7 @@ function App() {
           style={{
             position: 'absolute', top: 16, left: 16, zIndex: 10,
             background: 'var(--ink-800)', border: '1px solid var(--border-control)',
-            borderRadius: 8, padding: '8px 14px', fontSize: 14, fontWeight: 700,
+            borderRadius: 8, padding: '8px 14px', fontSize: 'var(--fs-lg)', fontWeight: 700,
             color: 'var(--text-primary)', cursor: 'pointer',
           }}
         >
@@ -2631,7 +2631,7 @@ function App() {
                   <span className="storage-meter-nav-text">
                     {gbUsed} GB / {STORAGE_LIMIT_GB} GB
                     <span style={{ color: barColor, fontWeight: 600, marginLeft: '0.3rem' }}>({pctDisplay}%)</span>
-                    <span style={{ color: 'var(--text-muted)', marginLeft: '0.4rem', fontSize: '0.72rem' }}>{storageInfo.fileCount.toLocaleString()} files</span>
+                    <span style={{ color: 'var(--text-muted)', marginLeft: '0.4rem', fontSize: 'var(--fs-2xs)' }}>{storageInfo.fileCount.toLocaleString()} files</span>
                   </span>
                   {pct > 0.85 && (
                     <span className="storage-meter-nav-warn"><AlertTriangle size={11} style={{ flexShrink: 0 }} /> Almost full</span>
@@ -2676,11 +2676,11 @@ function App() {
             <div>
               <h2>Step 1: Upload Images</h2>
               {uploadedImages.length > 0 && currentBatchId ? (
-                <p className="step-description" style={{ fontSize: '14px', color: 'var(--success)', margin: 0 }}>
+                <p className="step-description" style={{ fontSize: 'var(--fs-lg)', color: 'var(--success)', margin: 0 }}>
                   <Plus size={11} style={{ flexShrink: 0 }} /> <strong>Batch active</strong> — drop more images here to add them to this batch ({uploadedImages.length} image{uploadedImages.length !== 1 ? 's' : ''} already loaded)
                 </p>
               ) : (
-                <p className="step-description" style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>
+                <p className="step-description" style={{ fontSize: 'var(--fs-lg)', color: 'var(--text-secondary)', margin: 0 }}>
                   <Lightbulb size={11} style={{ flexShrink: 0 }} /> <strong>Tip:</strong> You can upload multiple batches! New images will be added to your current session.
                 </p>
               )}
@@ -2722,7 +2722,7 @@ function App() {
                   cursor: 'pointer',
                   // Dark label on a solid accent fill — --text-primary on --accent is only 2.46:1.
                   color: 'var(--ink-950)',
-                  fontSize: '14px',
+                  fontSize: 'var(--fs-lg)',
                   fontWeight: 'bold',
                   display: 'flex',
                   alignItems: 'center',
@@ -2742,7 +2742,7 @@ function App() {
                 marginTop: '0.5rem',
                 marginBottom: '1rem',
                 borderLeft: '4px solid var(--accent)',
-                fontSize: '14px'
+                fontSize: 'var(--fs-lg)'
               }}>
                 <ul style={{ margin: 0, paddingLeft: '1.5rem' }}>
                   <li><MousePointerClick size={11} /> <strong>Click to select/unselect</strong> (click again to deselect)</li>
@@ -2882,25 +2882,25 @@ function App() {
 
               if (multiGroups > 0 && singles > 0) {
                 return (
-                  <p style={{ color: 'var(--accent)', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+                  <p style={{ color: 'var(--accent)', fontWeight: 500, marginBottom: '0.5rem', fontSize: 'var(--fs-sm)' }}>
                     <Package size={11} style={{ flexShrink: 0 }} /> {totalListings} total listing{totalListings !== 1 ? 's' : ''}: {multiGroups} multi-image group{multiGroups !== 1 ? 's' : ''} + {singles} single{singles !== 1 ? 's' : ''} ({imageCount} images) — use Next/Previous to navigate{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
                   </p>
                 );
               } else if (multiGroups > 0) {
                 return (
-                  <p style={{ color: 'var(--accent)', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+                  <p style={{ color: 'var(--accent)', fontWeight: 500, marginBottom: '0.5rem', fontSize: 'var(--fs-sm)' }}>
                     <Package size={11} style={{ flexShrink: 0 }} /> {multiGroups} product group{multiGroups !== 1 ? 's' : ''} ({imageCount} images grouped) — use Next/Previous to navigate listings{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
                   </p>
                 );
               } else if (singles > 0) {
                 return (
-                  <p style={{ color: 'var(--accent)', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+                  <p style={{ color: 'var(--accent)', fontWeight: 500, marginBottom: '0.5rem', fontSize: 'var(--fs-sm)' }}>
                     <Package size={11} style={{ flexShrink: 0 }} /> {singles} categorized listing{singles !== 1 ? 's' : ''} ({imageCount} image{imageCount !== 1 ? 's' : ''}) — use Next/Previous to navigate{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
                   </p>
                 );
               } else {
                 return (
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                  <p style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-sm)', marginBottom: '0.5rem' }}>
                     <AlertTriangle size={11} style={{ flexShrink: 0 }} /> No categorized items yet — go back to Step 2 and drag items to a category zone.
                   </p>
                 );
@@ -2920,7 +2920,7 @@ function App() {
         {processedItems.length > 0 && (
           <section className="step-section">
             <details>
-              <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: '1.1rem', userSelect: 'none', padding: '0.25rem 0' }}>
+              <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 'var(--fs-md)', userSelect: 'none', padding: '0.25rem 0' }}>
                 Step 4: Review &amp; Export ▾
               </summary>
 

@@ -2093,7 +2093,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // NOTE: This must come AFTER all hook declarations above (React rules of hooks)
   if (!currentItem) {
     return (
-      <div className="product-description-container" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.95rem' }}>
+      <div className="product-description-container" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--fs-base)' }}>
         <AlertTriangle size={14} style={{ flexShrink: 0 }} /> No categorized items yet — go back to Step 2 and drag items to a category zone.
       </div>
     );
@@ -2192,7 +2192,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         </div>
         {/* Checkbox — top-right — selects this group for bulk preset apply */}
         <label
-          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.875rem', color: 'var(--text-secondary)', userSelect: 'none', marginLeft: 'auto' }}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: 'var(--fs-sm)', color: 'var(--text-secondary)', userSelect: 'none', marginLeft: 'auto' }}
           title="Select group for bulk preset apply"
         >
           <input
@@ -2263,7 +2263,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 margin: '0.5rem 0',
                 width: '100%',
                 justifyContent: 'center',
-                fontSize: '0.8125rem',
+                fontSize: 'var(--fs-xs)',
                 background: 'linear-gradient(135deg, var(--success) 0%, var(--shopify-green-dark) 100%)',
               }}
             >
@@ -2444,7 +2444,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     tags: currentItem.tags,
                   });
                 }}
-                style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
+                style={{ fontSize: 'var(--fs-xs)', padding: '0.3rem 0.6rem' }}
               >
                 <Brush size={12} style={{ flexShrink: 0 }} /> Copy Fields
               </button>
@@ -2458,7 +2458,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       targetIds.has(item.id) ? { ...item, ...copiedFields } : item
                     ));
                   }}
-                  style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem', background: 'var(--accent)' }}
+                  style={{ fontSize: 'var(--fs-xs)', padding: '0.3rem 0.6rem', background: 'var(--accent)' }}
                 >
                   <ClipboardPaste size={12} style={{ flexShrink: 0 }} /> Paste Fields
                 </button>
@@ -2466,7 +2466,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               {copiedCrop && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   {cropPasteProgress ? (
-                    <span style={{ fontSize: '0.75rem', color: 'var(--accent)', fontWeight: 600 }}>
+                    <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--accent)', fontWeight: 600 }}>
                       ⏳ {cropPasteProgress.done}/{cropPasteProgress.total} cropping…
                     </span>
                   ) : (
@@ -2477,14 +2477,14 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                           ? `Paste crop to ${selectedGroupIds.size} selected group(s)`
                           : 'Paste crop to ALL groups — select groups first to limit scope'}
                         onClick={() => handlePasteCrop(copiedCrop)}
-                        style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem', background: 'var(--info)' }}
+                        style={{ fontSize: 'var(--fs-xs)', padding: '0.3rem 0.6rem', background: 'var(--info)' }}
                       >
                         <Crop size={12} style={{ flexShrink: 0 }} /> Paste Crop{selectedGroupIds.size > 0 ? ` (${selectedGroupIds.size})` : ' (All)'}
                       </button>
                       <button
                         title="Clear copied crop"
                         onClick={() => setCopiedCrop(null)}
-                        style={{ fontSize: '0.8rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '0.1rem 0.3rem' }}
+                        style={{ fontSize: 'var(--fs-xs)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '0.1rem 0.3rem' }}
                       ><X size={12} /></button>
                     </>
                   )}
@@ -2529,7 +2529,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     }}
                     style={{
                       padding: '0.2rem 0.55rem',
-                      fontSize: '0.72rem',
+                      fontSize: 'var(--fs-2xs)',
                       fontWeight: 600,
                       /* Destructive pill: translucent danger fill + full-strength
                          danger text — the old pale-tint/dark-text pair inverts to
@@ -2552,7 +2552,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                         onClick={() => setVoiceMode(mode)}
                         style={{
                           padding: '0.2rem 0.7rem',
-                          fontSize: '0.75rem',
+                          fontSize: 'var(--fs-xs)',
                           fontWeight: 600,
                           border: 'none',
                           cursor: 'pointer',
@@ -2636,10 +2636,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     border: '1px solid var(--border)',
                     borderRadius: '6px',
                     padding: '0.5rem 0.6rem',
-                    fontSize: '0.7rem',
+                    fontSize: 'var(--fs-2xs)',
                     lineHeight: '1.6',
                   }}>
-                    <div style={{ fontWeight: 700, marginBottom: '0.3rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.65rem' }}>Voice Commands</div>
+                    <div style={{ fontWeight: 700, marginBottom: '0.3rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: 'var(--fs-2xs)' }}>Voice Commands</div>
                     {[
                       ['color', 'red'],
                       ['brand', 'Nike'],
@@ -2665,7 +2665,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                         <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'right' }}>{ex} <span style={{ color: 'var(--text-faint)' }}>•</span></span>
                       </div>
                     ))}
-                    <div style={{ marginTop: '0.4rem', paddingTop: '0.4rem', borderTop: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.63rem' }}>
+                    <div style={{ marginTop: '0.4rem', paddingTop: '0.4rem', borderTop: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 'var(--fs-2xs)' }}>
                       Say <strong style={{ color: 'var(--accent)' }}>period</strong> to end each field
                     </div>
                   </div>
@@ -2779,7 +2779,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontWeight: 600, marginBottom: '0.4rem' }}>
                 <span>Title:</span>
                 <span style={{
-                  fontSize: '0.75rem',
+                  fontSize: 'var(--fs-xs)',
                   fontWeight: 400,
                   color: (currentItem.seoTitle || '').length > 60 ? 'var(--danger)' : (currentItem.seoTitle || '').length > 50 ? 'var(--warning)' : 'var(--text-muted)'
                 }}>
@@ -2825,12 +2825,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 onKeyDown={(e) => e.stopPropagation()}
               />
               {!currentItem.seoTitle && (
-                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.25rem 0 0' }}>
+                <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', margin: '0.25rem 0 0' }}>
                   Preview from current fields — type to override, or hit Generate to lock it in
                 </p>
               )}
               {duplicateTitleWarning && (
-                <p style={{ fontSize: '0.78rem', color: 'var(--danger)', margin: '0.25rem 0 0', fontWeight: 600 }}>
+                <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--danger)', margin: '0.25rem 0 0', fontWeight: 600 }}>
                   <AlertTriangle size={12} style={{ flexShrink: 0 }} /> Duplicate title — this title already exists in another batch on Shopify
                 </p>
               )}
@@ -2899,14 +2899,14 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     padding: '0 0.75rem',
                     borderRadius: '6px',
                     cursor: 'pointer',
-                    fontSize: '0.8rem',
+                    fontSize: 'var(--fs-xs)',
                     whiteSpace: 'nowrap',
                   }}
                 >
                   <Trash2 size={12} /> Clear
                 </button>
               </div>
-              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.35rem', marginBottom: 0 }}>
+              <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', marginTop: '0.35rem', marginBottom: 0 }}>
                 Reads voice &amp; description → updates all fields → writes a new description
               </p>
             </div>
@@ -2924,7 +2924,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--info)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Target size={18} /> Intelligent Match Detected
                 </h4>
-                <div style={{ fontSize: '0.9rem', display: 'grid', gap: '0.5rem' }}>
+                <div style={{ fontSize: 'var(--fs-sm)', display: 'grid', gap: '0.5rem' }}>
                   {currentItem.brand && <div><strong>Brand:</strong> {currentItem.brand}</div>}
                   {currentItem.modelName && <div><strong>Model:</strong> {currentItem.modelName} {currentItem.modelNumber && `(${currentItem.modelNumber})`}</div>}
                   {currentItem.brandCategory && <div><strong>Category:</strong> {currentItem.brandCategory}</div>}
@@ -2950,14 +2950,14 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Check size={12} style={{ flexShrink: 0 }} /> Category Preset Applied
                 </h4>
-                <div style={{ fontSize: '0.9rem', display: 'grid', gap: '0.5rem' }}>
+                <div style={{ fontSize: 'var(--fs-sm)', display: 'grid', gap: '0.5rem' }}>
                   <div><strong>Category:</strong> {appliedPresetLabel || currentItem._presetData?.displayName}</div>
                   {(() => {
                     const activePreset = availablePresets.find(p => p.id === selectedPresetId);
                     const desc = activePreset?.description || currentItem._presetData?.description;
                     return desc ? <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>{desc}</div> : null;
                   })()}
-                  <div style={{ fontSize: '0.85rem', color: 'var(--success)', marginTop: '0.5rem' }}>
+                  <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--success)', marginTop: '0.5rem' }}>
                     <ClipboardList size={11} style={{ flexShrink: 0 }} /> Form fields have been pre-filled with preset defaults. You can edit any field to override.
                   </div>
                 </div>
@@ -2982,11 +2982,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     <Palette size={11} style={{ flexShrink: 0 }} /> Override Preset (Optional):
                   </label>
                   {selectedGroupIds.size > 0 && (
-                    <span style={{ fontSize: '0.8rem', color: 'var(--accent)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--accent)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                       <Sparkles size={10} style={{ flexShrink: 0 }} /> {selectedGroupIds.size} group{selectedGroupIds.size > 1 ? 's' : ''} selected — will apply to all
                       <button
                         onClick={() => setSelectedGroupIds(new Set())}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '0 0.2rem' }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 'var(--fs-sm)', padding: '0 0.2rem' }}
                         title="Clear selection"
                       ><X size={12} /></button>
                     </span>
@@ -3018,7 +3018,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       onKeyDown={e => e.stopPropagation()}
                       style={{
                         flex: 1, border: 'none', outline: 'none',
-                        padding: '0.5rem 0.25rem', fontSize: '0.95rem', background: 'transparent',
+                        padding: '0.5rem 0.25rem', fontSize: 'var(--fs-base)', background: 'transparent',
                         color: !presetSearchOpen && appliedPresetLabel ? 'var(--accent)' : 'var(--text-primary)',
                         fontWeight: !presetSearchOpen && appliedPresetLabel ? 600 : 400,
                       }}
@@ -3026,7 +3026,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     {(presetSearchQuery || appliedPresetLabel) && (
                       <button
                         onMouseDown={e => { e.preventDefault(); setPresetSearchQuery(''); setAppliedPresetLabel(''); setPresetSearchOpen(true); }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 0.5rem', color: 'var(--text-muted)', fontSize: '1rem', lineHeight: 1 }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 0.5rem', color: 'var(--text-muted)', fontSize: 'var(--fs-base)', lineHeight: 1 }}
                       ><X size={12} /></button>
                     )}
                   </div>
@@ -3053,7 +3053,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                         maxHeight: '240px', overflowY: 'auto',
                       }}>
                         {filtered.length === 0 && (
-                          <div style={{ padding: '0.6rem 0.9rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>No presets match</div>
+                          <div style={{ padding: '0.6rem 0.9rem', color: 'var(--text-muted)', fontSize: 'var(--fs-sm)' }}>No presets match</div>
                         )}
                         {filtered.map(opt => (
                           <div
@@ -3067,7 +3067,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                             }}
                             style={{
                               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                              padding: '0.45rem 0.9rem', cursor: 'pointer', fontSize: '0.9rem',
+                              padding: '0.45rem 0.9rem', cursor: 'pointer', fontSize: 'var(--fs-sm)',
                               /* 'transparent' lets the --ink-800 popover show through
                                  (the old value here was a literal white). */
                               background: opt.id === selectedPresetId ? 'var(--accent-dim)' : 'transparent',
@@ -3077,7 +3077,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                             onMouseLeave={e => (e.currentTarget.style.background = opt.id === selectedPresetId ? 'var(--accent-dim)' : 'transparent')}
                           >
                             <span>{opt.label}</span>
-                            {opt.sub && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{opt.sub}</span>}
+                            {opt.sub && <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>{opt.sub}</span>}
                           </div>
                         ))}
                       </div>
@@ -3085,7 +3085,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   })()}
                 </div>
                 <p style={{ 
-                  fontSize: '0.85rem', 
+                  fontSize: 'var(--fs-sm)', 
                   color: 'var(--text-muted)',
                   marginTop: '0.5rem',
                   marginBottom: 0
@@ -3099,7 +3099,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           {/* Comprehensive Product Form - All 62 CSV Fields */}
           <div className="form-section">
             <h3>Product Info</h3>
-            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+            <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
               Fields pre-filled from category preset. Voice dictation takes precedence. Edit any field as needed.
             </p>
             

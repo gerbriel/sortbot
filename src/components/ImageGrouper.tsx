@@ -2090,7 +2090,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           boxShadow: '0 8px 32px var(--accent-glow)',
           display: 'flex', flexDirection: 'column', gap: 8, fontFamily: 'inherit',
         }}>
-          <div style={{ color: 'var(--text-primary)', fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 7 }}>
+          <div style={{ color: 'var(--text-primary)', fontSize: 'var(--fs-sm)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 7 }}>
             {cropPasteProgress.status === 'running' ? (
               <span style={{
                 display: 'inline-block', width: 13, height: 13,
@@ -2106,7 +2106,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 ? `Done — ${cropPasteProgress.failed.length} failed`
                 : 'Crop applied successfully!'}
           </div>
-          <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', marginTop: 1 }}>
+          <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--fs-xs)', marginTop: 1 }}>
             {cropPasteProgress.status === 'running'
               ? `${cropPasteProgress.done} / ${cropPasteProgress.total} complete (${Math.round((cropPasteProgress.done / cropPasteProgress.total) * 100)}%)`
               : cropPasteProgress.failed.length > 0
@@ -2129,13 +2129,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   const ids = [...cropPasteProgress.failed];
                   await runCropBatchPaste(ids, copiedCrop!, copiedRotation);
                 }}
-                style={{ flex: 1, background: 'var(--warning)', color: 'var(--ink-950)', border: 'none', borderRadius: 8, padding: '0.4rem 0.7rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem' }}
+                style={{ flex: 1, background: 'var(--warning)', color: 'var(--ink-950)', border: 'none', borderRadius: 8, padding: '0.4rem 0.7rem', cursor: 'pointer', fontWeight: 600, fontSize: 'var(--fs-xs)' }}
               >
                 <RotateCcw size={12} style={{ flexShrink: 0 }} /> Retry {cropPasteProgress.failed.length} failed
               </button>
               <button
                 onClick={() => setCropPasteProgress(null)}
-                style={{ background: 'none', border: '1px solid var(--accent-line)', color: 'var(--accent)', borderRadius: 8, padding: '0.4rem 0.7rem', cursor: 'pointer', fontSize: '0.78rem' }}
+                style={{ background: 'none', border: '1px solid var(--accent-line)', color: 'var(--accent)', borderRadius: 8, padding: '0.4rem 0.7rem', cursor: 'pointer', fontSize: 'var(--fs-xs)' }}
               >
                 Dismiss
               </button>
@@ -2159,7 +2159,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             border: '2px solid var(--accent-line)', borderTopColor: 'var(--accent)',
             borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0,
           }} />
-          <span style={{ color: 'var(--text-primary)', fontSize: '0.85rem', fontWeight: 600 }}>
+          <span style={{ color: 'var(--text-primary)', fontSize: 'var(--fs-sm)', fontWeight: 600 }}>
             Uploading cropped image…
           </span>
         </div>

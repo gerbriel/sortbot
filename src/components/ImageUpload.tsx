@@ -707,7 +707,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
             ) : isUploading ? (
               <>
                 {/* Minimal dropzone content while uploading — creature lives in full-screen overlay */}
-                <p style={{ color: 'var(--gray-500)', fontSize: '0.85rem', margin: 0 }}>
+                <p style={{ color: 'var(--gray-500)', fontSize: 'var(--fs-sm)', margin: 0 }}>
                   Uploading{uploadProgress ? ` ${uploadProgress.done} / ${uploadProgress.total}` : '…'}
                 </p>
               </>
@@ -748,7 +748,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
             border: '1.5px solid var(--danger)',
             borderRadius: '8px',
             padding: '0.7rem 1rem',
-            fontSize: '0.85rem',
+            fontSize: 'var(--fs-sm)',
             color: 'var(--danger)',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
@@ -769,7 +769,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                     border: 'none',
                     borderRadius: '6px',
                     fontWeight: 600,
-                    fontSize: '0.82rem',
+                    fontSize: 'var(--fs-xs)',
                     cursor: isUploading ? 'not-allowed' : 'pointer',
                     opacity: isUploading ? 0.6 : 1,
                   }}
@@ -779,13 +779,13 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                 <button
                   type="button"
                   onClick={() => setFailedUploads([])}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--danger)' }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 'var(--fs-xs)', color: 'var(--danger)' }}
                 >
                   <X size={11} /> dismiss
                 </button>
               </div>
             </div>
-            <ul style={{ margin: '0.4rem 0 0 0', paddingLeft: '1.2rem', lineHeight: 1.6, fontSize: '0.78rem', color: 'var(--danger)' }}>
+            <ul style={{ margin: '0.4rem 0 0 0', paddingLeft: '1.2rem', lineHeight: 1.6, fontSize: 'var(--fs-xs)', color: 'var(--danger)' }}>
               {failedUploads.slice(0, 10).map((f, i) => (
                 <li key={i}>{f.originalName}</li>
               ))}
@@ -823,7 +823,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                         border: 'none',
                         borderRadius: '8px',
                         fontWeight: 600,
-                        fontSize: '0.9rem',
+                        fontSize: 'var(--fs-sm)',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
@@ -841,7 +841,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                   border: '1px solid var(--success)',
                   borderRadius: '8px',
                   padding: '0.6rem 1rem',
-                  fontSize: '0.85rem',
+                  fontSize: 'var(--fs-sm)',
                   color: 'var(--success)',
                   display: 'flex',
                   alignItems: 'center',
@@ -860,7 +860,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                   border: '1px solid var(--success)',
                   borderRadius: '8px',
                   padding: '0.6rem 1rem',
-                  fontSize: '0.85rem',
+                  fontSize: 'var(--fs-sm)',
                   color: 'var(--success)',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
@@ -874,7 +874,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                     </span>
                     <button
                       onClick={() => setRecompressState(null)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--success)', flexShrink: 0 }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 'var(--fs-xs)', color: 'var(--success)', flexShrink: 0 }}
                     >
                       <X size={11} /> dismiss
                     </button>
@@ -885,10 +885,10 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                       danger text below it. */}
                   {recompressState.errors.length > 0 && (
                     <div style={{ marginTop: '0.5rem', borderTop: '1px solid var(--border)', paddingTop: '0.4rem' }}>
-                      <div style={{ color: 'var(--danger)', fontWeight: 600, fontSize: '0.78rem', marginBottom: '0.2rem' }}>
+                      <div style={{ color: 'var(--danger)', fontWeight: 600, fontSize: 'var(--fs-xs)', marginBottom: '0.2rem' }}>
                         <AlertTriangle size={11} style={{ flexShrink: 0 }} /> {recompressState.errors.length} error{recompressState.errors.length !== 1 ? 's' : ''}:
                       </div>
-                      <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.75rem', color: 'var(--danger)', lineHeight: 1.5 }}>
+                      <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: 'var(--fs-xs)', color: 'var(--danger)', lineHeight: 1.5 }}>
                         {recompressState.errors.map((e, idx) => <li key={idx}>{e}</li>)}
                       </ul>
                     </div>

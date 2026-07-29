@@ -28,7 +28,7 @@
 }
 
 .auth-header h1 {
-  font-size: 2rem;
+  font-size: var(--fs-xl);
   margin: 0 0 var(--space-2) 0;
   color: var(--accent);
 }
@@ -36,7 +36,7 @@
 .auth-header p {
   margin: 0;
   color: var(--gray-600);
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
 }
 
 .auth-form {
@@ -45,7 +45,7 @@
 
 .auth-form h2 {
   margin: 0 0 var(--space-6) 0;
-  font-size: 1.5rem;
+  font-size: var(--fs-lg);
   /* was var(--gray-900) — that token does not exist in the ramp (50–700), so
      the declaration was invalid and silently inherited. Named explicitly now. */
   color: var(--text-primary);
@@ -58,7 +58,7 @@
   padding: var(--space-3);
   border-radius: var(--radius-md);
   margin-bottom: var(--space-4);
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   border: 1px solid var(--shopify-red);
 }
 
@@ -68,7 +68,7 @@
   padding: var(--space-3);
   border-radius: var(--radius-md);
   margin-bottom: var(--space-4);
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   border: 1px solid var(--accent);
 }
 
@@ -81,7 +81,7 @@
   margin-bottom: var(--space-2);
   font-weight: 600;
   color: var(--gray-700);
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
 }
 
 .form-group input {
@@ -89,7 +89,7 @@
   padding: var(--space-3);
   border: 1px solid var(--gray-300);
   border-radius: var(--radius-md);
-  font-size: 1rem;
+  font-size: var(--fs-base);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -113,7 +113,7 @@
   display: block;
   margin-top: var(--space-1);
   color: var(--gray-600);
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
 }
 
 .auth-button {
@@ -124,7 +124,7 @@
   color: var(--ink-950);
   border: none;
   border-radius: var(--radius-md);
-  font-size: 1rem;
+  font-size: var(--fs-base);
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s ease, transform 0.1s ease;
@@ -155,7 +155,7 @@
   margin-top: var(--space-6);
   text-align: center;
   color: var(--gray-600);
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
 }
 
 .auth-toggle button {
@@ -187,7 +187,7 @@
 .auth-footer p {
   margin: var(--space-1) 0;
   color: var(--gray-600);
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
 }
 
 /* Mobile Responsive */
@@ -205,7 +205,7 @@
   }
 
   .auth-header h1 {
-    font-size: 1.75rem;
+    font-size: var(--fs-xl);
   }
 
   .auth-form {
@@ -213,6 +213,6 @@
   }
 
   .auth-form h2 {
-    font-size: 1.25rem;
+    font-size: var(--fs-md);
   }
 }

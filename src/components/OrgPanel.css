@@ -36,7 +36,7 @@
 
 .org-panel-title h2 {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: var(--fs-md);
   color: var(--text-primary);
 }
 
@@ -57,7 +57,7 @@
   color: var(--accent);
   border-radius: 8px;
   padding: 0.5rem 0.7rem;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   margin-bottom: 0.75rem;
 }
 
@@ -72,14 +72,14 @@
   padding: 0.45rem 0.6rem;
   border: 1px solid var(--border);
   border-radius: 8px;
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
 }
 
 .org-invite-form select {
   padding: 0.45rem 0.4rem;
   border: 1px solid var(--border);
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
 }
 
 .org-invite-btn {
@@ -98,7 +98,7 @@
 
 .org-section-title {
   margin: 0.6rem 0 0.35rem;
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
@@ -116,7 +116,7 @@
   gap: 0.5rem;
   padding: 0.4rem 0.2rem;
   border-bottom: 1px solid var(--border-subtle);
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
 }
 
 .org-member-email {
@@ -128,7 +128,7 @@
 }
 
 .org-role-badge {
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   text-transform: uppercase;
   padding: 0.12rem 0.45rem;
@@ -146,7 +146,7 @@
   border: 1px solid var(--danger);
   color: var(--danger);
   border-radius: 6px;
-  font-size: 0.72rem;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   padding: 0.15rem 0.5rem;
   cursor: pointer;
@@ -157,12 +157,12 @@
 
 .org-panel-loading {
   color: var(--text-secondary);
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
 }
 
 .org-panel-footnote {
   margin: 1rem 0 0;
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 
@@ -172,7 +172,7 @@
 .beta-request-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
 
 .beta-request-meta {
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -184,7 +184,7 @@
 .beta-approve, .beta-deny {
   border: none;
   border-radius: 6px;
-  font-size: 0.72rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   padding: 0.25rem 0.6rem;
   cursor: pointer;
@@ -211,13 +211,13 @@
   padding: 0.3rem 0.5rem;
   border: 1px solid var(--accent-line);
   border-radius: 6px;
-  font-size: 1rem;
+  font-size: var(--fs-base);
   font-weight: 700;
   color: var(--text-primary);
 }
 
 .org-plan-badge {
-  font-size: 0.62rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -249,7 +249,7 @@
 /* ── Member rows: dates + role select ──────────────────────────────────── */
 .org-member-date {
   display: block;
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   color: var(--text-muted);
 }
 
@@ -257,7 +257,7 @@
   padding: 0.2rem 0.3rem;
   border: 1px solid var(--border);
   border-radius: 6px;
-  font-size: 0.72rem;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   color: var(--text-secondary);
   background: var(--ink-850);
@@ -274,7 +274,7 @@
   color: var(--ink-950);
   border: none;
   border-radius: 6px;
-  font-size: 0.72rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   padding: 0.2rem 0.55rem;
   cursor: pointer;
@@ -288,7 +288,7 @@
   border: 1px solid var(--border);
   color: var(--text-secondary);
   border-radius: 6px;
-  font-size: 0.72rem;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   padding: 0.2rem 0.55rem;
   cursor: pointer;
@@ -312,7 +312,7 @@
   border: 1px solid var(--danger);
   color: var(--danger);
   border-radius: 8px;
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   padding: 0.35rem 0.7rem;
   cursor: pointer;
@@ -322,7 +322,7 @@
 .org-leave-btn:disabled { opacity: 0.5; cursor: default; }
 
 .org-leave-warning {
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   color: var(--danger);
   flex: 1;
 }
@@ -343,7 +343,7 @@
   border: 1px solid transparent;
   color: var(--text-secondary);
   border-radius: 20px;
-  font-size: 0.7rem;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   padding: 0.2rem 0.6rem;
   cursor: pointer;
@@ -374,13 +374,13 @@
   min-width: 0;
   border: none;
   outline: none;
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   color: var(--text-primary);
   background: transparent;
 }
 
 .beta-request-dates {
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   color: var(--text-muted);
 }
 
@@ -416,7 +416,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  font-size: 0.82rem;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
 }
 
@@ -424,7 +424,7 @@
 .org-member-stats strong { color: var(--accent); }
 
 .org-member-signup {
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   display: flex;
   flex-wrap: wrap;
@@ -437,9 +437,9 @@
 .org-dir-row { align-items: flex-start; }
 .org-dir-info { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; width: 100%; }
 .org-dir-info .org-member-email { display: flex; align-items: center; gap: 0.4rem; }
-.org-dir-stats { font-size: 0.8rem; color: var(--text-secondary); }
+.org-dir-stats { font-size: var(--fs-xs); color: var(--text-secondary); }
 .org-dir-emails {
-  font-size: 0.76rem;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -453,7 +453,7 @@
   gap: 0.5rem;
   padding: 0.4rem 0.2rem;
   border-bottom: 1px solid var(--border-subtle);
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
 }
 
 .shopify-conn-row .org-member-email {
@@ -468,7 +468,7 @@
 
 .shopify-conn-help {
   margin: 0 0 0.5rem;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   /* Secondary, not muted — this is setup copy the admin has to actually read. */
   color: var(--text-secondary);
   line-height: 1.45;
@@ -491,7 +491,7 @@
 }
 
 .desc-settings-field span {
-  font-size: 0.7rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -503,7 +503,7 @@
   padding: 0.4rem 0.55rem;
   border: 1px solid var(--border);
   border-radius: 8px;
-  font-size: 0.82rem;
+  font-size: var(--fs-xs);
   font-family: inherit;
   resize: vertical;
 }
@@ -514,7 +514,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   cursor: pointer;
 }
@@ -540,7 +540,7 @@
   border: 1px solid transparent;
   color: var(--text-secondary);
   border-radius: 8px;
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   padding: 0.35rem 0.7rem;
   cursor: pointer;
@@ -583,7 +583,7 @@
   align-items: center;
   gap: 0.4rem;
   padding: 0.22rem 0;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
 }
 
 .fa-ms-org {
@@ -603,7 +603,7 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text-secondary);
-  font-size: 0.72rem;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   padding: 0.15rem 0.3rem;
   cursor: pointer;
@@ -614,7 +614,7 @@
 
 /* Amber, because arming a move is a destination choice, not a confirmed one. */
 .fa-move-label {
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--warning);
 }
@@ -628,7 +628,7 @@
 
 .fa-audit-row { padding: 0.3rem 0.2rem; }
 .fa-audit-row .org-member-email {
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   white-space: normal;
 }

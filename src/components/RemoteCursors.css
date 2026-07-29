@@ -13,7 +13,7 @@
   left: 10px;
   padding: 4px 8px;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: var(--fs-lg);
   font-weight: 600;
   white-space: nowrap;
   /* Label fill/text colour is set inline per user (presence colour) — only
@@ -69,13 +69,13 @@
 }
 
 .activity-icon {
-  font-size: 18px;
+  font-size: var(--fs-xl);
 }
 
 .activity-title {
   flex: 1;
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--fs-lg);
 }
 
 .activity-count {
@@ -85,7 +85,7 @@
   color: var(--text-primary);
   padding: 2px 8px;
   border-radius: 12px;
-  font-size: 12px;
+  font-size: var(--fs-lg);
   font-weight: 600;
 }
 
@@ -136,7 +136,7 @@
 
 .user-name {
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--fs-lg);
   color: var(--text-primary);
 }
 
@@ -147,13 +147,13 @@
 }
 
 .activity-step {
-  font-size: 12px;
+  font-size: var(--fs-lg);
   color: var(--text-secondary);
   font-weight: 500;
 }
 
 .activity-action {
-  font-size: 11px;
+  font-size: var(--fs-lg);
   color: var(--text-muted);
   font-style: italic;
 }

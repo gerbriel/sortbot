@@ -293,7 +293,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
               <div style={{
                 marginTop: '0.75rem', padding: '0.75rem 1rem', borderRadius: 8,
                 background: 'var(--danger-dim)', border: '1px solid var(--danger)', color: 'var(--danger)',
-                fontSize: '0.85rem', fontWeight: 600,
+                fontSize: 'var(--fs-sm)', fontWeight: 600,
               }}>
                 <Ban size={13} style={{ flexShrink: 0 }} /> Export blocked — {invalidPricedProducts.length} product
                 {invalidPricedProducts.length > 1 ? 's have' : ' has'} no price (or $0).
@@ -313,7 +313,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
           <div className="export-preview">
             <h3>Preview (Shopify Format)</h3>
             <div className="table-container" style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '420px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-              <table className="preview-table" style={{ minWidth: '4800px', borderCollapse: 'collapse', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
+              <table className="preview-table" style={{ minWidth: '4800px', borderCollapse: 'collapse', fontSize: 'var(--fs-xs)', whiteSpace: 'nowrap' }}>
                 <thead>
                   {/* Sticky header sits one surface step above the --ink-850 table
                       body so rows scroll under it without bleeding through. */}
@@ -448,14 +448,14 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       {!compactMode && (
         <div className="export-instructions">
           <h3><FileText size={14} style={{ flexShrink: 0 }} /> CSV Export</h3>
-          <p style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', marginTop: '0.5rem', lineHeight: '1.5' }}>
+          <p style={{ fontSize: 'var(--fs-base)', color: 'var(--text-secondary)', marginTop: '0.5rem', lineHeight: '1.5' }}>
             Downloads a CSV file with <strong>all product data and fields</strong> ready for Shopify import. 
             The CSV includes image URLs that Shopify will automatically fetch during import.
           </p>
           {/* Nested info box inside the accent-tinted .export-instructions panel —
               the translucent info fill keeps it distinct without a second opaque
               surface. Text inherits --text-primary from the page. */}
-          <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--info-dim)', borderRadius: '8px', fontSize: '0.9rem' }}>
+          <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--info-dim)', borderRadius: '8px', fontSize: 'var(--fs-sm)' }}>
             <strong><CheckCircle2 size={12} style={{ flexShrink: 0 }} /> Includes all fields:</strong>
             <ul style={{ marginTop: '0.5rem', marginBottom: 0, paddingLeft: '1.5rem' }}>
               <li>Product details (title, description, brand, category)</li>

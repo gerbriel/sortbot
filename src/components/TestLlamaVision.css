@@ -17,14 +17,14 @@
   align-items: center;
   gap: 12px;
   margin: 0 0 12px 0;
-  font-size: 24px;
+  font-size: var(--fs-2xl);
   color: var(--text-primary);
 }
 
 .test-description {
   color: var(--text-secondary);
   margin: 0 0 24px 0;
-  font-size: 14px;
+  font-size: var(--fs-lg);
 }
 
 .file-input {
@@ -85,7 +85,7 @@
 
 .sub-text {
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--fs-lg);
   font-weight: 400;
 }
 
@@ -109,7 +109,7 @@
 
 .test-result h4 {
   margin: 0 0 16px 0;
-  font-size: 18px;
+  font-size: var(--fs-xl);
   color: var(--text-primary);
 }
 
@@ -130,7 +130,7 @@
 }
 
 .result-item strong {
-  font-size: 12px;
+  font-size: var(--fs-lg);
   text-transform: uppercase;
   /* field labels at 12px — secondary, not muted, so they clear AA */
   color: var(--text-secondary);
@@ -138,14 +138,14 @@
 }
 
 .result-item span {
-  font-size: 16px;
+  font-size: var(--fs-xl);
   color: var(--text-primary);
   font-weight: 600;
 }
 
 .result-item p {
   margin: 4px 0 0 0;
-  font-size: 14px;
+  font-size: var(--fs-lg);
   color: var(--text-secondary);
   line-height: 1.5;
 }

@@ -14,7 +14,7 @@
 .workspace-label {
   font-weight: 600;
   color: var(--ink-950);
-  font-size: 14px;
+  font-size: var(--fs-lg);
   white-space: nowrap;
 }
 
@@ -32,7 +32,7 @@
   background: var(--ink-850);
   border: 2px solid var(--border);
   border-radius: 8px;
-  font-size: 14px;
+  font-size: var(--fs-lg);
   font-weight: 500;
   color: var(--text-primary);
   cursor: pointer;
@@ -52,7 +52,7 @@
 .dropdown-arrow {
   margin-left: 8px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--fs-lg);
 }
 
 .workspace-menu {
@@ -114,7 +114,7 @@
 }
 
 .option-icon {
-  font-size: 20px;
+  font-size: var(--fs-2xl);
   line-height: 1;
   flex-shrink: 0;
 }
@@ -127,18 +127,18 @@
 .option-name {
   font-weight: 600;
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: var(--fs-lg);
   margin-bottom: 2px;
 }
 
 .option-description {
-  font-size: 12px;
+  font-size: var(--fs-lg);
   color: var(--text-secondary);
 }
 
 .workspace-divider {
   padding: 8px 16px;
-  font-size: 11px;
+  font-size: var(--fs-lg);
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -156,7 +156,7 @@
      inverts to a solid ink pill so the label keeps its contrast. */
   background: var(--ink-900);
   border-radius: 20px;
-  font-size: 12px;
+  font-size: var(--fs-lg);
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;

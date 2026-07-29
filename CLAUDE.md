@@ -52,6 +52,44 @@ what let ~13,300 lines of existing CSS flip correctly without per-rule edits. An
 surface → `--ink-850`; a dark heading is text → `--text-primary`), and keep body text
 at WCAG AA 4.5:1 against its surface — `--text-muted` is for non-essential meta only.
 
+### Type scale — `--fs-*` (July 2026)
+
+The app had drifted to ~60 distinct font-size values app-wide (four inside a single
+0.05rem band, mixed `px`/`rem`, `!important` overrides). All of them now snap to one
+9-step ramp defined in `index.css`:
+
+| Token | rem | **renders as** | use |
+|---|---|---|---|
+| `--fs-2xs` | 0.72 | 6.5px | badges, chips, micro-meta |
+| `--fs-xs` | 0.8 | 7.2px | captions, secondary meta |
+| `--fs-sm` | 0.88 | 7.9px | secondary UI text, dense cells |
+| `--fs-base` | 1 | 9.0px | body, buttons, inputs |
+| `--fs-md` | 1.15 | 10.4px | emphasized body, card titles |
+| `--fs-lg` | 1.4 | 12.6px | section headings |
+| `--fs-xl` | 2 | 18.0px | step titles |
+| `--fs-2xl` | 2.5 | 22.5px | page headings |
+| `--fs-3xl` | 3 | 27.0px | hero |
+
+**Reason in the px column, not the rem** — the root is 9px (§16 Known Bugs), so `1rem`
+is 9px and a stray `font-size: 12px` renders *larger* than `1rem`, not smaller. That
+inversion is what produced most of the original drift. Pair with `--lh-tight` /
+`--lh-snug` / `--lh-normal`.
+
+Applies to inline styles too: `style={{ fontSize: 'var(--fs-sm)' }}`, not a literal.
+
+**TWO DELIBERATE EXCEPTIONS — do not "fix" them:**
+1. `html { font-size: 9px }` in `index.css` stays a literal. Tokenizing it is circular.
+2. **`Landing.css` stays px-based.** The marketing page is rendered at the main URL for
+   logged-out visitors and must not inherit the 9px root, or the hero collapses. A pass
+   that converted it to `--fs-*` shrank the nav from 14px to 12.6px and was reverted.
+   If Landing ever needs a scale, it needs its own px-based one.
+
+**Icons, not emoji.** Steps 1-4 use `lucide-react` (already a dependency) — no emoji in
+rendered UI. Emoji inside `console.log` / `log.*` / `console.table` diagnostics and code
+comments are fine and were deliberately left. The `categories.emoji` column is per-workspace
+USER DATA, not chrome — never rewrite it. Global `.lucide { flex-shrink: 0;
+vertical-align: -0.125em }` keeps SVGs on the text baseline where emoji sat for free.
+
 ---
 
 ## 2. Tech Stack
