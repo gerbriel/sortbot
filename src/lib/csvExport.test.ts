@@ -191,6 +191,34 @@ describe('preset shopifyProductType → CSV taxonomy columns', () => {
     expect(isKnownTaxonomyPath('')).toBe(false);
   });
 
+  // Matching is lenient, but the CSV must carry the canonical spelling — validating
+  // one string and emitting a different one is how the original bug got in.
+  it('emits the canonical spelling, not the preset’s raw text', () => {
+    const [row] = buildShopifyCsvRows([
+      product({
+        id: 'a', seoTitle: 'Tee', price: 10, category: 'tees', imageUrls: ['https://x/1.jpg'],
+        shopifyProductType: 'APPAREL & ACCESSORIES>clothing>Clothing Tops>polos',
+      } as never),
+    ]);
+    expect(row[catCol]).toBe('Apparel & Accessories > Clothing > Clothing Tops > Polos');
+    expect(row[typeCol]).toBe('Polos');
+  });
+
+  // The module must never emit a path its own validator would reject.
+  it('every path resolveCategoryPath can return is itself a known path', () => {
+    const keys = [
+      'tees', 'sweatshirts', 'hoodies', 'jackets', 'pants', 'jeans', 'shorts', 'hats',
+      'shoes', 'dresses', 'skirts', 'accessories', 'jerseys', 'polo', 'sweater',
+      'kids-tees', 'kids-hoodies', 'kids-jackets', 'kids-pants',
+      'kids-somethingunmapped', 'mens-tees', 'womens-shirts',
+    ];
+    for (const k of keys) {
+      const path = resolveCategoryPath(k);
+      if (!path) continue; // intentionally blank (e.g. mystery boxes)
+      expect(isKnownTaxonomyPath(path), `${k} → ${path}`).toBe(true);
+    }
+  });
+
   it('absent → category-name maps drive both columns (unchanged behavior)', () => {
     const [row] = buildShopifyCsvRows([
       product({ id: 'a', seoTitle: 'Tee', price: 10, category: 'tees', imageUrls: ['https://x/1.jpg'] }),

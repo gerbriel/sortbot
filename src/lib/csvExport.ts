@@ -356,15 +356,31 @@ function normalizeTaxonomyPath(path: string): string {
  * So: an unknown path is discarded in favor of the category-name maps below,
  * which only ever yield paths from this same set.
  */
-const KNOWN_TAXONOMY_PATHS = new Set<string>(
-  [...Object.values(SHOPIFY_CATEGORY_MAP), ...Object.values(SHOPIFY_KIDS_CATEGORY_MAP)]
+/** Fallback for a "kids-*" category whose type segment isn't in the kids map. */
+export const KIDS_FALLBACK_PATH = "Apparel & Accessories > Clothing > Baby & Children's Clothing";
+
+// normalized form → the canonical spelling we emit. Matching is lenient
+// (case/spacing) but the OUTPUT is always the canonical string, never the
+// caller's raw text: a preset holding "apparel & accessories>clothing>clothing
+// tops>t-shirts" matches, yet the CSV still gets the properly spaced path
+// Shopify resolves. Validating one string and emitting a different one is how
+// this bug class comes back.
+const CANONICAL_TAXONOMY_PATHS = new Map<string, string>(
+  [
+    ...Object.values(SHOPIFY_CATEGORY_MAP),
+    ...Object.values(SHOPIFY_KIDS_CATEGORY_MAP),
+    KIDS_FALLBACK_PATH,
+  ]
     .filter(Boolean)
-    .map(normalizeTaxonomyPath)
+    .map(p => [normalizeTaxonomyPath(p), p] as const)
 );
 
+/** The canonical spelling of `path` if Shopify accepts it, else '' . */
+export const canonicalTaxonomyPath = (path: string): string =>
+  (path && CANONICAL_TAXONOMY_PATHS.get(normalizeTaxonomyPath(path))) || '';
+
 /** True when `path` is a taxonomy path we know Shopify accepts. */
-export const isKnownTaxonomyPath = (path: string): boolean =>
-  !!path && KNOWN_TAXONOMY_PATHS.has(normalizeTaxonomyPath(path));
+export const isKnownTaxonomyPath = (path: string): boolean => !!canonicalTaxonomyPath(path);
 
 /**
  * Resolve the Shopify taxonomy path from the category.
@@ -382,7 +398,7 @@ export const resolveCategoryPath = (key: string): string => {
   if (isKids) {
     // Extract the type segment (everything after "kids-" / "kids ")
     const typeSegment = key.replace(/^kids[\s-]+/, '').split(/[-\s]+/).pop() ?? '';
-    return SHOPIFY_KIDS_CATEGORY_MAP[typeSegment] ?? "Apparel & Accessories > Clothing > Baby & Children's Clothing";
+    return SHOPIFY_KIDS_CATEGORY_MAP[typeSegment] ?? KIDS_FALLBACK_PATH;
   }
   if (key in SHOPIFY_CATEGORY_MAP) return SHOPIFY_CATEGORY_MAP[key];
   // Split on hyphens and spaces, try segments from last to first
@@ -518,12 +534,11 @@ export function buildShopifyCsvRows(products: ExportProduct[], gidOverrides?: Gi
     // back to the category-name maps) rather than failing the whole import.
     const presetShopifyType = (product.shopifyProductType || '').trim();
     const presetIsPath = presetShopifyType.includes('>');
-    const presetPathOk = presetIsPath && isKnownTaxonomyPath(presetShopifyType);
-    const productCategory = (presetPathOk ? presetShopifyType : '') || resolveCategoryPath(catKey);
+    // Canonical spelling, never the preset's raw text — see canonicalTaxonomyPath.
+    const presetPath = presetIsPath ? canonicalTaxonomyPath(presetShopifyType) : '';
+    const productCategory = presetPath || resolveCategoryPath(catKey);
     const productType =
-      (presetIsPath
-        ? (presetPathOk ? presetShopifyType.split('>').pop()!.trim() : '')
-        : presetShopifyType)
+      (presetIsPath ? (presetPath ? presetPath.split('>').pop()!.trim() : '') : presetShopifyType)
       || resolveProductType(catKey);
 
     // Tags: extract #hashtags from generated description first, fall back to product.tags array
