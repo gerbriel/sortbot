@@ -334,6 +334,38 @@ export const SHOPIFY_TYPE_MAP: Record<string, string> = {
   accessory: 'Accessories', accessories: 'Accessories',
 };
 
+/** Normalize a taxonomy path for comparison: collapse spacing around '>', lowercase. */
+function normalizeTaxonomyPath(path: string): string {
+  return path.split('>').map(s => s.trim()).filter(Boolean).join(' > ').toLowerCase();
+}
+
+/**
+ * Every taxonomy path this module is willing to put in the CSV.
+ *
+ * A preset's `shopify_product_type` is free text from the DB — nothing validates
+ * it on the way in. Emitting an unrecognized path verbatim does NOT just produce
+ * a bad category: Shopify's standard metafield definitions
+ * (shopify.color-pattern / fabric / target-gender) are scoped BY product category
+ * ("owner subtype"). A category Shopify can't resolve means those metafields have
+ * no valid owner, so the import rejects the ENTIRE product with
+ * "Owner subtype does not match the metafield definition's constraints" — only
+ * products that happen to have all three metafields blank survive.
+ * (Seen 2026-07-27: presets holding "… > Kids' Clothing > Kids' Tops & T-Shirts"
+ * failed 240 of 263 products.)
+ *
+ * So: an unknown path is discarded in favor of the category-name maps below,
+ * which only ever yield paths from this same set.
+ */
+const KNOWN_TAXONOMY_PATHS = new Set<string>(
+  [...Object.values(SHOPIFY_CATEGORY_MAP), ...Object.values(SHOPIFY_KIDS_CATEGORY_MAP)]
+    .filter(Boolean)
+    .map(normalizeTaxonomyPath)
+);
+
+/** True when `path` is a taxonomy path we know Shopify accepts. */
+export const isKnownTaxonomyPath = (path: string): boolean =>
+  !!path && KNOWN_TAXONOMY_PATHS.has(normalizeTaxonomyPath(path));
+
 /**
  * Resolve the Shopify taxonomy path from the category.
  * Categories are often compound like "mens-tees", "womens-shirts", "kids-hoodies".
@@ -481,11 +513,17 @@ export function buildShopifyCsvRows(products: ExportProduct[], gidOverrides?: Gi
     // segment; a short value feeds Type only. Otherwise fall back to the
     // category-name maps — never pass raw category names to Shopify (they'll
     // fail validation).
+    // A preset path is only trusted when Shopify actually accepts it — see
+    // KNOWN_TAXONOMY_PATHS. An unrecognized path is dropped (both columns fall
+    // back to the category-name maps) rather than failing the whole import.
     const presetShopifyType = (product.shopifyProductType || '').trim();
     const presetIsPath = presetShopifyType.includes('>');
-    const productCategory = (presetIsPath ? presetShopifyType : '') || resolveCategoryPath(catKey);
+    const presetPathOk = presetIsPath && isKnownTaxonomyPath(presetShopifyType);
+    const productCategory = (presetPathOk ? presetShopifyType : '') || resolveCategoryPath(catKey);
     const productType =
-      (presetIsPath ? presetShopifyType.split('>').pop()!.trim() : presetShopifyType)
+      (presetIsPath
+        ? (presetPathOk ? presetShopifyType.split('>').pop()!.trim() : '')
+        : presetShopifyType)
       || resolveProductType(catKey);
 
     // Tags: extract #hashtags from generated description first, fall back to product.tags array

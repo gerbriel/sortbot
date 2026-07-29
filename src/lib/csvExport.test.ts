@@ -6,6 +6,7 @@ import {
   escapeCsvValue,
   resolveCategoryPath,
   resolveProductType,
+  isKnownTaxonomyPath,
   type ExportProduct,
 } from './csvExport';
 
@@ -164,6 +165,30 @@ describe('preset shopifyProductType → CSV taxonomy columns', () => {
     ]);
     expect(row[typeCol]).toBe('Band Tees');
     expect(row[catCol]).toBe('Apparel & Accessories > Clothing > Clothing Tops > T-Shirts');
+  });
+
+  // Regression: on 2026-07-27 presets held invented paths like
+  // "… > Kids' Clothing > Kids' Tops & T-Shirts". Shopify couldn't resolve the
+  // category, so every product carrying a category-scoped standard metafield
+  // (color-pattern / fabric / target-gender) was rejected with "Owner subtype
+  // does not match the metafield definition's constraints" — 240 of 263 failed.
+  it('an unrecognized preset path is DROPPED, not passed through to Shopify', () => {
+    const [row] = buildShopifyCsvRows([
+      product({
+        id: 'a', seoTitle: 'Tee', price: 10, category: 'tees', imageUrls: ['https://x/1.jpg'],
+        shopifyProductType: "Apparel & Accessories > Clothing > Kids' Clothing > Kids' Tops & T-Shirts",
+      } as never),
+    ]);
+    expect(row[catCol]).toBe('Apparel & Accessories > Clothing > Clothing Tops > T-Shirts');
+    // Type falls back to the store's own type vocabulary, not the bogus leaf.
+    expect(row[typeCol]).toBe(resolveProductType('tees'));
+    expect(row[typeCol]).not.toContain("Kids'");
+  });
+
+  it('accepts a known path regardless of spacing/case', () => {
+    expect(isKnownTaxonomyPath('apparel & accessories>clothing>clothing tops>t-shirts')).toBe(true);
+    expect(isKnownTaxonomyPath("Apparel & Accessories > Clothing > Kids' Clothing")).toBe(false);
+    expect(isKnownTaxonomyPath('')).toBe(false);
   });
 
   it('absent → category-name maps drive both columns (unchanged behavior)', () => {

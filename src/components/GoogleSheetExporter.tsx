@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { smartSeoTruncate } from '../lib/textAIService';
 import {
   baseSize, stripUnresolvedTokens, buildCleanTitle, buildShopifyCsv,
-  resolveCategoryPath, resolveProductType,
+  resolveCategoryPath, resolveProductType, isKnownTaxonomyPath,
   resolveColorGid, resolveFabricGid, resolveGenderGid,
   type GidOverrides,
 } from '../lib/csvExport';
@@ -344,11 +344,15 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                     // Same precedence as buildShopifyCsvRows: preset-applied
                     // shopifyProductType wins (full path → category column,
                     // last segment → Type), category-name maps as fallback.
+                    // An unrecognized preset path is dropped (see isKnownTaxonomyPath).
                     const presetShopifyType = (product.shopifyProductType || '').trim();
                     const presetIsPath = presetShopifyType.includes('>');
-                    const productCategory = (presetIsPath ? presetShopifyType : '') || resolveCategoryPath(catKey);
+                    const presetPathOk = presetIsPath && isKnownTaxonomyPath(presetShopifyType);
+                    const productCategory = (presetPathOk ? presetShopifyType : '') || resolveCategoryPath(catKey);
                     const productType =
-                      (presetIsPath ? presetShopifyType.split('>').pop()!.trim() : presetShopifyType)
+                      (presetIsPath
+                        ? (presetPathOk ? presetShopifyType.split('>').pop()!.trim() : '')
+                        : presetShopifyType)
                       || resolveProductType(catKey);
                     const vendor = vendorName?.trim() || product.brand || '';
                     const previewHashtags = (product.generatedDescription || '')
