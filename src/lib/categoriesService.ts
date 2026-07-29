@@ -74,8 +74,8 @@ export async function createCategory(category: CategoryInput): Promise<Category>
       name: normalizedName,
       display_name: category.display_name,
       emoji: category.emoji || '📦',
-      // Persisted DB data, so a hex literal — this is the dark theme's --accent.
-      color: category.color || '#b087ff',
+      // Persisted DB data, so a hex literal — this is the Bone accent.
+      color: category.color || '#e6dccb',
       sort_order: category.sort_order || 999,
       is_active: category.is_active !== false,
     })
@@ -225,13 +225,13 @@ export async function initializeDefaultCategories(): Promise<void> {
   // workspace seven identical swatches, which defeats color-coding the zones.
   // These are PERSISTED DB VALUES, so they are hex literals, not tokens.
   const defaultCategories = [
-    { name: 'sweatshirts', display_name: 'Sweatshirts', emoji: '🧥', color: '#a78bfa', sort_order: 1, templateKey: 'Sweatshirts' },
-    { name: 'outerwear', display_name: 'Outerwear', emoji: '🧥', color: '#38bdf8', sort_order: 2, templateKey: 'Outerwear' },
-    { name: 'tees', display_name: 'Tees', emoji: '👕', color: '#4ade80', sort_order: 3, templateKey: 'Tees' },
-    { name: 'bottoms', display_name: 'Bottoms', emoji: '👖', color: '#fbbf24', sort_order: 4, templateKey: 'Bottoms' },
-    { name: 'femme', display_name: 'Feminine', emoji: '👗', color: '#f472b6', sort_order: 5, templateKey: 'Tees' },
-    { name: 'hats', display_name: 'Hats', emoji: '🧢', color: '#fb923c', sort_order: 6, templateKey: 'Hats' },
-    { name: 'mystery boxes', display_name: 'Mystery Boxes', emoji: '📦', color: '#2dd4bf', sort_order: 7, templateKey: 'Accessories' },
+    { name: 'sweatshirts', display_name: 'Sweatshirts', emoji: '🧥', color: '#d9cbb3', sort_order: 1, templateKey: 'Sweatshirts' },
+    { name: 'outerwear', display_name: 'Outerwear', emoji: '🧥', color: '#a3a695', sort_order: 2, templateKey: 'Outerwear' },
+    { name: 'tees', display_name: 'Tees', emoji: '👕', color: '#c9a68a', sort_order: 3, templateKey: 'Tees' },
+    { name: 'bottoms', display_name: 'Bottoms', emoji: '👖', color: '#9fa3a8', sort_order: 4, templateKey: 'Bottoms' },
+    { name: 'femme', display_name: 'Feminine', emoji: '👗', color: '#c2a0a0', sort_order: 5, templateKey: 'Tees' },
+    { name: 'hats', display_name: 'Hats', emoji: '🧢', color: '#bda368', sort_order: 6, templateKey: 'Hats' },
+    { name: 'mystery boxes', display_name: 'Mystery Boxes', emoji: '📦', color: '#9a9384', sort_order: 7, templateKey: 'Accessories' },
   ];
 
   // Insert categories one by one to handle conflicts gracefully

@@ -147,7 +147,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
                 <b className="mk-red"><Trash2 size={11} /> Delete</b>
               </div>
               <div className="mock-grid">
-                {['#c4b5fd', '#fca5a5', '#93c5fd', '#fcd34d', '#86efac', '#f9a8d4', '#a5b4fc', '#fdba74'].map((c, i) => (
+                {['#d9cbb3', '#b89a86', '#a3a695', '#c9b391', '#8f9285', '#c2a8a0', '#a89b8c', '#d4b78a'].map((c, i) => (
                   <div key={i} className={`mock-card${i === 1 || i === 4 ? ' mock-card--sel' : ''}`} style={{ background: c }}>
                     <Shirt size={22} />
                   </div>
@@ -155,7 +155,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
               </div>
               <div className="mock-groupcard">
                 <span className="mock-grouplabel"><Check size={11} /> 4 images · tees</span>
-                <div className="mock-groupthumbs"><i style={{ background: '#c4b5fd' }} /><i style={{ background: '#a5b4fc' }} /><i style={{ background: '#93c5fd' }} /><i style={{ background: '#818cf8' }} /></div>
+                <div className="mock-groupthumbs"><i style={{ background: '#d9cbb3' }} /><i style={{ background: '#b89a86' }} /><i style={{ background: '#a3a695' }} /><i style={{ background: '#8f9285' }} /></div>
               </div>
             </div>
           </div>

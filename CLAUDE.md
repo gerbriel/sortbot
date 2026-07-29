@@ -33,8 +33,20 @@ writes the new one, and deletes the old — do not just rename the string.
 ### Design system — dark by default (July 2026)
 
 `src/index.css` is the **single source of truth** for color, elevation, and motion.
-Near-black canvas (`--ink-950` `#08080a`, never pure `#000`), violet accent
-(`--accent` `#b087ff`), gold secondary (`--gold` `#ffd074`).
+Palette is **"Bone"** — warm editorial, chosen July 2026 to replace a violet/gold/
+green/blue/orange scheme that read as childish: warm near-black canvas
+(`--ink-950` `#0b0a09`, never pure `#000`), bone/ivory accent (`--accent` `#e6dccb`),
+aged brass secondary (`--gold` `#c8a06a`).
+
+**One accent, desaturated semantics.** The rule that keeps it from drifting back:
+UI chrome carries exactly one hue, and success/warning/danger/info are low-chroma
+(moss `#8f9f80`, amber-brown `#c2925c`, terracotta `#c47060`, warm grey `#a09a91`)
+rather than pure green/yellow/red/blue. Adding a saturated hue anywhere is the
+regression to watch for.
+
+Because everything resolves through these tokens, **swapping the entire palette is
+a ~30-line edit in `:root`** — that is the point of the token layer. Three candidates
+(Graphite / Bone / Copper) were rendered and compared before picking.
 
 **Token families:** `--ink-950…--ink-700` (surfaces, dark→light) · `--text-primary/
 secondary/muted/faint` · `--accent{,-hover,-press,-dim,-line,-glow}` · `--border{,-subtle,-strong}`
@@ -47,6 +59,12 @@ secondary/muted/faint` · `--accent{,-hover,-press,-dim,-line,-glow}` · `--bord
 `--gray-600/700` were body/heading text and are now **near-white**. That inversion is
 what let ~13,300 lines of existing CSS flip correctly without per-rule edits. Any
 `var(--gray-*)` you find is already right.
+
+Three colour surfaces are NOT tokens because they are data or stand-ins, and each
+had to be retuned by hand — check them when the palette changes:
+`Landing.tsx` mock garment tiles (inline hex, they stand in for photos),
+`DEFAULT_CATEGORIES` in `lib/categories.ts` + the duplicate list in
+`initializeDefaultCategories`, and the colour-picker defaults in `CategoriesManager.tsx`.
 
 **Rule for new CSS:** no hardcoded hex. Map by *role* (a white card background is a
 surface → `--ink-850`; a dark heading is text → `--text-primary`), and keep body text
