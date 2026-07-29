@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback, Component, type ReactN
 import exifr from 'exifr';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
-import { Tag, Settings, Package, ShoppingBag, Link2, Scissors, X, Trash2, Bug, BookMarked, KanbanSquare } from 'lucide-react';
+import { Tag, Settings, Package, ShoppingBag, Link2, Scissors, X, Trash2, Bug, BookMarked, KanbanSquare,
+         Cloud, AlertTriangle, RefreshCw, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save } from 'lucide-react';
 import { log, setDebugEnabled, isDebugEnabled } from './lib/debugLogger';
 import Auth from './components/Auth';
 import ImageUpload, { type ImageUploadHandle } from './components/ImageUpload';
@@ -1213,7 +1214,7 @@ function App() {
       if (result.success > 0) {
         setSaveMessage({
           type: 'success',
-          text: `✅ Saved ${result.success} product(s)${result.failed > 0 ? `, ${result.failed} failed` : ''}!`,
+          text: `Saved ${result.success} product(s)${result.failed > 0 ? `, ${result.failed} failed` : ''}!`,
         });
 
         // products/product_images rows were just written — prune stale rows then refresh Library
@@ -1235,14 +1236,14 @@ function App() {
       } else {
         setSaveMessage({
           type: 'error',
-          text: '❌ Failed to save products. Please try again.',
+          text: 'Failed to save products. Please try again.',
         });
       }
     } catch (error) {
       console.error('Save error:', error);
       setSaveMessage({
         type: 'error',
-        text: '❌ An error occurred while saving.',
+        text: 'An error occurred while saving.',
       });
     } finally {
       setSaving(false);
@@ -1462,7 +1463,7 @@ function App() {
 
       // Toast: "N images uploaded"
       const totalCount = uploadedImages.length + items.length;
-      addToast(`✓ ${totalCount} image${totalCount !== 1 ? 's' : ''} uploaded`);
+      addToast(`${totalCount} image${totalCount !== 1 ? 's' : ''} uploaded`);
 
       // Refresh storage meter after new upload
       fetchStorageUsage(user.id);
@@ -2518,7 +2519,7 @@ function App() {
     const batchDisplayName = batch.batch_name || defaultName;
     setSaveMessage({
       type: 'success',
-      text: `✅ Opened "${batchDisplayName}" — drop more images in Step 1 to add to this batch`,
+      text: `Opened "${batchDisplayName}" — drop more images in Step 1 to add to this batch`,
     });
     
     // Clear message after 5 seconds
@@ -2610,7 +2611,7 @@ function App() {
       {storageInfo !== null && user && (
         <div className="storage-meter-nav">
           <div className="storage-meter-nav-inner">
-            <span className="storage-meter-nav-label">☁️ Storage</span>
+            <span className="storage-meter-nav-label"><Cloud size={11} style={{ flexShrink: 0 }} /> Storage</span>
             {storageInfo.loading && storageInfo.usedBytes === 0 ? (
               <span className="storage-meter-nav-calculating">Calculating…</span>
             ) : (() => {
@@ -2633,7 +2634,7 @@ function App() {
                     <span style={{ color: 'var(--text-muted)', marginLeft: '0.4rem', fontSize: '0.72rem' }}>{storageInfo.fileCount.toLocaleString()} files</span>
                   </span>
                   {pct > 0.85 && (
-                    <span className="storage-meter-nav-warn">⚠️ Almost full</span>
+                    <span className="storage-meter-nav-warn"><AlertTriangle size={11} style={{ flexShrink: 0 }} /> Almost full</span>
                   )}
                 </>
               );
@@ -2645,7 +2646,7 @@ function App() {
               title="Refresh storage usage"
               style={{ marginLeft: 'auto' }}
             >
-              {storageInfo.loading ? '…' : '🔄'}
+              {storageInfo.loading ? '…' : <RefreshCw size={11} />}
             </button>
           </div>
         </div>
@@ -2676,11 +2677,11 @@ function App() {
               <h2>Step 1: Upload Images</h2>
               {uploadedImages.length > 0 && currentBatchId ? (
                 <p className="step-description" style={{ fontSize: '14px', color: 'var(--success)', margin: 0 }}>
-                  ➕ <strong>Batch active</strong> — drop more images here to add them to this batch ({uploadedImages.length} image{uploadedImages.length !== 1 ? 's' : ''} already loaded)
+                  <Plus size={11} style={{ flexShrink: 0 }} /> <strong>Batch active</strong> — drop more images here to add them to this batch ({uploadedImages.length} image{uploadedImages.length !== 1 ? 's' : ''} already loaded)
                 </p>
               ) : (
                 <p className="step-description" style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>
-                  💡 <strong>Tip:</strong> You can upload multiple batches! New images will be added to your current session.
+                  <Lightbulb size={11} style={{ flexShrink: 0 }} /> <strong>Tip:</strong> You can upload multiple batches! New images will be added to your current session.
                 </p>
               )}
             </div>
@@ -2690,14 +2691,14 @@ function App() {
                 onClick={() => uploadRef.current?.triggerFolder()}
                 disabled={uploadRef.current?.isBusy ?? false}
               >
-                📁 Import Folder
+                <FolderOpen size={13} style={{ flexShrink: 0 }} /> Import Folder
               </button>
               <button
                 className="step1-import-btn step1-zip-btn"
                 onClick={() => uploadRef.current?.triggerZip()}
                 disabled={uploadRef.current?.isBusy ?? false}
               >
-                🗜️ Import ZIP
+                <FileArchive size={13} style={{ flexShrink: 0 }} /> Import ZIP
               </button>
             </div>
           </div>
@@ -2744,13 +2745,13 @@ function App() {
                 fontSize: '14px'
               }}>
                 <ul style={{ margin: 0, paddingLeft: '1.5rem' }}>
-                  <li>👆 <strong>Click to select/unselect</strong> (click again to deselect)</li>
+                  <li><MousePointerClick size={11} /> <strong>Click to select/unselect</strong> (click again to deselect)</li>
                   <li>⌨️ <strong>Shift+Click</strong> to select multiple at once</li>
-                  <li>🔗 <strong>Click "Group Selected"</strong> - works with 1+ images</li>
-                  <li>✂️ <strong>Click "Ungroup Selected"</strong> - removes selected images from groups</li>
-                  <li>🖱️ <strong>Drag photos</strong> onto a group card to add them to that group</li>
-                  <li>🏷️ <strong>Drag a group card</strong> onto a category (right panel) to categorize it</li>
-                  <li>🗑️ <strong>Click × button</strong> to delete unwanted images</li>
+                  <li><Link2 size={11} /> <strong>Click "Group Selected"</strong> - works with 1+ images</li>
+                  <li><Scissors size={11} /> <strong>Click "Ungroup Selected"</strong> - removes selected images from groups</li>
+                  <li><Move size={11} /> <strong>Drag photos</strong> onto a group card to add them to that group</li>
+                  <li><Tag size={11} /> <strong>Drag a group card</strong> onto a category (right panel) to categorize it</li>
+                  <li><Trash2 size={11} /> <strong>Click × button</strong> to delete unwanted images</li>
                 </ul>
               </div>
             )}
@@ -2882,25 +2883,25 @@ function App() {
               if (multiGroups > 0 && singles > 0) {
                 return (
                   <p style={{ color: 'var(--accent)', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
-                    📦 {totalListings} total listing{totalListings !== 1 ? 's' : ''}: {multiGroups} multi-image group{multiGroups !== 1 ? 's' : ''} + {singles} single{singles !== 1 ? 's' : ''} ({imageCount} images) — use Next/Previous to navigate{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
+                    <Package size={11} style={{ flexShrink: 0 }} /> {totalListings} total listing{totalListings !== 1 ? 's' : ''}: {multiGroups} multi-image group{multiGroups !== 1 ? 's' : ''} + {singles} single{singles !== 1 ? 's' : ''} ({imageCount} images) — use Next/Previous to navigate{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
                   </p>
                 );
               } else if (multiGroups > 0) {
                 return (
                   <p style={{ color: 'var(--accent)', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
-                    📦 {multiGroups} product group{multiGroups !== 1 ? 's' : ''} ({imageCount} images grouped) — use Next/Previous to navigate listings{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
+                    <Package size={11} style={{ flexShrink: 0 }} /> {multiGroups} product group{multiGroups !== 1 ? 's' : ''} ({imageCount} images grouped) — use Next/Previous to navigate listings{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
                   </p>
                 );
               } else if (singles > 0) {
                 return (
                   <p style={{ color: 'var(--accent)', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
-                    📦 {singles} categorized listing{singles !== 1 ? 's' : ''} ({imageCount} image{imageCount !== 1 ? 's' : ''}) — use Next/Previous to navigate{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
+                    <Package size={11} style={{ flexShrink: 0 }} /> {singles} categorized listing{singles !== 1 ? 's' : ''} ({imageCount} image{imageCount !== 1 ? 's' : ''}) — use Next/Previous to navigate{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
                   </p>
                 );
               } else {
                 return (
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
-                    ⚠️ No categorized items yet — go back to Step 2 and drag items to a category zone.
+                    <AlertTriangle size={11} style={{ flexShrink: 0 }} /> No categorized items yet — go back to Step 2 and drag items to a category zone.
                   </p>
                 );
               }
@@ -2930,7 +2931,7 @@ function App() {
                     className="button button-primary"
                     disabled={saving}
                   >
-                    {saving ? '💾 Saving...' : '💾 Save Batch to Database'}
+                    {saving ? <><Save size={13} /> Saving...</> : <><Save size={13} /> Save Batch to Database</>}
                   </button>
                   
                   <button 
@@ -2938,7 +2939,7 @@ function App() {
                     className="button button-secondary"
                     disabled={saving}
                   >
-                    🗑️ Clear Batch
+                    <Trash2 size={13} style={{ flexShrink: 0 }} /> Clear Batch
                   </button>
                 </div>
 
@@ -3023,7 +3024,7 @@ function App() {
           {toasts.map(t => (
             <div key={t.id} className="toast-item">
               <span>{t.msg}</span>
-              <button className="toast-dismiss" onClick={() => dismissToast(t.id)}>✕</button>
+              <button className="toast-dismiss" onClick={() => dismissToast(t.id)}><X size={11} /></button>
             </div>
           ))}
         </div>

@@ -6,6 +6,7 @@ import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
 import { log } from '../lib/debugLogger';
 import './ImageUpload.css';
+import { XCircle, RefreshCw, X, Archive, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 // ─── Compression config ───────────────────────────────────────────────────────
 // Set to false to bypass compression and upload originals (for debugging).
@@ -611,7 +612,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     const savedLabel = savedKB >= 1024
       ? `${(savedKB / 1024).toFixed(1)} MB saved`
       : `${savedKB} KB saved`;
-    onToast?.(`✅ Compression done · ${savedLabel}${alreadyDoneCount > 0 ? ` · ${alreadyDoneCount} already compressed` : ''}${skipped > 0 ? ` · ${skipped} skipped` : ''}`);
+    onToast?.(`Compression done · ${savedLabel}${alreadyDoneCount > 0 ? ` · ${alreadyDoneCount} already compressed` : ''}${skipped > 0 ? ` · ${skipped} skipped` : ''}`);
   };
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -752,7 +753,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
               <span style={{ fontWeight: 600 }}>
-                ❌ {failedUploads.length} file{failedUploads.length !== 1 ? 's' : ''} failed to upload after 5 attempts
+                <XCircle size={12} style={{ flexShrink: 0 }} /> {failedUploads.length} file{failedUploads.length !== 1 ? 's' : ''} failed to upload after 5 attempts
               </span>
               <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
                 <button
@@ -773,14 +774,14 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                     opacity: isUploading ? 0.6 : 1,
                   }}
                 >
-                  🔄 Retry All
+                  <RefreshCw size={12} /> Retry All
                 </button>
                 <button
                   type="button"
                   onClick={() => setFailedUploads([])}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--danger)' }}
                 >
-                  ✕ dismiss
+                  <X size={11} /> dismiss
                 </button>
               </div>
             </div>
@@ -830,7 +831,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                         gap: '0.4rem',
                       }}
                     >
-                      🗜️ Compress {needsWorkCount} Image{needsWorkCount !== 1 ? 's' : ''}
+                      <Archive size={12} style={{ flexShrink: 0 }} /> Compress {needsWorkCount} Image{needsWorkCount !== 1 ? 's' : ''}
                     </button>
                   )}
                 </div>
@@ -864,7 +865,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
                     <span>
-                      ✅ Done! Saved{' '}
+                      <CheckCircle2 size={12} style={{ flexShrink: 0 }} /> Done! Saved{' '}
                       <strong>{recompressState.savedKB >= 1024
                         ? `${(recompressState.savedKB/1024).toFixed(1)} MB`
                         : `${recompressState.savedKB} KB`}</strong>
@@ -875,7 +876,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                       onClick={() => setRecompressState(null)}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--success)', flexShrink: 0 }}
                     >
-                      ✕ dismiss
+                      <X size={11} /> dismiss
                     </button>
                   </div>
                   {/* Error list. The divider was a pale-green hairline — a
@@ -885,7 +886,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                   {recompressState.errors.length > 0 && (
                     <div style={{ marginTop: '0.5rem', borderTop: '1px solid var(--border)', paddingTop: '0.4rem' }}>
                       <div style={{ color: 'var(--danger)', fontWeight: 600, fontSize: '0.78rem', marginBottom: '0.2rem' }}>
-                        ⚠️ {recompressState.errors.length} error{recompressState.errors.length !== 1 ? 's' : ''}:
+                        <AlertTriangle size={11} style={{ flexShrink: 0 }} /> {recompressState.errors.length} error{recompressState.errors.length !== 1 ? 's' : ''}:
                       </div>
                       <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.75rem', color: 'var(--danger)', lineHeight: 1.5 }}>
                         {recompressState.errors.map((e, idx) => <li key={idx}>{e}</li>)}

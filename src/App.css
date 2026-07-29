@@ -25,7 +25,7 @@
 }
 
 .app-header h1 {
-  font-size: 1.25rem;
+  font-size: var(--fs-md);
   font-weight: 600;
   /* --gray-900 was never defined (the legacy ramp stops at 700), so this
      declaration was dropped by the parser and the title fell back to inherit.
@@ -35,7 +35,7 @@
 }
 
 .header-subtitle {
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   color: var(--gray-600);
   margin: var(--space-1) 0 0 0;
 }
@@ -47,7 +47,7 @@
 }
 
 .user-email {
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   color: var(--gray-600);
   padding: var(--space-2) var(--space-3);
   background: var(--gray-50);
@@ -64,7 +64,7 @@
 }
 
 .app-header p {
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   color: var(--gray-500);
   margin: 0;
   display: none;
@@ -83,7 +83,7 @@
 
 .loading-screen p {
   color: var(--gray-600);
-  font-size: 1rem;
+  font-size: var(--fs-base);
 }
 
 /* Main Content Area */
@@ -112,7 +112,7 @@
 
 .step-section h2 {
   color: var(--gray-700);
-  font-size: 1.25rem;
+  font-size: var(--fs-md);
   font-weight: 600;
   margin-bottom: var(--space-5);
   padding-bottom: var(--space-4);
@@ -131,7 +131,7 @@
 }
 .step1-header h2 {
   color: var(--gray-700);
-  font-size: 1.25rem;
+  font-size: var(--fs-md);
   font-weight: 600;
   margin-bottom: 0.25rem;
   padding-bottom: 0;
@@ -147,7 +147,7 @@
   border: none;
   border-radius: 8px;
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -172,7 +172,7 @@
 
 .step-description {
   color: var(--gray-500);
-  font-size: 0.9375rem;
+  font-size: var(--fs-base);
   margin-bottom: var(--space-5);
   line-height: 1.6;
 }
@@ -186,7 +186,7 @@
   background: var(--shopify-green-light);
   color: var(--shopify-green);
   border-radius: var(--radius-md);
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   font-weight: 500;
   margin-top: var(--space-4);
 }
@@ -205,7 +205,7 @@
   border: none;
   padding: var(--space-3) var(--space-5);
   border-radius: var(--radius-md);
-  font-size: 0.9375rem;
+  font-size: var(--fs-base);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -266,7 +266,7 @@
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   padding: 0.25rem 0.55rem;
   /* Fallback literals kept in step with the repointed dark ramp, so the button
      still reads correctly if the token layer ever fails to load. */
@@ -321,7 +321,7 @@
 
 .export-section h3 {
   color: var(--gray-700);
-  font-size: 1rem;
+  font-size: var(--fs-base);
   font-weight: 600;
   margin-bottom: var(--space-4);
 }
@@ -393,7 +393,7 @@
 .grouper-actions-sidebar .button {
   width: 100%;
   justify-content: center;
-  font-size: 0.82rem;
+  font-size: var(--fs-xs);
   padding: 0.45rem 0.75rem;
 }
 
@@ -433,7 +433,7 @@
   .grouper-header {
     width: 160px !important;
     padding: 0.9rem 0.7rem !important;
-    font-size: 0.8rem;
+    font-size: var(--fs-xs);
   }
 }
 
@@ -443,11 +443,11 @@
   }
   
   .app-header h1 {
-    font-size: 1.25rem;
+    font-size: var(--fs-md);
   }
   
   .app-header h1::before {
-    font-size: 1.5rem;
+    font-size: var(--fs-lg);
   }
   
   .app-main {
@@ -461,7 +461,7 @@
   }
   
   .step-section h2 {
-    font-size: 1.125rem;
+    font-size: var(--fs-md);
     margin-bottom: var(--space-4);
   }
   
@@ -477,7 +477,7 @@
   }
   
   .app-header h1 {
-    font-size: 1rem;
+    font-size: var(--fs-base);
   }
   
   .header-subtitle {
@@ -491,7 +491,7 @@
   }
   
   .user-email {
-    font-size: 0.75rem;
+    font-size: var(--fs-xs);
     padding: var(--space-1) var(--space-2);
   }
   
@@ -505,7 +505,7 @@
   }
   
   .step-description {
-    font-size: 0.875rem;
+    font-size: var(--fs-sm);
   }
 
   /* Hide redundant "drag to category" helper text when panels are stacked */
@@ -515,7 +515,7 @@
 
   /* Action buttons in step2 right panel: smaller text on tiny screens */
   .grouper-actions-sidebar .button {
-    font-size: 0.78rem;
+    font-size: var(--fs-xs);
     padding: 0.4rem 0.6rem;
   }
 }
@@ -555,7 +555,7 @@
   border-radius: var(--radius-md);
   border: 1px solid var(--danger);
   margin-top: var(--space-4);
-  font-size: 0.9375rem;
+  font-size: var(--fs-base);
 }
 
 .success-message {
@@ -565,7 +565,7 @@
   border-radius: var(--radius-md);
   border: 1px solid var(--success);
   margin-top: var(--space-4);
-  font-size: 0.9375rem;
+  font-size: var(--fs-base);
 }
 
 /* ── Navbar storage meter ──────────────────────────────────────────────────── */
@@ -581,7 +581,7 @@
   gap: 0.6rem;
   max-width: 1600px;
   margin: 0 auto;
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
 }
 
 .storage-meter-nav-label {
@@ -591,7 +591,7 @@
 }
 
 .storage-meter-nav-calculating {
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   font-style: italic;
 }
@@ -620,7 +620,7 @@
 }
 
 .storage-meter-nav-warn {
-  font-size: 0.72rem;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   color: var(--danger);
   background: var(--danger-dim);
@@ -651,7 +651,7 @@
   color: var(--text-primary);
   padding: 0.65rem 1rem;
   border-radius: 10px;
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   font-weight: 500;
   box-shadow: var(--shadow-lg);
   pointer-events: all;
@@ -664,7 +664,7 @@
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   padding: 0;
   line-height: 1;
   flex-shrink: 0;

@@ -127,6 +127,32 @@ html {
   --space-10: 2.5rem;
   --space-12: 3rem;
 
+  /* ── Type scale ───────────────────────────────────────────────────────────
+     Steps 1-4 had drifted to 35 distinct font-size values — four of them inside
+     a 0.05rem band (0.8 / 0.8125 / 0.82 / 0.85), plus stray px values that
+     ignore the 9px root entirely and a handful of !important overrides. This is
+     the ramp everything snaps to.
+
+     REMEMBER THE ROOT IS 9px, so 1rem = 9px. The px column below is what the
+     user actually sees — that is the number to reason about, not the rem.
+     Sizes were chosen to preserve the existing dense look (this app is meant to
+     read like it is at 67% zoom); only the sub-6.5px tiers were lifted, because
+     nothing below that is legible. */
+  --fs-2xs:  0.72rem;   /*  6.5px — badges, chips, micro-meta */
+  --fs-xs:   0.8rem;    /*  7.2px — captions, secondary meta */
+  --fs-sm:   0.88rem;   /*  7.9px — secondary UI text, dense table cells */
+  --fs-base: 1rem;      /*  9.0px — body, buttons, inputs (the default) */
+  --fs-md:   1.15rem;   /* 10.4px — emphasized body, card titles */
+  --fs-lg:   1.4rem;    /* 12.6px — section headings */
+  --fs-xl:   2rem;      /* 18.0px — step titles */
+  --fs-2xl:  2.5rem;    /* 22.5px — page headings */
+  --fs-3xl:  3rem;      /* 27.0px — hero */
+
+  /* Line heights pair with the scale: tighter as type gets larger. */
+  --lh-tight:   1.25;   /* headings */
+  --lh-snug:    1.4;    /* dense UI, table rows, chips */
+  --lh-normal:  1.6;    /* body copy */
+
   /* ── Radius — slightly tighter than the old scale; large radii read soft,
         and this brand is not soft. */
   --radius-sm: 0.25rem;
@@ -191,6 +217,14 @@ body {
   background-clip: content-box;
 }
 *::-webkit-scrollbar-thumb:hover { background: #3a3a46; background-clip: content-box; }
+
+/* Lucide icons replaced the emoji in the Step 1-4 UI. Emoji sat on the text
+   baseline for free; SVGs do not — without this they hang low in inline
+   contexts (list items, headings, table cells) and squash in flex rows. */
+.lucide {
+  flex-shrink: 0;
+  vertical-align: -0.125em;
+}
 
 input::placeholder,
 textarea::placeholder {

@@ -1,7 +1,9 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
-import { Package, Image, ArrowDown, ArrowUp, ArrowUpDown, Check } from 'lucide-react';
+import { Package, Image, ArrowDown, ArrowUp, ArrowUpDown, Check, RotateCcw, CornerUpLeft,
+         CornerUpRight, Search, X, Camera, Circle, CircleDot, Crosshair, ClipboardPaste,
+         Trash2, Scissors } from 'lucide-react';
 import LoadingProgress from './LoadingProgress';
 import { log } from '../lib/debugLogger';
 import './ImageGrouper.css';
@@ -2096,7 +2098,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0,
               }} />
             ) : (
-              <span style={{ color: 'var(--success)', fontSize: 15 }}>✓</span>
+              <span style={{ color: 'var(--success)', display: 'inline-flex' }}><Check size={13} /></span>
             )}
             {cropPasteProgress.status === 'running'
               ? `Applying crop to ${cropPasteProgress.total} image${cropPasteProgress.total > 1 ? 's' : ''}…`
@@ -2129,7 +2131,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 }}
                 style={{ flex: 1, background: 'var(--warning)', color: 'var(--ink-950)', border: 'none', borderRadius: 8, padding: '0.4rem 0.7rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem' }}
               >
-                ↺ Retry {cropPasteProgress.failed.length} failed
+                <RotateCcw size={12} style={{ flexShrink: 0 }} /> Retry {cropPasteProgress.failed.length} failed
               </button>
               <button
                 onClick={() => setCropPasteProgress(null)}
@@ -2194,7 +2196,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 alignItems: 'center', gap: '0.4rem', userSelect: 'none',
               }}
             >
-              ↩ Undo
+              <CornerUpLeft size={12} /> Undo
             </span>
           )}
           {canRedo && (
@@ -2206,7 +2208,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 alignItems: 'center', gap: '0.4rem', userSelect: 'none',
               }}
             >
-              ↪ Redo
+              <CornerUpRight size={12} /> Redo
             </span>
           )}
         </div>
@@ -2246,7 +2248,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         {/* Filter bar — view type, date, category (all combinable, all toggle buttons) */}
         <div className="filter-bar">
           <span className="filter-bar-label">
-            🔎 Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}:
+            <Search size={12} style={{ flexShrink: 0 }} /> Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}:
           </span>
 
           {/* View type toggle buttons */}
@@ -2315,13 +2317,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               onClick={() => setFilters({ date: '', view: 'all', category: '' })}
               title="Clear all filters"
             >
-              ✕ Clear
+              <X size={11} /> Clear
             </button>
           )}
 
           {/* ── Auto-group by N ─────────────────────────────────────────────── */}
           <div className="auto-group-control" title="Auto-group images by sequential filename order. Set how many photos you took per item, then click Apply.">
-            <span className="auto-group-label">📸 Photos/item:</span>
+            <span className="auto-group-label"><Camera size={12} style={{ flexShrink: 0 }} /> Photos/item:</span>
             <input
               type="number"
               min={1}
@@ -2373,7 +2375,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 ? `Pick mode ON — selecting ${autoGroupN} at a time. Click to turn off.`
                 : `Pick mode: auto-select next ${autoGroupN} ungrouped images for manual grouping`}
             >
-              {pickMode ? '🟢 Pick' : '⬜ Pick'}
+              {pickMode ? <><CircleDot size={12} /> Pick</> : <><Circle size={12} /> Pick</>}
             </button>
             {/* Quick-pick slider: 1–10 */}
             <input
@@ -2441,7 +2443,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             if (!next) updateSelection(new Set());
           }}
         >
-          {photoSelectMode ? '🎯 Picking… (stop)' : '🎯 Pick photos'}
+          {photoSelectMode ? <><Crosshair size={12} /> Picking… (stop)</> : <><Crosshair size={12} /> Pick photos</>}
         </button>
 
         <span className="ptb-divider" />
@@ -2539,7 +2541,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   }
                 }}
               >
-                📋 Paste to {selectedItems.size}
+                <ClipboardPaste size={12} style={{ flexShrink: 0 }} /> Paste to {selectedItems.size}
               </button>
             )}
           </>
@@ -2551,7 +2553,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             title="Revert selected cropped images back to their original un-cropped versions"
             onClick={() => revertToOriginalBatch([...selectedItems])}
           >
-            ↺ Revert {groupedItems.filter(i => selectedItems.has(i.id) && i.originalStoragePath).length}
+            <RotateCcw size={12} style={{ flexShrink: 0 }} /> Revert {groupedItems.filter(i => selectedItems.has(i.id) && i.originalStoragePath).length}
           </button>
         )}
 
@@ -2561,7 +2563,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             title={`Delete ${selectedItems.size} selected image${selectedItems.size > 1 ? 's' : ''}`}
             onClick={handleDeleteSelected}
           >
-            🗑 Delete {selectedItems.size}
+            <Trash2 size={12} style={{ flexShrink: 0 }} /> Delete {selectedItems.size}
           </button>
         )}
 
@@ -2993,7 +2995,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           >
             {/* Lightbox content — hidden while crop is active */}
             {!cropping && <>
-              <button className="lightbox-close" onClick={(e) => { e.stopPropagation(); setLightboxSrc(null); }}>✕</button>
+              <button className="lightbox-close" onClick={(e) => { e.stopPropagation(); setLightboxSrc(null); }}><X size={16} /></button>
               <div className="lightbox-toolbar" onClick={(e) => e.stopPropagation()}>
                 <button className="lightbox-tool-btn" title="Rotate left" onClick={() => {
                   if (!lbItem) return;
@@ -3014,7 +3016,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   setCropModal({ open: true, itemId: lbItem.id });
                   setActivePreset('FREE'); setAspectLock(null);
                   setTempCrop({ x: 5, y: 5, w: 90, h: 90 });
-                }}>✂ Crop</button>
+                }}><Scissors size={12} /> Crop</button>
                 {lbItem && (
                   <button className="lightbox-tool-btn" title="Copy rotation"
                     onClick={(e) => { e.stopPropagation(); setCopiedRotation(lbItem.imageRotation || 0); }}>

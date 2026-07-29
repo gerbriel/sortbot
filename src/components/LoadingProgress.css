@@ -35,7 +35,7 @@
 
 .loading-message {
   text-align: center;
-  font-size: 20px;
+  font-size: var(--fs-2xl);
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 40px;
@@ -277,7 +277,7 @@
 }
 
 .progress-text {
-  font-size: 18px;
+  font-size: var(--fs-xl);
   font-weight: 700;
   color: var(--success);
   min-width: 50px;
@@ -292,7 +292,7 @@
   }
   
   .loading-message {
-    font-size: 18px;
+    font-size: var(--fs-xl);
     margin-bottom: 32px;
   }
   

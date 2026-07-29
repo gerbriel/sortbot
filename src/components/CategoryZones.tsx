@@ -36,6 +36,9 @@ import {
   PersonStanding,
   Ribbon,
   Sparkles,
+  Tag,
+  Menu,
+  Check,
 } from 'lucide-react';
 import './CategoryZones.css';
 
@@ -734,7 +737,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
           )}
         </div>
 
-        <h3>{compactMode ? '🏷️ Drop Here to Categorize' : '🏷️ Drag Groups Here to Categorize'}</h3>
+        <h3><Tag size={13} style={{ flexShrink: 0 }} /> {compactMode ? 'Drop Here to Categorize' : 'Drag Groups Here to Categorize'}</h3>
         {compactMode && selectedItemIds && selectedItemIds.size > 0 && (
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0 0 0.5rem', textAlign: 'center' }}>
             {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} selected — click a category to assign
@@ -789,7 +792,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
             <Package size={20} /> All Product Groups ({orderedGroups.length})
           </h3>
           <p className="reorder-hint">
-            ☰ Drag the <strong>grip handle</strong> on a card to reorder groups · Drag <strong>photos within a card</strong> to reorder images
+            <Menu size={11} style={{ flexShrink: 0 }} /> Drag the <strong>grip handle</strong> on a card to reorder groups · Drag <strong>photos within a card</strong> to reorder images
           </p>
           <div className="groups-grid">
             {orderedGroups.map(([groupId, groupItems], idx) => (
@@ -816,7 +819,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
 
                 {groupItems[0].category && (
                   <div className="category-indicator">
-                    <span className="category-check">✓</span>
+                    <span className="category-check"><Check size={11} /></span>
                     <span className="category-label">{groupItems[0].category}</span>
                   </div>
                 )}

@@ -9,7 +9,7 @@
 }
 
 .category-zones-container.compact .category-zones h3 {
-  font-size: 1rem;
+  font-size: var(--fs-base);
   margin-bottom: 0.75rem;
 }
 
@@ -31,13 +31,13 @@
 }
 
 .category-zones-container.compact .category-zone .category-name {
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   flex: 1;
   text-align: left;
 }
 
 .category-zones-container.compact .category-zone .category-count {
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 
@@ -55,7 +55,7 @@
   text-align: center;
   color: var(--text-primary);
   margin-bottom: 1.5rem;
-  font-size: 1.3rem;
+  font-size: var(--fs-lg);
 }
 
 .category-grid {
@@ -138,19 +138,19 @@
 }
 
 .category-icon {
-  font-size: 2.5rem;
+  font-size: var(--fs-2xl);
   margin-bottom: 0.5rem;
 }
 
 .category-name {
   font-weight: 600;
   color: var(--text-primary);
-  font-size: 0.95rem;
+  font-size: var(--fs-base);
   text-transform: capitalize;
 }
 
 .category-count {
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
 }
 
@@ -161,7 +161,7 @@
 .groups-section h3 {
   color: var(--text-primary);
   margin-bottom: 1rem;
-  font-size: 1.2rem;
+  font-size: var(--fs-md);
 }
 
 .groups-grid {
@@ -204,7 +204,7 @@
   color: var(--ink-950);
   padding: 0.25rem 0.75rem;
   border-radius: 20px;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   font-weight: 600;
 }
 
@@ -213,7 +213,7 @@
   color: var(--ink-950);
   padding: 0.35rem 0.85rem;
   border-radius: 20px;
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
   font-weight: 700;
   text-transform: capitalize;
   box-shadow: 0 2px 6px var(--success-dim);
@@ -320,7 +320,7 @@
      black plate is still the correct treatment in dark mode. */
   background: rgba(0, 0, 0, 0.55);
   color: var(--text-primary);
-  font-size: 0.7rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   padding: 2px 7px;
   border-radius: 10px;
@@ -330,7 +330,7 @@
 
 /* ── Reorder hint ────────────────────────────────────────────────── */
 .reorder-hint {
-  font-size: 0.82rem;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   margin: -0.5rem 0 1rem;
   padding: 0.4rem 0.75rem;
@@ -352,7 +352,7 @@
   }
   
   .category-icon {
-    font-size: 2rem;
+    font-size: var(--fs-xl);
   }
   
   .groups-grid {
@@ -369,7 +369,7 @@
   color: var(--ink-950);
   padding: 0.5rem 1rem;
   border-radius: 20px;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   font-weight: 600;
   box-shadow: 0 4px 12px var(--success-dim);
   display: flex;
@@ -381,7 +381,7 @@
 
 .category-check {
   font-weight: bold;
-  font-size: 1rem;
+  font-size: var(--fs-base);
 }
 
 .category-label {

@@ -1,4 +1,5 @@
 import { forwardRef, useImperativeHandle, useEffect, useState } from 'react';
+import { Ban, FileText, CheckCircle2 } from 'lucide-react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
 import { smartSeoTruncate } from '../lib/textAIService';
@@ -294,7 +295,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                 background: 'var(--danger-dim)', border: '1px solid var(--danger)', color: 'var(--danger)',
                 fontSize: '0.85rem', fontWeight: 600,
               }}>
-                🚫 Export blocked — {invalidPricedProducts.length} product
+                <Ban size={13} style={{ flexShrink: 0 }} /> Export blocked — {invalidPricedProducts.length} product
                 {invalidPricedProducts.length > 1 ? 's have' : ' has'} no price (or $0).
                 Set a price in Step 3 before exporting:
                 <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.2rem', fontWeight: 500 }}>
@@ -446,7 +447,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
 
       {!compactMode && (
         <div className="export-instructions">
-          <h3>📄 CSV Export</h3>
+          <h3><FileText size={14} style={{ flexShrink: 0 }} /> CSV Export</h3>
           <p style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', marginTop: '0.5rem', lineHeight: '1.5' }}>
             Downloads a CSV file with <strong>all product data and fields</strong> ready for Shopify import. 
             The CSV includes image URLs that Shopify will automatically fetch during import.
@@ -455,7 +456,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
               the translucent info fill keeps it distinct without a second opaque
               surface. Text inherits --text-primary from the page. */}
           <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--info-dim)', borderRadius: '8px', fontSize: '0.9rem' }}>
-            <strong>✅ Includes all fields:</strong>
+            <strong><CheckCircle2 size={12} style={{ flexShrink: 0 }} /> Includes all fields:</strong>
             <ul style={{ marginTop: '0.5rem', marginBottom: 0, paddingLeft: '1.5rem' }}>
               <li>Product details (title, description, brand, category)</li>
               <li>Pricing (price, compare-at price, cost)</li>

@@ -18,8 +18,12 @@
 }
 
 .form-section-title {
+  /* icons replaced the emoji here — flex keeps them on the text row */
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   margin: 0 0 0.5rem 0;
-  font-size: 0.65rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -57,7 +61,7 @@
   font-weight: 700;
   margin-bottom: 0.2rem;
   color: var(--accent);
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -67,7 +71,7 @@
   padding: 0.3rem 0.4rem;
   border: 1px solid var(--border);
   border-radius: 4px;
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   transition: all 0.2s;
   /* recessed one step below the --ink-800 panel it sits in */
   background: var(--ink-850);
@@ -89,7 +93,7 @@
 .preset-badge {
   display: inline-flex;
   align-items: center;
-  font-size: 0.65rem;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   color: var(--accent);
   background: var(--accent-dim);
@@ -111,7 +115,7 @@
 .button {
   padding: 0.3rem 0.7rem;
   border-radius: 4px;
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
@@ -217,7 +221,7 @@ input[type="number"].info-input::-webkit-outer-spin-button {
   border-radius: 10px;
   background: var(--warning-dim);
   color: var(--warning);
-  font-size: 0.62rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;

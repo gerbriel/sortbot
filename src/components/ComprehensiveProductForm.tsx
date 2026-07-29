@@ -1,4 +1,5 @@
 import React from 'react';
+import { ArrowLeft, DollarSign, Tag, Ruler, Package, Zap } from 'lucide-react';
 import type { ClothingItem } from '../App';
 import { normalizeSizeValue } from '../lib/textAIService';
 import './ComprehensiveProductForm.css';
@@ -47,7 +48,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
     if (!show) return null;
     return (
       <span className="preset-badge" title={`From "${currentItem._presetData?.displayName}" preset`}>
-        ← Preset
+        <ArrowLeft size={11} style={{ flexShrink: 0 }} /> Preset
       </span>
     );
   };
@@ -78,7 +79,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
 
       {/* Row 1: Pricing */}
       <div className="form-section-flat">
-        <h3 className="form-section-title">💰 Pricing</h3>
+        <h3 className="form-section-title"><DollarSign size={13} style={{ flexShrink: 0 }} /> Pricing</h3>
         <div className="fields-row">
           <div className="info-item">
             <label>Price ($):</label>
@@ -97,7 +98,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
 
       {/* Row 2: Core Details */}
       <div className="form-section-flat">
-        <h3 className="form-section-title">🏷️ Core Details</h3>
+        <h3 className="form-section-title"><Tag size={13} style={{ flexShrink: 0 }} /> Core Details</h3>
         <div className="fields-row">
           <div className="info-item">
             <label>Brand: <PresetBadge show={isFromPreset('brand')} /></label>
@@ -186,7 +187,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
 
       {/* Row 3: Measurements */}
       <div className="form-section-flat">
-        <h3 className="form-section-title">📏 Measurements (inches)</h3>
+        <h3 className="form-section-title"><Ruler size={13} style={{ flexShrink: 0 }} /> Measurements (inches)</h3>
         <div className="fields-row">
           <div className="info-item">
             <label>Width ("): {measurementNeeded('width', currentItem.measurements?.width)}</label>
@@ -227,7 +228,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
 
       {/* Row 4: Inventory & Shipping */}
       <div className="form-section-flat">
-        <h3 className="form-section-title">📦 Inventory & Shipping</h3>
+        <h3 className="form-section-title"><Package size={13} style={{ flexShrink: 0 }} /> Inventory & Shipping</h3>
         <div className="fields-row">
           <div className="info-item">
             <label>SKU:</label>
@@ -274,7 +275,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
 
       {/* Row 5: Status & Publishing */}
       <div className="form-section-flat">
-        <h3 className="form-section-title">⚡ Status & SEO</h3>
+        <h3 className="form-section-title"><Zap size={13} style={{ flexShrink: 0 }} /> Status & SEO</h3>
         <div className="fields-row">
           <div className="info-item">
             <label>Status:</label>

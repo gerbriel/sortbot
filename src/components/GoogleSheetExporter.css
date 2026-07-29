@@ -32,12 +32,12 @@
 }
 
 .stat-number {
-  font-size: 2rem;
+  font-size: var(--fs-xl);
   font-weight: bold;
 }
 
 .stat-label {
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
   opacity: 0.9;
 }
 
@@ -70,7 +70,7 @@
   color: var(--text-primary);
   border: 2px solid var(--border);
   border-radius: 6px;
-  font-size: 0.95rem;
+  font-size: var(--fs-base);
   font-family: monospace;
   transition: border-color 0.2s;
 }
@@ -101,7 +101,7 @@
   color: var(--success);
   text-decoration: none;
   font-family: monospace;
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
 }
 
 .sheet-url-saved a:hover {
@@ -113,7 +113,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   padding: 1rem;
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
 }
 
 .sheet-url-help p {

@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import type { ClothingItem } from '../App';
-import { Target } from 'lucide-react';
+import { Target, AlertTriangle, Check, Download, Search, Hourglass, Square, Mic, Trash2,
+         Brush, ClipboardPaste, Crop, X, Sparkles, Brain, RefreshCw, Palette, ClipboardList,
+         Lightbulb, Copy } from 'lucide-react';
 import { ComprehensiveProductForm } from './ComprehensiveProductForm';
 import { getCategoryPresets } from '../lib/categoryPresetsService';
 import type { CategoryPreset } from '../lib/categoryPresets';
@@ -2092,7 +2094,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   if (!currentItem) {
     return (
       <div className="product-description-container" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.95rem' }}>
-        ⚠️ No categorized items yet — go back to Step 2 and drag items to a category zone.
+        <AlertTriangle size={14} style={{ flexShrink: 0 }} /> No categorized items yet — go back to Step 2 and drag items to a category zone.
       </div>
     );
   }
@@ -2233,7 +2235,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               </button>
             ) : (
               <button className="button button-secondary" onClick={handleFinish}>
-                Finish ✓
+                Finish <Check size={12} />
               </button>
             )}
           </div>
@@ -2265,7 +2267,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 background: 'linear-gradient(135deg, var(--success) 0%, var(--shopify-green-dark) 100%)',
               }}
             >
-              💾 Download CSV
+              <Download size={12} style={{ flexShrink: 0 }} /> Download CSV
             </button>
           )}
 
@@ -2346,7 +2348,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
           {/* Magnifier settings controls */}
           <div className="magnifier-controls">
-            <span className="magnifier-controls-label">🔍 Magnifier</span>
+            <span className="magnifier-controls-label"><Search size={11} style={{ flexShrink: 0 }} /> Magnifier</span>
             <label className="magnifier-toggle">
               <input
                 type="checkbox"
@@ -2390,7 +2392,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             <h3>Voice Description</h3>
             {!speechSupported && (
               <div className="voice-warning">
-                ⚠️ Speech recognition not supported. Please use Chrome or Edge browser.
+                <AlertTriangle size={12} style={{ flexShrink: 0 }} /> Speech recognition not supported. Please use Chrome or Edge browser.
               </div>
             )}
             <div className="voice-controls">
@@ -2409,7 +2411,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 disabled={!speechSupported || isTransitioning}
                 style={isRecording ? { background: 'var(--danger)' } : undefined}
               >
-                {isTransitioning ? '⏳ Wait...' : (isRecording ? '⏹ Stop Recording' : '🎤 Start Recording')}
+                {isTransitioning ? <><Hourglass size={12} /> Wait...</> : (isRecording ? <><Square size={12} /> Stop Recording</> : <><Mic size={12} /> Start Recording</>)}
               </button>
               {currentItem.voiceDescription && !isRecording && (
                 <button 
@@ -2417,7 +2419,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   onClick={handleClearTranscript}
                   style={{ background: 'var(--warning)' }}
                 >
-                  🗑️ Clear
+                  <Trash2 size={12} /> Clear
                 </button>
               )}
               {/* Format painter — copy/paste structured fields */}
@@ -2444,7 +2446,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 }}
                 style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
               >
-                🖌️ Copy Fields
+                <Brush size={12} style={{ flexShrink: 0 }} /> Copy Fields
               </button>
               {copiedFields && (
                 <button
@@ -2458,7 +2460,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   }}
                   style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem', background: 'var(--accent)' }}
                 >
-                  📋 Paste Fields
+                  <ClipboardPaste size={12} style={{ flexShrink: 0 }} /> Paste Fields
                 </button>
               )}
               {copiedCrop && (
@@ -2477,13 +2479,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                         onClick={() => handlePasteCrop(copiedCrop)}
                         style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem', background: 'var(--info)' }}
                       >
-                        📐 Paste Crop{selectedGroupIds.size > 0 ? ` (${selectedGroupIds.size})` : ' (All)'}
+                        <Crop size={12} style={{ flexShrink: 0 }} /> Paste Crop{selectedGroupIds.size > 0 ? ` (${selectedGroupIds.size})` : ' (All)'}
                       </button>
                       <button
                         title="Clear copied crop"
                         onClick={() => setCopiedCrop(null)}
                         style={{ fontSize: '0.8rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '0.1rem 0.3rem' }}
-                      >✕</button>
+                      ><X size={12} /></button>
                     </>
                   )}
                 </div>
@@ -2540,7 +2542,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       transition: 'all 0.15s',
                     }}
                   >
-                    🗑 Clear Fields
+                    <Trash2 size={12} style={{ flexShrink: 0 }} /> Clear Fields
                   </button>
                   <div style={{ display: 'flex', gap: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-control)' }}>
                     {(['table', 'text'] as const).map(mode => (
@@ -2586,7 +2588,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     <>
                       {anySuggested && (
                         <span className="descriptor-chips-hint">
-                          ✦ suggested{currentItem?.brand ? ` for ${currentItem.brand}` : ''}
+                          <Sparkles size={10} style={{ flexShrink: 0 }} /> suggested{currentItem?.brand ? ` for ${currentItem.brand}` : ''}
                         </span>
                       )}
                       {ordered.map(({ chip, suggested, brandOnly }) => {
@@ -2829,7 +2831,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               )}
               {duplicateTitleWarning && (
                 <p style={{ fontSize: '0.78rem', color: 'var(--danger)', margin: '0.25rem 0 0', fontWeight: 600 }}>
-                  ⚠️ Duplicate title — this title already exists in another batch on Shopify
+                  <AlertTriangle size={12} style={{ flexShrink: 0 }} /> Duplicate title — this title already exists in another batch on Shopify
                 </p>
               )}
             </div>
@@ -2873,7 +2875,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   }}
                   title="Re-extract all fields from voice + description, then regenerate listing"
                 >
-                  {isGenerating ? '🧠 Regenerating…' : '🔄 Regenerate Description'}
+                  {isGenerating ? <><Brain size={12} /> Regenerating…</> : <><RefreshCw size={12} /> Regenerate Description</>}
                 </button>
                 <button
                   className="button"
@@ -2901,7 +2903,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  🗑 Clear
+                  <Trash2 size={12} /> Clear
                 </button>
               </div>
               <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.35rem', marginBottom: 0 }}>
@@ -2946,7 +2948,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 borderRadius: '8px'
               }}>
                 <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  ✓ Category Preset Applied
+                  <Check size={12} style={{ flexShrink: 0 }} /> Category Preset Applied
                 </h4>
                 <div style={{ fontSize: '0.9rem', display: 'grid', gap: '0.5rem' }}>
                   <div><strong>Category:</strong> {appliedPresetLabel || currentItem._presetData?.displayName}</div>
@@ -2956,7 +2958,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     return desc ? <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>{desc}</div> : null;
                   })()}
                   <div style={{ fontSize: '0.85rem', color: 'var(--success)', marginTop: '0.5rem' }}>
-                    📋 Form fields have been pre-filled with preset defaults. You can edit any field to override.
+                    <ClipboardList size={11} style={{ flexShrink: 0 }} /> Form fields have been pre-filled with preset defaults. You can edit any field to override.
                   </div>
                 </div>
               </div>
@@ -2977,16 +2979,16 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     fontWeight: 600,
                     color: 'var(--text-primary)'
                   }}>
-                    🎨 Override Preset (Optional):
+                    <Palette size={11} style={{ flexShrink: 0 }} /> Override Preset (Optional):
                   </label>
                   {selectedGroupIds.size > 0 && (
                     <span style={{ fontSize: '0.8rem', color: 'var(--accent)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      ✦ {selectedGroupIds.size} group{selectedGroupIds.size > 1 ? 's' : ''} selected — will apply to all
+                      <Sparkles size={10} style={{ flexShrink: 0 }} /> {selectedGroupIds.size} group{selectedGroupIds.size > 1 ? 's' : ''} selected — will apply to all
                       <button
                         onClick={() => setSelectedGroupIds(new Set())}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '0 0.2rem' }}
                         title="Clear selection"
-                      >✕</button>
+                      ><X size={12} /></button>
                     </span>
                   )}
                 </div>
@@ -3003,7 +3005,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       transition: 'border-color 0.15s, box-shadow 0.15s',
                     }}
                   >
-                    <span style={{ padding: '0 0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>🔍</span>
+                    <span style={{ padding: '0 0.5rem', color: 'var(--text-muted)', fontSize: 'var(--fs-sm)', display: 'inline-flex' }}><Search size={11} /></span>
                     <input
                       type="text"
                       placeholder={
@@ -3025,7 +3027,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       <button
                         onMouseDown={e => { e.preventDefault(); setPresetSearchQuery(''); setAppliedPresetLabel(''); setPresetSearchOpen(true); }}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 0.5rem', color: 'var(--text-muted)', fontSize: '1rem', lineHeight: 1 }}
-                      >✕</button>
+                      ><X size={12} /></button>
                     )}
                   </div>
 
@@ -3041,7 +3043,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                           normSearch(p.product_type || '').includes(q) ||
                           normSearch(p.category_name || '').includes(q)
                         )
-                        .map(p => ({ id: p.id, label: p.display_name + (p.is_default ? ' ✓' : ''), sub: p.product_type || '' }))
+                        .map(p => ({ id: p.id, label: p.display_name + (p.is_default ? ' (default)' : ''), sub: p.product_type || '' }))
                     ];
                     return (
                       <div style={{
@@ -3088,7 +3090,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   marginTop: '0.5rem',
                   marginBottom: 0
                 }}>
-                  💡 Select a different preset to override the current one. Voice dictation always takes precedence.
+                  <Lightbulb size={11} style={{ flexShrink: 0 }} /> Select a different preset to override the current one. Voice dictation always takes precedence.
                 </p>
               </div>
             )}
@@ -3136,7 +3138,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           <div className="lightbox-overlay" onClick={!cropping ? closeLightbox : undefined}>
             {/* Everything below is hidden while crop is active */}
             {!cropping && <>
-              <button className="lightbox-close-standalone" onClick={closeLightbox} title="Close">✕</button>
+              <button className="lightbox-close-standalone" onClick={closeLightbox} title="Close"><X size={12} /></button>
               {canNav && <button className="lightbox-nav lightbox-nav-left" onClick={(e) => { e.stopPropagation(); navigateLightbox(-1); }}>‹</button>}
               {canNav && <button className="lightbox-nav lightbox-nav-right" onClick={(e) => { e.stopPropagation(); navigateLightbox(1); }}>›</button>}
               <div className="lightbox-toolbar" onClick={(e) => e.stopPropagation()}>
@@ -3146,7 +3148,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   <button className="lightbox-tool-btn" title="Rotate right"
                     onClick={() => { const u = processedItems.map(i => i.id === lbItem.id ? { ...i, imageRotation: ((i.imageRotation || 0) + 90) % 360 } : i); setProcessedItems(u); setHasUnsavedChanges(true); }}>⟳ Rotate R</button>
                   <button className="lightbox-tool-btn" title="Crop image"
-                    onClick={() => { setCropModal({ open: true, itemId: lbItem.id }); setActivePreset('FREE'); setAspectLock(null); setTempCrop({ x: 5, y: 5, w: 90, h: 90 }); }}>✂ Crop</button>
+                    onClick={() => { setCropModal({ open: true, itemId: lbItem.id }); setActivePreset('FREE'); setAspectLock(null); setTempCrop({ x: 5, y: 5, w: 90, h: 90 }); }}><Crop size={12} /> Crop</button>
                 </>)}
               </div>
               <img src={lightboxSrc} alt="Full size preview" className="lightbox-image"
@@ -3172,7 +3174,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                          fill, so the label has to stay light or it disappears. */
                       style={{ background: tempCrop ? 'var(--accent)' : undefined, color: tempCrop ? 'var(--ink-950)' : 'var(--text-primary)', opacity: tempCrop ? 1 : 0.4 }}
                       onClick={() => { if (tempCrop) { setCopiedCrop(tempCrop); } }}>
-                      📐 Copy Crop
+                      <Copy size={12} style={{ flexShrink: 0 }} /> Copy Crop
                     </button>
                     <button className="crop-fs-btn crop-fs-done" disabled={!tempCrop} onClick={async () => {
                       if (!cropModal.itemId || !tempCrop) return;
