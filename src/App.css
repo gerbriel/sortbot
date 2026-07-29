@@ -6,14 +6,32 @@
 
 /* Header - Shopify Admin Style */
 .app-header {
-  background: var(--ink-900);
-  border-bottom: 1px solid var(--gray-200);
+  /* Black nav against the white page — the one deliberately inverted surface
+     in the app, so it does NOT take a --ink-* token. Everything inside it must
+     therefore set its own light foreground; see the overrides below. */
+  background: #000000;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
   padding: var(--space-4) var(--space-6);
   box-shadow: var(--shadow-sm);
   position: sticky;
   top: 0;
   z-index: 100;
 }
+
+.app-header,
+.app-header h1,
+.app-header p,
+.app-header .header-subtitle,
+.app-header button,
+.app-header a,
+.app-header svg { color: #ffffff; }
+
+/* Header buttons are outlined-on-black rather than the page's black-on-white. */
+.app-header button {
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.20);
+}
+.app-header button:hover { background: rgba(255, 255, 255, 0.18); }
 
 .header-content {
   width: 100%;

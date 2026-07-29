@@ -30,44 +30,61 @@ These deliberately still say `sortbot`, and renaming them is a breaking change:
 If any of these ever *do* get renamed, ship a migration that reads the old key,
 writes the new one, and deletes the old — do not just rename the string.
 
-### Design system — dark by default (July 2026)
+### Design system — light, Uber-inspired (July 2026)
 
 `src/index.css` is the **single source of truth** for color, elevation, and motion.
-Palette is **"Bone"** — warm editorial, chosen July 2026 to replace a violet/gold/
-green/blue/orange scheme that read as childish: warm near-black canvas
-(`--ink-950` `#0b0a09`, never pure `#000`), bone/ivory accent (`--accent` `#e6dccb`),
-aged brass secondary (`--gold` `#c8a06a`).
 
-**One accent, desaturated semantics.** The rule that keeps it from drifting back:
-UI chrome carries exactly one hue, and success/warning/danger/info are low-chroma
-(moss `#8f9f80`, amber-brown `#c2925c`, terracotta `#c47060`, warm grey `#a09a91`)
-rather than pure green/yellow/red/blue. Adding a saturated hue anywhere is the
-regression to watch for.
+White canvas, light-grey sections, black nav and black primary actions. Colour is
+spent almost entirely on black/white/grey; semantics appear only to signal state.
 
-Because everything resolves through these tokens, **swapping the entire palette is
-a ~30-line edit in `:root`** — that is the point of the token layer. Three candidates
-(Graphite / Bone / Copper) were rendered and compared before picking.
+| Role | Token | Value |
+|---|---|---|
+| page canvas | `--ink-950` | `#ffffff` |
+| subtle bg | `--ink-900` | `#fafafa` |
+| **grey sections / cards** | `--ink-850` | `#f3f3f3` |
+| modals, popovers | `--ink-800` | `#ffffff` (lifted by shadow) |
+| hover | `--ink-750` | `#e9e9e9` |
+| pressed / strong fill | `--ink-700` | `#dedede` |
+| text | `--text-primary/secondary/muted/faint` | `#000` / `#545454` / `#6b6b6b` / `#8e8e8e` |
+| **accent is BLACK** | `--accent` | `#000000` |
 
-**Token families:** `--ink-950…--ink-700` (surfaces, dark→light) · `--text-primary/
-secondary/muted/faint` · `--accent{,-hover,-press,-dim,-line,-glow}` · `--border{,-subtle,-strong}`
-· `--success/--warning/--danger/--info` plus `--*-dim` translucent fills ·
-`--shadow-sm/md/lg/xl/accent` · `--ease`, `--dur-fast/--dur/--dur-slow`.
+**Why solid buttons just work:** every solid-accent fill already sets
+`color: var(--ink-950)` (a rule from the dark era, where the accent was light).
+`--ink-950` is now white, so black fill + white label falls out for free. Keep that
+convention — it is what makes the palette swappable in either direction.
 
-**The inverted legacy ramp — do not "fix" it.** The old `--gray-50…--gray-700` and
-`--shopify-*` names still exist and are repointed at dark values, with the gray ramp
-*inverted*: `--gray-50` was the lightest background and is now the **darkest surface**;
-`--gray-600/700` were body/heading text and are now **near-white**. That inversion is
-what let ~13,300 lines of existing CSS flip correctly without per-rule edits. Any
-`var(--gray-*)` you find is already right.
+**`--ink-800` is intentionally NOT monotonic.** In a light theme elevation moves
+*toward* white, so modals/popovers (`#ffffff`) are lighter than the cards they sit
+over (`#f3f3f3`). Do not "correct" the ramp to be strictly ordered.
+
+**The legacy `--gray-*` ramp is back to its ORIGINAL meaning.** It was inverted for
+the dark theme; on light it reads normally again — `--gray-50` is the lightest
+background, `--gray-600/700` are the darkest text. If the app ever returns to dark,
+that ramp must invert again along with everything else.
+
+**Semantics are darkened for a light canvas** — `--success #0a7d43`, `--warning
+#8a5a00`, `--danger #b3001b`, `--info #3d3d3d`. The dark-theme values were far too
+light to read as text on white. Use the `--*-dim` tints as banner fills.
+
+**THE NAV IS THE ONE DELIBERATELY INVERTED SURFACE.** `.app-header` (App.css) and
+`.ld-nav` (Landing.css) are black bars on a white page, so they do **not** take
+`--ink-*` tokens and everything inside them sets a literal light foreground. That
+includes `.ld-logo`, `.ld-nav-link`, `.ld-nav-cta`, `.ld-nav-login` (the app's only
+white button) and the `.app-header` overrides. If you add anything to a nav, give it
+an explicit light colour or it will inherit page-black and vanish.
+
+Because everything else resolves through tokens, **swapping the whole palette is a
+~45-line edit in `:root`.** This app has already shipped violet-on-dark, bone-on-dark
+and monochrome variants from that one block.
 
 Three colour surfaces are NOT tokens because they are data or stand-ins, and each
-had to be retuned by hand — check them when the palette changes:
+must be retuned by hand when the palette changes:
 `Landing.tsx` mock garment tiles (inline hex, they stand in for photos),
 `DEFAULT_CATEGORIES` in `lib/categories.ts` + the duplicate list in
 `initializeDefaultCategories`, and the colour-picker defaults in `CategoriesManager.tsx`.
 
-**Rule for new CSS:** no hardcoded hex. Map by *role* (a white card background is a
-surface → `--ink-850`; a dark heading is text → `--text-primary`), and keep body text
+**Rule for new CSS:** no hardcoded hex outside the nav. Map by *role* (a grey section
+is a surface → `--ink-850`; a heading is text → `--text-primary`), and keep body text
 at WCAG AA 4.5:1 against its surface — `--text-muted` is for non-essential meta only.
 
 ### Type scale — `--fs-*` (July 2026)

@@ -29,13 +29,13 @@ export interface CategoryInput {
 // wheel and no two list-adjacent entries share a family, so the seven read as
 // distinct at swatch size.
 export const DEFAULT_CATEGORIES: Omit<CategoryInput, 'user_id'>[] = [
-  { name: 'sweatshirts', display_name: 'Sweatshirts', emoji: '🧥', color: '#d9cbb3', sort_order: 1 },
-  { name: 'outerwear', display_name: 'Outerwear', emoji: '🧥', color: '#a3a695', sort_order: 2 },
-  { name: 'tees', display_name: 'Tees', emoji: '👕', color: '#c9a68a', sort_order: 3 },
-  { name: 'bottoms', display_name: 'Bottoms', emoji: '👖', color: '#9fa3a8', sort_order: 4 },
-  { name: 'femme', display_name: 'Feminine', emoji: '👗', color: '#c2a0a0', sort_order: 5 },
-  { name: 'hats', display_name: 'Hats', emoji: '🧢', color: '#bda368', sort_order: 6 },
-  { name: 'mystery boxes', display_name: 'Mystery Boxes', emoji: '📦', color: '#9a9384', sort_order: 7 },
+  { name: 'sweatshirts', display_name: 'Sweatshirts', emoji: '🧥', color: '#e4e4e7', sort_order: 1 },
+  { name: 'outerwear', display_name: 'Outerwear', emoji: '🧥', color: '#9fb0aa', sort_order: 2 },
+  { name: 'tees', display_name: 'Tees', emoji: '👕', color: '#c9bfb6', sort_order: 3 },
+  { name: 'bottoms', display_name: 'Bottoms', emoji: '👖', color: '#9aa3b2', sort_order: 4 },
+  { name: 'femme', display_name: 'Feminine', emoji: '👗', color: '#c2b2bb', sort_order: 5 },
+  { name: 'hats', display_name: 'Hats', emoji: '🧢', color: '#b8b09a', sort_order: 6 },
+  { name: 'mystery boxes', display_name: 'Mystery Boxes', emoji: '📦', color: '#7f8489', sort_order: 7 },
 ];
 
 // Emoji options for category selection
