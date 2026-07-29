@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { KanbanSquare, X, Plus, Trash2, RefreshCw } from 'lucide-react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { KanbanSquare, X, Plus, Trash2, RefreshCw, ListTree, Search } from 'lucide-react';
 import {
   createCard,
   createColumn,
@@ -10,11 +10,12 @@ import {
   rebalanceCards,
   type BoardData,
 } from '../lib/kanbanService';
-import { buildBoardTree, cardProgress } from '../lib/kanban/tree';
+import { buildBoardTree, cardProgress, taskProgress } from '../lib/kanban/tree';
 import { computeDropRank, dropIndexBefore, needsRebalance, RANK_STEP } from '../lib/kanban/rank';
 import { completionForMove } from '../lib/kanban/status';
 import { deriveDateStatus } from '../lib/kanban/dates';
-import { formatDueDate, initials } from '../lib/kanban/format';
+import { formatDueDate, initials, toggleInSet } from '../lib/kanban/format';
+import { buildAtlas, laneKey, type AtlasCard } from '../lib/kanban/atlas';
 import type { CardNode, ColumnNode } from '../lib/kanban/types';
 import { log } from '../lib/debugLogger';
 import KanbanCardDetail from './KanbanCardDetail';
@@ -49,6 +50,28 @@ export default function KanbanBoard({ orgId, userId, userEmail, onClose }: Kanba
 
   const [openCardId, setOpenCardId] = useState<string | null>(null);
   const [addingIn, setAddingIn] = useState<string | null>(null); // column id
+  // 'lanes' = the drag-and-drop board; 'atlas' = the Feature Atlas layout
+  // (subsystem sections + wiring) derived LIVE from the same tree, so a lane
+  // drag or task tick in one view is already reflected in the other.
+  const [view, setView] = useState<'lanes' | 'atlas'>(() => {
+    try { return localStorage.getItem('sortbot_kanban_view') === 'atlas' ? 'atlas' : 'lanes'; }
+    catch { return 'lanes'; }
+  });
+  const switchView = (v: 'lanes' | 'atlas') => {
+    setView(v);
+    // Disarm transient lanes-view state on every switch: an armed lane-delete
+    // confirm (or an autoFocus add-card composer) must not survive an Atlas
+    // round-trip and remount ready to fire on a muscle-memory click.
+    setConfirmKey(null);
+    setAddingIn(null);
+    setAddingLane(false);
+    try { localStorage.setItem('sortbot_kanban_view', v); } catch { /* private mode */ }
+  };
+  // Atlas-view filters live HERE, not in KanbanAtlasView: the child unmounts on
+  // every toggle to lanes, so component-local state would make the natural
+  // round-trip (filter in Atlas → act in Lanes → return) lossy each time.
+  const [atlasQ, setAtlasQ] = useState('');
+  const [atlasHiddenLanes, setAtlasHiddenLanes] = useState<Set<string>>(new Set());
   const [newCardTitle, setNewCardTitle] = useState('');
   const [addingLane, setAddingLane] = useState(false);
   const [newLaneName, setNewLaneName] = useState('');
@@ -246,6 +269,16 @@ export default function KanbanBoard({ orgId, userId, userEmail, onClose }: Kanba
     });
   };
 
+  /** Atlas view's lane pill → move the card to the end of the chosen lane.
+   *  Same dropInto critical section as a drag, so completion stamping and
+   *  rebalance behave identically in both views. */
+  const moveFromAtlas = async (card: CardNode, toColumnId: string) => {
+    if (card.column_id === toColumnId) return;
+    const column = tree.find(c => c.id === toColumnId);
+    if (!column) return;
+    await dropInto(column, card.id, column.cards.length);
+  };
+
   const handleColumnDrop = async (e: React.DragEvent, column: ColumnNode) => {
     e.preventDefault();
     e.stopPropagation();
@@ -322,6 +355,28 @@ export default function KanbanBoard({ orgId, userId, userEmail, onClose }: Kanba
             <span className="kanban-scope-badge">workspace — every member can edit</span>
           </div>
           <div className="kanban-header-actions">
+            {!unavailable && (
+              <div className="kanban-view-toggle" role="tablist" aria-label="Board view">
+                <button
+                  role="tab"
+                  aria-selected={view === 'lanes'}
+                  className={`kanban-view-btn ${view === 'lanes' ? 'kanban-view-btn--on' : ''}`}
+                  disabled={loading}
+                  onClick={() => switchView('lanes')}
+                >
+                  <KanbanSquare size={12} /> Lanes
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={view === 'atlas'}
+                  className={`kanban-view-btn ${view === 'atlas' ? 'kanban-view-btn--on' : ''}`}
+                  disabled={loading}
+                  onClick={() => switchView('atlas')}
+                >
+                  <ListTree size={12} /> Atlas
+                </button>
+              </div>
+            )}
             <button className="kanban-icon-btn" title="Refresh" disabled={busy || loading} onClick={() => load()}>
               <RefreshCw size={13} />
             </button>
@@ -341,6 +396,23 @@ export default function KanbanBoard({ orgId, userId, userEmail, onClose }: Kanba
               then reopen this panel. Nothing else in the app is affected until you do.
             </p>
           </div>
+        ) : view === 'atlas' ? (
+          <KanbanAtlasView
+            tree={tree}
+            busy={busy}
+            q={atlasQ}
+            onQChange={setAtlasQ}
+            hiddenLanes={atlasHiddenLanes}
+            onToggleLane={(id) => setAtlasHiddenLanes(prev => toggleInSet(prev, id))}
+            onUnhideLane={(id) => setAtlasHiddenLanes(prev => {
+              if (!prev.has(id)) return prev;
+              const next = new Set(prev);
+              next.delete(id);
+              return next;
+            })}
+            onOpenCard={setOpenCardId}
+            onMove={moveFromAtlas}
+          />
         ) : (
           <div className="kanban-lanes">
             {tree.map(column => (
@@ -556,3 +628,251 @@ function KanbanCardMini({ card, now, busy, dragging, dragOver, onOpen, ...dnd }:
     </div>
   );
 }
+
+// ── Atlas view ──────────────────────────────────────────────────────────────
+// The Feature Atlas layout (subsystem sections, status pills, wiring) rebuilt
+// live from the same tree the lanes render — lib/kanban/atlas.ts owns the
+// parsing/grouping, this draws it. Clicking a card opens the SAME drawer as
+// the lanes view; the lane pill is a <select> that moves the card for real
+// (debounced — see AtlasCardRow). Filter state (q/hiddenLanes) is owned by
+// KanbanBoard so it survives view toggles.
+
+interface KanbanAtlasViewProps {
+  tree: ColumnNode[];
+  busy: boolean;
+  q: string;
+  onQChange: (q: string) => void;
+  hiddenLanes: Set<string>;
+  onToggleLane: (id: string) => void;
+  onUnhideLane: (id: string) => void;
+  onOpenCard: (id: string) => void;
+  onMove: (card: CardNode, toColumnId: string) => void;
+}
+
+function KanbanAtlasView({
+  tree, busy, q, onQChange, hiddenLanes, onToggleLane, onUnhideLane, onOpenCard, onMove,
+}: KanbanAtlasViewProps) {
+  const atlas = useMemo(() => buildAtlas(tree), [tree]);
+  const term = q.trim().toLowerCase();
+
+  // Filter + per-group totals in ONE memo. The pre-filter total rides on the
+  // group object itself (no parallel keyed Map to drift), lane visibility and
+  // text search are separate passes, and search is a single .includes against
+  // the haystack precomputed inside the memoized buildAtlas — nothing here
+  // rebuilds strings per keystroke or recomputes on unrelated re-renders.
+  const filtered = useMemo(
+    () => atlas.map(g => ({
+      ...g,
+      total: g.cards.length,
+      cards: g.cards
+        .filter(c => !hiddenLanes.has(c.card.column_id))
+        .filter(c => !term || c.haystack.includes(term)),
+    })),
+    [atlas, term, hiddenLanes],
+  );
+  const shown = filtered.reduce((n, g) => n + g.cards.length, 0);
+  const total = atlas.reduce((n, g) => n + g.cards.length, 0);
+
+  // Moving a card into a lane the user has hidden would make the row vanish
+  // mid-interaction (indistinguishable from deletion) — reveal the destination
+  // lane first so the moved card stays on screen.
+  const moveAndReveal = (card: CardNode, toColumnId: string) => {
+    onUnhideLane(toColumnId);
+    onMove(card, toColumnId);
+  };
+
+  // behavior 'auto', not 'smooth': the cards use content-visibility, and a
+  // smooth animation forces progressive render of every card it passes.
+  const jump = (key: string) => {
+    document.getElementById(`kanban-atlas-sec-${key}`)
+      ?.scrollIntoView({ behavior: 'auto', block: 'start' });
+  };
+
+  return (
+    <div className="kanban-atlas">
+      <div className="kanban-atlas-controls">
+        <label className="kanban-atlas-search">
+          <Search size={12} />
+          <input
+            placeholder={total === 0 ? 'Search cards…' : `Search ${total} cards…`}
+            value={q}
+            onChange={e => onQChange(e.target.value)}
+            onKeyDown={e => {
+              // Clear-on-Escape, but let an empty search bubble so the board closes.
+              if (e.key === 'Escape' && q) { e.stopPropagation(); onQChange(''); }
+            }}
+          />
+        </label>
+        <div className="kanban-atlas-lanechips">
+          {tree.map(col => (
+            <button
+              key={col.id}
+              className={`kanban-atlas-lanechip kanban-atlas-pill--${laneKey(col.name, col.is_done)} ${hiddenLanes.has(col.id) ? 'kanban-atlas-lanechip--off' : ''}`}
+              title={hiddenLanes.has(col.id) ? `Show ${col.name} cards` : `Hide ${col.name} cards`}
+              onClick={() => onToggleLane(col.id)}
+            >
+              {col.name} <span className="kanban-atlas-lanechip-n">{col.cards.length}</span>
+            </button>
+          ))}
+        </div>
+        <span className="kanban-atlas-showing">{shown} / {total}</span>
+      </div>
+
+      <div className="kanban-atlas-map">
+        {filtered.filter(g => g.kind === 'step').map((g, i) => (
+          <span key={g.key} className="kanban-atlas-map-step">
+            {i > 0 && <span className="kanban-atlas-map-arrow">→</span>}
+            <button
+              className={`kanban-atlas-map-node kanban-atlas-map-node--${g.key}`}
+              // A node whose section has no visible cards has nowhere to jump
+              // (sections render only when non-empty) — disable, don't no-op.
+              disabled={g.cards.length === 0}
+              title={g.cards.length === 0 ? 'No visible cards in this subsystem' : `Jump to ${g.title}`}
+              onClick={() => jump(g.key)}
+            >
+              <span className="kanban-atlas-map-kx">{g.step}</span> {g.title}
+              <span className="kanban-atlas-map-n">{g.cards.length}</span>
+            </button>
+          </span>
+        ))}
+        <span className="kanban-atlas-map-divider" />
+        {filtered.filter(g => g.kind === 'xcut' && g.total !== 0).map(g => (
+          <button
+            key={g.key}
+            className={`kanban-atlas-map-node kanban-atlas-map-node--xcut kanban-atlas-map-node--${g.key}`}
+            disabled={g.cards.length === 0}
+            title={g.cards.length === 0 ? 'No visible cards in this subsystem' : `Jump to ${g.title}`}
+            onClick={() => jump(g.key)}
+          >
+            {g.title}
+            <span className="kanban-atlas-map-n">{g.cards.length}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="kanban-atlas-scroll">
+        {filtered.filter(g => g.cards.length > 0).map(g => (
+          <section key={g.key} id={`kanban-atlas-sec-${g.key}`} className={`kanban-atlas-sec kanban-atlas-sec--${g.key}`}>
+            <div className="kanban-atlas-sec-head">
+              {g.step && <span className="kanban-atlas-sec-step">STEP {g.step}</span>}
+              <h3>{g.title}</h3>
+              <span className="kanban-atlas-sec-count">
+                {g.cards.length === g.total ? g.total : `${g.cards.length} / ${g.total}`}
+              </span>
+            </div>
+            {g.cards.map(c => (
+              <AtlasCardRow key={c.card.id} ac={c} tree={tree} busy={busy} onOpenCard={onOpenCard} onMove={moveAndReveal} />
+            ))}
+          </section>
+        ))}
+        {shown === 0 && (
+          <p className="kanban-atlas-empty">
+            {total === 0
+              ? 'No cards on the board yet — switch to Lanes to add some, or run the feature-atlas seed migration.'
+              : 'No cards match — clear the search or re-enable a lane.'}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface AtlasCardRowProps {
+  ac: AtlasCard;
+  tree: ColumnNode[];
+  busy: boolean;
+  onOpenCard: (id: string) => void;
+  onMove: (card: CardNode, toColumnId: string) => void;
+}
+
+const AtlasCardRow = memo(function AtlasCardRow({ ac, tree, busy, onOpenCard, onMove }: AtlasCardRowProps) {
+  const { card } = ac;
+  const progress = cardProgress(card);
+
+  // The pill's selection is DEBOUNCED before committing: a closed, focused
+  // native <select> fires change on EVERY arrow keypress on Windows/Linux, and
+  // each commit here is a real DB move (landing on Done stamps completed_at).
+  // Browsing coalesces to the resting choice; pendingLane shows the selection
+  // immediately while the timer runs.
+  const [pendingLane, setPendingLane] = useState<string | null>(null);
+  const commitTimer = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (commitTimer.current !== null) window.clearTimeout(commitTimer.current);
+  }, []);
+  const choose = (toColumnId: string) => {
+    setPendingLane(toColumnId);
+    if (commitTimer.current !== null) window.clearTimeout(commitTimer.current);
+    commitTimer.current = window.setTimeout(() => {
+      commitTimer.current = null;
+      setPendingLane(null);
+      if (toColumnId !== card.column_id) onMove(card, toColumnId);
+    }, 400);
+  };
+
+  return (
+    <div className="kanban-atlas-card" onClick={() => onOpenCard(card.id)}>
+      <div className="kanban-atlas-card-head">
+        {card.is_epic && <span className="kanban-epic-badge">epic</span>}
+        <span className="kanban-atlas-card-name">{ac.name}</span>
+        {progress.total > 0 && (
+          // Same markup as KanbanCardMini so the two views can never disagree
+          // on how completion looks (incl. the --done green fill).
+          <div className="kanban-card-progress kanban-card-progress--atlas" title={`${progress.done} of ${progress.total} done`}>
+            <div className="kanban-progress-track">
+              <div
+                className={`kanban-progress-fill ${progress.complete ? 'kanban-progress-fill--done' : ''}`}
+                style={{ width: `${Math.round(progress.ratio * 100)}%` }}
+              />
+            </div>
+            <span className="kanban-progress-label">{progress.done}/{progress.total}</span>
+          </div>
+        )}
+        <select
+          className={`kanban-atlas-lane-pill kanban-atlas-pill--${ac.laneKey}`}
+          value={pendingLane ?? card.column_id}
+          disabled={busy}
+          title="Move to lane"
+          onClick={e => e.stopPropagation()}
+          onChange={e => choose(e.target.value)}
+        >
+          {tree.map(col => <option key={col.id} value={col.id}>{col.name}</option>)}
+        </select>
+      </div>
+      {ac.notes.description && <p className="kanban-atlas-desc">{ac.notes.description}</p>}
+      {card.tasks.length > 0 && (
+        <div className="kanban-atlas-tasks">
+          {card.tasks.map(t => {
+            // Leaf-counted, like the progress badge beside it: a parent task
+            // with subtasks reads done when its SUBTASKS are done — the two
+            // indicators on this row must never contradict (tree.ts docstring).
+            const tp = taskProgress(t);
+            return (
+              <span
+                key={t.id}
+                className={`kanban-atlas-task ${tp.complete ? 'kanban-atlas-task--done' : ''}`}
+                title={[t.notes, t.subtasks.length ? `${tp.done}/${tp.total} subtasks` : ''].filter(Boolean).join(' — ') || undefined}
+              >
+                {tp.complete ? '✓' : '○'} {t.title}{t.subtasks.length > 0 && ` ${tp.done}/${tp.total}`}
+              </span>
+            );
+          })}
+        </div>
+      )}
+      {ac.notes.wiring.length > 0 && (
+        <ul className="kanban-atlas-wiring">
+          {ac.notes.wiring.map((w, i) => {
+            const idx = w.indexOf(':');
+            const verb = idx > 0 ? w.slice(0, idx) : '';
+            const rest = idx > 0 ? w.slice(idx + 1).trim() : w;
+            return <li key={i}>{verb && <b>{verb}:</b>} {rest}</li>;
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}, (prev, next) =>
+  // onOpenCard/onMove are deliberately excluded: they are behavior-stable
+  // closures recreated per parent render — comparing them would defeat the
+  // memo. ac identities survive filtering because buildAtlas is memoized.
+  prev.ac === next.ac && prev.tree === next.tree && prev.busy === next.busy,
+);

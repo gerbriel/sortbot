@@ -16,7 +16,7 @@ import { taskProgress } from '../lib/kanban/tree';
 import { RANK_STEP } from '../lib/kanban/rank';
 import { deriveDateStatus, validateDateRange } from '../lib/kanban/dates';
 import type { BoardMember, CardNode, KanbanCommentRow, TaskNode, TaskStatus } from '../lib/kanban/types';
-import { initials } from '../lib/kanban/format';
+import { initials, toggleInSet } from '../lib/kanban/format';
 
 interface KanbanCardDetailProps {
   card: CardNode;
@@ -56,13 +56,7 @@ export default function KanbanCardDetail({
 
   const patchCard = (patch: CardPatch, okMsg?: string) => onRun(() => updateCard(card.id, patch), okMsg);
 
-  const toggleExpanded = (id: string) => {
-    setExpanded(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
+  const toggleExpanded = (id: string) => setExpanded(prev => toggleInSet(prev, id));
 
   const toggleAssignee = (targetIds: string[], memberId: string): string[] =>
     targetIds.includes(memberId) ? targetIds.filter(i => i !== memberId) : [...targetIds, memberId];

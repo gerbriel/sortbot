@@ -20,6 +20,17 @@ export function initials(email: string | null): string {
   return name.slice(0, 2).toUpperCase();
 }
 
+/** Immutable Set toggle for React state setters: returns a new Set with `id`
+ *  added or removed. One home for the pattern (board lane-filter chips, drawer
+ *  task expansion) so a future tweak — e.g. returning the same reference when
+ *  unchanged — reaches every toggling Set state at once. */
+export function toggleInSet<T>(prev: Set<T>, id: T): Set<T> {
+  const next = new Set(prev);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  return next;
+}
+
 /** 'Jul 16' for a 'YYYY-MM-DD' date. The badge colour already carries
  *  overdue/due-soon, so the text only has to say which day. Parsed as a LOCAL
  *  date — the Date string constructor would read it as UTC and show the

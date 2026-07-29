@@ -566,3 +566,255 @@
   .kanban-lane { width: 210px; min-width: 210px; }
   .kanban-detail { width: 100%; }
 }
+
+/* ── Atlas view ──────────────────────────────────────────────────────────────
+   The Feature Atlas layout inside the board panel. Subsystem accents mirror
+   the debugLogger/atlas palette; lane pills reuse the seed's status semantics
+   (Done green, In review purple, In progress amber, To do blue, Backlog rose). */
+
+.kanban-view-toggle {
+  display: inline-flex;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-right: 0.3rem;
+}
+
+.kanban-view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: none;
+  background: white;
+  color: #6b7280;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.32rem 0.6rem;
+  cursor: pointer;
+}
+
+.kanban-view-btn + .kanban-view-btn { border-left: 1px solid #e5e7eb; }
+.kanban-view-btn:hover { color: #111827; background: #f9fafb; }
+.kanban-view-btn--on { background: #eef2ff; color: #3730a3; }
+
+.kanban-atlas {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* controls: search + lane filter chips + counter */
+.kanban-atlas-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.kanban-atlas-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.3rem 0.55rem;
+  background: white;
+  color: #9ca3af;
+  flex: 1 1 220px;
+  min-width: 160px;
+}
+
+.kanban-atlas-search input {
+  border: none;
+  outline: none;
+  font-size: 0.8rem;
+  width: 100%;
+  color: #111827;
+  background: transparent;
+}
+
+.kanban-atlas-lanechips { display: inline-flex; gap: 0.3rem; flex-wrap: wrap; }
+
+.kanban-atlas-lanechip {
+  border: 1px solid transparent;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.22rem 0.55rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.kanban-atlas-lanechip-n { opacity: 0.75; font-weight: 600; }
+.kanban-atlas-lanechip--off { opacity: 0.35; text-decoration: line-through; }
+.kanban-atlas-showing { margin-left: auto; font-size: 0.72rem; color: #9ca3af; white-space: nowrap; }
+
+/* lane status colours — chips and card pills share these */
+.kanban-atlas-pill--done       { background: #dcfce7; color: #15803d; }
+.kanban-atlas-pill--inreview   { background: #ede9fe; color: #6d28d9; }
+.kanban-atlas-pill--inprogress { background: #fef3c7; color: #b45309; }
+.kanban-atlas-pill--todo       { background: #dbeafe; color: #1d4ed8; }
+.kanban-atlas-pill--backlog    { background: #ffe4e6; color: #be123c; }
+.kanban-atlas-pill--custom     { background: #f3f4f6; color: #4b5563; }
+
+/* pipeline map strip */
+.kanban-atlas-map {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.kanban-atlas-map-step { display: inline-flex; align-items: center; gap: 0.3rem; }
+.kanban-atlas-map-arrow { color: #d1d5db; font-size: 0.8rem; }
+
+.kanban-atlas-map-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid #e5e7eb;
+  border-top: 3px solid var(--atlas-c, #4f46e5);
+  border-radius: 8px;
+  background: white;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #111827;
+  padding: 0.28rem 0.55rem;
+  cursor: pointer;
+}
+
+.kanban-atlas-map-node:hover:not(:disabled) { background: #f9fafb; }
+
+/* A node whose section has no visible cards is disabled (nowhere to jump). */
+.kanban-atlas-map-node:disabled { opacity: 0.4; cursor: default; }
+.kanban-atlas-map-node--xcut { border-top-width: 1px; border-left: 3px solid var(--atlas-c, #4f46e5); background: #f9fafb; }
+.kanban-atlas-map-kx { color: var(--atlas-c, #4f46e5); font-weight: 800; }
+.kanban-atlas-map-n { color: #9ca3af; font-weight: 600; }
+.kanban-atlas-map-divider { width: 1px; height: 18px; background: #e5e7eb; margin: 0 0.2rem; }
+
+/* subsystem accent — one custom property drives node tops, section rules */
+.kanban-atlas-map-node--upload,   .kanban-atlas-sec--upload   { --atlas-c: #0f9d6e; }
+.kanban-atlas-map-node--group,    .kanban-atlas-sec--group    { --atlas-c: #c2700a; }
+.kanban-atlas-map-node--describe, .kanban-atlas-sec--describe { --atlas-c: #c81e6f; }
+.kanban-atlas-map-node--export,   .kanban-atlas-sec--export   { --atlas-c: #2160d8; }
+.kanban-atlas-map-node--library,  .kanban-atlas-sec--library  { --atlas-c: #0784a8; }
+.kanban-atlas-map-node--accounts, .kanban-atlas-sec--accounts { --atlas-c: #6d3fd4; }
+.kanban-atlas-map-node--infra,    .kanban-atlas-sec--infra    { --atlas-c: #5b6472; }
+.kanban-atlas-sec--other { --atlas-c: #9ca3af; }
+
+/* scrolling section list */
+.kanban-atlas-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+}
+
+.kanban-atlas-sec { padding-top: 0.6rem; scroll-margin-top: 0.5rem; }
+
+.kanban-atlas-sec-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  border-bottom: 2px solid var(--atlas-c, #4f46e5);
+  padding-bottom: 0.3rem;
+  margin-bottom: 0.45rem;
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 2;
+}
+
+.kanban-atlas-sec-step {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--atlas-c, #4f46e5);
+}
+
+.kanban-atlas-sec-head h3 { margin: 0; font-size: 0.95rem; color: #111827; }
+.kanban-atlas-sec-count { margin-left: auto; font-size: 0.72rem; color: #9ca3af; }
+
+/* atlas card rows */
+.kanban-atlas-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: white;
+  padding: 0.55rem 0.7rem;
+  margin-bottom: 0.45rem;
+  cursor: pointer;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 90px;
+}
+
+.kanban-atlas-card:hover { border-color: #c7d2fe; box-shadow: 0 2px 8px rgba(79, 70, 229, 0.08); }
+
+.kanban-atlas-card-head { display: flex; align-items: center; gap: 0.4rem; }
+
+.kanban-atlas-card-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #111827;
+  flex: 1;
+  min-width: 0;
+}
+
+/* The atlas head row reuses KanbanCardMini's .kanban-card-progress markup
+   (track + fill + label) so completion looks identical in both views — this
+   modifier only adapts its layout to the inline flex row. */
+.kanban-card-progress--atlas { flex: 0 0 auto; width: 96px; margin: 0; }
+
+.kanban-atlas-lane-pill {
+  border: none;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  text-align: center;
+}
+
+.kanban-atlas-lane-pill:disabled { opacity: 0.6; cursor: default; }
+
+.kanban-atlas-desc {
+  margin: 0.35rem 0 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: #4b5563;
+  white-space: pre-line;
+}
+
+.kanban-atlas-tasks { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.4rem; }
+
+.kanban-atlas-task {
+  font-size: 0.68rem;
+  color: #4b5563;
+  background: #f3f4f6;
+  border-radius: 5px;
+  padding: 0.12rem 0.4rem;
+}
+
+.kanban-atlas-task--done { color: #15803d; background: #f0fdf4; }
+
+.kanban-atlas-wiring {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0.35rem 0 0;
+  border-top: 1px dashed #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.kanban-atlas-wiring li { font-size: 0.7rem; color: #6b7280; line-height: 1.4; }
+.kanban-atlas-wiring b { color: #374151; font-weight: 700; }
+
+.kanban-atlas-empty { color: #9ca3af; font-size: 0.8rem; padding: 1.5rem 0; text-align: center; }
