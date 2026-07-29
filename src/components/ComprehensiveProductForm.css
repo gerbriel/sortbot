@@ -4,11 +4,16 @@
   gap: 0.6rem;
 }
 
-/* Flat section — no accordion, always visible */
+/* Flat section — no accordion, always visible.
+   NOTE: this file was written against --shopify-gray-N and --shopify-blue-N
+   names that were never defined anywhere, so every one of those was
+   invalid-at-computed-value-time and silently dropped. Named real tokens now.
+   Surface: these panels nest inside PDG's .form-section (--ink-850), so they
+   step UP to --ink-800 — at --ink-850 they would vanish into the parent card. */
 .form-section-flat {
-  border: 1px solid var(--shopify-gray-200);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: white;
+  background: var(--ink-800);
   padding: 0.6rem 0.75rem 0.75rem;
 }
 
@@ -16,10 +21,10 @@
   margin: 0 0 0.5rem 0;
   font-size: 0.65rem;
   font-weight: 700;
-  color: var(--shopify-gray-700);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  border-bottom: 1px solid var(--shopify-gray-100);
+  border-bottom: 1px solid var(--border-subtle);
   padding-bottom: 0.3rem;
 }
 
@@ -51,7 +56,7 @@
   gap: 0.3rem;
   font-weight: 700;
   margin-bottom: 0.2rem;
-  color: #6366f1;
+  color: var(--accent);
   font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -60,20 +65,23 @@
 .info-input {
   width: 100%;
   padding: 0.3rem 0.4rem;
-  border: 1px solid var(--shopify-gray-300);
+  border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 0.78rem;
   transition: all 0.2s;
+  /* recessed one step below the --ink-800 panel it sits in */
+  background: var(--ink-850);
+  color: var(--text-primary);
 }
 
 .info-input:focus {
   outline: none;
-  border-color: var(--shopify-blue-500);
-  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 .info-input::placeholder {
-  color: rgba(140, 145, 150, 0.35);
+  color: var(--text-faint);
   font-style: italic;
 }
 
@@ -83,11 +91,11 @@
   align-items: center;
   font-size: 0.65rem;
   font-weight: 600;
-  color: var(--shopify-blue-600);
-  background: var(--shopify-blue-50);
+  color: var(--accent);
+  background: var(--accent-dim);
   padding: 2px 8px;
   border-radius: 10px;
-  border: 1px solid var(--shopify-blue-200);
+  border: 1px solid var(--accent-line);
   cursor: help;
   white-space: nowrap;
 }
@@ -114,14 +122,14 @@
 }
 
 .button-secondary {
-  background: var(--shopify-gray-100);
-  color: var(--shopify-gray-700);
-  border: 1px solid var(--shopify-gray-300);
+  background: var(--ink-750);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
 }
 
 .button-secondary:hover {
-  background: var(--shopify-gray-200);
-  border-color: var(--shopify-gray-400);
+  background: var(--ink-700);
+  border-color: var(--border-strong);
 }
 
 /* Responsive */
@@ -156,9 +164,11 @@ textarea.info-input {
 /* Select */
 select.info-input {
   cursor: pointer;
-  background: white;
+  background: var(--ink-850);
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  /* Data URIs cannot read CSS custom properties, so the caret fill is the
+     literal value of --text-secondary (#a8a8b3). Keep the two in sync. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23a8a8b3' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.75rem center;
   padding-right: 2.5rem;
@@ -180,20 +190,22 @@ input[type="number"].info-input::-webkit-outer-spin-button {
    Applied when showValidation=true and the field has no value.
    A pulsing red border draws attention without being too aggressive.   */
 .field-required-empty {
-  border-color: #ef4444 !important;
-  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25) !important;
+  border-color: var(--danger) !important;
+  /* the pulse needs two distinct alphas, so the ring is the --danger hue
+     (#f87171) at explicit opacities rather than the fixed --danger-dim */
+  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.3) !important;
   animation: fieldRequiredPulse 1.8s ease-in-out 2;
 }
 
 @keyframes fieldRequiredPulse {
-  0%, 100% { box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25); }
-  50%       { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.45); }
+  0%, 100% { box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.3); }
+  50%       { box-shadow: 0 0 0 4px rgba(248, 113, 113, 0.5); }
 }
 
 /* Once the user fills in the field, transition smoothly back to normal */
 .field-required-empty:focus {
-  border-color: var(--shopify-blue, #5c6ac4) !important;
-  box-shadow: 0 0 0 2px rgba(92, 106, 196, 0.3) !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent-dim) !important;
   animation: none;
 }
 
@@ -203,8 +215,8 @@ input[type="number"].info-input::-webkit-outer-spin-button {
   margin-left: 0.3rem;
   padding: 0.05rem 0.4rem;
   border-radius: 10px;
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--warning-dim);
+  color: var(--warning);
   font-size: 0.62rem;
   font-weight: 700;
   text-transform: uppercase;

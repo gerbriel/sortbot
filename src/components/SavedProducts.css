@@ -4,7 +4,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.72);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -12,14 +12,18 @@
   padding: 20px;
 }
 
+/* NOTE: this file referenced --shopify-gray-*/--shopify-blue-* custom
+   properties that were never defined anywhere in the project, so those
+   declarations were invalid at computed-value time (silently broken in the
+   old light theme too). They are mapped to real tokens by role below. */
 .saved-products-content {
-  background: white;
+  background: var(--ink-800);
   border-radius: 8px;
   max-width: 1200px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-xl);
 }
 
 .saved-products-header {
@@ -27,16 +31,17 @@
   justify-content: space-between;
   align-items: center;
   padding: 24px;
-  border-bottom: 1px solid var(--shopify-gray-200);
+  border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
-  background: white;
+  /* Must stay opaque and match the modal — content scrolls beneath it. */
+  background: var(--ink-800);
   z-index: 10;
 }
 
 .saved-products-header h2 {
   margin: 0;
-  color: var(--shopify-gray-700);
+  color: var(--text-primary);
   font-size: 24px;
 }
 
@@ -44,7 +49,7 @@
   background: none;
   border: none;
   font-size: 28px;
-  color: var(--shopify-gray-500);
+  color: var(--text-muted);
   cursor: pointer;
   padding: 0;
   width: 32px;
@@ -57,8 +62,8 @@
 }
 
 .close-button:hover {
-  background: var(--shopify-gray-100);
-  color: var(--shopify-gray-700);
+  background: var(--ink-750);
+  color: var(--text-primary);
 }
 
 .loading-state {
@@ -69,7 +74,7 @@
 .loading-state .spinner {
   width: 48px;
   height: 48px;
-  border: 4px solid var(--shopify-gray-200);
+  border: 4px solid var(--border);
   border-top-color: var(--shopify-green);
   border-radius: 50%;
   margin: 0 auto 20px;
@@ -77,7 +82,7 @@
 }
 
 .loading-state p {
-  color: var(--shopify-gray-600);
+  color: var(--text-secondary);
   font-size: 16px;
 }
 
@@ -87,14 +92,14 @@
 }
 
 .empty-state p {
-  color: var(--shopify-gray-600);
+  color: var(--text-secondary);
   font-size: 18px;
   margin: 8px 0;
 }
 
 .empty-subtitle {
   font-size: 14px !important;
-  color: var(--shopify-gray-500) !important;
+  color: var(--text-muted) !important;
 }
 
 .products-grid {
@@ -105,22 +110,23 @@
 }
 
 .product-card {
-  background: white;
-  border: 1px solid var(--shopify-gray-200);
+  background: var(--ink-850);
+  border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
   transition: all 0.2s;
 }
 
 .product-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  border-color: var(--shopify-gray-300);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-strong);
 }
 
 .product-image {
   width: 100%;
   height: 200px;
-  background: var(--shopify-gray-50, #f0f0f0);
+  /* Photo well recessed below the card so letterboxed images read as a slot. */
+  background: var(--ink-900);
   position: relative;
   overflow: hidden;
 }
@@ -145,8 +151,9 @@
   position: absolute;
   top: 8px;
   right: 8px;
+  /* Scrim sits over the photo, not over a surface — black stays correct here. */
   background: rgba(0, 0, 0, 0.7);
-  color: white;
+  color: var(--text-primary);
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 12px;
@@ -159,7 +166,7 @@
 
 .product-info h3 {
   margin: 0 0 12px 0;
-  color: var(--shopify-gray-700);
+  color: var(--text-primary);
   font-size: 16px;
   font-weight: 600;
   line-height: 1.3;
@@ -175,15 +182,15 @@
 .meta-tag {
   display: inline-block;
   padding: 4px 8px;
-  background: var(--shopify-gray-100);
-  color: var(--shopify-gray-600);
+  background: var(--ink-750);
+  color: var(--text-secondary);
   font-size: 12px;
   border-radius: 4px;
   font-weight: 500;
 }
 
 .product-description {
-  color: var(--shopify-gray-600);
+  color: var(--text-secondary);
   font-size: 14px;
   line-height: 1.5;
   margin: 0 0 12px 0;
@@ -195,13 +202,13 @@
   align-items: center;
   margin-bottom: 8px;
   padding-bottom: 8px;
-  border-bottom: 1px solid var(--shopify-gray-200);
+  border-bottom: 1px solid var(--border);
 }
 
 .product-price {
   font-size: 18px;
   font-weight: 700;
-  color: var(--shopify-gray-700);
+  color: var(--text-primary);
 }
 
 .status-badge {
@@ -213,23 +220,23 @@
 }
 
 .status-badge.active {
-  background: #d1f7c4;
-  color: #1f7a1f;
+  background: var(--success-dim);
+  color: var(--success);
 }
 
 .status-badge.draft {
-  background: var(--shopify-gray-200);
-  color: var(--shopify-gray-600);
+  background: var(--ink-750);
+  color: var(--text-secondary);
 }
 
 .status-badge.archived {
-  background: #ffeaa7;
-  color: #b8860b;
+  background: var(--warning-dim);
+  color: var(--warning);
 }
 
 .product-date {
   font-size: 12px;
-  color: var(--shopify-gray-500);
+  color: var(--text-muted);
   margin-bottom: 12px;
 }
 
@@ -241,9 +248,9 @@
 .action-button {
   flex: 1;
   padding: 8px 12px;
-  border: 1px solid var(--shopify-gray-300);
-  background: white;
-  color: var(--shopify-gray-700);
+  border: 1px solid var(--border-strong);
+  background: var(--ink-800);
+  color: var(--text-primary);
   border-radius: 4px;
   font-size: 13px;
   font-weight: 600;
@@ -254,8 +261,8 @@
 }
 
 .action-button:hover {
-  background: var(--shopify-gray-50);
-  border-color: var(--shopify-gray-400);
+  background: var(--ink-750);
+  border-color: var(--border-strong);
 }
 
 .view-button {
@@ -264,16 +271,16 @@
 }
 
 .view-button:hover {
-  background: #e3f8f3;
+  background: var(--success-dim);
 }
 
 .delete-button {
-  color: #d82c0d;
-  border-color: #d82c0d;
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 .delete-button:hover {
-  background: #fef3f2;
+  background: var(--danger-dim);
 }
 
 .delete-confirm {
@@ -283,13 +290,16 @@
 }
 
 .confirm-button {
-  background: #d82c0d;
-  color: white;
-  border-color: #d82c0d;
+  /* Destructive solid — the danger token is a light red on dark, so the
+     label flips to ink to clear AA. */
+  background: var(--danger);
+  color: var(--ink-950);
+  border-color: var(--danger);
 }
 
 .confirm-button:hover {
-  background: #b72209;
+  background: var(--danger);
+  filter: brightness(1.12);
 }
 
 .cancel-button {
@@ -322,32 +332,32 @@
   display: flex;
   gap: 8px;
   padding: 16px 24px;
-  border-bottom: 1px solid var(--shopify-gray-200);
-  background: var(--shopify-gray-50);
+  border-bottom: 1px solid var(--border);
+  background: var(--ink-900);
 }
 
 .toggle-button {
   flex: 1;
   padding: 10px 16px;
-  border: 1px solid var(--shopify-gray-300);
-  background: white;
+  border: 1px solid var(--border-strong);
+  background: var(--ink-850);
   border-radius: 6px;
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
-  color: var(--shopify-gray-600);
+  color: var(--text-secondary);
   transition: all 0.2s;
 }
 
 .toggle-button:hover {
-  border-color: var(--shopify-blue-500);
-  color: var(--shopify-blue-600);
+  border-color: var(--accent-line);
+  color: var(--accent-hover);
 }
 
 .toggle-button.active {
-  background: var(--shopify-blue-500);
-  border-color: var(--shopify-blue-500);
-  color: white;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--ink-950);
 }
 
 /* Batch View */
@@ -357,14 +367,15 @@
 
 .batch-group {
   margin-bottom: 32px;
-  border: 1px solid var(--shopify-gray-200);
+  border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
 }
 
 .batch-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  /* Brand gradient restated in violet; ink text because the accent is light. */
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-press) 100%);
+  color: var(--ink-950);
   padding: 16px 20px;
   display: flex;
   justify-content: space-between;
@@ -378,7 +389,10 @@
 }
 
 .batch-count {
-  background: rgba(255, 255, 255, 0.2);
+  /* Was a frosted white pill over the light-mode gradient; inverts to a solid
+     ink pill so the count keeps its contrast on the accent header. */
+  background: var(--ink-900);
+  color: var(--text-primary);
   padding: 4px 12px;
   border-radius: 12px;
   font-size: 13px;
@@ -387,7 +401,7 @@
 
 .batch-group .products-grid {
   padding: 20px;
-  background: var(--shopify-gray-50);
+  background: var(--ink-900);
 }
 
 /* ============================================================================
@@ -400,15 +414,16 @@
 
 .batch-table-section {
   margin-bottom: 32px;
-  border: 1px solid var(--shopify-gray-200);
+  border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
-  background: white;
+  background: var(--ink-850);
 }
 
 .batch-table-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  /* Brand gradient restated in violet; ink text because the accent is light. */
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-press) 100%);
+  color: var(--ink-950);
   padding: 20px 24px;
   display: flex;
   justify-content: space-between;
@@ -431,7 +446,9 @@
 }
 
 .batch-date {
-  background: rgba(255, 255, 255, 0.2);
+  /* Same inversion as .batch-count — solid ink pill on the accent header. */
+  background: var(--ink-900);
+  color: var(--text-primary);
   padding: 4px 12px;
   border-radius: 12px;
   font-size: 13px;
@@ -459,7 +476,7 @@
 
 .batch-table-wrapper {
   overflow-x: auto;
-  background: white;
+  background: var(--ink-850);
 }
 
 .batch-line-items-table {
@@ -469,29 +486,30 @@
 }
 
 .batch-line-items-table thead {
-  background: var(--shopify-gray-50);
-  border-bottom: 2px solid var(--shopify-gray-200);
+  background: var(--ink-800);
+  border-bottom: 2px solid var(--border);
 }
 
 .batch-line-items-table th {
   padding: 12px 16px;
   text-align: left;
   font-weight: 600;
-  color: var(--shopify-gray-700);
+  color: var(--text-primary);
   white-space: nowrap;
   position: sticky;
   top: 0;
-  background: var(--shopify-gray-50);
+  /* Sticky header must stay opaque — rows scroll underneath it. */
+  background: var(--ink-800);
   z-index: 5;
 }
 
 .batch-line-items-table tbody tr {
-  border-bottom: 1px solid var(--shopify-gray-100);
+  border-bottom: 1px solid var(--border-subtle);
   transition: background 0.15s;
 }
 
 .batch-line-items-table tbody tr:hover {
-  background: var(--shopify-blue-50);
+  background: var(--accent-dim);
 }
 
 .batch-line-items-table td {
@@ -516,9 +534,9 @@
   height: 48px;
   border-radius: 6px;
   overflow: hidden;
-  border: 1px solid var(--shopify-gray-200);
+  border: 1px solid var(--border);
   position: relative;
-  background: #f0f0f0;
+  background: var(--ink-900);
 }
 
 .table-product-image .lazy-skeleton {
@@ -546,14 +564,14 @@
 }
 
 .row-number {
-  color: var(--shopify-gray-500);
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 600;
   min-width: 24px;
 }
 
 .title-text {
-  color: var(--shopify-gray-700);
+  color: var(--text-primary);
   font-weight: 500;
   line-height: 1.4;
 }
@@ -570,24 +588,24 @@
 
 .condition-badge.new,
 .condition-badge.excellent {
-  background: #d4edda;
-  color: #155724;
+  background: var(--success-dim);
+  color: var(--success);
 }
 
 .condition-badge.good,
 .condition-badge.very-good {
-  background: #d1ecf1;
-  color: #0c5460;
+  background: var(--info-dim);
+  color: var(--info);
 }
 
 .condition-badge.fair {
-  background: #fff3cd;
-  color: #856404;
+  background: var(--warning-dim);
+  color: var(--warning);
 }
 
 .condition-badge.poor {
-  background: #f8d7da;
-  color: #721c24;
+  background: var(--danger-dim);
+  color: var(--danger);
 }
 
 /* Image Count Badge */
@@ -598,8 +616,8 @@
   min-width: 32px;
   height: 24px;
   padding: 0 8px;
-  background: var(--shopify-blue-100);
-  color: var(--shopify-blue-700);
+  background: var(--accent-dim);
+  color: var(--accent);
   border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
@@ -615,7 +633,8 @@
 
 .table-action-button {
   background: none;
-  border: 1px solid var(--shopify-gray-300);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-strong);
   padding: 6px;
   border-radius: 6px;
   cursor: pointer;
@@ -629,49 +648,56 @@
 }
 
 .table-action-button:hover {
-  background: var(--shopify-gray-100);
-  border-color: var(--shopify-gray-400);
+  background: var(--ink-750);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
 }
 
 .table-action-button.view-btn:hover {
-  background: var(--shopify-blue-50);
-  border-color: var(--shopify-blue-400);
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--accent);
 }
 
 .table-action-button.delete-btn:hover {
-  background: #fee;
-  border-color: #fcc;
+  background: var(--danger-dim);
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .table-action-button.confirm-btn {
+  /* Solid semantic fill — the dark-tuned green is light, so the glyph
+     flips to ink rather than white. */
   background: var(--shopify-green);
   border-color: var(--shopify-green);
-  color: white;
+  color: var(--ink-950);
 }
 
 .table-action-button.confirm-btn:hover {
-  background: #1a7f37;
+  background: var(--shopify-green-dark);
+  color: var(--ink-950);
 }
 
 .table-action-button.cancel-btn {
-  background: var(--shopify-gray-500);
-  border-color: var(--shopify-gray-500);
-  color: white;
+  background: var(--ink-700);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
 }
 
 .table-action-button.cancel-btn:hover {
-  background: var(--shopify-gray-600);
+  background: var(--ink-750);
+  color: var(--text-primary);
 }
 
 /* Table Footer */
 .batch-total-row {
-  background: var(--shopify-gray-50);
-  border-top: 2px solid var(--shopify-gray-300);
+  background: var(--ink-800);
+  border-top: 2px solid var(--border-strong);
   font-weight: 600;
 }
 
 .batch-total-row .total-price {
-  color: var(--shopify-gray-700);
+  color: var(--text-primary);
   font-size: 16px;
 }
 

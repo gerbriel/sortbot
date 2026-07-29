@@ -10,6 +10,31 @@ interface LandingProps {
   onLoginClick: () => void;
 }
 
+/** One row of the launch pricing ladder. Prices are preformatted strings so
+ *  the $1,200 comma and the $0.00 per item cell render exactly as speced. */
+interface PricingTier {
+  name: string;
+  items: string;
+  price: string;
+  perItem: string;
+  /** Founding shop monthly price (30% off, locked for life). Null on Free. */
+  founder: string | null;
+  featured?: boolean;
+}
+
+/** Revised launch pricing (July 2026): eight tiers that differ by monthly item
+ *  volume only — every plan gets the full product. Update pricing HERE. */
+const PRICING_TIERS: PricingTier[] = [
+  { name: 'Free',       items: '5',     price: '$0',     perItem: '$0.00', founder: null },
+  { name: 'Starter',    items: '25',    price: '$50',    perItem: '$2.00', founder: '$35' },
+  { name: 'Basic',      items: '60',    price: '$90',    perItem: '$1.50', founder: '$63' },
+  { name: 'Growth',     items: '135',   price: '$150',   perItem: '$1.11', founder: '$105' },
+  { name: 'Pro',        items: '300',   price: '$250',   perItem: '$0.83', founder: '$175', featured: true },
+  { name: 'Business',   items: '550',   price: '$350',   perItem: '$0.64', founder: '$245' },
+  { name: 'Scale',      items: '2,000', price: '$700',   perItem: '$0.35', founder: '$490' },
+  { name: 'Enterprise', items: '6,000', price: '$1,200', perItem: '$0.20', founder: '$840' },
+];
+
 /**
  * Public marketing landing — rendered at the MAIN URL for logged-out visitors.
  * Logged-in users never see this (session restore takes them straight to the
@@ -61,7 +86,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
     <div className="landing">
       {/* ── Nav ── */}
       <nav className="ld-nav">
-        <span className="ld-logo"><ShoppingBag size={22} /> Sortbot <span className="ld-chip">BETA</span></span>
+        <span className="ld-logo"><ShoppingBag size={22} /> Arcatya <span className="ld-chip">BETA</span></span>
         <span className="ld-nav-actions">
           <a href="#pricing" className="ld-nav-link">Pricing</a>
           <a href="#signup" className="ld-nav-cta">Request access</a>
@@ -73,7 +98,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
       <header className="ld-hero">
         <h1>Photograph the rack in the morning.<br />Listings live by lunch.</h1>
         <p>
-          Sortbot turns a camera roll of vintage clothing photos into listings that are
+          Arcatya turns a camera roll of vintage clothing photos into listings that are
           ready for Shopify. Group the angles, <em>speak</em> the details, export the file.
           Built by resellers who list hundreds of pieces a week.
         </p>
@@ -112,7 +137,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
             </ul>
           </div>
           <div className="ld-shot" aria-hidden="true">
-            <div className="shot-bar"><i /><i /><i /><em>Sortbot · Group &amp; Categorize</em></div>
+            <div className="shot-bar"><i /><i /><i /><em>Arcatya · Group &amp; Categorize</em></div>
             <div className="shot-mock shot-mock--grid">
               <div className="mock-toolbar">
                 <b><Target size={11} /> Pick photos</b>
@@ -154,7 +179,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
             </ul>
           </div>
           <div className="ld-shot" aria-hidden="true">
-            <div className="shot-bar"><i /><i /><i /><em>Sortbot · Category Presets</em></div>
+            <div className="shot-bar"><i /><i /><i /><em>Arcatya · Category Presets</em></div>
             <div className="shot-mock shot-mock--presets">
               <div className="mock-preset-head"><Layers size={13} /> Tees preset</div>
               <div className="mock-preset-rows">
@@ -173,7 +198,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
           <div className="ld-tour-text">
             <h2>Talk. Don't type.</h2>
             <p>
-              Hold the garment and say what you see. Sortbot parses brands, sizes,
+              Hold the garment and say what you see. Arcatya parses brands, sizes,
               colors, and measurements into the right fields and writes a clean,
               human listing with your measurements front and center.
             </p>
@@ -184,7 +209,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
             </ul>
           </div>
           <div className="ld-shot" aria-hidden="true">
-            <div className="shot-bar"><i /><i /><i /><em>Sortbot · Describe</em></div>
+            <div className="shot-bar"><i /><i /><i /><em>Arcatya · Describe</em></div>
             <div className="shot-mock shot-mock--voice">
               <div className="mock-mic"><Mic size={13} /> Recording… <span className="mock-wave"><i /><i /><i /><i /><i /></span></div>
               <div className="mock-transcript">“brand nike period size large fits like medium period width 18 period…”</div>
@@ -218,7 +243,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
             </ul>
           </div>
           <div className="ld-shot" aria-hidden="true">
-            <div className="shot-bar"><i /><i /><i /><em>Sortbot · Export</em></div>
+            <div className="shot-bar"><i /><i /><i /><em>Arcatya · Export</em></div>
             <div className="shot-mock shot-mock--csv">
               <div className="mock-thead"><b>Handle</b><b>Title</b><b>Price</b><b>Category</b><b>Size</b></div>
               {[
@@ -279,45 +304,29 @@ export default function Landing({ onLoginClick }: LandingProps) {
           Everything is <strong>free during the beta</strong>, and founding shops lock in
           <strong> 30% off for life</strong> on any tier when paid plans launch.
         </p>
-        <div className="ld-tiers">
-          <div className="ld-tier">
-            <h3>Starter</h3>
-            <div className="ld-tier-price">$49<span>/mo</span></div>
-            <div className="ld-tier-founder">Founding shops: $34/mo for life</div>
-            <ul>
-              <li><Check size={14} /> Up to 200 listings a month</li>
-              <li><Check size={14} /> Full workflow: group, voice, export</li>
-              <li><Check size={14} /> CSV built exactly for Shopify import</li>
-              <li><Check size={14} /> 1 user</li>
-            </ul>
-          </div>
-          <div className="ld-tier ld-tier--featured">
-            <div className="ld-tier-badge">Most popular</div>
-            <h3>Pro</h3>
-            <div className="ld-tier-price">$129<span>/mo</span></div>
-            <div className="ld-tier-founder">Founding shops: $89/mo for life</div>
-            <ul>
-              <li><Check size={14} /> Up to 750 listings a month</li>
-              <li><Check size={14} /> Unlimited teammates in one workspace</li>
-              <li><Check size={14} /> Title checks against your live store</li>
-              <li><Check size={14} /> Priority support</li>
-            </ul>
-          </div>
-          <div className="ld-tier">
-            <h3>Studio</h3>
-            <div className="ld-tier-price">$299<span>/mo</span></div>
-            <div className="ld-tier-founder">Founding shops: $209/mo for life</div>
-            <ul>
-              <li><Check size={14} /> Up to 2,000 listings a month, fair use</li>
-              <li><Check size={14} /> Unlimited teammates</li>
-              <li><Check size={14} /> Onboarding session for your team</li>
-              <li><Check size={14} /> Early access to new features</li>
-            </ul>
-          </div>
+        <div className="ld-tiers ld-tiers--ladder">
+          {PRICING_TIERS.map(t => (
+            <div key={t.name} className={`ld-tier${t.featured ? ' ld-tier--featured' : ''}`}>
+              {t.featured && <div className="ld-tier-badge">Most popular</div>}
+              <h3>{t.name}</h3>
+              <div className="ld-tier-price">{t.price}<span>/mo</span></div>
+              <div className="ld-tier-items">{t.items} items a month</div>
+              <div className="ld-tier-peritem">{t.perItem} per item</div>
+              {t.founder && (
+                <div className="ld-tier-founder">Founding shops: {t.founder}/mo for life</div>
+              )}
+            </div>
+          ))}
         </div>
+        <p className="ld-tier-includes">
+          <Check size={14} /> Every plan includes the full product: grouping, voice
+          descriptions, category presets, a shared team workspace, and CSV export
+          built for Shopify.
+        </p>
         <p className="ld-pricing-note">
           Planned launch pricing, subject to change before general availability.
-          Listings beyond your tier: $0.20 each. Annual billing: 2 months free.
+          Listings beyond your tier bill at your tier price per item.
+          Annual billing: 2 months free.
         </p>
       </section>
 
@@ -358,7 +367,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
       </section>
 
       <footer className="ld-footer">
-        Sortbot · built for vintage resellers · beta access is reviewed and approved by hand
+        Arcatya · built for vintage resellers · beta access is reviewed and approved by hand
       </footer>
     </div>
   );

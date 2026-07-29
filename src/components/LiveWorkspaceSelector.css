@@ -3,15 +3,17 @@
   align-items: center;
   gap: 12px;
   padding: 10px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  /* Brand gradient restated in violet; everything sitting on it flips to ink
+     text because the accent is a light violet. */
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-press) 100%);
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-sm);
   margin: 0 20px;
 }
 
 .workspace-label {
   font-weight: 600;
-  color: white;
+  color: var(--ink-950);
   font-size: 14px;
   white-space: nowrap;
 }
@@ -25,29 +27,31 @@
 .workspace-toggle {
   width: 100%;
   padding: 10px 16px;
-  background: white;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  /* Dark control ON the violet bar — the contrast reversal is what separates
+     it from the bar, so the border only needs to be a hairline. */
+  background: var(--ink-850);
+  border: 2px solid var(--border);
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
-  color: #2d3748;
+  color: var(--text-primary);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: space-between;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
 }
 
 .workspace-toggle:hover {
-  background: #f7fafc;
-  border-color: rgba(255, 255, 255, 0.5);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  background: var(--ink-750);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
 }
 
 .dropdown-arrow {
   margin-left: 8px;
-  color: #718096;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -56,9 +60,9 @@
   top: calc(100% + 8px);
   left: 0;
   right: 0;
-  background: white;
+  background: var(--ink-800);
   border-radius: 12px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-lg);
   z-index: 1000;
   max-height: 400px;
   overflow-y: auto;
@@ -83,7 +87,7 @@
   padding: 12px 16px;
   cursor: pointer;
   transition: background 0.15s ease;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .workspace-option:last-child {
@@ -91,12 +95,12 @@
 }
 
 .workspace-option:hover {
-  background: #f7fafc;
+  background: var(--ink-750);
 }
 
 .workspace-option.selected {
-  background: #edf2f7;
-  border-left: 3px solid #667eea;
+  background: var(--accent-dim);
+  border-left: 3px solid var(--accent);
 }
 
 .workspace-option.disabled {
@@ -104,8 +108,9 @@
   cursor: not-allowed;
 }
 
+/* Cancels the hover tint — must match the menu surface, not the page. */
 .workspace-option.disabled:hover {
-  background: white;
+  background: var(--ink-800);
 }
 
 .option-icon {
@@ -121,25 +126,25 @@
 
 .option-name {
   font-weight: 600;
-  color: #2d3748;
+  color: var(--text-primary);
   font-size: 14px;
   margin-bottom: 2px;
 }
 
 .option-description {
   font-size: 12px;
-  color: #718096;
+  color: var(--text-secondary);
 }
 
 .workspace-divider {
   padding: 8px 16px;
   font-size: 11px;
   font-weight: 600;
-  color: #a0aec0;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  background: #f7fafc;
-  border-bottom: 1px solid #e2e8f0;
+  background: var(--ink-850);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .live-indicator {
@@ -147,18 +152,20 @@
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.2);
+  /* Was a frosted white pill over the light-mode gradient; on dark that
+     inverts to a solid ink pill so the label keeps its contrast. */
+  background: var(--ink-900);
   border-radius: 20px;
   font-size: 12px;
   font-weight: 500;
-  color: white;
+  color: var(--text-primary);
   white-space: nowrap;
 }
 
 .pulse-dot {
   width: 8px;
   height: 8px;
-  background: #48bb78;
+  background: var(--success);
   border-radius: 50%;
   animation: pulse 2s ease-in-out infinite;
 }
@@ -200,15 +207,15 @@
 }
 
 .workspace-menu::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: transparent;
   border-radius: 0 12px 12px 0;
 }
 
 .workspace-menu::-webkit-scrollbar-thumb {
-  background: #cbd5e0;
+  background: var(--ink-700);
   border-radius: 4px;
 }
 
 .workspace-menu::-webkit-scrollbar-thumb:hover {
-  background: #a0aec0;
+  background: var(--text-faint);
 }

@@ -299,7 +299,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   };
 
   const handleCopyInvite = async (inv: OrgInviteRow) => {
-    const msg = `You're invited to the "${displayName}" workspace on Sortbot.\n\nSign in (or create an account) at ${appUrl} using this email address: ${inv.email}\n\nYou'll join the workspace automatically.`;
+    const msg = `You're invited to the "${displayName}" workspace on Arcatya.\n\nSign in (or create an account) at ${appUrl} using this email address: ${inv.email}\n\nYou'll join the workspace automatically.`;
     try {
       await navigator.clipboard.writeText(msg);
       setNotice('Invite message copied. Paste it into an email or text to your teammate.');
@@ -363,7 +363,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   };
 
   const mailtoWelcome = (s: BetaSignupRow) => {
-    const subject = encodeURIComponent('Your Sortbot beta access is ready');
+    const subject = encodeURIComponent('Your Arcatya beta access is ready');
     const body = encodeURIComponent(
       `Hi ${s.contact_name},\n\nYour beta request for ${s.org_name} is approved. Sign in at ${appUrl} with this email address and your workspace will be ready.\n\nWelcome aboard!`
     );

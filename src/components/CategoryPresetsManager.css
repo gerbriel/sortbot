@@ -5,7 +5,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.72);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -15,14 +15,14 @@
 }
 
 .presets-manager {
-  background: white;
+  background: var(--ink-800);
   border-radius: 12px;
   width: 100%;
   max-width: 1400px;
   max-height: 90vh;
   overflow-y: auto;
   padding: 2rem;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-xl);
 }
 
 .presets-header {
@@ -31,13 +31,13 @@
   align-items: center;
   margin-bottom: 2rem;
   padding-bottom: 1rem;
-  border-bottom: 2px solid #e5e7eb;
+  border-bottom: 2px solid var(--border);
 }
 
 .presets-header h2 {
   margin: 0;
   font-size: 2rem;
-  color: #1f2937;
+  color: var(--text-primary);
 }
 
 .header-actions {
@@ -50,7 +50,7 @@
   background: none;
   border: none;
   font-size: 1.5rem;
-  color: #6b7280;
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 0.5rem;
   width: 40px;
@@ -63,8 +63,8 @@
 }
 
 .button-close:hover {
-  background: #f3f4f6;
-  color: #1f2937;
+  background: var(--ink-750);
+  color: var(--text-primary);
 }
 
 /* Grid Layout */
@@ -78,22 +78,22 @@
   grid-column: 1 / -1;
   text-align: center;
   padding: 3rem;
-  background: #f9fafb;
+  background: var(--ink-850);
   border-radius: 8px;
-  color: #6b7280;
+  color: var(--text-secondary);
 }
 
 /* Preset Card */
 .preset-card {
-  background: white;
-  border: 1px solid #e5e7eb;
+  background: var(--ink-850);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 1.5rem;
   transition: box-shadow 0.2s;
 }
 
 .preset-card:hover {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-md);
 }
 
 .preset-header {
@@ -106,12 +106,12 @@
 .preset-header h3 {
   margin: 0;
   font-size: 1.25rem;
-  color: #1f2937;
+  color: var(--text-primary);
 }
 
 .preset-category {
-  background: #dbeafe;
-  color: #1e40af;
+  background: var(--info-dim);
+  color: var(--info);
   padding: 0.25rem 0.75rem;
   border-radius: 12px;
   font-size: 0.875rem;
@@ -119,7 +119,7 @@
 }
 
 .preset-description {
-  color: #6b7280;
+  color: var(--text-secondary);
   margin-bottom: 1rem;
   font-size: 0.9rem;
 }
@@ -130,17 +130,18 @@
   gap: 0.5rem;
   margin-bottom: 1rem;
   padding: 1rem;
-  background: #f9fafb;
+  /* Recessed panel inside the --ink-850 card, so it steps DOWN not up. */
+  background: var(--ink-900);
   border-radius: 6px;
 }
 
 .preset-detail {
   font-size: 0.9rem;
-  color: #374151;
+  color: var(--text-secondary);
 }
 
 .preset-detail strong {
-  color: #1f2937;
+  color: var(--text-primary);
   margin-right: 0.5rem;
 }
 
@@ -162,7 +163,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.72);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -172,27 +173,27 @@
 }
 
 .preset-form-modal {
-  background: white;
+  background: var(--ink-800);
   border-radius: 12px;
   padding: 2rem;
   max-width: 800px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-xl);
 }
 
 .preset-form-modal h3 {
   margin-top: 0;
   margin-bottom: 1.5rem;
   font-size: 1.5rem;
-  color: #1f2937;
+  color: var(--text-primary);
 }
 
 .form-section {
   margin-bottom: 2rem;
   padding-bottom: 2rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .form-section:last-of-type {
@@ -203,7 +204,7 @@
   margin-top: 0;
   margin-bottom: 1rem;
   font-size: 1.125rem;
-  color: #374151;
+  color: var(--text-primary);
 }
 
 .form-group {
@@ -214,7 +215,7 @@
   display: block;
   margin-bottom: 0.5rem;
   font-weight: 500;
-  color: #374151;
+  color: var(--text-secondary);
   font-size: 0.9rem;
 }
 
@@ -224,9 +225,11 @@
 .form-group textarea {
   width: 100%;
   padding: 0.75rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 0.9rem;
+  background: var(--ink-850);
+  color: var(--text-primary);
   transition: border-color 0.2s;
 }
 
@@ -234,13 +237,13 @@
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 .form-group input::placeholder,
 .form-group textarea::placeholder {
-  color: rgba(140, 145, 150, 0.35);
+  color: var(--text-faint);
   font-style: italic;
 }
 
@@ -248,12 +251,12 @@
   display: block;
   margin-top: 0.25rem;
   font-size: 0.8rem;
-  color: #6b7280;
+  color: var(--text-secondary);
 }
 
 .form-hint {
   font-size: 0.9rem;
-  color: #6b7280;
+  color: var(--text-secondary);
   margin-bottom: 1rem;
 }
 
@@ -287,14 +290,14 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem;
-  background: #f9fafb;
+  background: var(--ink-850);
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.2s;
 }
 
 .checkbox-label:hover {
-  background: #f3f4f6;
+  background: var(--ink-750);
 }
 
 .checkbox-label input[type="checkbox"] {
@@ -308,7 +311,7 @@
   justify-content: flex-end;
   margin-top: 2rem;
   padding-top: 1.5rem;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .form-actions button {
@@ -319,8 +322,9 @@
 
 /* Button Styles */
 .button {
-  background: #3b82f6;
-  color: white;
+  background: var(--accent);
+  /* Accent is a light violet — solid fills take dark ink, not white. */
+  color: var(--ink-950);
   border: none;
   padding: 0.75rem 1.5rem;
   border-radius: 6px;
@@ -331,23 +335,28 @@
 }
 
 .button:hover {
-  background: #2563eb;
+  background: var(--accent-hover);
 }
 
+/* Neutral variants sit on dark surfaces, so they re-assert light text. */
 .button-secondary {
-  background: #6b7280;
+  background: var(--ink-750);
+  color: var(--text-primary);
 }
 
 .button-secondary:hover {
-  background: #4b5563;
+  background: var(--ink-700);
 }
 
 .button-danger {
-  background: #ef4444;
+  background: var(--danger);
+  color: var(--ink-950);
 }
 
+/* No --danger-hover token exists; hover inverts to the translucent tint. */
 .button-danger:hover {
-  background: #dc2626;
+  background: var(--danger-dim);
+  color: var(--danger);
 }
 
 /* Responsive */
@@ -390,8 +399,8 @@
 /* ── Custom Sections & Fields ───────────────────────────────────────────── */
 
 .custom-sections-wrapper {
-  border: 2px dashed #6366f1;
-  background: #f8f7ff;
+  border: 2px dashed var(--accent-line);
+  background: var(--accent-dim);
 }
 
 .custom-sections-header {
@@ -406,8 +415,8 @@
 }
 
 .custom-section-block {
-  background: white;
-  border: 1px solid #e5e7eb;
+  background: var(--ink-850);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 1rem;
   margin-bottom: 0.75rem;
@@ -423,7 +432,7 @@
 .section-header-row h4 {
   margin: 0;
   font-size: 0.95rem;
-  color: #374151;
+  color: var(--text-primary);
 }
 
 .section-controls {
@@ -433,29 +442,29 @@
 
 .btn-icon {
   background: none;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
   border-radius: 4px;
   cursor: pointer;
   padding: 0.2rem 0.4rem;
   font-size: 0.8rem;
-  color: #6b7280;
+  color: var(--text-secondary);
   transition: all 0.15s;
 }
 
 .btn-icon:hover {
-  background: #f3f4f6;
-  border-color: #9ca3af;
-  color: #111827;
+  background: var(--ink-750);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
 }
 
 .btn-icon.btn-danger {
-  color: #ef4444;
-  border-color: #fecaca;
+  color: var(--danger);
+  border-color: var(--danger-dim);
 }
 
 .btn-icon.btn-danger:hover {
-  background: #fef2f2;
-  border-color: #ef4444;
+  background: var(--danger-dim);
+  border-color: var(--danger);
 }
 
 .button-sm {
@@ -475,8 +484,8 @@
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
+  background: var(--ink-850);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.45rem 0.7rem;
   font-size: 0.85rem;
@@ -484,13 +493,13 @@
 
 .custom-field-label {
   font-weight: 600;
-  color: #1f2937;
+  color: var(--text-primary);
   flex: 1;
 }
 
 .custom-field-type {
-  background: #e0e7ff;
-  color: #4338ca;
+  background: var(--accent-dim);
+  color: var(--accent);
   border-radius: 999px;
   padding: 0.1rem 0.55rem;
   font-size: 0.75rem;
@@ -498,7 +507,7 @@
 }
 
 .custom-field-default {
-  color: #6b7280;
+  color: var(--text-secondary);
   font-size: 0.78rem;
   font-style: italic;
 }
@@ -514,7 +523,7 @@
 .field-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.72);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -523,12 +532,12 @@
 }
 
 .field-modal {
-  background: white;
+  background: var(--ink-800);
   border-radius: 12px;
   padding: 1.75rem;
   width: 100%;
   max-width: 480px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-xl);
 }
 
 .field-modal-header {
@@ -541,6 +550,6 @@
 .field-modal-header h4 {
   margin: 0;
   font-size: 1.1rem;
-  color: #111827;
+  color: var(--text-primary);
 }
 

@@ -1,8 +1,8 @@
 /* Landing page — px units throughout (the app's 9px base font must not shrink it) */
 .landing {
   font-size: 16px;
-  color: #1f2937;
-  background: #fafaf9;
+  color: var(--text-primary);
+  background: var(--ink-950);
   line-height: 1.6;
   min-height: 100vh;
 }
@@ -16,21 +16,23 @@
   align-items: center;
   justify-content: space-between;
   padding: 14px 24px;
-  background: rgba(255, 255, 255, 0.92);
+  /* frosted bar: --ink-900 at 82% so the blur has something to pick up.
+     No token can carry the alpha, hence the literal. */
+  background: rgba(14, 14, 17, 0.82);
   backdrop-filter: blur(8px);
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-subtle);
   position: sticky;
   top: 0;
   z-index: 100;
 }
 
-.ld-logo { display: flex; align-items: center; gap: 8px; font-size: 19px; font-weight: 800; color: #4f46e5; }
+.ld-logo { display: flex; align-items: center; gap: 8px; font-size: 19px; font-weight: 800; color: var(--accent); }
 
 .ld-chip {
   font-size: 10px;
   font-weight: 800;
-  background: #fbbf24;
-  color: #78350f;
+  background: var(--gold);
+  color: var(--ink-950);
   padding: 2px 8px;
   border-radius: 999px;
   letter-spacing: 1px;
@@ -38,12 +40,12 @@
 
 .ld-nav-actions { display: flex; align-items: center; gap: 14px; }
 
-.ld-nav-link { color: #4b5563; font-size: 14px; font-weight: 700; text-decoration: none; }
-.ld-nav-link:hover { color: #4f46e5; }
+.ld-nav-link { color: var(--text-secondary); font-size: 14px; font-weight: 700; text-decoration: none; }
+.ld-nav-link:hover { color: var(--accent); }
 
 .ld-nav-cta {
-  background: #eef2ff;
-  color: #4338ca;
+  background: var(--accent-dim);
+  color: var(--accent);
   font-size: 14px;
   font-weight: 800;
   padding: 8px 14px;
@@ -52,8 +54,8 @@
 }
 
 .ld-nav-login {
-  background: #4f46e5;
-  color: #fff;
+  background: var(--accent);
+  color: var(--ink-950); /* dark label — white on the violet fill fails AA */
   font-size: 14px;
   font-weight: 800;
   padding: 8px 18px;
@@ -62,12 +64,16 @@
   cursor: pointer;
 }
 
-.ld-nav-login:hover { background: #4338ca; }
+.ld-nav-login:hover { background: var(--accent-hover); }
 
 /* ── Hero ── */
 .ld-hero {
-  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 55%, #6d28d9 100%);
-  color: #fff;
+  /* was a solid indigo→violet band; on a near-black canvas that reads as a
+     light-mode leftover. Now a violet wash laid over the ink surface. */
+  background:
+    linear-gradient(135deg, var(--accent-glow) 0%, var(--accent-dim) 55%, transparent 100%),
+    var(--ink-900);
+  color: var(--text-primary);
   text-align: center;
   padding: 72px 24px 80px;
 }
@@ -78,33 +84,33 @@
   max-width: 640px;
   margin: 22px auto 32px;
   font-size: 18px;
-  color: #e0e7ff;
+  color: var(--text-secondary);
 }
 
 .ld-hero-ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 
 .ld-btn-primary {
-  background: #fff;
-  color: #4f46e5;
+  background: var(--accent);
+  color: var(--ink-950);
   font-size: 17px;
   font-weight: 800;
   padding: 14px 28px;
   border-radius: 10px;
   text-decoration: none;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-accent);
 }
 
 .ld-btn-ghost {
-  color: #fff;
+  color: var(--text-primary);
   font-size: 17px;
   font-weight: 700;
   padding: 14px 22px;
-  border: 1px solid rgba(255, 255, 255, 0.45);
+  border: 1px solid var(--border-strong);
   border-radius: 10px;
   text-decoration: none;
 }
 
-.ld-hero-note { margin-top: 22px !important; font-size: 13px !important; color: #c7d2fe !important; }
+.ld-hero-note { margin-top: 22px !important; font-size: 13px !important; color: var(--text-muted) !important; }
 
 /* ── Stats strip ── */
 .ld-stats {
@@ -117,18 +123,18 @@
 }
 
 .ld-stats div {
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--ink-850);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 16px;
-  box-shadow: 0 6px 20px rgba(17, 24, 39, 0.07);
+  box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.ld-stats strong { font-size: 20px; color: #4f46e5; }
-.ld-stats span { font-size: 13px; color: #6b7280; }
+.ld-stats strong { font-size: 20px; color: var(--accent); }
+.ld-stats span { font-size: 13px; color: var(--text-secondary); }
 
 /* ── Tour ── */
 .ld-tour { max-width: 1040px; margin: 64px auto 0; padding: 0 24px; display: flex; flex-direction: column; gap: 72px; }
@@ -143,14 +149,14 @@
   .ld-tour-row--flip .ld-shot { order: 2; }
 }
 
-.ld-tour-text h2 { font-size: 26px; color: #111827; margin-bottom: 12px; }
-.ld-tour-text p { font-size: 16px; color: #4b5563; margin-bottom: 14px; }
+.ld-tour-text h2 { font-size: 26px; color: var(--text-primary); margin-bottom: 12px; }
+.ld-tour-text p { font-size: 16px; color: var(--text-secondary); margin-bottom: 14px; }
 
 .ld-tour-text li {
   position: relative;
   padding: 5px 0 5px 22px;
   font-size: 15px;
-  color: #374151;
+  color: var(--text-secondary);
 }
 
 .ld-tour-text li::before {
@@ -161,16 +167,16 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #6366f1;
+  background: var(--accent);
 }
 
 /* ── Mock screenshots ── */
 .ld-shot {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
   border-radius: 14px;
   overflow: hidden;
-  background: #fff;
-  box-shadow: 0 16px 44px rgba(17, 24, 39, 0.13);
+  background: var(--ink-850);
+  box-shadow: var(--shadow-lg);
 }
 
 .shot-bar {
@@ -178,15 +184,15 @@
   align-items: center;
   gap: 6px;
   padding: 9px 12px;
-  background: #f3f4f6;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--ink-800); /* window chrome sits one step above the shot body */
+  border-bottom: 1px solid var(--border);
 }
 
-.shot-bar i { width: 10px; height: 10px; border-radius: 50%; background: #d1d5db; }
-.shot-bar i:nth-child(1) { background: #fca5a5; }
-.shot-bar i:nth-child(2) { background: #fcd34d; }
-.shot-bar i:nth-child(3) { background: #86efac; }
-.shot-bar em { font-style: normal; font-size: 11px; color: #9ca3af; margin-left: 8px; font-weight: 600; }
+.shot-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--ink-700); }
+.shot-bar i:nth-child(1) { background: var(--danger); }
+.shot-bar i:nth-child(2) { background: var(--warning); }
+.shot-bar i:nth-child(3) { background: var(--success); }
+.shot-bar em { font-style: normal; font-size: 11px; color: var(--text-muted); margin-left: 8px; font-weight: 600; }
 
 .shot-mock { padding: 14px; }
 
@@ -198,15 +204,15 @@
   gap: 4px;
   font-size: 11px;
   font-weight: 700;
-  color: #3730a3;
-  background: #eef2ff;
-  border: 1px solid #c7d2fe;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
   padding: 4px 8px;
   border-radius: 6px;
 }
 
-.mock-toolbar .mk-green { background: #6366f1; border-color: #6366f1; color: #fff; }
-.mock-toolbar .mk-red { background: #dc2626; border-color: #dc2626; color: #fff; }
+.mock-toolbar .mk-green { background: var(--accent); border-color: var(--accent); color: var(--ink-950); }
+.mock-toolbar .mk-red { background: var(--danger); border-color: var(--danger); color: var(--ink-950); }
 
 .mock-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 
@@ -216,14 +222,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* deliberately NOT a token: these tiles stand in for photos and get pastel
+     backgrounds inline from Landing.tsx, so the icon stays light in both themes */
   color: rgba(255, 255, 255, 0.85);
 }
 
-.mock-card--sel { outline: 3px solid #4f46e5; outline-offset: -3px; }
+.mock-card--sel { outline: 3px solid var(--accent); outline-offset: -3px; }
 
 .mock-groupcard {
   margin-top: 10px;
-  border: 2px solid #667eea;
+  border: 2px solid var(--accent-line);
   border-radius: 8px;
   padding: 8px;
 }
@@ -234,8 +242,8 @@
   gap: 4px;
   font-size: 11px;
   font-weight: 800;
-  color: #fff;
-  background: #667eea;
+  color: var(--ink-950);
+  background: var(--accent);
   border-radius: 999px;
   padding: 2px 9px;
 }
@@ -248,8 +256,8 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--danger-dim);
+  color: var(--danger);
   font-size: 13px;
   font-weight: 800;
   padding: 6px 12px;
@@ -257,7 +265,7 @@
 }
 
 .mock-wave { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
-.mock-wave i { width: 3px; background: #ef4444; border-radius: 2px; animation: ld-wave 0.9s ease-in-out infinite; }
+.mock-wave i { width: 3px; background: var(--danger); border-radius: 2px; animation: ld-wave 0.9s ease-in-out infinite; }
 .mock-wave i:nth-child(1) { height: 6px; animation-delay: 0s; }
 .mock-wave i:nth-child(2) { height: 12px; animation-delay: 0.15s; }
 .mock-wave i:nth-child(3) { height: 8px; animation-delay: 0.3s; }
@@ -270,9 +278,9 @@
   margin: 12px 0;
   font-size: 13px;
   font-style: italic;
-  color: #6b7280;
-  background: #f9fafb;
-  border: 1px dashed #d1d5db;
+  color: var(--text-secondary);
+  background: var(--ink-900);
+  border: 1px dashed var(--border);
   border-radius: 8px;
   padding: 10px 12px;
 }
@@ -280,25 +288,25 @@
 .mock-fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 
 .mock-fields div {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 7px 10px;
   display: flex;
   flex-direction: column;
 }
 
-.mock-fields label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; font-weight: 700; }
-.mock-fields b { font-size: 14px; color: #111827; }
+.mock-fields label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 700; }
+.mock-fields b { font-size: 14px; color: var(--text-primary); }
 
 .mock-desc { margin-top: 12px; display: flex; flex-direction: column; gap: 7px; }
-.mock-desc i { height: 8px; border-radius: 4px; background: #e5e7eb; }
+.mock-desc i { height: 8px; border-radius: 4px; background: var(--ink-750); }
 
 /* csv mock */
 .mock-thead, .mock-trow { display: grid; grid-template-columns: 1.3fr 1.6fr 0.7fr 1fr 0.5fr; gap: 8px; padding: 8px 6px; }
-.mock-thead { border-bottom: 2px solid #e5e7eb; }
-.mock-thead b { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: #6b7280; }
-.mock-trow { border-bottom: 1px solid #f3f4f6; }
-.mock-trow span { font-size: 12px; color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mock-thead { border-bottom: 2px solid var(--border-strong); }
+.mock-thead b { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-muted); }
+.mock-trow { border-bottom: 1px solid var(--border-subtle); }
+.mock-trow span { font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .mock-download {
   margin-top: 12px;
@@ -306,8 +314,8 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  background: linear-gradient(135deg, #10b981, #059669);
-  color: #fff;
+  background: linear-gradient(135deg, var(--success), var(--shopify-green-dark));
+  color: var(--ink-950);
   font-size: 13px;
   font-weight: 800;
   padding: 10px;
@@ -321,11 +329,11 @@
 .ld-founding-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
 
 .ld-founding-grid > div {
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--ink-850);
+  border: 1px solid var(--border);
   border-radius: 14px;
   padding: 20px;
-  box-shadow: 0 6px 20px rgba(17, 24, 39, 0.06);
+  box-shadow: var(--shadow-md);
 }
 
 .ld-ic {
@@ -335,33 +343,33 @@
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  background: #eef2ff;
-  color: #4f46e5;
+  background: var(--accent-dim);
+  color: var(--accent);
   margin-bottom: 10px;
 }
 
-.ld-founding-grid h3 { font-size: 16px; color: #111827; margin-bottom: 5px; }
-.ld-founding-grid p { font-size: 14px; color: #4b5563; }
+.ld-founding-grid h3 { font-size: 16px; color: var(--text-primary); margin-bottom: 5px; }
+.ld-founding-grid p { font-size: 14px; color: var(--text-secondary); }
 
 /* ── Pricing ── */
 .ld-pricing { max-width: 1040px; margin: 80px auto 0; padding: 0 24px; }
 .ld-pricing h2 { text-align: center; font-size: 28px; }
-.landing .ld-pricing-sub { text-align: center; color: #6b7280; font-size: 15px; max-width: 560px; margin: 10px auto 30px; }
+.landing .ld-pricing-sub { text-align: center; color: var(--text-secondary); font-size: 15px; max-width: 560px; margin: 10px auto 30px; }
 
 .ld-tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; align-items: stretch; }
 
 .ld-tier {
   position: relative;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--ink-850);
+  border: 1px solid var(--border);
   border-radius: 16px;
   padding: 26px 22px;
-  box-shadow: 0 6px 20px rgba(17, 24, 39, 0.06);
+  box-shadow: var(--shadow-md);
 }
 
 .ld-tier--featured {
-  border: 2px solid #4f46e5;
-  box-shadow: 0 14px 40px rgba(79, 70, 229, 0.18);
+  border: 2px solid var(--accent);
+  box-shadow: var(--shadow-accent);
 }
 
 .ld-tier-badge {
@@ -369,8 +377,8 @@
   top: -12px;
   left: 50%;
   transform: translateX(-50%);
-  background: #4f46e5;
-  color: #fff;
+  background: var(--accent);
+  color: var(--ink-950);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.5px;
@@ -378,60 +386,61 @@
   border-radius: 999px;
 }
 
-.ld-tier h3 { font-size: 17px; color: #111827; }
+.ld-tier h3 { font-size: 17px; color: var(--text-primary); }
 
-.ld-tier-price { font-size: 38px; font-weight: 800; color: #4f46e5; margin: 6px 0 14px; }
-.ld-tier-price span { font-size: 15px; font-weight: 600; color: #9ca3af; }
+.ld-tier-price { font-size: 38px; font-weight: 800; color: var(--accent); margin: 6px 0 14px; }
+.ld-tier-price span { font-size: 15px; font-weight: 600; color: var(--text-muted); }
 
 .ld-tier li {
   display: flex;
   align-items: flex-start;
   gap: 8px;
   font-size: 14px;
-  color: #374151;
+  color: var(--text-secondary);
   padding: 5px 0;
 }
 
-.ld-tier li svg { flex: 0 0 auto; margin-top: 3px; color: #059669; }
+.ld-tier li svg { flex: 0 0 auto; margin-top: 3px; color: var(--success); }
 
-.landing .ld-pricing-note { text-align: center; font-size: 12px; color: #9ca3af; margin-top: 18px; }
+.landing .ld-pricing-note { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 18px; }
 
 /* ── Signup ── */
 .ld-signup {
   max-width: 780px;
   margin: 80px auto 0;
   padding: 32px 26px 36px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--ink-850);
+  border: 1px solid var(--border);
   border-radius: 16px;
-  box-shadow: 0 8px 28px rgba(17, 24, 39, 0.07);
+  box-shadow: var(--shadow-lg);
 }
 
 .ld-signup h2 { font-size: 28px; text-align: center; }
-.landing .ld-signup-sub { text-align: center; color: #6b7280; margin: 10px auto 24px; max-width: 520px; font-size: 15px; }
+.landing .ld-signup-sub { text-align: center; color: var(--text-secondary); margin: 10px auto 24px; max-width: 520px; font-size: 15px; }
 
 .ld-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
 @media (max-width: 560px) { .ld-form-row { grid-template-columns: 1fr; } }
 
-.ld-signup label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 700; color: #374151; }
+.ld-signup label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 700; color: var(--text-secondary); }
 
 .ld-signup input, .ld-signup select {
   font-size: 15px;
   padding: 10px 11px;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border);
   border-radius: 8px;
   font-weight: 400;
-  background: #fff;
+  background: var(--ink-900); /* inset against the --ink-850 panel */
 }
 
-.ld-signup input:focus, .ld-signup select:focus { outline: 2px solid #a5b4fc; border-color: #6366f1; }
-.ld-signup input:disabled, .ld-signup select:disabled { background: #f9fafb; color: #9ca3af; }
+.ld-signup input:focus, .ld-signup select:focus { outline: 2px solid var(--accent-line); border-color: var(--accent); }
+/* disabled fields flatten into the panel surface */
+.ld-signup input:disabled, .ld-signup select:disabled { background: var(--ink-850); color: var(--text-faint); }
 
 .ld-signup button[type="submit"] {
   width: 100%;
   margin-top: 6px;
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
-  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--accent-press));
+  color: var(--ink-950);
   font-size: 17px;
   font-weight: 800;
   padding: 14px;
@@ -443,14 +452,14 @@
 .ld-signup button[type="submit"]:disabled { opacity: 0.65; cursor: default; }
 
 .landing .ld-form-msg { margin-top: 13px; text-align: center; font-size: 14px; }
-.ld-form-msg--ok { color: #047857; font-weight: 700; }
-.ld-form-msg--err { color: #b91c1c; font-weight: 700; }
+.ld-form-msg--ok { color: var(--success); font-weight: 700; }
+.ld-form-msg--err { color: var(--danger); font-weight: 700; }
 
-.landing .ld-signup-login { text-align: center; margin-top: 16px; font-size: 14px; color: #6b7280; }
+.landing .ld-signup-login { text-align: center; margin-top: 16px; font-size: 14px; color: var(--text-secondary); }
 .landing .ld-signup-login button {
   background: none;
   border: none;
-  color: #4f46e5;
+  color: var(--accent);
   font-weight: 800;
   font-size: 14px;
   cursor: pointer;
@@ -458,22 +467,22 @@
 }
 
 /* ── Footer ── */
-.ld-footer { text-align: center; color: #9ca3af; font-size: 13px; padding: 56px 16px 32px; }
+.ld-footer { text-align: center; color: var(--text-muted); font-size: 13px; padding: 56px 16px 32px; }
 
 .ld-tier-founder {
   display: inline-block;
   font-size: 12px;
   font-weight: 800;
-  color: #92400e;
-  background: #fef3c7;
+  color: var(--gold);
+  background: var(--gold-dim);
   border-radius: 999px;
   padding: 3px 10px;
   margin-bottom: 12px;
 }
 
 /* variants of the prefixed classes */
-.landing .ld-form-msg--ok { color: #047857; font-weight: 700; }
-.landing .ld-form-msg--err { color: #b91c1c; font-weight: 700; }
+.landing .ld-form-msg--ok { color: var(--success); font-weight: 700; }
+.landing .ld-form-msg--err { color: var(--danger); font-weight: 700; }
 
 /* ── Preset mock panel ── */
 .mock-preset-head {
@@ -482,8 +491,8 @@
   gap: 6px;
   font-size: 13px;
   font-weight: 800;
-  color: #fff;
-  background: #059669;
+  color: var(--ink-950);
+  background: var(--success);
   border-radius: 999px;
   padding: 5px 12px;
   margin-bottom: 12px;
@@ -492,15 +501,15 @@
 .mock-preset-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
 .mock-preset-rows div {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px;
   display: flex;
   flex-direction: column;
 }
 
-.mock-preset-rows label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; font-weight: 700; }
-.mock-preset-rows b { font-size: 13px; color: #111827; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mock-preset-rows label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 700; }
+.mock-preset-rows b { font-size: 13px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .mock-preset-apply {
   margin-top: 12px;
@@ -508,9 +517,9 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  background: #ecfdf5;
-  border: 1px solid #a7f3d0;
-  color: #047857;
+  background: var(--success-dim);
+  border: 1px solid var(--success);
+  color: var(--success);
   font-size: 13px;
   font-weight: 800;
   padding: 9px;
@@ -522,25 +531,25 @@
   max-width: 1040px;
   margin: 80px auto 0;
   padding: 36px 24px;
-  background: #eef2ff;
+  background: var(--accent-dim);
   border-radius: 20px;
   text-align: center;
 }
 
-.ld-math h2 { font-size: 28px; color: #111827; }
+.ld-math h2 { font-size: 28px; color: var(--text-primary); }
 
 .landing .ld-math-sub {
   max-width: 640px;
   margin: 12px auto 26px;
-  color: #4b5563;
+  color: var(--text-secondary);
   font-size: 15px;
 }
 
 .ld-math-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
 
 .ld-math-grid > div {
-  background: #fff;
-  border: 1px solid #c7d2fe;
+  background: var(--ink-850);
+  border: 1px solid var(--accent-line);
   border-radius: 14px;
   padding: 22px 18px;
   display: flex;
@@ -549,5 +558,39 @@
   gap: 4px;
 }
 
-.ld-math-grid strong { font-size: 22px; color: #4f46e5; }
-.ld-math-grid p { font-size: 13px; color: #6b7280; }
+.ld-math-grid strong { font-size: 22px; color: var(--accent); }
+.ld-math-grid p { font-size: 13px; color: var(--text-secondary); }
+
+/* ── Pricing ladder (8 volume tiers, July 2026 revision) ──
+   Compacts the tier cards so all eight wrap into tidy rows; the declining
+   price per item is the story, so it gets the accent chip. */
+.ld-tiers--ladder { grid-template-columns: repeat(auto-fit, minmax(205px, 1fr)); gap: 12px; }
+.ld-tiers--ladder .ld-tier { padding: 20px 18px 16px; }
+.ld-tiers--ladder .ld-tier-price { font-size: 30px; margin: 4px 0 10px; }
+
+.ld-tier-items { font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; }
+
+.ld-tier-peritem {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-radius: 999px;
+  padding: 3px 10px;
+  margin-bottom: 10px;
+}
+
+.landing .ld-tier-includes {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+  max-width: 640px;
+  margin: 22px auto 0;
+}
+
+.landing .ld-tier-includes svg { flex: 0 0 auto; margin-top: 2px; color: var(--success); }

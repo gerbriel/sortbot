@@ -743,12 +743,12 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
         {failedUploads.length > 0 && (
           <div style={{
             marginTop: '0.75rem',
-            background: 'rgba(220,38,38,0.08)',
-            border: '1.5px solid #dc2626',
+            background: 'var(--danger-dim)',
+            border: '1.5px solid var(--danger)',
             borderRadius: '8px',
             padding: '0.7rem 1rem',
             fontSize: '0.85rem',
-            color: '#7f1d1d',
+            color: 'var(--danger)',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
               <span style={{ fontWeight: 600 }}>
@@ -761,8 +761,10 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                   disabled={isUploading}
                   style={{
                     padding: '0.35rem 0.9rem',
-                    background: '#dc2626',
-                    color: '#fff',
+                    background: 'var(--danger)',
+                    // Solid semantic fill needs a dark label — --text-primary on
+                    // --danger is only ~2.6:1.
+                    color: 'var(--ink-950)',
                     border: 'none',
                     borderRadius: '6px',
                     fontWeight: 600,
@@ -776,13 +778,13 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                 <button
                   type="button"
                   onClick={() => setFailedUploads([])}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: '#7f1d1d' }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--danger)' }}
                 >
                   ✕ dismiss
                 </button>
               </div>
             </div>
-            <ul style={{ margin: '0.4rem 0 0 0', paddingLeft: '1.2rem', lineHeight: 1.6, fontSize: '0.78rem', color: '#991b1b' }}>
+            <ul style={{ margin: '0.4rem 0 0 0', paddingLeft: '1.2rem', lineHeight: 1.6, fontSize: '0.78rem', color: 'var(--danger)' }}>
               {failedUploads.slice(0, 10).map((f, i) => (
                 <li key={i}>{f.originalName}</li>
               ))}
@@ -813,8 +815,10 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                       style={{
                         width: '100%',
                         padding: '0.6rem 1rem',
-                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                        color: '#fff',
+                        background: 'linear-gradient(135deg, var(--success) 0%, var(--shopify-green-dark) 100%)',
+                        // Solid semantic fill needs a dark label — --text-primary
+                        // on --success is only ~1.9:1.
+                        color: 'var(--ink-950)',
                         border: 'none',
                         borderRadius: '8px',
                         fontWeight: 600,
@@ -832,12 +836,12 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                 </div>
               ) : recompressState.running ? (
                 <div style={{
-                  background: 'rgba(16,185,129,0.12)',
-                  border: '1px solid #10b981',
+                  background: 'var(--success-dim)',
+                  border: '1px solid var(--success)',
                   borderRadius: '8px',
                   padding: '0.6rem 1rem',
                   fontSize: '0.85rem',
-                  color: '#065f46',
+                  color: 'var(--success)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.5rem',
@@ -851,12 +855,12 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                 </div>
               ) : (
                 <div style={{
-                  background: 'rgba(16,185,129,0.12)',
-                  border: '1px solid #10b981',
+                  background: 'var(--success-dim)',
+                  border: '1px solid var(--success)',
                   borderRadius: '8px',
                   padding: '0.6rem 1rem',
                   fontSize: '0.85rem',
-                  color: '#065f46',
+                  color: 'var(--success)',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
                     <span>
@@ -869,18 +873,21 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                     </span>
                     <button
                       onClick={() => setRecompressState(null)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: '#065f46', flexShrink: 0 }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--success)', flexShrink: 0 }}
                     >
                       ✕ dismiss
                     </button>
                   </div>
-                  {/* Error list */}
+                  {/* Error list. The divider was a pale-green hairline — a
+                      decorative separator inside the success panel, so it maps to
+                      the neutral border token rather than competing with the
+                      danger text below it. */}
                   {recompressState.errors.length > 0 && (
-                    <div style={{ marginTop: '0.5rem', borderTop: '1px solid #6ee7b7', paddingTop: '0.4rem' }}>
-                      <div style={{ color: '#991b1b', fontWeight: 600, fontSize: '0.78rem', marginBottom: '0.2rem' }}>
+                    <div style={{ marginTop: '0.5rem', borderTop: '1px solid var(--border)', paddingTop: '0.4rem' }}>
+                      <div style={{ color: 'var(--danger)', fontWeight: 600, fontSize: '0.78rem', marginBottom: '0.2rem' }}>
                         ⚠️ {recompressState.errors.length} error{recompressState.errors.length !== 1 ? 's' : ''}:
                       </div>
-                      <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.75rem', color: '#7f1d1d', lineHeight: 1.5 }}>
+                      <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.75rem', color: 'var(--danger)', lineHeight: 1.5 }}>
                         {recompressState.errors.map((e, idx) => <li key={idx}>{e}</li>)}
                       </ul>
                     </div>

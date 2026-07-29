@@ -602,7 +602,7 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
             <h2>Category Presets Manager</h2>
             <button className="button-close" onClick={onClose} title="Close">✕</button>
           </div>
-          <p style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>Loading category presets…</p>
+          <p style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading category presets…</p>
         </div>
       </div>
     );
@@ -620,7 +620,9 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
         </div>
 
         {/* ──────────── Gender Toggle ──────────── */}
-        <div style={{ display: 'flex', gap: '0.5rem', padding: '0.75rem 1.5rem', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>
+        {/* Tab strip sits one surface step BELOW the --ink-800 modal so it still
+            reads as a recessed bar, the way the old #f9fafb did on white. */}
+        <div style={{ display: 'flex', gap: '0.5rem', padding: '0.75rem 1.5rem', borderBottom: '1px solid var(--border)', background: 'var(--ink-850)' }}>
           {(['Men', 'Women', 'Kids'] as const).map(g => (
             <button
               key={g}
@@ -629,9 +631,10 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
                 padding: '0.4rem 1.4rem',
                 borderRadius: '999px',
                 border: '2px solid',
-                borderColor: genderFilter === g ? '#6366f1' : '#d1d5db',
-                background: genderFilter === g ? '#6366f1' : '#fff',
-                color: genderFilter === g ? '#fff' : '#374151',
+                // Solid --accent needs a dark label (--text-primary on it is 2.46:1).
+                borderColor: genderFilter === g ? 'var(--accent)' : 'var(--border-control)',
+                background: genderFilter === g ? 'var(--accent)' : 'var(--ink-800)',
+                color: genderFilter === g ? 'var(--ink-950)' : 'var(--text-secondary)',
                 fontWeight: 600,
                 fontSize: '0.9rem',
                 cursor: 'pointer',

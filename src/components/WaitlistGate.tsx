@@ -38,7 +38,7 @@ export default function WaitlistGate({ status, email, onSignOut, onRequested }: 
   return (
     <div className="waitlist-gate">
       <div className="waitlist-card">
-        <div className="waitlist-brand"><ShoppingBag size={20} /> Sortbot <span className="waitlist-chip">BETA</span></div>
+        <div className="waitlist-brand"><ShoppingBag size={20} /> Arcatya <span className="waitlist-chip">BETA</span></div>
 
         {status === 'pending' && (
           <>
@@ -62,7 +62,7 @@ export default function WaitlistGate({ status, email, onSignOut, onRequested }: 
 
         {status === 'none' && (
           <>
-            <h1>Sortbot is in private beta</h1>
+            <h1>Arcatya is in private beta</h1>
             <p>Tell us about your shop and we'll review your request — usually within a day or two.</p>
             <div className="waitlist-form">
               <input

@@ -1,7 +1,7 @@
 .org-panel-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(17, 24, 39, 0.55);
+  background: rgba(0, 0, 0, 0.72);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -9,13 +9,15 @@
 }
 
 .org-panel {
-  background: white;
+  background: var(--ink-800);
   border-radius: 12px;
   width: min(640px, 94vw);
   max-height: 80vh;
   overflow-y: auto;
   padding: 1.1rem 1.25rem 1.25rem;
-  box-shadow: 0 20px 50px rgba(17, 24, 39, 0.35);
+  /* --shadow-xl carries a hairline ring, so the panel still has an edge
+     against the scrim without adding a border (no layout shift). */
+  box-shadow: var(--shadow-xl);
 }
 
 .org-panel-header {
@@ -29,30 +31,30 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: #4f46e5;
+  color: var(--accent);
 }
 
 .org-panel-title h2 {
   margin: 0;
   font-size: 1.15rem;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .org-panel-close {
   background: none;
   border: none;
   cursor: pointer;
-  color: #6b7280;
+  color: var(--text-muted);
   padding: 0.25rem;
   border-radius: 6px;
 }
 
-.org-panel-close:hover { background: #f3f4f6; }
+.org-panel-close:hover { background: var(--ink-750); }
 
 .org-panel-notice {
-  background: #eef2ff;
-  border: 1px solid #c7d2fe;
-  color: #3730a3;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
   border-radius: 8px;
   padding: 0.5rem 0.7rem;
   font-size: 0.85rem;
@@ -68,22 +70,23 @@
 .org-invite-form input {
   flex: 1;
   padding: 0.45rem 0.6rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 0.9rem;
 }
 
 .org-invite-form select {
   padding: 0.45rem 0.4rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 0.85rem;
 }
 
 .org-invite-btn {
   padding: 0.45rem 0.9rem;
-  background: #4f46e5;
-  color: white;
+  background: var(--accent);
+  /* Dark ink on the light violet fill — a white label sits near 2:1 and fails AA. */
+  color: var(--ink-950);
   border: none;
   border-radius: 8px;
   font-weight: 700;
@@ -91,14 +94,14 @@
 }
 
 .org-invite-btn:disabled { opacity: 0.5; cursor: default; }
-.org-invite-btn:hover:not(:disabled) { background: #4338ca; }
+.org-invite-btn:hover:not(:disabled) { background: var(--accent-hover); }
 
 .org-section-title {
   margin: 0.6rem 0 0.35rem;
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 .org-member-list {
@@ -112,7 +115,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.4rem 0.2rem;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--border-subtle);
   font-size: 0.9rem;
 }
 
@@ -121,7 +124,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .org-role-badge {
@@ -130,17 +133,18 @@
   text-transform: uppercase;
   padding: 0.12rem 0.45rem;
   border-radius: 20px;
-  background: #e5e7eb;
-  color: #374151;
+  background: var(--ink-750);
+  color: var(--text-secondary);
 }
 
-.org-role-owner { background: #fef3c7; color: #92400e; }
-.org-role-admin { background: #e0e7ff; color: #3730a3; }
+/* Owner keeps its amber identity via the gold token; admin keeps the accent. */
+.org-role-owner { background: var(--gold-dim); color: var(--gold); }
+.org-role-admin { background: var(--accent-dim); color: var(--accent); }
 
 .org-member-remove {
   background: none;
-  border: 1px solid #fecaca;
-  color: #dc2626;
+  border: 1px solid var(--danger);
+  color: var(--danger);
   border-radius: 6px;
   font-size: 0.72rem;
   font-weight: 600;
@@ -148,18 +152,18 @@
   cursor: pointer;
 }
 
-.org-member-remove:hover:not(:disabled) { background: #fef2f2; }
+.org-member-remove:hover:not(:disabled) { background: var(--danger-dim); }
 .org-member-remove:disabled { opacity: 0.5; cursor: default; }
 
 .org-panel-loading {
-  color: #6b7280;
+  color: var(--text-secondary);
   font-size: 0.9rem;
 }
 
 .org-panel-footnote {
   margin: 1rem 0 0;
   font-size: 0.78rem;
-  color: #9ca3af;
+  color: var(--text-muted);
 }
 
 /* ── Beta requests (Founding Workspace admins) ─────────────────────────── */
@@ -169,7 +173,7 @@
 
 .beta-request-meta {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -186,14 +190,17 @@
   cursor: pointer;
 }
 
-.beta-approve { background: #059669; color: #fff; }
-.beta-approve:hover:not(:disabled) { background: #047857; }
-.beta-deny { background: #fee2e2; color: #b91c1c; }
-.beta-deny:hover:not(:disabled) { background: #fecaca; }
+/* Solid semantic fills take dark ink. There is no brighter step above
+   --success/--danger on dark, so hover reads as a soft halo instead of a
+   darker fill (darkening would look like a disabled state here). */
+.beta-approve { background: var(--success); color: var(--ink-950); }
+.beta-approve:hover:not(:disabled) { box-shadow: 0 0 0 3px var(--success-dim); }
+.beta-deny { background: var(--danger-dim); color: var(--danger); }
+.beta-deny:hover:not(:disabled) { background: var(--danger); color: var(--ink-950); }
 .beta-approve:disabled, .beta-deny:disabled { opacity: 0.5; cursor: default; }
 
-.beta-status-approved { background: #d1fae5; color: #065f46; }
-.beta-status-denied   { background: #fee2e2; color: #b91c1c; }
+.beta-status-approved { background: var(--success-dim); color: var(--success); }
+.beta-status-denied   { background: var(--danger-dim); color: var(--danger); }
 
 /* ── Rename / plan / shared icon buttons ───────────────────────────────── */
 .org-rename-form { display: flex; align-items: center; gap: 0.3rem; flex: 1; }
@@ -202,11 +209,11 @@
   flex: 1;
   min-width: 0;
   padding: 0.3rem 0.5rem;
-  border: 1px solid #c7d2fe;
+  border: 1px solid var(--accent-line);
   border-radius: 6px;
   font-size: 1rem;
   font-weight: 700;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .org-plan-badge {
@@ -216,8 +223,8 @@
   letter-spacing: 0.04em;
   padding: 0.12rem 0.45rem;
   border-radius: 20px;
-  background: #ede9fe;
-  color: #5b21b6;
+  background: var(--accent-dim);
+  color: var(--accent);
 }
 
 .org-icon-btn {
@@ -225,35 +232,35 @@
   align-items: center;
   justify-content: center;
   background: none;
-  border: 1px solid #e5e7eb;
-  color: #6b7280;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
   border-radius: 6px;
   padding: 0.22rem 0.35rem;
   cursor: pointer;
   text-decoration: none;
 }
 
-.org-icon-btn:hover:not(:disabled) { background: #f3f4f6; color: #374151; }
+.org-icon-btn:hover:not(:disabled) { background: var(--ink-750); color: var(--text-primary); }
 .org-icon-btn:disabled { opacity: 0.5; cursor: default; }
 
-.org-icon-danger { border-color: #fecaca; color: #dc2626; }
-.org-icon-danger:hover:not(:disabled) { background: #fef2f2; color: #b91c1c; }
+.org-icon-danger { border-color: var(--danger); color: var(--danger); }
+.org-icon-danger:hover:not(:disabled) { background: var(--danger-dim); color: var(--danger); }
 
 /* ── Member rows: dates + role select ──────────────────────────────────── */
 .org-member-date {
   display: block;
   font-size: 0.68rem;
-  color: #9ca3af;
+  color: var(--text-muted);
 }
 
 .org-role-select {
   padding: 0.2rem 0.3rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 0.72rem;
   font-weight: 600;
-  color: #374151;
-  background: #fff;
+  color: var(--text-secondary);
+  background: var(--ink-850);
   cursor: pointer;
 }
 
@@ -263,8 +270,8 @@
 .org-confirm-actions { display: flex; align-items: center; gap: 0.3rem; }
 
 .org-confirm-yes {
-  background: #dc2626;
-  color: #fff;
+  background: var(--danger);
+  color: var(--ink-950);
   border: none;
   border-radius: 6px;
   font-size: 0.72rem;
@@ -274,12 +281,12 @@
   white-space: nowrap;
 }
 
-.org-confirm-yes:hover:not(:disabled) { background: #b91c1c; }
+.org-confirm-yes:hover:not(:disabled) { box-shadow: 0 0 0 3px var(--danger-dim); }
 
 .org-confirm-no {
   background: none;
-  border: 1px solid #d1d5db;
-  color: #6b7280;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
   border-radius: 6px;
   font-size: 0.72rem;
   font-weight: 600;
@@ -287,14 +294,14 @@
   cursor: pointer;
 }
 
-.org-confirm-no:hover:not(:disabled) { background: #f3f4f6; }
+.org-confirm-no:hover:not(:disabled) { background: var(--ink-750); }
 .org-confirm-yes:disabled, .org-confirm-no:disabled { opacity: 0.5; cursor: default; }
 
 /* ── Leave workspace ───────────────────────────────────────────────────── */
 .org-leave-section {
   margin-top: 1rem;
   padding-top: 0.75rem;
-  border-top: 1px solid #f3f4f6;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .org-leave-btn {
@@ -302,8 +309,8 @@
   align-items: center;
   gap: 0.35rem;
   background: none;
-  border: 1px solid #fecaca;
-  color: #dc2626;
+  border: 1px solid var(--danger);
+  color: var(--danger);
   border-radius: 8px;
   font-size: 0.78rem;
   font-weight: 600;
@@ -311,12 +318,12 @@
   cursor: pointer;
 }
 
-.org-leave-btn:hover:not(:disabled) { background: #fef2f2; }
+.org-leave-btn:hover:not(:disabled) { background: var(--danger-dim); }
 .org-leave-btn:disabled { opacity: 0.5; cursor: default; }
 
 .org-leave-warning {
   font-size: 0.75rem;
-  color: #b91c1c;
+  color: var(--danger);
   flex: 1;
 }
 
@@ -332,9 +339,9 @@
 .beta-filter-chips { display: flex; gap: 0.25rem; flex-wrap: wrap; }
 
 .beta-chip {
-  background: #f3f4f6;
+  background: var(--ink-750);
   border: 1px solid transparent;
-  color: #4b5563;
+  color: var(--text-secondary);
   border-radius: 20px;
   font-size: 0.7rem;
   font-weight: 600;
@@ -342,12 +349,12 @@
   cursor: pointer;
 }
 
-.beta-chip:hover { background: #e5e7eb; }
+.beta-chip:hover { background: var(--ink-700); }
 
 .beta-chip--active {
-  background: #eef2ff;
-  border-color: #c7d2fe;
-  color: #3730a3;
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--accent);
 }
 
 .beta-search {
@@ -356,10 +363,10 @@
   gap: 0.3rem;
   flex: 1;
   min-width: 130px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.25rem 0.5rem;
-  color: #9ca3af;
+  color: var(--text-muted);
 }
 
 .beta-search input {
@@ -368,16 +375,16 @@
   border: none;
   outline: none;
   font-size: 0.78rem;
-  color: #111827;
+  color: var(--text-primary);
   background: transparent;
 }
 
 .beta-request-dates {
   font-size: 0.68rem;
-  color: #9ca3af;
+  color: var(--text-muted);
 }
 
-.beta-email-link { color: #4f46e5; text-decoration: none; }
+.beta-email-link { color: var(--accent); text-decoration: none; }
 .beta-email-link:hover { text-decoration: underline; }
 
 .beta-request-actions { align-items: center; flex-wrap: wrap; justify-content: flex-end; }
@@ -390,7 +397,7 @@
 .org-member-toggle {
   background: none;
   border: none;
-  color: #6b7280;
+  color: var(--text-muted);
   cursor: pointer;
   padding: 0.1rem;
   display: inline-flex;
@@ -402,37 +409,38 @@
 .org-member-detail {
   margin: 0.35rem 0 0.2rem 1.6rem;
   padding: 0.5rem 0.7rem;
-  background: #f8fafc;
-  border: 1px solid #e5e7eb;
+  /* Darker than the --ink-800 panel, so the nested detail reads as an inset well. */
+  background: var(--ink-850);
+  border: 1px solid var(--border);
   border-radius: 8px;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
   font-size: 0.82rem;
-  color: #374151;
+  color: var(--text-secondary);
 }
 
 .org-member-stats { display: flex; flex-wrap: wrap; gap: 0.9rem; }
-.org-member-stats strong { color: #4f46e5; }
+.org-member-stats strong { color: var(--accent); }
 
 .org-member-signup {
   font-size: 0.8rem;
-  color: #4b5563;
+  color: var(--text-secondary);
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem;
   align-items: center;
 }
 
-.org-member-detail-loading { color: #9ca3af; }
+.org-member-detail-loading { color: var(--text-muted); }
 
 .org-dir-row { align-items: flex-start; }
 .org-dir-info { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; width: 100%; }
 .org-dir-info .org-member-email { display: flex; align-items: center; gap: 0.4rem; }
-.org-dir-stats { font-size: 0.8rem; color: #374151; }
+.org-dir-stats { font-size: 0.8rem; color: var(--text-secondary); }
 .org-dir-emails {
   font-size: 0.76rem;
-  color: #6b7280;
+  color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -444,7 +452,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.4rem 0.2rem;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--border-subtle);
   font-size: 0.9rem;
 }
 
@@ -461,7 +469,8 @@
 .shopify-conn-help {
   margin: 0 0 0.5rem;
   font-size: 0.75rem;
-  color: #6b7280;
+  /* Secondary, not muted — this is setup copy the admin has to actually read. */
+  color: var(--text-secondary);
   line-height: 1.45;
 }
 
@@ -486,13 +495,13 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 .desc-settings-field input,
 .desc-settings-field textarea {
   padding: 0.4rem 0.55rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 0.82rem;
   font-family: inherit;
@@ -506,7 +515,7 @@
   align-items: center;
   gap: 0.35rem;
   font-size: 0.8rem;
-  color: #374151;
+  color: var(--text-secondary);
   cursor: pointer;
 }
 
@@ -522,14 +531,14 @@
   gap: 0.35rem;
   flex-wrap: wrap;
   margin-bottom: 0.75rem;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--border-subtle);
   padding-bottom: 0.6rem;
 }
 
 .org-tab {
-  background: #f3f4f6;
+  background: var(--ink-750);
   border: 1px solid transparent;
-  color: #4b5563;
+  color: var(--text-secondary);
   border-radius: 8px;
   font-size: 0.8rem;
   font-weight: 600;
@@ -537,12 +546,12 @@
   cursor: pointer;
 }
 
-.org-tab:hover { background: #e5e7eb; }
+.org-tab:hover { background: var(--ink-700); }
 
 .org-tab--on {
-  background: #eef2ff;
-  border-color: #c7d2fe;
-  color: #3730a3;
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--accent);
 }
 
 /* ── Users tab (Founding admins) ─────────────────────────────────────────────
@@ -565,7 +574,8 @@
   list-style: none;
   margin: 0;
   padding: 0 0 0 1.1rem;
-  border-left: 2px solid #eef2ff;
+  /* Accent-tinted rail — it groups the memberships under one account. */
+  border-left: 2px solid var(--accent-line);
 }
 
 .fa-membership-row {
@@ -581,7 +591,7 @@
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  color: #374151;
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -589,10 +599,10 @@
 
 .fa-move-select,
 .fa-add-row select {
-  background: #fff;
-  border: 1px solid #d1d5db;
+  background: var(--ink-850);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  color: #4b5563;
+  color: var(--text-secondary);
   font-size: 0.72rem;
   font-weight: 600;
   padding: 0.15rem 0.3rem;
@@ -606,7 +616,7 @@
 .fa-move-label {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #92400e;
+  color: var(--warning);
 }
 
 .fa-add-row {
@@ -619,7 +629,7 @@
 .fa-audit-row { padding: 0.3rem 0.2rem; }
 .fa-audit-row .org-member-email {
   font-size: 0.8rem;
-  color: #4b5563;
+  color: var(--text-secondary);
   white-space: normal;
 }
 .fa-audit-list { max-height: 220px; overflow-y: auto; }

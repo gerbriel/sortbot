@@ -74,7 +74,8 @@ export async function createCategory(category: CategoryInput): Promise<Category>
       name: normalizedName,
       display_name: category.display_name,
       emoji: category.emoji || '📦',
-      color: category.color || '#667eea',
+      // Persisted DB data, so a hex literal — this is the dark theme's --accent.
+      color: category.color || '#b087ff',
       sort_order: category.sort_order || 999,
       is_active: category.is_active !== false,
     })
@@ -218,14 +219,19 @@ export async function initializeDefaultCategories(): Promise<void> {
   // Insert default categories. templateKey → DEFAULT_MEASUREMENT_TEMPLATES
   // entry used for the seeded default preset (which measurements the category
   // expects in Step 3).
+  // Colors mirror DEFAULT_CATEGORIES in lib/categories.ts — picked to sit on the
+  // dark canvas (each >= 6.7:1 on --ink-850) and to read as distinct at swatch
+  // size. They must be per-entry: a single shared color here gave every new
+  // workspace seven identical swatches, which defeats color-coding the zones.
+  // These are PERSISTED DB VALUES, so they are hex literals, not tokens.
   const defaultCategories = [
-    { name: 'sweatshirts', display_name: 'Sweatshirts', emoji: '🧥', sort_order: 1, templateKey: 'Sweatshirts' },
-    { name: 'outerwear', display_name: 'Outerwear', emoji: '🧥', sort_order: 2, templateKey: 'Outerwear' },
-    { name: 'tees', display_name: 'Tees', emoji: '👕', sort_order: 3, templateKey: 'Tees' },
-    { name: 'bottoms', display_name: 'Bottoms', emoji: '👖', sort_order: 4, templateKey: 'Bottoms' },
-    { name: 'femme', display_name: 'Feminine', emoji: '👗', sort_order: 5, templateKey: 'Tees' },
-    { name: 'hats', display_name: 'Hats', emoji: '🧢', sort_order: 6, templateKey: 'Hats' },
-    { name: 'mystery boxes', display_name: 'Mystery Boxes', emoji: '📦', sort_order: 7, templateKey: 'Accessories' },
+    { name: 'sweatshirts', display_name: 'Sweatshirts', emoji: '🧥', color: '#a78bfa', sort_order: 1, templateKey: 'Sweatshirts' },
+    { name: 'outerwear', display_name: 'Outerwear', emoji: '🧥', color: '#38bdf8', sort_order: 2, templateKey: 'Outerwear' },
+    { name: 'tees', display_name: 'Tees', emoji: '👕', color: '#4ade80', sort_order: 3, templateKey: 'Tees' },
+    { name: 'bottoms', display_name: 'Bottoms', emoji: '👖', color: '#fbbf24', sort_order: 4, templateKey: 'Bottoms' },
+    { name: 'femme', display_name: 'Feminine', emoji: '👗', color: '#f472b6', sort_order: 5, templateKey: 'Tees' },
+    { name: 'hats', display_name: 'Hats', emoji: '🧢', color: '#fb923c', sort_order: 6, templateKey: 'Hats' },
+    { name: 'mystery boxes', display_name: 'Mystery Boxes', emoji: '📦', color: '#2dd4bf', sort_order: 7, templateKey: 'Accessories' },
   ];
 
   // Insert categories one by one to handle conflicts gracefully
@@ -238,7 +244,7 @@ export async function initializeDefaultCategories(): Promise<void> {
           name: cat.name,
           display_name: cat.display_name,
           emoji: cat.emoji,
-          color: '#667eea',
+          color: cat.color,
           sort_order: cat.sort_order,
           is_active: true,
         });

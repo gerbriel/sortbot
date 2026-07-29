@@ -251,17 +251,21 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
 
   // Color per product type — consistent across Men/Women/Kids so the same
   // category type always appears in the same color regardless of gender toggle.
+  // This is a CATEGORICAL palette (hue = identity), so it can't collapse into the
+  // semantic tokens. The values were the light-theme 500 tier, which goes muddy
+  // against --ink-800; each is lifted one tier so the zone border still reads on
+  // dark, and the ones whose hue already exists as a token use the token.
   const getPresetColor = (categoryName: string): string => {
     const n = categoryName.toLowerCase();
-    if (n.includes('tee') || n.includes('shirt') || n.includes('top') || n.includes('jersey') || n.includes('bodysuit')) return '#3b82f6'; // blue — tops
-    if (n.includes('sweatshirt') || n.includes('hoodie')) return '#8b5cf6'; // purple — fleece
-    if (n.includes('jacket') || n.includes('coat') || n.includes('outerwear')) return '#06b6d4'; // cyan — outerwear
-    if (n.includes('pant') || n.includes('jean') || n.includes('short') || n.includes('bottom')) return '#10b981'; // green — bottoms
-    if (n.includes('dress') || n.includes('skirt')) return '#ec4899'; // pink — dresses/skirts
-    if (n.includes('hat') || n.includes('cap')) return '#f59e0b'; // amber — hats
-    if (n.includes('shoe') || n.includes('sneaker') || n.includes('boot')) return '#f97316'; // orange — shoes
-    if (n.includes('access') || n.includes('bag') || n.includes('watch') || n.includes('jewel')) return '#6b7280'; // gray — accessories
-    return '#6366f1'; // indigo default
+    if (n.includes('tee') || n.includes('shirt') || n.includes('top') || n.includes('jersey') || n.includes('bodysuit')) return 'var(--info)'; // blue — tops
+    if (n.includes('sweatshirt') || n.includes('hoodie')) return '#a78bfa'; // purple — fleece
+    if (n.includes('jacket') || n.includes('coat') || n.includes('outerwear')) return '#22d3ee'; // cyan — outerwear
+    if (n.includes('pant') || n.includes('jean') || n.includes('short') || n.includes('bottom')) return 'var(--success)'; // green — bottoms
+    if (n.includes('dress') || n.includes('skirt')) return '#f472b6'; // pink — dresses/skirts
+    if (n.includes('hat') || n.includes('cap')) return 'var(--warning)'; // amber — hats
+    if (n.includes('shoe') || n.includes('sneaker') || n.includes('boot')) return 'var(--shopify-orange)'; // orange — shoes
+    if (n.includes('access') || n.includes('bag') || n.includes('watch') || n.includes('jewel')) return 'var(--text-muted)'; // gray — accessories
+    return 'var(--accent)'; // violet default
   };
 
   const loadCategories = async () => {
@@ -672,9 +676,10 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
                 padding: '0.3rem 1rem',
                 borderRadius: '999px',
                 border: '2px solid',
-                borderColor: genderFilter === g ? '#6366f1' : '#d1d5db',
-                background: genderFilter === g ? '#6366f1' : '#fff',
-                color: genderFilter === g ? '#fff' : '#374151',
+                // Solid --accent needs a dark label (--text-primary on it is 2.46:1).
+                borderColor: genderFilter === g ? 'var(--accent)' : 'var(--border-control)',
+                background: genderFilter === g ? 'var(--accent)' : 'var(--ink-850)',
+                color: genderFilter === g ? 'var(--ink-950)' : 'var(--text-secondary)',
                 fontWeight: 600,
                 fontSize: '0.8rem',
                 cursor: 'pointer',
@@ -698,11 +703,14 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
               width: '100%',
               padding: '0.4rem 2rem 0.4rem 0.75rem',
               borderRadius: '8px',
-              border: '1.5px solid #d1d5db',
+              border: '1.5px solid var(--border-control)',
               fontSize: '0.8rem',
               outline: 'none',
               boxSizing: 'border-box',
-              background: '#fff',
+              // Was '#fff', which overrode the global dark input rule and left
+              // --text-primary typed text on a white field.
+              background: 'var(--ink-850)',
+              color: 'var(--text-primary)',
             }}
           />
           {categorySearch && (
@@ -716,7 +724,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                color: '#9ca3af',
+                color: 'var(--text-muted)',
                 padding: 0,
                 lineHeight: 1,
                 fontSize: '1rem',
@@ -728,7 +736,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
 
         <h3>{compactMode ? '🏷️ Drop Here to Categorize' : '🏷️ Drag Groups Here to Categorize'}</h3>
         {compactMode && selectedItemIds && selectedItemIds.size > 0 && (
-          <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0 0 0.5rem', textAlign: 'center' }}>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0 0 0.5rem', textAlign: 'center' }}>
             {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} selected — click a category to assign
           </p>
         )}

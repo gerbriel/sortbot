@@ -74,7 +74,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthenticated }) => {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-header">
-          <h1>Sortbot</h1>
+          <h1>Arcatya</h1>
           <p>From camera roll to Shopify-ready listings</p>
         </div>
 

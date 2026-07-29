@@ -3,24 +3,26 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 60%, #6d28d9 100%);
+  /* Was a full-bleed indigo gradient. The page canvas has to be the darkest
+     layer in the dark theme — depth now comes from the card on top of it. */
+  background: linear-gradient(135deg, var(--ink-950) 0%, var(--ink-900) 100%);
   padding: 1.5rem;
 }
 
 .waitlist-card {
-  background: #fff;
+  background: var(--ink-850);
   border-radius: 16px;
   max-width: 440px;
   width: 100%;
   padding: 2.2rem 2rem;
   text-align: center;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-xl); /* carries the hairline ring that lifts it off the canvas */
 }
 
 .waitlist-brand {
   font-size: 1.2rem;
   font-weight: 800;
-  color: #4f46e5;
+  color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -31,30 +33,38 @@
 .waitlist-chip {
   font-size: 0.62rem;
   font-weight: 800;
-  background: #fbbf24;
-  color: #78350f;
+  /* BETA mark — gold is the founder/beta accent. Dark ink for the label:
+     the gold fill is light, so dark-on-gold is the readable pairing. */
+  background: var(--gold);
+  color: var(--ink-950);
   padding: 0.12rem 0.45rem;
   border-radius: 999px;
   letter-spacing: 0.08em;
 }
 
-.waitlist-card h1 { font-size: 1.45rem; color: #111827; margin-bottom: 0.6rem; }
-.waitlist-card p { color: #4b5563; font-size: 0.95rem; line-height: 1.55; }
+.waitlist-card h1 { font-size: 1.45rem; color: var(--text-primary); margin-bottom: 0.6rem; }
+/* body copy the user must actually read — secondary, never muted */
+.waitlist-card p { color: var(--text-secondary); font-size: 0.95rem; line-height: 1.55; }
 
 .waitlist-form { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 1.1rem; }
 
 .waitlist-form input {
   padding: 0.65rem 0.75rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 0.95rem;
+  /* The global input background is --ink-850, the same step as this card, so
+     the field would vanish into it. Recess it one step instead. */
+  background: var(--ink-900);
+  color: var(--text-primary);
 }
 
-.waitlist-form input:focus { outline: 2px solid #a5b4fc; border-color: #6366f1; }
+.waitlist-form input:focus { outline: 2px solid var(--accent-line); border-color: var(--accent); }
 
 .waitlist-form button {
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
-  color: #fff;
+  /* violet accent ramp; dark ink label — white on a light violet fill fails AA */
+  background: linear-gradient(135deg, var(--accent), var(--accent-press));
+  color: var(--ink-950);
   font-weight: 800;
   font-size: 1rem;
   padding: 0.7rem;
@@ -65,15 +75,15 @@
 
 .waitlist-form button:disabled { opacity: 0.6; cursor: default; }
 
-.waitlist-error { color: #b91c1c; font-weight: 700; font-size: 0.85rem; margin-top: 0.4rem; }
+.waitlist-error { color: var(--danger); font-weight: 700; font-size: 0.85rem; margin-top: 0.4rem; }
 
-.waitlist-footnote { margin-top: 1.4rem; font-size: 0.78rem; color: #9ca3af; }
+.waitlist-footnote { margin-top: 1.4rem; font-size: 0.78rem; color: var(--text-muted); }
 
 .waitlist-signout {
   margin-top: 0.9rem;
   background: none;
   border: none;
-  color: #6366f1;
+  color: var(--accent);
   font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;

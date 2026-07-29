@@ -8,7 +8,7 @@
 
 .export-summary h3 {
   margin-bottom: 1rem;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .summary-stats {
@@ -18,8 +18,11 @@
 }
 
 .stat-card {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  /* The old indigo→purple brand gradient, restated in the violet accent.
+     Text flips to the canvas ink because the accent is a LIGHT violet — white
+     on it would fall under 3:1. */
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-press) 100%);
+  color: var(--ink-950);
   padding: 1.5rem;
   border-radius: 8px;
   text-align: center;
@@ -39,8 +42,10 @@
 }
 
 .google-sheets-input-section {
-  background: #f9fafb;
-  border: 2px solid #e5e7eb;
+  /* Panel sits one step below the cards inside it, so the inputs (--ink-850
+     from the global input rule) read as raised rather than flush. */
+  background: var(--ink-900);
+  border: 2px solid var(--border);
   border-radius: 8px;
   padding: 1.5rem;
   margin-bottom: 2rem;
@@ -49,7 +54,7 @@
 .google-sheets-input-section h3 {
   margin-top: 0;
   margin-bottom: 0.5rem;
-  color: #667eea;
+  color: var(--accent);
 }
 
 .sheet-url-input-group {
@@ -61,7 +66,9 @@
 .sheet-url-input {
   flex: 1;
   padding: 0.75rem;
-  border: 2px solid #e5e7eb;
+  background: var(--ink-850);
+  color: var(--text-primary);
+  border: 2px solid var(--border);
   border-radius: 6px;
   font-size: 0.95rem;
   font-family: monospace;
@@ -70,20 +77,20 @@
 
 .sheet-url-input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 .sheet-url-input::placeholder {
-  color: rgba(156, 163, 175, 0.35);
+  color: var(--text-faint);
   font-family: monospace;
   font-style: italic;
 }
 
 .sheet-url-saved {
-  background: #d1fae5;
-  border: 2px solid #34d399;
-  color: #065f46;
+  background: var(--success-dim);
+  border: 2px solid var(--success);
+  color: var(--success);
   padding: 0.75rem;
   border-radius: 6px;
   margin-bottom: 1rem;
@@ -91,7 +98,7 @@
 }
 
 .sheet-url-saved a {
-  color: #059669;
+  color: var(--success);
   text-decoration: none;
   font-family: monospace;
   font-size: 0.9rem;
@@ -102,8 +109,8 @@
 }
 
 .sheet-url-help {
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--ink-850);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   padding: 1rem;
   font-size: 0.9rem;
@@ -112,13 +119,13 @@
 .sheet-url-help p {
   margin: 0 0 0.5rem 0;
   font-weight: 600;
-  color: #374151;
+  color: var(--text-primary);
 }
 
 .sheet-url-help ol {
   margin: 0;
   padding-left: 1.5rem;
-  color: #6b7280;
+  color: var(--text-secondary);
 }
 
 .sheet-url-help li {
@@ -131,14 +138,14 @@
 
 .export-preview h3 {
   margin-bottom: 1rem;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .table-container {
   overflow-x: auto;
-  background: white;
+  background: var(--ink-850);
   border-radius: 8px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--border);
 }
 
 .preview-table {
@@ -147,17 +154,20 @@
 }
 
 .preview-table th {
-  background: #f9f9f9;
+  /* Sticky header sits one step above the table surface so rows scroll
+     under it without bleeding through. */
+  background: var(--ink-800);
   padding: 1rem;
   text-align: left;
   font-weight: 600;
-  border-bottom: 2px solid #e5e5e5;
-  color: #333;
+  border-bottom: 2px solid var(--border);
+  color: var(--text-primary);
 }
 
 .preview-table td {
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid #f0f0f0;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .description-cell {
@@ -170,7 +180,7 @@
 .preview-note {
   padding: 1rem;
   text-align: center;
-  color: #666;
+  color: var(--text-secondary);
   font-style: italic;
 }
 
@@ -183,15 +193,15 @@
 }
 
 .export-instructions {
-  background: #f0f4ff;
+  background: var(--accent-dim);
   padding: 1.5rem;
   border-radius: 8px;
-  border-left: 4px solid #667eea;
+  border-left: 4px solid var(--accent);
 }
 
 .export-instructions h3 {
   margin-bottom: 1rem;
-  color: #667eea;
+  color: var(--accent);
 }
 
 .export-instructions ol {
@@ -200,7 +210,7 @@
 
 .export-instructions li {
   margin-bottom: 0.5rem;
-  color: #333;
+  color: var(--text-primary);
 }
 
 @media (max-width: 768px) {

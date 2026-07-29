@@ -1,4 +1,4 @@
-# Sortbot — Deep Analysis & Scaling Roadmap
+# Arcatya — Deep Analysis & Scaling Roadmap
 
 *Written July 2026 against commit `28e9d9b`. Companion to [CLAUDE.md](CLAUDE.md) (codebase reference). Goal state: a multi-organization SaaS where each org has its own private workspace, team, categories/presets, and Shopify store connection — marketed to vintage resellers, starting in California.*
 
@@ -6,14 +6,14 @@
 
 ## 1. Where the Product Stands Today
 
-Sortbot is a **single-workspace power tool** built around one team's real daily workflow. It takes a pile of clothing photos and turns them into Shopify-importable listings in four steps (upload → group → describe → export). It is fast, deeply tuned, and battle-hardened for that one workspace — but every architectural decision (shared RLS, one storage bucket layout, one Shopify secret, no roles) assumes exactly one team. That assumption is the main thing standing between today's app and the multi-org goal.
+Arcatya is a **single-workspace power tool** built around one team's real daily workflow. It takes a pile of clothing photos and turns them into Shopify-importable listings in four steps (upload → group → describe → export). It is fast, deeply tuned, and battle-hardened for that one workspace — but every architectural decision (shared RLS, one storage bucket layout, one Shopify secret, no roles) assumes exactly one team. That assumption is the main thing standing between today's app and the multi-org goal.
 
 ---
 
 ## 2. Strengths (what to protect while scaling)
 
 ### 2.1 The workflow itself is the moat
-The Step 1–4 pipeline mirrors how resellers physically work: shoot a rack in the morning, group the angles, dictate while looking at the garment, export before lunch. Features like **pick mode** (auto-select the next N ungrouped photos), **auto-group by N**, **EXIF shot-time ordering**, and **copy/paste crop across hundreds of images** only come from living the workflow. Competing tools (Vendoo, Crosslist, List Perfectly) start *after* the listing exists — they crosspost. Sortbot owns the harder, earlier step: **camera roll → first draft listing**. That positioning is genuinely differentiated.
+The Step 1–4 pipeline mirrors how resellers physically work: shoot a rack in the morning, group the angles, dictate while looking at the garment, export before lunch. Features like **pick mode** (auto-select the next N ungrouped photos), **auto-group by N**, **EXIF shot-time ordering**, and **copy/paste crop across hundreds of images** only come from living the workflow. Competing tools (Vendoo, Crosslist, List Perfectly) start *after* the listing exists — they crosspost. Arcatya owns the harder, earlier step: **camera roll → first draft listing**. That positioning is genuinely differentiated.
 
 ### 2.2 Voice-first data entry
 Continuous dictation with field commands (`"brand Nike period"`, `"width 18 period"`, `"type crewneck period"`) means a seller never puts the garment down to type. Measurements — the #1 trust factor in vintage sales — become nearly free to capture. No mainstream listing tool does this well.
@@ -139,11 +139,11 @@ Ordered so that each phase de-risks the next. Rough sizing assumes current solo 
 
 ## 5. California Go-to-Market Notes
 
-**Who to sell to first.** LA is the densest vintage-reseller market in the country: Melrose/Fairfax storefronts, Rose Bowl Flea and Long Beach Antique Market vendors, the bins-reseller scene, plus SF/Oakland and San Diego. The ideal early profile: a Shopify-storefront vintage shop (often also doing markets via Shopify POS) listing **50–500 items/week** with listing labor as the acknowledged bottleneck. That profile matches Sortbot's exact strengths and the Phase 2 Shopify integration.
+**Who to sell to first.** LA is the densest vintage-reseller market in the country: Melrose/Fairfax storefronts, Rose Bowl Flea and Long Beach Antique Market vendors, the bins-reseller scene, plus SF/Oakland and San Diego. The ideal early profile: a Shopify-storefront vintage shop (often also doing markets via Shopify POS) listing **50–500 items/week** with listing labor as the acknowledged bottleneck. That profile matches Arcatya's exact strengths and the Phase 2 Shopify integration.
 
 **The pitch.** "Photograph the rack in the morning; listings are live by lunch." Lead with measured time-per-listing (voice + presets + vision autofill), not features. Demo with a real rack of 40 items.
 
-**Positioning vs. incumbents.** Vendoo / List Perfectly / Crosslist start from an existing listing and crosspost it. Sortbot starts from the camera roll and *creates* the listing. Early on, position as the step **before** those tools (their users are your users), not a replacement — and keep the CSV so nobody has to switch anything else.
+**Positioning vs. incumbents.** Vendoo / List Perfectly / Crosslist start from an existing listing and crosspost it. Arcatya starts from the camera roll and *creates* the listing. Early on, position as the step **before** those tools (their users are your users), not a replacement — and keep the CSV so nobody has to switch anything else.
 
 **Distribution.**
 1. Hand-onboard 3–5 LA shops personally (founding-org pricing, weekly feedback loop). Their catalogs also stress-test tenancy.

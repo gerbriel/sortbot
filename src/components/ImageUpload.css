@@ -35,7 +35,8 @@
 }
 
 .mode-btn.active {
-  background: white;
+  /* Active pill lifts one surface step above the --gray-100 track it sits in */
+  background: var(--ink-750);
   color: var(--shopify-green);
   box-shadow: var(--shadow-sm);
 }
@@ -48,7 +49,7 @@
   text-align: center;
   cursor: pointer;
   transition: all 0.2s ease;
-  background: white;
+  background: var(--ink-850);
 }
 
 /* While uploading: minimal height, just shows the progress text */
@@ -69,7 +70,7 @@
   inset: 0;
   z-index: 9999;
   pointer-events: none;
-  background: rgba(255,255,255,0.0);
+  background: rgba(0, 0, 0, 0); /* fully transparent — only the outline shows */
   /* Dashed border that spans the full screen */
   outline: 3px dashed var(--shopify-blue);
   outline-offset: -12px;
@@ -84,15 +85,16 @@
   color: var(--gray-500);
   font-weight: 500;
   white-space: nowrap;
-  background: rgba(255,255,255,0.85);
+  /* Floats over the page during a drag — popover surface, not a frosted white pill */
+  background: var(--ink-800);
   padding: 4px 12px;
   border-radius: 20px;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+  box-shadow: var(--shadow-md);
 }
 
 .dropzone:hover {
   border-color: var(--shopify-blue);
-  background: #f7f9fc;
+  background: var(--ink-750);
 }
 
 .dropzone.active {
@@ -123,6 +125,10 @@
 /*
   Sits exactly on the raw cursor position, replacing the OS cursor.
   Rotates each frame to simulate the ball spinning as it unravels.
+
+  THEME NOTE: the wool/cat colours below are illustration, not UI surfaces —
+  they are the mascot's own palette (ginger wool, tabby fur) and are deliberately
+  left off-token. They already read correctly on the dark canvas.
 */
 .yarn-ball {
   position: fixed;
@@ -384,8 +390,8 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: rgba(0,0,0,0.72);
-  color: #fff;
+  background: rgba(0, 0, 0, 0.72);
+  color: var(--text-primary);
   font-size: 0.92rem;
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -402,10 +408,10 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: #fff;
+  background: var(--ink-800);
   border-radius: 14px;
   padding: 1.75rem 2.25rem;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+  box-shadow: var(--shadow-xl);
   z-index: 10002;
   text-align: center;
   min-width: 300px;
@@ -415,12 +421,13 @@
   margin: 0 0 0.4rem;
   font-size: 1.1rem;
   font-weight: 700;
-  color: #111;
+  color: var(--text-primary);
 }
 .yarn-cancel-sub {
   font-size: 0.85rem !important;
   font-weight: 400 !important;
-  color: #666 !important;
+  /* secondary, not muted — the user has to read this to make the choice */
+  color: var(--text-secondary) !important;
 }
 .yarn-cancel-buttons {
   display: flex;
@@ -428,10 +435,13 @@
   margin-top: 1.25rem;
   justify-content: center;
 }
+/* Destructive action: tinted fill at rest, solid on hover. On dark, a solid
+   #f87171 button needs dark text (white on it fails contrast), so the hover
+   state flips to --ink-950 type. */
 .yarn-cancel-btn-yes {
   padding: 0.55rem 1.4rem;
-  background: #dc2626;
-  color: #fff;
+  background: var(--danger-dim);
+  color: var(--danger);
   border: none;
   border-radius: 8px;
   font-size: 0.9rem;
@@ -439,19 +449,19 @@
   cursor: pointer;
   transition: background 0.15s;
 }
-.yarn-cancel-btn-yes:hover { background: #b91c1c; }
+.yarn-cancel-btn-yes:hover { background: var(--danger); color: var(--ink-950); }
 .yarn-cancel-btn-no {
   padding: 0.55rem 1.4rem;
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #d1d5db;
+  background: var(--ink-750);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s;
 }
-.yarn-cancel-btn-no:hover { background: #e5e7eb; }
+.yarn-cancel-btn-no:hover { background: var(--ink-700); }
 
 .upload-icon {
   width: 48px;
@@ -482,7 +492,7 @@
   border: 1px solid var(--gray-200);
   border-radius: var(--radius-lg);
   padding: var(--space-6);
-  background: white;
+  background: var(--ink-850);
 }
 
 .drive-instructions {
@@ -538,14 +548,15 @@
 }
 
 .drive-url-input::placeholder {
-  color: rgba(140, 145, 150, 0.35);
+  color: var(--text-faint);
   font-style: italic;
 }
 
 .drive-load-btn {
   padding: var(--space-3) var(--space-5);
   background: var(--shopify-green);
-  color: white;
+  /* dark type on the mint fill — white on #34d399 fails AA */
+  color: var(--ink-950);
   border: none;
   border-radius: var(--radius-md);
   font-size: 0.9375rem;
@@ -594,8 +605,11 @@
 .drive-example code {
   display: block;
   padding: var(--space-4);
-  background: var(--gray-700);
-  color: #e8f5e9;
+  /* NOT var(--gray-700): the legacy ramp is inverted, so gray-700 is now
+     near-white and can no longer serve as this block's background. A code
+     block should recess below the panel it sits in. */
+  background: var(--ink-950);
+  color: var(--success);
   border-radius: var(--radius-md);
   overflow-x: auto;
   font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
@@ -684,8 +698,8 @@
 /* ── Storage usage meter ─────────────────────────────────────────────────── */
 .storage-meter {
   margin-top: 0.75rem;
-  background: #f8faff;
-  border: 1px solid #c7d2fe;
+  background: var(--ink-850);
+  border: 1px solid var(--accent-line);
   border-radius: 8px;
   padding: 0.6rem 0.75rem 0.65rem;
 }
@@ -696,7 +710,7 @@
   justify-content: space-between;
   font-size: 0.8rem;
   font-weight: 700;
-  color: #3730a3;
+  color: var(--accent);
   margin-bottom: 0.35rem;
 }
 
@@ -722,12 +736,13 @@
 
 .storage-meter-loading {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--text-muted);
   font-style: italic;
 }
 
 .storage-meter-bar-wrap {
-  background: #e0e7ff;
+  /* unfilled track — the fill colour is set inline from JS */
+  background: var(--ink-700);
   border-radius: 99px;
   height: 7px;
   overflow: hidden;
@@ -745,29 +760,31 @@
   align-items: center;
   gap: 0.4rem;
   font-size: 0.75rem;
-  color: #1e1b4b;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 .storage-meter-pct {
-  color: #4338ca;
+  color: var(--accent);
   font-weight: 500;
 }
 
 .storage-meter-files {
   margin-left: auto;
-  color: #6b7280;
+  color: var(--text-muted);
   font-weight: 400;
   font-size: 0.72rem;
 }
 
+/* Banner pattern on dark: semantic hue for the type, its --*-dim as the fill
+   and hairline. The pale light-mode fills would have glared on the canvas. */
 .storage-meter-warning {
   margin-top: 0.35rem;
   font-size: 0.72rem;
   font-weight: 500;
-  color: #92400e;
-  background: #fef3c7;
-  border: 1px solid #fde68a;
+  color: var(--warning);
+  background: var(--warning-dim);
+  border: 1px solid var(--warning-dim);
   border-radius: 4px;
   padding: 0.2rem 0.5rem;
 }
@@ -776,9 +793,9 @@
   margin-top: 0.35rem;
   font-size: 0.72rem;
   font-weight: 600;
-  color: #991b1b;
-  background: #fee2e2;
-  border: 1px solid #fca5a5;
+  color: var(--danger);
+  background: var(--danger-dim);
+  border: 1px solid var(--danger-dim);
   border-radius: 4px;
   padding: 0.2rem 0.5rem;
 }

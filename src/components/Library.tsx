@@ -894,9 +894,11 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
       // Custom drag ghost showing count badge
       const ghost = document.createElement('div');
+      // Built at runtime, so no stylesheet can reach it — tokens are referenced
+      // inline. var() resolves fine here: the ghost is appended to <body>.
       ghost.style.cssText = `
         position:fixed; top:-9999px; left:-9999px;
-        background:#667eea; color:#fff; font-size:13px; font-weight:600;
+        background:var(--accent); color:var(--ink-950); font-size:13px; font-weight:600;
         padding:6px 14px; border-radius:20px; box-shadow:0 4px 12px rgba(0,0,0,0.25);
         pointer-events:none; white-space:nowrap;
       `;
@@ -1864,7 +1866,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         {/* Search bar + New Batch button */}
         <div style={{ display: 'flex', gap: '0.5rem', padding: '0.5rem 1rem', alignItems: 'center' }}>
           <div style={{ position: 'relative', flex: 1 }}>
-            <Search size={16} style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: '#888', pointerEvents: 'none' }} />
+            <Search size={16} style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
             <input
               type="text"
               placeholder={`Search ${viewMode}...`}
@@ -1876,7 +1878,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
                 paddingRight: '0.75rem',
                 paddingTop: '0.45rem',
                 paddingBottom: '0.45rem',
-                border: '1px solid #d1d5db',
+                border: '1px solid var(--border-control)',
                 borderRadius: '6px',
                 fontSize: '0.9rem',
                 outline: 'none',
@@ -1889,7 +1891,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
               onClick={handleCreateNewBatch}
               style={{
                 display: 'flex', alignItems: 'center', gap: '0.3rem',
-                background: '#6366f1', color: '#fff', border: 'none',
+                background: 'var(--accent)', color: 'var(--ink-950)', border: 'none',
                 borderRadius: '6px', padding: '0.45rem 0.85rem',
                 fontSize: '0.85rem', cursor: 'pointer', whiteSpace: 'nowrap',
               }}
@@ -2153,7 +2155,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
               {currentBatchId === batch.id && (
                 <span style={{
                   fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px',
-                  background: '#16a34a', color: '#fff', borderRadius: 999,
+                  background: 'var(--success)', color: 'var(--ink-950)', borderRadius: 999,
                   letterSpacing: '0.03em', flexShrink: 0,
                 }}>● Active</span>
               )}
@@ -2215,7 +2217,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
                 const editedBy = (batch as any).lastEditedBy || (batch.workflow_state as any)?.lastEditedBy;
                 if (!editedBy) return null;
                 return (
-                  <div className="meta-row" style={{ color: '#64748b', fontSize: '0.78rem' }} title={`Last edited by ${editedBy}`}>
+                  <div className="meta-row" style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }} title={`Last edited by ${editedBy}`}>
                     <User size={13} />
                     <span>edited by {editedBy}</span>
                   </div>
@@ -2687,12 +2689,12 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
                 </button>
                 {batchKey === 'no-batch' && (
                   <>
-                    <span style={{ fontSize: '0.75rem', color: '#888', marginLeft: '0.25rem' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.25rem' }}>
                       (orphaned duplicates — safe to delete)
                     </span>
                     <button
                       className="section-select-all"
-                      style={{ color: '#ef4444', borderColor: '#ef4444' }}
+                      style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
                       title="Delete all unassigned images — these are orphaned duplicates, not real data"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -2716,7 +2718,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
                 if (groupEntries.length === 0 && batchProductGroups.length > 0) {
                   return (
-                    <div style={{ padding: '8px 24px', color: '#888', fontSize: '13px' }}>
+                    <div style={{ padding: '8px 24px', color: 'var(--text-muted)', fontSize: '13px' }}>
                       {batchProductGroups.map(g => (
                         <div key={g.id} className="image-group-section">
                           <div className="image-group-header" style={{ cursor: 'default' }}>
@@ -2732,7 +2734,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
                 if (groupEntries.length === 0) {
                   return (
-                    <div style={{ padding: '12px 24px', color: '#aaa', fontSize: '13px', fontStyle: 'italic' }}>
+                    <div style={{ padding: '12px 24px', color: 'var(--text-muted)', fontSize: '13px', fontStyle: 'italic' }}>
                       No images in this batch yet
                     </div>
                   );

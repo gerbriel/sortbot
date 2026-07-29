@@ -1,4 +1,4 @@
-# CLAUDE.md — Sortbot Codebase Reference
+# CLAUDE.md — Arcatya Codebase Reference
 
 > **For any AI agent reading this file:**
 > 1. Read this file **in full** before writing any code.
@@ -11,7 +11,46 @@
 
 ## 1. Project Identity
 
-Sortbot is a web app for vintage clothing resellers. Users upload batches of clothing photos (individual files, folders, or ZIPs), group multi-angle photos of the same item together, assign categories, record a voice description per listing, and generate AI-powered Shopify-ready product listings. The final output is a CSV export formatted for Shopify product import. The app persists work-in-progress to Supabase (workflow_batches table) so sessions survive page reloads and can be reopened from a Library modal. It is designed as a shared workspace — all authenticated users currently see all batches and images in the Library, controlled via Supabase RLS.
+Arcatya is a web app for vintage clothing resellers. Users upload batches of clothing photos (individual files, folders, or ZIPs), group multi-angle photos of the same item together, assign categories, record a voice description per listing, and generate AI-powered Shopify-ready product listings. The final output is a CSV export formatted for Shopify product import. The app persists work-in-progress to Supabase (workflow_batches table) so sessions survive page reloads and can be reopened from a Library modal. It is designed as a shared workspace — all authenticated users currently see all batches and images in the Library, controlled via Supabase RLS.
+
+### Naming — "Arcatya" is the brand, "sortbot" is the plumbing (July 2026)
+
+The product was renamed from **Sortbot** to **Arcatya**. Only user-visible text changed.
+These deliberately still say `sortbot`, and renaming them is a breaking change:
+
+| Identifier | Where | Why it must not change |
+|---|---|---|
+| `/sortbot/` base path | `vite.config.ts`, `main.tsx` (SW registration) | Derived from the GitHub repo name `gerbriel/sortbot`. Changing it 404s every asset on the deployed site unless the repo is renamed first. |
+| `sortbot_current_batch_id`, `sortbot_current_batch_number`, `sortbot_workflow_backup` | `App.tsx` | Renaming drops every user's in-progress batch on next load. |
+| `sortbot_deleted_batch_ids` | `workflowBatchService.ts` | The delete tombstone registry — losing it resurrects deleted batches (see §15). |
+| `sortbot_compressed_paths` | `ImageUpload.tsx` | The "already compressed" set for all 4,854 storage files. Losing it re-compresses the entire bucket. |
+| `sortbot_debug_enabled`, `window.__SORTBOT_DEBUG__` | `debugLogger.ts` | Debug toggle state + the global guard. |
+| `sortbot_orphan_cleanup_v3` | `App.tsx` | One-shot cleanup guard; losing it re-runs the cleanup. |
+
+If any of these ever *do* get renamed, ship a migration that reads the old key,
+writes the new one, and deletes the old — do not just rename the string.
+
+### Design system — dark by default (July 2026)
+
+`src/index.css` is the **single source of truth** for color, elevation, and motion.
+Near-black canvas (`--ink-950` `#08080a`, never pure `#000`), violet accent
+(`--accent` `#b087ff`), gold secondary (`--gold` `#ffd074`).
+
+**Token families:** `--ink-950…--ink-700` (surfaces, dark→light) · `--text-primary/
+secondary/muted/faint` · `--accent{,-hover,-press,-dim,-line,-glow}` · `--border{,-subtle,-strong}`
+· `--success/--warning/--danger/--info` plus `--*-dim` translucent fills ·
+`--shadow-sm/md/lg/xl/accent` · `--ease`, `--dur-fast/--dur/--dur-slow`.
+
+**The inverted legacy ramp — do not "fix" it.** The old `--gray-50…--gray-700` and
+`--shopify-*` names still exist and are repointed at dark values, with the gray ramp
+*inverted*: `--gray-50` was the lightest background and is now the **darkest surface**;
+`--gray-600/700` were body/heading text and are now **near-white**. That inversion is
+what let ~13,300 lines of existing CSS flip correctly without per-rule edits. Any
+`var(--gray-*)` you find is already right.
+
+**Rule for new CSS:** no hardcoded hex. Map by *role* (a white card background is a
+surface → `--ink-850`; a dark heading is text → `--text-primary`), and keep body text
+at WCAG AA 4.5:1 against its surface — `--text-muted` is for non-essential meta only.
 
 ---
 

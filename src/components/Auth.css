@@ -4,14 +4,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--shopify-green) 0%, #005E46 100%);
+  /* Was a full-bleed Shopify-green gradient. The page canvas has to be the
+     darkest layer in the dark theme — depth now comes from the card that sits
+     on top of it, not from a saturated backdrop. */
+  background: linear-gradient(135deg, var(--ink-950) 0%, var(--ink-900) 100%);
   padding: var(--space-4);
 }
 
 .auth-card {
-  background: white;
+  background: var(--ink-850);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xl);
+  box-shadow: var(--shadow-xl); /* carries the hairline ring that lifts it off the canvas */
   max-width: 450px;
   width: 100%;
   overflow: hidden;
@@ -27,7 +30,7 @@
 .auth-header h1 {
   font-size: 2rem;
   margin: 0 0 var(--space-2) 0;
-  color: var(--shopify-green);
+  color: var(--accent);
 }
 
 .auth-header p {
@@ -43,12 +46,14 @@
 .auth-form h2 {
   margin: 0 0 var(--space-6) 0;
   font-size: 1.5rem;
-  color: var(--gray-900);
+  /* was var(--gray-900) — that token does not exist in the ramp (50–700), so
+     the declaration was invalid and silently inherited. Named explicitly now. */
+  color: var(--text-primary);
   text-align: center;
 }
 
 .auth-error {
-  background: #FEE;
+  background: var(--danger-dim);
   color: var(--shopify-red);
   padding: var(--space-3);
   border-radius: var(--radius-md);
@@ -58,13 +63,13 @@
 }
 
 .auth-message {
-  background: #E8F5E9;
-  color: var(--shopify-green);
+  background: var(--accent-dim);
+  color: var(--accent);
   padding: var(--space-3);
   border-radius: var(--radius-md);
   margin-bottom: var(--space-4);
   font-size: 0.875rem;
-  border: 1px solid var(--shopify-green);
+  border: 1px solid var(--accent);
 }
 
 .form-group {
@@ -90,8 +95,8 @@
 
 .form-group input:focus {
   outline: none;
-  border-color: var(--shopify-green);
-  box-shadow: 0 0 0 3px rgba(0, 128, 96, 0.1);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim); /* focus halo, kept in the border's colour family */
 }
 
 .form-group input:disabled {
@@ -100,7 +105,7 @@
 }
 
 .form-group input::placeholder {
-  color: rgba(140, 145, 150, 0.35);
+  color: var(--text-faint);
   font-style: italic;
 }
 
@@ -114,8 +119,9 @@
 .auth-button {
   width: 100%;
   padding: var(--space-3);
-  background: var(--shopify-green);
-  color: white;
+  background: var(--accent);
+  /* dark label on the bright fill — white on --accent is 2.46:1 and fails AA */
+  color: var(--ink-950);
   border: none;
   border-radius: var(--radius-md);
   font-size: 1rem;
@@ -125,7 +131,7 @@
 }
 
 .auth-button:hover:not(:disabled) {
-  background: #006D4E;
+  background: var(--accent-hover);
   transform: translateY(-1px);
 }
 
@@ -155,7 +161,7 @@
 .auth-toggle button {
   background: none;
   border: none;
-  color: var(--shopify-green);
+  color: var(--accent);
   font-weight: 600;
   cursor: pointer;
   text-decoration: underline;
@@ -163,7 +169,7 @@
 }
 
 .auth-toggle button:hover:not(:disabled) {
-  color: #006D4E;
+  color: var(--accent-hover);
 }
 
 .auth-toggle button:disabled {

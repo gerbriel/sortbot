@@ -216,8 +216,8 @@ class GrouperErrorBoundary extends Component<{ children: ReactNode }, GrouperBou
   render() {
     if (this.state.error) {
       return (
-        <div style={{ padding: '1rem', background: '#fff0f0', border: '1px solid red', borderRadius: 8, minHeight: 200 }}>
-          <strong style={{ color: 'red' }}>Render error (please report this message):</strong>
+        <div style={{ padding: '1rem', background: 'var(--danger-dim)', border: '1px solid var(--danger)', borderRadius: 8, minHeight: 200 }}>
+          <strong style={{ color: 'var(--danger)' }}>Render error (please report this message):</strong>
           <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12, marginTop: 8 }}>{this.state.error.message}{'\n'}{this.state.error.stack}</pre>
           <button onClick={() => this.setState({ error: null })} style={{ marginTop: 8 }}>Retry</button>
         </div>
@@ -1319,9 +1319,9 @@ function App() {
           onClick={() => setShowLogin(false)}
           style={{
             position: 'absolute', top: 16, left: 16, zIndex: 10,
-            background: 'rgba(255,255,255,0.9)', border: '1px solid #d1d5db',
+            background: 'var(--ink-800)', border: '1px solid var(--border-control)',
             borderRadius: 8, padding: '8px 14px', fontSize: 14, fontWeight: 700,
-            color: '#374151', cursor: 'pointer',
+            color: 'var(--text-primary)', cursor: 'pointer',
           }}
         >
           ← Back
@@ -2538,8 +2538,13 @@ function App() {
       <header className="app-header">
         <div className="header-content">
           <div>
-            <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <ShoppingBag size={32} /> Sortbot - Clothing Sorting & Export
+            {/* Wordmark, not a sentence — the descriptor lives in the subtitle
+                below. Tight tracking is what separates a mark from a label. */}
+            <h1 style={{
+              display: 'flex', alignItems: 'center', gap: '0.6rem',
+              letterSpacing: '-0.045em', fontWeight: 650, marginBottom: '0.2rem',
+            }}>
+              <ShoppingBag size={28} /> Arcatya
             </h1>
             <p className="header-subtitle">Upload, sort, describe, and export to Shopify</p>
           </div>
@@ -2612,7 +2617,9 @@ function App() {
               const STORAGE_LIMIT_GB = parseFloat(import.meta.env.VITE_STORAGE_LIMIT_GB || '100');
               const LIMIT = STORAGE_LIMIT_GB * 1024 * 1024 * 1024;
               const pct = storageInfo.usedBytes / LIMIT;
-              const barColor = pct > 0.85 ? '#dc2626' : pct > 0.6 ? '#d97706' : '#059669';
+              // Drives BOTH the bar fill and the percentage label, so it has to be a
+              // token that reads on the dark canvas as text and as a solid fill.
+              const barColor = pct > 0.85 ? 'var(--danger)' : pct > 0.6 ? 'var(--warning)' : 'var(--success)';
               const gbUsed = (storageInfo.usedBytes / (1024 ** 3)).toFixed(2);
               const pctDisplay = (pct * 100).toFixed(0);
               return (
@@ -2623,7 +2630,7 @@ function App() {
                   <span className="storage-meter-nav-text">
                     {gbUsed} GB / {STORAGE_LIMIT_GB} GB
                     <span style={{ color: barColor, fontWeight: 600, marginLeft: '0.3rem' }}>({pctDisplay}%)</span>
-                    <span style={{ color: '#6b7280', marginLeft: '0.4rem', fontSize: '0.72rem' }}>{storageInfo.fileCount.toLocaleString()} files</span>
+                    <span style={{ color: 'var(--text-muted)', marginLeft: '0.4rem', fontSize: '0.72rem' }}>{storageInfo.fileCount.toLocaleString()} files</span>
                   </span>
                   {pct > 0.85 && (
                     <span className="storage-meter-nav-warn">⚠️ Almost full</span>
@@ -2668,11 +2675,11 @@ function App() {
             <div>
               <h2>Step 1: Upload Images</h2>
               {uploadedImages.length > 0 && currentBatchId ? (
-                <p className="step-description" style={{ fontSize: '14px', color: '#4ade80', margin: 0 }}>
+                <p className="step-description" style={{ fontSize: '14px', color: 'var(--success)', margin: 0 }}>
                   ➕ <strong>Batch active</strong> — drop more images here to add them to this batch ({uploadedImages.length} image{uploadedImages.length !== 1 ? 's' : ''} already loaded)
                 </p>
               ) : (
-                <p className="step-description" style={{ fontSize: '14px', color: '#666', margin: 0 }}>
+                <p className="step-description" style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>
                   💡 <strong>Tip:</strong> You can upload multiple batches! New images will be added to your current session.
                 </p>
               )}
@@ -2706,13 +2713,14 @@ function App() {
               <button 
                 onClick={() => setShowStep2Info(!showStep2Info)}
                 style={{
-                  background: '#667eea',
+                  background: 'var(--accent)',
                   border: 'none',
                   borderRadius: '50%',
                   width: '24px',
                   height: '24px',
                   cursor: 'pointer',
-                  color: 'white',
+                  // Dark label on a solid accent fill — --text-primary on --accent is only 2.46:1.
+                  color: 'var(--ink-950)',
                   fontSize: '14px',
                   fontWeight: 'bold',
                   display: 'flex',
@@ -2727,12 +2735,12 @@ function App() {
             </div>
             {showStep2Info && (
               <div style={{
-                background: '#f0f4ff',
+                background: 'var(--accent-dim)',
                 padding: '1rem',
                 borderRadius: '8px',
                 marginTop: '0.5rem',
                 marginBottom: '1rem',
-                borderLeft: '4px solid #667eea',
+                borderLeft: '4px solid var(--accent)',
                 fontSize: '14px'
               }}>
                 <ul style={{ margin: 0, paddingLeft: '1.5rem' }}>
@@ -2834,8 +2842,9 @@ function App() {
                       disabled={grouperActions.selectedCount === 0}
                       style={{
                         display: 'flex', alignItems: 'center', gap: '0.5rem',
-                        background: grouperActions.selectedCount > 0 ? '#ef4444' : undefined,
-                        color: grouperActions.selectedCount > 0 ? '#fff' : undefined,
+                        background: grouperActions.selectedCount > 0 ? 'var(--danger)' : undefined,
+                        // Dark label on the solid danger fill (light text on --danger is ~2:1).
+                        color: grouperActions.selectedCount > 0 ? 'var(--ink-950)' : undefined,
                         border: 'none',
                       }}
                       title="Permanently delete all selected images"
@@ -2872,25 +2881,25 @@ function App() {
 
               if (multiGroups > 0 && singles > 0) {
                 return (
-                  <p style={{ color: '#6366f1', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+                  <p style={{ color: 'var(--accent)', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
                     📦 {totalListings} total listing{totalListings !== 1 ? 's' : ''}: {multiGroups} multi-image group{multiGroups !== 1 ? 's' : ''} + {singles} single{singles !== 1 ? 's' : ''} ({imageCount} images) — use Next/Previous to navigate{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
                   </p>
                 );
               } else if (multiGroups > 0) {
                 return (
-                  <p style={{ color: '#6366f1', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+                  <p style={{ color: 'var(--accent)', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
                     📦 {multiGroups} product group{multiGroups !== 1 ? 's' : ''} ({imageCount} images grouped) — use Next/Previous to navigate listings{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
                   </p>
                 );
               } else if (singles > 0) {
                 return (
-                  <p style={{ color: '#6366f1', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+                  <p style={{ color: 'var(--accent)', fontWeight: 500, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
                     📦 {singles} categorized listing{singles !== 1 ? 's' : ''} ({imageCount} image{imageCount !== 1 ? 's' : ''}) — use Next/Previous to navigate{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
                   </p>
                 );
               } else {
                 return (
-                  <p style={{ color: '#888', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
                     ⚠️ No categorized items yet — go back to Step 2 and drag items to a category zone.
                   </p>
                 );

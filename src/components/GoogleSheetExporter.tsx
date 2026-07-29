@@ -291,7 +291,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
             {invalidPricedProducts.length > 0 && (
               <div style={{
                 marginTop: '0.75rem', padding: '0.75rem 1rem', borderRadius: 8,
-                background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c',
+                background: 'var(--danger-dim)', border: '1px solid var(--danger)', color: 'var(--danger)',
                 fontSize: '0.85rem', fontWeight: 600,
               }}>
                 🚫 Export blocked — {invalidPricedProducts.length} product
@@ -311,10 +311,12 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
 
           <div className="export-preview">
             <h3>Preview (Shopify Format)</h3>
-            <div className="table-container" style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '420px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+            <div className="table-container" style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '420px', borderRadius: '8px', border: '1px solid var(--border)' }}>
               <table className="preview-table" style={{ minWidth: '4800px', borderCollapse: 'collapse', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
                 <thead>
-                  <tr style={{ position: 'sticky', top: 0, zIndex: 2, background: '#f8fafc' }}>
+                  {/* Sticky header sits one surface step above the --ink-850 table
+                      body so rows scroll under it without bleeding through. */}
+                  <tr style={{ position: 'sticky', top: 0, zIndex: 2, background: 'var(--ink-800)' }}>
                     {[
                       'Handle','Title','Body (HTML)','Vendor','Product Category','Type','Tags','Published',
                       'Option1 Name','Option1 Value','Option1 Linked To',
@@ -331,7 +333,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       'Variant Image','Variant Weight Unit','Variant Tax Code',
                       'Cost per item','Status','Size','Condition',
                     ].map((col, i) => (
-                      <th key={i} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '2px solid #e5e7eb', background: '#f8fafc', color: '#374151', minWidth: i <= 2 ? '180px' : '110px' }}>
+                      <th key={i} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, borderBottom: '2px solid var(--border)', background: 'var(--ink-800)', color: 'var(--text-primary)', minWidth: i <= 2 ? '180px' : '110px' }}>
                         {col}
                       </th>
                     ))}
@@ -422,9 +424,11 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       product.packageDimensions || '',                               // Package Dimensions (custom.package_dimensions)
                     ];
                     return (
-                      <tr key={product.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                      <tr key={product.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                         {cols.map((val, ci) => (
-                          <td key={ci} style={{ padding: '5px 10px', color: val ? '#111827' : '#9ca3af', verticalAlign: 'top' }}>
+                          // Empty cells render a placeholder em-dash — --text-faint keeps
+                          // them clearly subordinate to real data (--text-primary).
+                          <td key={ci} style={{ padding: '5px 10px', color: val ? 'var(--text-primary)' : 'var(--text-faint)', verticalAlign: 'top' }}>
                             {tr(val, ci === 0 || ci === 1 || ci === 40 ? 50 : ci === 2 || ci === 41 ? 60 : 35)}
                           </td>
                         ))}
@@ -443,11 +447,14 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       {!compactMode && (
         <div className="export-instructions">
           <h3>📄 CSV Export</h3>
-          <p style={{ fontSize: '0.95rem', color: '#666', marginTop: '0.5rem', lineHeight: '1.5' }}>
+          <p style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', marginTop: '0.5rem', lineHeight: '1.5' }}>
             Downloads a CSV file with <strong>all product data and fields</strong> ready for Shopify import. 
             The CSV includes image URLs that Shopify will automatically fetch during import.
           </p>
-          <div style={{ marginTop: '1rem', padding: '1rem', background: '#f0f9ff', borderRadius: '8px', fontSize: '0.9rem' }}>
+          {/* Nested info box inside the accent-tinted .export-instructions panel —
+              the translucent info fill keeps it distinct without a second opaque
+              surface. Text inherits --text-primary from the page. */}
+          <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--info-dim)', borderRadius: '8px', fontSize: '0.9rem' }}>
             <strong>✅ Includes all fields:</strong>
             <ul style={{ marginTop: '0.5rem', marginBottom: 0, paddingLeft: '1.5rem' }}>
               <li>Product details (title, description, brand, category)</li>

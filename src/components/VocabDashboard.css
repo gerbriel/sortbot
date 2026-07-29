@@ -1,7 +1,7 @@
 .vocab-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(17, 24, 39, 0.55);
+  background: rgba(0, 0, 0, 0.72);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -9,13 +9,15 @@
 }
 
 .vocab-panel {
-  background: white;
+  background: var(--ink-800);
   border-radius: 12px;
   width: min(640px, 94vw);
   max-height: 84vh;
   overflow-y: auto;
   padding: 1.1rem 1.25rem 1.25rem;
-  box-shadow: 0 20px 50px rgba(17, 24, 39, 0.35);
+  /* --shadow-xl carries a hairline ring, so the panel keeps an edge against
+     the scrim without adding a border (no layout shift). */
+  box-shadow: var(--shadow-xl);
 }
 
 .vocab-header {
@@ -29,10 +31,10 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: #4f46e5;
+  color: var(--accent);
 }
 
-.vocab-title h2 { margin: 0; font-size: 1.15rem; color: #111827; }
+.vocab-title h2 { margin: 0; font-size: 1.15rem; color: var(--text-primary); }
 
 .vocab-scope-badge {
   font-size: 0.62rem;
@@ -41,20 +43,20 @@
   letter-spacing: 0.04em;
   padding: 0.12rem 0.45rem;
   border-radius: 20px;
-  background: #ede9fe;
-  color: #5b21b6;
+  background: var(--accent-dim);
+  color: var(--accent);
 }
 
 .vocab-close {
   background: none;
   border: none;
   cursor: pointer;
-  color: #6b7280;
+  color: var(--text-muted);
   padding: 0.25rem;
   border-radius: 6px;
 }
 
-.vocab-close:hover { background: #f3f4f6; }
+.vocab-close:hover { background: var(--ink-750); }
 
 .vocab-tabs {
   display: flex;
@@ -65,9 +67,9 @@
 }
 
 .vocab-tab {
-  background: #f3f4f6;
+  background: var(--ink-750);
   border: 1px solid transparent;
-  color: #4b5563;
+  color: var(--text-secondary);
   border-radius: 8px;
   font-size: 0.8rem;
   font-weight: 600;
@@ -75,12 +77,12 @@
   cursor: pointer;
 }
 
-.vocab-tab:hover { background: #e5e7eb; }
+.vocab-tab:hover { background: var(--ink-700); }
 
 .vocab-tab--on {
-  background: #eef2ff;
-  border-color: #c7d2fe;
-  color: #3730a3;
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--accent);
 }
 
 .vocab-search {
@@ -89,10 +91,10 @@
   gap: 0.3rem;
   flex: 1;
   min-width: 120px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.25rem 0.5rem;
-  color: #9ca3af;
+  color: var(--text-muted);
 }
 
 .vocab-search input {
@@ -101,14 +103,14 @@
   border: none;
   outline: none;
   font-size: 0.78rem;
-  color: #111827;
+  color: var(--text-primary);
   background: transparent;
 }
 
 .vocab-notice {
-  background: #eef2ff;
-  border: 1px solid #c7d2fe;
-  color: #3730a3;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
   border-radius: 8px;
   padding: 0.5rem 0.7rem;
   font-size: 0.85rem;
@@ -118,7 +120,8 @@
 .vocab-help {
   margin: 0 0 0.6rem;
   font-size: 0.75rem;
-  color: #6b7280;
+  /* Secondary, not muted — this is instructional copy the founder has to read. */
+  color: var(--text-secondary);
   line-height: 1.5;
 }
 
@@ -133,7 +136,7 @@
   flex: 1;
   min-width: 140px;
   padding: 0.45rem 0.6rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 0.85rem;
 }
@@ -143,8 +146,9 @@
   align-items: center;
   gap: 0.3rem;
   padding: 0.45rem 0.8rem;
-  background: #4f46e5;
-  color: white;
+  background: var(--accent);
+  /* Dark ink on the light violet fill — a white label sits near 2:1 and fails AA. */
+  color: var(--ink-950);
   border: none;
   border-radius: 8px;
   font-weight: 700;
@@ -154,7 +158,7 @@
 }
 
 .vocab-add-btn:disabled { opacity: 0.5; cursor: default; }
-.vocab-add-btn:hover:not(:disabled) { background: #4338ca; }
+.vocab-add-btn:hover:not(:disabled) { background: var(--accent-hover); }
 
 .vocab-list { list-style: none; margin: 0; padding: 0; }
 
@@ -163,16 +167,16 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.4rem 0.2rem;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--border-subtle);
   font-size: 0.85rem;
 }
 
 .vocab-row--off { opacity: 0.45; }
 
 .vocab-chip-preview {
-  border: 1px solid #c7d2fe;
-  background: #eef2ff;
-  color: #4338ca;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-dim);
+  color: var(--accent);
   border-radius: 20px;
   padding: 0.15rem 0.6rem;
   font-size: 0.75rem;
@@ -182,7 +186,7 @@
 
 .vocab-brand-name {
   font-weight: 700;
-  color: #111827;
+  color: var(--text-primary);
   white-space: nowrap;
 }
 
@@ -192,11 +196,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #4b5563;
+  color: var(--text-secondary);
   font-size: 0.78rem;
 }
 
-.vocab-muted { color: #9ca3af; font-style: italic; }
+.vocab-muted { color: var(--text-muted); font-style: italic; }
 
 .vocab-toggle {
   display: inline-flex;
@@ -204,7 +208,7 @@
   gap: 0.25rem;
   font-size: 0.7rem;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--text-secondary);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -214,22 +218,22 @@
   align-items: center;
   justify-content: center;
   background: none;
-  border: 1px solid #e5e7eb;
-  color: #6b7280;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
   border-radius: 6px;
   padding: 0.22rem 0.35rem;
   cursor: pointer;
 }
 
-.vocab-icon-btn:hover:not(:disabled) { background: #f3f4f6; color: #374151; }
+.vocab-icon-btn:hover:not(:disabled) { background: var(--ink-750); color: var(--text-primary); }
 .vocab-icon-btn:disabled { opacity: 0.5; cursor: default; }
 
-.vocab-icon-danger { border-color: #fecaca; color: #dc2626; }
-.vocab-icon-danger:hover:not(:disabled) { background: #fef2f2; color: #b91c1c; }
+.vocab-icon-danger { border-color: var(--danger); color: var(--danger); }
+.vocab-icon-danger:hover:not(:disabled) { background: var(--danger-dim); color: var(--danger); }
 
 .vocab-edit-input {
   padding: 0.3rem 0.5rem;
-  border: 1px solid #c7d2fe;
+  border: 1px solid var(--accent-line);
   border-radius: 6px;
   font-size: 0.8rem;
   min-width: 110px;
@@ -240,8 +244,8 @@
 .vocab-confirm { display: flex; align-items: center; gap: 0.3rem; }
 
 .vocab-confirm-yes {
-  background: #dc2626;
-  color: #fff;
+  background: var(--danger);
+  color: var(--ink-950);
   border: none;
   border-radius: 6px;
   font-size: 0.72rem;
@@ -250,12 +254,14 @@
   cursor: pointer;
 }
 
-.vocab-confirm-yes:hover:not(:disabled) { background: #b91c1c; }
+/* No brighter step exists above --danger on dark, so hover reads as a soft
+   halo rather than a darker fill (darkening would look disabled here). */
+.vocab-confirm-yes:hover:not(:disabled) { box-shadow: 0 0 0 3px var(--danger-dim); }
 
 .vocab-confirm-no {
   background: none;
-  border: 1px solid #d1d5db;
-  color: #6b7280;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
   border-radius: 6px;
   font-size: 0.72rem;
   font-weight: 600;
@@ -263,14 +269,14 @@
   cursor: pointer;
 }
 
-.vocab-confirm-no:hover:not(:disabled) { background: #f3f4f6; }
+.vocab-confirm-no:hover:not(:disabled) { background: var(--ink-750); }
 
-.vocab-loading { color: #6b7280; font-size: 0.85rem; }
+.vocab-loading { color: var(--text-secondary); font-size: 0.85rem; }
 
 .vocab-footnote {
   margin: 0.9rem 0 0;
   font-size: 0.72rem;
-  color: #9ca3af;
+  color: var(--text-muted);
 }
 
 /* ── Built-in brand library ─────────────────────────────────────────────── */
@@ -279,10 +285,12 @@
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
-.vocab-row--builtin { background: #fafafa; }
+/* Read-only rows sit one step darker than the --ink-800 panel so the built-in
+   library reads as a separate, recessed band. */
+.vocab-row--builtin { background: var(--ink-850); }
 
 .vocab-customized-badge {
   font-size: 0.62rem;
@@ -291,8 +299,8 @@
   letter-spacing: 0.04em;
   padding: 0.12rem 0.45rem;
   border-radius: 20px;
-  background: #d1fae5;
-  color: #065f46;
+  background: var(--success-dim);
+  color: var(--success);
   white-space: nowrap;
 }
 
@@ -311,15 +319,15 @@
   margin-left: 0.35rem;
   font-size: 0.65rem;
   font-weight: 700;
-  color: #6b7280;
-  background: #f3f4f6;
+  color: var(--text-secondary);
+  background: var(--ink-750);
   border-radius: 10px;
   padding: 0.08rem 0.4rem;
 }
 
 .vocab-model-meta {
   font-size: 0.68rem;
-  color: #9ca3af;
+  color: var(--text-muted);
 }
 
 /* ── Model add/edit form ────────────────────────────────────────────────── */
@@ -329,8 +337,8 @@
   gap: 0.4rem 0.5rem;
   margin-bottom: 0.8rem;
   padding: 0.6rem;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--ink-850);
+  border: 1px solid var(--border);
   border-radius: 10px;
 }
 
@@ -345,13 +353,13 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 .vocab-mf-field input[type='text'],
 .vocab-mf-field input:not([type]) {
   padding: 0.35rem 0.5rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 0.8rem;
 }
@@ -380,9 +388,9 @@
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  border: 1px solid #fcd34d;
-  background: #fffbeb;
-  color: #92400e;
+  border: 1px solid var(--warning);
+  background: var(--warning-dim);
+  color: var(--warning);
   border-radius: 20px;
   padding: 0.15rem 0.5rem;
   font-size: 0.75rem;
@@ -390,28 +398,31 @@
 }
 
 .vocab-coverage-pill--covered {
-  border-color: #a7f3d0;
-  background: #ecfdf5;
-  color: #065f46;
+  border-color: var(--success);
+  background: var(--success-dim);
+  color: var(--success);
 }
 
 .vocab-coverage-count {
   font-size: 0.62rem;
   font-weight: 700;
-  background: rgba(0, 0, 0, 0.07);
+  /* --border is a translucent white film — the dark-mode inverse of the old
+     rgba(0,0,0,.07) wash, so it tints whichever pill it sits inside. */
+  background: var(--border);
   border-radius: 10px;
   padding: 0 0.3rem;
 }
 
-.vocab-coverage-check { color: #059669; }
+.vocab-coverage-check { color: var(--success); }
 
 .vocab-coverage-make {
   display: inline-flex;
   align-items: center;
   gap: 0.1rem;
-  border: 1px solid #f59e0b;
-  background: #fff;
-  color: #92400e;
+  border: 1px solid var(--warning);
+  /* Solid dark fill so the button separates from the amber pill behind it. */
+  background: var(--ink-900);
+  color: var(--warning);
   border-radius: 12px;
   font-size: 0.65rem;
   font-weight: 700;
@@ -419,5 +430,5 @@
   cursor: pointer;
 }
 
-.vocab-coverage-make:hover:not(:disabled) { background: #fef3c7; }
+.vocab-coverage-make:hover:not(:disabled) { background: var(--warning-dim); }
 .vocab-coverage-make:disabled { opacity: 0.5; cursor: default; }

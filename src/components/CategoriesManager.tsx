@@ -65,7 +65,10 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ onClose }) => {
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState<Partial<CategoryInput>>({
     emoji: 'package', // Default icon name instead of emoji
-    color: '#667eea',
+    // Hex literal, not a token: this value is written to categories.color in the
+    // DB and is fed to an <input type="color">, which cannot resolve var().
+    // #b087ff is the dark theme's --accent.
+    color: '#b087ff',
   });
 
   useEffect(() => {
@@ -99,7 +102,7 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ onClose }) => {
     setEditingCategory(null);
     setFormData({
       emoji: '📦',
-      color: '#667eea',
+      color: '#b087ff',
     });
     setShowForm(true);
   };
@@ -150,7 +153,7 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ onClose }) => {
       
       await loadCategories();
       setShowForm(false);
-      setFormData({ emoji: '📦', color: '#667eea' });
+      setFormData({ emoji: '📦', color: '#b087ff' });
       
       // Notify other components that categories changed
       window.dispatchEvent(new CustomEvent('categoriesUpdated'));
@@ -265,7 +268,7 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ onClose }) => {
                   <label>Color</label>
                   <input
                     type="color"
-                    value={formData.color || '#667eea'}
+                    value={formData.color || '#b087ff'}
                     onChange={(e) => setFormData(prev => ({ ...prev, color: e.target.value }))}
                   />
                 </div>

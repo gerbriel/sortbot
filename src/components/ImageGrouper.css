@@ -11,13 +11,17 @@
   min-width: 0; /* prevent flex blowout */
   max-height: 75vh;
   overflow-y: auto;
-  background: linear-gradient(135deg, #e0e7ff 0%, #f0f4ff 100%);
+  /* Recessed well: sits BELOW the cards (--ink-850) so they read as raised. */
+  background: linear-gradient(135deg, var(--ink-900) 0%, var(--ink-950) 100%);
   border-radius: 10px;
   padding: 0.75rem;
 }
 
 .grouper-header {
-  background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+  /* Was a solid indigo→purple brand panel. On black, a bright panel this large
+     screams; the sidebar is now a raised surface and the accent is spent on the
+     controls inside it instead. */
+  background: linear-gradient(180deg, var(--ink-850) 0%, var(--ink-900) 100%);
   padding: 1.25rem 1rem;
   border-radius: 10px;
   margin-bottom: 0;
@@ -37,7 +41,7 @@
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--text-secondary);
   font-size: 0.82rem;
   font-weight: 600;
   flex-wrap: wrap;
@@ -48,9 +52,9 @@
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: rgba(255, 255, 255, 0.85);
+  background: var(--ink-800);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
   border-radius: 6px;
   padding: 0.32rem 0.7rem;
   font-size: 0.8rem;
@@ -60,15 +64,15 @@
 }
 
 .sort-btn:hover {
-  background: rgba(255, 255, 255, 0.28);
-  border-color: rgba(255, 255, 255, 0.6);
-  color: #fff;
+  background: var(--ink-750);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
 }
 
 .sort-btn.active {
-  background: rgba(255, 255, 255, 0.9);
-  border-color: #fff;
-  color: #6366f1;
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--accent);
 }
 
 .stats {
@@ -76,7 +80,7 @@
   gap: 0.65rem;
   justify-content: flex-start;
   flex-direction: column;
-  color: white;
+  color: var(--text-primary);
   font-weight: 600;
   font-size: 0.92rem;
   flex-wrap: nowrap;
@@ -91,11 +95,11 @@
 }
 
 .grouper-instructions {
-  background: #f0f4ff;
+  background: var(--ink-850);
   padding: 1.5rem;
   border-radius: 8px;
   margin-bottom: 2rem;
-  border-left: 4px solid #667eea;
+  border-left: 4px solid var(--accent);
 }
 
 .grouper-instructions .instructions-toggle {
@@ -105,7 +109,7 @@
   cursor: pointer;
   font-size: 14px;
   font-weight: bold;
-  color: #333;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -115,19 +119,19 @@
 }
 
 .grouper-instructions .instructions-toggle:hover {
-  color: #667eea;
+  color: var(--accent);
 }
 
 .grouper-instructions p {
   margin: 0 0 0.5rem 0;
-  color: #333;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 .grouper-instructions ul {
   margin: 1rem 0 0 0;
   padding-left: 1.5rem;
-  color: #555;
+  color: var(--text-secondary);
 }
 
 .grouper-instructions li {
@@ -147,15 +151,17 @@
 
 .groups-section h3,
 .singles-section h3 {
-  color: #333;
+  color: var(--text-primary);
   margin-bottom: 0.75rem;
   font-size: 1.1rem;
 }
 
 /* Drop Zone Placeholder */
 .drop-zone-placeholder {
-  background: linear-gradient(135deg, #f0f4ff 0%, #e8eeff 100%);
-  border: 3px dashed #667eea;
+  background: linear-gradient(135deg, var(--ink-850) 0%, var(--ink-800) 100%);
+  /* Full-strength accent, not --accent-line: the dashed edge IS the affordance
+     here, and a translucent line falls under the 3:1 UI-contrast floor. */
+  border: 3px dashed var(--accent);
   border-radius: 8px;
   padding: 0.75rem 1rem;
   text-align: center;
@@ -168,25 +174,26 @@
 }
 
 .drop-zone-placeholder:hover {
-  background: linear-gradient(135deg, #e8eeff 0%, #dde5ff 100%);
-  border-color: #5568d3;
+  background: linear-gradient(135deg, var(--ink-800) 0%, var(--ink-750) 100%);
+  border-color: var(--accent-hover);
   transform: scale(1.01);
 }
 
 .drop-zone-placeholder.drag-over {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-color: #667eea;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-press) 100%);
+  border-color: var(--accent);
   border-style: solid;
   transform: scale(1.02);
-  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 8px 24px var(--accent-glow);
 }
 
 .drop-zone-placeholder.drag-over .drop-zone-content {
-  color: white;
+  /* Filled with the light violet accent — text flips to the canvas colour. */
+  color: var(--ink-950);
 }
 
 .drop-zone-content {
-  color: #667eea;
+  color: var(--accent);
   transition: all 0.3s ease;
 }
 
@@ -224,8 +231,9 @@
 }
 
 .product-group-card {
-  background: white;
-  border: 2px solid #667eea !important;
+  background: var(--ink-850);
+  /* Violet hairline marks "this is a group"; singles get the neutral --border. */
+  border: 2px solid var(--accent-line) !important;
   border-radius: 8px !important;
   padding: 0.4rem !important;
   transition: all 0.3s ease;
@@ -239,7 +247,7 @@
 }
 
 .product-group-card:hover {
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+  box-shadow: 0 4px 12px var(--accent-glow);
   transform: translateY(-1px);
   will-change: transform;
 }
@@ -254,8 +262,8 @@
 }
 
 .group-badge {
-  background: #667eea;
-  color: white;
+  background: var(--accent);
+  color: var(--ink-950);
   padding: 0.15rem 0.45rem;
   border-radius: 20px;
   font-size: 0.7rem;
@@ -263,14 +271,14 @@
 }
 
 .category-badge {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  color: white;
+  background: linear-gradient(135deg, var(--success) 0%, var(--shopify-green-dark) 100%);
+  color: var(--ink-950);
   padding: 0.15rem 0.45rem;
   border-radius: 20px;
   font-size: 0.7rem;
   font-weight: 700;
   text-transform: capitalize;
-  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+  box-shadow: var(--shadow-sm);
 }
 
 .group-images {
@@ -294,13 +302,13 @@
 }
 
 .group-image-item:hover {
-  border-color: #667eea;
+  border-color: var(--accent);
   transform: scale(1.05);
 }
 
 .group-image-item.selected {
-  border-color: #10b981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+  border-color: var(--success);
+  box-shadow: 0 0 0 3px var(--success-dim);
 }
 
 .group-image-item img {
@@ -325,8 +333,8 @@
   position: absolute;
   top: 5px;
   right: 5px;
-  background: #10b981;
-  color: white;
+  background: var(--success);
+  color: var(--ink-950);
   width: 24px;
   height: 24px;
   border-radius: 50%;
@@ -335,7 +343,7 @@
   justify-content: center;
   font-weight: bold;
   font-size: 1rem;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-sm);
 }
 
 .items-grid {
@@ -350,15 +358,15 @@
 /* columns-slider — inline range input in the toolbar */
 .columns-slider {
   width: 90px;
-  accent-color: #667eea;
+  accent-color: var(--accent);
   cursor: pointer;
   vertical-align: middle;
 }
 
 .single-item-card {
   position: relative;
-  background: white;
-  border: 2px solid #e5e5e5;
+  background: var(--ink-850);
+  border: 2px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
   cursor: pointer;
@@ -372,16 +380,16 @@
 }
 
 .single-item-card:hover {
-  border-color: #667eea;
+  border-color: var(--accent);
   transform: translateY(-4px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-md);
   will-change: transform;
 }
 
 .single-item-card.selected {
-  border-color: #10b981;
+  border-color: var(--success);
   border-width: 3px;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+  box-shadow: 0 0 0 3px var(--success-dim);
 }
 
 .single-item-card img {
@@ -393,8 +401,10 @@
 .image-with-controls { position: relative; flex: 1; min-height: 0; overflow: hidden; }
 .image-with-controls img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform 0.15s ease; }
 .image-controls { position: absolute; right: 6px; bottom: 6px; display: flex; gap: 6px; }
-.rotate-btn { background: rgba(0,0,0,0.5); color: #fff; border: none; padding: 4px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; }
-.rotate-btn:hover { background: rgba(0,0,0,0.7); }
+/* Stays a literal black scrim, not a surface token: this control floats ON TOP
+   of the photo, so it must stay translucent to keep the image readable. */
+.rotate-btn { background: rgba(0, 0, 0, 0.5); color: var(--text-primary); border: none; padding: 4px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+.rotate-btn:hover { background: rgba(0, 0, 0, 0.7); }
 
 .item-info {
   padding: 0.75rem;
@@ -406,11 +416,11 @@
 .capture-date-label {
   text-align: center;
   font-size: 0.65rem;
-  color: #888;
+  color: var(--text-muted);
   padding: 0.2rem 0.4rem 0.3rem;
   line-height: 1.3;
-  background: #f8f8f8;
-  border-top: 1px solid #eee;
+  background: var(--ink-900);
+  border-top: 1px solid var(--border-subtle);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -418,7 +428,7 @@
 
 .original-name-label {
   font-size: 0.62rem;
-  color: #aaa;
+  color: var(--text-muted);
   font-family: monospace;
   white-space: nowrap;
   overflow: hidden;
@@ -437,20 +447,20 @@
 }
 
 .filter-bar-label {
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--text-secondary);
   font-size: 0.82rem;
   font-weight: 700;
   white-space: nowrap;
-  border-top: 1px solid rgba(255,255,255,0.2);
+  border-top: 1px solid var(--border);
   padding-top: 0.6rem;
   width: 100%;
 }
 
 /* Date dropdown */
 .filter-select {
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  color: #fff;
+  background: var(--ink-800);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
   border-radius: 5px;
   padding: 0.22rem 0.6rem;
   font-size: 0.75rem;
@@ -462,18 +472,20 @@
 }
 
 .filter-select:hover {
-  background: rgba(255, 255, 255, 0.25);
-  border-color: rgba(255, 255, 255, 0.65);
+  background: var(--ink-750);
+  border-color: var(--border-strong);
 }
 
+/* Native option list paints light unless told otherwise. */
 .filter-select option {
-  background: #4f46e5;
-  color: #fff;
+  background: var(--ink-800);
+  color: var(--text-primary);
 }
 
+/* A filter is active — accent tint marks it, same as .sort-btn.active. */
 .filter-select:not([data-default="true"]) {
-  border-color: rgba(255, 255, 255, 0.9);
-  background: rgba(255, 255, 255, 0.28);
+  border-color: var(--accent-line);
+  background: var(--accent-dim);
 }
 
 /* Groups of related filter toggle buttons (e.g. all date buttons together) */
@@ -485,7 +497,7 @@
 }
 
 .filter-btn-group + .filter-btn-group {
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  border-top: 1px solid var(--border);
   padding-top: 0.35rem;
   margin-top: 0.1rem;
 }
@@ -500,13 +512,13 @@
   align-items: center;
   gap: 0.35rem;
   flex-wrap: wrap;
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  border-top: 1px solid var(--border);
   padding-top: 0.5rem;
   margin-top: 0.1rem;
 }
 
 .auto-group-label {
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--text-secondary);
   font-size: 0.82rem;
   font-weight: 600;
   white-space: nowrap;
@@ -515,10 +527,10 @@
 .auto-group-input {
   width: 3.2rem;
   padding: 0.28rem 0.4rem;
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: var(--ink-800);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 0.82rem;
   font-weight: 700;
   text-align: center;
@@ -533,56 +545,58 @@
 }
 
 .auto-group-input:focus {
-  border-color: rgba(255, 255, 255, 0.85);
-  background: rgba(255, 255, 255, 0.25);
+  border-color: var(--accent-line);
+  background: var(--ink-750);
 }
 
+/* Tinted-at-rest, solid-on-hover: the dark-theme equivalent of the old
+   pale-fill/darker-fill pair, since the palette has no darker green step. */
 .auto-group-btn {
-  background: rgba(16, 185, 129, 0.25) !important;
-  border-color: rgba(16, 185, 129, 0.7) !important;
-  color: #d1fae5 !important;
+  background: var(--success-dim) !important;
+  border-color: var(--success) !important;
+  color: var(--success) !important;
   font-weight: 700 !important;
 }
 
 .auto-group-btn:hover {
-  background: rgba(16, 185, 129, 0.45) !important;
-  border-color: #10b981 !important;
-  color: #fff !important;
+  background: var(--success) !important;
+  border-color: var(--success) !important;
+  color: var(--ink-950) !important;
 }
 
 .auto-group-slider {
   flex: 1 1 100%; /* own row */
   width: 100%;
   margin-top: 0.25rem;
-  accent-color: #10b981;
+  accent-color: var(--success);
   cursor: pointer;
 }
 
 .pick-mode-btn {
-  background: rgba(99, 102, 241, 0.2) !important;
-  border-color: rgba(99, 102, 241, 0.6) !important;
-  color: #c7d2fe !important;
+  background: var(--accent-dim) !important;
+  border-color: var(--accent-line) !important;
+  color: var(--accent) !important;
   font-weight: 700 !important;
 }
 
 .pick-mode-btn:hover {
-  background: rgba(99, 102, 241, 0.4) !important;
-  border-color: #6366f1 !important;
-  color: #fff !important;
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: var(--ink-950) !important;
 }
 
 .pick-mode-active {
-  background: rgba(99, 102, 241, 0.6) !important;
-  border-color: #818cf8 !important;
-  color: #fff !important;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.4);
+  background: var(--accent) !important;
+  border-color: var(--accent-hover) !important;
+  color: var(--ink-950) !important;
+  box-shadow: 0 0 0 2px var(--accent-line);
 }
 
 /* ── Keyboard shortcut cheat sheet (bottom of sidebar) ── */
 .keyboard-cheatsheet {
   margin-top: auto;
   padding-top: 0.9rem;
-  border-top: 1px solid rgba(255,255,255,0.15);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .cheatsheet-title {
@@ -590,7 +604,7 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(255,255,255,0.5);
+  color: var(--text-muted);
   margin-bottom: 0.5rem;
 }
 
@@ -603,13 +617,13 @@
 
 .cheatsheet-row kbd {
   display: inline-block;
-  background: rgba(0,0,0,0.35);
-  border: 1px solid rgba(255,255,255,0.2);
+  background: var(--ink-750);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 2px 8px;
   font-size: 1.3rem;
   font-family: ui-monospace, monospace;
-  color: rgba(255,255,255,0.85);
+  color: var(--text-primary);
   white-space: nowrap;
   min-width: 4.8rem;
   text-align: center;
@@ -618,7 +632,8 @@
 
 .cheatsheet-row span {
   font-size: 1.36rem;
-  color: rgba(255,255,255,0.55);
+  /* --text-secondary, not --text-muted: these labels have to be legible. */
+  color: var(--text-secondary);
   line-height: 1.3;
 }
 
@@ -633,20 +648,20 @@
   display: flex;
   justify-content: center;
   padding-top: 2rem;
-  border-top: 2px solid #f0f0f0;
+  border-top: 2px solid var(--border);
 }
 
 /* Category Zones for Drag and Drop */
 .category-zones {
   margin-bottom: 3rem;
   padding: 1.5rem;
-  background: linear-gradient(135deg, #f0f4ff 0%, #e0e7ff 100%);
+  background: linear-gradient(135deg, var(--ink-900) 0%, var(--ink-850) 100%);
   border-radius: 12px;
 }
 
 .category-zones h3 {
   margin: 0 0 1rem 0;
-  color: #333;
+  color: var(--text-primary);
   text-align: center;
   font-size: 1.2rem;
 }
@@ -658,8 +673,8 @@
 }
 
 .category-zone {
-  background: white;
-  border: 3px dashed #d1d5db;
+  background: var(--ink-850);
+  border: 3px dashed var(--border-strong);
   border-radius: 12px;
   padding: 1.5rem 1rem;
   display: flex;
@@ -673,17 +688,17 @@
 }
 
 .category-zone:hover {
-  border-color: #667eea;
-  background: #f9fafb;
+  border-color: var(--accent);
+  background: var(--ink-750);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+  box-shadow: 0 4px 12px var(--accent-glow);
 }
 
 .category-zone.drag-over {
-  border-color: #10b981;
-  background: #d1fae5;
+  border-color: var(--success);
+  background: var(--success-dim);
   border-style: solid;
-  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+  box-shadow: 0 0 0 4px var(--success-dim);
   transform: scale(1.05);
 }
 
@@ -693,26 +708,26 @@
 
 .category-name {
   font-weight: 600;
-  color: #374151;
+  color: var(--text-primary);
   font-size: 0.9rem;
 }
 
 .category-count {
   font-size: 0.85rem;
-  color: #6b7280;
+  color: var(--text-secondary);
 }
 
 /* Drag and Drop States */
 .product-group-card.drag-over {
-  border-color: #10b981;
-  background: #d1fae5;
-  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+  border-color: var(--success);
+  background: var(--success-dim);
+  box-shadow: 0 0 0 4px var(--success-dim);
   transform: scale(1.02);
 }
 
 .single-item-card.drag-over {
-  border-color: #10b981;
-  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+  border-color: var(--success);
+  box-shadow: 0 0 0 4px var(--success-dim);
   transform: scale(1.05);
 }
 
@@ -724,11 +739,11 @@
 
 /* Reorder drop indicator: thin colored bar on left or right edge */
 .single-item-card.reorder-over-left {
-  box-shadow: -3px 0 0 0 #667eea;
+  box-shadow: -3px 0 0 0 var(--accent);
   border-radius: 6px;
 }
 .single-item-card.reorder-over-right {
-  box-shadow: 3px 0 0 0 #667eea;
+  box-shadow: 3px 0 0 0 var(--accent);
   border-radius: 6px;
 }
 
@@ -757,7 +772,7 @@
 }
 
 .group-image-item:hover {
-  border-color: #667eea;
+  border-color: var(--accent);
   transform: scale(1.05);
 }
 
@@ -765,15 +780,15 @@
 .group-image-item.photo-dragging {
   opacity: 0.3;
   transform: scale(0.88);
-  border-color: #667eea !important;
+  border-color: var(--accent) !important;
   box-shadow: none !important;
 }
 
 .group-image-item.photo-drag-over {
-  border: 3px dashed #10b981 !important;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.45);
+  border: 3px dashed var(--success) !important;
+  box-shadow: 0 0 0 3px var(--success-dim);
   transform: scale(1.1);
-  background: rgba(16, 185, 129, 0.08);
+  background: var(--success-dim);
 }
 
 /* Remove-from-group button (shown on photo hover inside a group) */
@@ -782,8 +797,8 @@
   bottom: 3px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(99, 102, 241, 0.92);
-  color: white;
+  background: var(--accent);
+  color: var(--ink-950);
   border: none;
   border-radius: 8px;
   font-size: 13px;
@@ -801,7 +816,7 @@
 }
 
 .remove-from-group-btn:hover {
-  background: rgba(79, 70, 229, 0.98);
+  background: var(--accent-hover);
 }
 
 /* Delete button on the group header bar */
@@ -820,18 +835,21 @@
 
 /* Group selected state — whole card gets green outline */
 .product-group-card.all-selected {
-  border-color: #10b981 !important;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25) !important;
+  border-color: var(--success) !important;
+  box-shadow: 0 0 0 3px var(--success-dim) !important;
 }
 
+/* Partial selection: same green edge, but no ring — the ring is what
+   distinguishes "all" from "some" (the old lighter green has no dark-palette
+   equivalent that stays above the 3:1 border floor). */
 .product-group-card.some-selected {
-  border-color: #6ee7b7 !important;
+  border-color: var(--success) !important;
 }
 
 /* Small checkmark badge in group header when fully selected */
 .group-selected-indicator {
-  background: #10b981;
-  color: white;
+  background: var(--success);
+  color: var(--ink-950);
   width: 20px;
   height: 20px;
   border-radius: 50%;
@@ -856,8 +874,8 @@
   right: 4px;
   width: 28px;
   height: 28px;
-  background: rgba(239, 68, 68, 0.95);
-  color: white;
+  background: var(--danger);
+  color: var(--ink-950);
   border: none;
   border-radius: 50%;
   font-size: 20px;
@@ -876,8 +894,11 @@
   opacity: 1;
 }
 
+/* No darker red exists in the palette; the scale-up carries the hover feedback
+   and the ring adds the emphasis the old #dc2626 fill used to. */
 .delete-image-btn:hover {
-  background: #dc2626;
+  background: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-dim);
   transform: scale(1.1);
 }
 
@@ -885,23 +906,23 @@
 .new-group-zone {
   margin: 2rem 0;
   padding: 3rem 2rem;
-  border: 3px dashed #d1d5db;
+  border: 3px dashed var(--border-strong);
   border-radius: 12px;
-  background: #f9fafb;
+  background: var(--ink-850);
   transition: all 0.3s ease;
   cursor: pointer;
 }
 
 .new-group-zone:hover {
-  border-color: #667eea;
-  background: #f0f4ff;
+  border-color: var(--accent);
+  background: var(--ink-800);
 }
 
 .new-group-zone.drag-over {
-  border-color: #10b981;
+  border-color: var(--success);
   border-style: solid;
-  background: #d1fae5;
-  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+  background: var(--success-dim);
+  box-shadow: 0 0 0 4px var(--success-dim);
   transform: scale(1.02);
 }
 
@@ -910,14 +931,14 @@
   flex-direction: column;
   align-items: center;
   gap: 1rem;
-  color: #6b7280;
+  color: var(--text-secondary);
   font-size: 1rem;
   font-weight: 500;
 }
 
 .new-group-icon {
   font-size: 3rem;
-  color: #667eea;
+  color: var(--accent);
 }
 
 /* Single Item Card Draggable */
@@ -944,7 +965,7 @@
     border-radius: 8px;
     padding: 1rem;
     gap: 0.75rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--ink-850) 0%, var(--ink-900) 100%);
   }
 
   .grouper-scroll-content {
@@ -974,7 +995,7 @@
     border-top: none;
     padding-top: 0;
     width: auto;
-    border-left: 1px solid rgba(255,255,255,0.2);
+    border-left: 1px solid var(--border);
     padding-left: 0.5rem;
   }
 
@@ -986,7 +1007,7 @@
   .auto-group-control {
     border-top: none;
     padding-top: 0;
-    border-left: 1px solid rgba(255, 255, 255, 0.3);
+    border-left: 1px solid var(--border);
     padding-left: 0.6rem;
     margin-top: 0;
   }
@@ -994,7 +1015,7 @@
   .filter-btn-group + .filter-btn-group {
     border-top: none;
     padding-top: 0;
-    border-left: 1px solid rgba(255, 255, 255, 0.25);
+    border-left: 1px solid var(--border);
     padding-left: 0.4rem;
     margin-top: 0;
   }
@@ -1025,13 +1046,13 @@
   position: absolute;
   top: 8px;
   left: 8px;
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  color: white;
+  background: linear-gradient(135deg, var(--success) 0%, var(--shopify-green-dark) 100%);
+  color: var(--ink-950);
   padding: 0.5rem 1rem;
   border-radius: 20px;
   font-size: 0.85rem;
   font-weight: 600;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+  box-shadow: 0 4px 12px var(--success-dim);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -1043,8 +1064,8 @@
   position: absolute;
   top: 8px;
   left: 8px;
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  color: white;
+  background: linear-gradient(135deg, var(--success) 0%, var(--shopify-green-dark) 100%);
+  color: var(--ink-950);
   width: 28px;
   height: 28px;
   border-radius: 50%;
@@ -1053,7 +1074,7 @@
   justify-content: center;
   font-size: 0.9rem;
   font-weight: bold;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.5);
+  box-shadow: 0 2px 8px var(--success-dim);
   z-index: 5;
   animation: categoryAssigned 0.3s ease-out;
 }
@@ -1098,14 +1119,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #10b981;
+  color: var(--success);
 }
 
 .selection-indicator {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: var(--ink-950);
 }
 
 .drop-zone-icon {
@@ -1123,8 +1144,8 @@
 /* Selection box visualization */
 .selection-box {
   position: absolute;
-  border: 2px solid #667eea;
-  background: rgba(102, 126, 234, 0.15);
+  border: 2px solid var(--accent);
+  background: var(--accent-dim);
   z-index: 1000;
   pointer-events: none;
   border-radius: 4px;
@@ -1148,6 +1169,8 @@
 .lightbox-overlay {
   position: fixed;
   inset: 0;
+  /* Deeper than the standard 0.72 modal scrim on purpose: this backdrop exists
+     so a photo reads cleanly, and grid thumbnails showing through would fight it. */
   background: rgba(0, 0, 0, 0.88);
   display: flex;
   align-items: center;
@@ -1162,7 +1185,7 @@
   max-height: 78vh;
   object-fit: contain;
   border-radius: 8px;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-xl);
   cursor: default;
   transition: transform 0.2s ease;
 }
@@ -1176,7 +1199,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(0, 0, 0, 0.72);
   backdrop-filter: blur(6px);
   padding: 8px 14px;
   border-radius: 999px;
@@ -1184,9 +1207,9 @@
 }
 
 .lightbox-tool-btn {
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  color: white;
+  background: var(--ink-800);
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
   font-size: 0.85rem;
   padding: 5px 12px;
   border-radius: 6px;
@@ -1194,15 +1217,15 @@
   white-space: nowrap;
   transition: background 0.15s;
 }
-.lightbox-tool-btn:hover { background: rgba(255, 255, 255, 0.28); }
+.lightbox-tool-btn:hover { background: var(--ink-700); }
 
 .lightbox-close {
   position: absolute;
   top: 16px;
   right: 20px;
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--ink-800);
   border: none;
-  color: white;
+  color: var(--text-primary);
   font-size: 1.4rem;
   width: 36px;
   height: 36px;
@@ -1215,16 +1238,16 @@
 }
 
 .lightbox-close:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--ink-700);
 }
 
 .lightbox-nav {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--ink-800);
   border: none;
-  color: white;
+  color: var(--text-primary);
   font-size: 2.5rem;
   line-height: 1;
   width: 48px;
@@ -1238,7 +1261,7 @@
   z-index: 10000;
 }
 .lightbox-nav:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--ink-700);
 }
 .lightbox-nav--prev { left: 20px; }
 .lightbox-nav--next { right: 20px; }
@@ -1248,9 +1271,9 @@
   bottom: 18px;
   left: 50%;
   transform: translateX(-50%);
-  color: rgba(255,255,255,0.7);
+  color: var(--text-secondary);
   font-size: 0.85rem;
-  background: rgba(0,0,0,0.4);
+  background: var(--ink-900);
   padding: 3px 10px;
   border-radius: 12px;
   pointer-events: none;
@@ -1272,12 +1295,14 @@
   transition: background 0.15s ease;
 }
 
+/* Hover is a neutral raise, selection is an accent tint — two translucent
+   violets that far apart are indistinguishable on black. */
 .group-select-bar:hover {
-  background: rgba(102, 126, 234, 0.12);
+  background: var(--ink-750);
 }
 
 .group-select-bar.all-selected {
-  background: rgba(102, 126, 234, 0.18);
+  background: var(--accent-dim);
 }
 
 .group-select-check {
@@ -1287,21 +1312,22 @@
   width: 18px;
   height: 18px;
   flex: 0 0 18px;
-  border: 2px solid #667eea;
+  border: 2px solid var(--accent);
   border-radius: 50%;
-  background: white;
-  color: white;
+  /* Recessed well when empty; fills with accent once the group is selected. */
+  background: var(--ink-900);
+  color: var(--ink-950);
   font-size: 0.7rem;
   font-weight: 700;
   line-height: 1;
 }
 
 .group-select-bar.all-selected .group-select-check {
-  background: #667eea;
+  background: var(--accent);
 }
 
 .group-select-bar.some-selected .group-select-check {
-  color: #667eea;
+  color: var(--accent);
 }
 
 .group-menu-wrap {
@@ -1317,8 +1343,8 @@
   justify-content: center;
   border: none;
   border-radius: 6px;
-  background: rgba(102, 126, 234, 0.15);
-  color: #4f46e5;
+  background: var(--accent-dim);
+  color: var(--accent);
   font-size: 1rem;
   font-weight: 700;
   line-height: 1;
@@ -1326,7 +1352,8 @@
 }
 
 .group-menu-btn:hover {
-  background: rgba(102, 126, 234, 0.3);
+  background: var(--accent);
+  color: var(--ink-950);
 }
 
 .group-menu {
@@ -1335,10 +1362,10 @@
   right: 0;
   z-index: 50;
   min-width: 130px;
-  background: white;
-  border: 1px solid #e5e7eb;
+  background: var(--ink-800);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(17, 24, 39, 0.18);
+  box-shadow: var(--shadow-lg);
   padding: 0.25rem;
   display: flex;
   flex-direction: column;
@@ -1352,7 +1379,7 @@
   border: none;
   border-radius: 5px;
   background: none;
-  color: #1f2937;
+  color: var(--text-primary);
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
@@ -1360,7 +1387,7 @@
 }
 
 .group-menu-item:hover:not(:disabled) {
-  background: #eef2ff;
+  background: var(--ink-750);
 }
 
 .group-menu-item:disabled {
@@ -1369,11 +1396,11 @@
 }
 
 .group-menu-item--danger {
-  color: #dc2626;
+  color: var(--danger);
 }
 
 .group-menu-item--danger:hover:not(:disabled) {
-  background: #fef2f2;
+  background: var(--danger-dim);
 }
 
 /* ── Photo tools toolbar — pinned above the photo grid ─────────────────── */
@@ -1387,10 +1414,12 @@
   gap: 0.4rem;
   padding: 0.45rem 0.6rem;
   margin-bottom: 0.75rem;
-  background: #ffffff;
-  border: 1px solid #c7d2fe;
+  /* Sticky bar sits over the scrolling grid — needs an opaque surface, one
+     step above the well behind it, or thumbnails ghost through. */
+  background: var(--ink-850);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 3px 12px rgba(79, 70, 229, 0.12);
+  box-shadow: var(--shadow-md);
 }
 
 .ptb-btn {
@@ -1400,46 +1429,50 @@
   font-size: 0.78rem;
   font-weight: 600;
   padding: 0.32rem 0.6rem;
-  border: 1px solid #c7d2fe;
+  border: 1px solid var(--border);
   border-radius: 7px;
-  background: #eef2ff;
-  color: #3730a3;
+  background: var(--ink-750);
+  color: var(--text-secondary);
   cursor: pointer;
   white-space: nowrap;
 }
 
-.ptb-btn:hover:not(:disabled) { background: #e0e7ff; }
+.ptb-btn:hover:not(:disabled) { background: var(--ink-700); }
 .ptb-btn:disabled { opacity: 0.4; cursor: default; }
 
-.ptb-btn--active  { background: #6366f1; border-color: #6366f1; color: #fff; }
-.ptb-btn--primary { background: #6366f1; border-color: #6366f1; color: #fff; }
-.ptb-btn--primary:hover:not(:disabled) { background: #4f46e5; }
-.ptb-btn--warn    { background: #b45309; border-color: #b45309; color: #fff; }
-.ptb-btn--warn:hover:not(:disabled) { background: #92400e; }
-.ptb-btn--danger  { background: #dc2626; border-color: #dc2626; color: #fff; }
-.ptb-btn--danger:hover:not(:disabled) { background: #b91c1c; }
-.ptb-btn--ghost   { background: transparent; border-color: #fecaca; color: #b91c1c; font-size: 0.7rem; }
-.ptb-btn--ghost:hover:not(:disabled) { background: #fef2f2; }
+/* Filled variants flip their label to the canvas colour — every semantic token
+   in this palette is a LIGHT tint, so white-on-fill would be unreadable.
+   Warn/danger sit tinted at rest and go solid on hover, since the palette has
+   no darker step to hover into. */
+.ptb-btn--active  { background: var(--accent); border-color: var(--accent); color: var(--ink-950); }
+.ptb-btn--primary { background: var(--accent); border-color: var(--accent); color: var(--ink-950); }
+.ptb-btn--primary:hover:not(:disabled) { background: var(--accent-hover); }
+.ptb-btn--warn    { background: var(--warning-dim); border-color: var(--warning); color: var(--warning); }
+.ptb-btn--warn:hover:not(:disabled) { background: var(--warning); color: var(--ink-950); }
+.ptb-btn--danger  { background: var(--danger-dim); border-color: var(--danger); color: var(--danger); }
+.ptb-btn--danger:hover:not(:disabled) { background: var(--danger); color: var(--ink-950); }
+.ptb-btn--ghost   { background: transparent; border-color: var(--danger-dim); color: var(--danger); font-size: 0.7rem; }
+.ptb-btn--ghost:hover:not(:disabled) { background: var(--danger-dim); }
 
 .ptb-divider {
   width: 1px;
   height: 20px;
-  background: #e0e7ff;
+  background: var(--border);
 }
 
 .ptb-status {
   font-size: 0.72rem;
-  color: #4338ca;
+  color: var(--accent);
   font-weight: 600;
 }
 
-.ptb-status em { font-style: normal; color: #6b7280; font-weight: 500; }
+.ptb-status em { font-style: normal; color: var(--text-muted); font-weight: 500; }
 
 .ptb-link {
   background: none;
   border: none;
   cursor: pointer;
-  color: #6366f1;
+  color: var(--accent);
   font-size: 0.72rem;
   font-weight: 700;
   padding: 0;
@@ -1447,15 +1480,15 @@
 }
 
 .photo-pick-toggle--on {
-  background: #10b981 !important;
-  border-color: #10b981 !important;
-  color: #fff !important;
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.35);
+  background: var(--success) !important;
+  border-color: var(--success) !important;
+  color: var(--ink-950) !important;
+  box-shadow: 0 0 0 2px var(--success-dim);
 }
 
 /* Photo selected via pick mode — visible ring on photos inside group cards */
 .group-image-item.photo-picked {
-  outline: 3px solid #6366f1;
+  outline: 3px solid var(--accent);
   outline-offset: -3px;
   border-radius: 6px;
 }

@@ -1,6 +1,6 @@
-# Sortbot — Vintage Clothing Listing Workflow
+# Arcatya — Vintage Clothing Listing Workflow
 
-Sortbot is a web app for vintage clothing resellers. Upload a batch of clothing photos, group the multi-angle shots of each item, assign categories, dictate a description per listing, and export a Shopify-ready product CSV — hundreds of listings per session.
+Arcatya is a web app for vintage clothing resellers. Upload a batch of clothing photos, group the multi-angle shots of each item, assign categories, dictate a description per listing, and export a Shopify-ready product CSV — hundreds of listings per session.
 
 **Live app:** https://gerbriel.github.io/sortbot (deployed from `main` via GitHub Actions)
 

@@ -16,7 +16,9 @@
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  /* Label fill/text colour is set inline per user (presence colour) — only
+     the elevation is themed here. */
+  box-shadow: var(--shadow-sm);
   animation: fadeIn 0.2s ease;
 }
 
@@ -37,9 +39,9 @@
   top: 80px;
   right: 20px;
   width: 280px;
-  background: white;
+  background: var(--ink-800);
   border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
   z-index: 1000;
   animation: slideIn 0.3s ease;
@@ -61,8 +63,9 @@
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  /* Brand gradient restated in violet; ink text because the accent is light. */
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-press) 100%);
+  color: var(--ink-950);
 }
 
 .activity-icon {
@@ -76,7 +79,10 @@
 }
 
 .activity-count {
-  background: rgba(255, 255, 255, 0.2);
+  /* Was a frosted white pill over the light-mode gradient; on dark it inverts
+     to a solid ink pill so the count stays legible on the accent header. */
+  background: var(--ink-900);
+  color: var(--text-primary);
   padding: 2px 8px;
   border-radius: 12px;
   font-size: 12px;
@@ -90,13 +96,13 @@
 
 .activity-item {
   padding: 12px 16px;
-  border-left: 3px solid #667eea;
-  border-bottom: 1px solid #f0f0f0;
+  border-left: 3px solid var(--accent);
+  border-bottom: 1px solid var(--border-subtle);
   transition: background 0.15s ease;
 }
 
 .activity-item:hover {
-  background: #f7fafc;
+  background: var(--ink-750);
 }
 
 .activity-item:last-child {
@@ -131,7 +137,7 @@
 .user-name {
   font-weight: 600;
   font-size: 13px;
-  color: #2d3748;
+  color: var(--text-primary);
 }
 
 .activity-details {
@@ -142,13 +148,13 @@
 
 .activity-step {
   font-size: 12px;
-  color: #4a5568;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
 .activity-action {
   font-size: 11px;
-  color: #718096;
+  color: var(--text-muted);
   font-style: italic;
 }
 
@@ -158,16 +164,16 @@
 }
 
 .activity-list::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: transparent;
 }
 
 .activity-list::-webkit-scrollbar-thumb {
-  background: #cbd5e0;
+  background: var(--ink-700);
   border-radius: 3px;
 }
 
 .activity-list::-webkit-scrollbar-thumb:hover {
-  background: #a0aec0;
+  background: var(--text-faint);
 }
 
 /* Mobile responsive */

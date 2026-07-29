@@ -38,12 +38,14 @@
 
 .category-zones-container.compact .category-zone .category-count {
   font-size: 0.75rem;
-  color: #888;
+  color: var(--text-muted);
 }
 
 /* ────────────────────────────────────────────────────────────────── */
 .category-zones {
-  background: linear-gradient(135deg, #e0e7ff 0%, #f0f4ff 100%);
+  /* Was a pale indigo wash; on dark the same "tinted panel" read comes from
+     a surface step, not a hue. */
+  background: linear-gradient(135deg, var(--ink-850) 0%, var(--ink-900) 100%);
   padding: 2rem;
   border-radius: 12px;
   margin-bottom: 2rem;
@@ -51,7 +53,7 @@
 
 .category-zones h3 {
   text-align: center;
-  color: #333;
+  color: var(--text-primary);
   margin-bottom: 1.5rem;
   font-size: 1.3rem;
 }
@@ -65,8 +67,8 @@
 }
 
 .category-zone {
-  background: white;
-  border: 3px dashed #cbd5e1;
+  background: var(--ink-800);
+  border: 3px dashed var(--border-strong);
   border-radius: 12px;
   padding: 1.5rem 1rem;
   text-align: center;
@@ -81,58 +83,58 @@
 }
 
 .category-zone:hover {
-  border-color: #667eea;
-  background: #f8faff;
+  border-color: var(--accent);
+  background: var(--ink-750);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+  box-shadow: 0 4px 12px var(--accent-glow);
 }
 
 .category-zone.drag-over {
-  border-color: var(--category-color, #10b981);
-  background: rgba(16, 185, 129, 0.1);
+  border-color: var(--category-color, var(--success));
+  background: var(--success-dim);
   border-style: solid;
   transform: scale(1.05);
-  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+  box-shadow: 0 8px 20px var(--success-dim);
 }
 
 .category-zone:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  border-color: var(--category-color, #667eea);
+  box-shadow: var(--shadow-md);
+  border-color: var(--category-color, var(--accent));
 }
 
 /* ── Clear Category zone ─────────────────────────────────────────── */
 .category-zone-clear {
-  border-color: #e2e8f0 !important;
-  color: #94a3b8;
+  border-color: var(--border) !important;
+  color: var(--text-muted);
   opacity: 0.85;
 }
 
 .category-zone-clear .category-name {
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 .category-zone-clear .category-count {
-  color: #cbd5e1;
+  color: var(--text-faint);
 }
 
 .category-zone-clear:hover {
-  border-color: #ef4444 !important;
-  background: #fef2f2 !important;
-  color: #ef4444;
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15) !important;
+  border-color: var(--danger) !important;
+  background: var(--danger-dim) !important;
+  color: var(--danger);
+  box-shadow: 0 4px 12px var(--danger-dim) !important;
 }
 
 .category-zone-clear:hover .category-name {
-  color: #ef4444;
+  color: var(--danger);
 }
 
 .category-zone-clear.drag-over-clear {
-  border-color: #ef4444 !important;
+  border-color: var(--danger) !important;
   border-style: solid !important;
-  background: #fef2f2 !important;
+  background: var(--danger-dim) !important;
   transform: scale(1.05);
-  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3) !important;
+  box-shadow: 0 8px 20px var(--danger-dim) !important;
 }
 
 .category-icon {
@@ -142,14 +144,14 @@
 
 .category-name {
   font-weight: 600;
-  color: #333;
+  color: var(--text-primary);
   font-size: 0.95rem;
   text-transform: capitalize;
 }
 
 .category-count {
   font-size: 0.85rem;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .groups-section {
@@ -157,7 +159,7 @@
 }
 
 .groups-section h3 {
-  color: #333;
+  color: var(--text-primary);
   margin-bottom: 1rem;
   font-size: 1.2rem;
 }
@@ -169,8 +171,8 @@
 }
 
 .product-group-card {
-  background: white;
-  border: 2px solid #e5e7eb;
+  background: var(--ink-850);
+  border: 2px solid var(--border);
   border-radius: 12px;
   padding: 1rem;
   transition: all 0.3s ease;
@@ -183,8 +185,8 @@
 }
 
 .product-group-card:hover {
-  border-color: #667eea;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: var(--accent-line);
+  box-shadow: var(--shadow-md);
   transform: translateY(-2px);
 }
 
@@ -194,12 +196,12 @@
   align-items: center;
   margin-bottom: 0.75rem;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .group-badge {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-press) 100%);
+  color: var(--ink-950);
   padding: 0.25rem 0.75rem;
   border-radius: 20px;
   font-size: 0.85rem;
@@ -207,14 +209,14 @@
 }
 
 .category-badge {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  color: white;
+  background: linear-gradient(135deg, var(--success) 0%, var(--shopify-green-dark) 100%);
+  color: var(--ink-950);
   padding: 0.35rem 0.85rem;
   border-radius: 20px;
   font-size: 0.9rem;
   font-weight: 700;
   text-transform: capitalize;
-  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+  box-shadow: 0 2px 6px var(--success-dim);
 }
 
 .group-images {
@@ -228,8 +230,8 @@
   aspect-ratio: 1;
   border-radius: 8px;
   overflow: hidden;
-  border: 2px solid #e5e7eb;
-  background: #f0f0f0;
+  border: 2px solid var(--border);
+  background: var(--ink-800);
   transition: transform 0.15s ease, border-color 0.15s ease;
 }
 
@@ -264,15 +266,15 @@
 .photo-dragging {
   opacity: 0.3;
   transform: scale(0.88);
-  border: 2px solid #667eea !important;
+  border: 2px solid var(--accent) !important;
   box-shadow: none !important;
 }
 
 .photo-drag-over {
-  border: 2px dashed #10b981 !important;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.45), inset 0 0 0 2px rgba(16, 185, 129, 0.15);
+  border: 2px dashed var(--success) !important;
+  box-shadow: 0 0 0 3px var(--success-dim), inset 0 0 0 2px var(--success-dim);
   transform: scale(1.1);
-  background: rgba(16, 185, 129, 0.08);
+  background: var(--success-dim);
 }
 
 /* ── Group drag-to-reorder ───────────────────────────────────────── */
@@ -280,7 +282,7 @@
   position: absolute;
   top: 10px;
   right: 10px;
-  color: #9ca3af;
+  color: var(--text-muted);
   cursor: grab;
   padding: 4px;
   border-radius: 6px;
@@ -290,8 +292,8 @@
 }
 
 .group-drag-handle:hover {
-  color: #667eea;
-  background: rgba(102, 126, 234, 0.1);
+  color: var(--accent);
+  background: var(--accent-dim);
 }
 
 .group-drag-handle:active {
@@ -304,9 +306,9 @@
 }
 
 .group-drag-over {
-  border-color: #667eea !important;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3), 0 6px 20px rgba(102, 126, 234, 0.2);
-  background: #f8faff;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-line), 0 6px 20px var(--accent-glow);
+  background: var(--ink-750);
 }
 
 /* ── Position badge ──────────────────────────────────────────────── */
@@ -314,8 +316,10 @@
   position: absolute;
   top: 10px;
   left: 10px;
+  /* Scrim badge that sits ON a photo, not on a themed surface — a translucent
+     black plate is still the correct treatment in dark mode. */
   background: rgba(0, 0, 0, 0.55);
-  color: white;
+  color: var(--text-primary);
   font-size: 0.7rem;
   font-weight: 700;
   padding: 2px 7px;
@@ -327,12 +331,12 @@
 /* ── Reorder hint ────────────────────────────────────────────────── */
 .reorder-hint {
   font-size: 0.82rem;
-  color: #6b7280;
+  color: var(--text-secondary);
   margin: -0.5rem 0 1rem;
   padding: 0.4rem 0.75rem;
-  background: #f9fafb;
+  background: var(--ink-850);
   border-radius: 6px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
   display: inline-block;
 }
 
@@ -361,13 +365,13 @@
   position: absolute;
   top: 8px;
   left: 8px;
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  color: white;
+  background: linear-gradient(135deg, var(--success) 0%, var(--shopify-green-dark) 100%);
+  color: var(--ink-950);
   padding: 0.5rem 1rem;
   border-radius: 20px;
   font-size: 0.85rem;
   font-weight: 600;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+  box-shadow: 0 4px 12px var(--success-dim);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -386,9 +390,10 @@
 }
 
 .product-group-card.has-category {
-  border-color: #10b981;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
-  background: linear-gradient(to bottom, rgba(16, 185, 129, 0.05) 0%, white 100%);
+  border-color: var(--success);
+  box-shadow: 0 4px 12px var(--success-dim);
+  /* Faint success wash fading into the plain card surface. */
+  background: linear-gradient(to bottom, var(--success-dim) 0%, var(--ink-850) 100%);
 }
 
 @keyframes categoryAssigned {

@@ -5,7 +5,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.72);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -15,14 +15,14 @@
 }
 
 .categories-manager {
-  background: white;
+  background: var(--ink-800);
   border-radius: 12px;
   width: 100%;
   max-width: 800px;
   max-height: 90vh;
   overflow-y: auto;
   padding: 2rem;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-xl);
 }
 
 .categories-header {
@@ -31,13 +31,13 @@
   align-items: center;
   margin-bottom: 2rem;
   padding-bottom: 1rem;
-  border-bottom: 2px solid #e5e7eb;
+  border-bottom: 2px solid var(--border);
 }
 
 .categories-header h2 {
   margin: 0;
   font-size: 2rem;
-  color: #1f2937;
+  color: var(--text-primary);
 }
 
 .header-actions {
@@ -50,7 +50,7 @@
   background: none;
   border: none;
   font-size: 1.5rem;
-  color: #6b7280;
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 0.5rem;
   width: 40px;
@@ -63,8 +63,8 @@
 }
 
 .button-close:hover {
-  background: #f3f4f6;
-  color: #1f2937;
+  background: var(--ink-750);
+  color: var(--text-primary);
 }
 
 /* Categories List */
@@ -79,15 +79,15 @@
   justify-content: space-between;
   align-items: center;
   padding: 1rem;
-  background: white;
-  border: 1px solid #e5e7eb;
+  background: var(--ink-850);
+  border: 1px solid var(--border);
   border-radius: 8px;
   transition: all 0.2s ease;
 }
 
 .category-item:hover {
-  border-color: #667eea;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+  border-color: var(--accent-line);
+  box-shadow: 0 2px 8px var(--accent-glow);
 }
 
 .category-info {
@@ -104,7 +104,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f3f4f6;
+  background: var(--ink-750);
 }
 
 .category-details {
@@ -115,11 +115,11 @@
 
 .category-details strong {
   font-size: 1.125rem;
-  color: #1f2937;
+  color: var(--text-primary);
 }
 
 .category-details small {
-  color: #6b7280;
+  color: var(--text-secondary);
   font-size: 0.875rem;
 }
 
@@ -130,8 +130,8 @@
 }
 
 .button-icon {
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
+  background: var(--ink-750);
+  border: 1px solid var(--border);
   border-radius: 6px;
   width: 36px;
   height: 36px;
@@ -140,14 +140,16 @@
   justify-content: center;
   cursor: pointer;
   font-size: 1.25rem;
-  color: #6b7280;
+  color: var(--text-secondary);
   transition: all 0.2s ease;
 }
 
+/* Accent is a light violet, so text sitting on a solid accent fill must be
+   dark ink — white on --accent fails contrast. */
 .button-icon:hover:not(:disabled) {
-  background: #667eea;
-  color: white;
-  border-color: #667eea;
+  background: var(--accent);
+  color: var(--ink-950);
+  border-color: var(--accent);
 }
 
 .button-icon:disabled {
@@ -163,9 +165,9 @@
 .empty-state {
   text-align: center;
   padding: 3rem;
-  background: #f9fafb;
+  background: var(--ink-850);
   border-radius: 8px;
-  color: #6b7280;
+  color: var(--text-secondary);
 }
 
 /* Form Modal */
@@ -175,7 +177,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.72);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -184,7 +186,7 @@
 }
 
 .category-form-modal {
-  background: white;
+  background: var(--ink-800);
   border-radius: 12px;
   padding: 2rem;
   max-width: 500px;
@@ -196,7 +198,7 @@
 .category-form-modal h3 {
   margin: 0 0 1.5rem 0;
   font-size: 1.5rem;
-  color: #1f2937;
+  color: var(--text-primary);
 }
 
 .form-group {
@@ -207,16 +209,18 @@
   display: block;
   margin-bottom: 0.5rem;
   font-weight: 500;
-  color: #374151;
+  color: var(--text-secondary);
 }
 
 .form-group input[type="text"],
 .form-group input[type="color"] {
   width: 100%;
   padding: 0.75rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 1rem;
+  background: var(--ink-850);
+  color: var(--text-primary);
   transition: all 0.2s ease;
 }
 
@@ -227,24 +231,25 @@
 
 .form-group input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 .form-group input:disabled {
-  background: #f3f4f6;
+  background: var(--ink-900);
+  color: var(--text-faint);
   cursor: not-allowed;
 }
 
 .form-group input::placeholder {
-  color: rgba(140, 145, 150, 0.35);
+  color: var(--text-faint);
   font-style: italic;
 }
 
 .form-group small {
   display: block;
   margin-top: 0.25rem;
-  color: #6b7280;
+  color: var(--text-secondary);
   font-size: 0.875rem;
 }
 
@@ -254,14 +259,14 @@
   grid-template-columns: repeat(10, 1fr);
   gap: 0.5rem;
   padding: 1rem;
-  background: #f9fafb;
+  background: var(--ink-850);
   border-radius: 8px;
   max-height: 200px;
   overflow-y: auto;
 }
 
 .emoji-option {
-  background: white;
+  background: var(--ink-750);
   border: 2px solid transparent;
   border-radius: 6px;
   font-size: 1.5rem;
@@ -275,13 +280,13 @@
 }
 
 .emoji-option:hover {
-  background: #f3f4f6;
+  background: var(--ink-700);
   transform: scale(1.1);
 }
 
 .emoji-option.selected {
-  border-color: #667eea;
-  background: #eef2ff;
+  border-color: var(--accent);
+  background: var(--accent-dim);
 }
 
 /* Form Actions */
@@ -298,41 +303,45 @@
 /* Buttons */
 .button {
   padding: 0.75rem 1.5rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 1rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
-  background: white;
-  color: #374151;
+  background: var(--ink-750);
+  color: var(--text-primary);
 }
 
 .button:hover {
-  background: #f9fafb;
-  border-color: #9ca3af;
+  background: var(--ink-700);
+  border-color: var(--border-strong);
 }
 
 .button-primary {
-  background: #667eea;
-  color: white;
-  border-color: #667eea;
+  background: var(--accent);
+  color: var(--ink-950);
+  border-color: var(--accent);
 }
 
 .button-primary:hover {
-  background: #5568d3;
-  border-color: #5568d3;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
+/* Destructive: --danger is a light red, so the solid fill takes dark ink.
+   There is no --danger-hover token, so hover inverts to the translucent
+   --danger-dim tint — still unmistakably destructive, and contrast-safe. */
 .button-danger {
-  background: #ef4444;
-  color: white;
-  border-color: #ef4444;
+  background: var(--danger);
+  color: var(--ink-950);
+  border-color: var(--danger);
 }
 
 .button-danger:hover {
-  background: #dc2626;
-  border-color: #dc2626;
+  background: var(--danger-dim);
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 /* Responsive */

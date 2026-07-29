@@ -3,14 +3,14 @@
 }
 
 .sorter-info {
-  background: #f0f9ff;
-  border: 2px solid #0ea5e9;
+  background: var(--info-dim);
+  border: 2px solid var(--info);
   border-radius: 8px;
   padding: 1rem;
   margin-bottom: 1.5rem;
   text-align: center;
   font-weight: 500;
-  color: #0369a1;
+  color: var(--info);
 }
 
 .sorter-actions {
@@ -27,8 +27,8 @@
 }
 
 .item-card {
-  background: white;
-  border: 2px solid #e5e5e5;
+  background: var(--ink-850);
+  border: 2px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
   transition: all 0.3s ease;
@@ -37,20 +37,20 @@
 
 .item-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-md);
 }
 
 .group-badge {
   position: absolute;
   top: 10px;
   right: 10px;
-  background: rgba(102, 126, 234, 0.95);
-  color: white;
+  background: var(--accent);
+  color: var(--ink-950);
   padding: 0.4rem 0.8rem;
   border-radius: 20px;
   font-size: 0.85rem;
   font-weight: 600;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-sm);
   z-index: 10;
 }
 
@@ -59,7 +59,8 @@
   width: 100%;
   height: 250px;
   overflow: hidden;
-  background: #f0f0f0;
+  /* Photo well recessed below the card so letterboxed images read as a slot. */
+  background: var(--ink-900);
 }
 
 .item-image-wrap .lazy-skeleton {
@@ -89,26 +90,27 @@
   display: block;
   font-weight: 600;
   margin-bottom: 0.5rem;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .category-select {
   width: 100%;
   padding: 0.5rem;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 1rem;
-  background: white;
+  background: var(--ink-800);
+  color: var(--text-primary);
 }
 
 .category-select:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: var(--accent-line);
 }
 
 .sorter-footer {
   display: flex;
   justify-content: center;
   padding-top: 1rem;
-  border-top: 2px solid #f0f0f0;
+  border-top: 2px solid var(--border);
 }

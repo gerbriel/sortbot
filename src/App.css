@@ -6,7 +6,7 @@
 
 /* Header - Shopify Admin Style */
 .app-header {
-  background: white;
+  background: var(--ink-900);
   border-bottom: 1px solid var(--gray-200);
   padding: var(--space-4) var(--space-6);
   box-shadow: var(--shadow-sm);
@@ -27,7 +27,10 @@
 .app-header h1 {
   font-size: 1.25rem;
   font-weight: 600;
-  color: var(--gray-900);
+  /* --gray-900 was never defined (the legacy ramp stops at 700), so this
+     declaration was dropped by the parser and the title fell back to inherit.
+     Pinned to the real heading token. */
+  color: var(--text-primary);
   margin: 0;
 }
 
@@ -95,7 +98,7 @@
 
 /* Card/Section - Shopify Style */
 .step-section {
-  background: white;
+  background: var(--ink-850);
   border-radius: var(--radius-lg);
   border: 1px solid var(--gray-200);
   padding: var(--space-4);
@@ -157,12 +160,14 @@
   cursor: not-allowed;
 }
 .step1-folder-btn {
-  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-  color: #fff;
+  /* Was the old indigo brand gradient — now the violet accent ramp. Dark ink
+     for the label: white on a light violet fill fails AA. */
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-press) 100%);
+  color: var(--ink-950);
 }
 .step1-zip-btn {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  color: #fff;
+  background: linear-gradient(135deg, var(--gold) 0%, var(--warning) 100%);
+  color: var(--ink-950);
 }
 
 .step-description {
@@ -194,7 +199,9 @@
 /* Buttons - Shopify Polaris Style */
 .button {
   background: var(--shopify-green);
-  color: white;
+  /* Dark ink on the light semantic fills — white label on --success/--accent/
+     --danger sits around 2:1 and fails AA. */
+  color: var(--ink-950);
   border: none;
   padding: var(--space-3) var(--space-5);
   border-radius: var(--radius-md);
@@ -224,7 +231,7 @@
 }
 
 .button-secondary {
-  background: white;
+  background: var(--ink-850);
   color: var(--gray-700);
   border: 1px solid var(--gray-300);
 }
@@ -261,9 +268,11 @@
   gap: 0.3rem;
   font-size: 0.68rem;
   padding: 0.25rem 0.55rem;
-  background: var(--gray-100, #f3f4f6);
-  color: var(--gray-400, #9ca3af);
-  border: 1px solid var(--gray-300, #d1d5db);
+  /* Fallback literals kept in step with the repointed dark ramp, so the button
+     still reads correctly if the token layer ever fails to load. */
+  background: var(--gray-100, #141418);
+  color: var(--gray-400, #7a7a87);
+  border: 1px solid var(--gray-300, #2c2c36);
   border-radius: var(--radius-md, 6px);
   cursor: pointer;
   transition: all 0.15s;
@@ -274,18 +283,20 @@
 
 .button-debug-toggle:hover {
   opacity: 1;
-  background: var(--gray-200, #e5e7eb);
+  background: var(--gray-200, #1e1e25);
 }
 
 .button-debug-on {
-  background: #fef3c7;
-  color: #d97706;
-  border-color: #fbbf24;
+  background: var(--warning-dim);
+  color: var(--warning);
+  border-color: var(--warning);
   opacity: 1;
 }
 
+/* Gold is the only warmer/brighter translucent fill in the token set — it
+   gives the "on" state a visible hover step without a new colour. */
 .button-debug-on:hover {
-  background: #fde68a;
+  background: var(--gold-dim);
 }
 
 /* Batch Actions */
@@ -326,15 +337,15 @@
 }
 
 .save-message.success {
-  background: #d1f7c4;
-  color: #1f7a1f;
-  border: 1px solid #70c770;
+  background: var(--success-dim);
+  color: var(--success);
+  border: 1px solid var(--success);
 }
 
 .save-message.error {
-  background: #fef3f2;
-  color: #d82c0d;
-  border: 1px solid #f5b5a8;
+  background: var(--danger-dim);
+  color: var(--danger);
+  border: 1px solid var(--danger);
 }
 
 @keyframes slideDown {
@@ -359,8 +370,8 @@
   display: inline-block;
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -376,7 +387,7 @@
   gap: 0.5rem;
   margin-top: 1rem;
   padding-top: 1rem;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--border);
 }
 
 .grouper-actions-sidebar .button {
@@ -538,11 +549,11 @@
 
 /* Alert Messages */
 .error-message {
-  background: #ffebe9;
+  background: var(--danger-dim);
   color: var(--shopify-red);
   padding: var(--space-4);
   border-radius: var(--radius-md);
-  border: 1px solid #ffc9c3;
+  border: 1px solid var(--danger);
   margin-top: var(--space-4);
   font-size: 0.9375rem;
 }
@@ -552,15 +563,15 @@
   color: var(--shopify-green);
   padding: var(--space-4);
   border-radius: var(--radius-md);
-  border: 1px solid #c1f0e3;
+  border: 1px solid var(--success);
   margin-top: var(--space-4);
   font-size: 0.9375rem;
 }
 
 /* ── Navbar storage meter ──────────────────────────────────────────────────── */
 .storage-meter-nav {
-  background: #f8faff;
-  border-bottom: 1px solid #c7d2fe;
+  background: var(--ink-900);
+  border-bottom: 1px solid var(--border);
   padding: 0.35rem 1.5rem;
 }
 
@@ -575,20 +586,21 @@
 
 .storage-meter-nav-label {
   font-weight: 700;
-  color: #3730a3;
+  color: var(--accent);
   white-space: nowrap;
 }
 
 .storage-meter-nav-calculating {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--text-muted);
   font-style: italic;
 }
 
 .storage-meter-nav-bar-wrap {
   flex: 1;
   max-width: 180px;
-  background: #e0e7ff;
+  /* Unfilled track — a raised neutral so the JS-set fill colour stays legible. */
+  background: var(--ink-700);
   border-radius: 99px;
   height: 6px;
   overflow: hidden;
@@ -602,7 +614,7 @@
 }
 
 .storage-meter-nav-text {
-  color: #1e1b4b;
+  color: var(--text-primary);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -610,9 +622,9 @@
 .storage-meter-nav-warn {
   font-size: 0.72rem;
   font-weight: 600;
-  color: #991b1b;
-  background: #fee2e2;
-  border: 1px solid #fca5a5;
+  color: var(--danger);
+  background: var(--danger-dim);
+  border: 1px solid var(--danger);
   border-radius: 4px;
   padding: 1px 6px;
   white-space: nowrap;
@@ -634,13 +646,14 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  background: #1e293b;
-  color: #f8fafc;
+  /* Toast is a floating popover layer — one step above cards. */
+  background: var(--ink-800);
+  color: var(--text-primary);
   padding: 0.65rem 1rem;
   border-radius: 10px;
   font-size: 0.875rem;
   font-weight: 500;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  box-shadow: var(--shadow-lg);
   pointer-events: all;
   animation: toastIn 0.25s ease;
   max-width: 360px;
@@ -649,7 +662,7 @@
 .toast-dismiss {
   background: none;
   border: none;
-  color: #94a3b8;
+  color: var(--text-muted);
   cursor: pointer;
   font-size: 0.8rem;
   padding: 0;
@@ -659,7 +672,7 @@
 }
 
 .toast-dismiss:hover {
-  color: #f8fafc;
+  color: var(--text-primary);
 }
 
 @keyframes toastIn {

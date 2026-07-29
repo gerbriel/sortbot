@@ -1692,7 +1692,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     // Custom ghost: show count badge when moving multiple
     if (idsToMove.length > 1) {
       const ghost = document.createElement('div');
-      ghost.style.cssText = 'position:fixed;top:-999px;left:-999px;background:#667eea;color:#fff;padding:6px 12px;border-radius:20px;font:600 13px/1 sans-serif;pointer-events:none;';
+      // Built at runtime, so no stylesheet can reach it — tokens are referenced
+      // inline. var() resolves fine here: the ghost is appended to <body>.
+      ghost.style.cssText = 'position:fixed;top:-999px;left:-999px;background:var(--accent);color:var(--ink-950);padding:6px 12px;border-radius:20px;font:600 13px/1 sans-serif;pointer-events:none;';
       ghost.textContent = `Moving ${idsToMove.length} photos`;
       document.body.appendChild(ghost);
       e.dataTransfer.setDragImage(ghost, 60, 16);
@@ -2080,21 +2082,21 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       {cropPasteProgress && (
         <div style={{
           position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          zIndex: 99999, background: 'rgba(20,16,40,0.97)',
-          border: '1.5px solid #6366f1', borderRadius: 14,
+          zIndex: 99999, background: 'var(--ink-800)',
+          border: '1.5px solid var(--accent-line)', borderRadius: 14,
           padding: '14px 22px 12px', minWidth: 320, maxWidth: 420,
-          boxShadow: '0 8px 32px rgba(99,102,241,0.25)',
+          boxShadow: '0 8px 32px var(--accent-glow)',
           display: 'flex', flexDirection: 'column', gap: 8, fontFamily: 'inherit',
         }}>
-          <div style={{ color: '#e0e7ff', fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 7 }}>
+          <div style={{ color: 'var(--text-primary)', fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 7 }}>
             {cropPasteProgress.status === 'running' ? (
               <span style={{
                 display: 'inline-block', width: 13, height: 13,
-                border: '2px solid #6366f1', borderTopColor: '#a78bfa',
+                border: '2px solid var(--accent-line)', borderTopColor: 'var(--accent)',
                 borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0,
               }} />
             ) : (
-              <span style={{ color: '#4ade80', fontSize: 15 }}>✓</span>
+              <span style={{ color: 'var(--success)', fontSize: 15 }}>✓</span>
             )}
             {cropPasteProgress.status === 'running'
               ? `Applying crop to ${cropPasteProgress.total} image${cropPasteProgress.total > 1 ? 's' : ''}…`
@@ -2102,17 +2104,17 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 ? `Done — ${cropPasteProgress.failed.length} failed`
                 : 'Crop applied successfully!'}
           </div>
-          <div style={{ color: '#a5b4fc', fontSize: '0.78rem', marginTop: 1 }}>
+          <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', marginTop: 1 }}>
             {cropPasteProgress.status === 'running'
               ? `${cropPasteProgress.done} / ${cropPasteProgress.total} complete (${Math.round((cropPasteProgress.done / cropPasteProgress.total) * 100)}%)`
               : cropPasteProgress.failed.length > 0
                 ? `${cropPasteProgress.total - cropPasteProgress.failed.length} succeeded, ${cropPasteProgress.failed.length} failed`
                 : `All ${cropPasteProgress.total} image${cropPasteProgress.total > 1 ? 's' : ''} processed.`}
           </div>
-          <div style={{ background: 'rgba(99,102,241,0.18)', borderRadius: 8, height: 10, width: '100%', overflow: 'hidden', marginTop: 2 }}>
+          <div style={{ background: 'var(--accent-dim)', borderRadius: 8, height: 10, width: '100%', overflow: 'hidden', marginTop: 2 }}>
             <div style={{
               height: '100%',
-              background: 'linear-gradient(90deg,#6366f1 0%,#a78bfa 100%)',
+              background: 'linear-gradient(90deg,var(--accent-press) 0%,var(--accent) 100%)',
               borderRadius: 8,
               width: `${Math.round((cropPasteProgress.done / cropPasteProgress.total) * 100)}%`,
               transition: 'width 0.25s ease',
@@ -2125,13 +2127,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   const ids = [...cropPasteProgress.failed];
                   await runCropBatchPaste(ids, copiedCrop!, copiedRotation);
                 }}
-                style={{ flex: 1, background: '#f59e0b', color: '#111', border: 'none', borderRadius: 8, padding: '0.4rem 0.7rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem' }}
+                style={{ flex: 1, background: 'var(--warning)', color: 'var(--ink-950)', border: 'none', borderRadius: 8, padding: '0.4rem 0.7rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem' }}
               >
                 ↺ Retry {cropPasteProgress.failed.length} failed
               </button>
               <button
                 onClick={() => setCropPasteProgress(null)}
-                style={{ background: 'none', border: '1px solid #6366f1', color: '#a5b4fc', borderRadius: 8, padding: '0.4rem 0.7rem', cursor: 'pointer', fontSize: '0.78rem' }}
+                style={{ background: 'none', border: '1px solid var(--accent-line)', color: 'var(--accent)', borderRadius: 8, padding: '0.4rem 0.7rem', cursor: 'pointer', fontSize: '0.78rem' }}
               >
                 Dismiss
               </button>
@@ -2144,18 +2146,18 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       {cropUploadInProgress && !cropPasteProgress && (
         <div style={{
           position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          zIndex: 99999, background: 'rgba(20,16,40,0.97)',
-          border: '1.5px solid #6366f1', borderRadius: 14,
+          zIndex: 99999, background: 'var(--ink-800)',
+          border: '1.5px solid var(--accent-line)', borderRadius: 14,
           padding: '12px 22px', minWidth: 260,
-          boxShadow: '0 8px 32px rgba(99,102,241,0.25)',
+          boxShadow: '0 8px 32px var(--accent-glow)',
           display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'inherit',
         }}>
           <span style={{
             display: 'inline-block', width: 14, height: 14,
-            border: '2px solid #6366f1', borderTopColor: '#a78bfa',
+            border: '2px solid var(--accent-line)', borderTopColor: 'var(--accent)',
             borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0,
           }} />
-          <span style={{ color: '#e0e7ff', fontSize: '0.85rem', fontWeight: 600 }}>
+          <span style={{ color: 'var(--text-primary)', fontSize: '0.85rem', fontWeight: 600 }}>
             Uploading cropped image…
           </span>
         </div>
@@ -2170,14 +2172,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Image size={20} /> {singleItems.length} Single Items
           </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#6366f1' }}>
+          {/* Solid accent fill — .stats inherits near-white text, which is only
+              2.46:1 on --accent, so this chip carries its own dark label. */}
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--accent)', color: 'var(--ink-950)' }}>
             <Package size={20} /> {multiItemGroups.length + singleItems.length} Total Listings
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Image size={20} /> {groupedItems.length} Total Images
           </span>
           {selectedItems.size > 0 && (
-            <span style={{ background: '#10b981', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ background: 'var(--success)', color: 'var(--ink-950)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Check size={16} /> {selectedItems.size} Selected
             </span>
           )}
@@ -2186,7 +2190,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               onClick={handleUndo}
               title="Undo last grouping action (⌘Z)"
               style={{
-                background: '#6b7280', cursor: 'pointer', display: 'flex',
+                background: 'var(--ink-700)', cursor: 'pointer', display: 'flex',
                 alignItems: 'center', gap: '0.4rem', userSelect: 'none',
               }}
             >
@@ -2198,7 +2202,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               onClick={handleRedo}
               title="Redo last undone action (⌘Shift+Z)"
               style={{
-                background: '#6b7280', cursor: 'pointer', display: 'flex',
+                background: 'var(--ink-700)', cursor: 'pointer', display: 'flex',
                 alignItems: 'center', gap: '0.4rem', userSelect: 'none',
               }}
             >
