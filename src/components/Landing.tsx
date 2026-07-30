@@ -10,6 +10,36 @@ interface LandingProps {
   onLoginClick: () => void;
 }
 
+/* ── Photography ────────────────────────────────────────────────────────────
+ * Editorial vintage-clothing imagery, hosted on the Unsplash CDN (no bytes in
+ * the repo, no build step). The `w` param is sized to the largest slot the
+ * image can occupy, so nothing downloads a 5000px original.
+ *
+ * DO NOT hand-edit these URLs beyond the documented Unsplash query params
+ * (w / h / q / auto / fit) — every one below was verified 200 image/jpeg.
+ * Crops are steered with CSS object-position, not by rewriting the URL.
+ */
+const PHOTO = {
+  /** Hero band: a long rail of dark wool blazers on a real thrift floor. */
+  heroRail: 'https://images.unsplash.com/photo-1675537057530-312348c6caa2?w=2400&q=75&auto=format&fit=crop',
+  /** Tour 1: shop-window rail of cream and oatmeal knitwear. */
+  knitRail: 'https://images.unsplash.com/photo-1445205170230-053b83016050?w=1200&q=75&auto=format&fit=crop',
+  /** Tour 3: stack of folded knitwear in neutral tones. Replaced a denim macro
+   *  that was electric blue — it was the one image on the page fighting the
+   *  black/white/grey palette instead of sitting inside it. */
+  knitStack: 'https://images.unsplash.com/photo-1760013531865-89ff324f83a6?w=1200&q=75&auto=format&fit=crop',
+  /** Signup band: folded jeans on seamless white, the calmest of the set. */
+  denimStack: 'https://images.unsplash.com/photo-1637069585336-827b298fe84a?w=1200&q=75&auto=format&fit=crop',
+} as const;
+
+/** Footer attribution. Unsplash does not require it; we credit anyway. */
+const PHOTO_CREDITS: { name: string; href: string }[] = [
+  { name: 'Anthony Sebbo', href: 'https://unsplash.com/photos/a-rack-of-shirts-in-a-clothing-store-Q-o0ILOg3kk' },
+  { name: 'Hannah Morgan', href: 'https://unsplash.com/photos/assorted-color-hanging-clothes-lot-ycVFts5Ma4s' },
+  { name: 'Claire Abdo', href: 'https://unsplash.com/photos/a-stack-of-jeans-sitting-on-top-of-each-other-aWLTXw6kbDw' },
+  { name: 'Katya Azimova', href: 'https://unsplash.com/photos/stack-of-folded-cozy-sweaters-in-neutral-colors-05O5v_aBkO0' },
+];
+
 /** One row of the launch pricing ladder. Prices are preformatted strings so
  *  the $1,200 comma and the $0.00 per item cell render exactly as speced. */
 interface PricingTier {
@@ -45,7 +75,9 @@ const PRICING_TIERS: PricingTier[] = [
  *
  * The "screenshot" panels are stylized CSS mockups of the real dashboard.
  * To swap in real screenshots later: drop PNGs in public/screenshots/ and
- * replace the .shot-mock divs with <img> tags.
+ * replace the .shot-mock divs with <img> tags. They are KEPT alongside the
+ * photography — the mocks are the only thing on the page that shows what the
+ * product actually looks like, so a photo never replaces one, it sits above it.
  */
 export default function Landing({ onLoginClick }: LandingProps) {
   const [busy, setBusy] = useState(false);
@@ -94,19 +126,34 @@ export default function Landing({ onLoginClick }: LandingProps) {
         </span>
       </nav>
 
-      {/* ── Hero ── */}
+      {/* ── Hero ──
+          The copy stays ON the light canvas and the photograph sits BELOW it as
+          a full-bleed band, so no text is ever laid over the image and the black
+          nav remains the page's only inverted surface. */}
       <header className="ld-hero">
-        <h1>Photograph the rack in the morning.<br />Listings live by lunch.</h1>
-        <p>
-          Arcatya turns a camera roll of vintage clothing photos into listings that are
-          ready for Shopify. Group the angles, <em>speak</em> the details, export the file.
-          Built by resellers who list hundreds of pieces a week.
-        </p>
-        <div className="ld-hero-ctas">
-          <a href="#signup" className="ld-btn-primary">Request beta access</a>
-          <a href="#tour" className="ld-btn-ghost">See how it works</a>
+        <div className="ld-hero-inner">
+          <h1>Photograph the rack in the morning.<br />Listings live by lunch.</h1>
+          <p>
+            Arcatya turns a camera roll of vintage clothing photos into listings that are
+            ready for Shopify. Group the angles, <em>speak</em> the details, export the file.
+            Built by resellers who list hundreds of pieces a week.
+          </p>
+          <div className="ld-hero-ctas">
+            <a href="#signup" className="ld-btn-primary">Request beta access</a>
+            <a href="#tour" className="ld-btn-ghost">See how it works</a>
+          </div>
+          <p className="ld-hero-note">Free during the beta · no card required · founding shops lock in 30% off for life</p>
         </div>
-        <p className="ld-hero-note">Free during the beta · no card required · founding shops lock in 30% off for life</p>
+        <figure className="ld-photo ld-hero-media">
+          <img
+            src={PHOTO.heroRail}
+            alt="A rack of vintage blazers and coats hanging in a thrift shop, warm afternoon light"
+            width={2400}
+            height={900}
+            loading="eager"
+            fetchPriority="high"
+          />
+        </figure>
       </header>
 
       {/* ── Stats strip ── */}
@@ -136,26 +183,38 @@ export default function Landing({ onLoginClick }: LandingProps) {
               <li>Every photo action lives in one toolbar, not buried on each image</li>
             </ul>
           </div>
-          <div className="ld-shot" aria-hidden="true">
-            <div className="shot-bar"><i /><i /><i /><em>Arcatya · Group &amp; Categorize</em></div>
-            <div className="shot-mock shot-mock--grid">
-              <div className="mock-toolbar">
-                <b><Target size={11} /> Pick photos</b>
-                <b><RotateCcw size={11} /> Rotate 4</b>
-                <b><RotateCw size={11} /> Rotate 4</b>
-                <b className="mk-green"><Scissors size={11} /> Copy Crop</b>
-                <b className="mk-red"><Trash2 size={11} /> Delete</b>
-              </div>
-              <div className="mock-grid">
-                {['#e4e4e7', '#a1a1aa', '#d4d4d8', '#71717a', '#c8c8cf', '#8d8d95', '#eaeaed', '#5c5c66'].map((c, i) => (
-                  <div key={i} className={`mock-card${i === 1 || i === 4 ? ' mock-card--sel' : ''}`} style={{ background: c }}>
-                    <Shirt size={22} />
-                  </div>
-                ))}
-              </div>
-              <div className="mock-groupcard">
-                <span className="mock-grouplabel"><Check size={11} /> 4 images · tees</span>
-                <div className="mock-groupthumbs"><i style={{ background: '#e4e4e7' }} /><i style={{ background: '#a1a1aa' }} /><i style={{ background: '#d4d4d8' }} /><i style={{ background: '#71717a' }} /></div>
+          <div className="ld-tour-visual">
+            <figure className="ld-photo ld-tour-photo">
+              <img
+                src={PHOTO.knitRail}
+                alt="A window rack of cream and oatmeal knitwear in a second-hand clothing store"
+                width={1200}
+                height={675}
+                loading="lazy"
+                decoding="async"
+              />
+            </figure>
+            <div className="ld-shot" aria-hidden="true">
+              <div className="shot-bar"><i /><i /><i /><em>Arcatya · Group &amp; Categorize</em></div>
+              <div className="shot-mock shot-mock--grid">
+                <div className="mock-toolbar">
+                  <b><Target size={11} /> Pick photos</b>
+                  <b><RotateCcw size={11} /> Rotate 4</b>
+                  <b><RotateCw size={11} /> Rotate 4</b>
+                  <b className="mk-green"><Scissors size={11} /> Copy Crop</b>
+                  <b className="mk-red"><Trash2 size={11} /> Delete</b>
+                </div>
+                <div className="mock-grid">
+                  {['#e4e4e7', '#a1a1aa', '#d4d4d8', '#71717a', '#c8c8cf', '#8d8d95', '#eaeaed', '#5c5c66'].map((c, i) => (
+                    <div key={i} className={`mock-card${i === 1 || i === 4 ? ' mock-card--sel' : ''}`} style={{ background: c }}>
+                      <Shirt size={22} />
+                    </div>
+                  ))}
+                </div>
+                <div className="mock-groupcard">
+                  <span className="mock-grouplabel"><Check size={11} /> 4 images · tees</span>
+                  <div className="mock-groupthumbs"><i style={{ background: '#e4e4e7' }} /><i style={{ background: '#a1a1aa' }} /><i style={{ background: '#d4d4d8' }} /><i style={{ background: '#71717a' }} /></div>
+                </div>
               </div>
             </div>
           </div>
@@ -178,17 +237,19 @@ export default function Landing({ onLoginClick }: LandingProps) {
               <li>New teammate on the rack today? Your presets are the training manual</li>
             </ul>
           </div>
-          <div className="ld-shot" aria-hidden="true">
-            <div className="shot-bar"><i /><i /><i /><em>Arcatya · Category Presets</em></div>
-            <div className="shot-mock shot-mock--presets">
-              <div className="mock-preset-head"><Layers size={13} /> Tees preset</div>
-              <div className="mock-preset-rows">
-                <div><label>Ships from</label><b>Los Angeles, CA</b></div>
-                <div><label>Weight</label><b>300 g</b></div>
-                <div><label>SEO template</label><b>{'{size}'} Vintage {'{brand}'} {'{era}'} Tee</b></div>
-                <div><label>Measurements</label><b>Width · Length</b></div>
+          <div className="ld-tour-visual">
+            <div className="ld-shot" aria-hidden="true">
+              <div className="shot-bar"><i /><i /><i /><em>Arcatya · Category Presets</em></div>
+              <div className="shot-mock shot-mock--presets">
+                <div className="mock-preset-head"><Layers size={13} /> Tees preset</div>
+                <div className="mock-preset-rows">
+                  <div><label>Ships from</label><b>Los Angeles, CA</b></div>
+                  <div><label>Weight</label><b>300 g</b></div>
+                  <div><label>SEO template</label><b>{'{size}'} Vintage {'{brand}'} {'{era}'} Tee</b></div>
+                  <div><label>Measurements</label><b>Width · Length</b></div>
+                </div>
+                <div className="mock-preset-apply"><Check size={12} /> Applied to 30 products in one drop</div>
               </div>
-              <div className="mock-preset-apply"><Check size={12} /> Applied to 30 products in one drop</div>
             </div>
           </div>
         </div>
@@ -208,19 +269,31 @@ export default function Landing({ onLoginClick }: LandingProps) {
               <li>Measurements in every listing means fewer returns</li>
             </ul>
           </div>
-          <div className="ld-shot" aria-hidden="true">
-            <div className="shot-bar"><i /><i /><i /><em>Arcatya · Describe</em></div>
-            <div className="shot-mock shot-mock--voice">
-              <div className="mock-mic"><Mic size={13} /> Recording… <span className="mock-wave"><i /><i /><i /><i /><i /></span></div>
-              <div className="mock-transcript">“brand nike period size large fits like medium period width 18 period…”</div>
-              <div className="mock-fields">
-                <div><label>Brand</label><b>Nike</b></div>
-                <div><label>Size</label><b>L (fits like M)</b></div>
-                <div><label>Width</label><b>18"</b></div>
-                <div><label>Price</label><b>$45</b></div>
-              </div>
-              <div className="mock-desc">
-                <i style={{ width: '82%' }} /><i style={{ width: '95%' }} /><i style={{ width: '70%' }} /><i style={{ width: '88%' }} />
+          <div className="ld-tour-visual">
+            <figure className="ld-photo ld-tour-photo">
+              <img
+                src={PHOTO.knitStack}
+                alt="A stack of folded knitwear in cream, oatmeal and grey, resting on a wooden stool"
+                width={1200}
+                height={675}
+                loading="lazy"
+                decoding="async"
+              />
+            </figure>
+            <div className="ld-shot" aria-hidden="true">
+              <div className="shot-bar"><i /><i /><i /><em>Arcatya · Describe</em></div>
+              <div className="shot-mock shot-mock--voice">
+                <div className="mock-mic"><Mic size={13} /> Recording… <span className="mock-wave"><i /><i /><i /><i /><i /></span></div>
+                <div className="mock-transcript">“brand nike period size large fits like medium period width 18 period…”</div>
+                <div className="mock-fields">
+                  <div><label>Brand</label><b>Nike</b></div>
+                  <div><label>Size</label><b>L (fits like M)</b></div>
+                  <div><label>Width</label><b>18"</b></div>
+                  <div><label>Price</label><b>$45</b></div>
+                </div>
+                <div className="mock-desc">
+                  <i style={{ width: '82%' }} /><i style={{ width: '95%' }} /><i style={{ width: '70%' }} /><i style={{ width: '88%' }} />
+                </div>
               </div>
             </div>
           </div>
@@ -242,18 +315,20 @@ export default function Landing({ onLoginClick }: LandingProps) {
               <li>Works with your VA workflow: hand off the file and go</li>
             </ul>
           </div>
-          <div className="ld-shot" aria-hidden="true">
-            <div className="shot-bar"><i /><i /><i /><em>Arcatya · Export</em></div>
-            <div className="shot-mock shot-mock--csv">
-              <div className="mock-thead"><b>Handle</b><b>Title</b><b>Price</b><b>Category</b><b>Size</b></div>
-              {[
-                ['vintage nike 90s tee', 'XL Vintage Y2K Nike 90s Tee', '$45.00', 'T Shirts', 'XL'],
-                ['carhartt detroit jacket', 'Carhartt Detroit Jacket', '$120.00', 'Coats & Jackets', 'L'],
-                ['levis 501 straight', "Levi's 501 Straight Denim", '$68.00', 'Jeans', '32'],
-              ].map((row, i) => (
-                <div key={i} className="mock-trow">{row.map((cell, j) => <span key={j}>{cell}</span>)}</div>
-              ))}
-              <div className="mock-download"><Download size={13} /> Download CSV · 11 products · 42 photos</div>
+          <div className="ld-tour-visual">
+            <div className="ld-shot" aria-hidden="true">
+              <div className="shot-bar"><i /><i /><i /><em>Arcatya · Export</em></div>
+              <div className="shot-mock shot-mock--csv">
+                <div className="mock-thead"><b>Handle</b><b>Title</b><b>Price</b><b>Category</b><b>Size</b></div>
+                {[
+                  ['vintage nike 90s tee', 'XL Vintage Y2K Nike 90s Tee', '$45.00', 'T Shirts', 'XL'],
+                  ['carhartt detroit jacket', 'Carhartt Detroit Jacket', '$120.00', 'Coats & Jackets', 'L'],
+                  ['levis 501 straight', "Levi's 501 Straight Denim", '$68.00', 'Jeans', '32'],
+                ].map((row, i) => (
+                  <div key={i} className="mock-trow">{row.map((cell, j) => <span key={j}>{cell}</span>)}</div>
+                ))}
+                <div className="mock-download"><Download size={13} /> Download CSV · 11 products · 42 photos</div>
+              </div>
             </div>
           </div>
         </div>
@@ -332,6 +407,18 @@ export default function Landing({ onLoginClick }: LandingProps) {
 
       {/* ── Signup ── */}
       <section className="ld-signup" id="signup">
+        {/* Near-white studio background: it dissolves into the card, so the
+            form needs no scrim and the heading below it stays full contrast. */}
+        <figure className="ld-photo ld-signup-photo">
+          <img
+            src={PHOTO.denimStack}
+            alt="A stack of four folded pairs of denim jeans in graduated blue washes on a plain white surface"
+            width={1200}
+            height={500}
+            loading="lazy"
+            decoding="async"
+          />
+        </figure>
         <h2>Request beta access</h2>
         <p className="ld-signup-sub">
           We are onboarding a small number of shops and review every request by hand,
@@ -368,6 +455,16 @@ export default function Landing({ onLoginClick }: LandingProps) {
 
       <footer className="ld-footer">
         Arcatya · built for vintage resellers · beta access is reviewed and approved by hand
+        <p className="ld-credit">
+          Photography:{' '}
+          {PHOTO_CREDITS.map((c, i) => (
+            <span key={c.href}>
+              {i > 0 && ', '}
+              <a href={c.href} target="_blank" rel="noopener noreferrer">{c.name}</a>
+            </span>
+          ))}
+          {' '}via Unsplash
+        </p>
       </footer>
     </div>
   );

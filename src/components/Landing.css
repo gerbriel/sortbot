@@ -70,7 +70,12 @@
 
 .ld-nav-login:hover { background: rgba(255, 255, 255, 0.88); }
 
-/* ── Hero ── */
+/* ── Hero ──
+   The copy block sits on the light canvas and the photograph is a full-bleed
+   band UNDER it, so no headline is ever laid over an image and the nav stays
+   the only inverted surface on the page. The old bottom padding moved onto
+   .ld-hero-inner so the photo can reach the section's bottom edge, where the
+   stats cards (margin-top: -34px) then float over it. */
 .ld-hero {
   /* was a solid indigo→violet band; on a near-black canvas that reads as a
      light-mode leftover. Now a violet wash laid over the ink surface. */
@@ -79,8 +84,10 @@
     var(--ink-900);
   color: var(--text-primary);
   text-align: center;
-  padding: 72px 24px 80px;
+  padding: 72px 0 0;
 }
+
+.ld-hero-inner { padding: 0 24px 44px; }
 
 .ld-hero h1 { font-size: clamp(30px, 4.5vw, 50px); line-height: 1.15; font-weight: 800; }
 
@@ -116,6 +123,78 @@
 
 .ld-hero-note { margin-top: 22px !important; font-size: 13px !important; color: var(--text-muted) !important; }
 
+/* ── Photography ───────────────────────────────────────────────────────────
+   One frame for every marketing photo on the page.
+
+   The aspect-ratio always lives on the WRAPPER, never on the img, so the slot
+   is reserved at first paint and nothing reflows when the bytes land (the
+   width/height attributes in the markup are the belt to this suspenders, for
+   the case where this stylesheet has not parsed yet).
+
+   The --ink-850 fill is deliberate: a slow or failed load shows a neutral grey
+   block that reads as intentional negative space, never a broken-image glyph. */
+.ld-photo {
+  margin: 0;
+  /* width MUST be explicit. With only `aspect-ratio` + `max-height` set, a block
+     box has an indefinite width, so the browser derives the width FROM the
+     clamped height instead of filling its parent — the hero came out
+     460 x 24/9 = 1227px wide inside a 1440px band. Fixing the width makes the
+     ratio the thing that gives, which is what object-fit: cover is there for. */
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--ink-850);
+  position: relative;
+}
+
+.ld-photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* height:100% + the wrapper's aspect-ratio would otherwise let a very wide
+     viewport push the intrinsic width past the frame */
+  max-width: 100%;
+}
+
+/* Hero band — cinematic on desktop, squarer as the viewport narrows so the
+   rail still reads as a rail instead of a letterbox sliver. */
+.ld-hero-media {
+  aspect-ratio: 24 / 9;
+  max-height: 460px;
+}
+
+/* Bottom fade into the page canvas: the stats cards overlap this edge, and it
+   keeps the busiest part of the shot from fighting them. Literal white because
+   no token can carry an alpha ramp, and --ink-950 IS #ffffff. */
+.ld-hero-media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0) 62%, rgba(255, 255, 255, 0.9) 100%);
+}
+
+@media (max-width: 820px) {
+  .ld-hero-media { aspect-ratio: 16 / 9; }
+}
+
+@media (max-width: 560px) {
+  .ld-hero-media { aspect-ratio: 5 / 4; }
+  .ld-hero-inner { padding-bottom: 32px; }
+
+  /* PRE-EXISTING BUG (not from the imagery pass): logo + three nav actions do
+     not fit 390px, so the whole page gained a horizontal scrollbar. "Pricing"
+     is a jump-link to a section further down the same page, so dropping it here
+     costs nothing; the two actions that matter keep their targets. */
+  .ld-nav { padding: 12px 16px; gap: 10px; }
+  .ld-nav-actions { gap: 8px; }
+  .ld-nav-link { display: none; }
+  .ld-nav-cta { padding: 8px 10px; }
+  .ld-nav-login { padding: 8px 12px; }
+  .ld-logo { font-size: 17px; gap: 6px; }
+}
+
 /* ── Stats strip ── */
 .ld-stats {
   max-width: 1040px;
@@ -144,13 +223,27 @@
 .ld-tour { max-width: 1040px; margin: 64px auto 0; padding: 0 24px; display: flex; flex-direction: column; gap: 72px; }
 
 .ld-tour-row { display: grid; grid-template-columns: 1fr 1.1fr; gap: 40px; align-items: center; }
+/* The grid child is .ld-tour-visual (photo + mock), NOT .ld-shot — ordering
+   has to move the whole column or the photo detaches from its mock. */
 .ld-tour-row--flip .ld-tour-text { order: 2; }
-.ld-tour-row--flip .ld-shot { order: 1; }
+.ld-tour-row--flip .ld-tour-visual { order: 1; }
 
 @media (max-width: 820px) {
   .ld-tour-row { grid-template-columns: 1fr; }
   .ld-tour-row--flip .ld-tour-text { order: 1; }
-  .ld-tour-row--flip .ld-shot { order: 2; }
+  .ld-tour-row--flip .ld-tour-visual { order: 2; }
+}
+
+/* Photo above, product mock below: the garment as it exists on the rack, then
+   the same garment as the app sees it. The mock is never replaced — it is the
+   only thing on the page that shows the real interface. */
+.ld-tour-visual { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+.ld-tour-photo {
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-md);
 }
 
 .ld-tour-text h2 { font-size: 26px; color: var(--text-primary); margin-bottom: 12px; }
@@ -419,6 +512,19 @@
   box-shadow: var(--shadow-lg);
 }
 
+/* Full-bleed inside the signup card: the negative margins cancel the card's
+   32px/26px padding, and the radius is 1px tighter than the card's 16px so the
+   photo nests cleanly inside the border instead of poking through the corner. */
+.ld-signup-photo {
+  aspect-ratio: 12 / 5;
+  margin: -32px -26px 24px;
+  border-radius: 15px 15px 0 0;
+}
+
+@media (max-width: 560px) {
+  .ld-signup-photo { aspect-ratio: 16 / 9; }
+}
+
 .ld-signup h2 { font-size: 28px; text-align: center; }
 .landing .ld-signup-sub { text-align: center; color: var(--text-secondary); margin: 10px auto 24px; max-width: 520px; font-size: 15px; }
 
@@ -472,6 +578,12 @@
 
 /* ── Footer ── */
 .ld-footer { text-align: center; color: var(--text-muted); font-size: 13px; padding: 56px 16px 32px; }
+
+/* Photo attribution. Unsplash does not require it; crediting is just manners.
+   Prefixed with .landing to out-specify `.landing p { margin: 0 }`. */
+.landing .ld-credit { margin-top: 10px; font-size: 12px; color: var(--text-muted); }
+.landing .ld-credit a { color: var(--text-muted); text-decoration: underline; text-underline-offset: 2px; }
+.landing .ld-credit a:hover { color: var(--text-secondary); }
 
 .ld-tier-founder {
   display: inline-block;
