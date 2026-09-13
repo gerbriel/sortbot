@@ -3,6 +3,7 @@ import { Ban, FileText, CheckCircle2 } from 'lucide-react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
 import { smartSeoTruncate } from '../lib/textAIService';
+import { track } from '../lib/analytics';
 import {
   baseSize, stripUnresolvedTokens, buildCleanTitle, buildShopifyCsv,
   resolveCategoryPath, resolveProductType, canonicalTaxonomyPath,
@@ -259,6 +260,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    track('CSV Exported', { products: products.length });
   };
 
   // Expose downloadCSV so a parent can trigger it via ref

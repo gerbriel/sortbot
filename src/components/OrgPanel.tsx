@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Users, X, Pencil, Check, Copy, LogOut, Trash2, RotateCcw, Mail, Search, ChevronRight, ChevronDown, Building2, ShoppingBag, UserCog, History } from 'lucide-react';
+import { Users, X, Pencil, Check, Copy, LogOut, Trash2, RotateCcw, Mail, Search, ChevronRight, ChevronDown, Building2, ShoppingBag, UserCog, History, Contact, BarChart3 } from 'lucide-react';
 import {
   fetchOrgMembers, fetchOrgInvites, inviteToOrg, revokeInvite, removeMember,
   renameOrganization, updateMemberRole, fetchMemberActivity,
@@ -21,6 +21,9 @@ import {
   getOrgDescriptionSettings, saveOrgDescriptionSettings,
   DEFAULT_DESCRIPTION_SETTINGS, type DescriptionSettings,
 } from '../lib/descriptionSettings';
+import { syncCrmContacts } from '../lib/crmService';
+import AnalyticsPanel from './AnalyticsPanel';
+import CrmPanel from './CrmPanel';
 import './OrgPanel.css';
 
 interface OrgPanelProps {
@@ -58,8 +61,8 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // Dashboard tabs — Members (everyone), Settings (org admins),
-  // Beta program + Users (Founding admins)
-  const [panelTab, setPanelTab] = useState<'members' | 'settings' | 'beta' | 'users'>('members');
+  // Beta program + Users + Founder tools (Founding admins)
+  const [panelTab, setPanelTab] = useState<'members' | 'settings' | 'beta' | 'users' | 'tools'>('members');
   // Inline two-step confirm (no native confirm() — Do Not #12). Holds a key
   // like `remove:<userId>`, `leave`, or `beta-delete:<id>`; second click acts.
   const [confirmKey, setConfirmKey] = useState<string | null>(null);
@@ -95,6 +98,9 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   const [moveDraft, setMoveDraft] = useState<Record<string, string>>({});
   // Pending "add to workspace", keyed by user id.
   const [addDraft, setAddDraft] = useState<Record<string, { orgId: string; role: OrgRole }>>({});
+
+  // Founder tools (Founding admins): first-party Analytics + CRM sub-views.
+  const [toolsView, setToolsView] = useState<'analytics' | 'crm'>('analytics');
 
   // Click-to-expand member details (activity fetched lazily per member)
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
@@ -299,7 +305,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   };
 
   const handleCopyInvite = async (inv: OrgInviteRow) => {
-    const msg = `You're invited to the "${displayName}" workspace on Arcatya.\n\nSign in (or create an account) at ${appUrl} using this email address: ${inv.email}\n\nYou'll join the workspace automatically.`;
+    const msg = `You're invited to the "${displayName}" workspace on Acadia.\n\nSign in (or create an account) at ${appUrl} using this email address: ${inv.email}\n\nYou'll join the workspace automatically.`;
     try {
       await navigator.clipboard.writeText(msg);
       setNotice('Invite message copied. Paste it into an email or text to your teammate.');
@@ -350,6 +356,9 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
     else setNotice('Moved back to pending. If they already signed in and got a workspace, it stays — the gate only applies before the first sign-in.');
     await reload(true);
     setBusy(false);
+    // Keep the CRM stage current (lead → approved / lost). Best-effort; a
+    // missing crm.sql just returns 'unavailable'.
+    if (ok) void syncCrmContacts();
   };
 
   const handleBetaDelete = async (id: string) => {
@@ -363,7 +372,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   };
 
   const mailtoWelcome = (s: BetaSignupRow) => {
-    const subject = encodeURIComponent('Your Arcatya beta access is ready');
+    const subject = encodeURIComponent('Your Acadia beta access is ready');
     const body = encodeURIComponent(
       `Hi ${s.contact_name},\n\nYour beta request for ${s.org_name} is approved. Sign in at ${appUrl} with this email address and your workspace will be ready.\n\nWelcome aboard!`
     );
@@ -536,6 +545,11 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
           {isBetaAdmin && allUsers.length > 0 && (
             <button className={`org-tab ${panelTab === 'users' ? 'org-tab--on' : ''}`} onClick={() => setPanelTab('users')}>
               Users ({allUsers.length})
+            </button>
+          )}
+          {isBetaAdmin && (
+            <button className={`org-tab ${panelTab === 'tools' ? 'org-tab--on' : ''}`} onClick={() => setPanelTab('tools')}>
+              Founder tools
             </button>
           )}
         </div>
@@ -1071,6 +1085,25 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
               </>
             )}
           </>
+        )}
+
+        {/* ── Founder tools (Founding admins) — first-party Analytics + CRM.
+            Both live in this project's own tables (analytics_events, crm_*);
+            there is no third-party service behind either view. Messaging is
+            the floating Messages button (SupportWidget) so founders can answer
+            from any screen. */}
+        {panelTab === 'tools' && isBetaAdmin && (
+          <div className="ft-grid">
+            <div className="ft-subtabs">
+              <button className={`org-tab ${toolsView === 'analytics' ? 'org-tab--on' : ''}`} onClick={() => setToolsView('analytics')}>
+                <BarChart3 size={13} /> Analytics
+              </button>
+              <button className={`org-tab ${toolsView === 'crm' ? 'org-tab--on' : ''}`} onClick={() => setToolsView('crm')}>
+                <Contact size={13} /> CRM
+              </button>
+            </div>
+            {toolsView === 'analytics' ? <AnalyticsPanel /> : <CrmPanel />}
+          </div>
         )}
 
         {panelTab === 'members' && !loading && canLeave && (

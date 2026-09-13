@@ -1,6 +1,6 @@
-# Arcatya — Vintage Clothing Listing Workflow
+# Acadia — Vintage Clothing Listing Workflow
 
-Arcatya is a web app for vintage clothing resellers. Upload a batch of clothing photos, group the multi-angle shots of each item, assign categories, dictate a description per listing, and export a Shopify-ready product CSV — hundreds of listings per session.
+Acadia is a web app for vintage clothing resellers. Upload a batch of clothing photos, group the multi-angle shots of each item, assign categories, dictate a description per listing, and export a Shopify-ready product CSV — hundreds of listings per session.
 
 **Live app:** https://gerbriel.github.io/sortbot (deployed from `main` via GitHub Actions)
 
@@ -34,6 +34,7 @@ Arcatya is a web app for vintage clothing resellers. Upload a batch of clothing 
 - 🔌 **Per-org Shopify connections** — each workspace connects its own Shopify store (Workspace → Settings), so export dedup and per-store metaobject GIDs use that store. The Admin token is **write-only from the client** — only the Edge Function can read it.
 - 🎨 **Per-workspace description format** — customize the measurement prefix, washing/closing lines, hashtag rendering, disclaimers, seller name, and selling-paragraph tone from the workspace panel.
 - 📖 **Vocabulary dashboard (founding admins)** — CRUD the global knowledge base every workspace consumes: Step 3 quick-keyword chips, per-brand keywords (with a searchable built-in 917-brand library to copy from), and a brand/model database.
+- 🛠 **Founder tools (founding admins)** — built in, no third-party services: a **CRM** where every beta request and account becomes a contact automatically (stages, tags, follow-ups, notes), a cookieless **analytics** dashboard (pageviews, sessions, signup→export funnel, referrers, devices), and a **support inbox** for the in-app **Messages** button every signed-in user gets. Everything lives in this project's own Supabase tables. See [Founder tools](#founder-tools--analytics-crm-messaging-first-party).
 - 🏬 **Marketing landing + private beta** — logged-out visitors get a product tour, pricing, and a beta signup form. New sign-ups without a workspace or invite hit a waitlist gate; founding admins approve or deny requests, and approval auto-creates the workspace on next sign-in.
 - 🐛 **Debug logger** — a corner toggle enables categorized, colour-coded console logging plus DOM event tracing. Zero-cost when off; persisted across sessions.
 
@@ -128,6 +129,18 @@ supabase functions deploy generate-prose
 
 Then enable it per workspace in **Workspace → Settings**. It is **off by default**; without the secrets the function returns 503 and listings keep their rule-based text.
 
+### Founder tools — analytics, CRM, messaging (first-party)
+
+Acadia has its own analytics, CRM and support messaging. They are **features of this app, stored in this project's own Supabase tables** — no third-party service, no external API, no keys to configure. Each one is a migration in `supabase/migrations/` (run in the SQL Editor after `multi_org_tenancy.sql` + `beta_signups.sql`); the UI hides itself until its tables exist, so the code can ship first.
+
+| Feature | Migration | Who sees it |
+|---|---|---|
+| **Analytics** — cookieless pageviews + funnel events (Beta Signup → Account Created → Batch Created → CSV Exported), daily chart, referrers, devices | `analytics_events.sql` | Tracking runs for every visitor (Do Not Track honored, localhost skipped). Dashboard: Founding admins, **Workspace → Founder tools → Analytics** |
+| **CRM** — one contact per email with stage (lead → approved → active → churned / lost), tags, next follow-up, notes. Beta requests and accounts (with their workspace) become contacts automatically via `crm_sync_contacts()` | `crm.sql` | Founding admins, **Workspace → Founder tools → CRM** |
+| **Messaging** — the floating **Messages** button: users write to the founders, founders answer from the same button (it becomes the inbox), live via Supabase Realtime with polling fallback | `support_messaging.sql` | Every signed-in user (waitlisted users included); inbox for Founding admins |
+
+Privacy: analytics rows carry a random per-tab session id, the referrer host, a coarse device class and — for signed-in users — their own user/workspace id. No cookies, no IP, no user agent. `select public.analytics_prune(365);` trims history.
+
 ## Security
 
 - **The Supabase anon key is public by design.** It ships in the client bundle (as it does in every Supabase SPA). It is not a secret — for database rows, RLS policies rather than the key are the access boundary.
@@ -161,6 +174,7 @@ The core workflow tables (`products`, `product_images`, `categories`, `category_
 | Integrations | `org_shopify_connections` (client-write-only Admin token) |
 | Vocabulary | `descriptor_chips`, `brand_keywords`, `vocab_models` |
 | Beta program | `beta_signups` |
+| Founder tools | `analytics_events` (+ `analytics_summary()` / `analytics_prune()`), `crm_contacts`, `crm_notes` (+ `crm_sync_contacts()`), `support_threads`, `support_messages` |
 
 ## Browser Support
 

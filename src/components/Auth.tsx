@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { track } from '../lib/analytics';
 import './Auth.css';
 
 interface AuthProps {
@@ -34,6 +35,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthenticated }) => {
 
         if (data.user) {
           setMessage('Account created! Please check your email to verify your account.');
+          track('Account Created');
         }
       } else {
         // Sign in
@@ -74,7 +76,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthenticated }) => {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-header">
-          <h1>Arcatya</h1>
+          <h1>Acadia</h1>
           <p>From camera roll to Shopify-ready listings</p>
         </div>
 

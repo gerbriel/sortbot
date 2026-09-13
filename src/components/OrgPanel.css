@@ -633,3 +633,180 @@
   white-space: normal;
 }
 .fa-audit-list { max-height: 220px; overflow-y: auto; }
+
+/* ── Founder tools tab (Founding admins) ─────────────────────────────────────
+   First-party Analytics + CRM views (sub-tabs). Both are cards; both share the
+   toolbar/chip/table primitives below. Messaging lives in SupportWidget.css. */
+.ft-grid { display: flex; flex-direction: column; gap: 0.7rem; }
+.ft-subtabs { display: flex; gap: 0.35rem; }
+.ft-subtabs .org-tab { display: inline-flex; align-items: center; gap: 0.35rem; }
+
+.ft-card {
+  background: var(--ink-850);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 0.8rem 0.9rem;
+}
+
+.ft-toolbar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.ft-toolbar .beta-search { flex: 1; min-width: 160px; }
+.ft-chips { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+
+.ft-help { margin: 0 0 0.55rem; font-size: var(--fs-xs); color: var(--text-secondary); line-height: 1.45; }
+.ft-result { margin: 0 0 0.5rem; font-size: var(--fs-xs); color: var(--text-secondary); }
+.ft-error { margin: 0.4rem 0 0; font-size: var(--fs-xs); color: var(--danger); }
+.ft-setup { margin: 0; font-size: var(--fs-xs); color: var(--text-secondary); line-height: 1.55; }
+.ft-setup code { font-size: var(--fs-2xs); background: var(--ink-750); padding: 0.05rem 0.3rem; border-radius: 4px; word-break: break-all; }
+
+.ft-spin { animation: ft-spin 0.9s linear infinite; }
+@keyframes ft-spin { to { transform: rotate(360deg); } }
+
+/* ── Analytics ──────────────────────────────────────────────────────────────
+   KPI tiles, a plain-HTML column chart (thin bars, rounded caps square at the
+   baseline, hairline gridlines, sparse x labels, per-bar tooltip), tables. */
+.an-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem; margin-bottom: 0.9rem; }
+.an-tile {
+  display: flex; flex-direction: column; gap: 0.15rem;
+  padding: 0.6rem 0.7rem;
+  background: var(--ink-800);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.an-tile-label { font-size: var(--fs-xs); color: var(--text-secondary); }
+.an-tile-value { font-size: var(--fs-2xl); font-weight: 600; color: var(--text-primary); line-height: 1.1; }
+.an-tile-delta { font-size: var(--fs-2xs); color: var(--text-muted); }
+.an-tile-delta--up { color: var(--success); }
+.an-tile-delta--down { color: var(--danger); }
+
+.an-h { margin: 0.7rem 0 0.35rem; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+
+.an-chart { position: relative; padding-left: 2.4rem; }
+.an-plot { position: relative; height: 160px; }
+.an-gridline {
+  position: absolute; left: 0; right: 0;
+  border-top: 1px solid var(--border-subtle);   /* hairline, solid, recessive */
+  pointer-events: none;
+}
+.an-gridline span {
+  position: absolute; left: -2.4rem; top: -0.55em; width: 2rem;
+  text-align: right;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.an-bars { position: absolute; inset: 0; display: flex; align-items: flex-end; }
+.an-slot { flex: 1; height: 100%; display: flex; align-items: flex-end; justify-content: center; padding: 0 1px; outline: none; }
+.an-bar {
+  width: 100%; max-width: 24px;
+  background: var(--accent);
+  border-radius: 4px 4px 0 0;
+  transition: background 0.1s;
+}
+.an-slot--hover .an-bar, .an-slot:focus-visible .an-bar { background: var(--text-secondary); }
+.an-slot:focus-visible { box-shadow: inset 0 0 0 1px var(--border-control); border-radius: 4px; }
+.an-tooltip {
+  position: absolute; top: -0.5rem;
+  transform: translate(-50%, -100%);
+  display: flex; flex-direction: column; gap: 0.1rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--ink-800);
+  border: 1px solid var(--border-control);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+}
+.an-tooltip strong { color: var(--text-primary); }
+.an-tooltip span { color: var(--text-muted); font-size: var(--fs-2xs); }
+.an-xaxis { position: relative; height: 1.2rem; margin-top: 0.3rem; }
+.an-xlabel {
+  position: absolute; transform: translateX(-50%);
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.an-tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.4rem 1.2rem; }
+.an-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.an-table th {
+  text-align: left; font-weight: 600;
+  font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding: 0.2rem 0.4rem 0.2rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.an-table td { padding: 0.3rem 0.4rem 0.3rem 0; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary); }
+.an-table th.an-num, .an-table td.an-num, .an-num { text-align: right; font-variant-numeric: tabular-nums; }
+.an-meter { display: inline-block; vertical-align: middle; width: 70px; height: 6px; border-radius: 3px; background: var(--ink-750); overflow: hidden; margin-right: 0.4rem; }
+.an-meter span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.an-meter-label { font-size: var(--fs-xs); color: var(--text-secondary); }
+.an-views { margin-top: 0.5rem; }
+
+/* ── CRM ────────────────────────────────────────────────────────────────────── */
+.crm-add { flex-wrap: wrap; }
+.crm-add input { min-width: 140px; }
+.crm-chip-due { border-color: var(--warning); color: var(--warning); }
+
+.crm-row { flex-direction: column; align-items: stretch; gap: 0; }
+.crm-head { display: flex; align-items: center; gap: 0.5rem; width: 100%; }
+.crm-id { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; cursor: pointer; }
+.crm-name { font-weight: 600; color: var(--text-primary); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crm-meta { font-size: var(--fs-xs); color: var(--text-secondary); display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
+.crm-source, .crm-tag {
+  font-size: var(--fs-2xs);
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--ink-750);
+  color: var(--text-secondary);
+}
+.crm-tag { background: var(--accent-dim); border: 1px solid var(--accent-line); color: var(--accent); }
+.crm-stage { flex-shrink: 0; }
+.crm-date {
+  flex-shrink: 0;
+  padding: 0.25rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-control);
+  background: var(--ink-800);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-xs);
+}
+.crm-date--overdue { border-color: var(--danger); color: var(--danger); background: var(--danger-dim, var(--ink-800)); }
+.crm-date--today { border-color: var(--warning); color: var(--warning); }
+.crm-date--soon { color: var(--text-primary); }
+
+.crm-detail { padding: 0.5rem 0 0.2rem 1.7rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.crm-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.4rem; }
+.crm-fields label { display: flex; flex-direction: column; gap: 0.15rem; font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.crm-fields input {
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-control);
+  background: var(--ink-800);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.crm-stats { margin: 0; font-size: var(--fs-xs); color: var(--text-secondary); }
+
+.crm-notes { display: flex; flex-direction: column; gap: 0.35rem; }
+.crm-note { display: flex; flex-direction: column; gap: 0.1rem; padding: 0.4rem 0.55rem; background: var(--ink-800); border: 1px solid var(--border-subtle); border-radius: 8px; }
+.crm-note-body { font-size: var(--fs-sm); color: var(--text-primary); white-space: pre-wrap; word-break: break-word; }
+.crm-note-meta { display: flex; align-items: center; gap: 0.3rem; font-size: var(--fs-2xs); color: var(--text-muted); }
+.crm-note-add { display: flex; align-items: flex-end; gap: 0.4rem; }
+.crm-note-add textarea {
+  flex: 1; resize: vertical;
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-control);
+  background: var(--ink-800);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+.crm-danger { display: flex; justify-content: flex-end; }

@@ -38,6 +38,8 @@ import WorkspaceMenu from './components/WorkspaceMenu';
 import WaitlistGate from './components/WaitlistGate';
 import Landing from './components/Landing';
 import { getCategoryPresets } from './lib/categoryPresetsService';
+import { track, trackPageview, setAnalyticsContext, clearAnalyticsContext } from './lib/analytics';
+import SupportWidget from './components/SupportWidget';
 import { applyPresetDirectly } from './lib/applyPresetToGroup';
 import type { BrandCategory } from './lib/brandCategorySystem';
 import './App.css';
@@ -1128,7 +1130,7 @@ function App() {
   // hasn't been run, ensureOrganization returns legacy mode and currentOrg
   // stays null — no org UI renders and the app behaves exactly as before.
   useEffect(() => {
-    if (!user) { setCurrentOrg(null); setShowOrgPanel(false); setBetaWaitlist(null); return; }
+    if (!user) { setCurrentOrg(null); setShowOrgPanel(false); setBetaWaitlist(null); clearAnalyticsContext(); return; }
     let cancelled = false;
     ensureOrganization(user).then(res => {
       if (cancelled) return;
@@ -1141,21 +1143,34 @@ function App() {
         getOrgDescriptionSettings(res.org.id).then(s => {
           if (!cancelled) setOrgDescSettings(s);
         });
+        // First-party analytics: events from here on carry the user + workspace.
+        setAnalyticsContext({ userId: user.id, orgId: res.org.id });
       } else if (res.mode === 'waitlist') {
         setCurrentOrg(null);
         setBetaWaitlist(res.betaStatus);
+        setAnalyticsContext({ userId: user.id, orgId: null });
       } else {
         setCurrentOrg(null);
         setBetaWaitlist(null);
+        setAnalyticsContext({ userId: user.id, orgId: null });
       }
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  // First-party analytics: one pageview per top-level view change (landing →
+  // auth → waitlist → app; the app has no router). Must stay ABOVE the early
+  // returns below so the hook order never changes.
+  useEffect(() => {
+    if (loading) return;
+    trackPageview(!user ? (showLogin ? 'auth' : 'landing') : betaWaitlist ? 'waitlist' : 'app');
+  }, [loading, user, showLogin, betaWaitlist]);
+
   const handleSignOut = async () => {
     log.auth('handleSignOut');
     await supabase.auth.signOut();
+    clearAnalyticsContext();
     setUser(null);
     setCurrentOrg(null);
     setShowOrgPanel(false);
@@ -1335,12 +1350,16 @@ function App() {
   // Private beta gate — signed in but not approved: waitlist screen, no dashboard.
   if (betaWaitlist) {
     return (
-      <WaitlistGate
-        status={betaWaitlist}
-        email={user.email ?? ''}
-        onSignOut={handleSignOut}
-        onRequested={() => setBetaWaitlist('pending')}
-      />
+      <>
+        <WaitlistGate
+          status={betaWaitlist}
+          email={user.email ?? ''}
+          onSignOut={handleSignOut}
+          onRequested={() => setBetaWaitlist('pending')}
+        />
+        {/* Waitlisted users can still message the founders. */}
+        <SupportWidget userId={user.id} userEmail={user.email ?? null} orgName={null} isFounder={false} />
+      </>
     );
   }
 
@@ -1385,6 +1404,7 @@ function App() {
         workflow_state: { uploadedImages: [], groupedImages: [], sortedImages: [], processedItems: [] },
       });
       log.app(`handleImagesUploaded | pre-inserted batch row | batchId=${currentBatchIdRef.current}`);
+      track('Batch Created');
     }
     
     // If there are already grouped images, append to those too.
@@ -2545,7 +2565,7 @@ function App() {
               display: 'flex', alignItems: 'center', gap: '0.6rem',
               letterSpacing: '-0.045em', fontWeight: 650, marginBottom: '0.2rem',
             }}>
-              <ShoppingBag size={28} /> Arcatya
+              <ShoppingBag size={28} /> Acadia
             </h1>
             <p className="header-subtitle">Upload, sort, describe, and export to Shopify</p>
           </div>
@@ -3017,6 +3037,15 @@ function App() {
           currentBatchId={currentBatchId}
         />
       )}
+
+      {/* ── Support messaging (first-party): every signed-in user can message
+          the founders; Founding admins get the inbox of every conversation. */}
+      <SupportWidget
+        userId={user.id}
+        userEmail={user.email ?? null}
+        orgName={currentOrg?.name ?? null}
+        isFounder={currentOrg?.slug === 'founding' && (orgRole === 'owner' || orgRole === 'admin')}
+      />
 
       {/* ── Toast notifications ─────────────────────────────────────────────── */}
       {toasts.length > 0 && (

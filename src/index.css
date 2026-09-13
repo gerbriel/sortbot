@@ -7,7 +7,7 @@ html {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   ARCATYA — light design system (Uber-inspired)
+   ACADIA — light design system (Uber-inspired)
    ══════════════════════════════════════════════════════════════════════════
 
    White canvas, light-grey sections, BLACK nav and black primary actions.
@@ -15,7 +15,7 @@ html {
 
    TWO LAYERS LIVE HERE:
 
-   1. Arcatya tokens (--ink-*, --text-*, --accent-*, --border-*, --fs-*, --ease-*).
+   1. Acadia tokens (--ink-*, --text-*, --accent-*, --border-*, --fs-*, --ease-*).
       Use these in all new work.
 
    2. Legacy --gray-* / --shopify-* names, kept and repointed. NOTE: the gray

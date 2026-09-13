@@ -1,4 +1,33 @@
-# Changelog — Arcatya
+# Changelog — Acadia
+
+## 2026-09-13 — Founder tools built in: analytics, CRM, messaging (first-party)
+
+The app is 100% self-reliant for these: no third-party service, no external API. Everything is a table in this project's own Supabase database plus React UI. (An earlier same-day pass had integrated Twenty CRM, Plausible and Chatwoot — first hosted, then self-hosted; it was replaced outright by the native features below and no trace of it ships.)
+
+### Analytics (`supabase/migrations/analytics_events.sql`, `src/lib/analytics.ts`, `AnalyticsPanel.tsx`)
+- Cookieless first-party tracking: one `analytics_events` row per pageview / funnel event, written straight from the browser (anon landing visitors included; anon rows can never carry an identity, signed-in rows only their own user id — RLS). Random per-tab session id, referrer **host only**, coarse device class; no cookies, IP or user agent. Honors Do Not Track; skips localhost (`localStorage sortbot_analytics_force=1` to override).
+- Events: `pageview` on every top-level view change (landing / auth / waitlist / app), plus Beta Signup, Account Created, Batch Created, CSV Exported.
+- `analytics_summary(days)` RPC (Founding admins) returns totals + previous-period totals, a zero-filled daily series, top events, referrers, devices and views in one round-trip; `analytics_prune(days)` trims history.
+- Dashboard in **Workspace → Founder tools → Analytics**: 7/30/90-day range, KPI tiles with deltas, a daily pageview column chart (thin bars, rounded caps, hairline grid, per-bar tooltip, keyboard-focusable), the four-step funnel with conversion rates, and events / referrers / devices tables — every charted value is also in a table.
+
+### CRM (`supabase/migrations/crm.sql`, `src/lib/crmService.ts`, `CrmPanel.tsx`)
+- `crm_contacts` (one per email: stage lead → approved → active → churned / lost, tags, next follow-up, links to the auth user + workspace, last seen) and `crm_notes` (timeline). Founding admins only (every policy is `is_beta_admin()`); note authorship is pinned to the caller.
+- `crm_sync_contacts()` mirrors beta requests and accounts (with their oldest non-founding workspace) into contacts — new orgs and users show up by themselves; runs on panel open, on the Sync button, and after a beta approve/deny. It never overwrites hand edits: names/companies only fill blanks, stage only moves forward from lead/approved, tags/follow-ups/notes are untouched. The Founding Workspace's own members are skipped.
+- Panel: stage chips with counts, a "Due" chip for overdue/today follow-ups, search across email/name/company/tags, inline stage select + follow-up date (overdue/today/soon styling), expandable rows with editable name/company/tags, notes with add/delete, manual "Add contact", two-step delete.
+
+### Messaging (`supabase/migrations/support_messaging.sql`, `src/lib/supportService.ts`, `SupportWidget.tsx`)
+- `support_threads` (one per conversation, denormalized email/workspace for the inbox, trigger-maintained last-message/preview/read stamps, open/closed) and `support_messages`. RLS: a user sees only their own threads and may only post as `user` in them; Founding admins see everything and post as `founder`. Both tables are added to the Realtime publication (replica identity full) so updates are live; the widget also polls every 45 s as a fallback.
+- Floating **Messages** button (bottom-right) for every signed-in user — waitlisted users at the gate included — with an unread badge, conversation list, new-conversation composer, Enter-to-send. For Founding admins the same button is the **Inbox**: open/closed filter, unread-first ordering, reply, close/reopen.
+
+### Plumbing
+- New keys: `sortbot_analytics_session` (sessionStorage) and `sortbot_analytics_force` (localStorage) — listed in CLAUDE.md §1. No env vars, no Edge Function, no new dependency.
+- 16 new tests: tracker privacy contract (session id, DNT/localhost gating, referrer host, row shape), dashboard math (funnel, compact numbers, deltas, tick ceilings), CRM list logic (tags, follow-up urgency, filter/sort/counts), messaging unread/ordering/timestamps.
+
+## 2026-09-13 — Rename to Acadia
+
+### Brand
+- **Arcatya → Acadia** across every user-visible surface: landing page, auth, waitlist gate, app header wordmark, invite and beta-approval emails, browser title and meta description, the beta.html redirect page, the index.css header comment, README, ANALYSIS, CLAUDE.md
+- No structural identifier changed — the `/sortbot/` base path and every `sortbot_*` localStorage key still read `sortbot` (see CLAUDE.md §1)
 
 ## 2026-07-29 — Rebrand to Arcatya + dark theme
 
