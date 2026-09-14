@@ -78,7 +78,7 @@ light to read as text on white. Use the `--*-dim` tints as banner fills.
 `--ink-*` tokens and everything inside them sets a literal light foreground. That
 includes `.ld-logo`, `.ld-nav-link`, `.ld-nav-cta`, `.ld-nav-login` (the app's only
 white button) and the `.app-header` overrides. If you add anything to a nav, give it
-an explicit light colour or it will inherit page-black and vanish. The inverse holds for a light POPOVER rendered inside the nav (the account menu, `WorkspaceMenu.css`): it must opt back OUT with higher-specificity rules (`.app-header .wsmenu-menu …`) or its buttons/icons inherit the forced white and vanish on the white surface; and `.button-secondary` hover/focus inside the nav is pinned in App.css because the page-level hover rule (0,3,0) outranks the header rule (Sept 2026 fix).
+an explicit light colour or it will inherit page-black and vanish. The account menu popover (`WorkspaceMenu.tsx`) is PORTALED to `<body>` (Sept 2026) precisely so it never inherits the nav's forced light foreground — if you ever render a light surface INSIDE the nav again it must opt back out with higher-specificity rules or its buttons/icons vanish white-on-white; and `.button-secondary` hover/focus inside the nav is pinned in App.css because the page-level hover rule (0,3,0) outranks the header rule (Sept 2026 fix).
 
 Because everything else resolves through tokens, **swapping the whole palette is a
 ~45-line edit in `:root`.** This app has already shipped violet-on-dark, bone-on-dark
@@ -318,7 +318,22 @@ sortingapp/
 │   │   ├── Auth.tsx / .css        # Email/password sign-in + sign-up. MIN_PASSWORD_LENGTH = 10, enforced on sign-up only (existing short passwords can still sign in).
 │   │   ├── Landing.tsx / .css     # Marketing landing rendered at the main URL for logged-out visitors + beta signup form. Landing.css stays px-based (§1). Photos from images.unsplash.com (the one non-Supabase img-src origin).
 │   │   ├── WaitlistGate.tsx / .css  # Full-screen gate for a signed-in user with no membership and no invite.
-│   │   ├── WorkspaceMenu.tsx / .css # Header account dropdown: workspace name, role, email, links, sign-out.
+│   │   ├── WorkspaceMenu.tsx      # THE app's only navigation surface. Header trigger (workspace name +
+│   │   │                          # unread badge) + a portaled role="menu" popover: identity, "Back to
+│   │   │                          # workflow", Work/Setup/Founder groups, Sign out. Built from App's ONE
+│   │   │                          # `navItems` list. Controlled `open` so MobileNav's More tab opens the
+│   │   │                          # SAME menu. Portaled to <body> (the header is a z-index:100 stacking
+│   │   │                          # context, so an in-place sheet would paint under the tab bar) and
+│   │   │                          # anchored via --wsmenu-top/--wsmenu-right custom props (inline
+│   │   │                          # top/right would outrank the ≤640px sheet rules). Carries
+│   │   │                          # `data-tv-modal` so Escape closes the menu without ToolView also
+│   │   │                          # navigating back. Roving focus, Escape/Tab/outside-press dismissal.
+│   │   ├── WorkspaceMenu.css      # Trigger (inverted nav) + popover/bottom-sheet (tokens; portaled, so
+│   │   │                          # no .app-header opt-outs needed). 36px rows, 44px at pointer:coarse.
+│   │   ├── MobileNav.tsx          # ≤640px bottom tab bar ONLY (Workflow/Library/Messages/More). More
+│   │   │                          # opens WorkspaceMenu. NavRail (tablet) and the More sheet were
+│   │   │                          # deleted — they re-rendered a list the menu now owns.
+│   │   ├── MobileNav.css
 │   │   ├── ImageUpload.tsx / .css  # Step 1. Drag-drop, folder, ZIP (lazy `loadJSZip`), EXIF (lazy `loadExifr`), canvas compression, TUS upload with a TUS_TIMEOUT_MS = 5 min watchdog that falls through to the plain PUT. `forwardRef` → `ImageUploadHandle` (`triggerFolder()`, `triggerZip()`, `isBusy`). Writes product_images via `buildProductImageRow`. The compressed-paths registry is an in-memory Set flushed once (`flushCompressedPaths`) instead of a per-image localStorage write. Cancel deletes the rows/files it already created (`onUploadCancelled`).
 │   │   ├── ImageGrouper.tsx / .css  # Step 2 left panel, ~3226 lines. Multi-select, rubber-band, group/ungroup, delete, sidebar sort/filter, pick mode, auto-group, photo toolbar, keyboard shortcuts. Module-scope Intl formatters + a timestamp-keyed label cache; the rubber-band rect lives in a ref and is flushed to state at most once per rAF; the actions bundle is useMemo'd on the selection SIZE and delegates through a per-render ref. Exported as `memo(ImageGrouper)`.
 │   │   ├── CategoryZones.tsx / .css # Step 2 right panel. Drag/click groups onto categories; resolves presets through `lib/presetResolver.ts` with `allowDefaultPrefix: true`. Exported as `memo(CategoryZones)`.
@@ -343,7 +358,6 @@ sortingapp/
 │   │   ├── LabelPrintView.tsx / .css  # 'labels' view (§6), every member. Print sheet for the OPEN batch: one row per listing (rows come from `buildGroupArray`, the same builder Step 3 navigates with), three real label stocks from `lib/labelTemplates.ts`, a Code 128 SVG per label and the SKU underneath. READ-ONLY on the workflow store — its one mutation is `ensureSkus`, which writes `products.sku` and touches no in-memory item. Stores DEselection (so "print everything" is the empty set and late-arriving listings are never dropped); the print stylesheet hides everything but the sheet and drives `@page` from the same template.
 │   │   ├── BarcodeScannerView.tsx / .css  # 'scan' view (§6), every member. Three inputs: the phone camera via the browser's own `BarcodeDetector` (`code_128`, sampled every 160 ms — NO WASM polyfill; where the API is missing the view says so), a USB/Bluetooth scanner (it is a keyboard — it types the code and presses Enter), and a typed SKU. Every exit path goes through `stopCamera`, which stops every TRACK (pausing the <video> leaves the camera light on). A hit renders the listing card plus "Open in Step 3" when App supplies `onOpenListing`.
 │   │   ├── ToolView.tsx / .css    # THE full-page shell every header tool opens into (§6). Title row (icon + <h1> + one-line description + optional actions), "Back to workflow" first in tab order, Escape-to-back, optional `tabs` slot, `wide` (Library/Board), `escapeToBack` (Board). Focuses the <h1> and scrolls to top on open. ToolView.css owns THE spacing scale for all tool views — page padding `3rem clamp(2rem,4vw,6rem) 6rem`, 3rem section gaps, 2rem card padding, 4rem controls, 4.5rem table rows, 1400px measure — plus `--tv-sticky-top`, the header-clearance var the sticky editor columns and tab rails share. Per-tool CSS scopes its page overrides under `.tool-view` rather than rewriting 30 KB files. Tested in ToolView.test.tsx (8 tests).
-│   │   ├── MobileNav.tsx / .css   # The <= 1024px navigation (§1, §6). BOTH surfaces live in this one file — `NavRail` (the 641-1024px tablet row, rendered INSIDE <header>) and `MobileTabBar` (the <= 640px fixed bottom tabs Workflow / Library / Messages / More, plus the More bottom sheet, rendered OUTSIDE <header> because .app-header is a stacking context that would trap a fixed child). Exports the `NavTool` type. The sheet is the shared `ui/Dialog`, so focus trap / Escape / scrim dismissal come for free. There is no NavRail.tsx and no MobileTabBar.tsx. MobileNav.css is the one mobile-first stylesheet in the tree (§1).
 │   │   ├── responsiveGrid.ts / .test.ts  # PURE column-clamp helpers for the Step 2 grid (9 tests): PHONE_BREAKPOINT_PX = 640, gridColumnBounds(isPhone) (1-3 phone / 2-12 desktop), clampGridColumns, clampGroupGridColumns (group cards cap at 2). Exists because the grid applies its column count as an INLINE style that no media query can reach (§1); the stored slider preference is clamped for display, never mutated.
 │   │   ├── LazyImg.tsx            # Shared image component: skeleton shimmer, 3× retry with exponential backoff + `?t=` cache-bust (works around ERR_QUIC_PROTOCOL_ERROR). Used by Step 2/3/4 AND Library.
 │   │   ├── LoadingProgress.tsx / .css  # Upload progress bar shown in Step 2.
@@ -482,58 +496,16 @@ export type ActiveView =
 | Scan | `activeView === 'scan'` — **any signed-in user, every workspace** | `<ToolView>` → `<BarcodeScannerView />` | `React.lazy` (own chunk, ~7.6 kB) |
 | Messages widget | any signed-in user (waitlist included) | `<SupportWidget />` floating button — visible in EVERY view, including the Messages page | eager |
 
-### Navigation by breakpoint (Sept 2026)
+### Navigation (Sept 2026)
 
-The view list above is the same at every width; only the surface that *reaches* it
-changes. **`navTools` in `App.tsx` is the single declaration** of a tool's id, label,
-icon, tooltip and role gate — the desktop header maps over it (it replaced nine
-hand-written buttons), and `mobileTools` (the same list minus Messages, plus Workspace)
-feeds the rail, the tab bar and the sheet. Four hand-maintained copies of a role-gated
-list is how gates drift apart; add a tool to `navTools` and it appears everywhere.
+Navigation is ONE surface at every width: the header's workspace trigger opens
+<WorkspaceMenu> (a dropdown > 640px, a bottom sheet ≤ 640px), built from the
+single `navItems` list in App.tsx — each entry carries its group, icon, title
+and role gate. Below 640px a bottom tab bar adds Workflow / Library / Messages,
+and its More tab opens that same menu. The header itself is a wordmark plus that
+one trigger at every width.
 
-| Width | Header keeps | Tools live in |
-|---|---|---|
-| `> 1024px` | wordmark + subtitle, **all tools**, Messages, account menu | the header row — **unchanged** |
-| `641-1024px` | wordmark, Messages (badge), account menu | `<NavRail>` — a scroll-snapped second row on the same black bar, rendered INSIDE `<header>` |
-| `<= 640px` | wordmark, Messages (badge), account menu | `<MobileTabBar>` — fixed bottom tabs **Workflow / Library / Messages / More**, everything else behind More in a bottom sheet |
-
-- **CSS decides which nav shows, not `matchMedia`.** Both subtrees are in the DOM and the
-  inactive one is `display: none`, which also drops it from the accessibility tree — no
-  tool is announced twice, there is no flash of the wrong nav on first paint, and there is
-  no resize listener to keep in sync. One rule hides the desktop buttons:
-  `.app-header .nav-tool-btn:not(.nav-msg-btn) { display: none }`. `nav-msg-btn` is the
-  exemption handle on `MessagesNavButton` so the unread badge survives at every width.
-- **Rail and tab bar are two components for a stacking reason, not a styling one.**
-  `.app-header` is `position: sticky; z-index: 100`, i.e. a stacking context, so a
-  `position: fixed` child is trapped at that level. The rail belongs inside the header
-  (it is the header's second row, same black surface); the tab bar and its sheet must
-  render outside it or the More sheet paints under the support widget (z 5000) and the
-  toasts (z 9000).
-- **Workflow / Library / Messages are hard-coded tabs**; the sheet renders
-  `mobileTools` minus those (`TAB_IDS`), so nothing appears twice. The Messages tab hides
-  itself when `supportStore` reports the messaging tables absent, exactly like the header
-  button and the floating widget.
-- **`aria-current="page"` marks the active item on all four surfaces**, and **More reports
-  itself active** whenever the showing view lives behind it — the bar says where you are
-  instead of going blank on, say, CRM.
-- **The mobile surfaces navigate, they never toggle.** `navigateToView` only ever sets
-  `activeView`; tapping the tab you are on is inert. That is deliberately different from a
-  header button, which toggles back to the workflow (the sheet's trigger is unmounted by
-  the time the view opens, so there would be nothing to hand focus back to anyway).
-
-Things that bite if forgotten:
-
-- **The Messages header button is its own component** (`MessagesNavButton`, module scope in App.tsx), not an inline branch, because mounting `useSupportThreads` is what starts the Realtime channel and the poll. Putting that hook in App's body would query `support_threads` from the logged-out landing page and leave `available` false for up to 45 s after sign-in. It hides itself when messaging is unavailable (same rule as the widget) and carries the `.nav-badge` unread count — which sets its own literal `#ffffff` on `var(--danger)` in App.css, because the nav is the app's one inverted surface (§1). **The waitlist branch has no header at all** (`WaitlistGate` + `SupportWidget` only), so waitlisted users still reach messaging through the floating widget exactly as before.
-- **Labels and Scan are NOT founder-gated.** They are declared in `navTools` beside Library — all three act on the open batch — so they join the desktop header row, the tablet rail and, because `TAB_IDS` is only `{'library','messages'}`, the phone **More sheet** with no extra wiring. Both render `&& user` only. Labels takes `wide` (the sheet preview is a letter page, and the 1400px reading measure would crop it).
-- **A scanned or printed label jumps back into Step 3 through `openListingInStep3` → PDG's `focusProductId` prop.** A label identifies a `products` ROW; Step 3 navigates by GROUP INDEX, so App sets `focusListingId` and PDG maps the id through `buildGroupArray` (matching ANY photo in the group — `LabelPrintView` hands back the leader, the scanner hands back whichever row owns the SKU) and sets `currentGroupIndex`. **The id is cleared in the same `requestAnimationFrame` that scrolls**, which is load-bearing: PDG focuses on a CHANGE of the prop, so a sticky id would make a second scan of the same label — after navigating away with Next — do nothing. And if the scanned product is not in the OPEN batch, it navigates nowhere and raises a toast saying to open that batch from the Library first, rather than parking the user on an unrelated listing that looks like a successful jump. The membership test reads `processedItemsRef.current`, never a render-captured array (§14 #14). `id="step-3"` on the Step 3 section is the scroll target.
-- **Finance is founding-admin only**, gated exactly like Analytics/CRM/Vocabulary (`currentOrg?.slug === 'founding'` + `orgRole` owner/admin). It is safe to expose before `finance.sql` runs: every read reports `'unavailable'` and the view shows the setup step.
-- **Errors is a sub-tab of Analytics**, not a view of its own and no longer a tab inside OrgPanel. The "Founder tools" tab was removed from `OrgPanel`, which now owns only Members / Settings / Beta program / Users. `AnalyticsPanel`, `CrmPanel` and `ErrorsPanel` therefore `import './OrgPanel.css'` themselves — they use its `org-*` / `ft-*` / `an-*` classes and no longer ride along in OrgPanel's chunk.
-- **`setShowLibrary` is the one surviving flag-shaped setter** (`viewSetter('library')`), because `handleOpenBatch` and the close callback still speak in booleans. The other five tools open from the header via `toggleView(view)` and close through ToolView's Back.
-- **Clicking the header button of the view you are already in returns to the workflow.** The active button carries `aria-current="page"` + `.nav-tool-btn--on` — a solid white chip, because the nav is the app's one inverted surface and the page's black fill cannot read as "active" there.
-- **The header wordmark switches between `<h1>` and `<p>`** (`const Wordmark = activeView === 'workflow' ? 'h1' : 'p'`) so every view has exactly one `<h1>`; inside a tool view that `<h1>` is ToolView's title. `.app-header .app-wordmark` sets its own white colour, per §1's nav rule.
-- **Focus**: opening a view moves focus to its `<h1>` and scrolls to top; Back restores focus to the header button that opened it (`viewTriggerRef`). Escape goes back, except inside an editable field or while any `[data-tv-modal]` is open (the preset editor, `FieldModal`, Library's rename prompt).
-
-The `view` string the analytics pageview and `setErrorContext` record (`landing` / `auth` / `waitlist` / `app`) is computed in one place, in an effect that sits ABOVE the early returns so hook order stays stable.
+- **Labels and Scan are NOT founder-gated** — declared in `navItems` beside Library; they act on the open batch and render `&& user` only. Labels takes `wide`.
 
 ---
 
@@ -1658,6 +1630,8 @@ Two migrations are written and NOT run (§16), and one one-off data repair is ow
 - **Grouping, persistence and the double-click gesture** (`12-grouping-persistence.md`, reports 16, 29, 30 + the autosave audit) — "images upside down at the dictation step" was a rotation baked into a stored file and then applied a second time by CSS, reaching the item because the startup merge preferred the DB row's photo list; both restore paths are now `'own-image-wins'`. "Grouped photos don't stay grouped after a refresh" was **four** mechanisms compounding: the lagging `products.product_group` mirror beating `workflow_state`, the auto-save mutex dropping a collided fire instead of re-arming, the backup-vs-DB arbitration keying on `last_opened_at` (which dates the round trip, not the payload) and then REPLACING rather than merging, and a pending group-upsert timer that could delete the *next* batch's product rows. The audit also ended the silence: `autoSaveWorkflowBatchDetailed` now reports which of five outcomes happened, and `rls-blocked` — 0 rows updated, row still present, id handed back — is an error rather than a success. Two new pure modules (`restoreSource.ts`, `selectionGesture.ts`) with 35 tests between them, and both fixes were verified by reverting the option and watching the reproductions fail.
 - **Per-platform pricing, barcodes and listing labels** (`12-pricing-barcodes-labels.md`, features 21 and 25) — a listing keeps ONE price and a marketplace is a function applied at export time, stored in the existing `description_settings` JSONB so there is no migration and no change until a workspace configures one; `$0` never adjusts (or choosing a platform would defeat the export price gate) and no rule can produce a non-positive price. **Code 128 is first-party** — ~150 lines of ISO/IEC 15417 arithmetic instead of a dependency, its 107-row table proved by spec properties, published anchors and a decoder written from the symbology — as is the SKU alphabet (`ACD-` + 6 Crockford characters, uniqueness enforced by a partial unique index rather than a SELECT-first race). Two tables (`listing_labels` / `product_labels`, any member writes, because a vocabulary only admins can extend is not shared), three components (a per-listing picker with a genuine **partial** chip state, a print sheet for three real label stocks, a scanner that works by camera, USB scanner or typing — no WASM polyfill), and two new views available to **every** workspace. The label geometry test caught a real bug on its first run: the 4"×2" template would have run off the right edge of every sheet.
 - **One save indicator for the whole app** (`src/lib/saveStatusStore.ts`) — the third dependency-free `useSyncExternalStore` store, written by one pass and consumed by another so the two could not drift. Ref-counted, errors sticky until the next success, `reset()` on sign-out / batch delete / clear batch. App's `workflow_state` auto-save, the `products.product_group` mirror upsert, Save Batch (a **partial** save reports as an error), Step 3's two debounced writes, its unmount flush, its keepalive unload flush and the Save button all report into it; the three teardown paths are disjoint by construction so nothing double-reports (§8).
+
+- ✅ **Navigation consolidated into the workspace menu (Sept 2026)** — the header's ELEVEN tool buttons (which wrapped onto a second line), the tablet `NavRail` and the phone More sheet are all gone; the header is a wordmark plus the workspace trigger at every width, and every destination is a row in `WorkspaceMenu`: identity, "Back to workflow" (only inside a tool view), then Work (Library/Labels/Scan/Inbox) · Setup (Categories/Presets/Workspace dashboard) · Founder (Vocabulary/Analytics/CRM/Finance/Board), then Sign out. ONE `navItems` list in App.tsx feeds it, so a role gate is declared once. Full menu semantics: `aria-haspopup="menu"`/`aria-expanded` trigger, `role="menu"`/`menuitem`/`separator`, roving Arrow/Home/End with wrap, Escape restores focus to the opener, Tab and outside-press dismiss, keyboard opens focus the first row and pointer opens do not. The unread count rides the trigger AND the Inbox row. THREE THINGS ARE LOAD-BEARING: it is portaled to `<body>` (the header is a `z-index:100` stacking context, so an in-place bottom sheet would paint under the tab bar — the portal also removes the need for the old `.app-header .wsmenu-menu` colour opt-outs); its desktop anchor is passed as `--wsmenu-top`/`--wsmenu-right` custom properties, never inline `top`/`right`, or it would outrank the ≤640px sheet rules; and it carries `data-tv-modal` so ToolView's document-level Escape-to-workflow stays parked while the menu is open. The phone tab bar keeps Workflow/Library/Messages and its More tab opens this same component (`navMenuOpen` lifted into App) — one component, one list. `toggleView`, `MessagesNavButton`, `NavRail`, `NavTool`, `mobileTools`, `.nav-tool-btn*`, `.nav-rail*` and `.nav-sheet*` were all deleted. Verified by injecting the rendered markup into the live landing page at 1280/820/390/360 and by a 7-case keyboard suite on the in-house test harness (docs/reviews/14-nav-menu.md).
 
 ---
 

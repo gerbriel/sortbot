@@ -44,7 +44,7 @@ const uploadedImagesRef  = liveArrayRef('uploadedImages');
  *  happens and reuses the module afterwards. (ImageUpload defers it the same way.) */
 let exifrModulePromise: Promise<typeof import('exifr')> | null = null;
 const loadExifr = () => (exifrModulePromise ??= import('exifr'));
-import WorkspaceMenu from './components/WorkspaceMenu';
+import WorkspaceMenu, { type WorkspaceNavItem } from './components/WorkspaceMenu';
 import WaitlistGate from './components/WaitlistGate';
 import Landing from './components/Landing';
 import { getCategoryPresets } from './lib/categoryPresetsService';
@@ -54,7 +54,7 @@ import { purgeImageCache } from './lib/swCache';
 import SupportWidget from './components/SupportWidget';
 import { supportStore, useSupportThreads } from './lib/supportStore';
 import ToolView from './components/ToolView';
-import { NavRail, MobileTabBar, type NavTool } from './components/MobileNav';
+import { MobileTabBar } from './components/MobileNav';
 import { applyPresetDirectly } from './lib/applyPresetToGroup';
 import type { BrandCategory } from './lib/brandCategorySystem';
 import './App.css';
@@ -162,42 +162,43 @@ const ViewFallback = () => (
 );
 
 /**
- * Header "Messages" / "Inbox" button with its unread badge.
+ * The header's ONE control: the workspace trigger and the menu that is now the
+ * app's entire navigation.
  *
  * A component of its own, NOT a branch inside App's header, because mounting
  * `useSupportThreads` is what starts the shared Realtime channel and the 45 s
  * poll. App renders this only inside the signed-in header, so a logged-out
- * visitor on the landing page never queries `support_threads`.
+ * visitor on the landing page never queries `support_threads`. (It is the same
+ * reason the old Messages nav button was its own component; the unread count
+ * simply moved from that button to this trigger and to the Inbox menu row.)
  */
-function MessagesNavButton(
-  { isFounder, active, onClick }: {
+function AccountNav(
+  { isFounder, items, ...rest }: {
     isFounder: boolean;
-    active: boolean;
-    onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
+    items: WorkspaceNavItem[];
+    orgName: string | null;
+    role?: string;
+    email?: string | null;
+    activeView: string;
+    showBackToWorkflow: boolean;
+    onSelect: (id: string, opener: HTMLElement | null) => void;
+    onSignOut: () => void;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
   },
 ) {
   const { available, unreadCount } = useSupportThreads(isFounder ? 'founder' : 'user');
-  // Same rule as the floating widget: no messaging tables, no messaging UI.
-  if (available === false) return null;
+  // Same rule as the floating widget: no messaging tables, no messaging UI —
+  // the row disappears from the menu rather than opening a broken view.
+  const resolved = available === false
+    ? items.filter(i => i.id !== 'messages')
+    : items.map(i => (i.id === 'messages' ? { ...i, badge: unreadCount } : i));
   return (
-    <button
-      onClick={onClick}
-      /* `nav-msg-btn` is the exemption handle: App.css hides every other
-         .nav-tool-btn below 1024px, and this one stays so the unread badge is
-         visible at every width. */
-      className={`button button-secondary nav-tool-btn nav-msg-btn${active ? ' nav-tool-btn--on' : ''}`}
-      aria-current={active ? 'page' : undefined}
-      title={isFounder
-        ? 'Inbox — every conversation, from every workspace'
-        : 'Messages — talk to the Arcadian team'}
-    >
-      <MessageSquare size={18} /> {isFounder ? 'Inbox' : 'Messages'}
-      {unreadCount > 0 && (
-        <span className="nav-badge" aria-label={`${unreadCount} unread`}>
-          {unreadCount > 99 ? '99+' : unreadCount}
-        </span>
-      )}
-    </button>
+    <WorkspaceMenu
+      {...rest}
+      items={resolved}
+      unreadCount={available === false ? 0 : unreadCount}
+    />
   );
 }
 
@@ -443,13 +444,17 @@ function App() {
     // about to be detached silently drops focus to <body>.
     requestAnimationFrame(() => trigger?.focus());
   }, []);
-  /** Header button click: open the view, or return to the workflow if it already is. */
-  const toggleView = (view: Exclude<ActiveView, 'workflow'>) =>
-    (e: React.MouseEvent<HTMLButtonElement>) => {
-      if (activeView === view) { goToWorkflow(); return; }
-      viewTriggerRef.current = e.currentTarget;
-      setActiveView(view);
-    };
+  /** Whether the workspace menu is showing. Lifted out of WorkspaceMenu because
+   *  the phone tab bar's "More" opens the SAME menu — one component, one list. */
+  const [navMenuOpen, setNavMenuOpen] = useState(false);
+  /** A pick from the workspace menu. `opener` is the control the menu was opened
+   *  from (the header trigger, or More); parking it in `viewTriggerRef` is what
+   *  lets ToolView's Back and Escape return focus to where the trip started. */
+  const handleNavSelect = (id: string, opener: HTMLElement | null) => {
+    viewTriggerRef.current = opener instanceof HTMLButtonElement ? opener : null;
+    if (id === 'workflow') { goToWorkflow(); return; }
+    setActiveView(id as ActiveView);
+  };
   /** `useState`-shaped setter over activeView, so existing `setShowX(false)`
    *  call sites read exactly as they did. Turning a view OFF only returns to
    *  the workflow when that view is the one actually showing. The other five
@@ -2848,53 +2853,49 @@ function App() {
   const Wordmark = activeView === 'workflow' ? 'h1' : 'p';
 
   /* ── The navigation's single source of truth ──────────────────────────────
-     Every tool this user is allowed to see, in the order the desktop header
-     renders them. Four surfaces consume this list — the header row, the tablet
-     rail, the phone tab bar and the More sheet — so a tool's label, icon,
-     tooltip and role gate are declared exactly once. `messages` is a member of
-     the list purely to hold its POSITION in the header row; it renders as
-     <MessagesNavButton> there and as its own tab on a phone.
+     Every destination this user may open, in the order the workspace menu
+     renders them, each tagged with the band it belongs to. ONE list feeds the
+     menu at every width, so a role gate, a label and an icon are declared
+     exactly once — the header row, the tablet rail and the phone's More sheet
+     that used to re-render this list are all gone.
+
+     `messages` is declared here like anything else; <AccountNav> is what knows
+     whether the messaging tables exist, and drops the row (and the trigger's
+     badge) when they do not.
 
      Not memoized on purpose: it is a handful of object literals rebuilt during
-     a render that is already happening, and the two consumers are not memo'd,
-     so a useMemo here would buy nothing but a dependency array to get wrong. */
+     a render that is already happening, and the consumer is not memo'd, so a
+     useMemo here would buy nothing but a dependency array to get wrong. */
   const isFoundingAdmin = currentOrg?.slug === 'founding' && (orgRole === 'owner' || orgRole === 'admin');
-  const navTools: NavTool[] = [
-    { id: 'categories', label: 'Manage Categories', icon: <Tag size={18} />, title: 'Manage your product categories' },
-    { id: 'presets', label: 'Category Presets', icon: <Settings size={18} />, title: 'Manage category presets for shipping weight, measurements, and default attributes' },
-    { id: 'library', label: 'Library', icon: <Package size={18} />, title: 'View saved workflow batches' },
-    /* Labels and Scan are the physical half of the workflow and belong to EVERY
-       workspace, not just founding admins — they sit beside Library because all
-       three act on the batch rather than on settings. TAB_IDS in MobileNav
-       keeps the phone's two tabs as Library + Messages, so these land in the
-       More sheet; the tablet rail shows them outright. Both fall out of
-       `mobileTools` below with no extra wiring. */
-    { id: 'labels', label: 'Labels', icon: <Printer size={18} />, title: 'Labels — print shelf labels with barcodes for the open batch' },
-    { id: 'scan', label: 'Scan', icon: <ScanLine size={18} />, title: 'Scan — find a listing by its barcode or SKU' },
-    { id: 'messages', label: supportIsFounder ? 'Inbox' : 'Messages', icon: <MessageSquare size={18} />, title: 'Messages' },
+  const navItems: WorkspaceNavItem[] = [
+    /* WORK — the things you do to a batch. Labels and Scan are the physical
+       half of the workflow and belong to EVERY workspace, not just founding
+       admins, which is why they sit beside Library rather than under Setup. */
+    { id: 'library', label: 'Library', icon: <Package size={16} />, title: 'View saved workflow batches', group: 'work' },
+    { id: 'labels', label: 'Labels', icon: <Printer size={16} />, title: 'Labels — print shelf labels with barcodes for the open batch', group: 'work' },
+    { id: 'scan', label: 'Scan', icon: <ScanLine size={16} />, title: 'Scan — find a listing by its barcode or SKU', group: 'work' },
+    { id: 'messages', label: supportIsFounder ? 'Inbox' : 'Messages', icon: <MessageSquare size={16} />,
+      title: supportIsFounder
+        ? 'Inbox — every conversation, from every workspace'
+        : 'Messages — talk to the Arcadian team',
+      group: 'work' },
+    /* SETUP — the things you configure once and forget. */
+    { id: 'categories', label: 'Manage Categories', icon: <Tag size={16} />, title: 'Manage your product categories', group: 'setup' },
+    { id: 'presets', label: 'Category Presets', icon: <Settings size={16} />, title: 'Manage category presets for shipping weight, measurements, and default attributes', group: 'setup' },
+    ...(currentOrg ? [{ id: 'workspace', label: 'Workspace dashboard', icon: <Users size={16} />, title: 'Workspace — members, invites and settings', group: 'setup' as const }] : []),
+    /* FOUNDER — Founding Workspace only, and all but Board admin-only. */
     ...(isFoundingAdmin ? [
-      { id: 'vocabulary', label: 'Vocabulary', icon: <BookMarked size={18} />, title: 'Vocabulary — curate quick keyword chips and brand keywords (all workspaces)' },
-      { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={18} />, title: 'Analytics — first-party pageviews, funnel, referrers, errors (Founding Workspace)' },
-      { id: 'crm', label: 'CRM', icon: <Contact size={18} />, title: 'CRM — every beta request and account as a contact, with stages, follow-ups and notes (Founding Workspace)' },
-      { id: 'finance', label: 'Finance', icon: <Wallet size={18} />, title: 'Finance — income, expenses, profit, customers and reports (Founding Workspace)' },
+      { id: 'vocabulary', label: 'Vocabulary', icon: <BookMarked size={16} />, title: 'Vocabulary — curate quick keyword chips and brand keywords (all workspaces)', group: 'founder' as const },
+      { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={16} />, title: 'Analytics — first-party pageviews, funnel, referrers, errors (Founding Workspace)', group: 'founder' as const },
+      { id: 'crm', label: 'CRM', icon: <Contact size={16} />, title: 'CRM — every beta request and account as a contact, with stages, follow-ups and notes (Founding Workspace)', group: 'founder' as const },
+      { id: 'finance', label: 'Finance', icon: <Wallet size={16} />, title: 'Finance — income, expenses, profit, customers and reports (Founding Workspace)', group: 'founder' as const },
     ] : []),
     ...(currentOrg?.slug === 'founding' ? [
-      { id: 'board', label: 'Board', icon: <KanbanSquare size={18} />, title: 'Board — features and todos for this workspace' },
+      { id: 'board', label: 'Board', icon: <KanbanSquare size={16} />, title: 'Board — features and todos for this workspace', group: 'founder' as const },
     ] : []),
   ];
-  /* What the tablet rail and the More sheet show. Messages is dropped (it keeps
-     its own header button and its own tab at every width, so the unread badge
-     is never hidden behind "More"), and Workspace is appended — on desktop it
-     lives in the account menu, which stays visible, but it belongs in the
-     sheet's inventory of "every tool you can open". */
-  const mobileTools: NavTool[] = [
-    ...navTools.filter(t => t.id !== 'messages'),
-    ...(currentOrg ? [{ id: 'workspace', label: 'Workspace', icon: <Users size={18} />, title: 'Workspace — members, invites and settings' }] : []),
-  ];
-  /* The mobile surfaces navigate TO a view; they never toggle back off it the
-     way a header button does. Tapping the tab you are already on must be inert,
-     not a trip somewhere else, and the sheet's trigger is unmounted by the time
-     the view opens so there is no element to hand focus back to either. */
+  /* The phone's two named tabs navigate straight to a view. Tapping the tab you
+     are already on must be inert, not a trip somewhere else. */
   const navigateToView = (id: string) => setActiveView(id as ActiveView);
 
   return (
@@ -2918,62 +2919,26 @@ function App() {
             <p className="header-subtitle">Upload, sort, describe, and export to Shopify</p>
           </div>
           <div className="header-actions">
-            {/* ONE list drives four surfaces: this desktop row, the tablet
-                rail, the phone tab bar and the More sheet. Rendering it four
-                times by hand is how role gating and labels drift apart, so
-                `navTools` above is the only place a tool is declared.
-
-                Each button navigates to a full view; clicking the one that is
-                already showing comes back to the workflow. `aria-current` +
-                `.nav-tool-btn--on` mark it — a filled, white-outlined state,
-                since the nav is the app's one inverted surface (CLAUDE.md §1).
-
-                Below 1024px App.css hides every button in here EXCEPT Messages
-                and the account menu; the tools reappear in <NavRail> (tablet)
-                or the tab bar (phone). */}
-            {navTools.map(t => (
-              t.id === 'messages'
-                /* Everyone gets Messages — a user talks to us, a Founding admin
-                   gets the inbox of every conversation. Same page either way.
-                   Its own component, because mounting it is what starts the
-                   shared Realtime channel. */
-                ? (
-                  <MessagesNavButton
-                    key="messages"
-                    isFounder={supportIsFounder}
-                    active={activeView === 'messages'}
-                    onClick={toggleView('messages')}
-                  />
-                )
-                : (
-                  <button
-                    key={t.id}
-                    onClick={toggleView(t.id as Exclude<ActiveView, 'workflow'>)}
-                    className={`button button-secondary nav-tool-btn${activeView === t.id ? ' nav-tool-btn--on' : ''}`}
-                    aria-current={activeView === t.id ? 'page' : undefined}
-                    title={t.title}
-                  >
-                    {t.icon} {t.label}
-                  </button>
-                )
-            ))}
-            {/* Consolidated workspace/account control: identity + dashboard +
-                sign out live in the dropdown (replaced email + Sign Out). */}
-            <WorkspaceMenu
+            {/* THE HEADER'S ONLY CONTROL. It used to be eleven tool buttons
+                wrapping onto a second line plus this trigger; every one of them
+                is now a row in the menu below it, at every width. The trigger
+                carries the unread count so the one signal that cannot wait for
+                a menu to be opened is still on the bar. */}
+            <AccountNav
+              isFounder={supportIsFounder}
+              items={navItems}
               orgName={currentOrg?.name ?? null}
               role={currentOrg ? orgRole : undefined}
               email={user.email}
-              /* No trigger element to hand back focus to — the menu item that
-                 fired this is unmounted by the time the view opens. */
-              onOpenDashboard={currentOrg ? () => setActiveView('workspace') : undefined}
+              activeView={activeView}
+              showBackToWorkflow={activeView !== 'workflow'}
+              onSelect={handleNavSelect}
               onSignOut={handleSignOut}
+              open={navMenuOpen}
+              onOpenChange={setNavMenuOpen}
             />
           </div>
         </div>
-        {/* Tablet (641-1024px) second row: the tools that just left the header
-            above, as one horizontally scrolling rail. `display: none` at every
-            other width, so it is not in the a11y tree on desktop or phone. */}
-        <NavRail tools={mobileTools} activeView={activeView} onSelect={navigateToView} />
       </header>
 
       {/* ── Storage usage bar — always visible under the header ────────────── */}
@@ -3571,16 +3536,19 @@ function App() {
       )}
 
       {/* ── Phone navigation (≤640px) ───────────────────────────────────────
-          Fixed bottom tab bar + the More sheet. Deliberately OUTSIDE <header>:
-          the header is `position: sticky; z-index: 100`, which makes it a
-          stacking context, and a fixed child of it would be trapped at that
-          level — the sheet would then paint under the support widget. */}
+          The fixed bottom tab bar. Deliberately OUTSIDE <header>: the header is
+          `position: sticky; z-index: 100`, which makes it a stacking context,
+          and a fixed child of it would be trapped at that level. (The workspace
+          menu escapes the same trap by portaling to <body>.) */}
       <MobileTabBar
-        tools={mobileTools}
         activeView={activeView}
         onSelect={navigateToView}
         onGoWorkflow={goToWorkflow}
         isFounder={supportIsFounder}
+        /* "More" opens the SAME workspace menu the header trigger does — it
+           renders as a bottom sheet at this width. One component, one list. */
+        onOpenMore={() => setNavMenuOpen(true)}
+        moreOpen={navMenuOpen}
       />
 
       {/* ── Support messaging (first-party): every signed-in user can message

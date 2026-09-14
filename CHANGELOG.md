@@ -5,6 +5,9 @@
 ### Brand
 - **Acadia → Arcadian** across every user-visible surface (landing, auth, waitlist gate, header wordmark, tool-view copy, support widget and Messages, invite and approval emails, browser title and meta description, the beta.html redirect, CI and uptime title assertions, deploy configs, README, CLAUDE.md). Structural identifiers unchanged: the `/sortbot/` base path, every `sortbot_*` key, the `ACD-` SKU prefix and the `acadia-app` container names.
 
+### Navigation
+- **The header toolbar is gone.** Every tool (Library, Labels, Scan, Inbox, Manage Categories, Category Presets, Workspace dashboard, and for founding admins Vocabulary, Analytics, CRM, Finance, Board) is now a grouped option in the workspace menu at the top right, which shows the unread-message count on its trigger. Keyboard-complete (arrows, Home/End, Escape). On phones the same menu opens as a bottom sheet, and the bottom bar's More tab opens it too.
+
 ### Database
 - **The last nine database linter warnings cleared** — `supabase/migrations/security_rpc_wrappers.sql`
   finishes what `security_function_hardening.sql` started. The nine functions the client calls through

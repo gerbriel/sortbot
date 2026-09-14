@@ -1,93 +1,22 @@
 /* ════════════════════════════════════════════════════════════════════════════
-   MobileNav — the ≤1024px navigation (tablet rail, phone tab bar, More sheet).
+   MobileNav — the ≤640px phone tab bar.
 
-   Written mobile-first: the base rules describe the phone, and `min-width`
-   queries take things away again as the viewport grows. Nothing here exists
-   above 1024px, where the desktop header renders every tool itself.
+   Was three surfaces (tablet rail, tab bar, More sheet); the rail and the sheet
+   are gone, replaced by the one workspace menu (WorkspaceMenu.css), which is a
+   dropdown above 640px and a bottom sheet below it. Only the bar is left here.
 
-   BOTH SURFACES ARE PART OF THE BLACK NAV, so per CLAUDE.md §1 every foreground
-   inside them is a literal light value, never an --ink- or --text- token: those
-   resolve to page-black and would vanish. The one exception is the sheet, which
-   is a white popover (the shared Dialog) and therefore takes tokens normally.
+   Written mobile-first: the base rules describe the phone and the one
+   `max-width` query is what turns the bar on. Nothing here exists above 640px.
+
+   THE BAR IS PART OF THE BLACK NAV, so per CLAUDE.md §1 every foreground inside
+   it is a literal light value, never an --ink- or --text- token: those resolve
+   to page-black and would vanish.
 
    (Write token names out in full in these comments. A glob such as --ink-
    followed by a slash and another glob puts a comment terminator in the middle
    of the sentence, which ends the comment early and silently eats the first
    rule below it. That cost a debugging round here already.)
    ════════════════════════════════════════════════════════════════════════════ */
-
-/* ── Tablet rail (641-1024px) ───────────────────────────────────────────────
-   One row that scrolls sideways instead of wrapping, so the header's height
-   never changes with the number of tools a workspace can see (3 for a member,
-   9 for a founding admin). */
-
-.nav-rail {
-  display: none;
-  gap: var(--space-2);
-  /* Bleed to the header's edges so the first and last chip can sit flush,
-     then restore the inset with scroll-padding below. */
-  margin: var(--space-3) calc(var(--space-6) * -1) calc(var(--space-2) * -1);
-  padding: 0 var(--space-6) var(--space-2);
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  scroll-padding-inline: var(--space-6);
-  /* A visible scrollbar under a nav row is noise; the partially-clipped last
-     chip is the affordance that says "this scrolls". */
-  scrollbar-width: none;
-}
-
-.nav-rail::-webkit-scrollbar { display: none; }
-
-@media (min-width: 641px) and (max-width: 1024px) {
-  .nav-rail { display: flex; }
-}
-
-.nav-rail-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex: 0 0 auto;
-  scroll-snap-align: start;
-  min-height: var(--tap);
-  padding: var(--space-2) var(--space-4);
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.20);
-  background: rgba(255, 255, 255, 0.10);
-  color: #ffffff;
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-  /* Kills the 300ms double-tap-zoom wait without disabling panning, so the
-     rail still scrolls under a finger. */
-  touch-action: manipulation;
-}
-
-.nav-rail-btn svg { color: #ffffff; }
-
-/* Active = the solid white chip the header already uses for the current view,
-   so "where am I" reads identically at every width.
-
-   Prefixed with .app-header to out-specify `.app-header button:hover`
-   (0,1,1) — the same pin App.css needs for .nav-tool-btn--on, and for the
-   same reason: without it a hovered active chip repaints translucent and
-   keeps its black label, i.e. it disappears. */
-.app-header .nav-rail-btn--on,
-.app-header .nav-rail-btn--on:hover,
-.app-header .nav-rail-btn--on:focus-visible,
-.app-header .nav-rail-btn--on svg {
-  background: #ffffff;
-  border-color: #ffffff;
-  color: #000000;
-}
-
-/* The global focus ring is `2px solid var(--accent)`, and --accent is BLACK —
-   invisible on the black bar. Both inverted nav surfaces restate it light. */
-.nav-rail-btn:focus-visible,
-.tabbar-btn:focus-visible {
-  outline: 2px solid #ffffff;
-  outline-offset: -3px;
-}
 
 /* ── Phone tab bar (≤640px) ─────────────────────────────────────────────────
    Fixed to the bottom edge: the thumb's natural resting place, and it survives
@@ -103,7 +32,7 @@
   bottom: 0;
   z-index: 200;
   /* Above the header's 100 so a scrolled page cannot paint over it, below the
-     Dialog scrim (1000) so the More sheet covers it when open. */
+     workspace menu's scrim (1000) so the sheet covers the bar that opened it. */
   background: #000000;
   border-top: 1px solid rgba(255, 255, 255, 0.12);
   padding-bottom: var(--safe-b);
@@ -144,6 +73,13 @@
 
 .tabbar-btn svg { color: inherit; }
 
+/* The global focus ring is `2px solid var(--accent)`, and --accent is BLACK —
+   invisible on the black bar. This inverted surface restates it light. */
+.tabbar-btn:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: -3px;
+}
+
 .tabbar-btn span {
   max-width: 100%;
   overflow: hidden;
@@ -178,81 +114,4 @@
   font-weight: 700;
   line-height: 1.5;
   text-align: center;
-}
-
-/* ── The More sheet ─────────────────────────────────────────────────────────
-   Almost nothing to do here: `Dialog` already becomes a bottom sheet at ≤640px
-   (Dialog.css) — flush to the bottom edge, full width, top corners rounded,
-   rising from below, sized in dvh. The sheet can only be opened from the tab
-   bar, which exists only at that width, so it is always in that mode.
-
-   Two things the shared rules cannot know about this particular sheet: */
-.ui-dialog.nav-sheet {
-  /* A nav menu is not a form — it should not claim 92% of the screen and bury
-     the page it is navigating away from. */
-  max-height: 70dvh;
-}
-
-.ui-dialog.nav-sheet .ui-dialog__body {
-  /* Dialog pads the FOOTER for the home indicator; this sheet has no footer,
-     so the last row of tools would sit under it. */
-  padding-bottom: calc(var(--space-4) + var(--safe-b));
-  /* A flick past the end of a short list must not start scrolling the page
-     underneath (the scroll lock stops the body, not the overscroll chain). */
-  overscroll-behavior: contain;
-}
-
-.nav-sheet-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  /* Two columns at 390px: eight tools fit without the sheet needing to scroll,
-     and each cell is still far wider than a thumb. */
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2);
-}
-
-.nav-sheet-item {
-  display: flex;
-  align-items: center;
-  /* index.css centres every button's content by default. A menu is a list:
-     the icons have to form a column down the left edge, or the rows read as
-     eight unrelated chips. */
-  justify-content: flex-start;
-  gap: var(--space-3);
-  width: 100%;
-  min-height: calc(var(--tap) + var(--space-3));
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--ink-850);
-  color: var(--text-primary);
-  font-size: var(--fs-base);
-  font-weight: 600;
-  text-align: left;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.nav-sheet-item:hover { background: var(--ink-750); }
-
-.nav-sheet-item--on {
-  background: var(--accent);
-  border-color: var(--accent);
-  /* --ink-950 is white on this palette, so black fill + white label falls out
-     of the same convention the rest of the app uses (CLAUDE.md §1). */
-  color: var(--ink-950);
-}
-
-.nav-sheet-item--on svg { color: var(--ink-950); }
-
-.nav-sheet-icon { display: inline-flex; flex-shrink: 0; color: var(--text-secondary); }
-.nav-sheet-item--on .nav-sheet-icon { color: var(--ink-950); }
-
-.nav-sheet-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }

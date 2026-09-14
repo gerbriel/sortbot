@@ -730,29 +730,12 @@
    beats the UA's `[hidden] { display: none }` — pin it off explicitly. */
 .app-main[hidden] { display: none; }
 
-/* Header tool buttons carry the active-view state. The nav is the app's one
-   deliberately inverted surface (CLAUDE.md §1), so "active" cannot be the
-   page's black fill — it is a solid white chip with black ink, the same
-   treatment `.ld-nav-login` uses as the only white button on the black bar. */
-.header-actions { gap: var(--space-4); flex-wrap: wrap; }
+/* The header is a wordmark and ONE control at every width: the workspace
+   trigger. The eleven tool buttons that used to live here (and wrap onto a
+   second line) are rows in the workspace menu now, so this row never wraps. */
+.header-actions { gap: var(--space-4); flex-wrap: nowrap; }
 
-.app-header .nav-tool-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.app-header .nav-tool-btn--on,
-.app-header .nav-tool-btn--on:hover:not(:disabled),
-.app-header .nav-tool-btn--on:focus-visible {
-  background: #ffffff;
-  border-color: #ffffff;
-  color: #000000;
-}
-
-.app-header .nav-tool-btn--on svg { color: #000000; }
-
-/* Unread count on the Messages/Inbox nav button. The nav is the app's one
+/* Unread count on the workspace trigger. The nav is the app's one
    deliberately inverted surface (CLAUDE.md §1), so this sets its own literal
    foreground instead of inheriting page-black — and it reads the same whether
    the button is outlined on black or filled white as the active view. Same
@@ -771,39 +754,32 @@
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   MOBILE SHELL — the navigation model below 1024px
+   MOBILE SHELL — the navigation model
    ════════════════════════════════════════════════════════════════════════════
 
-   > 1024px   unchanged. One header row: wordmark, every tool, account menu.
-   ≤ 1024px   the header keeps ONLY the wordmark, Messages (badge and all) and
-              the account menu. The tools move out — to <NavRail>, a scrolling
-              second row inside this same black bar (MobileNav.css).
-   ≤ 640px    the rail goes too, and the tools live in a fixed bottom tab bar
-              plus its More sheet.
+   Every width   wordmark left, workspace trigger right. That trigger opens the
+                 one menu that holds every tool (WorkspaceMenu) — a dropdown
+                 above 640px, a bottom sheet below it.
+   ≤ 640px       a fixed bottom tab bar is added: Workflow / Library / Messages,
+                 and a More tab that opens that same menu (MobileNav.css).
 
-   The tools are hidden rather than conditionally rendered so that the decision
-   is made by the same media query that lays the replacement out — no matchMedia
-   state, no first-paint flash of the wrong nav. `display: none` also drops them
-   from the accessibility tree, so nothing is announced twice. */
+   THERE IS NOTHING LEFT TO HIDE AT A BREAKPOINT. The header used to shed eight
+   tool buttons at 1024px into a scrolling rail, and the rail's contents again
+   at 640px into a More sheet — three renderings of one list. The menu is the
+   single surface now, so the only width-dependent decision left is the menu's
+   own shape, and CSS makes it (no matchMedia, no first-paint flash). */
 
 @media (max-width: 1024px) {
-  /* Everything except Messages, which carries the unread count and is a
-     primary destination at every width. */
-  .app-header .nav-tool-btn:not(.nav-msg-btn) { display: none; }
-
-  /* The wordmark and the two surviving controls fit one row comfortably now,
-     so the header stops being a wrapping block and becomes a real app bar. */
-  .header-content { flex-wrap: nowrap; }
-  .header-actions { width: auto; gap: var(--space-2); flex-wrap: nowrap; }
-
   /* `.button { width: 100% }` at ≤768px (below) is meant for the workflow's
-     stacked action buttons; applied to the header it stretches Messages and
-     the account menu across the bar.
+     stacked action buttons; applied to the header it stretches the workspace
+     trigger across the bar.
 
      The 44px floor is applied here too, not only at the ≤640px phone
      breakpoint: a phone in LANDSCAPE is 641-1024px wide (a 14 Pro Max is 932),
-     so it takes the rail rather than the tab bar — and these two controls are
-     then the entire header. They were 33px. */
+     so it gets no tab bar — and this control is then the entire header. It
+     was 33px. */
+  .header-content { flex-wrap: nowrap; }
+  .header-actions { width: auto; gap: var(--space-2); flex-wrap: nowrap; }
   .app-header .button { width: auto; min-height: var(--tap); }
 
   /* Landscape on a notched phone puts the camera housing over the left edge.
@@ -838,8 +814,11 @@
 
   .app-wordmark { font-size: var(--fs-base); }
 
-  /* The account menu's workspace name is the first thing that should give. */
-  .wsmenu-name { max-width: 7rem; }
+  /* The workspace name is still the first thing that gives, but it has more
+     room to give from: the trigger used to share this bar with a Messages
+     button and eight hidden tool buttons' worth of gap, and now it is the only
+     control on it. At 7rem "Founding Workspace" read as "Foundi…". */
+  .wsmenu-name { max-width: 10rem; }
 
   /* CLEARANCE FOR THE TAB BAR. Everything that reaches the bottom of the page
      adds --tabbar-h (index.css), which is 0 above this breakpoint — so these

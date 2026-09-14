@@ -1,3 +1,17 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   WorkspaceMenu — the app's single navigation surface.
+
+   The TRIGGER lives in the black nav, so per CLAUDE.md §1 anything added to it
+   must state a literal light foreground or it inherits page-black and vanishes.
+   The POPOVER does not: it is portaled to <body>, outside the nav's cascade
+   entirely, so it takes --ink- / --text- tokens like any other white surface.
+   (That portal is why the old `.app-header .wsmenu-menu { color: … }` opt-outs
+   are gone — there is nothing left to opt out of.)
+
+   Written token-first and mobile-aware: one popover above 640px, the same
+   markup as a bottom sheet below it, decided purely by a media query.
+   ════════════════════════════════════════════════════════════════════════════ */
+
 .wsmenu-wrap {
   position: relative;
   display: inline-block;
@@ -23,17 +37,41 @@
 
 .wsmenu-caret--open { transform: rotate(180deg); }
 
-.wsmenu-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  min-width: 240px;
+/* ── Scrim (phone only) ─────────────────────────────────────────────────────
+   Above the tab bar (200) and matching the Dialog scrim's budget (1000), so a
+   sheet and a modal never fight. Hidden above 640px, where a full-screen layer
+   would eat the click that is meant to dismiss the popover AND do something. */
+.wsmenu-scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.55);
+  animation: wsmenu-fade var(--dur-fast, 0.12s) var(--ease, ease);
+}
+
+/* ── The popover ────────────────────────────────────────────────────────────
+   Anchored from two custom properties written by the component. They are
+   CUSTOM PROPERTIES rather than inline top/right precisely so the phone's
+   media query can win — an inline declaration could not be overridden. */
+.wsmenu-pop {
+  position: fixed;
+  top: var(--wsmenu-top, 4rem);
+  right: var(--wsmenu-right, 1rem);
+  z-index: 1001;
+  width: 272px;
+  max-width: calc(100vw - 2rem);
+  /* Never taller than the gap under the trigger; the list scrolls instead. */
+  max-height: calc(100dvh - var(--wsmenu-top, 4rem) - 1rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--ink-800);
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: var(--shadow-lg);
   padding: 0.35rem;
-  z-index: 1200;
+  color: var(--text-primary);
+  animation: wsmenu-pop-in var(--dur-fast, 0.12s) var(--ease, ease);
 }
 
 .wsmenu-id {
@@ -77,11 +115,35 @@
   white-space: nowrap;
 }
 
+/* ── Group headings and dividers ────────────────────────────────────────────
+   Eleven flat rows is a wall. The bands say WHY a tool is where it is, so the
+   eye lands on "Setup" rather than reading every label. */
+.wsmenu-group-label {
+  margin: 0.3rem 0 0.15rem;
+  padding: 0 0.6rem;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  /* Non-essential meta, which is exactly what --text-muted is for (§1). */
+  color: var(--text-muted);
+}
+
+.wsmenu-sep {
+  height: 1px;
+  margin: 0.3rem 0.35rem;
+  background: var(--border-subtle);
+}
+
+/* ── Rows ───────────────────────────────────────────────────────────────────
+   36px on a mouse, the full 44px floor wherever the pointer is coarse — the
+   phone sheet and a touch laptop both qualify, and neither is a breakpoint. */
 .wsmenu-item {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   width: 100%;
+  min-height: 36px;
   background: none;
   border: none;
   border-radius: 8px;
@@ -91,25 +153,109 @@
   color: var(--text-primary);
   cursor: pointer;
   text-align: left;
+  touch-action: manipulation;
 }
 
 .wsmenu-item:hover { background: var(--ink-750); }
 
-.wsmenu-item--danger { color: var(--danger); }
+/* The global ring is `2px solid var(--accent)` and --accent is BLACK, which
+   reads fine here: the popover is white, not part of the nav. */
+.wsmenu-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.wsmenu-item-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.wsmenu-item-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Active view: a filled grey row plus a check. Deliberately NOT the accent
+   black fill the old sheet used — a solid black row inside a white popover
+   reads as a button, and it would have forced the unread badge and the icon
+   to invert with it. */
+.wsmenu-item--on {
+  background: var(--ink-750);
+  font-weight: 700;
+}
+
+.wsmenu-item--on:hover { background: var(--ink-700); }
+.wsmenu-item--on .wsmenu-item-icon { color: var(--text-primary); }
+.wsmenu-item-check { flex-shrink: 0; color: var(--accent); }
+
+.wsmenu-item--back .wsmenu-item-icon { color: var(--accent); }
+
+.wsmenu-item--danger,
+.wsmenu-item--danger .wsmenu-item-icon { color: var(--danger); }
 .wsmenu-item--danger:hover { background: var(--danger-dim); }
 
-/* The popover is a lifted WHITE surface that lives inside the black nav, so it
-   must opt back out of the nav's forced light foreground and translucent button
-   fill (App.css `.app-header button / svg { color: #fff }`). Without these
-   higher-specificity rules the menu items render white-on-white and vanish. */
-.app-header .wsmenu-menu,
-.app-header .wsmenu-menu svg { color: var(--text-primary); }
-.app-header .wsmenu-menu .wsmenu-item {
-  background: none;
-  border: none;
-  color: var(--text-primary);
+/* Same disc as the header's .nav-badge and the widget's .sw-badge. Restated
+   rather than shared because all three live on different surfaces — this one
+   on a white popover — and only the geometry is common. */
+.wsmenu-badge {
+  flex-shrink: 0;
+  min-width: 1.6em;
+  padding: 0.1em 0.45em;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #ffffff;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
 }
-.app-header .wsmenu-menu .wsmenu-item:hover { background: var(--ink-750); }
-.app-header .wsmenu-menu .wsmenu-item--danger,
-.app-header .wsmenu-menu .wsmenu-item--danger svg { color: var(--danger); }
-.app-header .wsmenu-menu .wsmenu-item--danger:hover { background: var(--danger-dim); }
+
+@media (pointer: coarse) {
+  .wsmenu-item { min-height: var(--tap); }
+}
+
+/* ── Phone (≤640px): the same menu as a bottom sheet ────────────────────────
+   Flush to the bottom edge, full width, rounded only on top, rising from
+   below — the native idiom, and the thumb is already down there because the
+   tab bar's "More" is what opened it. `dvh` because Mobile Safari measures
+   `vh` against the browser chrome's expanded state. */
+@media (max-width: 640px) {
+  .wsmenu-scrim { display: block; }
+
+  .wsmenu-pop {
+    top: auto;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: none;
+    max-height: 80dvh;
+    border: none;
+    border-radius: var(--radius-xl, 1rem) var(--radius-xl, 1rem) 0 0;
+    padding: 0.35rem 0.35rem calc(0.35rem + var(--safe-b));
+    padding-left: max(0.35rem, var(--safe-l));
+    padding-right: max(0.35rem, var(--safe-r));
+    animation: wsmenu-sheet-in var(--dur, 0.18s) var(--ease, ease);
+  }
+
+  /* A sheet's rows carry more air than a dropdown's — and the labels are the
+     only navigation the phone has left. */
+  .wsmenu-item {
+    font-size: var(--fs-base);
+    padding: 0.5rem 0.7rem;
+  }
+
+  .wsmenu-group-label { padding: 0 0.7rem; }
+}
+
+@keyframes wsmenu-fade { from { opacity: 0; } }
+@keyframes wsmenu-pop-in { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes wsmenu-sheet-in { from { transform: translateY(100%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .wsmenu-scrim, .wsmenu-pop { animation: none; }
+}
