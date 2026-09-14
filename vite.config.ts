@@ -6,7 +6,7 @@ import react from '@vitejs/plugin-react'
 // visitors at the main URL). public/beta.html is a redirect stub for old links.
 export default defineConfig({
   plugins: [react()],
-  base: process.env.GITHUB_ACTIONS ? '/sortbot/' : '/',
+  base: '/',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
