@@ -565,19 +565,67 @@ export async function getWorkflowBatch(batchId: string): Promise<WorkflowBatch |
 }
 
 /**
- * Auto-save workflow state
- * Call this periodically (every 30 seconds) or on major actions
+ * Why an auto-save ended the way it did.
+ *
+ * `autoSaveWorkflowBatch` returns only an id, and three DIFFERENT outcomes all
+ * hand back a non-null id or null with no way to tell them apart — most
+ * dangerously `rls-blocked`, where the row exists, the UPDATE wrote NOTHING, and
+ * the caller was handed back its own batch id (i.e. a silent data loss reported
+ * as a success). The Step-3 save indicator has to show the truth, so the detailed
+ * entry point below reports which of these actually happened.
+ */
+export type AutoSaveOutcome =
+  /** The batch row was updated. */
+  | 'updated'
+  /** No row existed for a never-confirmed id; a fresh batch was created. */
+  | 'created'
+  /** The row exists but RLS refused the UPDATE — NOTHING WAS SAVED. */
+  | 'rls-blocked'
+  /** The batch is tombstoned or was deleted elsewhere; the save was dropped. */
+  | 'deleted'
+  /** A DB/network error, or the create attempt failed. */
+  | 'error';
+
+export interface AutoSaveResult {
+  batchId: string | null;
+  outcome: AutoSaveOutcome;
+  /** Human-readable reason for the non-success outcomes. */
+  message?: string;
+}
+
+/** True when the workflow_state write actually landed in Postgres. */
+export function autoSaveSucceeded(r: AutoSaveResult): boolean {
+  return r.outcome === 'updated' || r.outcome === 'created';
+}
+
+/**
+ * Auto-save workflow state. Back-compat wrapper: returns the batch id only.
+ * `null` still means "nothing to point at"; note that an `rls-blocked` save
+ * returns the id even though nothing was written — use
+ * `autoSaveWorkflowBatchDetailed` when the caller needs to know.
  */
 export async function autoSaveWorkflowBatch(
   batchId: string | null,
   batchNumber: string,
   workflowState: WorkflowBatch['workflow_state']
 ): Promise<string | null> {
+  return (await autoSaveWorkflowBatchDetailed(batchId, batchNumber, workflowState)).batchId;
+}
+
+/**
+ * Auto-save workflow state, reporting WHY it ended as it did.
+ * Call this periodically (every 30 seconds) or on major actions
+ */
+export async function autoSaveWorkflowBatchDetailed(
+  batchId: string | null,
+  batchNumber: string,
+  workflowState: WorkflowBatch['workflow_state']
+): Promise<AutoSaveResult> {
   try {
     // Never write to (or resurrect) a batch this browser knows was deleted.
     if (isBatchDeleted(batchId)) {
       console.warn(`autoSaveWorkflowBatch: batch ${batchId} was deleted — skipping save (no resurrection)`);
-      return null;
+      return { batchId: null, outcome: 'deleted', message: 'This batch was deleted — changes are not being saved.' };
     }
 
     const stats = calculateWorkflowStats(workflowState);
@@ -601,7 +649,7 @@ export async function autoSaveWorkflowBatch(
       if (!updateError && updated && updated.length > 0) {
         // Update succeeded — remember that this row is known to exist.
         confirmedBatchIds.add(batchId);
-        return batchId;
+        return { batchId, outcome: 'updated' };
       } else if (!updateError && (!updated || updated.length === 0)) {
         // UPDATE affected 0 rows. Two very different causes:
         //  (a) the batch row was genuinely DELETED → create a fresh one.
@@ -624,7 +672,11 @@ export async function autoSaveWorkflowBatch(
             `autoSaveWorkflowBatch: batch ${batchId} exists but UPDATE affected 0 rows ` +
             `(not owned by current user) — skipping save, NOT creating a duplicate`,
           );
-          return batchId;
+          return {
+            batchId,
+            outcome: 'rls-blocked',
+            message: 'This batch belongs to another user — your changes are not being saved.',
+          };
         }
         // Case (a): the row is genuinely gone. Two sub-cases:
         //  (a1) This session previously CONFIRMED the row existed → it was deleted
@@ -640,11 +692,13 @@ export async function autoSaveWorkflowBatch(
             `— treating as deleted, NOT re-creating it`,
           );
           markBatchDeleted(batchId);
-          return null;
+          return { batchId: null, outcome: 'deleted', message: 'This batch was deleted — changes are not being saved.' };
         }
         console.warn(`Batch ${batchId} never confirmed and not found — creating new batch (stub insert recovery)`);
         const batch = await createWorkflowBatch(batchNumber, workflowState, stats);
-        return batch?.id || null;
+        return batch?.id
+          ? { batchId: batch.id, outcome: 'created' }
+          : { batchId: null, outcome: 'error', message: 'Could not create the batch row.' };
       } else {
         // Real DB error — surface it so outer catch logs it
         throw updateError;
@@ -652,11 +706,18 @@ export async function autoSaveWorkflowBatch(
     } else {
       // Create new batch
       const batch = await createWorkflowBatch(batchNumber, workflowState, stats);
-      return batch?.id || null;
+      return batch?.id
+        ? { batchId: batch.id, outcome: 'created' }
+        : { batchId: null, outcome: 'error', message: 'Could not create the batch row.' };
     }
   } catch (error) {
     console.error('Error auto-saving workflow batch:', error);
-    return null;
+    // NOT `error instanceof Error`: the throw above re-raises supabase-js's
+    // PostgrestError, which is a plain object with a `message` string.
+    const message = typeof error === 'object' && error !== null && typeof (error as { message?: unknown }).message === 'string'
+      ? (error as { message: string }).message
+      : 'Auto-save failed.';
+    return { batchId: null, outcome: 'error', message };
   }
 }
 

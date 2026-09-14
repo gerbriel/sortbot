@@ -968,13 +968,15 @@
   box-shadow: var(--shadow-lg);
   pointer-events: none;
   background-repeat: no-repeat;
-  transform: translate(0, -50%);
+  /* NO centring transform: clampLensPosition (lib/magnifierPosition.ts) returns
+     the lens's true top-left so it can be held inside the viewport. A transform
+     here would move the painted box back out from under that clamp. */
   animation: zoomPopIn 0.1s ease;
 }
 
 @keyframes zoomPopIn {
-  from { opacity: 0; transform: translate(0, -50%) scale(0.92); }
-  to   { opacity: 1; transform: translate(0, -50%) scale(1); }
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
 }
 
 /* ── Lightbox modal ────────────────────────────────────────────── */
@@ -1549,5 +1551,51 @@
 
   .vct-header {
     font-size: var(--fs-xs);
+  }
+}
+
+/* ── Period boundary button ──────────────────────────────────────────────────
+   Sits beside Start/Stop while recording. Saying the word "period" is easy to
+   forget at the end of a long sentence, so the same boundary is available as a
+   button and as the "." key. Sized for a thumb on a phone. */
+.voice-period-btn {
+  font-size: var(--fs-xs);
+  padding: 0.3rem 0.6rem;
+}
+
+@media (max-width: 768px) {
+  .voice-period-btn {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0.5rem 1rem;
+    font-size: var(--fs-base);
+  }
+}
+
+/* ── Save (report 28) ──────────────────────────────────────────────────────
+   One button and one status line, both fed by lib/saveStatusStore, which every
+   persistence path in the app reports into — so this speaks for Step 3's two
+   debounced writes AND App's workflow_state auto-save, not just for the click. */
+.preview-save-btn {
+  gap: 0.4rem;
+}
+
+.save-status {
+  flex-basis: 100%;
+  text-align: center;
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-snug);
+  color: var(--text-muted);
+  min-height: 1.4em;           /* reserve the row so the nav never jumps */
+  margin: 0.2rem 0 0;
+}
+
+.save-status[data-state='saving'] { color: var(--text-secondary); }
+.save-status[data-state='saved']  { color: var(--success); }
+.save-status[data-state='error']  { color: var(--danger); font-weight: 600; }
+
+@media (max-width: 768px) {
+  .preview-save-btn {
+    min-height: var(--tap, 44px);
   }
 }

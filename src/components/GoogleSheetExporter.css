@@ -317,3 +317,58 @@
     width: 100%;
   }
 }
+
+/* ── Platform price selector (Feature 21) ───────────────────────────────────
+   Sits between the summary stats and the preview table. Reads as one control
+   plus its consequence: the <select> changes the number, the note says what
+   changed, so nobody downloads a re-priced CSV without being told in words. */
+.export-platform {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+  margin: 1rem 0 0.75rem;
+  padding: 0.9rem 1rem;
+  background: var(--ink-850);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.export-platform-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.export-platform-select {
+  /* 16px on phones: anything smaller makes iOS Safari zoom the whole page on
+     focus, which throws the user out of the preview table. */
+  font-size: var(--fs-md);
+  padding: 0.5rem 0.7rem;
+  min-height: 44px;          /* touch target */
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--ink-800);
+  color: var(--text-primary);
+}
+
+.export-platform-note {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+/* An active adjustment is a fact about the money in the file — it gets the
+   emphasis that "unchanged" does not. */
+.export-platform-note--on {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+@media (max-width: 560px) {
+  .export-platform { flex-direction: column; align-items: stretch; }
+  .export-platform-select { width: 100%; }
+}

@@ -120,7 +120,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
     <div className="landing">
       {/* ── Nav ── */}
       <nav className="ld-nav">
-        <span className="ld-logo"><ShoppingBag size={22} /> Acadia <span className="ld-chip">BETA</span></span>
+        <span className="ld-logo"><ShoppingBag size={22} /> Arcadian <span className="ld-chip">BETA</span></span>
         <span className="ld-nav-actions">
           <a href="#pricing" className="ld-nav-link">Pricing</a>
           <a href="#signup" className="ld-nav-cta">Request access</a>
@@ -136,7 +136,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
         <div className="ld-hero-inner">
           <h1>Photograph the rack in the morning.<br />Listings live by lunch.</h1>
           <p>
-            Acadia turns a camera roll of vintage clothing photos into listings that are
+            Arcadian turns a camera roll of vintage clothing photos into listings that are
             ready for Shopify. Group the angles, <em>speak</em> the details, export the file.
             Built by resellers who list hundreds of pieces a week.
           </p>
@@ -197,7 +197,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
               />
             </figure>
             <div className="ld-shot" aria-hidden="true">
-              <div className="shot-bar"><i /><i /><i /><em>Acadia · Group &amp; Categorize</em></div>
+              <div className="shot-bar"><i /><i /><i /><em>Arcadian · Group &amp; Categorize</em></div>
               <div className="shot-mock shot-mock--grid">
                 <div className="mock-toolbar">
                   <b><Target size={11} /> Pick photos</b>
@@ -241,7 +241,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
           </div>
           <div className="ld-tour-visual">
             <div className="ld-shot" aria-hidden="true">
-              <div className="shot-bar"><i /><i /><i /><em>Acadia · Category Presets</em></div>
+              <div className="shot-bar"><i /><i /><i /><em>Arcadian · Category Presets</em></div>
               <div className="shot-mock shot-mock--presets">
                 <div className="mock-preset-head"><Layers size={13} /> Tees preset</div>
                 <div className="mock-preset-rows">
@@ -261,7 +261,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
           <div className="ld-tour-text">
             <h2>Talk. Don't type.</h2>
             <p>
-              Hold the garment and say what you see. Acadia parses brands, sizes,
+              Hold the garment and say what you see. Arcadian parses brands, sizes,
               colors, and measurements into the right fields and writes a clean,
               human listing with your measurements front and center.
             </p>
@@ -283,7 +283,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
               />
             </figure>
             <div className="ld-shot" aria-hidden="true">
-              <div className="shot-bar"><i /><i /><i /><em>Acadia · Describe</em></div>
+              <div className="shot-bar"><i /><i /><i /><em>Arcadian · Describe</em></div>
               <div className="shot-mock shot-mock--voice">
                 <div className="mock-mic"><Mic size={13} /> Recording… <span className="mock-wave"><i /><i /><i /><i /><i /></span></div>
                 <div className="mock-transcript">“brand nike period size large fits like medium period width 18 period…”</div>
@@ -319,7 +319,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
           </div>
           <div className="ld-tour-visual">
             <div className="ld-shot" aria-hidden="true">
-              <div className="shot-bar"><i /><i /><i /><em>Acadia · Export</em></div>
+              <div className="shot-bar"><i /><i /><i /><em>Arcadian · Export</em></div>
               <div className="shot-mock shot-mock--csv">
                 <div className="mock-thead"><b>Handle</b><b>Title</b><b>Price</b><b>Category</b><b>Size</b></div>
                 {[
@@ -456,7 +456,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
       </section>
 
       <footer className="ld-footer">
-        Acadia · built for vintage resellers · beta access is reviewed and approved by hand
+        Arcadian · built for vintage resellers · beta access is reviewed and approved by hand
         <p className="ld-credit">
           Photography:{' '}
           {PHOTO_CREDITS.map((c, i) => (

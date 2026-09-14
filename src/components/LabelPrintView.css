@@ -1,0 +1,391 @@
+/* LabelPrintView — screen controls + a real print sheet.
+ *
+ * The geometry comes from the selected LabelTemplate as custom properties set
+ * inline on `.lpv` (--lpv-page-w, --lpv-label-w, --lpv-cols, …), so ONE source
+ * drives both the on-screen preview and the @page rule. Changing stock in the
+ * dropdown re-lays the preview and the printer output together; they cannot
+ * drift.
+ *
+ * Colour follows the tokens everywhere EXCEPT the label chips, which carry the
+ * label's own swatch inline. That is data (CLAUDE.md §1's carve-out), and a
+ * printed chip cannot resolve a theme token at all.
+ *
+ * Mobile-first: the scanner and the label list both get used on a phone in a
+ * stock room, so every control is a 44px target and every select is 16px.
+ */
+
+.lpv {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* ── Controls ───────────────────────────────────────────────────────────── */
+
+.lpv-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem;
+  background: var(--ink-850);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.lpv-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-width: 24rem;
+}
+
+.lpv-control > span {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.lpv-control select {
+  /* 16px: below it iOS Safari zooms the page on focus. */
+  font-size: var(--fs-md);
+  min-height: 44px;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--ink-800);
+  color: var(--text-primary);
+  width: 100%;
+}
+
+.lpv-template-note {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.lpv-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.2rem;
+}
+
+.lpv-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0.4rem 0.9rem;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--ink-800);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.lpv-btn:hover:not(:disabled) { background: var(--ink-750); }
+.lpv-btn:disabled { opacity: 0.45; cursor: default; }
+
+/* Solid accent fill. --ink-950 is white on this palette, which is what makes a
+   black button with a white label fall out for free (CLAUDE.md §1). */
+.lpv-btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--ink-950);
+}
+
+.lpv-btn--primary:hover:not(:disabled) { opacity: 0.88; background: var(--accent); }
+
+.lpv-spin { animation: lpv-spin 0.9s linear infinite; }
+@keyframes lpv-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .lpv-spin { animation: none; } }
+
+.lpv-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--warning);
+  background: var(--warning-dim);
+  border-radius: 6px;
+}
+
+.lpv-notice {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--success);
+}
+
+/* ── Pick list ──────────────────────────────────────────────────────────── */
+
+.lpv-picklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.lpv-pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.7rem;
+  padding: 0.4rem 0.7rem;
+  background: var(--ink-900);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+}
+
+/* Selected rows step forward rather than the unselected ones receding — the
+   common case is "all selected", which should not look like a dimmed page. */
+.lpv-pick--on { background: var(--ink-850); border-color: var(--border); }
+
+.lpv-pick-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 16rem;
+  min-width: 0;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.lpv-pick-main input { width: 18px; height: 18px; flex-shrink: 0; }
+
+.lpv-pick-title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lpv-pick-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.lpv-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.45rem;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  border-radius: 999px;
+  background: var(--ink-800);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.lpv-pill--price { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.lpv-pill--sku { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.lpv-pill--muted { color: var(--text-faint); border-style: dashed; }
+
+.lpv-pick-open {
+  min-height: 44px;
+  padding: 0.25rem 0.7rem;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.lpv-pick-open:hover { background: var(--ink-750); color: var(--text-primary); }
+
+/* ── Empty state ────────────────────────────────────────────────────────── */
+
+.lpv-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 3rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.lpv-empty p { margin: 0; font-size: var(--fs-md); color: var(--text-secondary); }
+.lpv-empty-sub { font-size: var(--fs-sm) !important; color: var(--text-muted) !important; }
+
+/* ── The sheet ──────────────────────────────────────────────────────────── */
+
+.lpv-sheet-heading {
+  margin: 0 0 0.5rem;
+  font-size: var(--fs-lg);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.lpv-sheet-wrap { overflow-x: auto; }
+
+/* On screen this is a scaled-down facsimile of the paper: a white page of the
+   template's real width, with the labels laid out on the template's grid. It
+   is the SAME element that prints, so a preview that looks wrong IS wrong. */
+.lpv-sheet {
+  display: grid;
+  grid-template-columns: repeat(var(--lpv-cols), var(--lpv-label-w));
+  column-gap: var(--lpv-gap-x);
+  row-gap: var(--lpv-gap-y);
+  justify-content: center;
+  width: var(--lpv-page-w);
+  padding: var(--lpv-page-m);
+  margin: 0 auto;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.lpv-label {
+  width: var(--lpv-label-w);
+  height: var(--lpv-label-h);
+  box-sizing: border-box;
+  padding: 0.09in 0.12in;
+  display: flex;
+  flex-direction: column;
+  gap: 0.03in;
+  overflow: hidden;
+  /* Literal black on white, not a token: this is ink on paper. A label that
+     inherits a themed grey is unreadable on a thermal printer. */
+  color: #000;
+  background: #fff;
+  /* A hairline so the preview shows where the label ends; removed for print,
+     because the real label already has an edge. */
+  border: 1px dashed rgb(0 0 0 / 0.18);
+}
+
+.lpv-label-title {
+  font-size: 8pt;
+  font-weight: 700;
+  line-height: 1.15;
+  /* Two lines, then clip — a long title must not push the barcode off the
+     label, which is the one element that has to be there. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.lpv-label-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.1in;
+  font-size: 8pt;
+}
+
+.lpv-label-size { font-weight: 700; }
+.lpv-label-price { font-weight: 700; margin-left: auto; font-variant-numeric: tabular-nums; }
+
+.lpv-label-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.03in;
+  overflow: hidden;
+  max-height: 0.22in;
+}
+
+.lpv-label-chip {
+  padding: 0 0.05in;
+  font-size: 6pt;
+  font-weight: 700;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.lpv-label-code {
+  margin-top: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.lpv-barcode svg { display: block; max-width: 100%; height: auto; }
+
+.lpv-nosku {
+  font-size: 7pt;
+  font-style: italic;
+  color: #666;
+}
+
+/* ── Print ──────────────────────────────────────────────────────────────── */
+
+@media print {
+  /* Paper size from the selected template. `@page` cannot read a custom
+     property, so `size: auto` plus an exactly-sized sheet element is the
+     portable way to do this: the browser fits the page to the content box and
+     the user's printer dialog picks the tray. Margins are zero here because
+     the sheet element already carries the template's own margin. */
+  @page { size: auto; margin: 0; }
+
+  /* Everything that is not the sheet is chrome — the app header, the ToolView
+     title block, the controls and the pick list all leave the paper. */
+  body * { visibility: hidden; }
+  .lpv-sheet-wrap, .lpv-sheet-wrap * { visibility: visible; }
+
+  .lpv-controls,
+  .lpv-picklist,
+  .lpv-sheet-heading { display: none !important; }
+
+  .lpv-sheet-wrap {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    overflow: visible;
+  }
+
+  .lpv-sheet {
+    border: none;
+    border-radius: 0;
+    margin: 0;
+    box-shadow: none;
+  }
+
+  /* No preview outline on the real thing, and never split a label across a
+     page boundary. */
+  .lpv-label {
+    border: none;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Chips and barcodes are the point of the page — stop the browser's
+     "economy" mode from dropping their backgrounds. */
+  .lpv-label-chip,
+  .lpv-sheet {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* ── Narrow screens ─────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .lpv-actions .lpv-btn { flex: 1 1 100%; }
+  .lpv-pick-open { width: 100%; }
+  /* A letter-width sheet cannot fit a phone; shrink the preview rather than
+     forcing a horizontal scroll of the whole page. The printed output is
+     unaffected — transform is a screen concern only. */
+  .lpv-sheet {
+    transform: scale(0.42);
+    transform-origin: top left;
+    margin-bottom: -60%;
+  }
+}

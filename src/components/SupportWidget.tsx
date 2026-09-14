@@ -138,7 +138,7 @@ function SupportWidget({ userEmail, orgName, isFounder }: SupportWidgetProps) {
   const subtitle = active
     ? (isFounder
         ? `${active.user_email ?? 'user'}${active.org_name ? ` · ${active.org_name}` : ''}`
-        : 'Acadia team')
+        : 'Arcadian team')
     : (isFounder ? `${openCount} open` : 'We reply here, usually within a day');
 
   return (
@@ -221,7 +221,7 @@ function SupportWidget({ userEmail, orgName, isFounder }: SupportWidgetProps) {
                 )}
                 {messages.map(m => {
                   const mine = m.sender_role === role;
-                  const who = mine ? 'You' : m.sender_role === 'founder' ? 'Acadia' : (active?.user_email ?? 'User');
+                  const who = mine ? 'You' : m.sender_role === 'founder' ? 'Arcadian' : (active?.user_email ?? 'User');
                   return (
                     <div key={m.id} className={`sw-msg ${mine ? 'sw-msg--mine' : ''}`}>
                       <div className="sw-bubble">{m.body}</div>

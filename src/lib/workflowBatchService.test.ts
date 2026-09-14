@@ -6,7 +6,8 @@ vi.mock('./supabase', async () => {
 });
 
 import { supabase } from './supabase';
-import { markBatchDeleted, isBatchDeleted, deleteWorkflowBatch, fetchWorkflowBatches, removeItemsFromWorkflowBatch } from './workflowBatchService';
+import { markBatchDeleted, isBatchDeleted, deleteWorkflowBatch, fetchWorkflowBatches, removeItemsFromWorkflowBatch,
+  autoSaveWorkflowBatchDetailed, autoSaveWorkflowBatch, autoSaveSucceeded, markBatchConfirmed } from './workflowBatchService';
 import type { MockedSupabaseClient, MockCall } from './testing/supabaseMock';
 
 const mock = (supabase as unknown as MockedSupabaseClient).__mock;
@@ -430,5 +431,102 @@ describe('removeItemsFromWorkflowBatch — compare-and-set on updated_at', () =>
         : undefined;
     await expect(removeItemsFromWorkflowBatch('batch-1', ['b'])).resolves.toBe(true);
     expect(mock.callsFor('workflow_batches', 'update')).toHaveLength(0);
+  });
+});
+
+
+/**
+ * Auto-save OUTCOMES — founder report 28, "ensure autosave is working".
+ *
+ * `autoSaveWorkflowBatch` returns only a batch id, and three different endings
+ * are indistinguishable through it. The worst is `rls-blocked`: the row exists,
+ * the UPDATE wrote NOTHING, and the caller is handed back its own batch id, so a
+ * total data loss looked exactly like a success and was reported to the user as
+ * nothing at all. These lock the outcome each ending reports.
+ */
+describe('autoSaveWorkflowBatchDetailed — outcomes', () => {
+  const state = { processedItems: [{ id: 'i1', productGroup: 'i1', category: 'tees' }] };
+
+  beforeEach(() => {
+    mock.reset();
+    mock.authUser = { id: 'user-1' };
+  });
+
+  it('updated: the UPDATE affected a row', async () => {
+    const id = `ok-${crypto.randomUUID()}`;
+    mock.responder = (c: MockCall) =>
+      c.table === 'workflow_batches' && c.op === 'update' ? { data: [{ id }], error: null } : undefined;
+    const r = await autoSaveWorkflowBatchDetailed(id, 'batch-1', state);
+    expect(r).toEqual({ batchId: id, outcome: 'updated' });
+    expect(autoSaveSucceeded(r)).toBe(true);
+  });
+
+  it('rls-blocked: 0 rows updated but the row still exists — NOT a success, and no duplicate batch', async () => {
+    const id = `rls-${crypto.randomUUID()}`;
+    mock.responder = (c: MockCall) => {
+      if (c.table === 'workflow_batches' && c.op === 'update') return { data: [], error: null };
+      if (c.table === 'workflow_batches' && c.op === 'select') return { data: { id }, error: null };
+      return undefined;
+    };
+    const r = await autoSaveWorkflowBatchDetailed(id, 'batch-1', state);
+    expect(r.outcome).toBe('rls-blocked');
+    expect(r.batchId).toBe(id);          // still points at the same batch…
+    expect(autoSaveSucceeded(r)).toBe(false); // …but nothing was written
+    expect(r.message).toMatch(/not being saved/i);
+    expect(mock.callsFor('workflow_batches', 'insert')).toHaveLength(0); // §18: never fork
+  });
+
+  it('deleted: a confirmed row that has vanished is tombstoned, never re-created', async () => {
+    const id = `gone-${crypto.randomUUID()}`;
+    markBatchConfirmed(id);
+    mock.responder = (c: MockCall) => {
+      if (c.table === 'workflow_batches' && c.op === 'update') return { data: [], error: null };
+      if (c.table === 'workflow_batches' && c.op === 'select') return { data: null, error: null };
+      return undefined;
+    };
+    const r = await autoSaveWorkflowBatchDetailed(id, 'batch-1', state);
+    expect(r).toEqual({ batchId: null, outcome: 'deleted', message: expect.any(String) });
+    expect(isBatchDeleted(id)).toBe(true);
+    expect(mock.callsFor('workflow_batches', 'insert')).toHaveLength(0);
+  });
+
+  it('deleted: a tombstoned batch is refused before any query runs', async () => {
+    const id = `tombstoned-${crypto.randomUUID()}`;
+    markBatchDeleted(id);
+    const r = await autoSaveWorkflowBatchDetailed(id, 'batch-1', state);
+    expect(r.outcome).toBe('deleted');
+    expect(mock.calls).toHaveLength(0);
+  });
+
+  it('created: a never-confirmed id whose row is missing is the stub-insert recovery path', async () => {
+    const id = `fresh-${crypto.randomUUID()}`;
+    mock.responder = (c: MockCall) => {
+      if (c.table === 'workflow_batches' && c.op === 'update') return { data: [], error: null };
+      if (c.table === 'workflow_batches' && c.op === 'select') return { data: null, error: null };
+      if (c.table === 'workflow_batches' && c.op === 'insert') return { data: { id: 'new-id' }, error: null };
+      return undefined;
+    };
+    const r = await autoSaveWorkflowBatchDetailed(id, 'batch-1', state);
+    expect(r).toEqual({ batchId: 'new-id', outcome: 'created' });
+    expect(autoSaveSucceeded(r)).toBe(true);
+  });
+
+  it('error: a DB error is reported, not swallowed into a null that reads as "deleted"', async () => {
+    const id = `err-${crypto.randomUUID()}`;
+    mock.responder = (c: MockCall) =>
+      c.table === 'workflow_batches' && c.op === 'update'
+        ? { data: null, error: { message: 'network down' } }
+        : undefined;
+    const r = await autoSaveWorkflowBatchDetailed(id, 'batch-1', state);
+    expect(r.outcome).toBe('error');
+    expect(r.message).toBe('network down');
+    expect(autoSaveSucceeded(r)).toBe(false);
+  });
+
+  it('the back-compat wrapper still returns just the id', async () => {
+    const id = `compat-${crypto.randomUUID()}`;
+    mock.responder = (c: MockCall) =>
+      c.table === 'workflow_batches' && c.op === 'update' ? { data: [{ id }], error: null } : undefined;
+    expect(await autoSaveWorkflowBatch(id, 'batch-1', state)).toBe(id);
   });
 });

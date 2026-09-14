@@ -24,7 +24,7 @@ type ChipFilter = ThreadStatus | 'all';
 /** Who wrote a message, from the reader's point of view. */
 function senderName(m: SupportMessage, role: SupportRole, thread: SupportThread | null): string {
   if (m.sender_role === role) return 'You';
-  return m.sender_role === 'founder' ? 'Acadia' : (thread?.user_email ?? 'User');
+  return m.sender_role === 'founder' ? 'Arcadian' : (thread?.user_email ?? 'User');
 }
 
 /**
@@ -311,14 +311,14 @@ export default function MessagesView({ userEmail, orgName, isFounder }: Messages
                     ? 'New conversation'
                     : isFounder
                       ? (active?.user_email ?? 'user')
-                      : (active?.subject || 'Acadia team')}
+                      : (active?.subject || 'Arcadian team')}
                 </strong>
                 <span className="mv-conv-meta">
                   {composingNew
                     ? 'We reply here, usually within a day.'
                     : isFounder
                       ? [active?.org_name, active?.status === 'closed' ? 'closed' : 'open'].filter(Boolean).join(' · ')
-                      : `Acadia team${closed ? ' · closed' : ''}`}
+                      : `Arcadian team${closed ? ' · closed' : ''}`}
                 </span>
               </div>
               {isFounder && active && (

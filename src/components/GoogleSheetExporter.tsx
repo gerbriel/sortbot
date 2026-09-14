@@ -1,5 +1,5 @@
-import { forwardRef, useImperativeHandle, useEffect, useState, memo } from 'react';
-import { Ban, FileText, CheckCircle2 } from 'lucide-react';
+import { forwardRef, useImperativeHandle, useEffect, useMemo, useState, memo } from 'react';
+import { Ban, FileText, CheckCircle2, Tags } from 'lucide-react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
 import { publicImageUrl } from '../lib/storageUrls';
@@ -11,6 +11,12 @@ import {
   resolveColorGid, resolveFabricGid, resolveGenderGid,
   type GidOverrides,
 } from '../lib/csvExport';
+import {
+  selectablePlatforms, describePlatformRule, platformSlug, isIdentityRule,
+  formatPlatformPrice, applyPlatformPrice, toPriceNumber,
+  type PlatformPricingRule,
+} from '../lib/platformPricing';
+import { getOrgDescriptionSettings } from '../lib/descriptionSettings';
 import './GoogleSheetExporter.css';
 
 /**
@@ -40,6 +46,14 @@ interface GoogleSheetExporterProps {
   /** Seller name for the CSV Vendor column (workspace/reseller, e.g.
    *  "C&D Vintage") — NOT the garment's brand. Empty → falls back to brand. */
   vendorName?: string;
+  /** The workspace's configured marketplaces (description_settings.
+   *  platformPricing). Undefined means "App has not resolved settings yet" —
+   *  distinct from [], which means "this workspace has configured none". */
+  platformPricing?: PlatformPricingRule[];
+  /** Fallback source for the above: when `platformPricing` is not supplied but
+   *  an org id is, the settings are fetched here. Lets the exporter work in
+   *  any mount that has an org without threading settings through it. */
+  orgId?: string;
 }
 
 export interface GoogleSheetExporterHandle {
@@ -47,7 +61,7 @@ export interface GoogleSheetExporterHandle {
 }
 
 const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExporterProps>(
-  ({ items, compactMode = false, vendorName }, ref) => {
+  ({ items, compactMode = false, vendorName, platformPricing, orgId }, ref) => {
 
   // Titles of products that ALREADY exist in the DB from OTHER batches (a proxy for
   // "already uploaded to Shopify"). Used to suffix this export's titles/handles so a new
@@ -112,6 +126,36 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
     // Re-fetch only when the SET of items changes (not on every field keystroke).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.length]);
+
+  /* ── Per-platform pricing (Feature 21) ───────────────────────────────────
+     The listing keeps ONE price; a platform is a function applied here, at
+     export time. Nothing is written back to the database, so the same batch
+     exports to Shopify and to eBay from the same rows and the price the user
+     typed in Step 3 never becomes ambiguous. See src/lib/platformPricing.ts. */
+  const [fetchedRules, setFetchedRules] = useState<PlatformPricingRule[] | null>(null);
+  useEffect(() => {
+    // Only when App did not hand the settings down. `platformPricing` being an
+    // empty array is an ANSWER ("none configured"), not a reason to go and ask.
+    if (platformPricing || !orgId) return;
+    let cancelled = false;
+    getOrgDescriptionSettings(orgId).then(s => {
+      if (!cancelled) setFetchedRules(s.platformPricing);
+    });
+    return () => { cancelled = true; };
+  }, [platformPricing, orgId]);
+
+  const platforms = useMemo(
+    () => selectablePlatforms(platformPricing ?? fetchedRules),
+    [platformPricing, fetchedRules],
+  );
+  const [platformId, setPlatformId] = useState<string>(platforms[0].id);
+  /* Derive rather than store: if the workspace disables or renames the selected
+     platform while Step 4 is open, a stored id would silently keep applying a
+     rule that no longer exists. Falling back to the first platform (always the
+     no-adjustment one) is the safe direction — it under-charges nobody. */
+  const platform = platforms.find(p => p.id === platformId) ?? platforms[0];
+  const pricingRule = isIdentityRule(platform) ? null : platform;
+  const pricingSummary = describePlatformRule(platform);
 
   // Group items by productGroup - each group is ONE product
   const productGroups = items.reduce((groups, item) => {
@@ -247,7 +291,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       return;
     }
 
-    const csvContent = buildShopifyCsv(products, gidOverrides ?? undefined, vendorName);
+    const csvContent = buildShopifyCsv(products, gidOverrides ?? undefined, vendorName, pricingRule);
 
     // Create and download the file
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -255,7 +299,12 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
     const url = URL.createObjectURL(blob);
     
     link.setAttribute('href', url);
-    link.setAttribute('download', `shopify-products-${new Date().toISOString().split('T')[0]}.csv`);
+    // The platform is in the filename because these files pile up in a Downloads
+    // folder and importing the eBay-priced CSV into Shopify is a silent, costly
+    // mistake. The identity platform keeps the historical filename exactly.
+    const stamp = new Date().toISOString().split('T')[0];
+    const suffix = pricingRule ? `-${platformSlug(platform.name)}` : '';
+    link.setAttribute('download', `shopify-products${suffix}-${stamp}.csv`);
     link.style.visibility = 'hidden';
     
     document.body.appendChild(link);
@@ -265,7 +314,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
     // blob in memory for the tab's lifetime. The revoke is deferred a tick because
     // Safari can still be reading the href when click() returns.
     setTimeout(() => URL.revokeObjectURL(url), 0);
-    track('CSV Exported', { products: products.length });
+    track('CSV Exported', { products: products.length, platform: platform.name });
   };
 
   // Expose downloadCSV so a parent can trigger it via ref
@@ -316,6 +365,32 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
               </div>
             )}
           </div>
+
+          {/* Platform selector — sits directly above the preview so the table
+              underneath is visibly the thing being re-priced. Only rendered
+              when the workspace has configured a marketplace; with none, the
+              single "Shopify / no adjustment" option would be a control that
+              cannot do anything. */}
+          {platforms.length > 1 && (
+            <div className="export-platform">
+              <label className="export-platform-label" htmlFor="export-platform-select">
+                <Tags size={14} aria-hidden="true" /> Export prices for
+              </label>
+              <select
+                id="export-platform-select"
+                className="export-platform-select"
+                value={platform.id}
+                onChange={(e) => setPlatformId(e.target.value)}
+              >
+                {platforms.map(pf => (
+                  <option key={pf.id} value={pf.id}>{pf.name}</option>
+                ))}
+              </select>
+              <p className={`export-platform-note${pricingRule ? ' export-platform-note--on' : ''}`}>
+                {pricingSummary}
+              </p>
+            </div>
+          )}
 
           <div className="export-preview">
             <h3>Preview (Shopify Format)</h3>
@@ -401,16 +476,19 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                       String(product.inventoryQuantity ?? 1),                       // Variant Inventory Qty
                       product.continueSellingOutOfStock ? 'continue' : 'deny',      // Variant Inventory Policy
                       'manual',                                                      // Variant Fulfillment Service
-                      product.price != null ? parseFloat(String(product.price)).toFixed(2) : '', // Variant Price
+                      formatPlatformPrice(product.price, pricingRule),                // Variant Price
                       (() => { // Variant Compare At Price — only if strictly greater than sale price
-                        const sale = parseFloat(String(product.price ?? 0));
-                        const compare = parseFloat(String(product.compareAtPrice ?? 0));
+                        // Identical rule to buildShopifyCsvRows, via the same
+                        // helpers, so the preview can never disagree with the file.
+                        const sale = applyPlatformPrice(toPriceNumber(product.price ?? 0), pricingRule);
+                        const rawCompare = toPriceNumber(product.compareAtPrice ?? 0);
+                        const compare = pricingRule?.applyToCompareAt ? applyPlatformPrice(rawCompare, pricingRule) : rawCompare;
                         return (compare > sale && compare > 0) ? compare.toFixed(2) : '';
                       })(),
                       product.requiresShipping === false ? 'false' : 'true',        // Variant Requires Shipping
                       'true',                                                        // Variant Taxable
                       '','','','',                                                   // Unit Price columns
-                      product.barcode || '',                                         // Variant Barcode
+                      product.barcode || product.sku || '',                           // Variant Barcode
                       product.imageUrls?.[0] || '',                                 // Image Src
                       '1',                                                           // Image Position
                       imageAltText || cleanTitle,                                   // Image Alt Text

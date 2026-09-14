@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Users, X, Pencil, Check, Copy, LogOut, Trash2, RotateCcw, Mail, Search, ChevronRight, ChevronDown, Building2, ShoppingBag, UserCog, History } from 'lucide-react';
+import { Users, X, Pencil, Check, Copy, LogOut, Trash2, RotateCcw, Mail, Search, ChevronRight, ChevronDown, Building2, ShoppingBag, UserCog, History, Tags, ArrowUp, ArrowDown, Plus } from 'lucide-react';
 import {
   fetchOrgMembers, fetchOrgInvites, inviteToOrg, revokeInvite, removeMember,
   renameOrganization, updateMemberRole, fetchMemberActivity,
@@ -21,6 +21,11 @@ import {
   getOrgDescriptionSettings, saveOrgDescriptionSettings,
   DEFAULT_DESCRIPTION_SETTINGS, type DescriptionSettings,
 } from '../lib/descriptionSettings';
+import {
+  PLATFORM_PRESETS, ADJUSTMENT_TYPES, ROUNDING_MODES, MAX_PERCENT, MAX_FIXED,
+  platformSlug, pricingExample, describePlatformRule,
+  type PlatformPricingRule, type PriceAdjustmentType, type PriceRounding,
+} from '../lib/platformPricing';
 import { syncCrmContacts } from '../lib/crmService';
 import { safeMailto } from '../lib/mailto';
 import './OrgPanel.css';
@@ -123,6 +128,10 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   const [descVendor, setDescVendor] = useState(DEFAULT_DESCRIPTION_SETTINGS.vendorName);
   const [descProseEnabled, setDescProseEnabled] = useState(DEFAULT_DESCRIPTION_SETTINGS.proseEnabled);
   const [descProseStyle, setDescProseStyle] = useState(DEFAULT_DESCRIPTION_SETTINGS.proseStyle);
+  // Marketplace price adjustments (Feature 21). Lives in the same JSONB, so it
+  // is loaded and saved with the block above — one write, never two that can
+  // half-apply.
+  const [descPlatforms, setDescPlatforms] = useState<PlatformPricingRule[]>([]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -137,6 +146,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
       setDescVendor(s.vendorName);
       setDescProseEnabled(s.proseEnabled);
       setDescProseStyle(s.proseStyle);
+      setDescPlatforms(s.platformPricing);
       setDescLoaded(true);
     });
     return () => { cancelled = true; };
@@ -155,6 +165,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
       vendorName: descVendor.trim(),
       proseEnabled: descProseEnabled,
       proseStyle: descProseStyle.trim(),
+      platformPricing: descPlatforms,
       disclaimerLines: descDisclaimers.split('\n').map(l => l.trim()).filter(Boolean),
     };
     const res = await saveOrgDescriptionSettings(org.id, settings);
@@ -176,8 +187,59 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
     setDescVendor(DEFAULT_DESCRIPTION_SETTINGS.vendorName);
     setDescProseEnabled(DEFAULT_DESCRIPTION_SETTINGS.proseEnabled);
     setDescProseStyle(DEFAULT_DESCRIPTION_SETTINGS.proseStyle);
+    // descPlatforms is deliberately NOT reset: "reset the description format"
+    // must not silently delete the workspace's marketplace pricing, which is
+    // a different subject that happens to share a JSONB column.
     setNotice('Reset to the default format — click Save format to apply it.');
   };
+
+  /* ── Marketplace pricing (Feature 21) ──────────────────────────────────────
+     Every mutation below rewrites the whole list rather than patching in place;
+     the list is a handful of rows and nothing else holds a reference to it, so
+     immutability costs nothing and removes a class of aliasing bug. Saving goes
+     through handleSaveDescSettings so there is exactly one writer of this JSONB. */
+
+  /** A new platform's id: slug of the name, suffixed only if already taken. */
+  const uniquePlatformId = (name: string, existing: PlatformPricingRule[]): string => {
+    const base = platformSlug(name);
+    if (!existing.some(p => p.id === base)) return base;
+    for (let n = 2; ; n++) {
+      const candidate = `${base}-${n}`;
+      if (!existing.some(p => p.id === candidate)) return candidate;
+    }
+  };
+
+  const addPlatform = (name: string, percent: number) => {
+    setDescPlatforms(prev => {
+      // A workspace that already has "eBay" wants to EDIT it, not collect a
+      // second one — a duplicate row here is always a mis-click.
+      if (prev.some(p => p.name.trim().toLowerCase() === name.trim().toLowerCase())) return prev;
+      return [...prev, {
+        id: uniquePlatformId(name, prev),
+        name: name.trim().slice(0, 40) || 'Platform',
+        enabled: true,
+        adjustment: { type: 'percent' as PriceAdjustmentType, value: percent },
+        rounding: 'none' as PriceRounding,
+        applyToCompareAt: false,
+      }];
+    });
+  };
+
+  const patchPlatform = (id: string, patch: Partial<PlatformPricingRule>) =>
+    setDescPlatforms(prev => prev.map(p => (p.id === id ? { ...p, ...patch } : p)));
+
+  const removePlatform = (id: string) =>
+    setDescPlatforms(prev => prev.filter(p => p.id !== id));
+
+  const movePlatform = (id: string, delta: -1 | 1) =>
+    setDescPlatforms(prev => {
+      const i = prev.findIndex(p => p.id === id);
+      const j = i + delta;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
 
   const toggleMember = (userId: string) => {
     const next = expandedMemberId === userId ? null : userId;
@@ -305,7 +367,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   };
 
   const handleCopyInvite = async (inv: OrgInviteRow) => {
-    const msg = `You're invited to the "${displayName}" workspace on Acadia.\n\nSign in (or create an account) at ${appUrl} using this email address: ${inv.email}\n\nYou'll join the workspace automatically.`;
+    const msg = `You're invited to the "${displayName}" workspace on Arcadian.\n\nSign in (or create an account) at ${appUrl} using this email address: ${inv.email}\n\nYou'll join the workspace automatically.`;
     try {
       await navigator.clipboard.writeText(msg);
       setNotice('Invite message copied. Paste it into an email or text to your teammate.');
@@ -378,7 +440,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   const mailtoWelcome = (s: BetaSignupRow): string | null =>
     safeMailto(
       s.email,
-      'Your Acadia beta access is ready',
+      'Your Arcadian beta access is ready',
       `Hi ${s.contact_name},\n\nYour beta request for ${s.org_name} is approved. Sign in at ${appUrl} with this email address and your workspace will be ready.\n\nWelcome aboard!`
     );
 
@@ -792,6 +854,166 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
                 <button className="org-invite-btn" disabled={busy} onClick={handleSaveDescSettings}>Save format</button>
                 <button className="org-confirm-no" disabled={busy} onClick={handleResetDescSettings}>Reset to defaults</button>
               </div>
+            </div>
+
+            {/* ── Marketplace pricing (Feature 21) ──────────────────────────
+                The listing keeps one price; each marketplace here is a rule
+                applied at CSV export time, chosen in Step 4. Nothing is
+                written back to a listing, so adding a platform can never
+                change what anyone sees in Step 3. */}
+            <h3 className="org-section-title"><Tags size={15} aria-hidden="true" /> Marketplace pricing</h3>
+            <p className="shopify-conn-help">
+              Each marketplace takes its own cut, so the same garment needs a different
+              number on each one. Set the markup once here and pick the marketplace in
+              Step 4 — the listing's own price never changes.
+            </p>
+
+            <div className="plat-list">
+              {descPlatforms.length === 0 && (
+                <p className="org-panel-loading">
+                  No marketplaces yet. Add one below — until you do, Step 4 exports your
+                  prices exactly as they are.
+                </p>
+              )}
+
+              {descPlatforms.map((pf, idx) => (
+                <div className={`plat-row${pf.enabled ? '' : ' plat-row--off'}`} key={pf.id}>
+                  <div className="plat-row-main">
+                    <label className="plat-field plat-field--name">
+                      <span>Marketplace</span>
+                      <input
+                        value={pf.name}
+                        maxLength={40}
+                        onChange={(e) => patchPlatform(pf.id, { name: e.target.value })}
+                      />
+                    </label>
+
+                    <label className="plat-field plat-field--narrow">
+                      <span>Adjust by</span>
+                      <select
+                        value={pf.adjustment.type}
+                        onChange={(e) => patchPlatform(pf.id, {
+                          adjustment: { ...pf.adjustment, type: e.target.value as PriceAdjustmentType },
+                        })}
+                      >
+                        {ADJUSTMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                      </select>
+                    </label>
+
+                    <label className="plat-field plat-field--narrow">
+                      <span>{pf.adjustment.type === 'percent' ? 'Percent' : 'Dollars'}</span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step={pf.adjustment.type === 'percent' ? 0.5 : 0.25}
+                        min={pf.adjustment.type === 'percent' ? -MAX_PERCENT : -MAX_FIXED}
+                        max={pf.adjustment.type === 'percent' ? MAX_PERCENT : MAX_FIXED}
+                        value={String(pf.adjustment.value)}
+                        onChange={(e) => {
+                          // Keep an in-progress "-" or "" from becoming NaN and
+                          // wiping the field while the user is still typing.
+                          const n = parseFloat(e.target.value);
+                          patchPlatform(pf.id, {
+                            adjustment: { ...pf.adjustment, value: Number.isFinite(n) ? n : 0 },
+                          });
+                        }}
+                      />
+                    </label>
+
+                    <label className="plat-field plat-field--narrow">
+                      <span>Round</span>
+                      <select
+                        value={pf.rounding}
+                        onChange={(e) => patchPlatform(pf.id, { rounding: e.target.value as PriceRounding })}
+                      >
+                        {ROUNDING_MODES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="plat-row-foot">
+                    {/* The worked example is the whole point of the row: nobody
+                        reasons about "+13% rounded to .99" in the abstract. */}
+                    <span className="plat-example" aria-live="polite">{pricingExample(pf)}</span>
+
+                    <label className="plat-check">
+                      <input
+                        type="checkbox"
+                        checked={pf.applyToCompareAt}
+                        onChange={(e) => patchPlatform(pf.id, { applyToCompareAt: e.target.checked })}
+                      />
+                      Compare-at too
+                    </label>
+
+                    <label className="plat-check">
+                      <input
+                        type="checkbox"
+                        checked={pf.enabled}
+                        onChange={(e) => patchPlatform(pf.id, { enabled: e.target.checked })}
+                      />
+                      Show in Step 4
+                    </label>
+
+                    <div className="plat-row-actions">
+                      <button
+                        type="button" className="plat-icon-btn"
+                        onClick={() => movePlatform(pf.id, -1)} disabled={idx === 0}
+                        title="Move up" aria-label={`Move ${pf.name} up`}
+                      ><ArrowUp size={14} /></button>
+                      <button
+                        type="button" className="plat-icon-btn"
+                        onClick={() => movePlatform(pf.id, 1)} disabled={idx === descPlatforms.length - 1}
+                        title="Move down" aria-label={`Move ${pf.name} down`}
+                      ><ArrowDown size={14} /></button>
+                      <button
+                        type="button" className="plat-icon-btn plat-icon-btn--danger"
+                        onClick={() => removePlatform(pf.id)}
+                        title="Remove" aria-label={`Remove ${pf.name}`}
+                      ><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+
+                  <p className="plat-summary">{describePlatformRule(pf)}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="plat-add">
+              <span className="plat-add-label"><Plus size={13} aria-hidden="true" /> Add a marketplace</span>
+              <div className="plat-add-chips">
+                {PLATFORM_PRESETS.map(preset => {
+                  const already = descPlatforms.some(
+                    p => p.name.trim().toLowerCase() === preset.name.toLowerCase());
+                  return (
+                    <button
+                      key={preset.name}
+                      type="button"
+                      className="plat-add-chip"
+                      disabled={already}
+                      onClick={() => addPlatform(preset.name, preset.percent)}
+                    >
+                      {preset.name}{preset.percent ? ` +${preset.percent}%` : ''}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  className="plat-add-chip plat-add-chip--custom"
+                  onClick={() => addPlatform(`Marketplace ${descPlatforms.length + 1}`, 0)}
+                >
+                  Custom…
+                </button>
+              </div>
+              <p className="shopify-conn-help">
+                The suggested percentages are each marketplace's published headline fee as a
+                starting point, not advice — fees change, so check yours and edit the number.
+              </p>
+            </div>
+
+            <div className="desc-settings-actions">
+              <button className="org-invite-btn" disabled={busy} onClick={handleSaveDescSettings}>
+                Save marketplaces
+              </button>
             </div>
           </>
         )}

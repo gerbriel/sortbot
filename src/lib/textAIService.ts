@@ -4,6 +4,7 @@
  */
 
 import { COLOR_WORDS_LIST } from './colorDatabase';
+import { VOICE_KEYWORD_TO_FIELD, stripFieldTitlePrefix } from './voiceGrammar';
 import { resolveDescriptionSettings, type DescriptionSettings } from './descriptionSettings';
 
 /**
@@ -110,6 +111,41 @@ export interface AIGeneratedContent {
  *
  * Anything NOT in a field command stays in the main description text.
  */
+/**
+ * ONE alternation of every spoken field title, built from the live parser's
+ * vocabulary (voiceGrammar.VOICE_KEYWORD_TO_FIELD) plus the two titles only the
+ * extractor understands (`model`, `type`) and the pit-to-pit synonyms.
+ *
+ * WHY THIS EXISTS: each field below used to carry its OWN hand-written copy of
+ * this list, and every copy was missing `description`, `note`, `chest`, `hip`,
+ * `rise`, `leg opening` and `type`. A value therefore ran straight through those
+ * titles — "brand nike chest 22" (no periods) put **"Nike Chest 22"** in the
+ * brand field, which is founder report 9. Built from the map, the lists cannot
+ * drift apart again.
+ *
+ * MEASUREMENT titles are gated on a following DIGIT, the same "plausible value"
+ * rule the live grammar uses to decide whether a title interrupts a description.
+ * Without it "style hip hop" would end the style value at `hip` and "high rise"
+ * at `rise` — both are ordinary vintage-resale vocabulary, and measurements are
+ * always dictated with a number.
+ */
+const MEASUREMENT_TITLES = [
+  ...Object.keys(VOICE_KEYWORD_TO_FIELD).filter(k => VOICE_KEYWORD_TO_FIELD[k].startsWith('meas_')),
+  'pit\\s*(?:to|2)?\\s*pit', 'p2p',
+].sort((a, b) => b.length - a.length).join('|');
+
+const PLAIN_TITLES = [
+  ...Object.keys(VOICE_KEYWORD_TO_FIELD).filter(k => !VOICE_KEYWORD_TO_FIELD[k].startsWith('meas_')),
+  'model', 'type',
+].sort((a, b) => b.length - a.length).join('|');
+
+/** "…(value) up to the next field title", as one shared lookahead. */
+const NEXT_TITLE_LOOKAHEAD =
+  `(?=\\s+(?:${PLAIN_TITLES})\\b|\\s+(?:${MEASUREMENT_TITLES})\\s+\\S*\\d|$)`;
+
+/** `head` must include its own trailing separator (e.g. "\\bbrand\\s+"). */
+const nextFieldRe = (head: string) => new RegExp(`${head}(.+?)${NEXT_TITLE_LOOKAHEAD}`, 'i');
+
 function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Record<string, any> {
   const extracted: Record<string, any> = {};
   // Normalize newlines → spaces so command regexes work even after formatVoiceTranscript
@@ -136,8 +172,8 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   // command started without a preceding "period"), truncate at that boundary.
   // Example: "brand quicksilver size xl period" → primary regex captures
   // "quicksilver size xl" → trimmed to "quicksilver" before "size xl".
-  const FIELD_BOUNDARY_RE =
-    /^(.*?)\b(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|type|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title|description)\s+\w/i;
+  const FIELD_BOUNDARY_RE = new RegExp(
+    `^(.*?)\\b(?:(?:${PLAIN_TITLES})\\s+\\w|(?:${MEASUREMENT_TITLES})\\s+\\S*\\d)`, 'i');
 
   function extractCommand(pattern: RegExp): string | null {
     const match = voiceDesc.match(pattern);
@@ -162,6 +198,10 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   } else {
     // No closing "period" (recording cut off) — fall back to the keyword
     // boundary so a following command can't bleed in.
+    // DELIBERATELY NOT the shared NEXT_TITLE_LOOKAHEAD: the description is the one
+    // field whose value legitimately contains field titles ("long sleeve", "boxy
+    // style", "care label"), so widening this list would chop descriptions in half
+    // — the exact regression the July 2026 voice overhaul fixed.
     const m = voiceDesc.match(/\bdescription\s+(.+?)(?=\s+(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
     if (m) {
       descriptionCmd = m[1].trim();
@@ -179,7 +219,7 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   if (!brand) {
     // Fallback for fast speech where "period" delimiter is missing or dropped.
     // Capture everything after "brand " up to the next field trigger keyword or end of string.
-    const m = voiceDesc.match(/\bbrand\s+(.+?)(?=\s+(?:model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    const m = voiceDesc.match(nextFieldRe('\\bbrand\\s+'));
     if (m) brand = m[1].trim();
   }
   if (brand) extracted.brand = toTitleCase(brand);
@@ -187,7 +227,7 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   // ── MODEL ─────────────────────────────────────────────────────────────────
   let model = extractCommand(/\bmodel\s+(.+?)\s+period\b/i);
   if (!model) {
-    const m = voiceDesc.match(/\bmodel\s+(.+?)(?=\s+(?:brand|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    const m = voiceDesc.match(nextFieldRe('\\bmodel\\s+'));
     if (m) model = m[1].trim();
   }
   if (model) extracted.modelName = toTitleCase(model);
@@ -208,12 +248,10 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   // before the plain "color X" command gets a chance to match.
   // Accepts: "secondary color blue period", "secondary blue period",
   //          "second color blue period", "accent color blue period"
-  const NEXT_FIELD = /brand|model|size|colou?r|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title/i;
-
   let secondaryColorCmd =
     extractCommand(/\b(?:secondary\s+colou?r?|second\s+colou?r?|accent\s+colou?r?)\s+(.+?)\s+period\b/i);
   if (!secondaryColorCmd) {
-    const m = voiceDesc.match(/\b(?:secondary\s+colou?r?|second\s+colou?r?|accent\s+colou?r?)\s+(.+?)(?=\s+(?:brand|model|size|colou?r|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    const m = voiceDesc.match(nextFieldRe('\\b(?:secondary\\s+colou?r?|second\\s+colou?r?|accent\\s+colou?r?)\\s+'));
     if (m) secondaryColorCmd = m[1].trim();
   }
   if (secondaryColorCmd) extracted.secondaryColor = toTitleCase(secondaryColorCmd);
@@ -223,20 +261,19 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
     extractCommand(/(?<!secondary[\s])(?<!second[\s])(?<!accent[\s])\bcolou?r\s+(.+?)\s+period\b/i);
   if (!colorCmd) {
     // No-period fallback: "color blue" → stop at next field trigger
-    const m = voiceDesc.match(/(?<!secondary[\s])(?<!second[\s])(?<!accent[\s])\bcolou?r\s+(.+?)(?=\s+(?:brand|model|size|secondary|second|accent|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    const m = voiceDesc.match(nextFieldRe('(?<!secondary[\\s])(?<!second[\\s])(?<!accent[\\s])\\bcolou?r\\s+'));
     if (m) colorCmd = m[1].trim();
   }
   if (colorCmd) {
     const parts = colorCmd.split(/\s+and\s+|\s*\/\s*/i).filter(Boolean);
     extracted.color = toTitleCase(stripColorModifiers(parts[0]));
     if (parts[1] && !extracted.secondaryColor) extracted.secondaryColor = toTitleCase(stripColorModifiers(parts[1]));
-    void NEXT_FIELD; // used in fallback regexes above
   }
 
   // ── MATERIAL ──────────────────────────────────────────────────────────────
   let materialCmd = extractCommand(/\b(?:material|fabric)\s+(.+?)\s+period\b/i);
   if (!materialCmd) {
-    const m = voiceDesc.match(/\b(?:material|fabric)\s+(.+?)(?=\s+(?:brand|model|size|colou?r|secondary|second|accent|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    const m = voiceDesc.match(nextFieldRe('\\b(?:material|fabric)\\s+'));
     if (m) materialCmd = m[1].trim();
   }
   if (materialCmd) {
@@ -248,7 +285,7 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   // ── CONDITION ─────────────────────────────────────────────────────────────
   let condRaw = extractCommand(/\bcondition\s+(.+?)\s+period\b/i);
   if (!condRaw) {
-    const m = voiceDesc.match(/\bcondition\s+(.+?)(?=\s+(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    const m = voiceDesc.match(nextFieldRe('\\bcondition\\s+'));
     if (m) condRaw = m[1].trim();
   }
   if (condRaw) extracted.condition = normalizeCondition(condRaw);
@@ -256,7 +293,7 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   // ── ERA ───────────────────────────────────────────────────────────────────
   let eraCmd = extractCommand(/\bera\s+(.+?)\s+period\b/i);
   if (!eraCmd) {
-    const m = voiceDesc.match(/\bera\s+(.+?)(?=\s+(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    const m = voiceDesc.match(nextFieldRe('\\bera\\s+'));
     if (m) eraCmd = m[1].trim();
   }
   if (eraCmd) extracted.era = normalizeEra(eraCmd);
@@ -264,7 +301,7 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   // ── STYLE ─────────────────────────────────────────────────────────────────
   let styleCmd = extractCommand(/\bstyle\s+(.+?)\s+period\b/i);
   if (!styleCmd) {
-    const m = voiceDesc.match(/\bstyle\s+(.+?)(?=\s+(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    const m = voiceDesc.match(nextFieldRe('\\bstyle\\s+'));
     if (m) styleCmd = m[1].trim();
   }
   if (styleCmd) extracted.style = toTitleCase(styleCmd);
@@ -272,7 +309,7 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   // ── TYPE (garment type) ───────────────────────────────────────────────────
   let typeCmd = extractCommand(/\btype\s+(.+?)\s+period\b/i);
   if (!typeCmd) {
-    const m = voiceDesc.match(/\btype\s+(.+?)(?=\s+(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|gender|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    const m = voiceDesc.match(nextFieldRe('\\btype\\s+'));
     if (m) typeCmd = m[1].trim();
   }
   if (typeCmd) extracted.type = toTitleCase(typeCmd);
@@ -280,7 +317,7 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   // ── GENDER ────────────────────────────────────────────────────────────────
   let genderCmd = extractCommand(/\bgender\s+(.+?)\s+period\b/i);
   if (!genderCmd) {
-    const m = voiceDesc.match(/\bgender\s+(.+?)(?=\s+(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|price|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    const m = voiceDesc.match(nextFieldRe('\\bgender\\s+'));
     if (m) genderCmd = m[1].trim();
   }
   if (genderCmd) extracted.gender = normalizeGender(genderCmd);
@@ -288,7 +325,7 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   // ── PRICE ─────────────────────────────────────────────────────────────────
   let priceRaw = extractCommand(/\bprice[:\s]+(.+?)\s+period\b/i);
   if (!priceRaw) {
-    const m = voiceDesc.match(/\bprice[:\s]+(.+?)(?=\s+(?:brand|model|size|colou?r|secondary|second|accent|material|fabric|condition|era|style|gender|flaws?|care|width|length|waist|shoulder|sleeve|inseam|outseam|tags?|title)\b|$)/i);
+    const m = voiceDesc.match(nextFieldRe('\\bprice[:\\s]+'));
     if (m) priceRaw = m[1].trim();
   }
   if (priceRaw) {
@@ -381,16 +418,20 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
   // Handles spoken multi-word sizes ("extra large", "extra extra small", "double extra large")
   // as well as abbreviations (XL, XXS, 3XL) and numeric sizes (32, 32x30, 10.5)
   if (!extracted.size) {
-    // Try multi-word spoken forms first (longest match wins)
+    // Try multi-word spoken forms first (longest match wins). The petite/tall/
+    // youth/pants/age families are listed BEFORE the plain letter ramp so
+    // "petite small" is never read as bare "small" and "large tall" never as
+    // bare "large" (report 26) — normalizeSizeValue does the actual mapping.
     const multiWordSize = voiceDesc.match(
-      /\b(triple\s+extra\s+large|triple\s+extra\s+small|double\s+extra\s+large|double\s+extra\s+small|extra\s+extra\s+extra\s+large|extra\s+extra\s+extra\s+small|extra\s+extra\s+large|extra\s+extra\s+small|extra\s+large|extra\s+small|one\s+size(?:\s+fits\s+(?:all|most))?)\b/i
+      /\b(petite\s+(?:extra\s+)?(?:small|medium|large)|petite\s+\d{1,2}|(?:extra\s+)?(?:small|medium|large)\s+tall|(?:youth|kids?|boys?|girls?|junior)\s+(?:extra\s+)?(?:small|medium|large)|\d{2}\s*(?:x|by|\/)\s*\d{2}|\d{1,2}\s*(?:-|to)\s*\d{1,2}\s*(?:months?|years?)|\d{1,2}\s*(?:months?|years?)\s+old|triple\s+extra\s+large|triple\s+extra\s+small|double\s+extra\s+large|double\s+extra\s+small|extra\s+extra\s+extra\s+large|extra\s+extra\s+extra\s+small|extra\s+extra\s+large|extra\s+extra\s+small|extra\s+large|extra\s+small|one\s+size(?:\s+fits\s+(?:all|most))?)\b/i
     );
     if (multiWordSize) {
-      extracted.size = normalizeSizeValue(multiWordSize[1]);
+      extracted.size = normalizeSizeValue(multiWordSize[1].replace(/\s+old$/i, ''));
     } else {
-      // Single-word / abbreviation / numeric fallback
+      // Single-word / abbreviation / numeric fallback. 1X–5X and 2T–6T sit in
+      // front of the letter ramp so "2x" can never be read as "2xl".
       const sizeFallback = voiceDesc.match(
-        /\b(?:size[:\s]+)?(5xl|4xl|3xl|xxxl|2xl|xxl|xl|large|medium|small|xxs|xs)\b/i
+        /\b(?:size[:\s]+)?([1-5]x(?![a-z])|[2-6]t(?![a-z])|y[sml]|yxl|5xl|4xl|3xl|xxxl|2xl|xxl|xl|large|medium|small|xxs|xs)\b/i
       );
       if (sizeFallback) {
         extracted.size = normalizeSizeValue((sizeFallback[1] || '').trim());
@@ -657,7 +698,35 @@ function extractFieldsFromVoice(rawVoiceDesc: string, _category?: string): Recor
     }
   }
 
+  // ── Pants sizing: the size and the two measurements are the same fact ────
+  // "waist 32 inseam 34" (two measurement commands, no size command) must still
+  // produce the size 32x34, and "size 32 by 34" must still fill the two
+  // measurement fields. Founder report 26.
+  if (!extracted.size && measurements['waist'] && measurements['inseam']) {
+    extracted.size = `${measurements['waist']}x${measurements['inseam']}`;
+  }
+  const waistInseam = typeof extracted.size === 'string'
+    ? extracted.size.match(/^(\d{2})x(\d{2})\b/)
+    : null;
+  if (waistInseam) {
+    if (!measurements['waist']) measurements['waist'] = waistInseam[1];
+    if (!measurements['inseam']) measurements['inseam'] = waistInseam[2];
+  }
+
   if (Object.keys(measurements).length > 0) extracted.measurements = measurements;
+
+  // ── Report 9: no field value may carry its own title ─────────────────────
+  // Structurally every span above already excludes the matched title, so this
+  // is the safety net that ALSO HEALS values stored by older sessions (and by
+  // the pre-fix live parser, which left "description" inside customDescription).
+  // Only the field's OWN titles are removed — see stripFieldTitlePrefix.
+  for (const key of Object.keys(extracted)) {
+    const v = extracted[key];
+    if (typeof v !== 'string') continue;
+    const cleaned = stripFieldTitlePrefix(key, v);
+    if (cleaned) extracted[key] = cleaned;
+    else delete extracted[key];
+  }
 
   return extracted;
 }
@@ -725,6 +794,16 @@ export function stripVoiceCommands(voiceDesc: string): string {
 
 // ── Normalizer helpers ────────────────────────────────────────────────────────
 
+/**
+ * Drop a leading spoken field title from a free-form value: "description super
+ * soft" → "super soft". Only ever removes the word at the very start, so a
+ * legitimate mention further in ("great description on the tag") is untouched.
+ */
+export function stripLeadingFieldTitle(raw?: string): string | undefined {
+  if (!raw) return raw;
+  return raw.replace(/^\s*(?:description|note)\b[\s:,-]*/i, '').trim() || undefined;
+}
+
 /** Strip descriptor adjectives from a color phrase: "Faded Out White" → "White" */
 function stripColorModifiers(raw: string): string {
   return raw
@@ -788,15 +867,76 @@ export function primaryMaterial(raw: string): string {
   return firstMat ? firstMat[1].trim() : raw.trim();
 }
 
+/**
+ * The letter ramp. Keys are lower-cased with all whitespace/hyphens removed, so
+ * "extra large", "extra-large" and "XL" all collapse onto the same key.
+ */
+const SIZE_LETTER_MAP: Record<string, string> = {
+  // XS
+  extrasmall: 'XS', xsmall: 'XS', xs: 'XS',
+  xxsmall: 'XXS', extraextrasmall: 'XXS', doubleextrasmall: 'XXS', xxs: 'XXS',
+  xxxsmall: 'XXXS', tripleextrasmall: 'XXXS', extraextraextrasmall: 'XXXS', xxxs: 'XXXS',
+  // S / M / L
+  small: 'S', s: 'S',
+  medium: 'M', m: 'M', med: 'M',
+  large: 'L', l: 'L', lg: 'L',
+  // XL
+  extralarge: 'XL', xlarge: 'XL', xl: 'XL',
+  // XXL — accept "extra extra large", "double extra large", "double x large", "xx large", "2xl"
+  xxlarge: 'XXL', extraextralarge: 'XXL', doubleextralarge: 'XXL',
+  doublexlarge: 'XXL', extraxlarge: 'XXL',
+  '2xlarge': 'XXL', '2xl': 'XXL', xxl: 'XXL',
+  // XXXL — accept "triple extra large", "extra extra extra large", "3xl", "triple x large"
+  xxxlarge: 'XXXL', tripleextralarge: 'XXXL',
+  extraextraextralarge: 'XXXL', triplexlarge: 'XXXL',
+  '3xlarge': 'XXXL', '3xl': 'XXXL', xxxl: 'XXXL',
+  // 4XL
+  '4xlarge': '4XL', '4xl': '4XL', xxxxl: '4XL', quadrupleextralarge: '4XL',
+  // 5XL
+  '5xlarge': '5XL', '5xl': '5XL', xxxxxl: '5XL',
+  // OSFA
+  '1size': 'OSFA', onesize: 'OSFA',
+};
+
+/** Spoken small numbers, for "one x" / "two x" plus sizes. */
+const SPOKEN_DIGIT: Record<string, string> = {
+  one: '1', two: '2', three: '3', four: '4', five: '5', six: '6',
+};
+
+const collapseSize = (s: string) => s.toLowerCase().replace(/[\s-]+/g, '');
+
+/** Letter symbol for a spoken/typed size word, or null when it is not one. */
+const letterSize = (s: string): string | null => SIZE_LETTER_MAP[collapseSize(s)] ?? null;
+
+/**
+ * normalizeSizeValue — every size family this catalogue actually sells, in one
+ * canonical spelling (founder report 26).
+ *
+ *   letters      "extra large", "xl"            → XL      (never spelled out)
+ *   plus         "1X", "one x", "2X"            → 1X, 2X  (NEVER folded into XL/XXL —
+ *                                                          women's 1X is not a men's XL)
+ *   tall         "large tall", "xl tall"        → LT, XLT
+ *   petite       "petite small" / "petite 2"    → PS / 2P (letters take the P first,
+ *                                                          numbers take it last — that is
+ *                                                          how the trade writes them)
+ *   toddler      "3T", "4 t"                    → 3T, 4T
+ *   youth/kids   "youth medium", "kids large"   → YM, YL
+ *   baby ages    "6-9", "6 to 9 months"         → 6-9, 6-9M
+ *   pants        "32x34", "32 by 34", "W32 L34" → 32x34   (and the waist/inseam
+ *                                                          measurement fields, filled by
+ *                                                          the voice extractor)
+ *   numeric      "size 8", "10.5"               → 8, 10.5
+ *   one size     "OSFA", "one size fits most"   → OSFA
+ *
+ * The "(fits like …)" note is orthogonal to all of it and is re-attached last,
+ * only when the caller asks for it (description SIZE line + the Step 3 size
+ * field). Titles, CSV size columns and alt text take the clean base size.
+ */
 export function normalizeSizeValue(raw: string, opts?: { keepFitsLike?: boolean }): string {
   // ── "(fits like …)" note ────────────────────────────────────────────────
   // Spoken as "size large fits like period" or "size large fits like medium period",
-  // or already stored as "L (fits like M)". The note is preserved ONLY where
-  // explicitly requested (description SIZE line, the size form field) — titles,
-  // CSV size columns, and Shopify fields always get the clean base size.
-  // NOTE: this must run BEFORE the OSFA check — "fits like" contains the word
-  // sequence "size fits" nowhere, but "one size fits all" must not be split here,
-  // so we require the note to come AFTER some base text or a "(" delimiter.
+  // or already stored as "L (fits like M)".
+  // NOTE: this must run BEFORE the OSFA check so "one size fits all" is not split here.
   let fitsNote: string | null = null;
   let base = raw;
   const fitsMatch = raw.match(/^(.+?)[\s,]*\(?\s*fits\s+like\s*:?\s*([^)]*?)\s*\)?\s*$/i);
@@ -809,52 +949,91 @@ export function normalizeSizeValue(raw: string, opts?: { keepFitsLike?: boolean 
   const withNote = (size: string) => (opts?.keepFitsLike && fitsNote ? `${size}${fitsNote}` : size);
 
   const trimmed = base.trim();
+  if (!trimmed) return withNote('');
 
   // OSFA / One Size Fits All → "OSFA"
   if (/\b(osfa|one[\s-]?size[\s-]?fits[\s-]?all|one[\s-]?size[\s-]?fits[\s-]?most|one[\s-]?size|os)\b/i.test(trimmed)) {
     return withNote('OSFA');
   }
 
-  // Collapse whitespace/hyphens and lowercase the whole string first so that
-  // multi-word spoken sizes like "extra large", "extra extra small", "double extra large"
-  // are matched before we fall back to splitting on the first token.
-  const collapsed = trimmed.toLowerCase().replace(/[\s-]+/g, '');
+  // Working copy: lower-cased, single-spaced, leading "size"/"sz" and
+  // gender qualifiers dropped ("women's large" → "large").
+  const t = trimmed
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/^(?:sz|size)\s+/, '')
+    .replace(/^(?:women'?s?|womens|mens|men'?s?|ladies|unisex)\s+/, '')
+    .trim();
 
-  const map: Record<string, string> = {
-    // XS
-    extrasmall: 'XS', xsmall: 'XS', xs: 'XS',
-    xxsmall: 'XXS', extraextrasmall: 'XXS', doubleextrasmall: 'XXS', xxs: 'XXS',
-    xxxsmall: 'XXXS', tripleextrasmall: 'XXXS', extraextraextrasmall: 'XXXS', xxxs: 'XXXS',
-    // S / M / L
-    small: 'S', s: 'S',
-    medium: 'M', m: 'M',
-    large: 'L', l: 'L',
-    // XL
-    extralarge: 'XL', xlarge: 'XL', xl: 'XL',
-    // XXL — accept "extra extra large", "double extra large", "double x large", "xx large", "2xl"
-    xxlarge: 'XXL', extraextralarge: 'XXL', doubleextralarge: 'XXL',
-    doublexlarge: 'XXL', extraxlarge: 'XXL',
-    '2xlarge': 'XXL', '2xl': 'XXL', xxl: 'XXL',
-    // XXXL — accept "triple extra large", "extra extra extra large", "3xl", "triple x large"
-    xxxlarge: 'XXXL', tripleextralarge: 'XXXL',
-    extraextraextralarge: 'XXXL', triplexlarge: 'XXXL',
-    '3xlarge': 'XXXL', '3xl': 'XXXL', xxxl: 'XXXL',
-    // 4XL
-    '4xlarge': '4XL', '4xl': '4XL', xxxxl: '4XL', quadrupleextralarge: '4XL',
-    // 5XL
-    '5xlarge': '5XL', '5xl': '5XL', xxxxxl: '5XL',
-    // OSFA
-    '1size': 'OSFA', onesize: 'OSFA',
-  };
+  // ── Pants: waist × inseam ───────────────────────────────────────────────
+  // "32x34", "32 x 34", "32 by 34", "32/34", "W32 L34". A HYPHEN is deliberately
+  // NOT a separator here — "6-9" is a baby age range, and that ambiguity is the
+  // whole reason kids sizes were being mangled.
+  const wi = t.match(/^w?\s*(\d{2})\s*(?:x|by|\/)\s*l?\s*(\d{2})$/)
+          || t.match(/^w\s*(\d{2})\s*l\s*(\d{2})$/);   // "W32 L34", "w32l34"
+  if (wi) return withNote(`${wi[1]}x${wi[2]}`);
 
-  // Try the full collapsed string first (handles "extra large", "extra extra small", etc.)
-  if (map[collapsed]) return withNote(map[collapsed]);
+  // ── Baby / kids age ranges ──────────────────────────────────────────────
+  // "6-9", "6 to 9", "6-9 months", "3-6 mo", "2-3 years", "18 months", "2 years"
+  const ageRange = t.match(/^(\d{1,2})\s*(?:-|–|—|to)\s*(\d{1,2})\s*(months?|mos?|mo|years?|yrs?|yr|m|y)?$/);
+  if (ageRange) {
+    const unit = ageRange[3] ? (/^m/.test(ageRange[3]) ? 'M' : 'Y') : '';
+    return withNote(`${ageRange[1]}-${ageRange[2]}${unit}`);
+  }
+  const singleAge = t.match(/^(\d{1,2})\s*(months?|mos?|mo|years?|yrs?|yr)$/);
+  if (singleAge) return withNote(`${singleAge[1]}${/^m/.test(singleAge[2]) ? 'M' : 'Y'}`);
 
-  // Fall back to just the first space/slash-separated token for numeric sizes
-  // like "32", "32x30", "10.5" that don't need multi-word handling
-  const first = trimmed.split(/[\s/]+/)[0];
-  const firstCollapsed = first.toLowerCase().replace(/[\s-]+/g, '');
-  return withNote(map[firstCollapsed] || first.toUpperCase());
+  // ── Toddler: 2T–6T ──────────────────────────────────────────────────────
+  const toddler = t.match(/^([2-6])\s*t$/);
+  if (toddler) return withNote(`${toddler[1]}T`);
+
+  // ── Women's plus: 1X–5X ─────────────────────────────────────────────────
+  // Guarded so it can NEVER swallow "2XL"/"3XL": the letter L (or "large") after
+  // the X means the men's ramp, which SIZE_LETTER_MAP owns. 1X ≠ XL, 2X ≠ XXL —
+  // they are different garments and merging them mis-sizes every plus listing.
+  const plus = t.match(/^(\d|one|two|three|four|five|six)\s*x$/);
+  if (plus) return withNote(`${SPOKEN_DIGIT[plus[1]] ?? plus[1]}X`);
+
+  // ── Tall: "large tall" → LT ─────────────────────────────────────────────
+  const tall = t.match(/^(.+?)\s+tall$/) || t.match(/^tall\s+(.+)$/);
+  if (tall) {
+    const b = letterSize(tall[1]);
+    if (b) return withNote(`${b}T`);
+  }
+
+  // ── Petite: "petite small" → PS, "petite 2" → 2P ────────────────────────
+  const petite = t.match(/^petite\s+(.+)$/) || t.match(/^(.+?)\s+petite$/);
+  if (petite) {
+    const rest = petite[1].trim();
+    if (/^\d{1,2}$/.test(rest)) return withNote(`${rest}P`);
+    const b = letterSize(rest);
+    if (b) return withNote(`P${b}`);
+  }
+  if (t === 'petite') return withNote('P');
+
+  // ── Youth / kids: "youth medium" → YM, "kids large" → YL ────────────────
+  const youth = t.match(/^(?:youth|kids?|childrens?|children'?s|child|boys?|boy'?s|girls?|girl'?s|junior'?s?|jr)\s+(.+)$/);
+  if (youth) {
+    const rest = youth[1].trim();
+    const b = letterSize(rest);
+    if (b) return withNote(`Y${b}`);
+    if (/^\d{1,2}$/.test(rest)) return withNote(`Y${rest}`);
+    // "youth 6-9 months", "kids 3T" — re-enter with the qualifier removed.
+    const inner = normalizeSizeValue(rest);
+    if (inner) return withNote(inner);
+  }
+
+  // ── Letter ramp ─────────────────────────────────────────────────────────
+  // Full collapsed string first, so "extra large" / "double extra large" match
+  // before we fall back to the first token.
+  const collapsed = collapseSize(t);
+  if (SIZE_LETTER_MAP[collapsed]) return withNote(SIZE_LETTER_MAP[collapsed]);
+
+  // ── Numeric and everything else ─────────────────────────────────────────
+  // First space/slash-separated token, so "32", "10.5", "3T", "1X", "YM", "LT"
+  // and "6-9" all pass through in their already-canonical spelling.
+  const first = t.split(/[\s/]+/)[0];
+  return withNote(SIZE_LETTER_MAP[collapseSize(first)] || first.toUpperCase());
 }
 
 /**
@@ -875,7 +1054,11 @@ export const generateProductDescription = async (
   // so regenerate always reflects the latest voice content, with form values as fallback.
   const mergedContext = {
     ...context,
-    customDescription: extracted.customDescription || context.customDescription,
+    // The spoken field title is not part of the value. The live dictation parser
+    // strips it (lib/voiceGrammar), but items dictated before that fix have it
+    // baked into the saved field, where it reached the title formula, the tag
+    // scanner and the description body as the literal word "description".
+    customDescription: stripLeadingFieldTitle(extracted.customDescription || context.customDescription),
     brand:             extracted.brand             || context.brand,
     color:             extracted.color             || context.color,
     secondaryColor:    extracted.secondaryColor    || context.secondaryColor,
@@ -1348,17 +1531,58 @@ function generateTitleFromFields(context: ProductContext): string {
   // and build: "{SIZE} - Vintage Y2K {BRAND} {desc keywords}" capped at 60 chars.
   // Falls through to the normal structured-fields formula if no description present.
   if (context.customDescription) {
+    // Report 11: a title is a keyword list, so no grammatical filler may reach it.
+    // Complete closed-class coverage — articles, prepositions, conjunctions,
+    // pronouns, auxiliaries, degree adverbs and contentless intensifiers. Every
+    // word here is closed-class or a pure intensifier; DESCRIPTIVE words (faded,
+    // boxy, cropped, single, stitch…) and brand/model tokens are never listed,
+    // because the title's whole job is to carry them.
     const STOP_WORDS = new Set([
-      'a','an','the','and','or','for','of','in','to','is','are','was','were',
-      'be','been','with','without','that','this','these','those','very','quite',
-      'just','also','has','have','had','it','its','lot','lots','colored','coloured',
-      'great','nice','perfect','really','super','some','so','how','all','on','at',
-      'by','as','up','out','from','into','about',
+      // articles & determiners
+      'a','an','the','this','that','these','those','each','every','any','some',
+      'no','other','another','such','both','either','neither','own','same',
+      // conjunctions
+      'and','or','but','nor','so','yet','if','then','than','because','while',
+      'although','though','whether','as',
+      // prepositions / particles
+      'of','in','on','at','to','for','from','with','without','into','onto',
+      'about','after','before','between','through','during',
+      'across','around','along','by','up','out','off','down','near','upon',
+      'via','per','plus','within','toward','towards','against','among',
+      // pronouns & possessives ("its" and "it's" both — the apostrophe survives
+      // the punctuation strip above, which is why "it's" used to reach titles)
+      'i','me','my','mine','we','us','our','ours','you','your','yours','he',
+      'him','his','she','her','hers','it','its',"it's",'they','them','their',
+      'theirs','who','whom','whose','which','what','there','here','itself',
+      // auxiliaries & common verbs with no descriptive content
+      'is','are','am','was','were','be','been','being','has','have','had',
+      'having','do','does','did','doing','will','would','shall','should','can',
+      'could','may','might','must','get','gets','got','go','goes','come',
+      'comes','let','lets','put','puts','see','look',
+      'looks','feel','feels','seem','seems','say','says','said',
+      // degree adverbs / intensifiers / contentless evaluatives
+      'very','really','quite','just','also','too','so','more','most','much',
+      'many','lot','lots','still','even','ever','never','always','again','well',
+      'pretty','super','great','nice','perfect','good','awesome','amazing',
+      'beautiful','definitely','absolutely','literally','basically','actually',
+      'honestly','probably','maybe','kinda','sorta','like','yes','yeah','no',
+      'not','how','why','when','where','all','only','okay','ok','sure',
+      // leftovers from the old list
+      'colored','coloured',
+      // DELIBERATELY ABSENT, though they are closed-class: 'over'/'under'
+      // ('all over print', 'over dyed'), 'made' ('made in usa', 'union made'),
+      // 'right'/'left' ('right chest hit') and 'bad' ('Bad Boy') all carry real
+      // meaning in resale vocabulary.
     ]);
     let descText = (context.customDescription)
       .toLowerCase()
       .replace(/\bperiod\b/gi, '')           // strip voice delimiter
       .replace(/^[xsml\d]+[\s\-]+/i, '')     // strip leading size prefix ("L -", "XL-")
+      // Apostrophes were NOT in the old punctuation class, so "it's" survived as
+      // a single token that no stop word matched and landed in titles (report 11).
+      // Possessive 's is dropped; other apostrophes become word breaks.
+      .replace(/(\w)['\u2019]s\b/g, '$1')
+      .replace(/['\u2019]/g, ' ')
       .replace(/[,;:.!?()\-\/]/g, ' ')       // strip punctuation
       .replace(/\s{2,}/g, ' ')
       .trim();

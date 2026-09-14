@@ -1,0 +1,269 @@
+/* BarcodeScannerView — a phone feature first, a desktop one second.
+ *
+ * The layout is a single column on a phone (where it is actually used, held in
+ * one hand in a stock room) and two columns from tablet up, with the result
+ * panel spanning the full width so a found listing is never squeezed.
+ *
+ * Only the label chips carry inline colour — that is the label's own swatch,
+ * i.e. data (CLAUDE.md §1's carve-out). Everything else is tokens.
+ */
+
+.bsv {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 760px) {
+  .bsv { grid-template-columns: 1fr 1fr; }
+  .bsv-result-panel { grid-column: 1 / -1; }
+}
+
+.bsv-panel {
+  padding: 1rem;
+  background: var(--ink-850);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.bsv-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.6rem;
+  font-size: var(--fs-md);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.bsv-help {
+  margin: 0 0 0.6rem;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.bsv-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  margin: 0.6rem 0 0;
+  padding: 0.55rem 0.7rem;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--warning);
+  background: var(--warning-dim);
+  border-radius: 6px;
+}
+
+/* ── Camera ─────────────────────────────────────────────────────────────── */
+
+.bsv-video-wrap {
+  position: relative;
+  /* A fixed ratio reserves the slot before the stream arrives, so starting the
+     camera does not shove the buttons down the page. */
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--ink-700);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bsv-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: none;
+}
+
+.bsv-video-wrap--on .bsv-video { display: block; }
+
+.bsv-video-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+/* A guide, not a crop — the detector reads the whole frame. It exists so the
+   user knows roughly where to hold the label. */
+.bsv-reticle {
+  position: absolute;
+  inset: 22% 12%;
+  border: 2px solid rgb(255 255 255 / 0.85);
+  border-radius: 6px;
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.25);
+  pointer-events: none;
+}
+
+.bsv-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+}
+
+.bsv-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0.4rem 0.9rem;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--ink-800);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.bsv-btn:hover:not(:disabled) { background: var(--ink-750); }
+.bsv-btn:disabled { opacity: 0.45; cursor: default; }
+
+/* Solid accent fill; --ink-950 is white on this palette (CLAUDE.md §1). */
+.bsv-btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--ink-950);
+}
+
+.bsv-btn--primary:hover:not(:disabled) { opacity: 0.88; background: var(--accent); }
+
+.bsv-spin { animation: bsv-spin 0.9s linear infinite; }
+@keyframes bsv-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .bsv-spin { animation: none; } }
+
+/* ── Keyboard input ─────────────────────────────────────────────────────── */
+
+.bsv-form {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.bsv-input {
+  flex: 1 1 12rem;
+  min-width: 0;
+  /* 16px minimum, and this field is the one a phone user focuses most — below
+     it iOS Safari zooms the viewport and the Find button leaves the screen. */
+  font-size: var(--fs-md);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.06em;
+  min-height: 44px;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--ink-800);
+  color: var(--text-primary);
+}
+
+.bsv-history {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.7rem;
+}
+
+.bsv-history-label {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.bsv-history-chip {
+  min-height: 44px;
+  padding: 0.2rem 0.6rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--fs-xs);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--ink-800);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.bsv-history-chip:hover { background: var(--ink-750); color: var(--text-primary); }
+
+/* ── Result card ────────────────────────────────────────────────────────── */
+
+.bsv-card {
+  display: flex;
+  gap: 0.9rem;
+  align-items: flex-start;
+}
+
+.bsv-card-thumb {
+  flex: 0 0 96px;
+  width: 96px;
+  aspect-ratio: 3 / 4;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--ink-800);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bsv-card-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.bsv-card-nothumb { color: var(--text-faint); }
+
+.bsv-card-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.bsv-card-title {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 650;
+  line-height: var(--lh-snug);
+  color: var(--text-primary);
+}
+
+.bsv-card-meta,
+.bsv-card-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.bsv-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.14rem 0.5rem;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  border-radius: 999px;
+  background: var(--ink-800);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.bsv-pill--price { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.bsv-pill--sku { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+.bsv-card-open { align-self: flex-start; margin-top: 0.2rem; }
+
+@media (max-width: 480px) {
+  .bsv-card { flex-direction: column; }
+  .bsv-card-thumb { width: 100%; flex: none; aspect-ratio: 4 / 3; }
+  .bsv-card-open { width: 100%; }
+  .bsv-form .bsv-btn { flex: 1 1 100%; }
+}

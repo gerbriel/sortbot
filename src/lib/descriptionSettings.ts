@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { log } from './debugLogger';
+import { normalizePlatformRules, type PlatformPricingRule } from './platformPricing';
 
 /**
  * descriptionSettings — per-workspace control over how the generated listing
@@ -33,6 +34,13 @@ export interface DescriptionSettings {
   /** Workspace voice notes passed to the model (e.g. "punchy streetwear
    *  voice, short sentences"). Empty = model default voice. */
   proseStyle: string;
+  /** Per-marketplace price adjustments applied at CSV export time (Step 4).
+   *  Ordered — the Step 4 selector shows them in this order after the built-in
+   *  no-adjustment platform. EMPTY BY DEFAULT: a workspace that never opens
+   *  this setting exports exactly the prices it always did. Nothing in the
+   *  description engine reads it, so the golden description snapshot is
+   *  untouched by its presence. */
+  platformPricing: PlatformPricingRule[];
 }
 
 export const DEFAULT_DESCRIPTION_SETTINGS: DescriptionSettings = {
@@ -43,6 +51,7 @@ export const DEFAULT_DESCRIPTION_SETTINGS: DescriptionSettings = {
   vendorName: '',
   proseEnabled: false,
   proseStyle: '',
+  platformPricing: [],
   disclaimerLines: [
     '* We note major imperfections—minor signs of age or wear may not be listed, adding to the vintage character.',
     '* High-quality piece, perfect for streetwear.',
@@ -51,9 +60,13 @@ export const DEFAULT_DESCRIPTION_SETTINGS: DescriptionSettings = {
   ],
 };
 
-/** Merge a stored partial over the defaults (tolerates old/missing keys). */
+/** Merge a stored partial over the defaults (tolerates old/missing keys).
+ *  platformPricing is additionally NORMALIZED rather than trusted: it is
+ *  free-form JSONB that feeds the money path, so a malformed rule is dropped
+ *  here once instead of being defended against at every use. */
 export function resolveDescriptionSettings(partial?: Partial<DescriptionSettings> | null): DescriptionSettings {
-  return { ...DEFAULT_DESCRIPTION_SETTINGS, ...(partial ?? {}) };
+  const merged = { ...DEFAULT_DESCRIPTION_SETTINGS, ...(partial ?? {}) };
+  return { ...merged, platformPricing: normalizePlatformRules(merged.platformPricing) };
 }
 
 /** The org's settings, defaults when unset. Fails soft to defaults if the

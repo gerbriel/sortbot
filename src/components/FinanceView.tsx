@@ -942,7 +942,7 @@ function Reports({ summary, transactions, range, orgNames }: {
           </tbody>
         </table>
         <p className="fin-statement-foot">
-          Prepared from the Acadia books · recurring entries counted once per month they land in.
+          Prepared from the Arcadian books · recurring entries counted once per month they land in.
         </p>
       </section>
     </>

@@ -1,0 +1,218 @@
+/* ListingLabelsPicker — colour/word/vendor label chips for one listing.
+ *
+ * Every colour here resolves through a token EXCEPT the chip fill, which is
+ * the label's own swatch applied inline from LABEL_COLORS. That is data, not
+ * chrome (CLAUDE.md §1's carve-out for DEFAULT_CATEGORIES et al.), and it has
+ * to survive being printed on a 2"×1.25" thermal label, where a themed token
+ * would not resolve at all.
+ *
+ * Mobile-first: every chip is a 44px-tall touch target at every width, and the
+ * name field is 16px so iOS does not zoom the page on focus.
+ */
+
+.llp {
+  margin: 0.75rem 0;
+  padding: 0.7rem 0.8rem;
+  background: var(--ink-850);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.llp-head {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-secondary);
+}
+
+.llp-title {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.llp-scope {
+  margin-left: auto;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.llp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.llp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 44px;                 /* touch target, phone and desktop alike */
+  padding: 0.3rem 0.7rem;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--ink-800);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.llp-chip:hover:not(:disabled) { background: var(--ink-750); }
+.llp-chip:disabled { cursor: default; }
+
+/* An unapplied chip is an offer; an applied one carries its own colour inline.
+   Partial gets a dashed edge so "some of these photos" reads differently from
+   "all of them" without relying on the count alone. */
+.llp-chip--partial { border-style: dashed; }
+.llp-chip--static { cursor: default; }
+
+.llp-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid rgb(0 0 0 / 0.18);
+  flex-shrink: 0;
+}
+
+.llp-kind {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.llp-partial {
+  font-size: var(--fs-2xs);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.llp-chip--add {
+  border-style: dashed;
+  color: var(--text-muted);
+}
+
+.llp-spin { animation: llp-spin 0.9s linear infinite; }
+
+@keyframes llp-spin { to { transform: rotate(360deg); } }
+
+/* Respect a user who has asked the OS for less motion — the spinner is
+   decorative, the disabled state already says "working". */
+@media (prefers-reduced-motion: reduce) {
+  .llp-spin { animation: none; }
+}
+
+/* ── New-label form ─────────────────────────────────────────────────────── */
+
+.llp-new {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.llp-new-name {
+  /* 16px minimum — below it iOS Safari zooms the viewport on focus and throws
+     the user out of Step 3. */
+  font-size: var(--fs-md);
+  min-height: 44px;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--ink-800);
+  color: var(--text-primary);
+  width: 100%;
+}
+
+.llp-new-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.llp-swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  cursor: pointer;
+  /* The swatch itself is 30px so twelve fit on a narrow phone; the 44px hit
+     area comes from the transparent outline box below. */
+  outline-offset: 3px;
+}
+
+.llp-swatch--on {
+  border-color: var(--text-primary);
+  outline: 2px solid var(--text-primary);
+}
+
+.llp-new-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.9rem;
+}
+
+.llp-new-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 44px;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.llp-new-kind input { width: 16px; height: 16px; }
+
+.llp-new-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+.llp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 44px;
+  padding: 0.35rem 0.8rem;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--ink-800);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.llp-btn:hover:not(:disabled) { background: var(--ink-750); }
+.llp-btn:disabled { opacity: 0.45; cursor: default; }
+
+/* Solid accent fill. --ink-950 is white on this palette, which is what makes a
+   black button with a white label fall out for free (CLAUDE.md §1). */
+.llp-btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--ink-950);
+}
+
+.llp-btn--primary:hover:not(:disabled) { opacity: 0.88; background: var(--accent); }
+
+.llp-error {
+  margin: 0.5rem 0 0;
+  font-size: var(--fs-xs);
+  color: var(--danger);
+}
+
+@media (max-width: 480px) {
+  .llp-new-actions { margin-left: 0; width: 100%; }
+  .llp-btn { flex: 1; justify-content: center; }
+}

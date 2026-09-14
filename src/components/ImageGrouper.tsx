@@ -14,6 +14,8 @@ import LoadingProgress from './LoadingProgress';
 import { log, isDebugEnabled } from '../lib/debugLogger';
 import { publicImageUrl } from '../lib/storageUrls';
 import './ImageGrouper.css';
+import { createTransformQueue } from '../lib/imageTransforms';
+import { isRepeatToggle as isRepeatToggleAt, isSelectionModeActive } from '../lib/selectionGesture';
 import './ProductDescriptionGenerator.css'; // crop-fs-* styles shared with PDG
 
 /** Retry a failed image load up to 3 times with exponential backoff + cache-bust.
@@ -211,6 +213,19 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // twice within ~15ms and leave the item in the wrong state.  Track the last toggle
   // timestamp per item; ignore any second call within 200ms of the first.
   const lastToggleTimeRef = useRef<Map<string, number>>(new Map());
+  /**
+   * Founder report 30 — "when multi-selecting, don't allow double-click to zoom".
+   *
+   * The selection as it stood when the CURRENT click gesture began, i.e. before
+   * the first mousedown toggled anything. A double-click's second mousedown must
+   * not be mistaken for a fresh gesture, so this is only refreshed when the
+   * mousedown is outside the `TOGGLE_REPEAT_MS` repeat window.
+   *
+   * Two things read it: whether the double-click should zoom at all (it must not
+   * when the user was already selecting), and what to restore when it does zoom
+   * (a double-click means "show me this", not "select this").
+   */
+  const selectionAtGestureStartRef = useRef<Set<string>>(new Set());
   const [draggedItem, setDraggedItem] = useState<ClothingItem | null>(null);
   const [draggedFromGroup, setDraggedFromGroup] = useState<string | null>(null);
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
@@ -341,6 +356,12 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // Format painter — copy crop/rotation style from one image and paste to others
   const [copiedRotation, setCopiedRotation] = useState<number | null>(null);
   const [copiedCrop, setCopiedCrop] = useState<{ x: number; y: number; w: number; h: number } | null | undefined>(undefined);
+  // Aspect (w/h) of the frame the copied crop was DRAWN on. `crop` is percent of
+  // frame, so it only transfers faithfully between images of the same shape —
+  // recording the source shape lets a paste onto a differently-shaped image keep
+  // the drawn rectangle instead of stretching it to the new aspect. Null (the
+  // resolve failed, or nothing copied) falls back to plain percent-of-frame.
+  const [copiedCropAspect, setCopiedCropAspect] = useState<number | null>(null);
   const [cropPasteProgress, setCropPasteProgress] = useState<{ done: number; total: number; status: 'running' | 'done'; failed: string[] } | null>(null);
   // Individual-crop upload indicator (shown while a single image is being cropped + uploaded)
   const [cropUploadInProgress, setCropUploadInProgress] = useState(false);
@@ -375,6 +396,29 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     publicImageUrl(item.storagePath) || item.imageUrls?.[0] || item.preview || '';
 
   /** Open lightbox by item ID — builds a pool of item IDs for navigation. */
+  /**
+   * Double-click entry point for the lightbox (report 30).
+   *
+   * While the user is building a selection — anything already selected when the
+   * gesture started, or either pick mode on — a double-click must stay a
+   * selection gesture: the click handlers have already applied exactly ONE
+   * toggle (the repeat guard eats the second), so the correct thing to do here
+   * is nothing at all.
+   *
+   * When it DOES zoom, the selection is put back the way it was before the
+   * gesture: a double-click means "show me this photo", and silently leaving it
+   * selected is how a later Group/Delete picks up a photo the user never chose.
+   */
+  const openLightboxFromDoubleClick = (itemId: string) => {
+    if (selectionModeActive()) {
+      log.grouper(`lightbox suppressed — selection mode active (item=${itemId})`);
+      return;
+    }
+    const before = selectionAtGestureStartRef.current;
+    if (selectedItemsRef.current.size !== before.size) updateSelection(new Set(before));
+    openLightboxForItem(itemId);
+  };
+
   const openLightboxForItem = (itemId: string) => {
     const live = groupedItemsRef.current.find(i => i.id === itemId);
     if (!live) { console.warn('[ImageGrouper] openLightboxForItem: item not found', itemId); return; }
@@ -407,6 +451,29 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       if (nextItem) { setLightboxItemId(nextId); setLightboxSrc(getItemUrl(nextItem)); }
       return ni;
     });
+  };
+
+  // ── Crop concurrency control ───────────────────────────────────────────────
+  // Every transform for a given item is chained behind the previous one. Two
+  // pastes that overlap on the same item (double-clicked Paste, the Retry button
+  // firing while the first pass is still draining, a group card and the toolbar
+  // targeting the same photo) otherwise both read the same pre-crop baseItem,
+  // upload to two paths, and race each other's storage delete — one of them wins
+  // and the other's file is removed out from under the row that points at it.
+  const itemTransformQueueRef = useRef(createTransformQueue());
+  const queueItemTransform = (itemId: string, task: () => Promise<void>): Promise<void> =>
+    itemTransformQueueRef.current.run(itemId, task);
+
+  // One paste batch at a time — the Retry button and a second Paste click are
+  // both reachable while a run is still draining.
+  const cropPasteRunningRef = useRef(false);
+
+  type CropApplyOptions = {
+    /** Part of a bulk paste: the batch owns progress + the parent notification,
+     *  failures must propagate, and pixels come from the cached original. */
+    batched?: boolean;
+    /** Aspect of the frame the pasted crop was drawn on, when known. */
+    cropSourceAspect?: number | null;
   };
 
   // ── Crop helpers (mirrors ProductDescriptionGenerator) ────────────────────
@@ -510,17 +577,31 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     measureGCImg();
   }, [cropModal.open, measureGCImg]);
 
-  const applyAndPersistTransformGrouper = async (itemId: string, cropOverride: { x: number; y: number; w: number; h: number }, rotationOverride?: number, _skipSingleProgress = false) => {
+  const applyAndPersistTransformGrouper = async (
+    itemId: string,
+    cropOverride: { x: number; y: number; w: number; h: number },
+    rotationOverride?: number,
+    opts: CropApplyOptions = {},
+  ) => {
+    const { batched = false, cropSourceAspect = null } = opts;
     const baseItem = groupedItemsRef.current.find(i => i.id === itemId);
-    if (!baseItem) { console.error('[crop] baseItem not found', itemId); return; }
+    if (!baseItem) throw new Error(`[crop] baseItem not found: ${itemId}`);
     const rot = rotationOverride !== undefined ? rotationOverride : (baseItem.imageRotation || 0);
     const item = { ...baseItem, imageRotation: rot, crop: cropOverride };
-    log.grouper('[crop] starting — item:', itemId, 'storagePath:', item.storagePath, 'crop:', cropOverride);
-    if (!_skipSingleProgress) setCropUploadInProgress(true);
+    log.grouper('[crop] starting — item:', itemId, 'storagePath:', item.storagePath, 'crop:', cropOverride, 'batched:', batched);
+    if (!batched) setCropUploadInProgress(true);
     try {
       const { createTransformedFile } = await import('../lib/imageTransforms');
-      const file = await createTransformedFile(item);
-      if (!file) { console.error('[crop] createTransformedFile returned null — check CORS or image src'); return; }
+      // A BULK PASTE reads the cached ORIGINAL: the pasted percentages describe a
+      // full frame, so re-applying them to an item that was already cropped would
+      // crop the crop and leave it framed differently from the rest of the batch.
+      // An INTERACTIVE crop must read the current file — that is what the modal
+      // displayed and what the percentages were drawn on.
+      const file = await createTransformedFile(item, {
+        sourceMode: batched ? 'original' : 'current',
+        cropSourceAspect,
+      });
+      if (!file) throw new Error(`[crop] createTransformedFile returned null for ${itemId} — check CORS or image src`);
       log.grouper('[crop] transformed file ok, size:', file.size);
 
       // ── Determine original path to cache ────────────────────────────────────
@@ -547,6 +628,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           .from('product-images')
           .upload(freshPath, file, { cacheControl: '3600', upsert: false });
         if (error) {
+          // Not fatal on its own — the uploadTransformedImage fallback below gets
+          // a turn — but it must not silently leave the item uncropped.
           console.error('[crop] storage upload error:', error.message);
         } else {
           newPath = data.path;
@@ -561,7 +644,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         const { uploadTransformedImage } = await import('../lib/productService');
         const res = await uploadTransformedImage(file, userId, itemId);
         if (res) { newUrl = res.url; newPath = res.path; }
-        else { console.error('[crop] uploadTransformedImage also failed'); return; }
+        else throw new Error(`[crop] upload failed for ${itemId} — uploadTransformedImage returned null`);
       }
 
       log.grouper('[crop] writing to DB — product_id:', itemId, 'newPath:', newPath);
@@ -605,7 +688,14 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       // Notify parent (autoSave) with the computed new items.
       // We CANNOT use groupedItemsRef.current here — it reflects the pre-crop
       // state until React processes the setGroupedItems call above.
-      onGrouped(groupedItemsRef.current.map(cropMapper));
+      //
+      // Inside a BATCH this notification is skipped entirely. Concurrent items
+      // would each map that same pre-batch array through their OWN mapper, so
+      // every payload dropped the other items' crops; App would store one, and
+      // the stale storagePath coming back through the `items` prop trips the
+      // `pathChanged` branch of initializeItems, which reverts the item's URLs
+      // to the pre-crop file. runCropBatchPaste sends one payload at the end.
+      if (!batched) onGrouped(groupedItemsRef.current.map(cropMapper));
 
       log.grouper('[crop] done ✅ item:', itemId, 'newUrl:', newUrl);
       // Evict the old URL from the session image cache so a subsequent re-crop
@@ -613,8 +703,35 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       const { evictCachedImage } = await import('../lib/imageTransforms');
       if (item.preview) evictCachedImage(item.preview);
       if (item.imageUrls?.[0]) evictCachedImage(item.imageUrls[0]);
-    } catch (err) { console.error('[crop] unexpected error:', err); }
-    finally { if (!_skipSingleProgress) setCropUploadInProgress(false); }
+    } catch (err) {
+      // MUST propagate: runCropBatchPaste counts a resolved promise as a success,
+      // so swallowing here reported failed items as done and left them uncropped
+      // among hundreds of correct ones — with no retry offered.
+      console.error('[crop] unexpected error:', err);
+      throw err;
+    }
+    finally { if (!batched) setCropUploadInProgress(false); }
+  };
+
+  // ── Record what shape a copied crop was drawn on ───────────────────────────
+  // Fire-and-forget: the aspect only refines the paste, and a failure degrades
+  // to plain percent-of-frame, i.e. exactly the historical behaviour. The
+  // resolve also warms the session image cache with the copy source, which a
+  // paste from the original will read again.
+  const captureCopiedCrop = (source: ClothingItem, crop: ClothingItem['crop']) => {
+    setCopiedCrop(crop ?? null);
+    setCopiedCropAspect(null);
+    if (!crop) return;
+    const url = source.preview || source.imageUrls?.[0] || '';
+    if (!url) return;
+    void (async () => {
+      try {
+        const { getSourceFrameAspect } = await import('../lib/imageTransforms');
+        const aspect = await getSourceFrameAspect(url, source.imageRotation || 0);
+        log.grouper('[paste] copied crop source aspect:', aspect, 'from', source.id);
+        setCopiedCropAspect(aspect);
+      } catch { /* percent-of-frame fallback */ }
+    })();
   };
 
   // ── Revert a single item to its cached original ─────────────────────────────
@@ -660,12 +777,21 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     targetIds: string[],
     crop: { x: number; y: number; w: number; h: number },
     rotation: number | null = null,
+    cropSourceAspect: number | null = null,
   ) => {
-    log.grouper('[paste] runCropBatchPaste START — ids:', targetIds.length, 'crop:', crop, 'rotation:', rotation);
+    if (cropPasteRunningRef.current) {
+      console.warn('[paste] a paste batch is already running — ignoring this one');
+      return;
+    }
+    log.grouper('[paste] runCropBatchPaste START — ids:', targetIds.length, 'crop:', crop, 'rotation:', rotation, 'srcAspect:', cropSourceAspect);
     log.grouper('[paste] groupedItemsRef.current.length at start:', groupedItemsRef.current.length);
     if (targetIds.length === 0) { console.warn('[paste] targetIds empty — nothing to do'); return; }
-    const total = targetIds.length;
+    // De-duplicate: a photo can be reachable from both the selection and a group
+    // card, and applying the same crop twice is wasted uploads at best.
+    const ids = [...new Set(targetIds)];
+    const total = ids.length;
     const failed: string[] = [];
+    cropPasteRunningRef.current = true;
     setCropPasteProgress({ done: 0, total, status: 'running', failed: [] });
     let wakeLock: WakeLockSentinel | null = null;
     try {
@@ -674,17 +800,29 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     } catch { /* ignore */ }
     const BATCH = 8;
     let done = 0;
-    for (let i = 0; i < targetIds.length; i += BATCH) {
-      const chunk = targetIds.slice(i, i + BATCH);
-      await Promise.all(chunk.map(id =>
-        applyAndPersistTransformGrouper(id, crop, rotation !== null ? rotation : undefined, true /* skipSingleProgress */)
-          .then(() => { done++; log.grouper('[paste] ✅ item done:', id, done, '/', total); setCropPasteProgress({ done, total, status: 'running', failed: [...failed] }); })
-          .catch((err) => { done++; failed.push(id); console.error('[paste] ❌ item failed:', id, err); setCropPasteProgress({ done, total, status: 'running', failed: [...failed] }); })
-      ));
+    try {
+      for (let i = 0; i < ids.length; i += BATCH) {
+        const chunk = ids.slice(i, i + BATCH);
+        await Promise.all(chunk.map(id =>
+          queueItemTransform(id, () => applyAndPersistTransformGrouper(
+            id,
+            crop,
+            rotation !== null ? rotation : undefined,
+            { batched: true, cropSourceAspect },
+          ))
+            .then(() => { done++; log.grouper('[paste] ✅ item done:', id, done, '/', total); setCropPasteProgress({ done, total, status: 'running', failed: [...failed] }); })
+            .catch((err) => { done++; failed.push(id); console.error('[paste] ❌ item failed:', id, err); setCropPasteProgress({ done, total, status: 'running', failed: [...failed] }); })
+        ));
+      }
+    } finally {
+      if (wakeLock) { try { await wakeLock.release(); } catch { /* ignore */ } }
+      cropPasteRunningRef.current = false;
     }
-    if (wakeLock) { try { await wakeLock.release(); } catch { /* ignore */ } }
     log.grouper('[paste] all done — failed:', failed.length, 'groupedItemsRef.current.length:', groupedItemsRef.current.length);
     log.grouper('[paste] scheduling deferred onGrouped with', groupedItemsRef.current.length, 'items');
+    // The ONLY parent notification for the whole batch. Per-item calls are
+    // suppressed (see applyAndPersistTransformGrouper): each would have mapped a
+    // pre-batch array through its own mapper and dropped its siblings' crops.
     setTimeout(() => {
       log.grouper('[paste] deferred onGrouped firing — ref.length:', groupedItemsRef.current.length);
       onGrouped(groupedItemsRef.current);
@@ -1427,14 +1565,40 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     updateSelection(next);
   };
 
+  /** True when this click is the tail of a double-click on the same target.
+   *  Rules live in lib/selectionGesture.ts (report 30) so they are testable. */
+  const isRepeatToggle = (targetId: string) =>
+    isRepeatToggleAt(lastToggleTimeRef.current.get(targetId), Date.now());
+
+  /**
+   * Is the user mid-selection? Report 30: while this is true a double-click must
+   * behave like a single click (one toggle) and must NOT open the lightbox.
+   *
+   * Reads refs, not state, because it runs from DOM handlers that may hold a
+   * render-old closure — the same rule the rest of this file follows.
+   */
+  const selectionModeActive = () => isSelectionModeActive({
+    selectedAtGestureStart: selectionAtGestureStartRef.current.size,
+    pickMode: pickModeRef.current,
+    photoSelectMode: photoSelectModeRef.current,
+  });
+
+  /** Record the pre-gesture selection, unless this mousedown is the second half
+   *  of a double-click (in which case the first one already recorded it). */
+  const noteGestureStart = (targetId: string) => {
+    if (!isRepeatToggle(targetId)) {
+      selectionAtGestureStartRef.current = new Set(selectedItemsRef.current);
+    }
+  };
+
   // Toggle a single (ungrouped) item, with Shift+click range and Ctrl/Cmd+click additive
   const toggleItemSelection = (itemId: string, e?: React.MouseEvent) => {
     // Guard: hardware double-clicks fire two mousedown events ~10–15ms apart.
-    // If the same item was toggled within 200ms, skip this call to prevent
-    // the item bouncing back to its previous state.
+    // If the same item was toggled within TOGGLE_REPEAT_MS, skip this call to
+    // prevent the item bouncing back to its previous state.
     const now = Date.now();
-    const lastTime = lastToggleTimeRef.current.get(itemId) ?? 0;
-    if (now - lastTime < 200) {
+    const lastTime = lastToggleTimeRef.current.get(itemId) ?? now;
+    if (isRepeatToggle(itemId)) {
       log.grouper(`toggleItemSelection | debounced (${now - lastTime}ms) item=${itemId}`);
       return;
     }
@@ -1615,6 +1779,14 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
   // Toggle one photo's selection (pick mode — used by photos inside group cards)
   const togglePhotoPick = (itemId: string) => {
+    // Same double-click guard the singles grid has had since 7c4806f: without it
+    // a double-click inside a group card fired TWO click events, toggled twice and
+    // left the photo back where it started — the "half-toggled" half of report 30.
+    if (isRepeatToggle(itemId)) {
+      log.grouper(`togglePhotoPick | debounced item=${itemId}`);
+      return;
+    }
+    lastToggleTimeRef.current.set(itemId, Date.now());
     const next = new Set(selectedItemsRef.current);
     if (next.has(itemId)) next.delete(itemId); else next.add(itemId);
     updateSelection(next);
@@ -2267,7 +2439,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               <button
                 onClick={async () => {
                   const ids = [...cropPasteProgress.failed];
-                  await runCropBatchPaste(ids, copiedCrop!, copiedRotation);
+                  await runCropBatchPaste(ids, copiedCrop!, copiedRotation, copiedCropAspect);
                 }}
                 style={{ flex: 1, background: 'var(--warning)', color: 'var(--ink-950)', border: 'none', borderRadius: 8, padding: '0.4rem 0.7rem', cursor: 'pointer', fontWeight: 600, fontSize: 'var(--fs-xs)' }}
               >
@@ -2644,7 +2816,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             const firstId = [...selectedItems][0];
             const source = firstId ? groupedItems.find(i => i.id === firstId) : null;
             if (!source) { alert('Select an image first to copy its crop.'); return; }
-            setCopiedCrop(source.crop ?? null);
+            captureCopiedCrop(source, source.crop);
             // Deselect the source so user can now select targets
             setSelectedItems(new Set());
           }}
@@ -2665,7 +2837,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 ? 'Rotation copied'
                 : 'Crop copied'}
               {' · '}
-              <button className="ptb-link" onClick={() => { setCopiedRotation(null); setCopiedCrop(undefined); }}>
+              <button className="ptb-link" onClick={() => { setCopiedRotation(null); setCopiedCrop(undefined); setCopiedCropAspect(null); }}>
                 clear
               </button>
               {selectedItems.size === 0 && <em> — now select target photos</em>}
@@ -2680,7 +2852,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   log.grouper('[paste] Paste-to-selected clicked — selectedItems:', targetIds.length, 'copiedCrop:', copiedCrop, 'copiedRotation:', copiedRotation);
                   setSelectedItems(new Set());
                   if (copiedCrop !== undefined && copiedCrop !== null) {
-                    await runCropBatchPaste(targetIds, copiedCrop, copiedRotation);
+                    await runCropBatchPaste(targetIds, copiedCrop, copiedRotation, copiedCropAspect);
                   } else {
                     // Rotation only — just update state
                     const updated = groupedItems.map(i => {
@@ -2844,11 +3016,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     // handleReorderDragStart so multi-select drags work correctly.
                     reorderPreDragSelectionRef.current = new Set(selectedItemsRef.current);
                     if (!(e.target as HTMLElement).closest('.delete-image-btn') && !(e.target as HTMLElement).closest('.rotate-btn')) {
+                      // Report 30: record the selection BEFORE this gesture toggles
+                      // anything, so the double-click handler can tell "the user was
+                      // already selecting" from "this click is what selected it".
+                      noteGestureStart(item.id);
                       toggleItemSelection(item.id, e);
                     }
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  onDoubleClick={(e) => openLightboxForItem((e.currentTarget as HTMLElement).dataset.itemId!)}
+                  onDoubleClick={(e) => openLightboxFromDoubleClick((e.currentTarget as HTMLElement).dataset.itemId!)}
                 >
                   {item.category && (
                     <div className="category-indicator-small" style={{ display: 'none' }}>
@@ -2969,6 +3145,12 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   // for drag-reorder / double-click lightbox, and buttons/menu do their
                   // own thing — clicking those must never toggle the group selection.
                   if (t.closest('button') || t.closest('.group-images') || t.closest('.group-menu-wrap')) return;
+                  // Report 30: a double-click on the select bar used to fire two
+                  // mousedowns and toggle the whole group twice — i.e. do nothing,
+                  // visibly. One gesture, one toggle, keyed on the group id.
+                  if (isRepeatToggle(groupId)) return;
+                  lastToggleTimeRef.current.set(groupId, Date.now());
+                  noteGestureStart(groupId);
                   toggleGroupSelection(groupId, items);
                 }}
                 onClick={(e) => e.stopPropagation()}
@@ -3019,7 +3201,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                           onClick={(e) => {
                             e.stopPropagation();
                             const source = items.find(i => i.crop) ?? items[0];
-                            setCopiedCrop(source.crop ?? null);
+                            captureCopiedCrop(source, source.crop);
                             setCopiedRotation(source.imageRotation ?? null);
                             setOpenMenuGroupId(null);
                           }}
@@ -3036,7 +3218,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                             if (copiedCrop == null) return;
                             setOpenMenuGroupId(null);
                             const ids = items.map(i => i.id);
-                            await runCropBatchPaste(ids, copiedCrop, copiedRotation);
+                            await runCropBatchPaste(ids, copiedCrop, copiedRotation, copiedCropAspect);
                           }}
                         >
                           Paste crop
@@ -3081,7 +3263,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       onDrop={(e) => handlePhotoDrop(e, item.id, groupId)}
                       onDragEnd={handlePhotoDragEnd}
                       onDragLeave={() => setDragOverPhotoId(null)}
-                      onDoubleClick={(e) => { e.stopPropagation(); openLightboxForItem((e.currentTarget as HTMLElement).dataset.itemId!); }}
+                      onDoubleClick={(e) => { e.stopPropagation(); openLightboxFromDoubleClick((e.currentTarget as HTMLElement).dataset.itemId!); }}
+                      onMouseDown={() => noteGestureStart(item.id)}
                       onClick={(e) => {
                         e.stopPropagation(); // don't bubble to group-level toggle
                         // Pick mode: clicking a photo inside a group selects it for
@@ -3173,7 +3356,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 )}
                 {lbItem && (
                   <button className="lightbox-tool-btn" title="Copy crop"
-                    onClick={(e) => { e.stopPropagation(); setCopiedCrop(lbItem.crop ?? null); }}>
+                    onClick={(e) => { e.stopPropagation(); captureCopiedCrop(lbItem, lbItem.crop); }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:'middle'}}>
                       <polyline points="6 2 6 6 2 6"/><polyline points="18 22 18 18 22 18"/>
                       <path d="M6 6h12v12H6z" strokeDasharray="2 2"/>
@@ -3204,7 +3387,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     <span className="crop-fs-title">Crop</span>
                     <button className="crop-fs-btn crop-fs-done" disabled={!tempCrop} onClick={async () => {
                       if (!cropModal.itemId || !tempCrop) return;
-                      await applyAndPersistTransformGrouper(cropModal.itemId, tempCrop);
+                      // The apply now rethrows so batch pastes can count failures;
+                      // the interactive path reports and still tears the modal down.
+                      try {
+                        await queueItemTransform(cropModal.itemId, () =>
+                          applyAndPersistTransformGrouper(cropModal.itemId!, tempCrop));
+                      } catch (err) {
+                        console.error('[crop] apply failed:', err);
+                        alert('Could not apply the crop — the image could not be loaded or uploaded. Please try again.');
+                      }
                       // onGrouped is now called inside applyAndPersistTransformGrouper
                       // with the correct post-crop items — no need to call it here.
                       setCropModal({ open: false }); setTempCrop(null); setActivePreset('FREE'); setAspectLock(null);

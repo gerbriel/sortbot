@@ -222,9 +222,50 @@ describe('mergeProductRowIntoItem — fields both restore paths agree on', () =>
       htmlToPlain,
       OPEN_BATCH_MERGE_OPTIONS,
     );
-    expect(merged.brand).toBe('Nike');
     expect(merged.size).toBe('L');
     expect(merged.price).toBe(45);
+    // brand is the ONE exception to this rule — see the block below.
+    expect(merged.brand).toBe('ItemBrand');
+  });
+
+  // ── Founder report 23 ────────────────────────────────────────────────────
+  // products.vendor stores item.brand, and this merge runs on App's BACKGROUND
+  // hydration, after the UI is interactive. Row-first meant a brand typed in the
+  // first second after load was replaced by whatever the DB held.
+  describe('brand — the item wins, so a live edit is never clobbered', () => {
+    it.each([OPEN_BATCH_MERGE_OPTIONS, STARTUP_MERGE_OPTIONS])(
+      'keeps the in-memory brand over the row vendor (%#)',
+      (options) => {
+        const merged = mergeProductRowIntoItem(
+          baseItem({ brand: 'Carhartt' }),
+          { id: 'p1', vendor: 'C&D Vintage' },
+          htmlToPlain,
+          options,
+        );
+        expect(merged.brand).toBe('Carhartt');
+      });
+
+    it('still takes the row vendor when the item has no brand — the restore case', () => {
+      // `brand` is not in the slimForWorkflowState whitelist, so this is what a
+      // real hydration looks like and the behaviour there is unchanged.
+      const merged = mergeProductRowIntoItem(
+        baseItem({ brand: undefined }),
+        { id: 'p1', vendor: 'Nike' },
+        htmlToPlain,
+        OPEN_BATCH_MERGE_OPTIONS,
+      );
+      expect(merged.brand).toBe('Nike');
+    });
+
+    it('treats an empty in-memory brand as absent, not as an edit', () => {
+      const merged = mergeProductRowIntoItem(
+        baseItem({ brand: '' }),
+        { id: 'p1', vendor: 'Nike' },
+        htmlToPlain,
+        OPEN_BATCH_MERGE_OPTIONS,
+      );
+      expect(merged.brand).toBe('Nike');
+    });
   });
 
   it('falls back to the item for columns the row does not have', () => {
@@ -335,10 +376,43 @@ describe('mergeProductRowIntoItem — divergence 2: imageStrategy', () => {
     expect(merged.imageUrls).toEqual(['https://cdn.test/u/p1/own.jpg']);
   });
 
-  it("STARTUP: the DB group list WINS over the item's own image", () => {
+  // ── divergence 2 CLOSED (report 16) ───────────────────────────────────────
+  // Startup used to be 'db-group-wins'. Two separate data bugs rode on that:
+  // a group LEADER's row carries the whole group's photo list, and
+  // saveProductToDatabase adds a row for a BAKED (already-rotated) JPEG while
+  // leaving item.imageRotation set, so the UI rotated it a second time.
+  it("STARTUP: the item's OWN image now wins over the DB group list, like open-batch", () => {
     const merged = mergeProductRowIntoItem(baseItem(), groupRow, htmlToPlain, STARTUP_MERGE_OPTIONS);
+    expect(merged.imageUrls).toEqual(['https://cdn.test/own.jpg']);
+    expect(merged.preview).toBe('https://cdn.test/own.jpg');
+  });
+
+  it('STARTUP: report 16 — a baked, already-rotated row cannot replace the item image', () => {
+    // What Save Batch leaves behind: the original row plus a second row holding
+    // the rotation-baked file, both at position 0 (so their order is arbitrary).
+    const afterSaveBatch: ProductRowLite = {
+      id: 'p1',
+      product_group: 'g1',
+      product_images: [
+        { image_url: 'https://cdn.test/baked-rotated.jpg', storage_path: 'u/p1/baked.jpg', position: 0 },
+        { image_url: 'https://cdn.test/own.jpg', storage_path: 'u/p1/own.jpg', position: 0 },
+      ],
+    };
+    const item = baseItem({ imageRotation: 90 });
+    const merged = mergeProductRowIntoItem(item, afterSaveBatch, htmlToPlain, STARTUP_MERGE_OPTIONS);
+    // The item still declares a 90° rotation, so it MUST still be showing the
+    // un-rotated original — otherwise the CSS transform doubles it to 180°.
+    expect(merged.imageRotation).toBe(90);
+    expect(merged.preview).toBe('https://cdn.test/own.jpg');
+    expect(merged.imageUrls).not.toContain('https://cdn.test/baked-rotated.jpg');
+  });
+
+  it('STARTUP: the DB group list is still the fallback for an item with no image at all', () => {
+    const merged = mergeProductRowIntoItem(
+      baseItem({ imageUrls: [], preview: '', storagePath: undefined }),
+      groupRow, htmlToPlain, STARTUP_MERGE_OPTIONS,
+    );
     expect(merged.imageUrls).toEqual(['https://cdn.test/first.jpg', 'https://cdn.test/second.jpg']);
-    expect(merged.preview).toBe('https://cdn.test/first.jpg');
   });
 
   it('STARTUP: keeps the item images when the row has none', () => {
@@ -405,14 +479,44 @@ describe('mergeProductRowIntoItem — divergences 4 and 5: status and measuremen
 });
 
 describe('mergeProductRowIntoItem — divergences 6 and 7: which extra fields each path sets', () => {
-  it('OPEN-BATCH re-derives productGroup and sets originalName, but not appliedPresetId', () => {
+  // ── divergence 6 CHANGED (report 29) ──────────────────────────────────────
+  // products.product_group is a LAGGING mirror of workflow_state, written by a
+  // different 2 s debounce; letting it win silently un-grouped restored batches.
+  it("OPEN-BATCH keeps the ITEM's productGroup and sets originalName, but not appliedPresetId", () => {
     const merged = mergeProductRowIntoItem(
-      baseItem({ productGroup: 'old-group', appliedPresetId: 'item-preset' }),
+      baseItem({ productGroup: 'live-group', appliedPresetId: 'item-preset' }),
       fullRow(), htmlToPlain, OPEN_BATCH_MERGE_OPTIONS,
     );
-    expect(merged.productGroup).toBe('g1');
+    expect(merged.productGroup).toBe('live-group'); // NOT the row's 'g1'
     expect(merged.originalName).toBe('DSC1.jpg');
     expect(merged.appliedPresetId).toBe('item-preset'); // untouched, carried by the spread
+  });
+
+  it('OPEN-BATCH: report 29 — a stale row cannot re-group an item the user ungrouped', () => {
+    // workflow_state says "singleton" (productGroup === own id); the products row
+    // still carries the group the user just broke up.
+    const merged = mergeProductRowIntoItem(
+      baseItem({ productGroup: 'p1' }),
+      { id: 'p1', product_group: 'old-group' }, htmlToPlain, OPEN_BATCH_MERGE_OPTIONS,
+    );
+    expect(merged.productGroup).toBe('p1');
+  });
+
+  it("OPEN-BATCH: a mismatched (title-matched) row cannot move an item into another product's group", () => {
+    const merged = mergeProductRowIntoItem(
+      baseItem({ productGroup: 'my-group' }),
+      { id: 'SOMEONE-ELSE', product_group: 'their-group' }, htmlToPlain, OPEN_BATCH_MERGE_OPTIONS,
+    );
+    expect(merged.productGroup).toBe('my-group');
+  });
+
+  it("'row-wins' is still available and is the default for setProductGroup: true", () => {
+    const row = { id: 'p1', product_group: 'g1' };
+    const item = baseItem({ productGroup: 'live-group' });
+    expect(mergeProductRowIntoItem(item, row, htmlToPlain, { setProductGroup: true }).productGroup)
+      .toBe('g1');
+    expect(mergeProductRowIntoItem(item, row, htmlToPlain, { setProductGroup: 'row-wins' }).productGroup)
+      .toBe('g1');
   });
 
   it('STARTUP leaves productGroup and originalName alone and sets appliedPresetId', () => {
@@ -432,14 +536,19 @@ describe('mergeProductRowIntoItem — divergences 6 and 7: which extra fields ea
     expect(merged.originalName).toBe('MINE.jpg');
   });
 
-  it('OPEN-BATCH falls back to the item id when neither row nor item has a group', () => {
+  it('OPEN-BATCH falls back to the item id when the item has no group', () => {
     const merged = mergeProductRowIntoItem(baseItem(), { id: 'p1' }, htmlToPlain, OPEN_BATCH_MERGE_OPTIONS);
     expect(merged.productGroup).toBe('p1');
   });
 });
 
 describe('the two option presets are the two call sites', () => {
-  it('differ in exactly the seven documented options', () => {
+  it('no longer differ on imageStrategy — divergence 2 is closed', () => {
+    expect(STARTUP_MERGE_OPTIONS.imageStrategy).toBe('own-image-wins');
+    expect(OPEN_BATCH_MERGE_OPTIONS.imageStrategy).toBe('own-image-wins');
+  });
+
+  it('differ in exactly the six remaining documented options', () => {
     const keys = new Set([...Object.keys(STARTUP_MERGE_OPTIONS), ...Object.keys(OPEN_BATCH_MERGE_OPTIONS)]);
     const differing = [...keys].filter(
       k => (STARTUP_MERGE_OPTIONS as Record<string, unknown>)[k]
@@ -450,7 +559,6 @@ describe('the two option presets are the two call sites', () => {
       'defaultEmptyMeasurements',
       'defaultStatus',
       'descriptionStrategy',
-      'imageStrategy',
       'setAppliedPresetId',
       'setOriginalName',
       'setProductGroup',

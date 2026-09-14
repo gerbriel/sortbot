@@ -9,6 +9,10 @@ interface ComprehensiveProductFormProps {
   currentGroup: ClothingItem[];
   processedItems: ClothingItem[];
   setProcessedItems: (items: ClothingItem[]) => void;
+  /** Rendered directly under the Brand input — the brand-spelling surface. */
+  brandExtra?: React.ReactNode;
+  /** Fired when the seller types over the Brand field (report 14's "remember"). */
+  onBrandEdited?: (value: string) => void;
 }
 
 export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> = ({
@@ -16,6 +20,8 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
   currentGroup,
   processedItems,
   setProcessedItems,
+  brandExtra,
+  onBrandEdited,
 }) => {
   // Always highlight empty fields — visible on load, after voice, after reload
   const req = (value: any): string =>
@@ -102,11 +108,12 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
         <div className="fields-row">
           <div className="info-item">
             <label>Brand: <PresetBadge show={isFromPreset('brand')} /></label>
-            <input type="text" value={currentItem.brand || ''} onChange={(e) => updateGroupField('brand', e.target.value)} placeholder="e.g., Nike, Levi's" className={`info-input${req(currentItem.brand)}`} />
+            <input type="text" value={currentItem.brand || ''} onChange={(e) => updateGroupField('brand', e.target.value)} onBlur={(e) => onBrandEdited?.(e.target.value)} placeholder="e.g., Nike, Levi's" className={`info-input${req(currentItem.brand)}`} />
+            {brandExtra}
           </div>
           <div className="info-item">
             <label>Size:</label>
-            <input type="text" value={currentItem.size || ''} onChange={(e) => updateGroupField('size', e.target.value)} onBlur={(e) => { const norm = normalizeSizeValue(e.target.value, { keepFitsLike: true }); if (norm && norm !== e.target.value) updateGroupField('size', norm); }} placeholder="e.g., M, L, XL" className={`info-input${req(currentItem.size)}`} />
+            <input type="text" value={currentItem.size || ''} onChange={(e) => updateGroupField('size', e.target.value)} onBlur={(e) => { const norm = normalizeSizeValue(e.target.value, { keepFitsLike: true }); if (norm && norm !== e.target.value) updateGroupField('size', norm); }} placeholder="M · 1X · 32x34 · YM · PS" className={`info-input${req(currentItem.size)}`} />
           </div>
           <div className="info-item">
             <label>Condition:</label>

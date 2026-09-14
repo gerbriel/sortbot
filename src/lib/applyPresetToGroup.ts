@@ -2,6 +2,7 @@ import type { ClothingItem } from '../App';
 import type { CategoryPreset } from './categoryPresets';
 import { getCategoryPresets } from './categoryPresetsService';
 import { resolvePreset } from './presetResolver';
+import { scrubSellerBrand } from './brandSpelling';
 
 /**
  * Interpolate a SEO title template string, replacing {placeholder} tokens
@@ -164,7 +165,16 @@ function applyPresetFields(
       // brand is the GARMENT's brand — voice/manual only. (preset.vendor is
       // NOT a brand default: the CSV Vendor column is the seller name, which
       // comes from the org-level vendorName setting, not from items.)
-      brand: item.brand || undefined,
+      //
+      // scrubSellerBrand is the HEAL for founder report 23. A build that shipped
+      // for 34 minutes in July 2026 did `item.brand || preset.vendor`, and the
+      // preset field is labelled "Default Vendor/Brand" — so shops typed their
+      // own name into it and it went into the brand of every listing preset-
+      // applied in that window. That value was persisted to products.vendor, the
+      // storage column for item.brand, and comes back on every reload. Applying
+      // a preset is the one moment we can see both the brand and the vendor it
+      // came from, so it is where the poisoned value gets dropped.
+      brand: scrubSellerBrand(item.brand, [preset.vendor]),
       // productType / shopifyProductType are preset-owned
       productType: pick(item.productType, preset.product_type) || undefined,
       shopifyProductType: pick(item.shopifyProductType, preset.shopify_product_type) || undefined,

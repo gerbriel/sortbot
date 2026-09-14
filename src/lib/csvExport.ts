@@ -1,5 +1,6 @@
 import type { ClothingItem } from '../App';
 import { smartSeoTruncate, primaryMaterial, normalizeSizeValue } from './textAIService';
+import { applyPlatformPrice, formatPlatformPrice, toPriceNumber, type PlatformPricingRule } from './platformPricing';
 
 /**
  * csvExport — pure Shopify CSV generation, extracted verbatim from
@@ -524,8 +525,19 @@ export const escapeCsvValue = (value: unknown): string => {
  * Build the Shopify import rows for a list of coalesced, title-deduped
  * products. The caller is responsible for the price gate (no $0 products)
  * and for title dedup — this function is pure formatting.
+ *
+ * `pricing` is the selected marketplace's rule (src/lib/platformPricing.ts).
+ * Omitted — the default everywhere except the Step 4 platform selector — every
+ * price is emitted exactly as it always was, which is what keeps the golden CSV
+ * snapshot valid. See platformPricing's invariant 1: a $0 price is never
+ * adjusted, so a platform selection can never sneak past the exporter's gate.
  */
-export function buildShopifyCsvRows(products: ExportProduct[], gidOverrides?: GidOverrides, vendorName?: string): string[][] {
+export function buildShopifyCsvRows(
+  products: ExportProduct[],
+  gidOverrides?: GidOverrides,
+  vendorName?: string,
+  pricing?: PlatformPricingRule | null,
+): string[][] {
   const headers = SHOPIFY_CSV_HEADERS;
   const rows: string[][] = [];
   const usedHandles = new Set<string>();
@@ -612,10 +624,16 @@ export function buildShopifyCsvRows(products: ExportProduct[], gidOverrides?: Gi
       String(product.inventoryQuantity ?? 1),                         // Variant Inventory Qty
       product.continueSellingOutOfStock ? 'continue' : 'deny',        // Variant Inventory Policy
       'manual',                                                        // Variant Fulfillment Service
-      product.price != null ? parseFloat(String(product.price)).toFixed(2) : '', // Variant Price
+      formatPlatformPrice(product.price, pricing),                     // Variant Price
       (() => { // Variant Compare At Price — only output if strictly greater than sale price
-        const sale = parseFloat(String(product.price ?? 0));
-        const compare = parseFloat(String(product.compareAtPrice ?? 0));
+        // Compared against the ADJUSTED sale price, so a +20% platform never
+        // emits a compare-at that is now BELOW what the listing charges (which
+        // Shopify renders as a nonsense "discount").
+        const sale = applyPlatformPrice(toPriceNumber(product.price ?? 0), pricing);
+        const rawCompare = toPriceNumber(product.compareAtPrice ?? 0);
+        // A compare-at is a reference price, not one we charge — only adjusted
+        // when the platform explicitly opts in.
+        const compare = pricing?.applyToCompareAt ? applyPlatformPrice(rawCompare, pricing) : rawCompare;
         return (compare > sale && compare > 0) ? compare.toFixed(2) : '';
       })(),
       product.requiresShipping === false ? 'false' : 'true',          // Variant Requires Shipping
@@ -624,7 +642,7 @@ export function buildShopifyCsvRows(products: ExportProduct[], gidOverrides?: Gi
       '',                                                              // Unit Price Total Measure Unit
       '',                                                              // Unit Price Base Measure
       '',                                                              // Unit Price Base Measure Unit
-      product.barcode || '',                                           // Variant Barcode
+      product.barcode || product.sku || '',                             // Variant Barcode
       product.imageUrls?.[0] || '',                                    // Image Src
       '1',                                                             // Image Position
       imageAltText || cleanTitle,                                      // Image Alt Text
@@ -667,9 +685,14 @@ export function buildShopifyCsvRows(products: ExportProduct[], gidOverrides?: Gi
 }
 
 /** Full CSV text: escaped header line + escaped data rows. */
-export function buildShopifyCsv(products: ExportProduct[], gidOverrides?: GidOverrides, vendorName?: string): string {
+export function buildShopifyCsv(
+  products: ExportProduct[],
+  gidOverrides?: GidOverrides,
+  vendorName?: string,
+  pricing?: PlatformPricingRule | null,
+): string {
   return [
     SHOPIFY_CSV_HEADERS.map(escapeCsvValue).join(','),
-    ...buildShopifyCsvRows(products, gidOverrides, vendorName).map(row => row.map(escapeCsvValue).join(',')),
+    ...buildShopifyCsvRows(products, gidOverrides, vendorName, pricing).map(row => row.map(escapeCsvValue).join(',')),
   ].join('\n');
 }

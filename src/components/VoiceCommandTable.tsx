@@ -53,48 +53,11 @@ const ROWS: { label: string; key: string; placeholder: string; getValue: (item: 
   ],
 ];
 
-// Map voice command keywords → field keys (for active-column detection)
-export const VOICE_KEYWORD_TO_FIELD: Record<string, string> = {
-  'title': 'seoTitle',
-  'brand': 'brand',
-  'size': 'size',
-  'color': 'color',
-  'colour': 'color',
-  'secondary color': 'secondaryColor',
-  'secondary colour': 'secondaryColor',
-  'second color': 'secondaryColor',
-  'second colour': 'secondaryColor',
-  '2nd color': 'secondaryColor',
-  'secondary': 'secondaryColor',
-  'accent color': 'secondaryColor',
-  'accent colour': 'secondaryColor',
-  'accent': 'secondaryColor',
-  'condition': 'condition',
-  'price': 'price',
-  'era': 'era',
-  'style': 'style',
-  'gender': 'gender',
-  'material': 'material',
-  'fabric': 'material',
-  'tags': 'tags',
-  'tag': 'tags',
-  'flaws': 'flaws',
-  'flaw': 'flaws',
-  'care': 'care',
-  'description': 'customDescription',
-  'note': 'customDescription',
-  'width': 'meas_width',
-  'length': 'meas_length',
-  'chest': 'meas_chest',
-  'waist': 'meas_waist',
-  'hip': 'meas_hip',
-  'rise': 'meas_rise',
-  'inseam': 'meas_inseam',
-  'outseam': 'meas_outseam',
-  'leg opening': 'meas_leg',
-  'sleeve': 'meas_sleeve',
-  'shoulder': 'meas_shoulder',
-};
+// Map voice command keywords → field keys (for active-column detection).
+// The vocabulary itself lives in lib/voiceGrammar.ts, next to the parser that
+// consumes it; re-exported here because this is where callers have always
+// imported it from.
+export { VOICE_KEYWORD_TO_FIELD } from '../lib/voiceGrammar';
 
 const ROW_LABELS = ['Core Info', 'Style & Details', 'Measurements (upper)', 'Measurements (lower)'];
 
@@ -205,7 +168,7 @@ const VoiceCommandTable: React.FC<VoiceCommandTableProps> = ({
       {isRecording && activeField && (
         <div className="vct-status">
           <span className="vct-status-dot" />
-          Listening for <strong>{activeField.replace('meas_', '').replace('seoTitle', 'title')}</strong> value — say value then <strong>.</strong>
+          Listening for <strong>{activeField.replace('meas_', '').replace('seoTitle', 'title')}</strong> — say the value, then the next field name, or <strong>"period"</strong> / the <strong>.</strong> key
         </div>
       )}
       {isRecording && !activeField && (

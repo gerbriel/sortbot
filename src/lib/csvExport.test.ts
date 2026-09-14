@@ -9,6 +9,7 @@ import {
   isKnownTaxonomyPath,
   type ExportProduct,
 } from './csvExport';
+import type { PlatformPricingRule } from './platformPricing';
 
 /**
  * Golden-file tests for the Shopify CSV export — the money path.
@@ -349,5 +350,100 @@ describe('escapeCsvValue — spreadsheet formula injection (audit 05, #14)', () 
     ]);
     expect(csv).toContain(`,'=cmd|calc,`);
     expect(csv).not.toContain(',=cmd|calc,');
+  });
+});
+
+describe('buildShopifyCsvRows — per-platform pricing (Feature 21)', () => {
+  const h = SHOPIFY_CSV_HEADERS;
+  const priceOf = (rows: string[][]) => rows[0][h.indexOf('Variant Price')];
+  const compareOf = (rows: string[][]) => rows[0][h.indexOf('Variant Compare At Price')];
+  const ebay: PlatformPricingRule = {
+    id: 'ebay', name: 'eBay', enabled: true,
+    adjustment: { type: 'percent', value: 10 }, rounding: '.99', applyToCompareAt: false,
+  };
+  const p = (o: Partial<ExportProduct> = {}) =>
+    product({ id: 'a', seoTitle: 'Tee', price: 45, imageUrls: ['https://x/1.jpg'], ...o });
+
+  it('emits the unadjusted price when no rule is passed (the default everywhere)', () => {
+    expect(priceOf(buildShopifyCsvRows([p()]))).toBe('45.00');
+    expect(priceOf(buildShopifyCsvRows([p()], undefined, undefined, null))).toBe('45.00');
+  });
+
+  it('applies the selected platform rule to Variant Price', () => {
+    expect(priceOf(buildShopifyCsvRows([p()], undefined, undefined, ebay))).toBe('49.99');
+  });
+
+  it('leaves Compare At Price alone unless the platform opts in', () => {
+    const rows = buildShopifyCsvRows([p({ compareAtPrice: 65 })], undefined, undefined, ebay);
+    expect(priceOf(rows)).toBe('49.99');
+    expect(compareOf(rows)).toBe('65.00');
+  });
+
+  it('adjusts Compare At Price when applyToCompareAt is set', () => {
+    const rows = buildShopifyCsvRows([p({ compareAtPrice: 65 })], undefined, undefined,
+      { ...ebay, applyToCompareAt: true });
+    expect(compareOf(rows)).toBe('71.99'); // 65 +10% = 71.50 → 71.99
+  });
+
+  it('drops a compare-at the adjustment has overtaken, instead of shipping a fake discount', () => {
+    // 45 → 54 under +20%; a 50 compare-at is no longer above the sale price.
+    const rows = buildShopifyCsvRows([p({ compareAtPrice: 50 })], undefined, undefined,
+      { ...ebay, adjustment: { type: 'percent', value: 20 }, rounding: 'none' });
+    expect(priceOf(rows)).toBe('54.00');
+    expect(compareOf(rows)).toBe('');
+  });
+
+  it('NEVER adjusts a $0 price — the exporter gate must still catch it', () => {
+    // The whole reason applyPlatformPrice passes non-positive prices through.
+    expect(priceOf(buildShopifyCsvRows([p({ price: 0 })], undefined, undefined, ebay))).toBe('0.00');
+    expect(priceOf(buildShopifyCsvRows([p({ price: undefined })], undefined, undefined, ebay))).toBe('');
+  });
+
+  it('applies a fixed-dollar rule too', () => {
+    const rows = buildShopifyCsvRows([p()], undefined, undefined,
+      { ...ebay, adjustment: { type: 'fixed', value: 5 }, rounding: 'none' });
+    expect(priceOf(rows)).toBe('50.00');
+  });
+
+  it('touches nothing else in the row', () => {
+    const plain = buildShopifyCsvRows([p({ compareAtPrice: 65 })]);
+    const adjusted = buildShopifyCsvRows([p({ compareAtPrice: 65 })], undefined, undefined, ebay);
+    const priceCols = new Set([h.indexOf('Variant Price'), h.indexOf('Variant Compare At Price')]);
+    plain[0].forEach((cell, i) => {
+      if (!priceCols.has(i)) expect(adjusted[0][i], `column ${h[i]}`).toBe(cell);
+    });
+  });
+
+  it('buildShopifyCsv threads the rule through', () => {
+    expect(buildShopifyCsv([p()], undefined, undefined, ebay)).toContain('49.99');
+    expect(buildShopifyCsv([p()])).toContain('45.00');
+  });
+});
+
+describe('buildShopifyCsvRows — SKU and barcode columns (Feature 25)', () => {
+  const h = SHOPIFY_CSV_HEADERS;
+  const p = (o: Partial<ExportProduct> = {}) =>
+    product({ id: 'a', seoTitle: 'Tee', price: 45, imageUrls: ['https://x/1.jpg'], ...o });
+
+  it('both columns exist in the Shopify header list', () => {
+    expect(h).toContain('Variant SKU');
+    expect(h).toContain('Variant Barcode');
+  });
+
+  it('writes the SKU to Variant SKU and, absent its own barcode, to Variant Barcode', () => {
+    const [row] = buildShopifyCsvRows([p({ sku: 'ACD-7H2K9M' })]);
+    expect(row[h.indexOf('Variant SKU')]).toBe('ACD-7H2K9M');
+    expect(row[h.indexOf('Variant Barcode')]).toBe('ACD-7H2K9M');
+  });
+
+  it('an explicit barcode still wins (a real UPC is not ours to overwrite)', () => {
+    const [row] = buildShopifyCsvRows([p({ sku: 'ACD-7H2K9M', barcode: '012345678905' })]);
+    expect(row[h.indexOf('Variant Barcode')]).toBe('012345678905');
+  });
+
+  it('leaves both blank when the listing has no SKU — the golden case', () => {
+    const [row] = buildShopifyCsvRows([p()]);
+    expect(row[h.indexOf('Variant SKU')]).toBe('');
+    expect(row[h.indexOf('Variant Barcode')]).toBe('');
   });
 });

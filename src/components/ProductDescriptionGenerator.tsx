@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
 import type { ClothingItem } from '../App';
 import { Target, AlertTriangle, Check, Download, Search, Hourglass, Square, Mic, Trash2,
          Brush, ClipboardPaste, Crop, X, Sparkles, Brain, RefreshCw, Palette, ClipboardList,
-         Lightbulb, Copy } from 'lucide-react';
+         Lightbulb, Copy, CircleDot, Save } from 'lucide-react';
 import { ComprehensiveProductForm } from './ComprehensiveProductForm';
 import { getCategoryPresets } from '../lib/categoryPresetsService';
 import type { CategoryPreset } from '../lib/categoryPresets';
@@ -12,8 +12,22 @@ import { syncGroupFieldsToDatabase, flushProductPatchKeepalive } from '../lib/pr
 import { supabase } from '../lib/supabase';
 import LazyImg from './LazyImg';
 import { log, isDebugEnabled } from '../lib/debugLogger';
-import VoiceCommandTable, { VOICE_KEYWORD_TO_FIELD } from './VoiceCommandTable';
+import VoiceCommandTable from './VoiceCommandTable';
+import {
+  parseVoiceChunk, flushVoiceState, detectActiveField, patchVoiceLine, fixTranscript,
+  EMPTY_VOICE_STATE, type VoiceParseState, type VoiceWrite,
+} from '../lib/voiceGrammar';
+import { resolvePreset } from '../lib/presetResolver';
 import { useStoreItemArray, liveArrayRef } from '../lib/workflowStore';
+import { saveStatus, useSaveStatus } from '../lib/saveStatusStore';
+import { clampLensPosition } from '../lib/magnifierPosition';
+import BrandSpelling, { type BrandNotice } from './BrandSpelling';
+import ListingLabelsPicker from './ListingLabelsPicker';
+import {
+  fetchBrandAliases, saveBrandAlias, deleteBrandAlias,
+  aliasCandidates, builtinBrandCandidates, type BrandAlias,
+} from '../lib/brandAliasService';
+import { resolveHeardBrand, isSellerName, type BrandCandidate } from '../lib/brandSpelling';
 import { buildGroupArray } from '../lib/grouping';
 import { fetchActiveChips, getBrandTerms, getAllBrandKeywordEntries, termMatchesChip, wordsRelated } from '../lib/vocabService';
 import { requestProse } from '../lib/proseService';
@@ -44,6 +58,11 @@ interface ProductDescriptionGeneratorProps {
   /** Per-workspace description format (organizations.description_settings);
    *  null → defaults. Passed into the generator on every Generate. */
   descriptionSettings?: DescriptionSettings | null;
+  /** A scanned or printed label identifies a `products` row; Step 3 navigates by
+   *  GROUP. Set this to that product id and the matching group is selected.
+   *  App re-sets it on every scan (even of the same code), so re-scanning a
+   *  listing you already have open still re-focuses it. */
+  focusProductId?: string | null;
 }
 
 // Web Speech API types
@@ -80,6 +99,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   onDownloadCSV,
   batchId,
   descriptionSettings,
+  focusProductId,
 }) => {
   // Stage 2b: processedItems lives in workflowStore — the SAME list App.tsx
   // reads/writes. This is the FULL item list (uncategorized singles included);
@@ -102,6 +122,22 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const [appliedPresetLabel, setAppliedPresetLabel] = useState('');
   const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  // ── Brand spelling memory (report 14) ────────────────────────────────────
+  // Per-workspace "the mic heard X, the tag says Y". `aliasesAvailable` is false
+  // until the brand_aliases migration has been run, and the whole surface hides.
+  const [brandAliases, setBrandAliases] = useState<BrandAlias[]>([]);
+  const [aliasesAvailable, setAliasesAvailable] = useState(false);
+  const [brandNotice, setBrandNotice] = useState<BrandNotice | null>(null);
+  const [brandBusy, setBrandBusy] = useState(false);
+  const [brandError, setBrandError] = useState<string | null>(null);
+  const brandAliasesRef = useRef<BrandAlias[]>([]);
+  brandAliasesRef.current = brandAliases;
+  /** groupId → the raw spelling voice last put in the brand field. */
+  const heardBrandRef = useRef<Map<string, string>>(new Map());
+  // The one shared indicator — App's workflow_state auto-save reports into the
+  // same store, so this line speaks for every persistence path (report 28).
+  const save = useSaveStatus();
   const [duplicateTitleWarning, setDuplicateTitleWarning] = useState(false);
   // TWO independent debounce paths, TWO timers (finding 10). They used to share one
   // ref: an edit both calls debouncedDirectSave AND changes processedItems, so the
@@ -118,11 +154,35 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // silent success for a write that touched nothing. (finding 1)
   const accessTokenRef = useRef<string | null>(null);
   const userIdRef = useRef<string | undefined>(undefined);
+  // Denormalized onto a saved brand alias so the workspace can see who added it
+  // (auth.users is not client-readable; the INSERT policy pins it to this JWT).
+  const userEmailRef = useRef<string | null>(null);
   // Direct save ref — holds latest group to save, set by user edits, consumed by
   // debouncedDirectSave. (Historically this bypassed the isResettingRef feedback
   // loop; that loop no longer exists — kept because it's still the most direct
   // per-edit DB save path.)
   const pendingSaveGroupRef = useRef<ClothingItem[] | null>(null);
+
+  /**
+   * Every Step-3 write to the products table goes through here so the ONE save
+   * indicator (lib/saveStatusStore) reflects it — the debounced direct save, the
+   * debounced processedItems save, and the manual Save button (report 28).
+   * syncGroupFieldsToDatabase resolves false rather than throwing, so a silent
+   * RLS refusal now surfaces as "Save failed" instead of nothing at all.
+   */
+  const reportedSync = (group: ClothingItem[], label: string): Promise<boolean> => {
+    saveStatus.begin();
+    return syncGroupFieldsToDatabase(group, batchId ?? null, userIdRef.current)
+      .then((ok) => { saveStatus.end(ok, ok ? undefined : 'Could not save this listing'); return ok; })
+      .catch((e) => {
+        console.error(`[PDG] ${label} syncGroupFields threw:`, e);
+        saveStatus.end(false, e instanceof Error ? e.message : 'Save failed');
+        return false;
+      });
+  };
+  // The [processedItems] effect must not re-subscribe when this identity changes.
+  const reportedSyncRef = useRef(reportedSync);
+  reportedSyncRef.current = reportedSync;
 
   const debouncedDirectSave = (group: ClothingItem[]) => {
     // Routed through the debug logger (debugging finding 18): these fired
@@ -147,7 +207,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       const g = pendingSaveGroupRef.current;
       if (g && g.length > 0) {
         log.pdg(`debouncedDirectSave FIRING for id=${g[0]?.id}`);
-        syncGroupFieldsToDatabase(g, batchId ?? null, userIdRef.current).catch((e) => console.error('[PDG] debouncedDirectSave syncGroupFields threw:', e));
+        reportedSync(g, 'debouncedDirectSave');
         pendingSaveGroupRef.current = null;
       } else {
         log.pdg('debouncedDirectSave fired but pendingSaveGroupRef was empty/null');
@@ -158,10 +218,18 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Voice command table
   const [voiceMode, setVoiceMode] = useState<'table' | 'text'>('table');
   const [activeVoiceField, setActiveVoiceField] = useState<string | null>(null);
-  const activeVoiceFieldRef = useRef<string | null>(null);
-  const pendingFieldValueRef = useRef<string>(''); // accumulates spoken value for active field
+  // The dictation parser's running state (which field is open, what has been
+  // captured for it). All grammar lives in lib/voiceGrammar.ts.
+  const voiceStateRef = useRef<VoiceParseState>(EMPTY_VOICE_STATE);
   // Always-current handleTableFieldChange so onresult closure never goes stale
-  const applyTableFieldRef = useRef<(field: string, value: string) => void>(() => {});
+  const applyTableFieldRef = useRef<(field: string, value: string, groupIndex?: number) => void>(() => {});
+  // Live group index for the recognition callbacks — lets the recogniser survive
+  // navigation instead of being torn down and losing a half-spoken value.
+  const currentGroupIndexRef = useRef(0);
+  // Which listing the currently-open command was spoken over. A value flushed
+  // while navigating must land on THAT listing, not on whichever one the user
+  // has just moved to.
+  const voiceStateGroupRef = useRef(0);
 
   // Photo reorder drag state (Step 4 thumbnails)
   const [draggedThumbId, setDraggedThumbId] = useState<string | null>(null);
@@ -198,7 +266,14 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const [tempCrop, setTempCrop] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   // Clipboard for crop — holds {x,y,w,h} percentages so user can paste to many items
   const [copiedCrop, setCopiedCrop] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const [cropPasteProgress, setCropPasteProgress] = useState<{ done: number; total: number } | null>(null);
+  // Aspect (w/h) of the frame the copied crop was DRAWN on. `crop` is percent of
+  // frame, so it only transfers faithfully between images of the same shape;
+  // recording the source shape lets a paste onto a differently-shaped image keep
+  // the drawn rectangle. Null (resolve failed, nothing copied) = percent-of-frame.
+  const [copiedCropAspect, setCopiedCropAspect] = useState<number | null>(null);
+  const [cropPasteProgress, setCropPasteProgress] = useState<{ done: number; total: number; failed: number } | null>(null);
+  // One paste batch at a time — the button stays reachable while a run drains.
+  const cropPasteRunningRef = useRef(false);
 
   // Magnifier state — cursor-following zoom lens on main preview image
   const [magnifier, setMagnifier] = useState<{ src: string; x: number; y: number; bgX: number; bgY: number } | null>(null);
@@ -245,6 +320,15 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     return { groupArray, currentGroup, currentItem };
   }, [processedItems, currentGroupIndex]);
 
+  // Stable id list for ListingLabelsPicker. It keys its fetch on these, so a new
+  // array every render would refetch the labels on every keystroke; joined-string
+  // deps make the identity change only when the group's membership actually does.
+  const currentGroupIdsKey = currentGroup.map(i => i.id).join(',');
+  const currentGroupIds = useMemo(
+    () => (currentGroupIdsKey ? currentGroupIdsKey.split(',') : []),
+    [currentGroupIdsKey],
+  );
+
   // Notify App that items changed so it schedules the workflow_state auto-save.
   // Stage 2b: the store is the single source of truth — this callback carries
   // the already-current full list purely as an auto-save trigger. The old
@@ -290,7 +374,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             brand: group[0]?.brand,
           });
         }
-        syncGroupFieldsToDatabase(group, batchId ?? null, userIdRef.current).catch((e) => console.error('[PDG] debounce effect syncGroupFields threw:', e));
+        reportedSyncRef.current(group, 'processedItems debounce');
       } else {
         log.pdg(`processedItems debounce effect fired but group is empty at index ${currentGroupIndex}`);
       }
@@ -301,15 +385,50 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [processedItems]);
 
+  /**
+   * UNMOUNT flush (report 28). The [processedItems] debounce above cancels itself
+   * in its own cleanup, which also runs when this component unmounts — and it
+   * unmounts on every batch switch (App renders it with key={currentBatchId}).
+   * beforeunload/pagehide do not fire for a component unmount, so the last
+   * ≤500 ms of edits simply vanished.
+   *
+   * That window is not theoretical: ComprehensiveProductForm writes through
+   * setProcessedItems directly, NOT through handleTableFieldChange, so form
+   * edits are carried by this debounce ALONE — debouncedDirectSave never sees
+   * them. Empty deps, so the cleanup runs at unmount and nowhere else.
+   */
+  useEffect(() => {
+    return () => {
+      if (groupSaveTimerRef.current) { clearTimeout(groupSaveTimerRef.current); groupSaveTimerRef.current = null; }
+      if (directSaveTimerRef.current) { clearTimeout(directSaveTimerRef.current); directSaveTimerRef.current = null; }
+      const live = processedItemsRef.current;
+      const seen = new Set<string>();
+      const flush = (group: ClothingItem[] | undefined | null) => {
+        if (!group?.length || seen.has(group[0].id)) return;
+        seen.add(group[0].id);
+        void reportedSyncRef.current(group, 'unmount flush');
+      };
+      const pending = pendingSaveGroupRef.current;
+      pendingSaveGroupRef.current = null;
+      if (pending?.length) {
+        const ids = new Set(pending.map(i => i.id));
+        flush(live.filter(i => ids.has(i.id)));
+      }
+      flush(buildGroupArray(live)[currentGroupIndexRef.current]);
+    };
+  }, []);
+
   // Keep the access token warm for the unload flush below.
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       accessTokenRef.current = data?.session?.access_token ?? null;
       userIdRef.current = data?.session?.user?.id;
+      userEmailRef.current = data?.session?.user?.email ?? null;
     }).catch(() => { /* offline — the flush will simply no-op */ });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       accessTokenRef.current = session?.access_token ?? null;
       userIdRef.current = session?.user?.id;
+      userEmailRef.current = session?.user?.email ?? null;
     });
     return () => sub.subscription.unsubscribe();
   }, []);
@@ -338,6 +457,14 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       const pending = pendingSaveGroupRef.current;
       if (pending) { pendingSaveGroupRef.current = null; flushGroup(pending); }
       flushGroup(buildGroupArray(processedItemsRef.current)[currentGroupIndex]);
+      // Report into the one indicator (12-grouping-persistence.md, edit 2).
+      // OPTIMISTICALLY, and only when something was actually written: a
+      // keepalive PATCH is fire-and-forget by construction — the document is
+      // being discarded, so there is no response to await and no render left in
+      // which to show a failure. begin()+end(true) keeps the ref count balanced.
+      // This is the ONLY unload path that reports; the unmount flush above uses
+      // reportedSync, and the two never run for the same teardown.
+      if (flushedIds.size > 0) { saveStatus.begin(); saveStatus.end(true); }
     };
     // beforeunload alone is unreliable on back-button navigation and mobile
     // (bfcache freezes the page without firing it) — pagehide is the dependable
@@ -362,6 +489,20 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       setCurrentGroupIndex(groupArray.length - 1);
     }
   }, [groupArray.length, currentGroupIndex]);
+
+  /**
+   * Scanned/printed label → this listing. The id may be the group leader OR any
+   * photo in the group (LabelPrintView hands back the leader; the scanner hands
+   * back whichever row owns the SKU), so both are matched. App has already
+   * checked the product is in the open batch and refuses to navigate otherwise,
+   * so a miss here means the batch changed underneath — leave the user where
+   * they are rather than jumping somewhere arbitrary.
+   */
+  useEffect(() => {
+    if (!focusProductId) return;
+    const idx = groupArray.findIndex(g => g.some(i => i.id === focusProductId));
+    if (idx >= 0) setCurrentGroupIndex(idx);
+  }, [focusProductId, groupArray]);
 
   useEffect(() => {
     // Check if browser supports Speech Recognition
@@ -396,51 +537,28 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let interim = '';
-      let final = '';
-
-      // Correct common speech-to-text misrecognitions for clothing measurements
-      const fixTranscript = (t: string) =>
-        t
-          // "wits 18" / "what's 18" / "whats 18" before a number → "width 18"
-          .replace(/\b(wits|what's|whats|wit's)\b(?=\s+\d)/gi, 'width')
-          .replace(/\bwith\b(?=\s+\d)/gi, 'width')   // "with 18 inches" → "width 18 inches"
-          .replace(/\bwidth\b(?=\s+(a|an|the)\b)/gi, 'with') // "width a great" → "with a great"
-          .replace(/\bwidth\b(?=\s+[a-z]{3,}(?!\s*\d))/gi, 'with') // "width nice" → "with nice"
-          // Common measurement word misrecognitions
-          .replace(/\b(shows|shower|shoulder's|shoulders)\b(?=\s+\d)/gi, 'shoulder')
-          .replace(/\b(waste|ways|waist's)\b(?=\s+\d)/gi, 'waist')
-          // inseam: many STT engines mis-hear it ("and seam", "in seem", "in steam", etc.)
-          .replace(/\b(in seam|in-seam|unseam|and seam|in seem|in steam|in-scene|in scene|in-team|inseams?)\b(?=\s+[\d])/gi, 'inseam')
-          .replace(/\b(in seam|in-seam|unseam|and seam|in seem|in steam)\b/gi, 'inseam')
-          .replace(/\b(out seam|out-seam|out seem|out-seem|outseams?)\b/gi, 'outseam')
-          .replace(/\b(chest's|chess|jest)\b(?=\s+\d)/gi, 'chest')
-          .replace(/\b(hip's|hips)\b(?=\s+\d)/gi, 'hip')
-          .replace(/\b(sleeve's|sleeves)\b(?=\s+\d)/gi, 'sleeve')
-          .replace(/\b(length's|lengths)\b(?=\s+\d)/gi, 'length')
-          // "30 and a half" / "30 and half" → "30.5"
-          .replace(/(\d+)\s+and\s+a?\s*half\b/gi, (_, n) => String(parseFloat(n) + 0.5))
-          // Normalize "inches" / "inch" / "in." after a number so the number is clean
-          .replace(/(\d+(?:\.\d+)?)\s*(?:inches|inch|in\.)\b/gi, '$1');
+      const finals: string[] = [];
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = fixTranscript(event.results[i][0].transcript);
-        if (event.results[i].isFinal) {
-          final += transcript + ' ';
-        } else {
-          interim += transcript;
-        }
+        // Each result is ONE utterance — kept separate so the grammar can tell
+        // "a fresh utterance started with a field title" from "the speaker is
+        // still narrating", which is what closes an open description.
+        if (event.results[i].isFinal) finals.push(transcript);
+        else interim += transcript;
       }
 
-      if (final) {
+      if (finals.length > 0) {
+        const final = finals.join(' ') + ' ';
+
         setProcessedItems(prev => {
           const updated = [...prev];
-          
           // Recalculate groups from updated items (same sort order as main groupArray)
           const updatedGroupArray = buildGroupArray(updated);
-          const currentGroup = updatedGroupArray[currentGroupIndex];
-          const currentItem = currentGroup[0];
-          const currentDescription = currentItem.voiceDescription || '';
-          
+          const currentGroup = updatedGroupArray[currentGroupIndexRef.current];
+          if (!currentGroup?.length) return prev;
+          const currentDescription = currentGroup[0].voiceDescription || '';
+
           // Apply voice description to all items in the current group
           currentGroup.forEach(groupItem => {
             const itemIndex = updated.findIndex(item => item.id === groupItem.id);
@@ -451,175 +569,31 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               };
             }
           });
-          
+
           return updated;
         });
-        
+
         setInterimTranscript('');
 
-        // Detect active column from final chunk — clear on period/dot, set on keyword
-        const finalLower = final.toLowerCase();
-        const hasPeriod = /\bperiod\b/i.test(final);
-
-        // Find last keyword in this chunk
-        let lastPos = -1;
-        let lastKey: string | null = null;
-        let lastKeyword = '';
-        for (const [keyword, fieldKey] of Object.entries(VOICE_KEYWORD_TO_FIELD)) {
-          const idx = finalLower.lastIndexOf(keyword);
-          if (idx > lastPos) { lastPos = idx; lastKey = fieldKey; lastKeyword = keyword; }
+        // ── Parse the utterances into field writes ──────────────────────────
+        // Grammar (lib/voiceGrammar.ts): a command ends at "period", at the next
+        // field title, or at the end of the utterance; the title itself is never
+        // part of the value; a description only ends at "period" or at a new
+        // utterance that opens a real command.
+        const spokenOverGroup = currentGroupIndexRef.current;
+        voiceStateGroupRef.current = spokenOverGroup;
+        for (const utterance of finals) {
+          const { writes, state } = parseVoiceChunk(utterance, voiceStateRef.current, { newUtterance: true });
+          voiceStateRef.current = state;
+          applyVoiceWritesRef.current(writes, spokenOverGroup);
         }
-
-        if (hasPeriod) {
-          // ── Multi-command chunked processing ─────────────────────────────
-          // A single speech chunk can contain multiple commands, e.g.:
-          //   "brand quicksilver period size xl period color blue period"
-          // We walk through the chunk segment-by-segment, splitting on "period",
-          // so fast speech never causes one field's value to bleed into another.
-
-          // Split on "period" boundaries (case-insensitive)
-          const segments = final.split(/\s*\bperiod\b\s*/i);
-          // segments[last] is whatever came after the final "period" (often empty or next keyword)
-          const trailingText = segments[segments.length - 1].trim();
-
-          for (let si = 0; si < segments.length - 1; si++) {
-            const seg = segments[si].trim();
-            if (!seg) continue;
-            const segLower = seg.toLowerCase();
-
-            // DESCRIPTION MODE: while dictating a description, every word up to
-            // the closing "period" is narration — words like "sleeve", "style",
-            // "length" must NOT be treated as new field commands mid-sentence.
-            if (activeVoiceFieldRef.current === 'customDescription') {
-              const v = (pendingFieldValueRef.current + ' ' + seg).trim();
-              if (v) applyTableFieldRef.current('customDescription', v);
-              pendingFieldValueRef.current = '';
-              activeVoiceFieldRef.current = null;
-              continue;
-            }
-
-            // Find ALL keyword occurrences within this segment (word-boundary-aware).
-            // This lets a single period-bounded chunk like "width 18 length 28 period"
-            // correctly yield TWO separate field writes instead of one.
-            type KwHit = { pos: number; kw: string; fk: string };
-            const hits: KwHit[] = [];
-            for (const [kw, fk] of Object.entries(VOICE_KEYWORD_TO_FIELD)) {
-              const idx = segLower.indexOf(kw);
-              if (idx === -1) continue;
-              const prevOk = idx === 0 || segLower[idx - 1] === ' ';
-              const nextOk = idx + kw.length >= segLower.length || segLower[idx + kw.length] === ' ';
-              if (prevOk && nextOk) hits.push({ pos: idx, kw, fk });
-            }
-            // Sort by position; prefer longer keyword at the same position
-            hits.sort((a, b) => a.pos - b.pos || b.kw.length - a.kw.length);
-            // Remove shorter keywords shadowed by a longer one at the same start
-            const kwHits = hits.filter((h, i) => i === 0 || h.pos >= hits[i - 1].pos + hits[i - 1].kw.length);
-
-            if (kwHits.length === 0) {
-              // No keyword — continuation of current active field, then "period" closes it
-              if (activeVoiceFieldRef.current) {
-                pendingFieldValueRef.current = (pendingFieldValueRef.current + ' ' + seg).trim();
-              }
-              const f = activeVoiceFieldRef.current;
-              const v = pendingFieldValueRef.current.trim();
-              if (f && v) applyTableFieldRef.current(f, v);
-              pendingFieldValueRef.current = '';
-              activeVoiceFieldRef.current = null;
-            } else {
-              // Handle any text before the first keyword
-              if (kwHits[0].pos > 0) {
-                // Text before first keyword continues the previously active field
-                const before = seg.slice(0, kwHits[0].pos).trim();
-                if (activeVoiceFieldRef.current && before) {
-                  pendingFieldValueRef.current = (pendingFieldValueRef.current + ' ' + before).trim();
-                }
-                const f = activeVoiceFieldRef.current;
-                const v = pendingFieldValueRef.current.trim();
-                if (f && v) applyTableFieldRef.current(f, v);
-              } else {
-                // Segment starts with a keyword — flush any prior pending field
-                const prevField = activeVoiceFieldRef.current;
-                const prevValue = pendingFieldValueRef.current.trim();
-                if (prevField && prevValue) applyTableFieldRef.current(prevField, prevValue);
-              }
-              pendingFieldValueRef.current = '';
-              activeVoiceFieldRef.current = null;
-
-              // Apply every keyword→value pair found in this segment.
-              // Each is closed by the trailing "period" (or by the next keyword in the segment).
-              // EXCEPTION: "description" swallows the REST of the segment — its
-              // value runs to the closing "period", so narration words that
-              // double as field keywords never chop it up.
-              for (let ki = 0; ki < kwHits.length; ki++) {
-                const { pos, kw, fk } = kwHits[ki];
-                const valueStart = pos + kw.length;
-                const isDescription = fk === 'customDescription';
-                const valueEnd = (!isDescription && ki + 1 < kwHits.length) ? kwHits[ki + 1].pos : seg.length;
-                const value = seg.slice(valueStart, valueEnd).trim();
-                if (value) applyTableFieldRef.current(fk, value);
-                if (isDescription) break; // everything after belonged to the description
-              }
-              pendingFieldValueRef.current = '';
-              activeVoiceFieldRef.current = null;
-            }
-          }
-
-          // Handle trailing text after the last "period" — it may be a new keyword
-          // starting the next command (e.g. "... period size" — user hasn't said the value yet)
-          if (trailingText) {
-            const trailLower = trailingText.toLowerCase();
-            let trailField: string | null = null;
-            let trailKwLen = 0;
-            for (const [kw, fk] of Object.entries(VOICE_KEYWORD_TO_FIELD)) {
-              if (trailLower.startsWith(kw + ' ') || trailLower === kw) {
-                if (kw.length > trailKwLen) { trailField = fk; trailKwLen = kw.length; }
-              }
-            }
-            if (trailField) {
-              const afterKw = trailingText.slice(trailKwLen).trim();
-              activeVoiceFieldRef.current = trailField;
-              pendingFieldValueRef.current = afterKw;
-              setActiveVoiceField(trailField);
-            } else {
-              setActiveVoiceField(null);
-            }
-          } else {
-            setActiveVoiceField(null);
-          }
-        } else if (activeVoiceFieldRef.current === 'customDescription') {
-          // Mid-description, no period yet — keyword lookalikes ("sleeve",
-          // "style"…) are narration; keep accumulating until "period".
-          pendingFieldValueRef.current = (pendingFieldValueRef.current + ' ' + final.trim()).trim();
-        } else if (lastKey) {
-          // No period in chunk — new keyword detected, start accumulating value
-          const afterKeyword = final.slice(lastPos + lastKeyword.length).trim();
-          pendingFieldValueRef.current = afterKeyword;
-          activeVoiceFieldRef.current = lastKey;
-          setActiveVoiceField(lastKey);
-        } else if (activeVoiceFieldRef.current) {
-          // More text for the current active field
-          pendingFieldValueRef.current = (pendingFieldValueRef.current + ' ' + final.trim()).trim();
-        }
-
-        // Don't restart automatically - continuous mode handles this
+        setActiveVoiceField(voiceStateRef.current.activeField);
       } else {
         setInterimTranscript(interim);
         // Real-time column highlighting from interim text. Never switch away
         // from an in-progress description — its narration words ("sleeve",
         // "style"…) are not commands until "period" closes it.
-        if (activeVoiceFieldRef.current !== 'customDescription') {
-          const interimLower = interim.toLowerCase();
-          let lastPos = -1;
-          let lastKey: string | null = null;
-          for (const [keyword, fieldKey] of Object.entries(VOICE_KEYWORD_TO_FIELD)) {
-            const idx = interimLower.lastIndexOf(keyword);
-            if (idx > lastPos) { lastPos = idx; lastKey = fieldKey; }
-          }
-          if (lastKey) {
-            activeVoiceFieldRef.current = lastKey;
-            setActiveVoiceField(lastKey);
-          }
-        }
+        setActiveVoiceField(detectActiveField(interim, voiceStateRef.current));
       }
     };
 
@@ -658,6 +632,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     };
 
     recognition.onend = () => {
+      // The browser ends the session on its own silence timeout. Whatever the
+      // speaker had already dictated stays in voiceStateRef (it is NOT cleared
+      // here), so an open description survives the gap and keeps accumulating
+      // when recognition resumes below.
       // Only restart if we're still supposed to be recording
       // This happens when continuous mode times out or browser limits it
       if (isRecordingRef.current && !isStartingRef.current) {
@@ -696,8 +674,16 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         }
       }
     };
+    // Mount-stable on purpose: the recogniser must outlive group navigation, or
+    // the teardown aborts mid-utterance and drops whatever was being dictated.
+    // Everything per-render it needs is read through a ref.
     // setProcessedItems is a stable store setter — listed to satisfy exhaustive-deps.
-  }, [currentGroupIndex, setProcessedItems]);
+  }, [setProcessedItems]);
+
+  // Keep the recognition callbacks pointed at the listing on screen.
+  useEffect(() => {
+    currentGroupIndexRef.current = currentGroupIndex;
+  }, [currentGroupIndex]);
 
   // Load available presets on mount
   useEffect(() => {
@@ -1060,7 +1046,18 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         // force=true: user explicitly chose this preset, so reset stale preset-owned
         // fields (style, gender, tags, policies, etc.) and apply fresh values.
         // Voice/manual fields (brand, size, color, measurements, title) are kept.
-        const updatedGroup = applyPresetDirectly(group, preset.product_type || preset.category_name, preset, true);
+        //
+        // The category passed in is the group's OWN category — applyPresetFields
+        // always writes `category: categoryName`, so passing the preset's
+        // product_type here overwrote the Step-2 category with it. That is what
+        // stopped the category "sticking", and it also erased the override signal
+        // the auto-apply guards rely on (`productType !== category`), letting the
+        // next regeneration resolve a different preset and drift further. The
+        // preset's product_type still reaches generation via `productType` /
+        // `_presetData.productType`, which is where it belongs.
+        const groupCategory = group.find(i => i.category)?.category
+          || preset.product_type || preset.category_name;
+        const updatedGroup = applyPresetDirectly(group, groupCategory, preset, true);
         allUpdatedItems.push(...updatedGroup);
       }
 
@@ -1147,9 +1144,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     isRecordingRef.current = false;
     isStartingRef.current = false;
     setIsRecording(false);
-    activeVoiceFieldRef.current = null;
-    pendingFieldValueRef.current = '';
-    setActiveVoiceField(null);
+    // Commit — never discard. A description the speaker never closed with
+    // "period" used to be wiped here, which is why long dictations "timed out"
+    // and vanished. flushVoiceState writes it, then clears the parser.
+    commitVoiceBoundaryRef.current();
     
     if (recognitionRef.current) {
       try {
@@ -1232,6 +1230,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               ...(extractedFields.price      && { price:          parseFloat(extractedFields.price) || undefined }),
               ...(extractedFields.flaws      && { flaws:          extractedFields.flaws }),
               ...(extractedFields.care       && { care:           extractedFields.care }),
+              // customDescription was the one extracted field this path never
+              // applied — a dictated description only reached the form if the
+              // regeneration that follows happened to run and succeed.
+              ...(extractedFields.customDescription && { customDescription: extractedFields.customDescription }),
               ...(extractedFields.seoTitle   && { seoTitle:       extractedFields.seoTitle }),
               ...(extractedFields.tags && extractedFields.tags.length > 0 && {
                 tags: [...new Set([...(item.tags || []), ...extractedFields.tags])].slice(0, 5)
@@ -1260,14 +1262,43 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Only syncs the CURRENT GROUP (the one the user just edited) — not all groups.
   // Syncing all groups on every navigation caused N parallel DB calls (one per group)
   // making every Next/Prev click noticeably slow on large batches.
+  /**
+   * Flush everything pending and WAIT for it (report 28). Cancels both debounce
+   * timers and runs what they were holding, so the Save button is a real "write
+   * my work now" and not a third racing path.
+   *
+   * Groups are re-read out of the live store (processedItemsRef), never from the
+   * render snapshot — the pending group captured at edit time is already stale by
+   * the time the user clicks, which is the bug class the previous pass fixed in
+   * handleTableFieldChange.
+   */
   const handleSave = async () => {
-    log.pdg(`handleSave | group=${currentGroupIndex} groupSize=${currentGroup.length} batchId=${batchId ?? 'none'}`);
-    if (!currentGroup.length) { setHasUnsavedChanges(false); return; }
+    log.pdg(`handleSave | group=${currentGroupIndex} batchId=${batchId ?? 'none'}`);
+    if (groupSaveTimerRef.current) { clearTimeout(groupSaveTimerRef.current); groupSaveTimerRef.current = null; }
+    if (directSaveTimerRef.current) { clearTimeout(directSaveTimerRef.current); directSaveTimerRef.current = null; }
+
+    const live = processedItemsRef.current;
+    const groups: ClothingItem[][] = [];
+    const current = buildGroupArray(live)[currentGroupIndex] ?? [];
+    if (current.length) groups.push(current);
+
+    // A debounced direct save that was still waiting may belong to ANOTHER
+    // listing (the user edited, then navigated). Re-read it fresh and save it too.
+    const pending = pendingSaveGroupRef.current;
+    pendingSaveGroupRef.current = null;
+    if (pending?.length && pending[0]?.id !== current[0]?.id) {
+      const ids = new Set(pending.map(i => i.id));
+      const fresh = live.filter(i => ids.has(i.id));
+      if (fresh.length) groups.push(fresh);
+    }
+
+    if (!groups.length) { setHasUnsavedChanges(false); return; }
+    setIsSaving(true);
     try {
-      await syncGroupFieldsToDatabase(currentGroup, batchId ?? null, userIdRef.current);
-      setHasUnsavedChanges(false);
-    } catch {
-      // Silently fail — workflow_state blob is the source of truth
+      const results = await Promise.all(groups.map(g => reportedSync(g, 'handleSave')));
+      if (results.every(Boolean)) setHasUnsavedChanges(false);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -1291,45 +1322,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   };
 
   /** fieldKey → the spoken label used in "label value period" transcript lines. */
-  const FIELD_TO_VOICE_LABEL: Record<string, string> = {
-    seoTitle: 'title', brand: 'brand', size: 'size', color: 'color',
-    secondaryColor: 'second color', condition: 'condition', price: 'price',
-    era: 'era', style: 'style', gender: 'gender', material: 'material',
-    tags: 'tags', flaws: 'flaws', care: 'care', customDescription: 'description',
-    meas_width: 'width', meas_length: 'length', meas_chest: 'chest',
-    meas_waist: 'waist', meas_hip: 'hip', meas_rise: 'rise',
-    meas_inseam: 'inseam', meas_outseam: 'outseam', meas_leg: 'leg opening',
-    meas_sleeve: 'sleeve', meas_shoulder: 'shoulder',
-  };
-
-  /**
-   * Surgically sync ONE field edit into the voice transcript: update the
-   * existing "label value period" line if present, else append one. Everything
-   * else in the transcript — especially freeform narration — is left intact.
-   * (The old approach rebuilt the WHOLE transcript from structured fields,
-   * which silently deleted any narration the moment a field changed.)
-   */
-  const patchVoiceLine = (text: string, fieldKey: string, value: string): string => {
-    const label = FIELD_TO_VOICE_LABEL[fieldKey];
-    if (!label) return text;
-    const val = value.trim();
-    const esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const lineRe = new RegExp(`^${esc}\\s+.*?(?:\\bperiod\\b|\\.)\\s*$`, 'im');
-    if (!val) {
-      // Field cleared — drop its stale line so Regenerate can't resurrect it
-      return text.replace(lineRe, '').replace(/\n{2,}/g, '\n').trim();
-    }
-    const newLine = `${label} ${val} period`;
-    if (lineRe.test(text)) return text.replace(lineRe, newLine);
-    return text.trim() ? `${text.trimEnd()}\n${newLine}` : newLine;
-  };
-
   /** Handle a cell edit from the VoiceCommandTable — updates fields AND rebuilds voiceDescription */
-  const handleTableFieldChange = (fieldKey: string, value: string) => {
-    log.pdg(`handleTableFieldChange | ${fieldKey}="${value}" groupIndex=${currentGroupIndex}`);
+  const handleTableFieldChange = (fieldKey: string, value: string, groupIndexOverride?: number) => {
+    const groupIndex = groupIndexOverride ?? currentGroupIndex;
+    log.pdg(`handleTableFieldChange | ${fieldKey}="${value}" groupIndex=${groupIndex}`);
     const latestItems = processedItemsRef.current;
     const latestGroupArray = buildGroupArray(latestItems);
-    const latestGroup = latestGroupArray[currentGroupIndex] || [];
+    const latestGroup = latestGroupArray[groupIndex] || [];
     const targetIds = new Set(latestGroup.map(g => g.id));
     setProcessedItems(prev => prev.map(item => {
       if (!targetIds.has(item.id)) return item;
@@ -1373,34 +1372,245 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
     // Immediately schedule a direct save — bypasses the processedItems→onProcessed→prop feedback loop
     // that was causing isResettingRef to block the debounce save effect.
-    const updatedGroup = currentGroup.map(groupItem => {
-      const item = processedItems.find(i => i.id === groupItem.id) ?? groupItem;
-      if (!targetIds.has(item.id)) return item;
-      let updated: ClothingItem;
-      if (fieldKey.startsWith('meas_')) {
-        const measKey = fieldKey.slice(5);
-        updated = { ...item, measurements: { ...(item.measurements || {}), [measKey]: value } };
-      } else if (fieldKey === 'price') {
-        const directNum = parseFloat(value.replace(/[^0-9.]/g, ''));
-        updated = { ...item, price: isNaN(directNum) ? undefined : directNum };
-      } else if (fieldKey === 'tags') {
-        updated = { ...item, tags: value.split(/,\s*/).filter(Boolean) };
-      } else {
-        updated = { ...item, [fieldKey]: value };
-      }
-      return { ...updated, voiceDescription: patchVoiceLine(updated.voiceDescription || '', fieldKey, value) };
-    });
+    //
+    // Read the group back out of the STORE (processedItemsRef is a live view, fresh
+    // the instant the setter above returns). Rebuilding it from the render-captured
+    // `processedItems` lost every edit made since the last render — which is every
+    // other field when a single spoken chunk writes several of them in one tick, and
+    // any keystroke burst when typing. The DB then received a row missing those
+    // fields and clobbered them. It also kept a SECOND copy of the field-mapping
+    // logic that had already drifted (spoken-word prices like "forty five" parsed to
+    // a number for the store but to undefined for the save).
+    const savedGroup = processedItemsRef.current.filter(i => targetIds.has(i.id));
     if (isDebugEnabled()) {
       log.pdg('handleTableFieldChange → debouncedDirectSave with updatedGroup[0]', {
-        id: updatedGroup[0]?.id,
-        [fieldKey]: (updatedGroup[0] as any)[fieldKey],
+        id: savedGroup[0]?.id,
+        [fieldKey]: savedGroup[0] ? (savedGroup[0] as unknown as Record<string, unknown>)[fieldKey] : undefined,
       });
     }
-    debouncedDirectSave(updatedGroup);
+    if (savedGroup.length) debouncedDirectSave(savedGroup);
   };
 
   // Keep applyTableFieldRef current every render
   applyTableFieldRef.current = handleTableFieldChange;
+
+  // ── Brand spelling memory (report 14) ────────────────────────────────────
+
+  // Brand names from the founder vocabulary (brand_keywords) — the middle
+  // candidate source. vocabService caches the rows, so this costs no extra
+  // request; a ref (not state) because only the async resolver reads it and a
+  // re-render on arrival would buy nothing.
+  const brandKeywordBrandsRef = useRef<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    getAllBrandKeywordEntries()
+      .then(entries => { if (!cancelled) brandKeywordBrandsRef.current = entries.map(e => e.brand); })
+      .catch(() => { /* fails soft — the alias + built-in sources still work */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  const reloadAliases = useCallback(() => {
+    fetchBrandAliases().then(res => {
+      if (res.status === 'ok') { setBrandAliases(res.aliases); setAliasesAvailable(true); }
+      else setAliasesAvailable(false);
+    }).catch(() => setAliasesAvailable(false));
+  }, []);
+
+  useEffect(() => { reloadAliases(); }, [reloadAliases]);
+
+  /** Group id for a given index — the key heardBrandRef is filed under. */
+  const groupKeyAt = useCallback((index: number): string => {
+    const g = buildGroupArray(processedItemsRef.current)[index] ?? [];
+    return g[0] ? (g[0].productGroup || g[0].id) : '';
+  }, []);
+
+  /**
+   * Resolve a brand that arrived from SPEECH against this workspace's saved
+   * spellings, the founder vocabulary, and (only as a last resort) the built-in
+   * library.
+   *
+   * The heard value is written FIRST by the caller and is never blocked on this —
+   * a network hiccup must not lose dictation. An exact alias then rewrites the
+   * field and says so; a strong-but-unsaved match only asks.
+   *
+   * The built-in library is a ~361 KB lazy chunk (CLAUDE.md §15), so it is only
+   * fetched when the two cheap sources produced nothing — i.e. once, on the first
+   * genuinely unknown brand of a session, and never for a shop whose aliases and
+   * vocabulary already cover its inventory.
+   */
+  const resolveVoiceBrand = useCallback(async (heard: string, groupIndex: number) => {
+    const raw = (heard || '').trim();
+    if (!raw) return;
+    const groupKey = groupKeyAt(groupIndex);
+    if (groupKey) heardBrandRef.current.set(groupKey, raw);
+
+    const cheap: BrandCandidate[] = [
+      ...aliasCandidates(brandAliasesRef.current),
+      ...brandKeywordBrandsRef.current.map(b => ({ brand: b, source: 'vocab' as const })),
+    ];
+    let res = resolveHeardBrand(raw, cheap);
+    if (!res.applied && !res.suggestion) {
+      const builtin = await builtinBrandCandidates();
+      if (builtin.length) res = resolveHeardBrand(raw, [...cheap, ...builtin]);
+    }
+
+    // The listing may have changed while the library loaded — only act if the
+    // brand we resolved is still the one sitting in the field.
+    const liveGroup = buildGroupArray(processedItemsRef.current)[groupIndex] ?? [];
+    if (!liveGroup.length || (liveGroup[0].brand || '').trim() !== raw) return;
+
+    if (res.applied) {
+      applyTableFieldRef.current('brand', res.brand, groupIndex);
+      if (groupKey) heardBrandRef.current.set(groupKey, res.brand);
+      setBrandNotice({ kind: 'applied', heard: raw, preferred: res.brand });
+    } else if (res.suggestion) {
+      setBrandNotice({ kind: 'suggest', heard: raw, preferred: res.suggestion.brand });
+    } else {
+      // The brand settled on something already correct. Drop a suggestion raised
+      // against a HALF-SPOKEN value — the grammar writes the tail of every
+      // utterance optimistically, so "nik" asks "Did you mean Nike?" a beat
+      // before "nike" arrives and answers it. A pending "remember" offer is the
+      // seller's own decision and is left alone.
+      setBrandNotice(n => (n && n.kind !== 'remember' ? null : n));
+    }
+  }, [groupKeyAt]);
+
+  /** Undo an applied alias: put the spelling the microphone produced back. */
+  const undoBrandCorrection = useCallback(() => {
+    setBrandNotice(n => {
+      if (n?.kind === 'applied') applyTableFieldRef.current('brand', n.heard);
+      return null;
+    });
+  }, []);
+
+  const useBrandSuggestion = useCallback((preferred: string) => {
+    setBrandNotice(n => {
+      applyTableFieldRef.current('brand', preferred);
+      // Accepting a suggestion is also the moment to offer to remember it.
+      return n ? { kind: 'remember', heard: n.heard, preferred } : null;
+    });
+  }, []);
+
+  const rememberBrandAlias = useCallback((heard: string, preferred: string) => {
+    setBrandBusy(true);
+    setBrandError(null);
+    saveBrandAlias(heard, preferred, userEmailRef.current)
+      .then(res => {
+        if (res.ok) { setBrandNotice(null); reloadAliases(); }
+        else setBrandError(res.error ?? 'Could not save that spelling.');
+      })
+      .finally(() => setBrandBusy(false));
+  }, [reloadAliases]);
+
+  const removeBrandAlias = useCallback((id: string) => {
+    setBrandError(null);
+    deleteBrandAlias(id).then(res => {
+      if (res.ok) reloadAliases();
+      else setBrandError(res.error ?? 'Could not remove that spelling.');
+    });
+  }, [reloadAliases]);
+
+  /**
+   * The seller typed over a brand that came from voice → offer to remember it
+   * for the whole workspace. Only fires on a real correction of a real dictated
+   * value, so it cannot nag on a brand that was typed from scratch.
+   */
+  const noteBrandEdited = useCallback((value: string) => {
+    const typed = (value || '').trim();
+    const heard = heardBrandRef.current.get(groupKeyAt(currentGroupIndexRef.current));
+    if (!typed || !heard) return;
+    if (heard.trim().toLowerCase() === typed.toLowerCase()) return;
+    setBrandNotice({ kind: 'remember', heard, preferred: typed });
+  }, [groupKeyAt]);
+
+  // A new listing starts with a clean slate — a notice about the previous one
+  // is not about this one.
+  useEffect(() => { setBrandNotice(null); setBrandError(null); }, [currentGroupIndex]);
+
+  // ── Report 23: the seller name is never a garment brand ──────────────────
+  // products.vendor is the storage column for item.brand AND the CSV Vendor
+  // column carries the SHOP name, so a brand equal to this workspace's vendor
+  // name is always the seller leaking into the garment field. The code that put
+  // it there (preset.vendor → brand) shipped for 34 minutes in July 2026 and was
+  // reverted, but the ROWS it wrote are still in products.vendor and the
+  // hydration merge re-serves them over whatever the seller just typed — which
+  // is why retyping the brand never stuck. Clear it here, where the correction
+  // is visible and is persisted by the normal per-group save path.
+  const sellerNames = useMemo(
+    () => [descriptionSettings?.vendorName].filter((n): n is string => !!n && !!n.trim()),
+    [descriptionSettings?.vendorName],
+  );
+  useEffect(() => {
+    if (sellerNames.length === 0) return;
+    const group = buildGroupArray(processedItemsRef.current)[currentGroupIndex] ?? [];
+    const brand = group[0]?.brand;
+    // Runs at most once per listing: after the clear, brand is '' and never matches.
+    if (brand && isSellerName(brand, sellerNames)) {
+      log.pdg(`brand scrub | "${brand}" is the seller name, not a garment brand`);
+      applyTableFieldRef.current('brand', '', currentGroupIndex);
+    }
+  }, [currentGroupIndex, sellerNames, processedItems]);
+
+  /**
+   * Apply the field writes the dictation grammar produced. Each one goes through
+   * the same path as a hand-typed cell edit, so a spoken value and a typed value
+   * are indistinguishable downstream (group-wide update, transcript patch, save).
+   */
+  const applyVoiceWrites = useCallback((writes: VoiceWrite[], groupIndex?: number) => {
+    for (const w of writes) {
+      applyTableFieldRef.current(w.field, w.value, groupIndex);
+      // Brand alone gets a second, ASYNCHRONOUS look (report 14). The write
+      // above already happened, so nothing is lost if the lookup fails.
+      if (w.field === 'brand') {
+        void resolveVoiceBrand(w.value, groupIndex ?? currentGroupIndexRef.current);
+      }
+    }
+  }, [resolveVoiceBrand]);
+  const applyVoiceWritesRef = useRef(applyVoiceWrites);
+  useEffect(() => { applyVoiceWritesRef.current = applyVoiceWrites; }, [applyVoiceWrites]);
+
+  /**
+   * Close the command currently being dictated and write its value — the spoken
+   * "period", the "." key and the Period button all land here. Also called
+   * whenever listening stops or the listing changes, so a value that was never
+   * terminated is committed instead of silently thrown away.
+   */
+  const commitVoiceBoundary = useCallback(() => {
+    const { writes, state } = flushVoiceState(voiceStateRef.current);
+    voiceStateRef.current = state;
+    if (writes.length) {
+      log.pdg(`commitVoiceBoundary | ${writes.map(w => w.field).join(',')}`);
+      applyVoiceWritesRef.current(writes, voiceStateGroupRef.current);
+    }
+    setActiveVoiceField(null);
+    setInterimTranscript('');
+  }, []);
+  const commitVoiceBoundaryRef = useRef(commitVoiceBoundary);
+  useEffect(() => { commitVoiceBoundaryRef.current = commitVoiceBoundary; }, [commitVoiceBoundary]);
+
+  // Moving to another listing commits what is open — the value belongs to the
+  // listing it was spoken over, not the next one.
+  useEffect(() => {
+    return () => { commitVoiceBoundaryRef.current(); };
+  }, [currentGroupIndex]);
+
+  // "." (or the numpad decimal) is the same boundary as saying "period" — the
+  // word is hard to remember and easy to forget at the end of a long sentence.
+  // Ignored while a field/textarea has focus so it never eats a typed decimal.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!isRecordingRef.current) return;
+      if (e.key !== '.' && e.code !== 'NumpadDecimal') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
+      e.preventDefault();
+      commitVoiceBoundaryRef.current();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // ── Quick descriptor keyword chips ─────────────────────────────────────
   // Founder-curated from the descriptor_chips table; hardcoded list is the
@@ -1543,33 +1753,30 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       {
         const freshPresets = await getCategoryPresets();
 
-        // Priority order for preset to use during regeneration:
-        // 1. selectedPresetId — in-memory manual override (set this session, or restored by nav effect)
-        // 2. item.productType lookup — productType is saved to DB so it survives refresh
-        // 3. default preset for item.category — category-level fallback
+        // Which preset is "the current set up" for this listing, most explicit first.
+        // Every step is identity-based or goes through the ONE shared matcher
+        // (lib/presetResolver — product_type + is_default, then any product_type,
+        // then legacy category_name). The old chain used bare `.find()` calls that
+        // ignored is_default, so with two presets sharing a product_type it could
+        // return an unrelated one and silently re-apply it over the user's choice
+        // on every Stop Recording / Generate.
+        // 1. selectedPresetId   — the preset the user picked this session
+        // 2. appliedPresetId    — the same choice, persisted to the DB row
+        // 3. productType        — preset-owned, survives reload
+        // 4. category           — the category default, last resort
         const bySelectedId = selectedPresetId
           ? freshPresets.find(p => p.id === selectedPresetId && p.is_active)
           : null;
-        const byProductType = !bySelectedId && item.productType
-          ? freshPresets.find(p =>
-              p.is_active &&
-              (p.product_type?.toLowerCase() === item.productType!.toLowerCase() ||
-               p.category_name.toLowerCase() === item.productType!.toLowerCase())
-            )
+        const byAppliedId = !bySelectedId && item.appliedPresetId
+          ? freshPresets.find(p => p.id === item.appliedPresetId && p.is_active)
           : null;
-        const byCategory = (!bySelectedId && !byProductType && item.category)
-          ? freshPresets.find(p =>
-              p.is_active && p.is_default &&
-              (p.product_type?.toLowerCase() === item.category!.toLowerCase() ||
-               p.category_name.toLowerCase() === item.category!.toLowerCase())
-            ) ??
-            freshPresets.find(p =>
-              p.is_active &&
-              (p.product_type?.toLowerCase() === item.category!.toLowerCase() ||
-               p.category_name.toLowerCase() === item.category!.toLowerCase())
-            )
+        const byProductType = (!bySelectedId && !byAppliedId)
+          ? resolvePreset(freshPresets, item.productType)
           : null;
-        const matchingPreset = bySelectedId ?? byProductType ?? byCategory ?? null;
+        const byCategory = (!bySelectedId && !byAppliedId && !byProductType)
+          ? resolvePreset(freshPresets, item.category)
+          : null;
+        const matchingPreset = bySelectedId ?? byAppliedId ?? byProductType ?? byCategory ?? null;
 
         if (isDebugEnabled()) {
           log.pdg('[PRESET REGEN] Step 0 preset resolution', {
@@ -1578,6 +1785,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             productType: item.productType,
             selectedPresetId,
             bySelectedIdName: bySelectedId?.display_name,
+            byAppliedIdName: byAppliedId?.display_name,
             byProductTypeName: byProductType?.display_name,
             byCategoryName: byCategory?.display_name,
             resolvedPresetName: matchingPreset?.display_name,
@@ -1585,8 +1793,14 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         }
 
         if (matchingPreset) {
-          // Use the matched preset's productType as the authoritative category for title/tag generation.
-          const effectiveCategory = matchingPreset.product_type || matchingPreset.category_name || item.category || '';
+          // Keep the listing's own category. applyPresetFields writes
+          // `category: categoryName`, so passing the preset's product_type here
+          // rewrote the category on every regeneration — the same drift as the
+          // manual-apply path above, except this one fires on every dictation.
+          // Title/tag generation reads the preset's product_type separately
+          // (`_presetData.productType`, a few lines below), so nothing is lost.
+          const effectiveCategory = item.category
+            || matchingPreset.product_type || matchingPreset.category_name || '';
           latestGroup = applyPresetDirectly(group, effectiveCategory, matchingPreset);
           // Flush the preset-refreshed items back into state so the form reflects them
           setProcessedItems(prev => {
@@ -1712,16 +1926,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         });
         return updated;
       });
-      // Immediately flush to DB so a page refresh never loses the generated description
-      const updatedGroupForSave = currentGroup.map(gi => {
-        const found = targetIds.has(gi.id);
-        if (!found) return gi;
-        return {
-          ...gi,
-          generatedDescription: finalDescription,
-          ...(aiResult.suggestedTitle && { seoTitle: aiResult.suggestedTitle }),
-        };
-      });
+      // Immediately flush to DB so a page refresh never loses the generated description.
+      // Read the group back out of the store: `currentGroup` is the render-captured
+      // snapshot from BEFORE the preset refresh and the voice extraction above, so
+      // saving it wrote the generated text alongside stale values for every other
+      // column — brand/size/colour just extracted from speech were reverted in the
+      // DB and came back empty on the next reload.
+      const updatedGroupForSave = processedItemsRef.current.filter(i => targetIds.has(i.id));
       if (isDebugEnabled()) {
         log.pdg('[REGEN] Flushing to DB immediately:', {
           id: updatedGroupForSave[0]?.id,
@@ -2169,35 +2380,64 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // helper createTransformedFile will be dynamically imported where needed
 
   // Upload transformed image and optionally overwrite the existing storage path
-  const applyAndPersistTransform = async (itemId: string, replaceExisting = true, itemOverride?: Partial<ClothingItem>) => {
+  type TransformApplyOptions = {
+    /** Part of a bulk paste: pixels come from the cached pre-crop original so a
+     *  repeat paste cannot crop the crop. */
+    bulk?: boolean;
+    /** Aspect of the frame the pasted crop was drawn on, when known. */
+    cropSourceAspect?: number | null;
+  };
+
+  const applyAndPersistTransform = async (
+    itemId: string,
+    replaceExisting = true,
+    itemOverride?: Partial<ClothingItem>,
+    opts: TransformApplyOptions = {},
+  ) => {
+    const { bulk = false, cropSourceAspect = null } = opts;
     const baseItem = processedItems.find(i => i.id === itemId);
-    if (!baseItem) return;
+    if (!baseItem) throw new Error(`[crop] item not found: ${itemId}`);
     const item = itemOverride ? { ...baseItem, ...itemOverride } : baseItem;
 
-    const { createTransformedFile } = await import('../lib/imageTransforms');
-    const file = await createTransformedFile(item);
-    if (!file) { console.error('createTransformedFile returned null for item', itemId); return; }
+    const { createTransformedFile, invalidateImageUrl } = await import('../lib/imageTransforms');
+    // A BULK PASTE reads the cached ORIGINAL: pasted percentages describe a full
+    // frame, so re-applying them to an already-cropped file crops the crop. An
+    // INTERACTIVE crop must read the current file — that is what the modal showed.
+    const file = await createTransformedFile(item, {
+      sourceMode: bulk ? 'original' : 'current',
+      cropSourceAspect,
+    });
+    if (!file) throw new Error(`[crop] createTransformedFile returned null for ${itemId}`);
 
     try {
       const { uploadFileToPath, uploadTransformedImage } = await import('../lib/productService');
       if (replaceExisting && item.storagePath) {
         const res = await uploadFileToPath(file, item.storagePath, true);
         if (res) {
+          // This overwrote the bytes at an UNCHANGED url, which is the one thing
+          // public/sw.js assumes never happens ("immutable per storage_path").
+          // Drop the LRU entry, the SW's 7-day entry, and force the next read
+          // past the HTTP cache — otherwise the next paste re-crops the original.
+          await invalidateImageUrl(res.url);
           setProcessedItems(prev => prev.map(i => i.id === itemId ? { ...i, preview: res.url, storagePath: res.path, imageRotation: 0, crop: undefined } : i));
           setHasUnsavedChanges(true);
           return;
         }
       }
       const res2 = await uploadTransformedImage(file);
-      if (res2) {
-        if (replaceExisting && item.storagePath) {
-          try { await (await import('../lib/supabase')).supabase.storage.from('product-images').remove([item.storagePath]); } catch { /* ignore */ }
-        }
-        setProcessedItems(prev => prev.map(i => i.id === itemId ? { ...i, preview: res2.url, storagePath: res2.path, imageRotation: 0, crop: undefined } : i));
-        setHasUnsavedChanges(true);
+      if (!res2) throw new Error(`[crop] upload failed for ${itemId} — both upload paths returned null`);
+      if (replaceExisting && item.storagePath) {
+        try { await (await import('../lib/supabase')).supabase.storage.from('product-images').remove([item.storagePath]); } catch { /* ignore */ }
+        await invalidateImageUrl(item.preview || '');
       }
+      setProcessedItems(prev => prev.map(i => i.id === itemId ? { ...i, preview: res2.url, storagePath: res2.path, imageRotation: 0, crop: undefined } : i));
+      setHasUnsavedChanges(true);
     } catch (err) {
+      // MUST propagate: handlePasteCrop counts a resolved promise as a success,
+      // so swallowing here reported failed items as cropped and left them
+      // untouched among hundreds of correct ones, with no retry offered.
       console.error('applyAndPersistTransform error:', err);
+      throw err;
     }
   };
 
@@ -2205,6 +2445,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Applies copiedCrop to every item across all selected groups (or all groups if
   // none selected), batched 4 at a time so Supabase isn't overwhelmed.
   const handlePasteCrop = async (crop: { x: number; y: number; w: number; h: number }) => {
+    if (cropPasteRunningRef.current) { console.warn('[paste] a paste batch is already running — ignoring this one'); return; }
     const groupArray = buildGroupArray(processedItems);
     // Determine target groups
     let targetGroups: typeof groupArray;
@@ -2226,19 +2467,40 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
     // Then: bake + upload in batches of 4 so Supabase isn't overloaded
     const CONCURRENCY = 4;
-    setCropPasteProgress({ done: 0, total: targetItems.length });
+    const total = targetItems.length;
+    cropPasteRunningRef.current = true;
+    setCropPasteProgress({ done: 0, total, failed: 0 });
     let done = 0;
-    for (let i = 0; i < targetItems.length; i += CONCURRENCY) {
-      const batch = targetItems.slice(i, i + CONCURRENCY);
-      await Promise.all(batch.map(item => applyAndPersistTransform(item.id, true, { crop })));
-      done += batch.length;
-      setCropPasteProgress({ done, total: targetItems.length });
-      // Small breathing room between batches to avoid rate-limit
-      if (i + CONCURRENCY < targetItems.length) {
-        await new Promise(resolve => setTimeout(resolve, 150));
+    const failedIds: string[] = [];
+    try {
+      for (let i = 0; i < targetItems.length; i += CONCURRENCY) {
+        const batch = targetItems.slice(i, i + CONCURRENCY);
+        // settled, not all-or-nothing: one item's failure must not abort the run,
+        // and — the actual bug — must not be counted as a success either.
+        await Promise.all(batch.map(item =>
+          applyAndPersistTransform(item.id, true, { crop }, { bulk: true, cropSourceAspect: copiedCropAspect })
+            .then(() => { done++; })
+            .catch((err) => { done++; failedIds.push(item.id); console.error('[paste] item failed:', item.id, err); })
+        ));
+        setCropPasteProgress({ done, total, failed: failedIds.length });
+        // Small breathing room between batches to avoid rate-limit
+        if (i + CONCURRENCY < targetItems.length) {
+          await new Promise(resolve => setTimeout(resolve, 150));
+        }
       }
+    } finally {
+      cropPasteRunningRef.current = false;
     }
-    setCropPasteProgress(null);
+    if (failedIds.length > 0) {
+      // Never silently report a clean run: these items still show the crop in
+      // state (set optimistically above) but their stored pixels are unchanged.
+      console.error('[paste] crop paste finished with failures:', failedIds);
+      setCropPasteProgress({ done: total, total, failed: failedIds.length });
+      window.alert(`${failedIds.length} of ${total} image${total > 1 ? 's' : ''} could not be cropped — their stored photos are unchanged. Check the connection and paste again.`);
+      setTimeout(() => setCropPasteProgress(null), 4000);
+    } else {
+      setCropPasteProgress(null);
+    }
     if (selectedGroupIds.size > 0) setSelectedGroupIds(new Set());
   };
 
@@ -2308,6 +2570,29 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 Finish <Check size={12} />
               </button>
             )}
+            {/* Report 28 — an explicit Save. Both debounced paths are flushed and
+                awaited, so "Saved" means the products table actually has it. */}
+            <button
+              className="button button-secondary preview-save-btn"
+              onClick={handleSave}
+              disabled={isSaving}
+              title="Save this listing now"
+            >
+              <Save size={12} style={{ flexShrink: 0 }} /> {isSaving ? 'Saving' : 'Save'}
+            </button>
+          </div>
+          <div
+            className="save-status"
+            data-state={save.status}
+            role="status"
+            aria-live="polite"
+            title={save.message ?? undefined}
+          >
+            {save.status === 'saving' && 'Saving…'}
+            {save.status === 'error' && 'Save failed — retry'}
+            {save.status === 'saved' && save.lastSavedAt &&
+              `Saved ${new Date(save.lastSavedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+            {save.status === 'idle' && (hasUnsavedChanges ? 'Unsaved changes' : '')}
           </div>
           {groupArray.length > 1 && (
             <input
@@ -2484,6 +2769,16 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               >
                 {isTransitioning ? <><Hourglass size={12} /> Wait...</> : (isRecording ? <><Square size={12} /> Stop Recording</> : <><Mic size={12} /> Start Recording</>)}
               </button>
+              {isRecording && (
+                <button
+                  type="button"
+                  className="button button-secondary voice-period-btn"
+                  title={'End the current field — same as saying "period". Shortcut: the . key'}
+                  onClick={commitVoiceBoundary}
+                >
+                  <CircleDot size={12} style={{ flexShrink: 0 }} /> Period
+                </button>
+              )}
               {currentItem.voiceDescription && !isRecording && (
                 <button 
                   className="button" 
@@ -2539,6 +2834,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   {cropPasteProgress ? (
                     <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--accent)', fontWeight: 600 }}>
                       ⏳ {cropPasteProgress.done}/{cropPasteProgress.total} cropping…
+                      {cropPasteProgress.failed > 0 && ` · ${cropPasteProgress.failed} failed`}
                     </span>
                   ) : (
                     <>
@@ -2554,7 +2850,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       </button>
                       <button
                         title="Clear copied crop"
-                        onClick={() => setCopiedCrop(null)}
+                        onClick={() => { setCopiedCrop(null); setCopiedCropAspect(null); }}
                         style={{ fontSize: 'var(--fs-xs)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '0.1rem 0.3rem' }}
                       ><X size={12} /></button>
                     </>
@@ -2576,7 +2872,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             <div className="voice-result">
               {/* Mode toggle */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <label><strong>Voice Description</strong> <span style={{ fontWeight: 400, color: 'var(--text-muted)', fontSize: '0.85em' }}>— say <em>field name → value → "period"</em> to apply (e.g. <em>"brand Nike period"</em>)</span></label>
+                <label><strong>Voice Description</strong> <span style={{ fontWeight: 400, color: 'var(--text-muted)', fontSize: '0.85em' }}>— say <em>field name → value</em>; the next field name ends it (e.g. <em>"brand Nike size large"</em>). Say <em>"period"</em> or press <strong>.</strong> to end one on its own</span></label>
                 <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                   <button
                     type="button"
@@ -2835,7 +3131,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       });
                       setProcessedItems(updated);
                     }}
-                    placeholder={"Start Recording and speak...\n\nExample (say measurements without needing 'period'):\n  chest 38 waist 32 sleeve 25\n  color black period brand Nike period"}
+                    placeholder={"Start Recording and speak...\n\nNo 'period' needed — the next field name ends the one before it:\n  brand Nike size large price forty\n  chest 38 waist 32 sleeve 25\n\nFor a free-form description, say 'period' (or press .) when you're done:\n  description super soft faded boxy fit period"}
                     rows={8}
                     className="description-textarea"
                     style={{ flex: 1, minWidth: 0 }}
@@ -3165,6 +3461,14 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 </p>
               </div>
             )}
+
+            {/* Shelf labels for THIS listing — colour/word/vendor tags that the
+                Shopify fields cannot hold, printed on the label and scanned back.
+                Every photo in the group gets the label, so it survives a regroup.
+                The component owns its own fetching, renders nothing until
+                listing_labels.sql has been run, and never touches processedItems
+                — so it cannot interact with the store patches around it. */}
+            <ListingLabelsPicker productIds={currentGroupIds} />
           </div>
 
           {/* Comprehensive Product Form - All 62 CSV Fields */}
@@ -3179,6 +3483,21 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               currentGroup={currentGroup}
               processedItems={processedItems}
               setProcessedItems={setProcessedItems}
+              onBrandEdited={noteBrandEdited}
+              brandExtra={
+                <BrandSpelling
+                  available={aliasesAvailable}
+                  aliases={brandAliases}
+                  notice={brandNotice}
+                  busy={brandBusy}
+                  error={brandError}
+                  onDismissNotice={() => { setBrandNotice(null); setBrandError(null); }}
+                  onUndo={undoBrandCorrection}
+                  onUseSuggestion={useBrandSuggestion}
+                  onSaveAlias={rememberBrandAlias}
+                  onDeleteAlias={removeBrandAlias}
+                />
+              }
             />
           </div>
         </div>
@@ -3191,8 +3510,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           style={{
             width: magnifierSettings.size,
             height: magnifierSettings.size,
-            left: magnifier.x + 20,
-            top: magnifier.y,
+            // Clamped to the viewport (report 17) — the lens used to be cut off
+            // at every edge. clampLensPosition returns the TRUE top-left, which
+            // is why .magnifier-lens no longer applies a centring transform.
+            ...clampLensPosition(
+              magnifier.x, magnifier.y, magnifierSettings.size,
+              window.innerWidth, window.innerHeight,
+            ),
             backgroundImage: `url(${magnifier.src})`,
             backgroundPosition: `${magnifier.bgX}% ${magnifier.bgY}%`,
             backgroundSize: `${magnifierSettings.zoom * 100}%`,
@@ -3244,12 +3568,35 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                          Enabled = solid accent (needs a dark label); disabled = no
                          fill, so the label has to stay light or it disappears. */
                       style={{ background: tempCrop ? 'var(--accent)' : undefined, color: tempCrop ? 'var(--ink-950)' : 'var(--text-primary)', opacity: tempCrop ? 1 : 0.4 }}
-                      onClick={() => { if (tempCrop) { setCopiedCrop(tempCrop); } }}>
+                      onClick={() => {
+                        if (!tempCrop) return;
+                        setCopiedCrop(tempCrop);
+                        setCopiedCropAspect(null);
+                        // Fire-and-forget: the aspect only refines the paste, and a
+                        // failure degrades to plain percent-of-frame (the historical
+                        // behaviour). Also warms the cache with the copy source.
+                        const srcItem = processedItems.find(i => i.id === cropModal.itemId);
+                        const srcUrl = srcItem?.preview || srcItem?.imageUrls?.[0] || '';
+                        if (!srcUrl) return;
+                        void (async () => {
+                          try {
+                            const { getSourceFrameAspect } = await import('../lib/imageTransforms');
+                            setCopiedCropAspect(await getSourceFrameAspect(srcUrl, srcItem?.imageRotation || 0));
+                          } catch { /* percent-of-frame fallback */ }
+                        })();
+                      }}>
                       <Copy size={12} style={{ flexShrink: 0 }} /> Copy Crop
                     </button>
                     <button className="crop-fs-btn crop-fs-done" disabled={!tempCrop} onClick={async () => {
                       if (!cropModal.itemId || !tempCrop) return;
-                      await applyAndPersistTransform(cropModal.itemId, true, { crop: tempCrop });
+                      // The apply now rethrows so bulk pastes can count failures;
+                      // the interactive path reports and still tears the modal down.
+                      try {
+                        await applyAndPersistTransform(cropModal.itemId, true, { crop: tempCrop });
+                      } catch (err) {
+                        console.error('[crop] apply failed:', err);
+                        window.alert('Could not apply the crop — the image could not be loaded or uploaded. Please try again.');
+                      }
                       setCropModal({ open: false }); setTempCrop(null); setActivePreset('FREE'); setAspectLock(null);
                       closeLightbox();
                     }}>Done</button>

@@ -76,8 +76,8 @@ jobs:
 
           # The document title is what the post-deploy smoke test asserts against
           # the live site, so a rename must be a deliberate, visible change.
-          if ! grep -q '<title>Acadia</title>' dist/index.html; then
-            echo "::error file=index.html::<title>Acadia</title> not found in dist/index.html — update the post-deploy smoke test in deploy.yml if this rename is intentional"
+          if ! grep -q '<title>Arcadian</title>' dist/index.html; then
+            echo "::error file=index.html::<title>Arcadian</title> not found in dist/index.html — update the post-deploy smoke test in deploy.yml if this rename is intentional"
             exit 1
           fi
 

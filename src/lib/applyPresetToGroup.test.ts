@@ -136,6 +136,42 @@ describe('applyPresetDirectly — field wiring (July 2026 audit fixes)', () => {
     expect(voiceKept.brand).toBe('Nike');
   });
 
+  // ── Report 23 ────────────────────────────────────────────────────────────
+  // A build that shipped for 34 minutes in July 2026 did `item.brand ||
+  // preset.vendor`. The wiring was reverted; the ROWS it wrote were not, and
+  // products.vendor is the storage column for item.brand, so every reload
+  // re-serves the shop name as the brand. Applying a preset heals it.
+  it('a brand that IS the preset vendor is dropped, not preserved', () => {
+    const [healed] = applyPresetDirectly([makeItem({ brand: 'C&D Vintage' })], 'tees',
+      makePreset({ vendor: 'C&D Vintage' }));
+    expect(healed.brand).toBeUndefined();
+  });
+
+  it('heals through case, punctuation and the &/and spelling', () => {
+    for (const poisoned of ['c and d vintage', 'C&D VINTAGE.', 'c & d  vintage']) {
+      const [out] = applyPresetDirectly([makeItem({ brand: poisoned })], 'tees',
+        makePreset({ vendor: 'C&D Vintage' }));
+      expect(out.brand, poisoned).toBeUndefined();
+    }
+  });
+
+  it('never touches a real brand, including one that merely contains "Vintage"', () => {
+    const [kept] = applyPresetDirectly([makeItem({ brand: 'American Vintage' })], 'tees',
+      makePreset({ vendor: 'C&D Vintage' }));
+    expect(kept.brand).toBe('American Vintage');
+  });
+
+  it('a preset with no vendor leaves the brand exactly as it was', () => {
+    const [kept] = applyPresetDirectly([makeItem({ brand: 'Carhartt' })], 'tees', makePreset({}));
+    expect(kept.brand).toBe('Carhartt');
+  });
+
+  it('force mode still cannot put the vendor into brand', () => {
+    const [forced] = applyPresetDirectly([makeItem({ brand: 'Nike' })], 'tees',
+      makePreset({ vendor: 'C&D Vintage' }), true);
+    expect(forced.brand).toBe('Nike');
+  });
+
   it('falls back to suggested_price_max for compare-at when compare_at_price is unset', () => {
     const [maxFallback] = applyPresetDirectly([makeItem()], 'tees',
       makePreset({ suggested_price_max: 60 }));
@@ -200,5 +236,78 @@ describe('resolvePreset', () => {
     expect(resolvePreset([], 'hats')).toBeUndefined();
     expect(resolvePreset(undefined, 'hats')).toBeUndefined();
     expect(resolvePreset([p({ id: 'k', product_type: 'hats' })], undefined)).toBeUndefined();
+  });
+});
+
+describe('report 3 — the categoryName argument is the LISTING category, not the preset type', () => {
+  // applyPresetFields always writes `category: categoryName`. Step 3 used to pass
+  // `preset.product_type` there, which overwrote the Step-2 category with the
+  // preset's type. That broke two things at once: the category stopped sticking,
+  // and `productType !== category` — the signal every auto-apply guard uses to
+  // detect a manual override — was flattened, so the next regeneration re-resolved
+  // a preset from scratch and could land on an unrelated one.
+  const preset = makePreset({
+    product_type: 'Mens Sweatshirts',
+    category_name: 'sweatshirts',
+    gender: 'Men',
+  });
+
+  it('keeps the listing category while taking productType from the preset', () => {
+    const [out] = applyPresetDirectly(
+      [{ id: 'i1', category: 'sweatshirts' } as ClothingItem],
+      'sweatshirts',
+      preset,
+      true,
+    );
+    expect(out.category).toBe('sweatshirts');
+    expect(out.productType).toBe('Mens Sweatshirts');
+  });
+
+  it('leaves the override signal (productType !== category) intact', () => {
+    const [out] = applyPresetDirectly(
+      [{ id: 'i1', category: 'sweatshirts' } as ClothingItem],
+      'sweatshirts',
+      preset,
+      true,
+    );
+    expect(out.productType!.toLowerCase()).not.toBe(out.category!.toLowerCase());
+  });
+
+  it('destroys that signal when the preset type is passed as the category', () => {
+    // The shape of the bug, kept as documentation of what must not be done.
+    const [out] = applyPresetDirectly(
+      [{ id: 'i1', category: 'sweatshirts' } as ClothingItem],
+      preset.product_type!,
+      preset,
+      true,
+    );
+    expect(out.category).toBe('Mens Sweatshirts');
+    expect(out.productType!.toLowerCase()).toBe(out.category!.toLowerCase());
+  });
+
+  it('records the preset identity so regeneration can resolve it again', () => {
+    const [out] = applyPresetDirectly(
+      [{ id: 'i1', category: 'sweatshirts' } as ClothingItem],
+      'sweatshirts',
+      preset,
+      true,
+    );
+    expect(out.appliedPresetId).toBe(preset.id);
+    expect(out._presetData?.presetId).toBe(preset.id);
+  });
+});
+
+describe('report 3 — resolvePreset prefers the default over an arbitrary first match', () => {
+  const p = (o: Partial<CategoryPreset>) =>
+    ({ is_active: true, is_default: false, category_name: '', ...o }) as CategoryPreset;
+
+  it('picks the default when two presets share a product_type', () => {
+    // The old regeneration chain used a bare `.find()` here, so whichever row the
+    // DB returned first won — that is the "unrelated preset group" in the report.
+    const list = [
+      p({ id: 'first', product_type: 'sweatshirts' }),
+      p({ id: 'default', product_type: 'sweatshirts', is_default: true }),
+    ];
+    expect(resolvePreset(list, 'sweatshirts')?.id).toBe('default');
   });
 });

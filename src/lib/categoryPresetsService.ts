@@ -118,7 +118,19 @@ export async function permanentlyDeleteCategoryPreset(id: string): Promise<void>
 }
 
 /**
- * Apply category preset to product data
+ * UNUSED — no caller anywhere in src/. Kept because it is exported; the live
+ * preset path is applyPresetToGroup.ts (`applyPresetDirectly`).
+ *
+ * Apply category preset to product data.
+ *
+ * WARNING IF YOU WIRE THIS UP: the keys here are snake_case `products` COLUMNS,
+ * not ClothingItem fields. `vendor` is that table's storage column for
+ * item.brand, so the `preset.vendor` default this used to carry wrote the SHOP
+ * name straight into the garment brand of every listing — founder report 23,
+ * and the 34-minute-lived regression that caused it (21296ea, reverted by
+ * f8ae919). It has been removed. The CSV Vendor column is filled from the
+ * org-level `vendorName` setting at export time; nothing item-shaped should
+ * ever carry it.
  */
 export function applyCategoryPreset(
   productData: any,
@@ -133,7 +145,8 @@ export function applyCategoryPreset(
     
     // Apply product classification
     product_type: productData.product_type || preset.product_type,
-    vendor: productData.vendor || preset.vendor,
+    // vendor: DELIBERATELY NOT DEFAULTED from the preset — see the warning above.
+    vendor: productData.vendor,
     
     // Apply material and care
     material: productData.material || preset.default_material,

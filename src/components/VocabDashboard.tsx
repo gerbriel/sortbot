@@ -11,6 +11,10 @@ import {
 // dynamically when its tab opens (see the lazy-load effects below)
 import type { BuiltinBrandEntry } from '../lib/builtinBrandVocab';
 import type { ModelContext } from '../lib/brandCategorySystem';
+import BrandSpelling from './BrandSpelling';
+import {
+  fetchBrandAliases, saveBrandAlias, deleteBrandAlias, type BrandAlias,
+} from '../lib/brandAliasService';
 import './VocabDashboard.css';
 
 /**
@@ -26,7 +30,14 @@ import './VocabDashboard.css';
 /* No props: as a full view its only chrome is ToolView's, and closing is
    ToolView's "Back to workflow" button. */
 export default function VocabDashboard() {
-  const [tab, setTab] = useState<'chips' | 'brands' | 'models'>('chips');
+  const [tab, setTab] = useState<'chips' | 'brands' | 'models' | 'spellings'>('chips');
+  // Brand spellings are PER WORKSPACE, not global like the three tabs above —
+  // the tab is here because this is where a founder already comes to curate
+  // vocabulary, and the same manager is reachable inline from the Step 3 brand
+  // field for every member. The scope badge says which is which.
+  const [aliases, setAliases] = useState<BrandAlias[]>([]);
+  const [aliasesAvailable, setAliasesAvailable] = useState(false);
+  const [aliasError, setAliasError] = useState<string | null>(null);
   const [chips, setChips] = useState<DescriptorChip[]>([]);
   const [brands, setBrands] = useState<BrandKeywordRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -106,6 +117,16 @@ export default function VocabDashboard() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  /** Brand spellings — reports 'unavailable' until brand_aliases.sql is run. */
+  const loadAliases = () => {
+    fetchBrandAliases().then(res => {
+      if (res.status === 'ok') { setAliases(res.aliases); setAliasesAvailable(true); }
+      else setAliasesAvailable(false);
+    }).catch(() => setAliasesAvailable(false));
+  };
+
+  useEffect(() => { loadAliases(); }, []);
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string } | boolean>, okMsg: string) => {
     if (busy) return;
@@ -272,7 +293,9 @@ export default function VocabDashboard() {
   return (
     <div className="vocab-page">
       <div className="vocab-toolbar">
-        <span className="vocab-scope-badge">global — all workspaces</span>
+        <span className="vocab-scope-badge">
+          {tab === 'spellings' ? 'this workspace only' : 'global — all workspaces'}
+        </span>
         <div className="vocab-tabs">
           <button className={`vocab-tab ${tab === 'chips' ? 'vocab-tab--on' : ''}`} onClick={() => { setTab('chips'); setEditId(null); setConfirmDeleteId(null); }}>
             Quick keyword chips ({chips.length})
@@ -282,6 +305,9 @@ export default function VocabDashboard() {
           </button>
           <button className={`vocab-tab ${tab === 'models' ? 'vocab-tab--on' : ''}`} onClick={() => { setTab('models'); setEditId(null); setConfirmDeleteId(null); }}>
             Models ({dbModels.length})
+          </button>
+          <button className={`vocab-tab ${tab === 'spellings' ? 'vocab-tab--on' : ''}`} onClick={() => { setTab('spellings'); setEditId(null); setConfirmDeleteId(null); }}>
+            Brand spellings ({aliases.length})
           </button>
         </div>
         <div className="vocab-search">
@@ -294,6 +320,42 @@ export default function VocabDashboard() {
 
         {loading ? (
           <p className="vocab-loading">Loading vocabulary…</p>
+        ) : tab === 'spellings' ? (
+          <>
+            <p className="vocab-help">
+              What speech-to-text hears &rarr; what to write in the Brand field. Speech engines
+              return the English word, and clothing labels are deliberately misspelled — “echo
+              unlimited” for Ecko Unltd, “foo boo” for Fubu. One row here fixes it for every
+              listing this workspace dictates. Members can add these from the Brand field in
+              Step 3 too; these are <strong>not</strong> shared with other workspaces.
+            </p>
+            {!aliasesAvailable && (
+              <p className="vocab-loading">
+                Brand spellings are not set up yet — run supabase/migrations/brand_aliases.sql.
+              </p>
+            )}
+            <BrandSpelling
+              variant="full"
+              available={aliasesAvailable}
+              aliases={search.trim()
+                ? aliases.filter(a =>
+                    a.heard.toLowerCase().includes(search.trim().toLowerCase()) ||
+                    a.preferred.toLowerCase().includes(search.trim().toLowerCase()))
+                : aliases}
+              busy={busy}
+              error={aliasError}
+              onSaveAlias={(heard, preferred) => {
+                setAliasError(null);
+                saveBrandAlias(heard, preferred)
+                  .then(r => { if (r.ok) loadAliases(); else setAliasError(r.error ?? 'Could not save.'); });
+              }}
+              onDeleteAlias={(id) => {
+                setAliasError(null);
+                deleteBrandAlias(id)
+                  .then(r => { if (r.ok) loadAliases(); else setAliasError(r.error ?? 'Could not remove.'); });
+              }}
+            />
+          </>
         ) : tab === 'models' ? (
           <>
             <p className="vocab-help">

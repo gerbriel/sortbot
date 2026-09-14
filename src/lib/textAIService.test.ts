@@ -4,6 +4,7 @@ import {
   normalizeSizeValue,
   smartSeoTruncate,
   primaryMaterial,
+  stripLeadingFieldTitle,
 } from './textAIService';
 
 /**
@@ -273,5 +274,218 @@ describe('helpers', () => {
 
   it('primaryMaterial strips percentage prefixes', () => {
     expect(primaryMaterial('50% cotton 50% polyester').toLowerCase()).toContain('cotton');
+  });
+});
+
+describe('report 10 — the literal word "description" never reaches title/tags/body', () => {
+  it('strips a leading field title from a value dictated before the parser fix', async () => {
+    // Items dictated by the old inline parser have the spoken title baked into
+    // the saved field. It used to flow straight into the title formula.
+    const result = await generateProductDescription({
+      customDescription: 'description super soft faded boxy fit',
+      brand: 'Nike',
+      size: 'L',
+      category: 'tees',
+    });
+    expect(result.suggestedTitle).not.toMatch(/description/i);
+    expect(result.suggestedTitle).toContain('soft');
+    expect(result.description).not.toMatch(/\bdescription\b/i);
+  });
+
+  it('strips the "note" synonym too', () => {
+    expect(stripLeadingFieldTitle('note really soft')).toBe('really soft');
+  });
+
+  it('only strips at the very start — a real mention is kept', () => {
+    expect(stripLeadingFieldTitle('great description on the tag'))
+      .toBe('great description on the tag');
+  });
+
+  it('leaves an ordinary value untouched', () => {
+    expect(stripLeadingFieldTitle('super soft faded')).toBe('super soft faded');
+  });
+
+  it('collapses a value that was nothing but the title', () => {
+    expect(stripLeadingFieldTitle('description')).toBeUndefined();
+  });
+
+  it('passes undefined through', () => {
+    expect(stripLeadingFieldTitle(undefined)).toBeUndefined();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Report 9 — field names never land inside field values
+// ═══════════════════════════════════════════════════════════════════════════
+describe('report 9 — the extractor stops a value at the NEXT field title', () => {
+  beforeEach(() => { vi.spyOn(Math, 'random').mockReturnValue(0); });
+
+  it('"brand nike chest 22" (no periods) → brand "Nike", not "Nike Chest 22"', async () => {
+    const r = await generateProductDescription({
+      voiceDescription: 'brand nike chest 22 period', category: 'tees',
+    });
+    expect(r.extractedFields?.brand).toBe('Nike');
+  });
+
+  it('a trailing bare "description" does not become part of the brand', async () => {
+    const r = await generateProductDescription({
+      voiceDescription: 'brand nike description', category: 'tees',
+    });
+    expect(r.extractedFields?.brand).toBe('Nike');
+  });
+
+  it('every extracted value is free of its own field title', async () => {
+    const r = await generateProductDescription({
+      voiceDescription:
+        'brand nike period size large period color red period material cotton period ' +
+        'condition good period era 90s period style boxy period gender men period ' +
+        'width 18 period length 26 period description super soft period',
+      category: 'tees',
+    });
+    const f = r.extractedFields ?? {};
+    for (const [k, v] of Object.entries(f)) {
+      if (typeof v !== 'string') continue;
+      expect(v.toLowerCase(), `${k} kept its own title`).not.toMatch(
+        /^(brand|size|colou?r|material|fabric|condition|era|style|gender|price|description|note|tags?|flaws?|care|title)\b/,
+      );
+    }
+    expect(f.customDescription).toBe('super soft');
+  });
+
+  it('MEASUREMENT titles are digit-gated, so "style hip hop" keeps its value', async () => {
+    const r = await generateProductDescription({
+      voiceDescription: 'style hip hop period brand nike period', category: 'tees',
+    });
+    expect(r.extractedFields?.style).toBe('Hip Hop');
+    expect(r.extractedFields?.brand).toBe('Nike');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Report 11 — titles carry keywords, never grammatical filler
+// ═══════════════════════════════════════════════════════════════════════════
+describe('report 11 — small words never reach a description-built title', () => {
+  beforeEach(() => { vi.spyOn(Math, 'random').mockReturnValue(0); });
+
+  const FILLER = /\b(of|its|it's|a|an|the|and|or|with|for|from|in|on|at|to|is|are|was|this|that|these|those|has|have|very|really|so|just)\b/i;
+
+  it('drops articles, prepositions, auxiliaries and intensifiers', async () => {
+    const r = await generateProductDescription({
+      customDescription:
+        "it's a really nice one of the faded boxy tees and it has some of that single stitch",
+      brand: 'Nike', size: 'XL', category: 'tees',
+    });
+    expect(r.suggestedTitle).not.toMatch(FILLER);
+  });
+
+  it('keeps the descriptive words and the brand', async () => {
+    const r = await generateProductDescription({
+      customDescription: "it's a very faded and really distressed boxy tee with single stitch",
+      brand: 'Nike', size: 'XL', category: 'tees',
+    });
+    expect(r.suggestedTitle).toContain('Nike');
+    expect(r.suggestedTitle).toMatch(/faded/);
+    expect(r.suggestedTitle).toMatch(/distressed|boxy/);
+  });
+
+  it('"it\'s" is filtered even though the apostrophe survives punctuation stripping', async () => {
+    const r = await generateProductDescription({
+      customDescription: "it's cropped", brand: 'Levis', size: 'M', category: 'tees',
+    });
+    expect(r.suggestedTitle?.toLowerCase()).not.toContain("it's");
+    expect(r.suggestedTitle?.toLowerCase()).not.toMatch(/\bits\b/);
+    expect(r.suggestedTitle).toMatch(/cropped/);
+  });
+
+  it('domain words that LOOK closed-class are kept ("made in usa", "all over print")', async () => {
+    const r = await generateProductDescription({
+      customDescription: 'made in usa all over print', brand: 'Nike', size: 'L', category: 'tees',
+    });
+    expect(r.suggestedTitle?.toLowerCase()).toContain('made');
+    expect(r.suggestedTitle?.toLowerCase()).toContain('over');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Report 26 — every size family this catalogue sells
+// ═══════════════════════════════════════════════════════════════════════════
+describe('normalizeSizeValue — report 26 size families', () => {
+  it.each([
+    // kids ages
+    ['6-9', '6-9'], ['6 to 9', '6-9'], ['6-9 months', '6-9M'], ['3-6 mo', '3-6M'],
+    ['2-3 years', '2-3Y'], ['18 months', '18M'], ['2 years', '2Y'],
+    // toddler
+    ['3T', '3T'], ['4 t', '4T'], ['2t', '2T'],
+    // youth / kids
+    ['youth medium', 'YM'], ['YM', 'YM'], ['kids large', 'YL'], ['boys small', 'YS'],
+    ['youth extra large', 'YXL'], ['junior medium', 'YM'], ['youth 10', 'Y10'],
+    ['kids 3T', '3T'],
+    // women's petite
+    ['petite small', 'PS'], ['petite medium', 'PM'], ['petite large', 'PL'],
+    ['petite 2', '2P'], ['2 petite', '2P'], ['petite', 'P'],
+    // women's plus — NEVER folded into the XL ramp
+    ['1X', '1X'], ['2X', '2X'], ['3X', '3X'], ['1 x', '1X'], ['one x', '1X'],
+    // tall
+    ['large tall', 'LT'], ['medium tall', 'MT'], ['extra large tall', 'XLT'],
+    ['tall large', 'LT'], ['LT', 'LT'],
+    // pants
+    ['32x34', '32x34'], ['32 x 34', '32x34'], ['32 by 34', '32x34'],
+    ['32/34', '32x34'], ['W32 L34', '32x34'], ['w32l34', '32x34'],
+    // numeric women's
+    ['size 8', '8'], ['size 10', '10'], ['10.5', '10.5'],
+    // the existing rules must be untouched
+    ['large', 'L'], ['extra large', 'XL'], ['double extra large', 'XXL'],
+    ['3xl', 'XXXL'], ['2xl', 'XXL'], ['one size fits all', 'OSFA'],
+    ["women's large", 'L'], ['mens extra large', 'XL'],
+  ])('%s → %s', (input, expected) => {
+    expect(normalizeSizeValue(input)).toBe(expected);
+  });
+
+  it('plus sizes are NOT the XL ramp — 1X ≠ XL and 2X ≠ XXL', () => {
+    expect(normalizeSizeValue('1X')).not.toBe('XL');
+    expect(normalizeSizeValue('2X')).not.toBe(normalizeSizeValue('2XL'));
+    expect(normalizeSizeValue('2XL')).toBe('XXL');
+  });
+
+  it('the "(fits like …)" note still rides along on the new families', () => {
+    expect(normalizeSizeValue('1X fits like XL', { keepFitsLike: true })).toBe('1X (fits like XL)');
+    expect(normalizeSizeValue('32x34 fits like 33', { keepFitsLike: true })).toBe('32x34 (fits like 33)');
+    expect(normalizeSizeValue('1X fits like XL')).toBe('1X');
+  });
+});
+
+describe('report 26 — pants sizing through the voice pipeline', () => {
+  beforeEach(() => { vi.spyOn(Math, 'random').mockReturnValue(0); });
+
+  it('"waist 32 inseam 34" with no size command → size 32x34', async () => {
+    const r = await generateProductDescription({
+      voiceDescription: 'brand levis period waist 32 period inseam 34 period', category: 'bottoms',
+    });
+    expect(r.extractedFields?.size).toBe('32x34');
+  });
+
+  it('"size 32 by 34" also fills the waist and inseam measurements', async () => {
+    const r = await generateProductDescription({
+      voiceDescription: 'size 32 by 34 period', category: 'bottoms',
+    });
+    expect(r.extractedFields?.size).toBe('32x34');
+    const m = (r.extractedFields?.measurements ?? {}) as Record<string, string>;
+    expect(m.waist).toBe('32');
+    expect(m.inseam).toBe('34');
+  });
+
+  it('spoken kids and plus sizes survive the extractor', async () => {
+    const kids = await generateProductDescription({
+      voiceDescription: 'size youth medium period', category: 'tees',
+    });
+    expect(kids.extractedFields?.size).toBe('YM');
+    const plus = await generateProductDescription({
+      voiceDescription: 'size 1X period', category: 'tees',
+    });
+    expect(plus.extractedFields?.size).toBe('1X');
+    const petite = await generateProductDescription({
+      voiceDescription: 'size petite small period', category: 'tees',
+    });
+    expect(petite.extractedFields?.size).toBe('PS');
   });
 });

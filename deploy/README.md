@@ -1,4 +1,4 @@
-# deploy/ — container packaging for Acadia
+# deploy/ — container packaging for Arcadian
 
 Production today is **GitHub Pages**: `.github/workflows/deploy.yml` builds on
 every push to `main` and publishes `dist/` to

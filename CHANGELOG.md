@@ -1,4 +1,101 @@
-# Changelog — Acadia
+# Changelog — Arcadian
+
+## 2026-09-14 — Rename to Arcadian
+
+### Brand
+- **Acadia → Arcadian** across every user-visible surface (landing, auth, waitlist gate, header wordmark, tool-view copy, support widget and Messages, invite and approval emails, browser title and meta description, the beta.html redirect, CI and uptime title assertions, deploy configs, README, CLAUDE.md). Structural identifiers unchanged: the `/sortbot/` base path, every `sortbot_*` key, the `ACD-` SKU prefix and the `acadia-app` container names.
+
+### Database
+- **The last nine database linter warnings cleared** — `supabase/migrations/security_rpc_wrappers.sql`
+  finishes what `security_function_hardening.sql` started. The nine functions the client calls through
+  `supabase.rpc(...)` kept warning 0029 because they had to stay in the exposed schema to be callable; that
+  was true of the entry point, not of the definer rights. Each SECURITY DEFINER body now lives in the
+  unexposed `app_private` schema behind a SECURITY INVOKER wrapper in `public` whose signature is identical
+  down to argument names, DEFAULTs, `returns table` column order and volatility — so `/rest/v1/rpc/<fn>`
+  answers exactly as before and **no client code changed** (verified: identical result hash, founder access,
+  42501 for non-founders, zero anon reachability across all 18 functions, and a byte-identical layered
+  rollback). Supabase's linter now reports nothing: 0011, 0028 and 0029 all clear. Note that this also means
+  the linter can no longer flag a NEW SECURITY DEFINER function — CLAUDE.md §18 is the guard from here.
+- **Database function hardening (linter 0011 / 0028 / 0029)** — `CREATE FUNCTION` grants EXECUTE to PUBLIC,
+  so all 27 SECURITY DEFINER functions were callable by the logged-out `anon` role. New migration
+  `supabase/migrations/security_function_hardening.sql`: the eight helpers that policies and `org_id` column
+  DEFAULTs call move into a new unexposed `app_private` schema (with same-name SECURITY INVOKER wrappers in
+  `public`, because function bodies re-resolve names at execution time while policies are bound by OID);
+  the fifteen trigger functions, internal guards and maintenance routines lose EXECUTE from PUBLIC, `anon`
+  **and** `authenticated` (a trigger fires without it); the nine RPCs the client actually calls keep
+  `authenticated` and lose `anon`. `crm_touch_updated_at` and `finance_touch_updated_at` get a pinned
+  `search_path`. Additive, idempotent, rollback included; verified on a throwaway PostgreSQL 14 — founder
+  RPCs, tenant RLS, anon analytics writes, the support triggers and the founding-admin lockout rail all
+  behave identically, and the rollback restores the catalog byte for byte. No client code changes.
+
+## 2026-09-14 — Dictation, persistence, pricing, barcodes and labels
+
+Twelve more of your reports, numbered as you sent them (9, 11, 14, 16, 17, 21, 23, 25, 26, 28, 29, 30). **1,019 tests / 51 files green**, build clean, no new dependency, and the description and CSV output for a listing that was already correct is byte-for-byte what it was. Two migrations and one one-off data repair are waiting for you at the bottom of this entry — until they are run, everything behaves exactly as it does today.
+
+### Dictating and describing
+
+- **Report 9 — field names stop ending up inside your fields.** Saying `brand nike chest 22` was storing the brand as "Nike Chest 22", and the same happened with the word "description" and six other field names, in every field. A value now ends where the next field name begins, and any field name that had already been saved into a value is stripped when it is read. Only the field's own name is removed, so real labels like "Care Bears" and "Second Skin" survive.
+- **Report 26 — kids, petite, plus, tall and pants sizes are understood.** `petite small` was becoming "PETITE", `youth medium` became "YOUTH", `large tall` quietly lost the "tall", and `32 by 34` lost the inseam entirely. They now come out as `PS`, `YM`, `LT` and `32x34`, along with toddler (`3T`), baby age ranges (`6-9M`) and women's plus (`1X`) — and women's plus is never turned into men's extra-large, because they are different garments. Saying the waist and the inseam fills the size, and saying the size fills the waist and inseam.
+- **Report 11 — titles stop collecting small words.** `of`, `its`, `it's`, `the`, `they`, `would`, `because` and the rest of their families are filtered out of a title built from your description. Words that only look like filler in a resale listing — "all **over** print", "**made** in usa", "**right** chest hit", "**Bad** Boy" — are deliberately kept.
+- **Report 14 — the app remembers how your brands are misheard.** Dictation returns the English word it heard: "echo unlimited" for *Ecko Unltd*, "foo boo" for *Fubu*, "la tiger" for *Le Tigre*. Correct it once and choose "Remember for this workspace", and from then on it is corrected automatically with an Undo. When it is only fairly sure it asks "Did you mean Ecko Unltd?" and leaves your text alone until you say yes. Anyone on the team can see and edit the list, from the Brand field or from the Vocabulary dashboard's new Brand spellings tab.
+- **Report 17 — the magnifying glass stays on screen.** It used to run off the right edge and get cut off at the top and bottom. It now flips to the other side of the cursor rather than sliding, so it never covers the spot you are inspecting.
+- **Report 23 — "C&D Vintage" stops coming back in the brand field.** A build that was live for 34 minutes in July wrote the shop name into the same column that stores a garment's brand, and the app then loaded it back over whatever you had just typed. It no longer writes it, it clears it when it sees it, and a brand you type is never replaced by the stored one. **The rows written that day are still in the database** — see the repair at the bottom.
+- **Report 28 — a Save button, and you can see when saving fails.** Auto-save was working, but a failure was completely silent. There is now a Save button beside Prev/Next that flushes everything and waits for the write, and one status line — `Saving… / Saved 12:04 / Save failed — retry` — that every save in the app reports into. One real hole was found and closed while checking: the last half-second of typing could be dropped when you switched batches from the Library.
+
+### Grouping, photos and saving
+
+- **Report 29 — grouped photos stay grouped after a refresh.** Four separate things were undoing your grouping: an older copy of the grouping in a second place in the database was allowed to win; a save that arrived while another was still in flight was thrown away instead of retried; the app compared the timestamps wrongly and sometimes discarded the newer of its two copies; and the newer copy, when it did win, replaced the other one wholesale and took descriptions with it. An ungroup is now treated as a decision, not as missing data, so a refresh cannot put a group back together.
+- **Also fixed on that path:** a pending grouping save could delete the product rows of the *next* batch if you opened one within two seconds of grouping.
+- **Report 16 — photos stop appearing upside down in the Describe step.** Saving a batch writes a rotated copy of a rotated photo, and the app was then rotating that copy again on the next load — 90 plus 90 is 180, which is why it looked upside down rather than sideways. It only affected photos that were rotated *and* saved, which is why it looked random. Restored photos now always come from their own original file.
+- **Report 30 — double-clicking while selecting no longer opens the photo.** While anything is selected (or a pick mode is on), a double-click is exactly one selection tap and nothing else. On group photos it used to select and deselect in one gesture, so nothing happened at all except the photo opening. With nothing selected it still opens the photo, and it no longer leaves that photo selected afterwards.
+
+### Pricing, barcodes and labels
+
+- **Report 21 — per-marketplace pricing.** Set an uplift per platform — a percentage or a dollar amount, with optional `.99` or whole-dollar rounding, and optionally applied to the compare-at price too — in **Workspace → Settings → Marketplace pricing**. Then pick the platform above the Step 4 preview: the preview and the downloaded CSV both use it, the platform name goes into the filename (`shopify-products-ebay-2026-09-14.csv`), and a line above the preview states the rule in words. Quick-add chips seed each marketplace's published headline fee as a starting point — fees change, so check yours. Your listing still has **one** price; the marketplace rule is applied when the file is written and never saved back. A $0 price is never adjusted, so picking a platform cannot sneak an unpriced product past the export block.
+- **Report 25 — labels.** Give a listing colour labels, word labels ("bad kids club") and vendor labels from Step 3. A label can be on some of a listing's photos and not others, so a chip shows "2/4" and tapping it applies it to the rest rather than clearing it. Any member of the workspace can add labels — it is shared shop vocabulary.
+- **Report 25 — printed labels with barcodes.** The new **Labels** page prints a shelf label per listing of the open batch: title, size, price, its labels, and a scannable barcode with the SKU underneath. Three stocks are supported — 4"×2" (10 per sheet), Avery 5160 (30 per sheet) and 2.25"×1.25" thermal — and what you see on screen is what prints. SKUs are assigned on demand and are unique inside your workspace.
+- **Report 25 — scanning.** The new **Scan** page finds a listing three ways: point a phone camera at a label, use a USB or Bluetooth barcode scanner (it behaves like a keyboard), or type the SKU. A hit shows the listing and opens it in the Describe step. If the scanned listing belongs to a different batch, it says so and tells you to open that batch from the Library rather than jumping you to the wrong listing. Everything here is ours — no barcode library, no scanning service, and no camera left running after you leave the page.
+- **Labels and Scan are available to every workspace**, from the header on a computer and from **More** on a phone.
+
+### Before these are fully on
+
+Run in the Supabase SQL editor, after the workspace migration. Both are additive, can be run twice safely, and include a rollback:
+
+- **`supabase/migrations/brand_aliases.sql`** — turns on brand spelling memory. Until then the brand-spelling panel simply does not appear.
+- **`supabase/migrations/listing_labels.sql`** — turns on labels, SKUs and the Labels and Scan pages. Until then the labels picker shows nothing, Labels prints without barcodes, and Scan says what is missing.
+
+One more thing needs a human: **the "C&D Vintage" rows from report 23 are still in the database.** The code no longer creates or reloads them, but rows written during that 34-minute window in July still hold the shop name where a garment brand belongs. The `update` to fix them — with a preview query to read first — is in `docs/reviews/12-step3-fields-brands-sizes.md`, "Final stitch", section 5. It is a one-off edit to your own data, not a schema change, which is why it is not a migration.
+
+## 2026-09-14 — Step 3 dictation and crop paste fixes
+
+Your six Step 3 reports (numbered below as you sent them), plus the "1 or 2 out of a hundred come out cropped wrong" problem. Nothing else changed: no migration to run, no setting to change, no new dependency, and the description and CSV output for a listing that was already correct is byte-for-byte what it was. **668 tests / 41 files green**, build clean.
+
+### Dictating
+
+- **Report 4 — you no longer have to say "period".** Naming the next field ends the one before it, so `brand nike size large price forty` fills three fields in one breath. Whatever you have said is also written when you simply stop talking — including when the browser cuts the microphone on its own after a pause and starts it again. Nothing is thrown away any more: Stop Recording keeps what was in progress instead of deleting it, and so does moving to the next listing.
+- **Report 5 — press the `.` key, or click the new Period button, instead of saying the word.** Same effect as saying it. The key is ignored while you are typing in a field, so it never eats a decimal point.
+- **Report 10 — the word "description" no longer ends up inside your listings.** Dictating `description super soft faded` was storing the literal word "description" as part of the description, which then leaked into the generated title, the tags and the description body. It is stripped now, and listings already saved with it are repaired when they are next generated.
+- **Report 7 — a dictated description no longer gets chopped in half.** It now runs until you say "period" (or press the key), so narration containing words like "sleeve", "style", "length" or "care" stays in the description instead of jumping into those fields. A new sentence that really does start a command — `length 28` — still ends it.
+- **Field names are matched as whole words.** Saying "vin**tag**e", "over**size**d" or "s**care**d" no longer fires the tags, size or care fields.
+- **Words always land on the listing you said them over**, even if you hit Next in the middle of a sentence.
+
+### Editing after dictating
+
+- **Report 8 — edits stick now.** Changing one field in the voice table was deleting the description that shared a line with it in the transcript, and the next Generate then rebuilt the listing from the damaged transcript. Fixed.
+- **Several fields dictated in one breath all save.** `brand nike size large price forty` was writing all three on screen but saving only the last one to the database, and a spoken price like "forty five" saved as blank. Fixed.
+- **Generating no longer reverts brand, size or colour** in the database to their pre-dictation values.
+
+### Categories and presets
+
+- **Report 3 — your category stops being replaced by the preset's product type.** Assigning a preset in Step 3 was overwriting the category you set in Step 2 (`sweatshirts` became `Mens Sweatshirts`), and because generating runs every time you stop recording, it could then pick an unrelated preset and re-apply it. The category you chose is now left alone, and when two presets share a product type the one marked default wins instead of whichever the database returned first.
+
+### Cropping
+
+- **Pasting a crop across many photos is accurate on the odd ones out.** A copied crop now remembers the shape of the photo it was drawn on, so pasting it onto a photo shot in the other orientation, onto a rotated photo, or onto one that was already cropped reproduces the same framing instead of a stretched version of it. Photos that match the one you copied from are cropped exactly as before.
+- **Pasting twice no longer crops the crop.** A bulk paste now works from the original photo, so running it again does not zoom in further.
+- **Photos that fail are reported instead of counted as done.** A failed upload or a photo that would not load used to show as finished while staying uncropped; you now get a count of what failed and a message saying those photos are unchanged, and the Retry button actually appears.
+- **Crops in Step 3 show up immediately.** A re-crop in the Describe step replaces the photo at the same address, and the app's own image cache plus the offline cache could keep serving the old picture for up to a week — which is why a few photos in a batch looked like the crop had not applied. Those caches are now cleared for that photo.
+- **Two crops can no longer run on the same photo at once** (a double-clicked Paste, or Retry starting while the first pass is still finishing), which could leave a photo pointing at a file that had just been deleted.
 
 ## 2026-09-14 — Mobile-first pass
 

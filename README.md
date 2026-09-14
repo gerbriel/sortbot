@@ -1,6 +1,6 @@
-# Acadia — Vintage Clothing Listing Workflow
+# Arcadian — Vintage Clothing Listing Workflow
 
-Acadia is a web app for vintage clothing resellers. Upload a batch of clothing photos, group the multi-angle shots of each item, assign categories, dictate a description per listing, and export a Shopify-ready product CSV — hundreds of listings per session.
+Arcadian is a web app for vintage clothing resellers. Upload a batch of clothing photos, group the multi-angle shots of each item, assign categories, dictate a description per listing, and export a Shopify-ready product CSV — hundreds of listings per session.
 
 **Live app:** https://gerbriel.github.io/sortbot (deployed from `main` via GitHub Actions)
 
@@ -17,12 +17,18 @@ Acadia is a web app for vintage clothing resellers. Upload a batch of clothing p
 - 📦 **Grouping (Step 2)** — rubber-band multi-select, keyboard shortcuts (`Cmd+Enter` group, `Cmd+A` / `Cmd+Shift+A` / `Cmd+D` selection), auto-group by N photos per item, **pick mode** (auto-selects the next N ungrouped photos for rapid grouping), and a columns-per-row density slider (2–12).
 - 🛠️ **Photo toolbar (Step 2)** — sticky toolbar above the grid: photo-pick mode (select individual photos, including inside group cards), rotate the selection ±90°, copy/paste rotation and crop across many photos, revert to original, delete selection.
 - 🏷️ **Categories + presets** — drag groups onto category zones; presets auto-fill shipping, measurements, SEO title templates, and Shopify taxonomy. Per-group preset overrides persist across reloads.
-- 🎤 **Voice descriptions (Step 3)** — Web Speech API dictation with field commands (`"brand Nike period"`, `"size large period"`, `"width 18 period"`, `"type crewneck period"`, `"description ... period"`).
+- 🎤 **Voice descriptions (Step 3)** — Web Speech API dictation with field commands (`"brand Nike period"`, `"size large period"`, `"width 18 period"`, `"type crewneck period"`, `"description ... period"`). You do not have to say "period": naming the next field ends the one before it. A field name is never left inside the value it introduced, and a description keeps running through words like "sleeve" and "style" that would otherwise look like new fields.
+- **Sizes the way a resale shop says them** — kids, toddler, youth, petite, plus, tall and pants sizing all normalize correctly (`petite small` → `PS`, `youth medium` → `YM`, `large tall` → `LT`, `32 by 34` → `32x34`, `6-9 months` → `6-9M`). Women's plus is never folded into men's extra-large (`1X` is not `XL`), and saying the waist and inseam fills the size — or the other way round.
+- **Brand spelling memory** — speech-to-text hears "echo unlimited" for *Ecko Unltd* and "foo boo" for *Fubu*. Correct it once and the workspace remembers: the next time it is applied automatically (with Undo). A near-miss offers "Did you mean...?" and leaves your text alone until you accept it. Any member can manage the list.
+- **Save button and one save indicator** — Step 3 has an explicit Save beside Prev/Next that flushes both auto-save timers and waits for the write, and a status line that says `Saving… / Saved 12:04 / Save failed — retry`. Every save path in the app — auto-save, grouping, Save Batch, per-listing saves — reports into that one line, so a failure is never silent.
 - 💡 **Quick keyword chips (Step 3)** — one-click resale descriptors that patch the voice transcript and update the whole group. Chips related to the current item's brand float to the front with a "suggested" treatment.
 - ✍️ **Title/tag engine** — builds ≤60-char SEO titles from garment type, brand, and description keywords; sizes always render as letter symbols (XL/XXL); category-aware synonym swapping prevents cross-category contamination.
 - ✒️ **Model-written selling paragraph (opt-in, per workspace)** — a Cloudflare Workers AI model writes *only* the short selling paragraph; the rule-based engine still owns the description skeleton, so a model can never corrupt a measurement or price. Output is validated (length, banned phrases, and a numbers guard) and silently falls back to the rule-based text if anything fails.
 - ✂️ **Crop tool** — crop/zoom any photo in Step 3, then copy the crop and paste it across many items; re-encoded images re-upload to the same storage path.
 - 🛍️ **Shopify CSV export (Step 4)** — 54-column Shopify import format, group-wide field coalescing, rows in shoot order, a hard $0-price export block, and title/handle dedup against the export itself, the app's own database, **and the live Shopify catalog** (via the `shopify-titles` Edge Function).
+- **Per-marketplace pricing** — set an uplift per platform (a percentage or a dollar amount, optional `.99` or whole-dollar rounding, optionally applied to compare-at too) in Workspace → Settings, then pick the platform above the Step 4 preview. A listing still keeps **one** price; the marketplace rule is applied when the CSV is written, never saved back. The platform goes in the filename (`shopify-products-ebay-2026-09-14.csv`) and a line above the preview states the rule in words. A $0 price is never adjusted, so choosing a platform can never sneak an unpriced product past the export block.
+- **Labels and barcodes** — give listings colour, word and vendor labels in Step 3, then open **Labels** to print a shelf label per listing: title, size, price, its labels, and a scannable barcode with the SKU underneath. Three label stocks (4"×2" 10-up, Avery 5160 30-up, and 2.25"×1.25" thermal). SKUs are assigned on demand and are unique per workspace.
+- **Scan** — find a listing by pointing a phone camera at its label, by using a USB or Bluetooth barcode scanner, or by typing the SKU. A hit shows the listing and opens it in Step 3. The barcode generator and reader are ours — no barcode library, no scanning service.
 - 💾 **Auto-save + session restore** — work-in-progress persists to Supabase on a 2 s debounce (it saves once you stop making changes); reload restores the active batch.
 - 📚 **Library** — browse all batches/groups/images, rename, duplicate, delete (with a shared-storage-file reference guard), reopen any batch. Batch cards show who last edited them.
 
@@ -33,7 +39,8 @@ Acadia is a web app for vintage clothing resellers. Upload a batch of clothing p
 - 📊 **Workspace dashboard** — tabbed panel for members and invites, workspace settings, beta request approvals, and (for founding admins) an aggregate directory of all workspaces and cross-workspace user management. Analytics, CRM, Finance and Errors are their own full-page views opened from the header.
 - 🔌 **Per-org Shopify connections** — each workspace connects its own Shopify store (Workspace → Settings), so export dedup and per-store metaobject GIDs use that store. The Admin token is **write-only from the client** — only the Edge Function can read it.
 - 🎨 **Per-workspace description format** — customize the measurement prefix, washing/closing lines, hashtag rendering, disclaimers, seller name, and selling-paragraph tone from the workspace panel.
-- 📖 **Vocabulary dashboard (founding admins)** — CRUD the global knowledge base every workspace consumes: Step 3 quick-keyword chips, per-brand keywords (with a searchable built-in 917-brand library to copy from), and a brand/model database.
+- **Marketplace pricing (workspace settings)** — one card per marketplace: name, percent or dollar uplift, rounding, whether it applies to compare-at, and whether it appears in Step 4, with a live worked example (`$45.00 → $49.99`). Quick-add chips seed each marketplace's published headline fee as a starting point — fees change, so check yours. "Reset to defaults" resets the description format only; it never deletes pricing that merely shares the same settings record.
+- 📖 **Vocabulary dashboard (founding admins)** — CRUD the global knowledge base every workspace consumes: Step 3 quick-keyword chips, per-brand keywords (with a searchable built-in 917-brand library to copy from), and a brand/model database. A **Brand spellings** tab manages this workspace's own dictation corrections — the one tab whose rows are per-workspace rather than global, and the one any member can also reach from the Brand field in Step 3.
 - 💬 **Messages (everyone)** — every signed-in user gets a floating **Messages** button *and* a full **Messages** page from the header, with an unread badge. Search your conversations, keep the thread open beside the list, send with Enter. For founding admins the same page is the **Inbox**: every conversation from every workspace, Open/Closed/All filters, unread first, close and reopen. Both views and the badge share one live connection, so they never disagree.
 - 🛠 **Founder tools (founding admins)** — built in, no third-party services: a **CRM** where every beta request and account becomes a contact automatically (stages, tags, follow-ups, notes), a cookieless **analytics** dashboard (pageviews, sessions, signup→export funnel, referrers, devices), the **Inbox** half of Messages, a **Finance** module (income/expense ledger, monthly profit-and-loss, what the customer base is worth, CSV + printable reports), and an **Errors** view that groups the app's own crash reports into issues. Everything lives in this project's own Supabase tables. See [Founder tools](#founder-tools--analytics-crm-messaging-first-party).
 - 🏬 **Marketing landing + private beta** — logged-out visitors get a product tour, pricing, and a beta signup form. New sign-ups without a workspace or invite hit a waitlist gate; founding admins approve or deny requests, and approval auto-creates the workspace on next sign-in.
@@ -41,7 +48,7 @@ Acadia is a web app for vintage clothing resellers. Upload a batch of clothing p
 
 ### Mobile
 
-The app is usable on a phone end to end. **Step 1 takes photos directly from the camera** ("Take photos") or the camera roll ("Choose from library") — the same compression, EXIF and resumable-upload pipeline as a desktop drop. Navigation changes with the screen: the full tool row on desktop, a scrolling rail on a tablet, and a **bottom tab bar** (Workflow / Library / Messages / More) on a phone, with everything else behind More. Tool pages reflow — wide tables become cards or scroll inside themselves, dialogs become bottom sheets, and every control is at least 44px with 16px text so iOS does not zoom the page.
+The app is usable on a phone end to end. **Step 1 takes photos directly from the camera** ("Take photos") or the camera roll ("Choose from library") — the same compression, EXIF and resumable-upload pipeline as a desktop drop. Navigation changes with the screen: the full tool row on desktop, a scrolling rail on a tablet, and a **bottom tab bar** (Workflow / Library / Messages / More) on a phone, with everything else — including **Labels** and **Scan** — behind More. Scanning is a phone feature by design: the camera reader uses the browser's own barcode support, and where that is missing the view says so and points at the USB-scanner and typed-SKU paths instead. Tool pages reflow — wide tables become cards or scroll inside themselves, dialogs become bottom sheets, and every control is at least 44px with 16px text so iOS does not zoom the page.
 
 **Desktop-only, by design:** dragging groups onto a category (on a phone you select photos and tap a category instead), drag-to-reorder photos, rubber-band selection, and the cursor-following magnifier. Crop works on touch. Voice dictation still needs Chrome or Edge.
 
@@ -52,7 +59,7 @@ The app is usable on a phone end to end. **Step 1 takes photos directly from the
 | Frontend | React 19 + TypeScript 5.9 |
 | Build | Vite 7 |
 | Backend / DB | Supabase (Postgres + RLS, Storage, Auth, two Deno Edge Functions) |
-| Tests | Vitest 4 + happy-dom (570 tests, 39 files) |
+| Tests | Vitest 4 + happy-dom (1,019 tests, 51 files) |
 | Uploads | tus-js-client (resumable, 6 MB chunks) |
 | Styling | Plain CSS, component-scoped files |
 | Speech | Web Speech API (Chrome/Edge) |
@@ -109,7 +116,7 @@ npm run lint       # eslint
 npm run preview    # preview the production build
 ```
 
-Tests are characterization tests that lock in workflow-critical behavior: the title/size/voice engine, preset priority and preset resolution, the CSV builder (golden snapshot) and its formula-injection guard, Library data derivation, grouping conventions, the save→reload field whitelist, batch-delete tombstones, query pagination and chunk sizes, the compare-and-set on the workflow blob, the LRU image cache, the error reporter's privacy and fingerprint contracts, and the UI primitives' keyboard/ARIA behavior. Snapshots live in `src/lib/__snapshots__/` — update deliberately with `npx vitest run -u` only when output changes on purpose.
+Tests are characterization tests that lock in workflow-critical behavior: the title/size/voice engine, preset priority and preset resolution, the CSV builder (golden snapshot) and its formula-injection guard, Library data derivation, grouping conventions, the save→reload field whitelist, batch-delete tombstones, query pagination and chunk sizes, the compare-and-set on the workflow blob, the LRU image cache, the error reporter's privacy and fingerprint contracts, the UI primitives' keyboard/ARIA behavior, and — since Sept 14 2026 — the nine size families, the brand-spelling matcher (including the false-positive guards that keep `nike` and `dickies` apart), which restore source wins and what the merge keeps, the Step-2 double-click rule, the Code 128 table (proved three ways, including a decoder written from the symbology), the per-marketplace pricing invariants, and the label-sheet geometry. Snapshots live in `src/lib/__snapshots__/` — update deliberately with `npx vitest run -u` only when output changes on purpose.
 
 ### CI and monitoring
 
@@ -162,7 +169,7 @@ Then enable it per workspace in **Workspace → Settings**. It is **off by defau
 
 ### Founder tools — analytics, CRM, messaging (first-party)
 
-Acadia has its own analytics, CRM, support messaging and finance. They are **features of this app, stored in this project's own Supabase tables** — no third-party service, no external API, no payment processor, no keys to configure. Each one is a migration in `supabase/migrations/` (run in the SQL Editor after `multi_org_tenancy.sql` + `beta_signups.sql`); the UI hides itself until its tables exist, so the code can ship first.
+Arcadian has its own analytics, CRM, support messaging and finance. They are **features of this app, stored in this project's own Supabase tables** — no third-party service, no external API, no payment processor, no keys to configure. Each one is a migration in `supabase/migrations/` (run in the SQL Editor after `multi_org_tenancy.sql` + `beta_signups.sql`); the UI hides itself until its tables exist, so the code can ship first.
 
 | Feature | Migration | Who sees it |
 |---|---|---|
@@ -217,12 +224,25 @@ Paths follow `{userId}/{productId}/{timestamp}-{random}.{ext}`, so URLs are ungu
 
 1. **Upload** — drop images/folders/ZIPs. Compression, TUS upload, and EXIF read happen automatically. The storage meter and compression tools live here.
 2. **Group & Categorize** — group each item's photos (manually, auto-group by N, or pick mode), then drag groups onto category zones. Presets apply automatically.
-3. **Describe** — navigate listing-by-listing; dictate or type; Generate Description builds the title, tags, and Shopify-style description; edit any of the ~50 fields. Everything auto-saves.
-4. **Export** — review the 54-column preview, then download the Shopify import CSV. Export blocks if any product is missing a price.
+3. **Describe** — navigate listing-by-listing; dictate or type; Generate Description builds the title, tags, and Shopify-style description; edit any of the ~50 fields. Everything auto-saves, there is a **Save** button when you want to be sure, and the status line under the navigation tells you when the last save landed or failed. Labels for the listing sit under the preset controls.
+   - **Dictation:** say a field name, then its value — `brand nike size large price forty`. You do not need to say "period": a field ends when you name the next one, and whatever you have said is written even if you just stop talking or pause long enough for the browser to cut the microphone. Say **"period"**, press the **`.` key**, or click the **Period** button when you want to close a field explicitly — which matters most after a free-form `description …`, since a description keeps running through words like "sleeve" and "style" that would otherwise look like new fields.
+4. **Export** — pick a marketplace if you have configured one (its uplift is applied to the prices in the file, and its name goes in the filename), review the 54-column preview, then download the Shopify import CSV. Export blocks if any product is missing a price.
+5. **Label and scan (optional)** — assign SKUs and print shelf labels with barcodes from **Labels**, then pull any listing back up from **Scan** with a camera, a USB scanner, or by typing the SKU.
 
 ## Database
 
 The core workflow tables (`products`, `product_images`, `categories`, `category_presets`) are typed in `src/lib/supabase.ts`; the rest are typed in their own service modules (`workflowBatchService.ts`, `orgService.ts`, `shopifyConnectionService.ts`, `vocabService.ts`, `betaService.ts`). Schema and migration SQL live in `supabase/migrations/` (**read the warnings in CLAUDE.md before running any of them** — several rewrite RLS policies).
+
+**Two workflow migrations are written but not yet applied** (both additive, idempotent, with rollback at the bottom, both verified against a throwaway Postgres 14, and both to be run after `multi_org_tenancy.sql`):
+
+| Migration | What it turns on | Until it is run |
+|---|---|---|
+| `brand_aliases.sql` | Brand spelling memory in Step 3 | Every path reports itself unavailable and the brand-spelling surface hides; dictation behaves exactly as it does today. |
+| `listing_labels.sql` | Listing labels, SKUs and the Labels/Scan views | The labels picker renders nothing, the Labels view prints titles and prices without barcodes, and the scanner says what is missing. |
+| `security_function_hardening.sql` (run LAST, and again after any migration that recreates a helper) | Clears the Supabase linter's function warnings: policy helpers move to an unexposed `app_private` schema behind same-name wrappers, trigger functions lose client EXECUTE, RPCs lose `anon` | Nothing user-visible changes either way; the linter keeps warning. |
+| `security_rpc_wrappers.sql` (run after `security_function_hardening.sql`; re-run both, in that order, after replaying any migration that recreates a function) | Clears the last nine linter warnings: the client-called founder RPCs move to `app_private` behind identical same-name wrappers; the app's calls are unchanged | Nothing user-visible changes; the linter keeps reporting those nine. |
+
+There is also **one one-off data repair** that is deliberately not a migration: a July 2026 build briefly wrote the shop's own name into `products.vendor`, which is the column that stores a garment's brand. The code no longer does this and heals what it sees, but the affected rows need a hand-run `update` — the SQL, with a preview query to read first, is in `docs/reviews/12-step3-fields-brands-sizes.md` ("Final stitch", section 5).
 
 | Group | Tables |
 |---|---|
@@ -231,6 +251,8 @@ The core workflow tables (`products`, `product_images`, `categories`, `category_
 | Tenancy | `organizations` (incl. `description_settings` JSONB), `org_members`, `org_invites` |
 | Integrations | `org_shopify_connections` (client-write-only Admin token) |
 | Vocabulary | `descriptor_chips`, `brand_keywords`, `vocab_models` |
+| Brand spelling | `brand_aliases` (per-workspace "heard → preferred", any member writes) |
+| Labels & barcodes | `listing_labels`, `product_labels` (plus `products.sku` / `.barcode`, with a unique SKU index per workspace so a scan is never ambiguous) |
 | Beta program | `beta_signups` |
 | Founder tools | `analytics_events` (+ `analytics_summary()` / `analytics_prune()`), `crm_contacts`, `crm_notes` (+ `crm_sync_contacts()`), `support_threads`, `support_messages`, `app_errors` (+ `app_errors_summary()` / `app_errors_prune()`) |
 | Finance | `finance_transactions` (the ledger — a row with a recurrence is a *template*, its repeats are expanded when read, never stored), `finance_plan_prices` (plan → monthly list price), `finance_settings` (founding discount percent and cutoff date) (+ `finance_summary()`) |

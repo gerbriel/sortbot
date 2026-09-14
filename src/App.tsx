@@ -2,7 +2,7 @@ import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMe
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { Tag, Settings, Package, ShoppingBag, Link2, Scissors, X, Trash2, Bug, BookMarked, KanbanSquare,
-         Cloud, AlertTriangle, RefreshCw, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users, MessageSquare, Wallet } from 'lucide-react';
+         Cloud, AlertTriangle, RefreshCw, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users, MessageSquare, Wallet, Printer, ScanLine } from 'lucide-react';
 import { log, setDebugEnabled, isDebugEnabled } from './lib/debugLogger';
 import Auth from './components/Auth';
 import ImageUpload, { type ImageUploadHandle } from './components/ImageUpload';
@@ -20,11 +20,13 @@ import {
   productRowToClothingItem, mergeProductRowIntoItem,
   STARTUP_MERGE_OPTIONS, OPEN_BATCH_MERGE_OPTIONS, type ProductRowLite,
 } from './lib/productRow';
-import { autoSaveWorkflowBatch, markBatchConfirmed, type WorkflowBatch } from './lib/workflowBatchService';
+import { autoSaveWorkflowBatchDetailed, autoSaveSucceeded, markBatchConfirmed, type WorkflowBatch } from './lib/workflowBatchService';
 import { ensureOrganization, type Organization, type OrgRole } from './lib/orgService';
 import { getOrgDescriptionSettings, type DescriptionSettings } from './lib/descriptionSettings';
 import { slimForWorkflowState, ultraSlimForBackup, asClothingItems } from './lib/slimItems';
-import { scheduleWorkflowBackup, flushWorkflowBackup, cancelWorkflowBackup } from './lib/workflowBackup';
+import { scheduleWorkflowBackup, flushWorkflowBackup, cancelWorkflowBackup, WORKFLOW_BACKUP_KEY } from './lib/workflowBackup';
+import { readWorkflowBackup, resolveRestoreItems, workflowStateCapturedAt } from './lib/restoreSource';
+import { saveStatus } from './lib/saveStatusStore';
 import { buildProductImageRow, mergeProductImageRows, stage4ColumnsAvailable, type ExistingProductImageRow } from './lib/imageRowSync';
 import { useStoreItemArray, liveArrayRef } from './lib/workflowStore';
 
@@ -141,12 +143,15 @@ const CrmPanel = React.lazy(() => import('./components/CrmPanel'));
 const FinanceView = React.lazy(() => import('./components/FinanceView'));
 const ErrorsPanel = React.lazy(() => import('./components/ErrorsPanel'));
 const MessagesView = React.lazy(() => import('./components/MessagesView'));
+const LabelPrintView = React.lazy(() => import('./components/LabelPrintView'));
+const BarcodeScannerView = React.lazy(() => import('./components/BarcodeScannerView'));
 
 /** Every destination the app can be showing. The four workflow steps are one
  *  view ('workflow'); each header tool is a full page of its own. */
 export type ActiveView =
   | 'workflow' | 'library' | 'categories' | 'presets'
-  | 'vocabulary' | 'analytics' | 'crm' | 'finance' | 'board' | 'workspace' | 'messages';
+  | 'vocabulary' | 'analytics' | 'crm' | 'finance' | 'board' | 'workspace' | 'messages'
+  | 'labels' | 'scan';
 
 /** Fallback shown while a view's chunk is in flight. Reuses the existing
  *  `.loading-screen` + `.spinner` styles, so there is no new CSS. */
@@ -184,7 +189,7 @@ function MessagesNavButton(
       aria-current={active ? 'page' : undefined}
       title={isFounder
         ? 'Inbox — every conversation, from every workspace'
-        : 'Messages — talk to the Acadia team'}
+        : 'Messages — talk to the Arcadian team'}
     >
       <MessageSquare size={18} /> {isFounder ? 'Inbox' : 'Messages'}
       {unreadCount > 0 && (
@@ -396,6 +401,16 @@ class GrouperErrorBoundary extends Component<{ children: ReactNode }, GrouperBou
  * isOpeningBatchRef, which guards handleOpenBatch for exactly this reason.
  */
 let startupRestoreInFlight = false;
+
+/** Supabase workflow_state debounce. CLAUDE.md §11: never below 1 000 ms. */
+const AUTOSAVE_DEBOUNCE_MS = 2000;
+/** How long a fire that collided with an in-flight save waits before retrying.
+ *  Still ≥ 1 000 ms, and it re-arms rather than dropping the newest state. */
+const AUTOSAVE_RETRY_MS = 1000;
+/** Debounce for the `products.product_group` mirror upsert. Separate timer from
+ *  the workflow_state save so rapid group/ungroup clicks don't fire an 800-row
+ *  upsert each (aae35fc) — which is also why the two mirrors can disagree. */
+const GROUP_UPSERT_DEBOUNCE_MS = 2000;
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -768,8 +783,16 @@ function App() {
         // On the next open, those items appeared in the DB query (.eq('batch_id', X))
         // making the gap-fill grow unboundedly (38 items → 1003 items after one open).
         // batch_id is set authoritatively at upload time (handleImagesUploaded) and must
-        // not be changed here. The purpose of this upsert is to ensure product_group and
-        // title are in sync — NOT to reassign ownership.
+        // not be changed here.
+        //
+        // NOTE what `ignoreDuplicates: true` actually means: for a row that ALREADY
+        // EXISTS this upsert writes nothing at all — not batch_id (the point), but not
+        // product_group or title either. It only ever INSERTS rows that are missing.
+        // The single writer of `product_group` on an existing row is the debounced
+        // upsert in handleImagesGrouped (plus saveBatchToDatabase /
+        // syncGroupFieldsToDatabase in Step 3), which is exactly why that column runs
+        // stale — and why the restore merge must NOT treat it as authoritative for
+        // grouping (see OPEN_BATCH_MERGE_OPTIONS in lib/productRow.ts).
         { onConflict: 'id', ignoreDuplicates: true }
       );
       // Build product_images rows. For image_url: prefer imageUrls[0], fall back to publicImageUrl(storagePath).
@@ -930,21 +953,30 @@ function App() {
                 groupedImages?.length   ? groupedImages    :
                 uploadedImages          ? uploadedImages   : [];
 
-              // If the localStorage backup is NEWER than the Supabase data (e.g. user
-              // grouped items and refreshed before the 2s debounce flushed to Supabase),
-              // prefer the backup so recently grouped items aren't silently lost.
-              // Also used as the sole source when Supabase has no items yet.
-              try {
-                const backup = JSON.parse(localStorage.getItem('sortbot_workflow_backup') || 'null');
-                if (backup?.batchId === savedBatchId && backup?.items?.length > 0) {
-                  const supabaseUpdatedAt = batch.last_opened_at ? new Date(batch.last_opened_at).getTime() : (batch.updated_at ? new Date(batch.updated_at).getTime() : 0);
-                  const backupIsNewer = backup.savedAt > supabaseUpdatedAt;
-                  if (rawItems.length === 0 || backupIsNewer) {
-                    log.app(`startup restore | using localStorage backup (${backup.items.length} items, saved ${Math.round((Date.now() - backup.savedAt) / 1000)}s ago, supabase updated ${Math.round((Date.now() - supabaseUpdatedAt) / 1000)}s ago, newer=${backupIsNewer})`);
-                    rawItems = backup.items;
-                  }
+              // Which copy is newer — the Supabase blob or the throttled localStorage
+              // backup? Decided by lib/restoreSource.ts, which compares the backup's
+              // savedAt against when the BLOB'S CONTENT was captured
+              // (workflow_state.lastEditedAt), not against `last_opened_at`.
+              // `last_opened_at` dates the round trip, not the payload, and is bumped
+              // by writes that touch no workflow_state at all — so it systematically
+              // over-stated the DB's freshness and threw away newer grouping work.
+              // When the backup wins the two are MERGED (it carries 7 fields, the blob
+              // carries 15) so winning the race no longer costs customDescription /
+              // originalName / brandCategory for the whole batch.
+              {
+                const backup = readWorkflowBackup(
+                  localStorage.getItem(WORKFLOW_BACKUP_KEY), savedBatchId,
+                );
+                const decision = resolveRestoreItems({
+                  dbItems: rawItems,
+                  dbCapturedAt: workflowStateCapturedAt(batch),
+                  backup,
+                });
+                if (decision.source !== 'db') {
+                  log.app(`startup restore | source=${decision.source} — ${decision.reason}`);
+                  rawItems = decision.items;
                 }
-              } catch { /* corrupt backup — ignore */ }
+              }
               // Re-hydrate preview — stripped before saving to reduce payload size.
               // imageUrls may also be empty for older items; reconstruct from storagePath
               // (synchronous, no extra DB query) as the final fallback.
@@ -1138,6 +1170,23 @@ function App() {
               }
 
               if (hydratedItems.length) {
+                // ── Report 16 tripwire ────────────────────────────────────────
+                // Every item that still declares a rotation, and whether its URL
+                // is derived from storagePath (safe — that file is NOT baked) or
+                // came from a product_images row (which CAN be a baked, already-
+                // rotated file, so a CSS rotate on top of it shows 180°).
+                if (isDebugEnabled()) {
+                  const rotated = (hydratedItems as ClothingItem[]).filter(i => i.imageRotation);
+                  if (rotated.length) {
+                    log.img(`[rot] ${rotated.length} restored item(s) still declare a rotation:`,
+                      rotated.slice(0, 10).map(i => ({
+                        id: i.id,
+                        rotation: i.imageRotation,
+                        urlFrom: i.storagePath && i.preview === publicImageUrl(i.storagePath) ? 'storagePath (safe)' : 'DB row (suspect)',
+                        preview: i.preview?.slice(-40),
+                      })));
+                  }
+                }
                 const restoredFrom = processedItems?.length ? 'processedItems' : sortedImages?.length ? 'sortedImages' : groupedImages?.length ? 'groupedImages' : 'uploadedImages';
                 log.app(`startup restore | HYDRATED | batchId=${savedBatchId} | rawItems=${rawItems.length} liveItems=${hydratedItems.length} | restoredFrom=${restoredFrom}${noUrlCount ? ` | noUrl=${noUrlCount}` : ''}`);
                 setUploadedImages(hydratedItems);
@@ -1222,7 +1271,24 @@ function App() {
                         // (empty-string coercion, DB-group images winning, the
                         // description fallback, the 'Active'/{} defaults, and which
                         // of productGroup/originalName/appliedPresetId it sets).
-                        return mergeProductRowIntoItem(item, p, htmlDescToPlain, STARTUP_MERGE_OPTIONS);
+                        const merged = mergeProductRowIntoItem(item, p, htmlDescToPlain, STARTUP_MERGE_OPTIONS);
+                        // ── Report 16 tripwire ────────────────────────────────
+                        // "Random images upside down at the dictation step" is a
+                        // rotation applied TWICE: once baked into the stored file
+                        // by saveProductToDatabase's createTransformedFile, once
+                        // by the `rotate(Ndeg)` CSS on the card/preview. It can
+                        // only happen when a restored item still declares a
+                        // rotation AND is now pointing at a file it did not point
+                        // at before the merge. 'own-image-wins' makes that
+                        // impossible for any item with a storagePath; this line
+                        // catches the legacy remainder (no storagePath, so the
+                        // DB list is still the only source) in the field.
+                        if (merged.imageRotation && merged.preview !== item.preview) {
+                          log.img(`[rot] item ${item.id} kept rotation ${merged.imageRotation}° but its image CHANGED in the DB merge `
+                            + `(${item.preview || 'none'} → ${merged.preview}) — storagePath=${item.storagePath ?? 'NONE'}. `
+                            + `If this photo looks upside down, this is why.`);
+                        }
+                        return merged;
                       });
                     setUploadedImages(prev => mergeDB(prev));
                     setGroupedImages(prev => mergeDB(prev));
@@ -1287,9 +1353,11 @@ function App() {
               // workflow_state is null (batch row exists but has never been auto-saved,
               // e.g. user refreshed within the first 2s after uploading). Check the
               // instant localStorage backup written by autoSaveWorkflow.
-              try {
-                const backup = JSON.parse(localStorage.getItem('sortbot_workflow_backup') || 'null');
-                if (backup?.batchId === savedBatchId && backup?.items?.length > 0) {
+              {
+                const backup = readWorkflowBackup(
+                  localStorage.getItem(WORKFLOW_BACKUP_KEY), savedBatchId,
+                );
+                if (backup) {
                   log.app(`startup restore | workflow_state null — using localStorage backup (${backup.items.length} items, saved ${Math.round((Date.now() - backup.savedAt) / 1000)}s ago)`);
                   const backupItems = (backup.items as any[]).map((item: any) => {
                     const canonical = publicImageUrl(item.storagePath);
@@ -1304,7 +1372,7 @@ function App() {
                   setProcessedItems(backupItems);
                   registerItemsInDB(backupItems, savedBatchId, session.user);
                 }
-              } catch { /* corrupt backup — ignore */ }
+              }
             }
           }
         } catch (err) {
@@ -1403,6 +1471,9 @@ function App() {
     // Support threads are per-account: drop them so the next person to sign in
     // on this machine never sees a flash of the previous one's conversations.
     supportStore.reset();
+    // Same reasoning: the save indicator must not carry one account's state into
+    // the next sign-in on the same machine.
+    saveStatus.reset();
     setUser(null);
     setCurrentOrg(null);
     setActiveView('workflow');
@@ -1455,12 +1526,16 @@ function App() {
 
     setSaving(true);
     setSaveMessage(null);
+    saveStatus.begin();
 
     try {
       // Pass the currentBatchId so products are linked to the workflow batch
       const result = await saveBatchToDatabase(processedItems, user.id, currentBatchId);
-      
+
       if (result.success > 0) {
+        // A partial save is NOT a clean save — the indicator must say so.
+        if (result.failed > 0) saveStatus.end(false, `${result.failed} product(s) failed to save.`);
+        else saveStatus.end(true);
         setSaveMessage({
           type: 'success',
           text: `Saved ${result.success} product(s)${result.failed > 0 ? `, ${result.failed} failed` : ''}!`,
@@ -1483,6 +1558,7 @@ function App() {
           setSaveMessage(null);
         }, 3000);
       } else {
+        saveStatus.end(false, 'Failed to save products.');
         setSaveMessage({
           type: 'error',
           text: 'Failed to save products. Please try again.',
@@ -1490,6 +1566,7 @@ function App() {
       }
     } catch (error) {
       console.error('Save error:', error);
+      saveStatus.end(false, error instanceof Error ? error.message : 'An error occurred while saving.');
       setSaveMessage({
         type: 'error',
         text: 'An error occurred while saving.',
@@ -1518,6 +1595,12 @@ function App() {
       isUploadingRef.current = false;
       pendingChunkRef.current = [];
       if (chunkTimerRef.current) { clearTimeout(chunkTimerRef.current); chunkTimerRef.current = null; }
+      // Same reason handleOpenBatch drops it: this timer's callback prunes
+      // products rows for whatever batch is current when it FIRES.
+      if (groupUpsertTimerRef.current) { clearTimeout(groupUpsertTimerRef.current); groupUpsertTimerRef.current = null; }
+      if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null; }
+      // No batch left to save — don't leave a stale 'saved'/'error' on the indicator.
+      saveStatus.reset();
     }
   };
 
@@ -1546,7 +1629,10 @@ function App() {
     cancelWorkflowBackup();
     localStorage.removeItem('sortbot_current_batch_id');
     localStorage.removeItem('sortbot_current_batch_number');
-    localStorage.removeItem('sortbot_workflow_backup');
+    localStorage.removeItem(WORKFLOW_BACKUP_KEY);
+    // The batch is gone — a leftover 'saving'/'error' on the indicator would be
+    // about a batch that no longer exists.
+    saveStatus.reset();
     setUploadedImages([]);
     setGroupedImages([]);
     setSortedImages([]);
@@ -1580,6 +1666,43 @@ function App() {
   const onLibraryCloseStable    = useEventCallback(() => setShowLibrary(false));
   const onOpenBatchStable       = useEventCallback((batch: WorkflowBatch) => handleOpenBatch(batch));
   const onBatchDeletedStable    = useEventCallback((batchId: string) => handleBatchDeleted(batchId));
+
+  /* The listing a scan asked for, handed to PDG for one render and then cleared.
+     It has to be cleared: PDG focuses on a CHANGE of the prop, so if the id stuck
+     around, scanning the same label again after navigating away with Next would
+     pass an unchanged value and do nothing. Clearing makes every scan a
+     null → id transition. */
+  const [focusListingId, setFocusListingId] = useState<string | null>(null);
+
+  /* Scanned or printed label → the listing, for LabelPrintView and
+     BarcodeScannerView.
+
+     A scan identifies a `products` row; Step 3 navigates by GROUP INDEX. PDG now
+     takes `focusProductId` and maps the id through buildGroupArray to that
+     index, so this both scrolls Step 3 into view AND selects the listing.
+
+     What it refuses to do is pretend. If the scanned product is not in the open
+     batch, scrolling to Step 3 would park the user on an unrelated listing and
+     look like a successful jump — so we say where it actually is instead. The
+     live store view is read (never the render-captured array) per §14. */
+  const openListingInStep3 = useEventCallback((productId: string) => {
+    const items = processedItemsRef.current;
+    const inOpenBatch = items.some(i => i.id === productId || i.productGroup === productId);
+    if (!inOpenBatch) {
+      addToast('That listing is not in the batch you have open — find it in the Library and open its batch first.');
+      return;
+    }
+    setActiveView('workflow');
+    setFocusListingId(productId);
+    // Deferred: the workflow is parked behind `hidden` until this render
+    // commits, and scrolling to a hidden element is a no-op.
+    requestAnimationFrame(() => {
+      document.getElementById('step-3')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // PDG's focus effect has already run for this commit; release the id so the
+      // next scan is a fresh transition (see the note on the state above).
+      setFocusListingId(null);
+    });
+  });
 
   // Step 2's list: both branches are store arrays whose identity is already stable
   // between store updates, so naming it is enough — no new array per render.
@@ -2017,10 +2140,25 @@ function App() {
     // a 800-item Supabase upsert on every click — only after 2 s of inactivity.
     if (!user) return;
     if (groupUpsertTimerRef.current) clearTimeout(groupUpsertTimerRef.current);
+    // Pin the batch this payload belongs to. `currentBatchIdRef.current` is read
+    // at FIRE time, two seconds later, by which point the user may have opened a
+    // different batch from the Library — and `pruneStaleProducts` DELETES every
+    // products row of the given batch that is not in the keep-list, so a stale
+    // timer was capable of deleting the newly-opened batch's rows wholesale.
+    const upsertBatchId = currentBatchIdRef.current;
     groupUpsertTimerRef.current = setTimeout(async () => {
+      groupUpsertTimerRef.current = null;
+      if (currentBatchIdRef.current !== upsertBatchId) {
+        log.app(`handleImagesGrouped | products upsert abandoned — batch changed (${upsertBatchId} → ${currentBatchIdRef.current})`);
+        return;
+      }
       const allRegisterable = itemsWithCategories.filter(i => i.imageUrls?.[0] || i.storagePath);
       if (allRegisterable.length === 0) return;
 
+      // This write is the `products.product_group` MIRROR. It used to fail with
+      // nothing but a console.warn, and a silent failure here is what leaves the
+      // mirror stale (report 29) — so it reports into the same indicator.
+      saveStatus.begin();
       // Upsert in chunks to avoid PostgREST URL-length limit (lib/chunk.ts)
       let hadError = false;
       for (const chunk of chunked(allRegisterable)) {
@@ -2040,6 +2178,9 @@ function App() {
           hadError = true;
           break;
         }
+      }
+      if (hadError) {
+        saveStatus.end(false, 'Could not save the grouping to the products table.');
       }
       if (!hadError) {
         // Also upsert product_images rows for items that were uploaded directly by
@@ -2071,12 +2212,14 @@ function App() {
         }
 
         // Prune any stale products rows for this batch that are no longer in the current item set.
-        if (currentBatchIdRef.current) {
-          await pruneStaleProducts(currentBatchIdRef.current, allRegisterable.map(i => i.id));
+        // Uses the PINNED id, never the live ref — see the note where the timer is armed.
+        if (upsertBatchId) {
+          await pruneStaleProducts(upsertBatchId, allRegisterable.map(i => i.id));
         }
         setLibraryRefreshTrigger(prev => prev + 1);
+        saveStatus.end(true);
       }
-    }, 2000);
+    }, GROUP_UPSERT_DEBOUNCE_MS);
   };
 
   const handleItemsProcessed = (items: ClothingItem[]) => {
@@ -2129,7 +2272,8 @@ function App() {
     // Cancel any pending save
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
 
-    autoSaveTimerRef.current = setTimeout(async () => {
+    const fire = async () => {
+      autoSaveTimerRef.current = null;
       // Guard: if session hasn't resolved yet (getSession().then() still in flight),
       // currentBatchIdRef.current will be null and we'd create a spurious new batch.
       // This happens when PDG mounts immediately and calls handleItemsProcessed before
@@ -2139,14 +2283,22 @@ function App() {
         return;
       }
 
-      // In-flight guard: if a save round-trip is already pending, skip this fire.
-      // Without this, two debounce timers that both fired can both see "0 rows updated"
-      // (row not yet in DB) in autoSaveWorkflowBatch and both INSERT a new batch row.
+      // In-flight guard: if a save round-trip is already pending, this fire must NOT
+      // run concurrently — two calls that both see "0 rows updated" (row not yet in
+      // DB) would both INSERT a batch row, which is the duplicate-batch bug.
+      //
+      // But it must not be DROPPED either, which is what it used to be. The in-flight
+      // save is carrying a payload captured BEFORE these changes, so dropping this
+      // fire meant the newest grouping never reached Supabase at all — and the restore
+      // then preferred that older blob because `last_opened_at` records when the older
+      // write LANDED. Re-arm instead: the newest state always gets a turn.
       if (autoSaveInFlightRef.current) {
-        log.app('autoSaveWorkflow | skipped — save already in flight');
+        log.app('autoSaveWorkflow | save already in flight — re-arming');
+        autoSaveTimerRef.current = setTimeout(fire, AUTOSAVE_RETRY_MS);
         return;
       }
       autoSaveInFlightRef.current = true;
+      saveStatus.begin();
 
       // True slim — only the fields that CANNOT be recovered from the products/product_images
       // DB tables (slimForWorkflowState — extracted to lib/slimItems.ts, tested there).
@@ -2174,11 +2326,15 @@ function App() {
       try {
         // Use ref so we always get the latest batchId regardless of closure age
         log.app(`autoSaveWorkflow | fire | batchId=${currentBatchIdRef.current} | items=${slim(live).length}`);
-        const batchId = await autoSaveWorkflowBatch(
+        // Detailed variant: the plain one hands back the batch id even when RLS
+        // silently refused the UPDATE, so a total write failure looked like a
+        // success. The indicator has to show the difference.
+        const result = await autoSaveWorkflowBatchDetailed(
           currentBatchIdRef.current,
           currentBatchNumber,
           safeState
         );
+        const { batchId } = result;
 
         if (batchId && batchId !== currentBatchIdRef.current) {
           // First save OR old batch was deleted and a new one was created
@@ -2187,15 +2343,26 @@ function App() {
           localStorage.setItem('sortbot_current_batch_id', batchId);
           localStorage.setItem('sortbot_current_batch_number', currentBatchNumber);
         }
+        if (autoSaveSucceeded(result)) {
+          saveStatus.end(true);
+        } else {
+          // Was silently console.warn'd inside the service and reported to the user
+          // as nothing at all. rls-blocked in particular means the edit is GONE.
+          console.warn(`[App] auto-save did not persist (${result.outcome}):`, result.message);
+          saveStatus.end(false, result.message ?? `Auto-save failed (${result.outcome}).`);
+        }
         // NOTE: No Library refresh here — auto-save only writes to workflow_state,
         // NOT to products/product_images. The Library re-fetches on real DB changes only
         // (explicit Save Batch or image delete), preventing the auto-save → loadAll loop.
       } catch (error) {
         console.error('Auto-save failed:', error);
+        saveStatus.end(false, error instanceof Error ? error.message : 'Auto-save failed.');
       } finally {
         autoSaveInFlightRef.current = false;
       }
-    }, 2000); // wait 2 s of inactivity before hitting Supabase
+    };
+
+    autoSaveTimerRef.current = setTimeout(fire, AUTOSAVE_DEBOUNCE_MS); // wait 2 s of inactivity before hitting Supabase
   };
 
   // Register restored workflow items in products + product_images so Library sees them.
@@ -2239,6 +2406,10 @@ function App() {
     markBatchConfirmed(batch.id); // row verified — if it vanishes later, it was deleted (never re-create)
     pendingChunkRef.current = [];
     if (chunkTimerRef.current) { clearTimeout(chunkTimerRef.current); chunkTimerRef.current = null; }
+    // The outgoing batch's debounced products upsert must not fire against the
+    // incoming one. Its callback now also re-checks the pinned id, so this is
+    // belt-and-braces — but it saves a pointless round trip on every open.
+    if (groupUpsertTimerRef.current) { clearTimeout(groupUpsertTimerRef.current); groupUpsertTimerRef.current = null; }
     setCurrentBatchId(batch.id);
     setCurrentBatchNumber(batch.batch_number);
     localStorage.setItem('sortbot_current_batch_id', batch.id);
@@ -2507,6 +2678,7 @@ function App() {
           }
         }
 
+        let groupMirrorDrift = 0;
         restoredProcessedItems = baseItems.map((item: ClothingItem) => {
           // Match by productGroup FIRST — the only collision-free key. This is what
           // prevents the "mixed up images" bug: matching by shared title or by list
@@ -2527,6 +2699,22 @@ function App() {
           // NOTE: the old position-index fallback (productsToUse[index]) was removed —
           // it aligned two differently-ordered lists and bled unrelated products' data.
 
+          if (savedProduct && isDebugEnabled()) {
+            // Report 29 tripwire: products.product_group is a LAGGING mirror of
+            // workflow_state (separate 2 s debounce, and registerItemsInDB's
+            // ignoreDuplicates:true upsert never updates it). It no longer wins
+            // the merge — this counts how far behind it actually was, so a
+            // founder capture shows whether the mirror is the problem.
+            const rowGroup = savedProduct.product_group || savedProduct.id;
+            const liveGroup = item.productGroup || item.id;
+            if (rowGroup !== liveGroup) {
+              groupMirrorDrift++;
+              if (groupMirrorDrift <= 5) {
+                log.app(`[group] item ${item.id}: workflow_state says "${liveGroup}", products.product_group says "${rowGroup}" — keeping workflow_state`);
+              }
+            }
+          }
+
           if (savedProduct) {
             // DB row wins — it was written by an explicit Save which is authoritative.
             // workflow_state (item) is the fallback for fields not yet in the DB.
@@ -2542,8 +2730,11 @@ function App() {
           
           return item;
         });
+        if (groupMirrorDrift > 0) {
+          log.app(`[group] products.product_group disagreed with workflow_state on ${groupMirrorDrift}/${baseItems.length} items (workflow_state won)`);
+        }
       }
-      
+
       // Set all 4 arrays from the single restored list so every step stays in sync.
       log.app(`[OPEN] ✓ Final state set: restoredProcessedItems=${restoredProcessedItems.length}`);
       // Same shape as the hydration log above: a full .filter() plus an object
@@ -2672,6 +2863,14 @@ function App() {
     { id: 'categories', label: 'Manage Categories', icon: <Tag size={18} />, title: 'Manage your product categories' },
     { id: 'presets', label: 'Category Presets', icon: <Settings size={18} />, title: 'Manage category presets for shipping weight, measurements, and default attributes' },
     { id: 'library', label: 'Library', icon: <Package size={18} />, title: 'View saved workflow batches' },
+    /* Labels and Scan are the physical half of the workflow and belong to EVERY
+       workspace, not just founding admins — they sit beside Library because all
+       three act on the batch rather than on settings. TAB_IDS in MobileNav
+       keeps the phone's two tabs as Library + Messages, so these land in the
+       More sheet; the tablet rail shows them outright. Both fall out of
+       `mobileTools` below with no extra wiring. */
+    { id: 'labels', label: 'Labels', icon: <Printer size={18} />, title: 'Labels — print shelf labels with barcodes for the open batch' },
+    { id: 'scan', label: 'Scan', icon: <ScanLine size={18} />, title: 'Scan — find a listing by its barcode or SKU' },
     { id: 'messages', label: supportIsFounder ? 'Inbox' : 'Messages', icon: <MessageSquare size={18} />, title: 'Messages' },
     ...(isFoundingAdmin ? [
       { id: 'vocabulary', label: 'Vocabulary', icon: <BookMarked size={18} />, title: 'Vocabulary — curate quick keyword chips and brand keywords (all workspaces)' },
@@ -2714,7 +2913,7 @@ function App() {
               display: 'flex', alignItems: 'center', gap: '0.6rem',
               letterSpacing: '-0.045em', fontWeight: 650, marginBottom: '0.2rem',
             }}>
-              <ShoppingBag size={28} /> Acadia
+              <ShoppingBag size={28} /> Arcadian
             </Wordmark>
             <p className="header-subtitle">Upload, sort, describe, and export to Shopify</p>
           </div>
@@ -3035,7 +3234,8 @@ function App() {
 
         {/* Step 3: Add Descriptions */}
         {sortedImages.length > 0 && (
-          <section className="step-section">
+          /* id is the scroll target for openListingInStep3 (a scanned label). */
+          <section className="step-section" id="step-3">
             <h2>Step 3: Add Voice Descriptions & Generate Product Info</h2>
             {(() => {
               // Always compute from processedItems — same source PDG uses for navigation.
@@ -3085,6 +3285,7 @@ function App() {
               onDownloadCSV={onDownloadCSVStable}
               batchId={currentBatchId}
               descriptionSettings={orgDescSettings}
+              focusProductId={focusListingId}
             />
           </section>
         )}
@@ -3118,7 +3319,15 @@ function App() {
 
                 <div className="export-section">
                   <h3>Export Options</h3>
-                  <GoogleSheetExporter ref={exporterRef} vendorName={resolvedVendorName} items={step4ExportItems} />
+                  {/* platformPricing: the workspace's marketplace price rules.
+                      Undefined until settings resolve, which the exporter reads
+                      as "not known yet" and falls back to no adjustment. */}
+                  <GoogleSheetExporter
+                    ref={exporterRef}
+                    vendorName={resolvedVendorName}
+                    platformPricing={orgDescSettings?.platformPricing}
+                    items={step4ExportItems}
+                  />
                 </div>
               </div>
             </details>
@@ -3316,7 +3525,7 @@ function App() {
             title={supportIsFounder ? 'Inbox' : 'Messages'}
             description={supportIsFounder
               ? 'Every conversation with every workspace. Reply, close what is handled, reopen what is not.'
-              : 'Talk to the Acadia team. Ask anything — we read everything and usually reply within a day.'}
+              : 'Talk to the Arcadian team. Ask anything — we read everything and usually reply within a day.'}
             onBack={goToWorkflow}
             wide
           >
@@ -3325,6 +3534,38 @@ function App() {
               orgName={supportOrgName}
               isFounder={supportIsFounder}
             />
+          </ToolView>
+        </Suspense>
+      )}
+
+      {/* Labels — printable shelf labels for the open batch. `wide` because the
+          sheet preview is a letter page and the reading measure would crop it.
+          The view reads workflowStore directly and never writes an item back;
+          its only write is assigning SKUs to `products`. */}
+      {activeView === 'labels' && user && (
+        <Suspense fallback={<ViewFallback />}>
+          <ToolView
+            icon={<Printer size={26} />}
+            title="Labels"
+            description="Print shelf labels for this batch — title, size, price, your colour and vendor labels, and a scannable barcode."
+            onBack={goToWorkflow}
+            wide
+          >
+            <LabelPrintView onOpenListing={openListingInStep3} />
+          </ToolView>
+        </Suspense>
+      )}
+
+      {/* Scan — camera, USB scanner or a typed SKU, back to the listing. */}
+      {activeView === 'scan' && user && (
+        <Suspense fallback={<ViewFallback />}>
+          <ToolView
+            icon={<ScanLine size={26} />}
+            title="Scan"
+            description="Point the camera at a label, use a USB scanner, or type a SKU to pull up the listing."
+            onBack={goToWorkflow}
+          >
+            <BarcodeScannerView onOpenListing={openListingInStep3} />
           </ToolView>
         </Suspense>
       )}

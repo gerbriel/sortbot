@@ -1,4 +1,4 @@
-/* ── Acadia UI primitives ───────────────────────────────────────────────────
+/* ── Arcadian UI primitives ───────────────────────────────────────────────────
    One import site for the whole primitive set:
 
      import { Button, Dialog, ConfirmAction } from '../components/ui';

@@ -55,7 +55,7 @@ describe('ToolView', () => {
     const onBack = vi.fn();
     const { container } = mount(
       <ToolView icon={<span>i</span>} title="Workspace" onBack={onBack}>
-        <input defaultValue="Acadia" />
+        <input defaultValue="Arcadian" />
       </ToolView>,
     );
     keyDown('Escape', one(container, 'input'));

@@ -89,7 +89,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthenticated }) => {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-header">
-          <h1>Acadia</h1>
+          <h1>Arcadian</h1>
           <p>From camera roll to Shopify-ready listings</p>
         </div>
 
