@@ -29,8 +29,9 @@ env:
   LINT_BASELINE: 254
   # The deployed base path is derived from the GitHub repo name and must not
   # change (AGENTS.md §1). GITHUB_ACTIONS=true is set for us by the runner, so
-  # vite.config.ts picks /sortbot/ here exactly as it does in deploy.yml.
-  EXPECTED_BASE_PATH: /sortbot/
+  # The site is served from the custom domain arcadian.ltd at the root, so
+  # vite.config.ts sets base '/' everywhere (the old /sortbot/ Pages path 301s there).
+  EXPECTED_BASE_PATH: /
 
 jobs:
   verify:
@@ -81,7 +82,7 @@ jobs:
             exit 1
           fi
 
-          # Asset URLs must keep the /sortbot/ prefix. Changing the base path
+          # Asset URLs must be root-relative for the custom domain. Changing the base path
           # 404s every asset on the deployed site (AGENTS.md §1).
           if ! grep -q "src=\"${EXPECTED_BASE_PATH}assets/" dist/index.html; then
             echo "::error file=vite.config.ts::built asset paths are not under ${EXPECTED_BASE_PATH} — the GitHub Pages base path must not change (AGENTS.md §1)"

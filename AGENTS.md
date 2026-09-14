@@ -23,7 +23,7 @@ These deliberately still say `sortbot`, and renaming them is a breaking change:
 
 | Identifier | Where | Why it must not change |
 |---|---|---|
-| `/sortbot/` base path | `vite.config.ts`, `main.tsx` (SW registration) | Derived from the GitHub repo name `gerbriel/sortbot`. Changing it 404s every asset on the deployed site unless the repo is renamed first. |
+| ~~`/sortbot/` base path~~ → `/` | `vite.config.ts` | Since 14 Sept 2026 the site is served from the custom domain **arcadian.ltd** at the root, so `base` is `'/'` in every environment; the old `gerbriel.github.io/sortbot` address 301-redirects there. `main.tsx` registers the service worker at `import.meta.env.BASE_URL`, so nothing else changes. |
 | `sortbot_current_batch_id`, `sortbot_current_batch_number` | `App.tsx` | Renaming drops every user's in-progress batch on next load. |
 | `sortbot_workflow_backup` | `lib/workflowBackup.ts` (`WORKFLOW_BACKUP_KEY`), read by `App.tsx` | The synchronous crash backup. The key moved into the module that owns the throttled write (Sept 2026) — same string, one definition. |
 | `sortbot_deleted_batch_ids` | `workflowBatchService.ts` | The delete tombstone registry — losing it resurrects deleted batches (see §15). |
@@ -237,7 +237,7 @@ full in prose (§18 #30).
 |---|---|---|
 | `react` | ^19.2.0 | UI framework. `StrictMode` is ON — double-invokes effects in dev. |
 | `react-dom` | ^19.2.0 | DOM rendering. |
-| `vite` | ^7.2.4 | Build tool + dev server. Base path is `/sortbot/` on GitHub Actions, `/` locally. |
+| `vite` | ^7.2.4 | Build tool + dev server. Base path is `/` everywhere (custom domain, Sept 2026). |
 | `typescript` | ~5.9.3 | Type checking. `tsc -b` runs before Vite build. |
 | `@supabase/supabase-js` | ^2.93.3 | Auth (email/password), Postgres DB queries, Realtime presence, Storage bucket for images. |
 | `lucide-react` | ^0.563.0 | Icon components throughout the UI. |
@@ -289,7 +289,7 @@ Coverage by area:
 
 `src/lib/testing/supabaseMock.ts` (test-only, imported by no app code) is a chainable `supabase` stand-in that records table/op/filters/payload/`range()` per call and exposes `inSizes()` / `callsFor()` helpers — that is how query **order** and **chunk size** are asserted. Snapshots live in `src/lib/__snapshots__/` — update deliberately with `npx vitest run -u` only when output changes on purpose.
 
-**Deployment:** GitHub Actions deploys to GitHub Pages at `https://gerbriel.github.io/sortbot` on every push to `main` (`.github/workflows/deploy.yml`). `vite.config.ts` detects `process.env.GITHUB_ACTIONS` to set `base: '/sortbot/'`.
+**Deployment:** GitHub Actions deploys to GitHub Pages, served at `https://arcadian.ltd` (custom domain; `gerbriel.github.io/sortbot` redirects) on every push to `main` (`.github/workflows/deploy.yml`). `vite.config.ts` detects `process.env.GITHUB_ACTIONS` to set `base: '/sortbot/'`.
 
 **CI (Sept 2026):** `.github/workflows/ci.yml` runs on every pull request and on every push to a non-`main` branch, with `permissions: contents: read` only — it never deploys. Steps: `npm ci` → `npm test` → `npm run build` (with dummy `VITE_*` values) → **verify build output** (`dist/index.html` exists, contains `<title>Arcadian</title>`, and its asset URLs are under `/sortbot/` — the base path §1 forbids changing) → **bundle secret-leak guard** (greps `dist/` for `shpat_`, `service_role`, `eyJhbGciOi`, `sk-…` shapes; every `VITE_*` var is inlined into the public bundle, so this is the one mistake that cannot be walked back) → **lint ratchet** (fails only if the problem count GREW past `LINT_BASELINE`) → **migration hygiene** (every migration *changed in the PR* must contain a ROLLBACK section and an "idempotent"/"if not exists" note; the repo-wide pass rate is reported as informational debt). A second job type-checks the Edge Functions with `deno check` (`continue-on-error` while the gate is new). **`LINT_BASELINE` in that file still reads `311`; the tree is at 252** (§17) — lowering it is a one-line change that locks the win in.
 
@@ -459,7 +459,7 @@ sortingapp/
 ├── .github/workflows/             # deploy.yml (Pages, push to main) · ci.yml (PR/branch: test, build, dist verification, secret-leak grep, lint ratchet, migration hygiene, deno check) · uptime.yml (15-min probe → GitHub issue).
 ├── dist/                          # Build output. Do not edit.
 ├── .env / .env.example            # Local env vars (NOT committed) / template with the three VITE_ values.
-├── vite.config.ts                 # Sets base '/sortbot/' under GITHUB_ACTIONS, '/' locally.
+├── vite.config.ts                 # base '/' (custom domain arcadian.ltd; the old /sortbot/ Pages path redirects).
 ├── vitest.config.ts               # happy-dom + dummy Supabase env vars.
 ├── tsconfig*.json, eslint.config.js, package.json
 ├── index.html                     # Vite entry. Carries the CSP <meta http-equiv> + referrer policy (§9) and the pre-paint canvas <style>.
