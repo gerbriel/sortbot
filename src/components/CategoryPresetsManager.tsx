@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Users, UserRound, Baby, X, Pencil, Trash2 } from 'lucide-react';
 import type {
   CategoryPreset,
   CategoryPresetInput,
@@ -107,11 +108,11 @@ const FieldModal: React.FC<FieldModalProps> = ({ initial, onSave, onClose }) => 
   };
 
   return (
-    <div className="field-modal-overlay">
+    <div className="field-modal-overlay" data-tv-modal>
       <div className="field-modal">
         <div className="field-modal-header">
           <h4>{initial ? 'Edit Field' : 'Add Field'}</h4>
-          <button type="button" className="button-close" onClick={onClose}>✕</button>
+          <button type="button" className="button-close" onClick={onClose}><X size={14} /></button>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
@@ -203,8 +204,8 @@ const SectionHeader: React.FC<SectionHeaderProps> = ({
         {canMoveDown && (
           <button type="button" className="btn-icon" title="Move section down" onClick={onMoveDown}>↓</button>
         )}
-        <button type="button" className="btn-icon" title="Rename section" onClick={onRename}>✏️</button>
-        <button type="button" className="btn-icon btn-danger" title="Delete section" onClick={onDelete}>🗑</button>
+        <button type="button" className="btn-icon" title="Rename section" onClick={onRename}><Pencil size={13} /></button>
+        <button type="button" className="btn-icon btn-danger" title="Delete section" onClick={onDelete}><Trash2 size={13} /></button>
       </div>
     )}
   </div>
@@ -237,8 +238,8 @@ const CustomFieldsBlock: React.FC<CustomFieldsBlockProps> = ({
           {idx < fields.length - 1 && (
             <button type="button" className="btn-icon" onClick={() => onMoveDown(f.id)}>↓</button>
           )}
-          <button type="button" className="btn-icon" onClick={() => onEdit(f)}>✏️</button>
-          <button type="button" className="btn-icon btn-danger" onClick={() => onDelete(f.id)}>🗑</button>
+          <button type="button" className="btn-icon" onClick={() => onEdit(f)}><Pencil size={13} /></button>
+          <button type="button" className="btn-icon btn-danger" onClick={() => onDelete(f.id)}><Trash2 size={13} /></button>
         </div>
       </div>
     ))}
@@ -250,7 +251,7 @@ const CustomFieldsBlock: React.FC<CustomFieldsBlockProps> = ({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose }) => {
+const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
   const [presets, setPresets] = useState<CategoryPreset[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -423,7 +424,7 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
     try {
       await createCategoryPreset(duplicateData);
       await loadPresets();
-      alert(`✅ Duplicated: "${newDisplayName}"`);
+      alert(`Duplicated: "${newDisplayName}"`);
     } catch (error) {
       console.error('Error duplicating preset:', error);
       alert('Failed to duplicate preset');
@@ -450,13 +451,13 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
         window.dispatchEvent(new CustomEvent('presetsUpdated', {
           detail: { categoryName: editingPreset.category_name }
         }));
-        alert('Preset updated ✅');
+        alert('Preset updated');
       } else {
         const suffix = uid();
         const uniqueName = (formData.display_name || 'preset')
           .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').substring(0, 40) + '_' + suffix;
         await createCategoryPreset({ ...dataToSave, category_name: uniqueName } as CategoryPresetInput);
-        alert('Preset created ✅');
+        alert('Preset created');
       }
       await loadPresets();
       setShowForm(false);
@@ -595,39 +596,25 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
   // ── render ─────────────────────────────────────────────────────────────────
 
   if (loading) {
-    return (
-      <div className="presets-manager-overlay">
-        <div className="presets-manager">
-          <div className="presets-header">
-            <h2>Category Presets Manager</h2>
-            <button className="button-close" onClick={onClose} title="Close">✕</button>
-          </div>
-          <p style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading category presets…</p>
-        </div>
-      </div>
-    );
+    return <p className="presets-page-loading">Loading category presets…</p>;
   }
 
   return (
-    <div className="presets-manager-overlay" onClick={onClose}>
-      <div className="presets-manager" onClick={e => e.stopPropagation()}>
-        <div className="presets-header">
-          <h2>Category Presets Manager</h2>
-          <div className="header-actions">
-            <button className="button" onClick={handleCreate}>+ Create New Preset</button>
-            <button className="button-close" onClick={onClose} title="Close">✕</button>
-          </div>
-        </div>
-
+    /* Page layout: the preset list is the left column and the editor — a
+       full-screen modal until now — is the right one, so you can see what you
+       are editing next to everything else. */
+    <div className={`presets-page${showForm ? ' presets-page--editing' : ''}`}>
+      <div className="presets-toolbar">
         {/* ──────────── Gender Toggle ──────────── */}
-        {/* Tab strip sits one surface step BELOW the --ink-800 modal so it still
-            reads as a recessed bar, the way the old #f9fafb did on white. */}
-        <div style={{ display: 'flex', gap: '0.5rem', padding: '0.75rem 1.5rem', borderBottom: '1px solid var(--border)', background: 'var(--ink-850)' }}>
+        <div className="presets-gender-tabs">
           {(['Men', 'Women', 'Kids'] as const).map(g => (
             <button
               key={g}
               onClick={() => setGender(g)}
               style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
                 padding: '0.4rem 1.4rem',
                 borderRadius: '999px',
                 border: '2px solid',
@@ -641,18 +628,24 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = ({ onClose
                 transition: 'all 0.15s',
               }}
             >
-              {g === 'Men' ? '👔 Men' : g === 'Women' ? '👗 Women' : '🧒 Kids'}
+              {g === 'Men' ? <Users size={14} /> : g === 'Women' ? <UserRound size={14} /> : <Baby size={14} />}
+              <span>{g}</span>
             </button>
           ))}
         </div>
+        <button className="button" onClick={handleCreate}>+ Create new preset</button>
+      </div>
 
-        {/* ──────────── Form Modal ──────────── */}
+      <div className="presets-body tv-cols">
+        {/* ──────────── Preset editor ──────────── */}
         {showForm && (
-          <div className="preset-form-overlay" onClick={() => setShowForm(false)}>
-            <div className="preset-form-modal" onClick={e => e.stopPropagation()}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                <h3 style={{ margin: 0 }}>{editingPreset ? 'Edit' : 'Create'} Category Preset</h3>
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          /* data-tv-modal parks ToolView's Escape-to-workflow while an edit is
+             open, so a stray Escape can never throw away a half-written preset. */
+          <div className="preset-editor" data-tv-modal>
+            <div className="preset-editor-inner">
+              <div className="preset-editor-head">
+                <h2 className="tv-section-title" style={{ margin: 0 }}>{editingPreset ? 'Edit' : 'Create'} preset</h2>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                   <button type="button" className="button button-secondary" onClick={() => setShowForm(false)}>Cancel</button>
                   <button form="preset-form" type="submit" className="button">{editingPreset ? 'Update' : 'Create'} Preset</button>
                 </div>

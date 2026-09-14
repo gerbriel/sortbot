@@ -20,6 +20,8 @@
 
 import * as tus from 'tus-js-client';
 import { supabase } from './supabase';
+import { publicImageUrl } from './storageUrls';
+import { log, isDebugEnabled } from './debugLogger';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const BUCKET = 'product-images';
@@ -48,17 +50,32 @@ export function tusUploadFile(
   storagePath: string,
   onProgress?: (uploaded: number, total: number) => void,
 ): Promise<TusUploadResult> {
-  return new Promise(async (resolve, reject) => {
+  // NOTE (finding 8): the executor must NOT be `async`. An async executor swallows
+  // its own throws — the rejection lands on the executor's own (unheld) promise, so
+  // the promise we return here NEVER SETTLES. A single rejecting
+  // supabase.auth.getSession() (a refresh-token round trip on a dropped connection —
+  // precisely the slow/rural case TUS exists for) therefore hung the awaiting upload
+  // chunk, and with it the whole 1 500-image loop: no error, no retry, no progress.
+  // The async work lives in an inner IIFE whose .catch() settles the outer promise.
+  return new Promise((resolve, reject) => {
+    (async () => {
     // Retrieve the current session token so Storage RLS accepts this upload.
-    const { data: sessionData } = await supabase.auth.getSession();
-    const token = sessionData?.session?.access_token;
+    let token: string | undefined;
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      token = sessionData?.session?.access_token;
+    } catch (err) {
+      console.error('[tus] ❌ Session lookup failed — cannot upload', storagePath, err);
+      reject(new Error(`tusUpload: session lookup failed: ${String(err)}`));
+      return;
+    }
     if (!token) {
       console.error('[tus] ❌ No auth session — cannot upload', storagePath);
       reject(new Error('tusUpload: no auth session'));
       return;
     }
 
-    console.log('[tus] 🚀 Starting upload:', storagePath, `(${(file.size / 1024).toFixed(0)} KB)`);
+    log.upload(`[tus] 🚀 Starting upload: ${storagePath} (${(file.size / 1024).toFixed(0)} KB)`);
 
     let lastLoggedPct = -1;
 
@@ -88,19 +105,19 @@ export function tusUploadFile(
         const pct = Math.floor((bytesUploaded / bytesTotal) * 4) * 25;
         if (pct !== lastLoggedPct) {
           lastLoggedPct = pct;
-          console.log(
-            `[tus] 📶 ${storagePath.split('/').pop()} — ${pct}%`,
-            `(${(bytesUploaded / 1024).toFixed(0)}/${(bytesTotal / 1024).toFixed(0)} KB)`,
-          );
+          // .split() + two .toFixed() per milestone, 4x per file x N files.
+          if (isDebugEnabled()) {
+            log.upload(
+              `[tus] 📶 ${storagePath.split('/').pop()} — ${pct}%`,
+              `(${(bytesUploaded / 1024).toFixed(0)}/${(bytesTotal / 1024).toFixed(0)} KB)`,
+            );
+          }
         }
         onProgress?.(bytesUploaded, bytesTotal);
       },
       onSuccess() {
-        const { data: { publicUrl } } = supabase.storage
-          .from(BUCKET)
-          .getPublicUrl(storagePath);
-        console.log('[tus] ✅ Upload complete:', storagePath);
-        resolve({ storagePath, publicUrl });
+        log.upload(`[tus] ✅ Upload complete: ${storagePath}`);
+        resolve({ storagePath, publicUrl: publicImageUrl(storagePath) });
       },
       onError(err) {
         console.error('[tus] ❌ Upload error for', storagePath, err);
@@ -109,7 +126,8 @@ export function tusUploadFile(
       onBeforeRequest(req) {
         // Log each PATCH (chunk) sent — useful for diagnosing stalled uploads
         if (req.getMethod() === 'PATCH') {
-          console.log('[tus] → PATCH chunk sent for', storagePath.split('/').pop());
+          // Fires once per 6 MB chunk of every file in the batch.
+          if (isDebugEnabled()) log.upload(`[tus] → PATCH chunk sent for ${storagePath.split('/').pop()}`);
         }
       },
     });
@@ -118,10 +136,10 @@ export function tusUploadFile(
     // where it left off rather than re-uploading from byte 0.
     upload.findPreviousUploads().then(previousUploads => {
       if (previousUploads.length > 0) {
-        console.log('[tus] ♻️  Resuming previous upload for', storagePath, '— found', previousUploads.length, 'previous session(s)');
+        log.upload(`[tus] ♻️  Resuming previous upload for ${storagePath} — found ${previousUploads.length} previous session(s)`);
         upload.resumeFromPreviousUpload(previousUploads[0]);
       } else {
-        console.log('[tus] 🆕 No previous upload found — starting fresh for', storagePath);
+        log.upload(`[tus] 🆕 No previous upload found — starting fresh for ${storagePath}`);
       }
       upload.start();
     }).catch((err) => {
@@ -129,5 +147,6 @@ export function tusUploadFile(
       console.warn('[tus] findPreviousUploads failed (localStorage unavailable?), starting fresh:', err);
       upload.start();
     });
+    })().catch(reject);   // any unexpected throw settles the outer promise
   });
 }

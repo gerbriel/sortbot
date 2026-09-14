@@ -4,6 +4,9 @@ import {
   fetchAnalyticsSummary, buildFunnel, compactNumber, percentDelta, niceCeiling,
   type AnalyticsSummary,
 } from '../lib/analytics';
+// These three were tabs inside OrgPanel; as top-level views they must pull
+// the shared org/ft/an class styles in themselves.
+import './OrgPanel.css';
 
 type Range = 7 | 30 | 90;
 const RANGES: Range[] = [7, 30, 90];

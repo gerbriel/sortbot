@@ -27,6 +27,14 @@
 
 const CACHE_NAME = 'sortbot-images-v1';
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const REVALIDATE_AFTER_MS = 24 * 60 * 60 * 1000; // 1 day: revalidate at most daily per entry
+
+// Hard entry cap. 15 000 entries x ~400 KB = ~6 GB, which is past the point where
+// Chrome evicts the whole origin bucket; 3 000 (~1.2 GB) keeps two full 1 500-image
+// batches resident while staying inside every browser's per-origin budget.
+const MAX_ENTRIES = 3000;
+// Trim at most this many per fetch so pruning never blocks an image response.
+const TRIM_PER_FETCH = 50;
 
 // Match any Supabase Storage public image URL
 const SUPABASE_IMG_PATTERN = /\/storage\/v1\/object\/public\/product-images\//;
@@ -62,6 +70,30 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(handleImageRequest(event.request));
 });
 
+// ─── Message: purge the image cache ───────────────────────────────────────────
+// Sent by src/lib/swCache.ts purgeImageCache() on sign-out. The cache is keyed
+// by URL only and lives in shared origin storage, so without this the previous
+// user's product photos stay readable to the next person on the machine for the
+// full 7-day TTL (security audit 05, finding #21). Replies on the MessageChannel
+// port the page supplies so the caller knows whether to fall back.
+self.addEventListener('message', (event) => {
+  if (!event.data || event.data.type !== 'PURGE_IMAGE_CACHE') return;
+  event.waitUntil(
+    (async () => {
+      let ok = true;
+      try {
+        await caches.delete(CACHE_NAME);
+        // Any older cache version left behind by a previous SW build.
+        await pruneOldCaches();
+      } catch {
+        ok = false;
+      }
+      const port = event.ports && event.ports[0];
+      if (port) port.postMessage({ type: 'PURGE_IMAGE_CACHE_DONE', ok });
+    })()
+  );
+});
+
 // ─── Core handler ─────────────────────────────────────────────────────────────
 async function handleImageRequest(request) {
   // Strip ?t= cache-bust params (added by LazyImg retry logic) so retries
@@ -77,8 +109,12 @@ async function handleImageRequest(request) {
     const age = Date.now() - cachedAt;
 
     if (age < MAX_AGE_MS) {
-      // CACHE HIT (fresh) — return immediately, refresh in background
-      refreshInBackground(cache, request, cacheKey);
+      // CACHE HIT — revalidate only once the entry is past the staleness floor.
+      // Product images are immutable per storage_path (a re-crop writes a NEW path),
+      // so a fresh entry has nothing to learn from the network. Refreshing on EVERY
+      // hit re-issued one request per image per page load — the exact storm this SW
+      // exists to prevent.
+      if (age > REVALIDATE_AFTER_MS) refreshInBackground(cache, request, cacheKey);
       return cached;
     }
     // Entry is stale — fall through to network fetch (will update cache)
@@ -89,6 +125,7 @@ async function handleImageRequest(request) {
     const networkResponse = await fetch(request);
     if (networkResponse.ok) {
       await storeInCache(cache, cacheKey, networkResponse.clone());
+      void trimCache(cache); // never awaited — must not delay the image
     }
     return networkResponse;
   } catch (err) {
@@ -137,10 +174,20 @@ function stripCacheBust(url) {
   try {
     const u = new URL(url);
     u.searchParams.delete('t');
+    u.searchParams.delete('_retry'); // imageTransforms.ts retry suffix — same bytes, must share a key
     return u.toString();
   } catch {
     return url;
   }
+}
+
+/** Oldest-first trim to MAX_ENTRIES. cache.keys() returns insertion order, which is
+ *  close enough to LRU here because storeInCache re-puts on refresh. */
+async function trimCache(cache) {
+  const keys = await cache.keys();
+  const over = keys.length - MAX_ENTRIES;
+  if (over <= 0) return;
+  await Promise.all(keys.slice(0, Math.min(over, TRIM_PER_FETCH)).map((k) => cache.delete(k)));
 }
 
 /** Delete cache entries from old cache versions */

@@ -9,30 +9,6 @@
      card   → --ink-850   (raised one step out of the lane)
      drawer → --ink-800   (separated from the panel by border + cast shadow) */
 
-.kanban-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.72);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 16px;
-}
-
-.kanban-panel {
-  position: relative;
-  background: var(--ink-800);
-  border-radius: 12px;
-  width: min(1500px, 97vw);
-  height: 90vh;
-  display: flex;
-  flex-direction: column;
-  padding: 1.1rem 1.25rem 1.25rem;
-  box-shadow: var(--shadow-xl);
-  overflow: hidden;
-}
-
 /* ── Header ─────────────────────────────────────────────────────────────── */
 
 .kanban-header {
@@ -589,7 +565,6 @@
 /* ── Narrow screens ─────────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
-  .kanban-panel { height: 95vh; padding: 0.8rem; }
   .kanban-lane { width: 210px; min-width: 210px; }
   .kanban-detail { width: 100%; }
 }
@@ -852,3 +827,64 @@
 .kanban-atlas-wiring b { color: var(--text-primary); font-weight: 700; }
 
 .kanban-atlas-empty { color: var(--text-muted); font-size: var(--fs-xs); padding: 1.5rem 0; text-align: center; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PAGE MODE — Board as a full view (was a 1500px × 90vh modal)
+   ════════════════════════════════════════════════════════════════════════════
+
+   Scoped under `.tool-view` so the 900 lines above stay as they are. The board
+   still owns a bounded height — lanes scroll inside themselves and the strip
+   scrolls sideways — but it is now the full width of the window with page-scale
+   gutters instead of a 1.1rem modal inset. */
+
+.kanban-page {
+  /* .kanban-detail (the card drawer) is position:absolute against the board —
+     .kanban-panel used to be the positioned ancestor. */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  /* Fill what is left of the window under the header + title block, so the
+     lanes are as tall as the screen allows. */
+  height: calc(100vh - 30rem);
+  min-height: 50rem;
+}
+
+.tool-view .kanban-header {
+  margin-bottom: 1.5rem;
+  gap: 1.5rem;
+}
+
+.tool-view .kanban-header-actions { gap: 1rem; }
+
+.tool-view .kanban-notice {
+  padding: 1.2rem 1.5rem;
+  font-size: var(--fs-base);
+  margin-bottom: 1.5rem;
+}
+
+.tool-view .kanban-lanes {
+  gap: 1.5rem;
+  padding-bottom: 1.5rem;
+}
+
+.tool-view .kanban-lane {
+  width: 280px;
+  min-width: 280px;
+  padding: 1.2rem;
+  border-radius: var(--radius-lg);
+}
+
+.tool-view .kanban-lane-head { margin-bottom: 1.2rem; }
+
+.tool-view .kanban-unavailable {
+  padding: 2rem;
+  font-size: var(--fs-base);
+}
+
+.tool-view .kanban-loading { font-size: var(--fs-base); }
+
+@media (max-width: 640px) {
+  .kanban-page { height: auto; min-height: 0; }
+  .tool-view .kanban-lanes { max-height: 70vh; }
+}

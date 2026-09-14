@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback, Component, type ReactNode } from 'react';
-import exifr from 'exifr';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, Suspense, Component, type ReactNode } from 'react';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { Tag, Settings, Package, ShoppingBag, Link2, Scissors, X, Trash2, Bug, BookMarked, KanbanSquare,
-         Cloud, AlertTriangle, RefreshCw, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save } from 'lucide-react';
+         Cloud, AlertTriangle, RefreshCw, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users } from 'lucide-react';
 import { log, setDebugEnabled, isDebugEnabled } from './lib/debugLogger';
 import Auth from './components/Auth';
 import ImageUpload, { type ImageUploadHandle } from './components/ImageUpload';
@@ -13,15 +12,20 @@ import CategoryZones from './components/CategoryZones';
 import ProductDescriptionGenerator from './components/ProductDescriptionGenerator';
 import GoogleSheetExporter from './components/GoogleSheetExporter';
 import type { GoogleSheetExporterHandle } from './components/GoogleSheetExporter';
-import { Library } from './components/Library';
-import CategoryPresetsManager from './components/CategoryPresetsManager';
-import CategoriesManager from './components/CategoriesManager';
-import { saveBatchToDatabase, getThumbnailUrl } from './lib/productService';
+
+import { saveBatchToDatabase } from './lib/productService';
+import { publicImageUrl, thumbnailImageUrl } from './lib/storageUrls';
+import { chunked } from './lib/chunk';
+import {
+  productRowToClothingItem, mergeProductRowIntoItem,
+  STARTUP_MERGE_OPTIONS, OPEN_BATCH_MERGE_OPTIONS, type ProductRowLite,
+} from './lib/productRow';
 import { autoSaveWorkflowBatch, markBatchConfirmed, type WorkflowBatch } from './lib/workflowBatchService';
 import { ensureOrganization, type Organization, type OrgRole } from './lib/orgService';
 import { getOrgDescriptionSettings, type DescriptionSettings } from './lib/descriptionSettings';
-import { slimForWorkflowState, ultraSlimForBackup } from './lib/slimItems';
-import { buildProductImageRow, stage4ColumnsAvailable } from './lib/imageRowSync';
+import { slimForWorkflowState, ultraSlimForBackup, asClothingItems } from './lib/slimItems';
+import { scheduleWorkflowBackup, flushWorkflowBackup, cancelWorkflowBackup } from './lib/workflowBackup';
+import { buildProductImageRow, mergeProductImageRows, stage4ColumnsAvailable, type ExistingProductImageRow } from './lib/imageRowSync';
 import { useStoreItemArray, liveArrayRef } from './lib/workflowStore';
 
 // Live read-only views into workflowStore — replace the old ref-mirror pattern.
@@ -31,18 +35,122 @@ const sortedImagesRef    = liveArrayRef('sortedImages');
 const groupedImagesRef   = liveArrayRef('groupedImages');
 const processedItemsRef  = liveArrayRef('processedItems');
 const uploadedImagesRef  = liveArrayRef('uploadedImages');
-import OrgPanel from './components/OrgPanel';
-import VocabDashboard from './components/VocabDashboard';
-import KanbanBoard from './components/KanbanBoard';
+
+/** exifr (~56 KB) is only reachable from the EXIF-rescan fallback, which runs for at
+ *  most 30 items of an old batch that predates `capturedAt`. A static import put it in
+ *  the main chunk for every visitor; this loads it the first time a rescan actually
+ *  happens and reuses the module afterwards. (ImageUpload defers it the same way.) */
+let exifrModulePromise: Promise<typeof import('exifr')> | null = null;
+const loadExifr = () => (exifrModulePromise ??= import('exifr'));
 import WorkspaceMenu from './components/WorkspaceMenu';
 import WaitlistGate from './components/WaitlistGate';
 import Landing from './components/Landing';
 import { getCategoryPresets } from './lib/categoryPresetsService';
 import { track, trackPageview, setAnalyticsContext, clearAnalyticsContext } from './lib/analytics';
+import { installErrorReporter, reportError, setErrorContext, clearErrorContext } from './lib/errorReporter';
+import { purgeImageCache } from './lib/swCache';
 import SupportWidget from './components/SupportWidget';
+import ToolView from './components/ToolView';
 import { applyPresetDirectly } from './lib/applyPresetToGroup';
 import type { BrandCategory } from './lib/brandCategorySystem';
 import './App.css';
+
+// First-party error tracking: window 'error' + 'unhandledrejection' → app_errors.
+// Module scope so it is listening before the first render. No-op on localhost and
+// until app_errors.sql has been run. Idempotent + typeof window-guarded, so
+// StrictMode's double invoke is safe.
+installErrorReporter();
+
+/**
+ * Stable-identity wrapper around a changing callback (React's "useEvent" pattern).
+ *
+ * The returned function NEVER changes identity, and always invokes the most recent
+ * render's `fn`. That is the whole point: it is what lets `React.memo` bail out on
+ * the big workflow children without any dependency-array archaeology, and — given
+ * this codebase's history of stale-closure bugs (CLAUDE.md §14 #14, §15's
+ * `aae35fc`/`993c0cf`/`b0a41a6`) — it is strictly safer than `useCallback([...])`:
+ * a `useCallback` with a wrong dep list silently freezes state, while this can only
+ * ever call the newest closure. Semantics are identical to the inline arrow it
+ * replaces; only the identity is now constant.
+ *
+ * Not for anything a child calls DURING ITS OWN RENDER — the ref is assigned in a
+ * layout effect, so it is only guaranteed current after commit. Every use here is
+ * an event/async handler.
+ */
+function useEventCallback<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R {
+  const ref = useRef(fn);
+  useLayoutEffect(() => { ref.current = fn; });
+  // `useCallback(…, [])` is what makes the identity permanent; the ref read lives
+  // INSIDE the returned function, so it happens at call time (an event) and never
+  // during render — which is both correct and what keeps react-hooks/refs quiet.
+  return useCallback((...args: A) => ref.current(...args), []);
+}
+
+/* ── PostgREST 1 000-row cap ──────────────────────────────────────────────────
+ * Every PostgREST response is capped server-side (default `max-rows` = 1 000) and
+ * the truncation is SILENT — no error, just a short array. Any `select` that can
+ * match more rows than that must page with `.range()`, or it quietly returns a
+ * partial view of the table. At the documented 1 500-image working set that was
+ * not merely slow: the batch-open hydration saw 1 000 of 1 500 products (the rest
+ * lost every DB-backed field), and pruneStaleProducts diffed against a partial set.
+ * Same idiom as libraryService.fetchSavedImages. (perf finding F13) */
+const PG_PAGE = 1000;
+/** Hard stop so a server that keeps answering with full pages cannot spin forever. */
+const PG_MAX_PAGES = 60;
+
+/** Drain every page of a ranged Supabase select. `page(from, to)` must apply
+ *  `.range(from, to)` and nothing else per call — all other filters are the
+ *  caller's. Returns the rows read so far plus the first error encountered, so a
+ *  mid-pagination failure degrades to "partial, and we know it" instead of
+ *  pretending to be complete. */
+async function readAllPages<Row>(
+  page: (from: number, to: number) => PromiseLike<{ data: Row[] | null; error: { message: string } | null }>,
+): Promise<{ rows: Row[]; error: { message: string } | null }> {
+  const rows: Row[] = [];
+  let from = 0;
+  for (let guard = 0; guard < PG_MAX_PAGES; guard++) {
+    const { data, error } = await page(from, from + PG_PAGE - 1);
+    if (error) return { rows, error };
+    if (!data || data.length === 0) break;
+    rows.push(...data);
+    if (data.length < PG_PAGE) break;   // short page = last page
+    from += PG_PAGE;
+  }
+  return { rows, error: null };
+}
+
+/* ── Lazily-loaded overlays (perf finding F24) ────────────────────────────────
+ * None of these is part of the four-step flow; each renders only behind its own
+ * `show*` flag, and three of them (KanbanBoard, VocabDashboard, the OrgPanel
+ * cluster) are founder-only. Statically imported they contributed ~143 KB of
+ * source — plus everything they pull in — to the main chunk that every visitor
+ * parses before first paint, including logged-out ones on the landing page.
+ * Analytics / CRM / Errors are their own chunks now that they are top-level
+ * views rather than tabs inside OrgPanel. Landing / Auth / WaitlistGate are
+ * deliberately NOT lazy: they ARE the first paint. */
+const Library = React.lazy(() => import('./components/Library').then(m => ({ default: m.Library })));
+const CategoriesManager = React.lazy(() => import('./components/CategoriesManager'));
+const CategoryPresetsManager = React.lazy(() => import('./components/CategoryPresetsManager'));
+const OrgPanel = React.lazy(() => import('./components/OrgPanel'));
+const VocabDashboard = React.lazy(() => import('./components/VocabDashboard'));
+const KanbanBoard = React.lazy(() => import('./components/KanbanBoard'));
+const AnalyticsPanel = React.lazy(() => import('./components/AnalyticsPanel'));
+const CrmPanel = React.lazy(() => import('./components/CrmPanel'));
+const ErrorsPanel = React.lazy(() => import('./components/ErrorsPanel'));
+
+/** Every destination the app can be showing. The four workflow steps are one
+ *  view ('workflow'); each header tool is a full page of its own. */
+export type ActiveView =
+  | 'workflow' | 'library' | 'categories' | 'presets'
+  | 'vocabulary' | 'analytics' | 'crm' | 'board' | 'workspace';
+
+/** Fallback shown while a view's chunk is in flight. Reuses the existing
+ *  `.loading-screen` + `.spinner` styles, so there is no new CSS. */
+const ViewFallback = () => (
+  <div className="loading-screen" style={{ minHeight: '40vh' }}>
+    <div className="spinner" />
+  </div>
+);
 
 /** Strip HTML <br> tags (from Shopify-formatted descriptions) back to plain-text newlines for the dashboard editor. */
 function htmlDescToPlain(html: string): string {
@@ -215,6 +323,11 @@ class GrouperErrorBoundary extends Component<{ children: ReactNode }, GrouperBou
   static getDerivedStateFromError(error: Error) { return { error }; }
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('[GrouperErrorBoundary] caught render error:', error, info);
+    // The boundary is the ONLY place a render crash is observable.
+    reportError(error, {
+      source: 'boundary',
+      component: info.componentStack?.split('\n')[1]?.trim().replace(/^at\s+/, '') ?? 'ImageGrouper',
+    });
   }
   render() {
     if (this.state.error) {
@@ -230,19 +343,66 @@ class GrouperErrorBoundary extends Component<{ children: ReactNode }, GrouperBou
   }
 }
 
+/**
+ * Startup-restore guard (finding 22). The auth effect's getSession().then(...)
+ * chain is not abortable, so React StrictMode's dev double-mount ran the WHOLE
+ * restore twice concurrently — including registerItemsInDB's delete-then-reinsert
+ * and the EXIF rescan, racing them against each other. Module-level (not a ref)
+ * so the second mount sees the first mount's flag. Same shape as
+ * isOpeningBatchRef, which guards handleOpenBatch for exactly this reason.
+ */
+let startupRestoreInFlight = false;
+
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  // Which user id ensureOrganization has finished resolving (see the pageview effect).
+  const [orgResolvedFor, setOrgResolvedFor] = useState<string | null>(null);
   // Multi-org tenancy: the signed-in user's workspace. null = not resolved yet
   // OR the tenancy migration hasn't been run (legacy shared-workspace mode —
   // the app works exactly as before and no org UI is shown).
   const [currentOrg, setCurrentOrg] = useState<Organization | null>(null);
   const [orgRole, setOrgRole] = useState<OrgRole>('member');
-  const [showOrgPanel, setShowOrgPanel] = useState(false);
-  // Founder-only vocabulary dashboard (chips + brand keywords, global content)
-  const [showVocabDashboard, setShowVocabDashboard] = useState(false);
-  // Team board — Founding Workspace members (any role) track features/todos
-  const [showKanban, setShowKanban] = useState(false);
+  /* ── Top-level view ────────────────────────────────────────────────────────
+     The header tools used to be fixed-position modals stacked over the
+     workflow. They are full PAGES now (ToolView), and exactly one is showing
+     at a time — 'workflow' is the four steps. The workflow itself is never
+     unmounted; it is parked behind the `hidden` attribute on <main>, so an
+     upload in flight, the grouper's selection, and Step 3's debounced saves
+     all survive opening a tool and coming back. */
+  const [activeView, setActiveView] = useState<ActiveView>('workflow');
+  // The header button that opened the current view. Focus returns to it on Back
+  // so a keyboard user is put back exactly where they left off.
+  const viewTriggerRef = useRef<HTMLButtonElement | null>(null);
+  // Stable identity: ToolView registers its Escape listener against it, and a
+  // new function every render would re-register the listener every render.
+  const goToWorkflow = useCallback(() => {
+    setActiveView('workflow');
+    const trigger = viewTriggerRef.current;
+    viewTriggerRef.current = null;
+    // Deferred: the view is still mounted this tick, and focusing a node that is
+    // about to be detached silently drops focus to <body>.
+    requestAnimationFrame(() => trigger?.focus());
+  }, []);
+  /** Header button click: open the view, or return to the workflow if it already is. */
+  const toggleView = (view: Exclude<ActiveView, 'workflow'>) =>
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      if (activeView === view) { goToWorkflow(); return; }
+      viewTriggerRef.current = e.currentTarget;
+      setActiveView(view);
+    };
+  /** `useState`-shaped setter over activeView, so existing `setShowX(false)`
+   *  call sites read exactly as they did. Turning a view OFF only returns to
+   *  the workflow when that view is the one actually showing. The other five
+   *  tools open/close purely from the header and their Back button, so
+   *  `setShowLibrary` — used by handleOpenBatch and the close callback — is
+   *  the only flag-shaped setter still worth having. */
+  const viewSetter = (view: Exclude<ActiveView, 'workflow'>) => (on: boolean) =>
+    setActiveView(cur => (on ? view : cur === view ? 'workflow' : cur));
+  const setShowLibrary = viewSetter('library');
+  // Analytics is one view with two sub-tabs; Errors used to be a third
+  // Founder-tools sibling inside the Workspace modal.
+  const [analyticsTab, setAnalyticsTab] = useState<'overview' | 'errors'>('overview');
   // Per-workspace description format — fetched with the org, passed to Step 3
   const [orgDescSettings, setOrgDescSettings] = useState<DescriptionSettings | null>(null);
   // CSV Vendor column = the SELLER: explicit setting → founding default
@@ -270,12 +430,10 @@ function App() {
   // Ref mirror so onCategoryAssigned closures always call the current clearSelection
   const grouperActionsRef = useRef<GrouperActions | null>(null);
   grouperActionsRef.current = grouperActions;
-  const [showLibrary, setShowLibrary] = useState(false);
+  const showLibrary = activeView === 'library';
   // Ref mirror so the autoSave closure (inside setTimeout) can read the live value
   // without capturing a stale boolean from the render where autoSave was scheduled.
   const showLibraryRef = useRef(false);
-  const [showCategoryPresets, setShowCategoryPresets] = useState(false);
-  const [showCategoriesManager, setShowCategoriesManager] = useState(false);
   const [saving, setSaving] = useState(false);
   const [libraryRefreshTrigger, setLibraryRefreshTrigger] = useState(0);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -375,6 +533,28 @@ function App() {
   // NOTE: the old per-render ref mirrors of the four item arrays are gone —
   // sortedImagesRef & co. are now module-level LIVE views into workflowStore
   // (see liveArrayRef imports at the top of this file).
+
+  // ── Teardown: flush the backup, then drop every pending timer ─────────────
+  // The three debounce timers below outlived the component: a tab close or an
+  // unmount mid-debounce left them queued to fire against a torn-down tree.
+  // The unload flush is what preserves the "a refresh never loses grouping"
+  // guarantee now that the localStorage backup is throttled (see autoSaveWorkflow):
+  // whatever is still inside the throttle window is written before the page goes.
+  // `pagehide` is the dependable one — `beforeunload` does not fire reliably on
+  // back-button navigation or when a mobile browser freezes the page into bfcache.
+  useEffect(() => {
+    const flushOnUnload = () => flushWorkflowBackup();
+    window.addEventListener('beforeunload', flushOnUnload);
+    window.addEventListener('pagehide', flushOnUnload);
+    return () => {
+      window.removeEventListener('beforeunload', flushOnUnload);
+      window.removeEventListener('pagehide', flushOnUnload);
+      flushWorkflowBackup();
+      if (autoSaveTimerRef.current)    { clearTimeout(autoSaveTimerRef.current);    autoSaveTimerRef.current = null; }
+      if (groupUpsertTimerRef.current) { clearTimeout(groupUpsertTimerRef.current); groupUpsertTimerRef.current = null; }
+      if (chunkTimerRef.current)       { clearTimeout(chunkTimerRef.current);       chunkTimerRef.current = null; }
+    };
+  }, []);
   const [currentBatchNumber, setCurrentBatchNumber] = useState<string>(() => {
     return localStorage.getItem('sortbot_current_batch_number') || `batch-${Date.now()}`;
   });
@@ -487,6 +667,26 @@ function App() {
     // Store setters have stable identity (workflowStore) — listed to satisfy exhaustive-deps.
   }, [setUploadedImages, setGroupedImages, setSortedImages, setProcessedItems]);
 
+  /**
+   * Called by ImageUpload when the user cancels a partially-finished upload
+   * (finding 3). The cancel path deletes the Storage objects and the DB rows it
+   * wrote; these items must also leave the in-memory arrays, or the session is
+   * left holding items whose CDN URLs 404 — which then get re-registered by the
+   * next group action and, once they outgrow the gap-fill cap, silently deleted.
+   */
+  const handleUploadCancelled = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    const drop = new Set(ids);
+    const prune = (arr: ClothingItem[]) => arr.filter(i => !drop.has(i.id));
+    setUploadedImages(prune);
+    setGroupedImages(prune);
+    setSortedImages(prune);
+    setProcessedItems(prune);
+    pendingChunkRef.current = pendingChunkRef.current.filter(i => !drop.has(i.id));
+    log.upload(`handleUploadCancelled | dropped ${ids.length} cancelled items from state`);
+    // Store setters have stable identity (workflowStore) — listed to satisfy exhaustive-deps.
+  }, [setUploadedImages, setGroupedImages, setSortedImages, setProcessedItems]);
+
   // Fetch storage usage once the user is known
   useEffect(() => {
     if (!user) return;
@@ -528,19 +728,19 @@ function App() {
         // title are in sync — NOT to reassign ownership.
         { onConflict: 'id', ignoreDuplicates: true }
       );
-      // Build product_images rows. For image_url: prefer imageUrls[0], fall back to getPublicUrl(storagePath).
+      // Build product_images rows. For image_url: prefer imageUrls[0], fall back to publicImageUrl(storagePath).
       // storage_path may be null for legacy items — that's fine, the column is nullable.
       // Conflict key: (product_id, image_url) — matches the existing composite unique constraint.
       // Stage 4 dual-write: rows include transforms + captured_at + original_storage_path
       // (the latter two only once the stage4_slim_fields migration has been run).
       const stage4 = await stage4ColumnsAvailable();
-      const productImageRows = registerable.flatMap((item, idx) => {
-        const imageUrl = item.imageUrls?.[0] ||
-          (item.storagePath
-            ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
-            : null);
+      // position 0: each of these rows is the PRIMARY image of its own product.
+      // (It used to be the item's index in `registerable`, which made every
+      // product's single row claim a different, meaningless position.)
+      const productImageRows = registerable.flatMap((item) => {
+        const imageUrl = item.imageUrls?.[0] || publicImageUrl(item.storagePath) || null;
         if (!imageUrl) return []; // no image_url available at all — skip
-        return [buildProductImageRow(item, activeUser.id, idx, imageUrl, stage4)];
+        return [buildProductImageRow(item, activeUser.id, 0, imageUrl, stage4)];
       });
       if (productImageRows.length > 0) {
         // Delete-then-insert strategy: wipe ALL product_images rows for the
@@ -551,51 +751,70 @@ function App() {
         // Chunk into groups of 100 to avoid PostgREST URL length limits (400 error)
         // that occur when passing hundreds of IDs in a single IN() clause.
         const productIds = registerable.map(i => i.id);
-        const DELETE_CHUNK_SIZE = 100;
 
-        // Before deleting, preserve any existing original_name values from the DB
-        // for items whose in-memory originalName is currently absent (e.g. items from
-        // batches saved before the originalName feature was added). Without this, the
-        // delete-then-insert would write original_name=null and erase any previously
-        // backfilled value, making filenames permanently invisible on Step 2 cards.
-        const itemsWithoutName = productImageRows.filter(r => !r.original_name);
-        if (itemsWithoutName.length > 0) {
-          const idsToFetch = itemsWithoutName.map(r => r.product_id);
-          const existingNameMap = new Map<string, string>();
-          for (let i = 0; i < idsToFetch.length; i += DELETE_CHUNK_SIZE) {
-            const chunk = idsToFetch.slice(i, i + DELETE_CHUNK_SIZE);
-            const { data: existingRows } = await supabase
-              .from('product_images')
-              .select('product_id, original_name')
-              .in('product_id', chunk)
-              .not('original_name', 'is', null);
-            if (existingRows) {
-              for (const row of existingRows) {
-                if (row.original_name && !existingNameMap.has(row.product_id)) {
-                  existingNameMap.set(row.product_id, row.original_name);
-                }
-              }
-            }
+        // Read the FULL existing row set before wiping it. Two reasons:
+        //  1. original_name: in-memory items from pre-originalName batches have none,
+        //     and re-inserting null would erase a previously backfilled filename.
+        //  2. finding 16 — a group's photos live as N rows against the LEADER product
+        //     (written by saveBatchToDatabase with real `position` values), while this
+        //     function only knows one row per item. Re-inserting just our rows
+        //     collapsed the group's photo list and flattened every position on every
+        //     batch open. mergeProductImageRows carries those rows across the wipe.
+        //     The wipe itself STAYS (CLAUDE.md §18 #3) — it is still what clears a
+        //     stale row whose CDN URL changed for a file we are re-writing.
+        const existingRowSelect = 'product_id, image_url, storage_path, position, alt_text, original_name, transforms, user_id'
+          + (stage4 ? ', captured_at, original_storage_path' : '');
+        const existingRows: ExistingProductImageRow[] = [];
+        let existingReadOk = true;
+        for (const chunk of chunked(productIds)) {
+          const { data, error: readErr } = await supabase
+            .from('product_images')
+            .select(existingRowSelect)
+            .in('product_id', chunk);
+          if (readErr) {
+            // Could not see the current rows — do NOT wipe what we cannot re-create.
+            console.warn('[App] registerItemsInDB | existing product_images read error:', readErr.message);
+            existingReadOk = false;
+            break;
           }
-          // Merge preserved names back into rows that are missing them
-          if (existingNameMap.size > 0) {
-            for (const row of productImageRows) {
-              if (!row.original_name && existingNameMap.has(row.product_id)) {
-                row.original_name = existingNameMap.get(row.product_id)!;
-              }
-            }
-            log.db(`registerItemsInDB | preserved original_name for ${existingNameMap.size} items from DB`);
+          for (const row of (data ?? []) as unknown as ExistingProductImageRow[]) {
+            existingRows.push({ ...row, user_id: row.user_id || activeUser.id });
           }
         }
 
-        for (let i = 0; i < productIds.length; i += DELETE_CHUNK_SIZE) {
-          const chunk = productIds.slice(i, i + DELETE_CHUNK_SIZE);
-          const { error: delErr } = await supabase
-            .from('product_images')
-            .delete()
-            .in('product_id', chunk);
-          if (delErr) {
-            console.warn('[App] registerItemsInDB | product_images delete error:', delErr.message);
+        // Carry original_name forward for items whose in-memory value is missing.
+        const existingNameMap = new Map<string, string>();
+        for (const row of existingRows) {
+          if (row.original_name && !existingNameMap.has(row.product_id)) {
+            existingNameMap.set(row.product_id, row.original_name);
+          }
+        }
+        if (existingNameMap.size > 0) {
+          for (const row of productImageRows) {
+            if (!row.original_name && existingNameMap.has(row.product_id)) {
+              row.original_name = existingNameMap.get(row.product_id)!;
+            }
+          }
+          log.db(`registerItemsInDB | preserved original_name for ${existingNameMap.size} items from DB`);
+        }
+
+        const rowsToWrite = existingReadOk
+          ? mergeProductImageRows(productImageRows, existingRows)
+          : productImageRows;
+        const carriedOver = rowsToWrite.length - productImageRows.length;
+        if (carriedOver > 0) {
+          log.db(`registerItemsInDB | carried ${carriedOver} existing group photo row(s) across the wipe`);
+        }
+
+        if (existingReadOk) {
+          for (const chunk of chunked(productIds)) {
+            const { error: delErr } = await supabase
+              .from('product_images')
+              .delete()
+              .in('product_id', chunk);
+            if (delErr) {
+              console.warn('[App] registerItemsInDB | product_images delete error:', delErr.message);
+            }
           }
         }
 
@@ -604,7 +823,7 @@ function App() {
         // registerItemsInDB call already re-inserted the rows (race), the
         // upsert simply skips them rather than throwing a 409 conflict.
         const { error: imgErr } = await supabase.from('product_images').upsert(
-          productImageRows,
+          rowsToWrite,
           { onConflict: 'product_id,image_url', ignoreDuplicates: true }
         );
         if (imgErr) {
@@ -627,6 +846,11 @@ function App() {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
+      if (startupRestoreInFlight) {
+        log.auth('app startup | restore already in flight (StrictMode double-mount) — skipping');
+        return;
+      }
+      startupRestoreInFlight = true;
 
       // Auto-restore last batch on page load so users don't lose progress on reload
       const savedBatchId = localStorage.getItem('sortbot_current_batch_id');
@@ -685,15 +909,11 @@ function App() {
               // ALSO: imageUrls[0] can end up pointing to a different item's path due to
               // merge bugs — storagePath is always authoritative, so always rebuild from it.
               const liveItems = rawItems.map((item: any) => {
-                const canonical = item.storagePath
-                  ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
-                  : '';
+                const canonical = publicImageUrl(item.storagePath);
                 // If we have a storagePath, rebuild imageUrls entirely from it (ignore saved value)
                 const imageUrls = canonical ? [canonical] : (item.imageUrls?.length ? item.imageUrls : []);
                 const preview = canonical || (item.preview?.startsWith('blob:') ? '' : (item.preview || ''));
-                const thumbnailUrl = item.storagePath
-                  ? getThumbnailUrl(item.storagePath, 300)
-                  : (imageUrls[0] || '');
+                const thumbnailUrl = thumbnailImageUrl(item.storagePath) || imageUrls[0] || '';
                 return {
                   ...item,
                   preview,
@@ -711,11 +931,11 @@ function App() {
                 // gets too long (~794+ IDs). Large batches (800+ images) hit this.
                 const missingNameIds = itemsMissingName.map((i: any) => i.id);
                 const nameRows: any[] = [];
-                for (let ci = 0; ci < missingNameIds.length; ci += 100) {
+                for (const idChunk of chunked(missingNameIds)) {
                   const { data } = await supabase
                     .from('product_images')
                     .select('product_id, original_name')
-                    .in('product_id', missingNameIds.slice(ci, ci + 100))
+                    .in('product_id', idChunk)
                     .not('original_name', 'is', null)
                     .order('position', { ascending: true });
                   if (data) nameRows.push(...data);
@@ -754,11 +974,11 @@ function App() {
                 // Chunked to stay under PostgREST's URL-length limit on large batches.
                 const dbImages: any[] = [];
                 let dbImgErr: any = null;
-                for (let ci = 0; ci < missingIds.length; ci += 100) {
+                for (const idChunk of chunked(missingIds)) {
                   const { data, error } = await supabase
                     .from('product_images')
                     .select('product_id, image_url, storage_path, position, original_name')
-                    .in('product_id', missingIds.slice(ci, ci + 100))
+                    .in('product_id', idChunk)
                     .order('position', { ascending: true });
                   if (error) dbImgErr = error;
                   if (data) dbImages.push(...data);
@@ -792,20 +1012,35 @@ function App() {
                   if (groupIds.length > 0) {
                     // Fetch product_images for ALL items that share these productGroups,
                     // so we can map group leader → images and hand them to orphan items.
-                    const { data: groupProducts, error: gpErr } = await supabase
-                      .from('products')
-                      .select('id, product_group')
-                      .in('product_group', groupIds);
-                    log.app(`startup restore | DB fallback stage2 products | rows=${groupProducts?.length ?? 0}${gpErr ? ` err=${gpErr.message}` : ''}`);
-                    if (groupProducts && groupProducts.length > 0) {
+                    // Both IN() lists are chunked at 100: unchunked, a large batch
+                    // builds a multi-KB URL that PostgREST answers with a 400/414
+                    // (the same limit lib/chunk.ts's ID_CHUNK exists for).
+                    const groupProducts = [];
+                    let gpErr: { message: string } | null = null;
+                    for (const groupChunk of chunked(groupIds)) {
+                      const { data, error } = await supabase
+                        .from('products')
+                        .select('id, product_group')
+                        .in('product_group', groupChunk);
+                      if (error) { gpErr = error; break; }
+                      if (data) groupProducts.push(...data);
+                    }
+                    log.app(`startup restore | DB fallback stage2 products | rows=${groupProducts.length}${gpErr ? ` err=${gpErr.message}` : ''}`);
+                    if (groupProducts.length > 0) {
                       const groupMemberIds = groupProducts.map((p: any) => p.id);
-                      const { data: groupImages, error: giErr } = await supabase
-                        .from('product_images')
-                        .select('product_id, image_url, storage_path, position')
-                        .in('product_id', groupMemberIds)
-                        .order('position', { ascending: true });
-                      log.app(`startup restore | DB fallback stage2 images | rows=${groupImages?.length ?? 0}${giErr ? ` err=${giErr.message}` : ''}`);
-                      if (groupImages && groupImages.length > 0) {
+                      const groupImages = [];
+                      let giErr: { message: string } | null = null;
+                      for (const memberChunk of chunked(groupMemberIds)) {
+                        const { data, error } = await supabase
+                          .from('product_images')
+                          .select('product_id, image_url, storage_path, position')
+                          .in('product_id', memberChunk)
+                          .order('position', { ascending: true });
+                        if (error) { giErr = error; break; }
+                        if (data) groupImages.push(...data);
+                      }
+                      log.app(`startup restore | DB fallback stage2 images | rows=${groupImages.length}${giErr ? ` err=${giErr.message}` : ''}`);
+                      if (groupImages.length > 0) {
                         // Build a map: productGroup → image_url list (from any member that has images)
                         const groupImgMap = new Map<string, string[]>();
                         const groupPathMap = new Map<string, string>();
@@ -843,10 +1078,8 @@ function App() {
                     if (item.thumbnailUrl || item.preview || item.imageUrls?.[0]) return item;
                     const urls = imgMap.get(item.id) ?? [];
                     const sp = pathMap.get(item.id) ?? item.storagePath ?? '';
-                    const reconstructed = sp
-                      ? supabase.storage.from('product-images').getPublicUrl(sp).data.publicUrl
-                      : (urls[0] ?? '');
-                    const thumbUrl = sp ? getThumbnailUrl(sp, 300) : (urls[0] ?? '');
+                    const reconstructed = publicImageUrl(sp) || (urls[0] ?? '');
+                    const thumbUrl = thumbnailImageUrl(sp) || (urls[0] ?? '');
                     return {
                       ...item,
                       storagePath: sp || item.storagePath,
@@ -880,14 +1113,17 @@ function App() {
                 (async () => {
                   try {
                     const hydrateSelect = `id, description, seo_title, seo_description, voice_description, vendor, product_category, product_type, tags, published, status, size, color, secondary_color, price, compare_at_price, cost_per_item, sku, barcode, inventory_quantity, weight_value, requires_shipping, continue_selling_out_of_stock, package_dimensions, parcel_size, ships_from, condition, flaws, material, era, care_instructions, measurements, model_name, model_number, size_type, style, gender, age_group, policies, renewal_options, who_made_it, what_is_it, listing_type, discounted_shipping, mpn, custom_label_0, product_group, applied_preset_id, product_images(image_url, storage_path, position, original_name)`;
-                    const { data: dbProds } = await supabase
+                    // Paged: a 1 500-item batch used to hydrate only its first 1 000
+                    // items, so 500 items silently lost every DB-backed field (F13).
+                    const { rows: dbProds } = await readAllPages((from, to) => supabase
                       .from('products')
                       .select(hydrateSelect)
                       .eq('batch_id', savedBatchId)
-                      .order('created_at', { ascending: true });
+                      .order('created_at', { ascending: true })
+                      .range(from, to));
                     // If no DB products found, items haven’t been registered yet — do it now.
                     // This covers fresh uploads that haven’t been through handleImagesUploaded yet.
-                    if (!dbProds || dbProds.length === 0) {
+                    if (dbProds.length === 0) {
                       registerItemsInDB(hydratedItems, savedBatchId, session.user);
                       return;
                     }
@@ -910,83 +1146,39 @@ function App() {
                           (item.seoTitle ? byTitle.get(item.seoTitle.trim()) : undefined) ??
                           (item.preview  ? byImgUrl.get(item.preview)        : undefined) ??
                           (item.imageUrls?.[0] ? byImgUrl.get(item.imageUrls[0]) : undefined);
+                        // These two ran UNCONDITIONALLY, once per item per array — 4 arrays
+                        // x 1 500 items = 6 000 console calls on every page restore, each
+                        // building a 15-field object with .slice() calls. log.* alone is not
+                        // enough: its arguments are evaluated eagerly at the call site, so the
+                        // object literal would still be built with debug off. Hence the guard.
                         if (!p) {
-                          console.warn('[HYDRATE] mergeDB: no DB record found for item', item.id, 'seoTitle:', item.seoTitle);
+                          if (isDebugEnabled()) log.app(`hydrate | no DB record for item ${item.id} seoTitle="${item.seoTitle ?? ''}"`);
                           return item;
                         }
-                        console.log('[HYDRATE] mergeDB MATCH item.id:', item.id, '=> DB row', {
-                          p_seo_title: p.seo_title,
-                          p_description_snippet: p.description?.slice(0, 60),
-                          p_voice_description: p.voice_description?.slice(0, 60),
-                          p_vendor: p.vendor,
-                          p_size: p.size,
-                          p_color: p.color,
-                          p_price: p.price,
-                          p_condition: p.condition,
-                          p_era: p.era,
-                          p_style: p.style,
-                          p_gender: p.gender,
-                          p_material: p.material,
-                          p_measurements: p.measurements,
-                        });
-                        const dbImageUrls: string[] = (p.product_images || [])
-                          .sort((a: any, b: any) => a.position - b.position)
-                          .map((img: any) => img.image_url)
-                          .filter(Boolean);
-                        const resolvedImageUrls = dbImageUrls.length ? dbImageUrls : (item.imageUrls ?? []);
-                        const resolvedPreview = resolvedImageUrls[0] || item.preview || '';
-                        return {
-                          ...item,
-                          imageUrls:                 resolvedImageUrls,
-                          preview:                   resolvedPreview,
-                          generatedDescription:      htmlDescToPlain(p.description ?? '') || item.generatedDescription || '',
-                          voiceDescription:          p.voice_description   ?? item.voiceDescription   ?? '',
-                          // Clear title entirely if it contains the garbled sz artifact — will be regenerated cleanly
-                          seoTitle:                  (() => { const t = p.seo_title || item.seoTitle || ''; return /\bsz\b/i.test(t) ? '' : t; })(),
-                          seoDescription:            p.seo_description     || item.seoDescription      || '',
-                          tags:                      p.tags?.length        ? p.tags                    : (item.tags || []),
-                          brand:                     p.vendor              || item.brand               || '',
-                          category:                  p.product_category    || item.category            || '',
-                          productType:               p.product_type        || item.productType         || '',
-                          published:                 p.published           ?? item.published,
-                          status:                    p.status              || item.status              || 'Active',
-                          size:                      p.size                || item.size                || '',
-                          color:                     p.color               || item.color               || '',
-                          secondaryColor:            p.secondary_color     || item.secondaryColor      || '',
-                          price:                     p.price               ?? item.price,
-                          compareAtPrice:            p.compare_at_price    ?? item.compareAtPrice,
-                          costPerItem:               p.cost_per_item       ?? item.costPerItem,
-                          sku:                       p.sku                 || item.sku                 || '',
-                          barcode:                   p.barcode             || item.barcode             || '',
-                          inventoryQuantity:         p.inventory_quantity  ?? item.inventoryQuantity,
-                          weightValue:               p.weight_value        || item.weightValue         || '',
-                          requiresShipping:          p.requires_shipping   ?? item.requiresShipping,
-                          continueSellingOutOfStock: p.continue_selling_out_of_stock ?? item.continueSellingOutOfStock,
-                          packageDimensions:         p.package_dimensions  || item.packageDimensions   || '',
-                          parcelSize:                p.parcel_size         || item.parcelSize          || '',
-                          shipsFrom:                 p.ships_from          || item.shipsFrom           || '',
-                          condition:                 p.condition           || item.condition           || '',
-                          flaws:                     p.flaws               || item.flaws               || '',
-                          material:                  p.material            || item.material            || '',
-                          era:                       p.era                 || item.era                 || '',
-                          care:                      p.care_instructions   || item.care                || '',
-                          measurements:              p.measurements        || item.measurements        || {},
-                          modelName:                 p.model_name          || item.modelName           || '',
-                          modelNumber:               p.model_number        || item.modelNumber         || '',
-                          sizeType:                  p.size_type           || item.sizeType            || '',
-                          style:                     p.style               || item.style               || '',
-                          gender:                    p.gender              || item.gender,
-                          ageGroup:                  p.age_group           || item.ageGroup            || '',
-                          policies:                  p.policies            || item.policies            || '',
-                          renewalOptions:            p.renewal_options     || item.renewalOptions      || '',
-                          whoMadeIt:                 p.who_made_it         || item.whoMadeIt           || '',
-                          whatIsIt:                  p.what_is_it          || item.whatIsIt            || '',
-                          listingType:               p.listing_type        || item.listingType         || '',
-                          discountedShipping:        p.discounted_shipping || item.discountedShipping   || '',
-                          mpn:                       p.mpn                 || item.mpn                 || '',
-                          customLabel0:              p.custom_label_0      || item.customLabel0        || '',
-                          appliedPresetId:           p.applied_preset_id   || item.appliedPresetId     || '',
-                        };
+                        if (isDebugEnabled()) {
+                          log.app(`hydrate | MATCH ${item.id}`, {
+                            p_seo_title: p.seo_title,
+                            p_description_snippet: p.description?.slice(0, 60),
+                            p_voice_description: p.voice_description?.slice(0, 60),
+                            p_vendor: p.vendor,
+                            p_size: p.size,
+                            p_color: p.color,
+                            p_price: p.price,
+                            p_condition: p.condition,
+                            p_era: p.era,
+                            p_style: p.style,
+                            p_gender: p.gender,
+                            p_material: p.material,
+                            p_measurements: p.measurements,
+                          });
+                        }
+                        // ONE merge, shared with handleOpenBatch (lib/productRow.ts).
+                        // STARTUP_MERGE_OPTIONS reproduces THIS path exactly — it
+                        // differs from the open-batch path in seven documented ways
+                        // (empty-string coercion, DB-group images winning, the
+                        // description fallback, the 'Active'/{} defaults, and which
+                        // of productGroup/originalName/appliedPresetId it sets).
+                        return mergeProductRowIntoItem(item, p, htmlDescToPlain, STARTUP_MERGE_OPTIONS);
                       });
                     setUploadedImages(prev => mergeDB(prev));
                     setGroupedImages(prev => mergeDB(prev));
@@ -1006,10 +1198,10 @@ function App() {
                 if (missingDate.length > 0 && missingDate.length <= 30) {
                   log.app(`startup restore | auto-EXIF rescan | ${missingDate.length} items missing capturedAt`);
                   (async () => {
-                    const CHUNK = 5;
+                    const { default: exifr } = await loadExifr();
                     const updatedMap = new Map<string, number>();
-                    for (let ci = 0; ci < missingDate.length; ci += CHUNK) {
-                      const chunk = missingDate.slice(ci, ci + CHUNK);
+                    // 5 bounds CONCURRENT image downloads, not URL length.
+                    for (const chunk of chunked(missingDate, 5)) {
                       await Promise.all(chunk.map(async (item: any) => {
                         const url = item.imageUrls?.[0] || item.thumbnailUrl || item.preview || '';
                         if (!url) return;
@@ -1032,15 +1224,16 @@ function App() {
                       setUploadedImages(prev => patch(prev));
                       setGroupedImages(prev => patch(prev));
                       setSortedImages(prev => patch(prev));
-                      setProcessedItems(prev => {
-                        const patched = patch(prev);
-                        autoSaveWorkflow({
-                          uploadedImages: uploadedImagesRef.current,
-                          groupedImages: groupedImagesRef.current,
-                          sortedImages: sortedImagesRef.current,
-                          processedItems: patched,
-                        });
-                        return patched;
+                      setProcessedItems(prev => patch(prev));
+                      // Auto-save AFTER the setters, never inside an updater (finding 14):
+                      // updaters must be pure and StrictMode double-invokes them, which
+                      // wrote the localStorage backup twice and reset the 2 s debounce twice.
+                      // liveArrayRef `.current` is already fresh here (store, not render).
+                      autoSaveWorkflow({
+                        uploadedImages: uploadedImagesRef.current,
+                        groupedImages: groupedImagesRef.current,
+                        sortedImages: sortedImagesRef.current,
+                        processedItems: processedItemsRef.current,
                       });
                     }
                   })();
@@ -1055,12 +1248,10 @@ function App() {
                 if (backup?.batchId === savedBatchId && backup?.items?.length > 0) {
                   log.app(`startup restore | workflow_state null — using localStorage backup (${backup.items.length} items, saved ${Math.round((Date.now() - backup.savedAt) / 1000)}s ago)`);
                   const backupItems = (backup.items as any[]).map((item: any) => {
-                    const canonical = item.storagePath
-                      ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
-                      : '';
+                    const canonical = publicImageUrl(item.storagePath);
                     const imageUrls = canonical ? [canonical] : (item.imageUrls?.length ? item.imageUrls : []);
                     const preview = canonical || (item.preview?.startsWith('blob:') ? '' : (item.preview || ''));
-                    const thumbnailUrl = item.storagePath ? getThumbnailUrl(item.storagePath, 300) : (imageUrls[0] || '');
+                    const thumbnailUrl = thumbnailImageUrl(item.storagePath) || imageUrls[0] || '';
                     return { ...item, preview, imageUrls, thumbnailUrl };
                   });
                   setUploadedImages(backupItems);
@@ -1083,6 +1274,7 @@ function App() {
           // If ref was already set, keep localStorage intact so next reload can retry
         }
       }
+      startupRestoreInFlight = false;
     });
 
     // Listen for auth changes
@@ -1096,44 +1288,19 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // One-time cleanup: delete orphaned product_images rows from old broken sessions.
-  // These have storage_path timestamps that predate the FK-fix and never actually
-  // uploaded a file (or the DB write failed), causing perpetual 400s in the gallery.
-  // Uses localStorage so this only fires once per browser, not on every page load.
-  useEffect(() => {
-    if (!user) return;
-    const CLEANUP_KEY = 'sortbot_orphan_cleanup_v3';
-    if (localStorage.getItem(CLEANUP_KEY)) return;
-
-    (async () => {
-      try {
-        // Delete rows from all known broken sessions (bad timestamp prefixes).
-        // v1 targeted 17796956/17796957 (wrong session).
-        // v3 adds 17796974 which was the actual session with wrong-path DB writes.
-        const badPrefixes = ['17796956', '17796957', '17796974'];
-        for (const prefix of badPrefixes) {
-          await supabase
-            .from('product_images')
-            .delete()
-            .like('storage_path', `%${prefix}%`);
-        }
-      } catch {
-        // Non-critical — swallow silently
-      } finally {
-        localStorage.setItem(CLEANUP_KEY, '1');
-        log.app('one-time orphan cleanup complete');
-      }
-    })();
-  }, [user]);
-
   // Resolve the user's workspace once per sign-in. If the tenancy migration
   // hasn't been run, ensureOrganization returns legacy mode and currentOrg
   // stays null — no org UI renders and the app behaves exactly as before.
   useEffect(() => {
-    if (!user) { setCurrentOrg(null); setShowOrgPanel(false); setBetaWaitlist(null); clearAnalyticsContext(); return; }
+    if (!user) { setCurrentOrg(null); setActiveView('workflow'); setBetaWaitlist(null); clearAnalyticsContext(); clearErrorContext(); return; }
     let cancelled = false;
     ensureOrganization(user).then(res => {
       if (cancelled) return;
+      // Records WHICH user's workspace is resolved, so the pageview effect can
+      // wait for it (betaWaitlist === null is ambiguous: it means both "not
+      // waitlisted" and "not resolved yet"). Set here, never reset — it is only
+      // ever compared against the current user's id. (finding 19)
+      setOrgResolvedFor(user.id);
       if (res.mode === 'org') {
         setCurrentOrg(res.org);
         setOrgRole(res.role);
@@ -1145,14 +1312,17 @@ function App() {
         });
         // First-party analytics: events from here on carry the user + workspace.
         setAnalyticsContext({ userId: user.id, orgId: res.org.id });
+        setErrorContext({ userId: user.id, orgId: res.org.id });
       } else if (res.mode === 'waitlist') {
         setCurrentOrg(null);
         setBetaWaitlist(res.betaStatus);
         setAnalyticsContext({ userId: user.id, orgId: null });
+        setErrorContext({ userId: user.id, orgId: null });
       } else {
         setCurrentOrg(null);
         setBetaWaitlist(null);
         setAnalyticsContext({ userId: user.id, orgId: null });
+        setErrorContext({ userId: user.id, orgId: null });
       }
     });
     return () => { cancelled = true; };
@@ -1162,18 +1332,33 @@ function App() {
   // First-party analytics: one pageview per top-level view change (landing →
   // auth → waitlist → app; the app has no router). Must stay ABOVE the early
   // returns below so the hook order never changes.
+  // Depends on user?.id, NOT the user object: onAuthStateChange hands us a fresh
+  // object on every hourly TOKEN_REFRESHED, which re-fired this effect and logged a
+  // duplicate pageview per tab per hour. It also used to fire before the workspace
+  // bootstrap resolved, recording 'app' and then 'waitlist' for every waitlisted
+  // sign-in. (finding 19)
+  const signedInUserId = user?.id;
   useEffect(() => {
     if (loading) return;
-    trackPageview(!user ? (showLogin ? 'auth' : 'landing') : betaWaitlist ? 'waitlist' : 'app');
-  }, [loading, user, showLogin, betaWaitlist]);
+    if (signedInUserId && orgResolvedFor !== signedInUserId) return;
+    const view = !signedInUserId ? (showLogin ? 'auth' : 'landing') : betaWaitlist ? 'waitlist' : 'app';
+    // setErrorContext is a plain module function, not setState — effect-safe.
+    setErrorContext({ view });
+    trackPageview(view);
+  }, [loading, signedInUserId, orgResolvedFor, showLogin, betaWaitlist]);
 
   const handleSignOut = async () => {
     log.auth('handleSignOut');
     await supabase.auth.signOut();
+    // Drop every cached tenant image from shared Cache Storage: the SW cache is
+    // keyed by URL only, so without this the next person on the machine can still
+    // pull the previous workspace's photos (security audit 05, finding #21).
+    await purgeImageCache();
     clearAnalyticsContext();
+    clearErrorContext();
     setUser(null);
     setCurrentOrg(null);
-    setShowOrgPanel(false);
+    setActiveView('workflow');
     // Reset all data
     setUploadedImages([]);
     setSortedImages([]);
@@ -1191,19 +1376,21 @@ function App() {
    */
   const pruneStaleProducts = async (batchId: string, keepIds: string[]) => {
     const keepSet = new Set(keepIds);
-    const { data: dbRows, error: fetchErr } = await supabase
+    // Paged — unpaginated this saw at most 1 000 of the batch's rows, so stale rows
+    // beyond that were never diffed and never pruned (F13).
+    const { rows: dbRows, error: fetchErr } = await readAllPages((from, to) => supabase
       .from('products')
       .select('id')
-      .eq('batch_id', batchId);
+      .eq('batch_id', batchId)
+      .order('created_at', { ascending: true })
+      .range(from, to));
     if (fetchErr) {
       console.warn('[App] pruneStaleProducts | fetch error:', fetchErr.message);
       return;
     }
-    const staleIds = (dbRows ?? []).map(r => r.id).filter(id => !keepSet.has(id));
+    const staleIds = dbRows.map(r => r.id).filter(id => !keepSet.has(id));
     if (staleIds.length === 0) return;
-    const CHUNK = 100;
-    for (let i = 0; i < staleIds.length; i += CHUNK) {
-      const chunk = staleIds.slice(i, i + CHUNK);
+    for (const chunk of chunked(staleIds)) {
       const { error: delErr } = await supabase
         .from('products')
         .delete()
@@ -1306,6 +1493,10 @@ function App() {
     currentBatchIdRef.current = null;
     setCurrentBatchId(null);
     setCurrentBatchNumber(`batch-${Date.now()}`);
+    // Cancel BEFORE the removeItem: a queued throttled write landing afterwards
+    // would put the deleted batch's backup straight back (the "deleted batch
+    // returns" bug, via a different door).
+    cancelWorkflowBackup();
     localStorage.removeItem('sortbot_current_batch_id');
     localStorage.removeItem('sortbot_current_batch_number');
     localStorage.removeItem('sortbot_workflow_backup');
@@ -1314,6 +1505,52 @@ function App() {
     setSortedImages([]);
     setProcessedItems([]);
   };
+
+  /* ── Stable props for the memoized workflow children (perf finding F2) ──────
+   * Steps 1-4 are sections of ONE page and all mount simultaneously, and App
+   * subscribes to all four store arrays plus `toasts`, `storageInfo`,
+   * `saveMessage`, `selectedGroupItems` and `grouperActions`. So before this,
+   * a single keystroke in a Step-3 field re-rendered the 1 500-card Step-2 grid,
+   * CategoryZones AND the 54-column export preview — every callback prop was a
+   * fresh inline arrow and every list prop a fresh array, so `React.memo` could
+   * not have bailed out even if it had been there.
+   *
+   * Everything below is referentially constant for the life of the component;
+   * `useEventCallback` guarantees each one still runs the newest closure. */
+  // The handlers themselves are declared further down the component body (after the
+  // early `loading`/`!user` returns, where no hook may go), so each wrapper calls
+  // through a thin arrow — resolved at call time, which is always post-mount.
+  const onGroupedStable         = useEventCallback((items: ClothingItem[]) => handleImagesGrouped(items));
+  const onCategorizedStable     = useEventCallback((items: ClothingItem[]) => handleImagesSorted(items));
+  const onProcessedStable       = useEventCallback((items: ClothingItem[]) => handleItemsProcessed(items));
+  const onStatsChangeStable     = useEventCallback(() => {});   // stats come from processedItems now
+  const onImageDeletedStable    = useEventCallback(() => setLibraryRefreshTrigger(prev => prev + 1));
+  const onCategoryAssignedStable = useEventCallback(() => {
+    setSelectedGroupItems(new Set());
+    grouperActionsRef.current?.onCategoryAssigned();
+  });
+  const onDownloadCSVStable     = useEventCallback(() => exporterRef.current?.downloadCSV());
+  const onLibraryCloseStable    = useEventCallback(() => setShowLibrary(false));
+  const onOpenBatchStable       = useEventCallback((batch: WorkflowBatch) => handleOpenBatch(batch));
+  const onBatchDeletedStable    = useEventCallback((batchId: string) => handleBatchDeleted(batchId));
+
+  // Step 2's list: both branches are store arrays whose identity is already stable
+  // between store updates, so naming it is enough — no new array per render.
+  const step2Items = groupedImages.length > 0 ? groupedImages : uploadedImages;
+
+  // Step 4's list was an inline IIFE, i.e. a brand-new array on every App render,
+  // which alone defeated any memo on the exporter and re-ran its whole
+  // group/coalesce/dedup/54-column-preview pipeline. Same filter, memoized.
+  const step4ExportItems = useMemo(() => {
+    const groupCounts: Record<string, number> = {};
+    processedItems.forEach(i => { const k = i.productGroup || i.id; groupCounts[k] = (groupCounts[k] || 0) + 1; });
+    return processedItems.filter(i => i.category || groupCounts[i.productGroup || i.id] > 1);
+  }, [processedItems]);
+
+  // SupportWidget's props: primitives, but derived — memoize the two computed ones
+  // so the value is stable while `currentOrg`/`orgRole` are unchanged.
+  const supportIsFounder = currentOrg?.slug === 'founding' && (orgRole === 'owner' || orgRole === 'admin');
+  const supportOrgName = currentOrg?.name ?? null;
 
   if (loading) {
     return (
@@ -1467,8 +1704,9 @@ function App() {
       // Stage 4 dual-write: same shared row builder as registerItemsInDB.
       const stage4Upload = await stage4ColumnsAvailable();
       const { error: imgErr2 } = await supabase.from('product_images').upsert(
-        uploadedItems.map((item, idx) =>
-          buildProductImageRow(item, user.id, idx, item.imageUrls![0], stage4Upload)
+        // position 0 — one image per product here, so the array index was meaningless.
+        uploadedItems.map(item =>
+          buildProductImageRow(item, user.id, 0, item.imageUrls![0], stage4Upload)
         ),
         // ignoreDuplicates: true — never overwrite/conflict with registerItemsInDB's
         // delete-then-insert strategy. This write is best-effort to keep the Library
@@ -1600,11 +1838,16 @@ function App() {
       const registerable = items.filter(i => i.imageUrls?.[0] || i.storagePath);
       if (registerable.length > 0) {
         await supabase.from('products').upsert(
+          // NO batch_id (finding 6 / CLAUDE.md §18 #3): batch_id is assigned
+          // authoritatively at upload time. Re-asserting it here with
+          // ignoreDuplicates:false silently re-tags any row that belongs to
+          // another batch — the batch_id theft that made gap-fill grow
+          // unboundedly. user_id stays because this upsert must still be able
+          // to CREATE a row (user_id is NOT NULL and RLS-checked on insert).
           registerable.map(item => ({
             id: item.id,
             product_category: item.category ?? null,
             product_group: item.productGroup || item.id,
-            batch_id: currentBatchId,
             user_id: user.id,
           })),
           { onConflict: 'id', ignoreDuplicates: false }
@@ -1677,10 +1920,9 @@ function App() {
       // Rebuild canonical URL and thumbnailUrl from storagePath to avoid using
       // imageUrls[0] values that may have been corrupted by earlier merges.
       const sp = sortedItem.storagePath || existing?.storagePath || '';
-      const canonicalUrl = sp
-        ? supabase.storage.from('product-images').getPublicUrl(sp).data.publicUrl
-        : (sortedItem.imageUrls?.[0] || existing?.imageUrls?.[0] || '');
-      const canonicalThumb = sp ? getThumbnailUrl(sp, 300) : canonicalUrl;
+      const canonicalUrl = publicImageUrl(sp)
+        || sortedItem.imageUrls?.[0] || existing?.imageUrls?.[0] || '';
+      const canonicalThumb = thumbnailImageUrl(sp) || canonicalUrl;
       const imageFields = {
         storagePath: sp || undefined,
         imageUrls:   canonicalUrl ? [canonicalUrl] : [],
@@ -1724,16 +1966,14 @@ function App() {
       const allRegisterable = itemsWithCategories.filter(i => i.imageUrls?.[0] || i.storagePath);
       if (allRegisterable.length === 0) return;
 
-      // Upsert in chunks of 100 to avoid PostgREST URL-length limit
-      const CHUNK = 100;
+      // Upsert in chunks to avoid PostgREST URL-length limit (lib/chunk.ts)
       let hadError = false;
-      for (let i = 0; i < allRegisterable.length; i += CHUNK) {
-        const chunk = allRegisterable.slice(i, i + CHUNK);
+      for (const chunk of chunked(allRegisterable)) {
         const { error: grpErr } = await supabase.from('products').upsert(
+          // NO batch_id — see the note in handleImagesSorted (finding 6).
           chunk.map(item => ({
             id: item.id,
             user_id: user.id,
-            batch_id: currentBatchIdRef.current,
             product_group: item.productGroup || item.id,
             title: item.seoTitle || null,
             status: 'Active',
@@ -1753,18 +1993,15 @@ function App() {
         // views show blank images after the first group action.
         const withImages = allRegisterable.filter(i => i.imageUrls?.[0] || i.storagePath);
         if (withImages.length > 0) {
-          const productImageRows = withImages.map((item, idx) => {
-            const imageUrl = item.imageUrls?.[0] ||
-              (item.storagePath
-                ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
-                : null);
+          const productImageRows = withImages.map((item) => {
+            const imageUrl = item.imageUrls?.[0] || publicImageUrl(item.storagePath) || null;
             if (!imageUrl) return null;
             return {
               image_url: imageUrl,
               storage_path: item.storagePath ?? null,
               product_id: item.id,
               user_id: user.id,
-              position: idx,
+              position: 0,
               alt_text: item.seoTitle || 'Uploaded image',
               original_name: item.originalName ?? null,
             };
@@ -1811,28 +2048,28 @@ function App() {
   }) => {
     if (!user) return;
 
-    // ── Instant localStorage backup ──────────────────────────────────────
-    // Written synchronously (no debounce) so a quick page refresh never loses
-    // pending group/category changes that haven't reached Supabase yet.
-    // Ultra-slim: only the 7 fields needed to detect a race with Supabase.
-    // Everything else is recovered from the DB merge in handleOpenBatch / startup hydration.
-    try {
-      // Only the fields that are NOT in the products/product_images tables — we cannot
-      // recover these from any DB query, so they must survive a page refresh here.
-      // (ultraSlimForBackup — extracted to lib/slimItems.ts, tested there.)
+    // ── localStorage backup (throttled ~1 s trailing) ────────────────────
+    // Still far ahead of the 2 s Supabase write — winning that refresh race is its
+    // only job — but no longer a 1 500-element map + ~393 KB JSON.stringify + a
+    // BLOCKING setItem on every one of the seven call sites (i.e. on every group
+    // click, category assignment and Step-3 keystroke). A 50-click burst used to pay
+    // that 50 times; it now pays it once. `flushWorkflowBackup` is wired to
+    // pagehide/beforeunload below, so "a refresh never loses pending grouping" holds.
+    // Ultra-slim: only the fields that are NOT in products/product_images and so
+    // cannot be recovered by the DB merge in handleOpenBatch / startup hydration.
+    scheduleWorkflowBackup(() => {
       const liveNow =
         workflowState.processedItems.length > 0 ? workflowState.processedItems :
         workflowState.sortedImages.length    > 0 ? workflowState.sortedImages    :
         workflowState.groupedImages.length   > 0 ? workflowState.groupedImages   :
         workflowState.uploadedImages;
-      if (liveNow.length > 0 && currentBatchIdRef.current) {
-        localStorage.setItem('sortbot_workflow_backup', JSON.stringify({
-          batchId:   currentBatchIdRef.current,
-          savedAt:   Date.now(),
-          items:     liveNow.map(ultraSlimForBackup),
-        }));
-      }
-    } catch { /* localStorage full or unavailable — skip */ }
+      if (liveNow.length === 0 || !currentBatchIdRef.current) return null;
+      return {
+        batchId: currentBatchIdRef.current,
+        savedAt: Date.now(),
+        items:   liveNow.map(ultraSlimForBackup),
+      };
+    });
 
     // Cancel any pending save
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
@@ -1916,18 +2153,21 @@ function App() {
   const handleOpenBatch = async (batch: WorkflowBatch) => {
     // Guard against double-fire (React Strict Mode, or rapid double-click)
     if (isOpeningBatchRef.current) {
-      console.log(`[OPEN] SKIPPED — already in progress | batchId=${batch.id}`);
+      log.app(`[OPEN] SKIPPED — already in progress | batchId=${batch.id}`);
       return;
     }
-    console.log(`[OPEN] ▶ START batchId=${batch.id} name="${batch.batch_name}" step=${batch.current_step}`);
-    console.log('[OPEN] workflow_state keys:', batch.workflow_state ? Object.keys(batch.workflow_state) : 'NULL');
-    const wsLengths = batch.workflow_state ? {
-      processedItems: batch.workflow_state.processedItems?.length ?? 0,
-      sortedImages:   batch.workflow_state.sortedImages?.length ?? 0,
-      groupedImages:  batch.workflow_state.groupedImages?.length ?? 0,
-      uploadedImages: batch.workflow_state.uploadedImages?.length ?? 0,
-    } : 'none';
-    console.log('[OPEN] workflow_state array lengths:', wsLengths);
+    log.app(`[OPEN] ▶ START batchId=${batch.id} name="${batch.batch_name}" step=${batch.current_step}`);
+    // Object.keys allocates — only do it when someone is looking.
+    if (isDebugEnabled()) log.app('[OPEN] workflow_state keys:', batch.workflow_state ? Object.keys(batch.workflow_state) : 'NULL');
+    if (isDebugEnabled()) {
+      const wsLengths = batch.workflow_state ? {
+        processedItems: batch.workflow_state.processedItems?.length ?? 0,
+        sortedImages:   batch.workflow_state.sortedImages?.length ?? 0,
+        groupedImages:  batch.workflow_state.groupedImages?.length ?? 0,
+        uploadedImages: batch.workflow_state.uploadedImages?.length ?? 0,
+      } : 'none';
+      log.app('[OPEN] workflow_state array lengths:', wsLengths);
+    }
     log.app(`handleOpenBatch | batchId=${batch.id} batchName="${batch.batch_name}" step=${batch.current_step}`);
     isOpeningBatchRef.current = true;
     try {
@@ -1949,7 +2189,7 @@ function App() {
     localStorage.setItem('sortbot_current_batch_id', batch.id);
     localStorage.setItem('sortbot_current_batch_number', batch.batch_number);
     // ── Now clear in-flight image state ─────────────────────────────────────────
-    console.log('[OPEN] Clearing current state and setting batchId=', batch.id);
+    log.app(`[OPEN] Clearing current state and setting batchId=${batch.id}`);
     setUploadedImages([]);
     setGroupedImages([]);
     setSortedImages([]);
@@ -1959,15 +2199,17 @@ function App() {
     const { uploadedImages, groupedImages, sortedImages, processedItems } = batch.workflow_state ?? {};
 
     // processedItems is now the single saved list (others are empty arrays in new format).
-    // Fall back through all arrays for older batch formats.
-    // Cast as ClothingItem[] — SlimItems have the same fields minus file/preview (which are runtime-only anyway).
-    const rawWorkflowItems = (
+    // Fall back through all arrays for older batch formats. DO NOT break this chain
+    // without updating the startup restore too (CLAUDE.md §18 #4).
+    // asClothingItems is the ONE documented widening: a persisted item has no `file`
+    // and (since the slimming) no `preview`; both are rebuilt from `storagePath` below.
+    const rawWorkflowItems = asClothingItems(
       processedItems?.length  ? processedItems  :
       sortedImages?.length    ? sortedImages     :
       groupedImages?.length   ? groupedImages    :
       uploadedImages?.length  ? uploadedImages   : []
-    ) as ClothingItem[];
-    console.log(`[OPEN] rawWorkflowItems=${rawWorkflowItems.length} (source: ${processedItems?.length ? 'processedItems' : sortedImages?.length ? 'sortedImages' : groupedImages?.length ? 'groupedImages' : uploadedImages?.length ? 'uploadedImages' : 'NONE'})`);
+    );
+    log.app(`[OPEN] rawWorkflowItems=${rawWorkflowItems.length} (source: ${processedItems?.length ? 'processedItems' : sortedImages?.length ? 'sortedImages' : groupedImages?.length ? 'groupedImages' : uploadedImages?.length ? 'uploadedImages' : 'NONE'})`);
 
     // Re-hydrate preview — stripped before saving to reduce payload size.
     // imageUrls may also be empty for older items; reconstruct from storagePath
@@ -1977,13 +2219,10 @@ function App() {
     // IMPORTANT: reject any saved blob: URL — they are only valid for the browser
     // session in which they were created and will 404 after any page reload.
     const workflowItems: ClothingItem[] = rawWorkflowItems.map(item => {
-      const reconstructed = item.storagePath
-        ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
-        : '';
+      const reconstructed = publicImageUrl(item.storagePath);
       const savedPreview = item.preview?.startsWith('blob:') ? '' : (item.preview || '');
-      const thumbnailUrl = item.storagePath
-        ? getThumbnailUrl(item.storagePath, 300)
-        : (item.imageUrls?.[0] || reconstructed);
+      const thumbnailUrl = thumbnailImageUrl(item.storagePath)
+        || item.imageUrls?.[0] || reconstructed;
       return {
         ...item,
         preview: savedPreview || item.imageUrls?.[0] || reconstructed,
@@ -1992,21 +2231,25 @@ function App() {
       };
     });
     
-    console.log(`[OPEN] workflowItems after hydration=${workflowItems.length}`);
-    const withPreview = workflowItems.filter(i => i.preview || i.imageUrls?.length || i.thumbnailUrl);
-    console.log(`[OPEN] items with image URL: ${withPreview.length}/${workflowItems.length}`);
-    if (workflowItems[0]) console.log('[OPEN] first item sample:', { id: workflowItems[0].id, preview: workflowItems[0].preview?.slice(0,80), storagePath: workflowItems[0].storagePath, imageUrls: workflowItems[0].imageUrls?.length });
+    log.app(`[OPEN] workflowItems after hydration=${workflowItems.length}`);
+    // A full .filter() over the batch plus a per-item object literal — both were
+    // running on every batch open in production purely to feed the log.
+    if (isDebugEnabled()) {
+      const withPreview = workflowItems.filter(i => i.preview || i.imageUrls?.length || i.thumbnailUrl);
+      log.app(`[OPEN] items with image URL: ${withPreview.length}/${workflowItems.length}`);
+      if (workflowItems[0]) log.app('[OPEN] first item sample:', { id: workflowItems[0].id, preview: workflowItems[0].preview?.slice(0,80), storagePath: workflowItems[0].storagePath, imageUrls: workflowItems[0].imageUrls?.length });
+    }
 
     // Set state immediately from workflow_state so images render right away.
     // DB product descriptions will merge in after the fetch below.
     if (workflowItems.length > 0) {
-      console.log('[OPEN] ✓ Setting initial state from workflow_state');
+      log.app('[OPEN] ✓ Setting initial state from workflow_state');
       setUploadedImages(workflowItems);
       setGroupedImages(workflowItems);
       setSortedImages(workflowItems);
       setProcessedItems(workflowItems);
     } else {
-      console.log('[OPEN] ⚠ workflow_state was empty — will try DB reconstruction below');
+      log.app('[OPEN] ⚠ workflow_state was empty — will try DB reconstruction below');
     }
 
     // Fetch saved products from database to restore descriptions
@@ -2075,13 +2318,17 @@ function App() {
         )
       `;
 
-      console.log('[OPEN] Fetching products from DB for batch', batch.id);
-      const { data: savedProducts, error: prodErr } = await supabase
+      log.app(`handleOpenBatch | fetching products from DB for batch ${batch.id}`);
+      // Paged — unpaginated, a 1 500-item batch restored only its first 1 000
+      // products, and the gap-fill safety cap then judged the remaining 500 against
+      // that partial view (F13).
+      const { rows: savedProducts, error: prodErr } = await readAllPages((from, to) => supabase
         .from('products')
         .select(slimProductSelect)
         .eq('batch_id', batch.id)
-        .order('created_at', { ascending: true });
-      console.log(`[OPEN] DB products fetch: count=${savedProducts?.length ?? 0} error=${prodErr?.message ?? 'none'}`);
+        .order('created_at', { ascending: true })
+        .range(from, to));
+      log.app(`handleOpenBatch | DB products fetch: count=${savedProducts.length} error=${prodErr?.message ?? 'none'}`);
       
       // If no products found with this batch_id, try to find orphaned products
       // (products saved around the same time with image URLs matching this batch)
@@ -2093,12 +2340,23 @@ function App() {
         const startTime = new Date(batchCreatedAt.getTime() - timeWindow);
         const endTime = new Date(batchCreatedAt.getTime() + timeWindow);
         
-        const { data: recentProducts } = await supabase
+        // SCOPED + BOUNDED (finding 7). This used to be an unfiltered, unlimited
+        // select over a 48-hour window: under shared-workspace RLS it returned
+        // every product ANY user created in that window, and a URL-matched row
+        // that legitimately belongs to another batch would then be re-tagged into
+        // this one on the next group action. Only genuinely unassigned rows
+        // (batch_id IS NULL) owned by this user can be adopted, and never more
+        // than the batch could plausibly need.
+        let orphanQuery = supabase
           .from('products')
           .select(slimProductSelect)
+          .is('batch_id', null)
           .gte('created_at', startTime.toISOString())
           .lte('created_at', endTime.toISOString())
-          .order('created_at', { ascending: true });
+          .order('created_at', { ascending: true })
+          .limit(Math.max(workflowItems.length * 2, 100));
+        if (user?.id) orphanQuery = orphanQuery.eq('user_id', user.id);
+        const { data: recentProducts } = await orphanQuery;
         
         if (recentProducts && recentProducts.length > 0) {
           // Try to match by image URLs from workflowItems
@@ -2112,7 +2370,7 @@ function App() {
         }
       }
       
-      console.log(`[OPEN] potentialOrphans=${potentialOrphans.length} productsToUse=${savedProducts?.length ? savedProducts.length + ' (from DB)' : potentialOrphans.length + ' (orphans)'}`);
+      log.app(`[OPEN] potentialOrphans=${potentialOrphans.length} productsToUse=${savedProducts?.length ? savedProducts.length + ' (from DB)' : potentialOrphans.length + ' (orphans)'}`);
       const productsToUse = savedProducts && savedProducts.length > 0 ? savedProducts : potentialOrphans;
       if (productsToUse.length > 0) foundInDB = true;
       
@@ -2122,82 +2380,14 @@ function App() {
       // When there is NO workflow_state at all, reconstruct ClothingItems from DB products.
       let baseItems: ClothingItem[] = workflowItems;
 
-      console.log(`[OPEN] baseItems from workflow_state=${baseItems.length}`);
+      log.app(`[OPEN] baseItems from workflow_state=${baseItems.length}`);
       if (baseItems.length === 0 && productsToUse && productsToUse.length > 0) {
-        console.log(`[OPEN] workflow_state empty — reconstructing ${productsToUse.length} items from DB products`);
+        log.app(`[OPEN] workflow_state empty — reconstructing ${productsToUse.length} items from DB products`);
         // No workflow_state — build items from the DB products table
-        baseItems = productsToUse.map((p: any): ClothingItem => {
-          const sortedImgs = (p.product_images || [])
-            .sort((a: any, b: any) => a.position - b.position);
-          const images: string[] = sortedImgs.map((img: any) => img.image_url).filter(Boolean);
-          const firstStoragePath: string | undefined =
-            sortedImgs.find((img: any) => img.storage_path)?.storage_path ?? undefined;
-          const dbOriginalName: string | undefined =
-            sortedImgs.find((img: any) => img.original_name)?.original_name ?? undefined;
-          const reconstructed = firstStoragePath
-            ? supabase.storage.from('product-images').getPublicUrl(firstStoragePath).data.publicUrl
-            : '';
-          const resolvedPreview = images[0] || reconstructed;
-          const resolvedThumbnail = firstStoragePath
-            ? getThumbnailUrl(firstStoragePath, 300)
-            : resolvedPreview;
-          return {
-            id: p.id,
-            preview: resolvedPreview,
-            imageUrls: images.length ? images : (reconstructed ? [reconstructed] : []),
-            thumbnailUrl: resolvedThumbnail,
-            file: null as any,
-            storagePath: firstStoragePath,
-            originalName: dbOriginalName,
-            productGroup: p.product_group || p.id,
-            voiceDescription:          p.voice_description   || '',
-            generatedDescription:      htmlDescToPlain(p.description || ''),
-            // Clear title entirely if it contains the garbled sz artifact
-            seoTitle:                  (() => { const t = p.seo_title || ''; return /\bsz\b/i.test(t) ? '' : t; })(),
-            seoDescription:            p.seo_description     || '',
-            tags:                      p.tags                || [],
-            brand:                     p.vendor              || '',
-            category:                  p.product_category    || '',
-            productType:               p.product_type        || '',
-            published:                 p.published           ?? true,
-            status:                    p.status              || 'active',
-            size:                      p.size                || '',
-            color:                     p.color               || '',
-            secondaryColor:            p.secondary_color     || '',
-            price:                     p.price               ?? undefined,
-            compareAtPrice:            p.compare_at_price    ?? undefined,
-            costPerItem:               p.cost_per_item       ?? undefined,
-            sku:                       p.sku                 || '',
-            barcode:                   p.barcode             || '',
-            inventoryQuantity:         p.inventory_quantity  ?? undefined,
-            weightValue:               p.weight_value        || '',
-            requiresShipping:          p.requires_shipping   ?? true,
-            continueSellingOutOfStock: p.continue_selling_out_of_stock ?? false,
-            packageDimensions:         p.package_dimensions  || '',
-            parcelSize:                p.parcel_size         || '',
-            shipsFrom:                 p.ships_from          || '',
-            condition:                 p.condition           || '',
-            flaws:                     p.flaws               || '',
-            material:                  p.material            || '',
-            era:                       p.era                 || '',
-            care:                      p.care_instructions   || '',
-            measurements:              p.measurements        || {},
-            modelName:                 p.model_name          || '',
-            modelNumber:               p.model_number        || '',
-            sizeType:                  p.size_type           || '',
-            style:                     p.style               || '',
-            gender:                    (p.gender             || '') as any,
-            ageGroup:                  p.age_group           || '',
-            policies:                  p.policies            || '',
-            renewalOptions:            p.renewal_options     || '',
-            whoMadeIt:                 p.who_made_it         || '',
-            whatIsIt:                  p.what_is_it          || '',
-            listingType:               p.listing_type        || '',
-            discountedShipping:        p.discounted_shipping || '',
-            mpn:                       p.mpn                 || '',
-            customLabel0:              p.custom_label_0      || '',
-          };
-        });
+        // ONE builder, shared with the gap-fill path below (lib/productRow.ts).
+        // These two blocks were byte-identical 70-line copies.
+        baseItems = productsToUse.map((p: ProductRowLite) =>
+          productRowToClothingItem(p, htmlDescToPlain));
       }
 
       // Gap-fill: if workflow_state existed but was saved when only categorized items
@@ -2213,80 +2403,10 @@ function App() {
         const gapFillCap = Math.max(workflowItems.length * 2, 50); // allow at most 2× or 50, whichever is larger
         if (missing.length > 0 && missing.length <= gapFillCap) {
           log.app(`handleOpenBatch | gap-fill | adding ${missing.length} DB items missing from workflow_state`);
-          const missingItems: ClothingItem[] = missing.map((p: any): ClothingItem => {
-            const sortedImgs = (p.product_images || [])
-              .sort((a: any, b: any) => a.position - b.position);
-            const images: string[] = sortedImgs.map((img: any) => img.image_url).filter(Boolean);
-            // storagePath: use first image row that has one
-            const firstStoragePath: string | undefined =
-              sortedImgs.find((img: any) => img.storage_path)?.storage_path ?? undefined;
-            const dbOriginalName: string | undefined =
-              sortedImgs.find((img: any) => img.original_name)?.original_name ?? undefined;
-            const reconstructed = firstStoragePath
-              ? supabase.storage.from('product-images').getPublicUrl(firstStoragePath).data.publicUrl
-              : '';
-            const resolvedPreview = images[0] || reconstructed;
-            const resolvedThumbnail = firstStoragePath
-              ? getThumbnailUrl(firstStoragePath, 300)
-              : resolvedPreview;
-            return {
-              id: p.id,
-              preview: resolvedPreview,
-              imageUrls: images.length ? images : (reconstructed ? [reconstructed] : []),
-              thumbnailUrl: resolvedThumbnail,
-              file: null as any,
-              storagePath: firstStoragePath,
-              productGroup: p.product_group || p.id,
-              originalName: dbOriginalName,
-              // capturedAt: not stored in DB — will be undefined for gap-filled items
-              voiceDescription:          p.voice_description   || '',
-              generatedDescription:      htmlDescToPlain(p.description || ''),
-              // Clear title entirely if it contains the garbled sz artifact
-              seoTitle:                  (() => { const t = p.seo_title || ''; return /\bsz\b/i.test(t) ? '' : t; })(),
-              seoDescription:            p.seo_description     || '',
-              tags:                      p.tags                || [],
-              brand:                     p.vendor              || '',
-              category:                  p.product_category    || '',
-              productType:               p.product_type        || '',
-              published:                 p.published           ?? true,
-              status:                    p.status              || 'active',
-              size:                      p.size                || '',
-              color:                     p.color               || '',
-              secondaryColor:            p.secondary_color     || '',
-              price:                     p.price               ?? undefined,
-              compareAtPrice:            p.compare_at_price    ?? undefined,
-              costPerItem:               p.cost_per_item       ?? undefined,
-              sku:                       p.sku                 || '',
-              barcode:                   p.barcode             || '',
-              inventoryQuantity:         p.inventory_quantity  ?? undefined,
-              weightValue:               p.weight_value        || '',
-              requiresShipping:          p.requires_shipping   ?? true,
-              continueSellingOutOfStock: p.continue_selling_out_of_stock ?? false,
-              packageDimensions:         p.package_dimensions  || '',
-              parcelSize:                p.parcel_size         || '',
-              shipsFrom:                 p.ships_from          || '',
-              condition:                 p.condition           || '',
-              flaws:                     p.flaws               || '',
-              material:                  p.material            || '',
-              era:                       p.era                 || '',
-              care:                      p.care_instructions   || '',
-              measurements:              p.measurements        || {},
-              modelName:                 p.model_name          || '',
-              modelNumber:               p.model_number        || '',
-              sizeType:                  p.size_type           || '',
-              style:                     p.style               || '',
-              gender:                    (p.gender             || '') as any,
-              ageGroup:                  p.age_group           || '',
-              policies:                  p.policies            || '',
-              renewalOptions:            p.renewal_options     || '',
-              whoMadeIt:                 p.who_made_it         || '',
-              whatIsIt:                  p.what_is_it          || '',
-              listingType:               p.listing_type        || '',
-              discountedShipping:        p.discounted_shipping || '',
-              mpn:                       p.mpn                 || '',
-              customLabel0:              p.custom_label_0      || '',
-            };
-          });
+          // capturedAt is intentionally absent on gap-filled items: no products
+          // column holds it, so they have no date until the EXIF rescan runs.
+          const missingItems: ClothingItem[] = missing.map((p: ProductRowLite) =>
+            productRowToClothingItem(p, htmlDescToPlain));
           baseItems = [...baseItems, ...missingItems];
         } else if (missing.length > gapFillCap) {
           log.app(`handleOpenBatch | gap-fill SKIPPED — ${missing.length} DB items exceed cap (${gapFillCap}); likely stolen batch_ids from a previous session. Deleting in background.`);
@@ -2295,10 +2415,8 @@ function App() {
           // bug — the real items already live in workflow_state. Nullifying batch_id
           // only hides them until someone re-assigns them; deletion is permanent.
           const stolenIds = missing.map((p: any) => p.id);
-          const CHUNK = 100;
           (async () => {
-            for (let ci = 0; ci < stolenIds.length; ci += CHUNK) {
-              const chunk = stolenIds.slice(ci, ci + CHUNK);
+            for (const chunk of chunked(stolenIds)) {
               // Delete associated product_images first (FK constraint)
               await supabase.from('product_images').delete().in('product_id', chunk);
               // Then delete the product rows
@@ -2322,7 +2440,12 @@ function App() {
         const productsByImageUrl = new Map<string, any>();
         for (const p of productsToUse) {
           const g = p.product_group || p.id;
-          if (g && !productsByGroup.has(g)) productsByGroup.set(g, p);
+          // Prefer the LEADER row (id === product_group) — that is the row the
+          // Step-3 save path writes (syncGroupFieldsToDatabase / saveBatchToDatabase).
+          // "first created_at wins" resolved to a different row as soon as
+          // processedItems order diverged from insertion order, and the group's
+          // description/price were then read off a stub. (finding 2)
+          if (g && (!productsByGroup.has(g) || p.id === g)) productsByGroup.set(g, p);
           if (p.seo_title) productsByTitle.set(p.seo_title.trim(), p);
           for (const img of (p.product_images || [])) {
             if (img.image_url) productsByImageUrl.set(img.image_url, p);
@@ -2354,91 +2477,12 @@ function App() {
             // workflow_state (item) is the fallback for fields not yet in the DB.
             // Reconstruct imageUrls from DB product_images rows if the workflow_state
             // item's imageUrls are empty (slim() strips them before saving).
-            const dbImageUrls: string[] = (savedProduct.product_images || [])
-              .sort((a: any, b: any) => a.position - b.position)
-              .map((img: any) => img.image_url)
-              .filter(Boolean);
-            const dbOriginalName: string | undefined = (savedProduct.product_images || [])
-              .sort((a: any, b: any) => a.position - b.position)
-              .find((img: any) => img.original_name)?.original_name ?? undefined;
-            // CRITICAL: prefer THIS item's own image. savedProduct is matched at the GROUP
-            // level, so its product_images is the whole group's photo list — using it here
-            // would make every member of a group show the same (first) image. Each item keeps
-            // its own photo (workflow_state preserves storagePath/imageUrls per item); the
-            // DB group list is only a fallback for items that have no image of their own.
-            const ownImageUrls: string[] = item.imageUrls?.length
-              ? item.imageUrls
-              : (item.storagePath
-                  ? [supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl]
-                  : []);
-            const resolvedImageUrls = ownImageUrls.length ? ownImageUrls : dbImageUrls;
-            const resolvedPreview = item.preview || resolvedImageUrls[0] ||
-              (item.storagePath ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl : '');
-            return {
-              ...item,
-              // Images — must be set before any other field that depends on them
-              imageUrls: resolvedImageUrls,
-              preview:   resolvedPreview,
-              // Core
-              productGroup:             savedProduct.product_group       || item.productGroup       || item.id,
-              voiceDescription:         savedProduct.voice_description   ?? item.voiceDescription   ?? '',
-              generatedDescription:     htmlDescToPlain(savedProduct.description ?? item.generatedDescription ?? ''),
-              // Clear title entirely if it contains the garbled sz artifact
-              seoTitle:                 (() => { const t = savedProduct.seo_title || item.seoTitle || ''; return /\bsz\b/i.test(t) ? '' : t; })(),
-              seoDescription:           savedProduct.seo_description     || item.seoDescription,
-              tags:                     savedProduct.tags?.length        ? savedProduct.tags        : (item.tags || []),
-              // Shopify fields
-              brand:                    savedProduct.vendor              || item.brand,
-              category:                 savedProduct.product_category    || item.category,
-              productType:              savedProduct.product_type        || item.productType,
-              published:                savedProduct.published           ?? item.published,
-              status:                   savedProduct.status              || item.status,
-              // Variants
-              size:                     savedProduct.size                || item.size,
-              color:                    savedProduct.color               || item.color,
-              secondaryColor:           savedProduct.secondary_color     || item.secondaryColor,
-              // Pricing
-              price:                    savedProduct.price               ?? item.price,
-              compareAtPrice:           savedProduct.compare_at_price    ?? item.compareAtPrice,
-              costPerItem:              savedProduct.cost_per_item       ?? item.costPerItem,
-              // Inventory
-              sku:                      savedProduct.sku                 || item.sku,
-              barcode:                  savedProduct.barcode             || item.barcode,
-              inventoryQuantity:        savedProduct.inventory_quantity  ?? item.inventoryQuantity,
-              // Shipping
-              weightValue:              savedProduct.weight_value        || item.weightValue,
-              requiresShipping:         savedProduct.requires_shipping   ?? item.requiresShipping,
-              continueSellingOutOfStock:savedProduct.continue_selling_out_of_stock ?? item.continueSellingOutOfStock,
-              packageDimensions:        savedProduct.package_dimensions  || item.packageDimensions,
-              parcelSize:               savedProduct.parcel_size         || item.parcelSize,
-              shipsFrom:                savedProduct.ships_from          || item.shipsFrom,
-              // Details
-              condition:                savedProduct.condition           || item.condition,
-              flaws:                    savedProduct.flaws               || item.flaws,
-              material:                 savedProduct.material            || item.material,
-              era:                      savedProduct.era                 || item.era,
-              care:                     savedProduct.care_instructions   || item.care,
-              measurements:             savedProduct.measurements        || item.measurements,
-              modelName:                savedProduct.model_name          || item.modelName,
-              modelNumber:              savedProduct.model_number        || item.modelNumber,
-              // Classification
-              sizeType:                 savedProduct.size_type           || item.sizeType,
-              style:                    savedProduct.style               || item.style,
-              gender:                   savedProduct.gender              || item.gender,
-              ageGroup:                 savedProduct.age_group           || item.ageGroup,
-              // Policies
-              policies:                 savedProduct.policies            || item.policies,
-              renewalOptions:           savedProduct.renewal_options     || item.renewalOptions,
-              whoMadeIt:                savedProduct.who_made_it         || item.whoMadeIt,
-              whatIsIt:                 savedProduct.what_is_it          || item.whatIsIt,
-              listingType:              savedProduct.listing_type        || item.listingType,
-              discountedShipping:       savedProduct.discounted_shipping || item.discountedShipping,
-              // Marketing
-              mpn:                      savedProduct.mpn                 || item.mpn,
-              customLabel0:             savedProduct.custom_label_0      || item.customLabel0,
-              // Original filename — for name-sort in Step 2
-              originalName:             item.originalName                || dbOriginalName,
-            };
+            // CRITICAL (commit 3a70b52): prefer THIS item's own image. savedProduct is
+            // matched at the GROUP level, so its product_images is the whole group's
+            // photo list — preferring it made every member of a group show the same
+            // photo. OPEN_BATCH_MERGE_OPTIONS encodes that ('own-image-wins'), plus
+            // the six other ways this path differs from the startup restore.
+            return mergeProductRowIntoItem(item, savedProduct, htmlDescToPlain, OPEN_BATCH_MERGE_OPTIONS);
           }
           
           return item;
@@ -2446,17 +2490,21 @@ function App() {
       }
       
       // Set all 4 arrays from the single restored list so every step stays in sync.
-      console.log(`[OPEN] ✓ Final state set: restoredProcessedItems=${restoredProcessedItems.length}`);
-      const finalWithImg = restoredProcessedItems.filter(i => i.preview || i.imageUrls?.length || i.thumbnailUrl);
-      console.log(`[OPEN] final items with images: ${finalWithImg.length}/${restoredProcessedItems.length}`);
-      if (restoredProcessedItems[0]) console.log('[OPEN] first final item:', { id: restoredProcessedItems[0].id, preview: restoredProcessedItems[0].preview?.slice(0,80), category: restoredProcessedItems[0].category });
+      log.app(`[OPEN] ✓ Final state set: restoredProcessedItems=${restoredProcessedItems.length}`);
+      // Same shape as the hydration log above: a full .filter() plus an object
+      // literal, previously unconditional.
+      if (isDebugEnabled()) {
+        const finalWithImg = restoredProcessedItems.filter(i => i.preview || i.imageUrls?.length || i.thumbnailUrl);
+        log.app(`[OPEN] final items with images: ${finalWithImg.length}/${restoredProcessedItems.length}`);
+        if (restoredProcessedItems[0]) log.app('[OPEN] first final item:', { id: restoredProcessedItems[0].id, preview: restoredProcessedItems[0].preview?.slice(0,80), category: restoredProcessedItems[0].category });
+      }
       setUploadedImages(restoredProcessedItems);
       setGroupedImages(restoredProcessedItems);
       setSortedImages(restoredProcessedItems);
       setProcessedItems(restoredProcessedItems);
     } catch (error) {
       console.error('[OPEN] ❌ CATCH — Error restoring saved product data:', error);
-      console.log('[OPEN] Falling back to workflowItems:', workflowItems.length);
+      log.app(`[OPEN] Falling back to workflowItems: ${workflowItems.length}`);
       // Fallback to basic workflow state — restoredProcessedItems stays as workflowItems (hoisted default)
       setUploadedImages(workflowItems);
       setGroupedImages(workflowItems);
@@ -2486,10 +2534,10 @@ function App() {
     if (itemsMissingDate.length > 0 && itemsMissingDate.length <= 30) {
       log.app(`handleOpenBatch | auto-EXIF rescan | ${itemsMissingDate.length} items missing capturedAt`);
       (async () => {
-        const CHUNK = 5;
+        const { default: exifr } = await loadExifr();
         const updatedMap = new Map<string, number>();
-        for (let ci = 0; ci < itemsMissingDate.length; ci += CHUNK) {
-          const chunk = itemsMissingDate.slice(ci, ci + CHUNK);
+        // 5 bounds CONCURRENT image downloads, not URL length.
+        for (const chunk of chunked(itemsMissingDate, 5)) {
           await Promise.all(chunk.map(async (item) => {
             const url = item.imageUrls?.[0] || item.thumbnailUrl || item.preview || '';
             if (!url) return;
@@ -2512,16 +2560,15 @@ function App() {
           setUploadedImages(prev => patch(prev));
           setGroupedImages(prev => patch(prev));
           setSortedImages(prev => patch(prev));
-          setProcessedItems(prev => {
-            const patched = patch(prev);
-            // Auto-save so corrected dates survive reload
-            autoSaveWorkflow({
-              uploadedImages: uploadedImagesRef.current,
-              groupedImages: groupedImagesRef.current,
-              sortedImages: sortedImagesRef.current,
-              processedItems: patched,
-            });
-            return patched;
+          setProcessedItems(prev => patch(prev));
+          // Auto-save AFTER the setters so the corrected dates survive reload — never
+          // inside an updater (finding 14): updaters must be pure, and StrictMode
+          // double-invokes them. liveArrayRef `.current` is already fresh here.
+          autoSaveWorkflow({
+            uploadedImages: uploadedImagesRef.current,
+            groupedImages: groupedImagesRef.current,
+            sortedImages: sortedImagesRef.current,
+            processedItems: processedItemsRef.current,
           });
         }
       })();
@@ -2529,7 +2576,7 @@ function App() {
 
     // Batch identity already set at the top of this function — nothing to do here.
     
-    console.log('[OPEN] ✓ DONE — closing library, isAlreadyActiveBatch=', isAlreadyActiveBatch);
+    log.app(`[OPEN] ✓ DONE — closing library, isAlreadyActiveBatch=${isAlreadyActiveBatch}`);
     // Close library and refresh it so new registrations are visible next open
     setShowLibrary(false);
     setLibraryRefreshTrigger(prev => prev + 1);
@@ -2552,6 +2599,8 @@ function App() {
   }
   };
 
+  const Wordmark = activeView === 'workflow' ? 'h1' : 'p';
+
   return (
     <div className="app-container">
       {/* Real-time collaboration: Show cursors and activity of other users */}
@@ -2560,55 +2609,82 @@ function App() {
         <div className="header-content">
           <div>
             {/* Wordmark, not a sentence — the descriptor lives in the subtitle
-                below. Tight tracking is what separates a mark from a label. */}
-            <h1 style={{
+                below. Tight tracking is what separates a mark from a label.
+                It is the page's <h1> on the workflow; inside a tool view
+                ToolView's title takes that role, so the mark steps down to a
+                <p> and every view keeps exactly one h1. */}
+            <Wordmark className="app-wordmark" style={{
               display: 'flex', alignItems: 'center', gap: '0.6rem',
               letterSpacing: '-0.045em', fontWeight: 650, marginBottom: '0.2rem',
             }}>
               <ShoppingBag size={28} /> Acadia
-            </h1>
+            </Wordmark>
             <p className="header-subtitle">Upload, sort, describe, and export to Shopify</p>
           </div>
           <div className="header-actions">
-            <button 
-              onClick={() => setShowCategoriesManager(true)} 
-              className="button button-secondary"
-              style={{ marginRight: '12px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            {/* Each button navigates to a full view; clicking the one that is
+                already showing comes back to the workflow. `aria-current` +
+                `.nav-tool-btn--on` mark it — a filled, white-outlined state,
+                since the nav is the app's one inverted surface (CLAUDE.md §1). */}
+            <button
+              onClick={toggleView('categories')}
+              className={`button button-secondary nav-tool-btn${activeView === 'categories' ? ' nav-tool-btn--on' : ''}`}
+              aria-current={activeView === 'categories' ? 'page' : undefined}
               title="Manage your product categories"
             >
               <Tag size={18} /> Manage Categories
             </button>
-            <button 
-              onClick={() => setShowCategoryPresets(true)} 
-              className="button button-secondary"
-              style={{ marginRight: '12px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            <button
+              onClick={toggleView('presets')}
+              className={`button button-secondary nav-tool-btn${activeView === 'presets' ? ' nav-tool-btn--on' : ''}`}
+              aria-current={activeView === 'presets' ? 'page' : undefined}
               title="Manage category presets for shipping weight, measurements, and default attributes"
             >
               <Settings size={18} /> Category Presets
             </button>
-            <button 
-              onClick={() => setShowLibrary(true)} 
-              className="button button-secondary"
-              style={{ marginRight: '12px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            <button
+              onClick={toggleView('library')}
+              className={`button button-secondary nav-tool-btn${activeView === 'library' ? ' nav-tool-btn--on' : ''}`}
+              aria-current={activeView === 'library' ? 'page' : undefined}
               title="View saved workflow batches"
             >
               <Package size={18} /> Library
             </button>
             {currentOrg?.slug === 'founding' && (orgRole === 'owner' || orgRole === 'admin') && (
               <button
-                onClick={() => setShowVocabDashboard(true)}
-                className="button button-secondary"
-                style={{ marginRight: '12px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                onClick={toggleView('vocabulary')}
+                className={`button button-secondary nav-tool-btn${activeView === 'vocabulary' ? ' nav-tool-btn--on' : ''}`}
+                aria-current={activeView === 'vocabulary' ? 'page' : undefined}
                 title="Vocabulary — curate quick keyword chips and brand keywords (all workspaces)"
               >
                 <BookMarked size={18} /> Vocabulary
               </button>
             )}
+            {currentOrg?.slug === 'founding' && (orgRole === 'owner' || orgRole === 'admin') && (
+              <>
+                <button
+                  onClick={toggleView('analytics')}
+                  className={`button button-secondary nav-tool-btn${activeView === 'analytics' ? ' nav-tool-btn--on' : ''}`}
+                  aria-current={activeView === 'analytics' ? 'page' : undefined}
+                  title="Analytics — first-party pageviews, funnel, referrers, errors (Founding Workspace)"
+                >
+                  <BarChart3 size={18} /> Analytics
+                </button>
+                <button
+                  onClick={toggleView('crm')}
+                  className={`button button-secondary nav-tool-btn${activeView === 'crm' ? ' nav-tool-btn--on' : ''}`}
+                  aria-current={activeView === 'crm' ? 'page' : undefined}
+                  title="CRM — every beta request and account as a contact, with stages, follow-ups and notes (Founding Workspace)"
+                >
+                  <Contact size={18} /> CRM
+                </button>
+              </>
+            )}
             {currentOrg?.slug === 'founding' && (
               <button
-                onClick={() => setShowKanban(true)}
-                className="button button-secondary"
-                style={{ marginRight: '12px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                onClick={toggleView('board')}
+                className={`button button-secondary nav-tool-btn${activeView === 'board' ? ' nav-tool-btn--on' : ''}`}
+                aria-current={activeView === 'board' ? 'page' : undefined}
                 title="Board — features and todos for this workspace"
               >
                 <KanbanSquare size={18} /> Board
@@ -2620,7 +2696,9 @@ function App() {
               orgName={currentOrg?.name ?? null}
               role={currentOrg ? orgRole : undefined}
               email={user.email}
-              onOpenDashboard={currentOrg ? () => setShowOrgPanel(true) : undefined}
+              /* No trigger element to hand back focus to — the menu item that
+                 fired this is unmounted by the time the view opens. */
+              onOpenDashboard={currentOrg ? () => setActiveView('workspace') : undefined}
               onSignOut={handleSignOut}
             />
           </div>
@@ -2682,7 +2760,12 @@ function App() {
         {debugEnabled ? 'Debug: ON' : 'Debug: OFF'}
       </button>
 
-      <main className="app-main">
+      {/* The workflow is PARKED, never unmounted: an upload in flight, the
+          grouper's selection, and Step 3's debounced saves all keep running
+          while a tool view is open. `hidden` (not an inline display:none) so
+          it is removed from the a11y tree too — App.css pins the flex
+          display off, since `display:flex` would otherwise beat the UA rule. */}
+      <main className="app-main" hidden={activeView !== 'workflow'}>
         {/* Save Message */}
         {saveMessage && (
           <div className={`save-message ${saveMessage.type}`}>
@@ -2722,7 +2805,7 @@ function App() {
               </button>
             </div>
           </div>
-          <ImageUpload ref={uploadRef} onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} onToast={addToast} onChunkReady={handleChunkReady} onUploadStart={handleUploadStart} getBatchId={() => currentBatchIdRef.current} />
+          <ImageUpload ref={uploadRef} onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} onToast={addToast} onChunkReady={handleChunkReady} onUploadCancelled={handleUploadCancelled} onUploadStart={handleUploadStart} getBatchId={() => currentBatchIdRef.current} />
           {/* "N images uploaded" moved to toast — see handleImagesUploaded */}
         </section>
 
@@ -2790,14 +2873,12 @@ function App() {
                 <GrouperErrorBoundary>
                 <ImageGrouper 
                   key={currentBatchId || 'no-batch'}
-                  items={groupedImages.length > 0 ? groupedImages : uploadedImages}
-                  onGrouped={handleImagesGrouped}
-                  onStatsChange={() => {}} // stats now computed directly from processedItems
+                  items={step2Items}
+                  onGrouped={onGroupedStable}
+                  onStatsChange={onStatsChangeStable} // stats now computed directly from processedItems
                   userId={user.id}
                   batchId={currentBatchId || undefined}
-                  onImageDeleted={() => {
-                    setLibraryRefreshTrigger(prev => prev + 1);
-                  }}
+                  onImageDeleted={onImageDeletedStable}
                   onSelectionChange={setSelectedGroupItems}
                   onActionsReady={setGrouperActions}
                 />
@@ -2810,11 +2891,11 @@ function App() {
                 </p>
                 <GrouperErrorBoundary>
                 <CategoryZones 
-                  items={groupedImages.length > 0 ? groupedImages : uploadedImages}
-                  onCategorized={handleImagesSorted}
+                  items={step2Items}
+                  onCategorized={onCategorizedStable}
                   compactMode
                   selectedItemIds={selectedGroupItems}
-                  onCategoryAssigned={() => { setSelectedGroupItems(new Set()); grouperActionsRef.current?.onCategoryAssigned(); }}
+                  onCategoryAssigned={onCategoryAssignedStable}
                 />
                 </GrouperErrorBoundary>
                 {/* Selection action buttons — rendered here so they stay visible while scrolling left panel */}
@@ -2928,8 +3009,8 @@ function App() {
             })()}
             <ProductDescriptionGenerator
               key={currentBatchId ?? 'new'}
-              onProcessed={handleItemsProcessed}
-              onDownloadCSV={() => exporterRef.current?.downloadCSV()}
+              onProcessed={onProcessedStable}
+              onDownloadCSV={onDownloadCSVStable}
               batchId={currentBatchId}
               descriptionSettings={orgDescSettings}
             />
@@ -2965,11 +3046,7 @@ function App() {
 
                 <div className="export-section">
                   <h3>Export Options</h3>
-                  <GoogleSheetExporter ref={exporterRef} vendorName={resolvedVendorName} items={(() => {
-                    const groupCounts: Record<string, number> = {};
-                    processedItems.forEach(i => { const k = i.productGroup || i.id; groupCounts[k] = (groupCounts[k] || 0) + 1; });
-                    return processedItems.filter(i => i.category || groupCounts[i.productGroup || i.id] > 1);
-                  })()} />
+                  <GoogleSheetExporter ref={exporterRef} vendorName={resolvedVendorName} items={step4ExportItems} />
                 </div>
               </div>
             </details>
@@ -2977,65 +3054,169 @@ function App() {
         )}
       </main>
 
-      {/* Categories Manager Modal */}
-      {showCategoriesManager && (
-        <CategoriesManager 
-          onClose={() => setShowCategoriesManager(false)} 
-        />
+      {/* ══ Tool views ══════════════════════════════════════════════════════
+          Formerly fixed-position modals over the workflow; each is now a full
+          page under the header, inside the shared ToolView shell (title block,
+          Back to workflow, Escape, one calm spacing scale). Every component
+          keeps its `onClose` prop — Back is what calls it. */}
+
+      {activeView === 'categories' && (
+        <Suspense fallback={<ViewFallback />}>
+          <ToolView
+            icon={<Tag size={26} />}
+            title="Categories"
+            description="The categories you drag groups onto in Step 2. Each one carries an icon, a colour and its place in the list."
+            onBack={goToWorkflow}
+          >
+            <CategoriesManager onClose={goToWorkflow} />
+          </ToolView>
+        </Suspense>
       )}
 
-      {/* Category Presets Modal */}
-      {showCategoryPresets && (
-        <CategoryPresetsManager
-          onClose={() => setShowCategoryPresets(false)}
-        />
+      {activeView === 'presets' && (
+        <Suspense fallback={<ViewFallback />}>
+          <ToolView
+            icon={<Settings size={26} />}
+            title="Category presets"
+            description="Defaults applied the moment a category is assigned — shipping weight, which measurements to ask for, and the SEO title template."
+            onBack={goToWorkflow}
+          >
+            <CategoryPresetsManager onClose={goToWorkflow} />
+          </ToolView>
+        </Suspense>
       )}
 
-      {/* Workspace (org members & invites) Modal */}
-      {showOrgPanel && currentOrg && user && (
-        <OrgPanel
-          org={currentOrg}
-          myRole={orgRole}
-          myUserId={user.id}
-          onClose={() => setShowOrgPanel(false)}
-          onOrgUpdated={(org) => setCurrentOrg(org)}
-          onMyRoleChanged={(role) => setOrgRole(role)}
-          onLeftWorkspace={() => {
-            // Membership is gone; reload so ensureOrganization re-bootstraps
-            // into their next org (or the waitlist / a fresh workspace).
-            setShowOrgPanel(false);
-            window.location.reload();
-          }}
-          onDescriptionSettingsChanged={(s) => setOrgDescSettings(s)}
-        />
+      {activeView === 'library' && user && (
+        <Suspense fallback={<ViewFallback />}>
+          <ToolView
+            icon={<Package size={26} />}
+            title="Library"
+            description="Every batch, listing and image in this workspace. Open a batch to pick it back up where you left it."
+            onBack={goToWorkflow}
+            wide
+          >
+            <Library
+              userId={user.id}
+              onClose={onLibraryCloseStable}
+              onOpenBatch={onOpenBatchStable}
+              onBatchDeleted={onBatchDeletedStable}
+              refreshTrigger={libraryRefreshTrigger}
+              currentBatchId={currentBatchId}
+            />
+          </ToolView>
+        </Suspense>
       )}
 
-      {/* Vocabulary dashboard (founding admins only — chips + brand keywords) */}
-      {showVocabDashboard && currentOrg?.slug === 'founding' && (orgRole === 'owner' || orgRole === 'admin') && (
-        <VocabDashboard onClose={() => setShowVocabDashboard(false)} />
+      {activeView === 'workspace' && currentOrg && user && (
+        <Suspense fallback={<ViewFallback />}>
+          <ToolView
+            icon={<Users size={26} />}
+            title="Workspace"
+            description="Who is in this workspace, what they can do, and how its listings are written and exported."
+            onBack={goToWorkflow}
+          >
+            <OrgPanel
+              org={currentOrg}
+              myRole={orgRole}
+              myUserId={user.id}
+              onClose={goToWorkflow}
+              onOrgUpdated={(org) => setCurrentOrg(org)}
+              onMyRoleChanged={(role) => setOrgRole(role)}
+              onLeftWorkspace={() => {
+                // Membership is gone; reload so ensureOrganization re-bootstraps
+                // into their next org (or the waitlist / a fresh workspace).
+                setActiveView('workflow');
+                window.location.reload();
+              }}
+              onDescriptionSettingsChanged={(s) => setOrgDescSettings(s)}
+            />
+          </ToolView>
+        </Suspense>
+      )}
+
+      {/* Vocabulary (founding admins only — chips + brand keywords, global content) */}
+      {activeView === 'vocabulary' && currentOrg?.slug === 'founding' && (orgRole === 'owner' || orgRole === 'admin') && (
+        <Suspense fallback={<ViewFallback />}>
+          <ToolView
+            icon={<BookMarked size={26} />}
+            title="Vocabulary"
+            description="The quick keyword chips and brand words every workspace's descriptions are written from. Edited here, used everywhere."
+            onBack={goToWorkflow}
+          >
+            <VocabDashboard />
+          </ToolView>
+        </Suspense>
+      )}
+
+      {/* Analytics + Errors — one view, two tabs. Both read this project's own
+          tables (analytics_events, app_errors); no third-party service. */}
+      {activeView === 'analytics' && currentOrg?.slug === 'founding' && (orgRole === 'owner' || orgRole === 'admin') && (
+        <Suspense fallback={<ViewFallback />}>
+          <ToolView
+            icon={<BarChart3 size={26} />}
+            title="Analytics"
+            description="First-party pageviews, funnel, referrers and devices — plus everything that threw, in the Errors tab."
+            onBack={goToWorkflow}
+            tabs={
+              <>
+                <button
+                  role="tab"
+                  aria-selected={analyticsTab === 'overview'}
+                  className={`tool-view-tab${analyticsTab === 'overview' ? ' tool-view-tab--on' : ''}`}
+                  onClick={() => setAnalyticsTab('overview')}
+                >
+                  <BarChart3 size={14} /> Overview
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={analyticsTab === 'errors'}
+                  className={`tool-view-tab${analyticsTab === 'errors' ? ' tool-view-tab--on' : ''}`}
+                  onClick={() => setAnalyticsTab('errors')}
+                >
+                  <AlertTriangle size={14} /> Errors
+                </button>
+              </>
+            }
+          >
+            {analyticsTab === 'overview' ? <AnalyticsPanel /> : <ErrorsPanel />}
+          </ToolView>
+        </Suspense>
+      )}
+
+      {activeView === 'crm' && currentOrg?.slug === 'founding' && (orgRole === 'owner' || orgRole === 'admin') && (
+        <Suspense fallback={<ViewFallback />}>
+          <ToolView
+            icon={<Contact size={26} />}
+            title="CRM"
+            description="Every beta request and account as a contact, with stages, follow-ups and notes."
+            onBack={goToWorkflow}
+          >
+            <CrmPanel />
+          </ToolView>
+        </Suspense>
       )}
 
       {/* Team board (Founding Workspace — EVERY member, not just admins: the
           whole point is that anyone can add and pick up work) */}
-      {showKanban && currentOrg && user && currentOrg.slug === 'founding' && (
-        <KanbanBoard
-          orgId={currentOrg.id}
-          userId={user.id}
-          userEmail={user.email ?? null}
-          onClose={() => setShowKanban(false)}
-        />
-      )}
-
-      {/* Library Modal */}
-      {showLibrary && user && (
-        <Library
-          userId={user.id}
-          onClose={() => setShowLibrary(false)}
-          onOpenBatch={handleOpenBatch}
-          onBatchDeleted={handleBatchDeleted}
-          refreshTrigger={libraryRefreshTrigger}
-          currentBatchId={currentBatchId}
-        />
+      {activeView === 'board' && currentOrg && user && currentOrg.slug === 'founding' && (
+        <Suspense fallback={<ViewFallback />}>
+          <ToolView
+            icon={<KanbanSquare size={26} />}
+            title="Board"
+            description="Features and todos for this workspace. Anyone here can add a card and pick one up."
+            onBack={goToWorkflow}
+            wide
+            /* KanbanBoard owns Escape: it closes an open card drawer first. */
+            escapeToBack={false}
+          >
+            <KanbanBoard
+              orgId={currentOrg.id}
+              userId={user.id}
+              userEmail={user.email ?? null}
+              onClose={goToWorkflow}
+            />
+          </ToolView>
+        </Suspense>
       )}
 
       {/* ── Support messaging (first-party): every signed-in user can message
@@ -3043,8 +3224,8 @@ function App() {
       <SupportWidget
         userId={user.id}
         userEmail={user.email ?? null}
-        orgName={currentOrg?.name ?? null}
-        isFounder={currentOrg?.slug === 'founding' && (orgRole === 'owner' || orgRole === 'admin')}
+        orgName={supportOrgName}
+        isFounder={supportIsFounder}
       />
 
       {/* ── Toast notifications ─────────────────────────────────────────────── */}

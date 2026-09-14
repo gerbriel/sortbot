@@ -1,84 +1,52 @@
-/* Modal Overlay */
-.categories-manager-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.72);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  overflow-y: auto;
-  padding: 2rem;
-}
+/* ════════════════════════════════════════════════════════════════════════════
+   Categories — full page (was a modal). Editor left, list right; the editor
+   used to be a second modal stacked on the first.
+   Spacing follows ToolView's scale (9px root): 2rem card padding, 2rem grid
+   gap, 1.2rem+ row padding, 4rem minimum control height.
+   ════════════════════════════════════════════════════════════════════════════ */
 
-.categories-manager {
-  background: var(--ink-800);
-  border-radius: 12px;
-  width: 100%;
-  max-width: 800px;
-  max-height: 90vh;
-  overflow-y: auto;
-  padding: 2rem;
-  box-shadow: var(--shadow-xl);
-}
-
-.categories-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid var(--border);
-}
-
-.categories-header h2 {
+.categories-page-loading {
   margin: 0;
-  font-size: var(--fs-xl);
-  color: var(--text-primary);
-}
-
-.header-actions {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-}
-
-.button-close {
-  background: none;
-  border: none;
-  font-size: var(--fs-lg);
+  padding: 3rem 0;
   color: var(--text-secondary);
-  cursor: pointer;
-  padding: 0.5rem;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
+  font-size: var(--fs-base);
 }
 
-.button-close:hover {
-  background: var(--ink-750);
-  color: var(--text-primary);
+.categories-page {
+  /* Editor column is sized to the form, not to the viewport. */
+  grid-template-columns: minmax(0, 42rem) minmax(0, 1fr);
+  gap: 2.5rem;
 }
+
+/* Follows the list while a long category list scrolls past it. */
+.categories-editor {
+  position: sticky;
+  top: var(--tv-sticky-top, 8.5rem);
+}
+
+.categories-editor-hint {
+  margin: 0 0 2rem;
+  font-size: var(--fs-base);
+  line-height: var(--lh-normal);
+  color: var(--text-secondary);
+}
+
+.categories-list-col { min-width: 0; }
 
 /* Categories List */
 .categories-list {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.2rem;
 }
 
 .category-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem;
+  gap: 1.5rem;
+  padding: 1.4rem 2rem;
+  min-height: 8rem;
   background: var(--ink-850);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -93,7 +61,8 @@
 .category-info {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 1.5rem;
+  min-width: 0;
 }
 
 .category-emoji {
@@ -125,8 +94,9 @@
 
 .category-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.8rem;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .button-icon {
@@ -170,39 +140,8 @@
   color: var(--text-secondary);
 }
 
-/* Form Modal */
-.category-form-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.72);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1001;
-  padding: 2rem;
-}
-
-.category-form-modal {
-  background: var(--ink-800);
-  border-radius: 12px;
-  padding: 2rem;
-  max-width: 500px;
-  width: 100%;
-  max-height: 90vh;
-  overflow-y: auto;
-}
-
-.category-form-modal h3 {
-  margin: 0 0 1.5rem 0;
-  font-size: var(--fs-lg);
-  color: var(--text-primary);
-}
-
 .form-group {
-  margin-bottom: 1.5rem;
+  margin-bottom: 2rem;
 }
 
 .form-group label {
@@ -256,12 +195,14 @@
 /* Emoji Picker */
 .emoji-picker {
   display: grid;
-  grid-template-columns: repeat(10, 1fr);
-  gap: 0.5rem;
-  padding: 1rem;
-  background: var(--ink-850);
+  /* Auto-fit instead of a hard 10 columns: the editor column is narrower than
+     the old 500px modal, and 10 fixed tracks squeezed the icons to slivers. */
+  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+  gap: 0.8rem;
+  padding: 1.5rem;
+  background: var(--ink-900);
   border-radius: 8px;
-  max-height: 200px;
+  max-height: 30rem;
   overflow-y: auto;
 }
 
@@ -346,10 +287,6 @@
 
 /* Responsive */
 @media (max-width: 768px) {
-  .categories-manager {
-    padding: 1rem;
-  }
-
   .category-item {
     flex-direction: column;
     align-items: flex-start;
@@ -368,4 +305,16 @@
   .form-actions {
     flex-direction: column;
   }
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 1024px) {
+  .categories-page { grid-template-columns: 1fr; }
+  .categories-editor { position: static; }
+}
+
+@media (max-width: 640px) {
+  .category-item { flex-direction: column; align-items: stretch; gap: 1.2rem; }
+  .category-actions { justify-content: flex-end; }
 }

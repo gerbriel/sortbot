@@ -1,0 +1,126 @@
+name: Uptime
+
+# First-party liveness check. No third-party monitor: this workflow curls the
+# deployed site and the Supabase auth health endpoint, and files the incident as
+# a GitHub issue. Notification is GitHub's own issue email.
+#
+# HONEST LIMITS: `schedule` is best-effort — GitHub delays or skips runs when
+# Actions is busy, so treat a missing run as "unknown", not "healthy". A probe
+# cannot see a partial outage that only affects signed-in users, and it cannot
+# see a broken RLS policy. The real availability signal is still `CSV Exported`
+# per day in the Analytics panel (docs/reviews/06-devops.md §6.4).
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+# Least privilege: read the repo, write issues. No pages, no id-token,
+# no contents: write.
+permissions:
+  contents: read
+  issues: write
+
+# Never let two probes race over the same incident issue.
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: probe site + supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # No checkout: nothing in the repo is needed, and skipping it keeps the
+      # job to a few seconds.
+      - name: Probe
+        id: probe
+        env:
+          SITE: https://gerbriel.github.io/sortbot/
+          # The title the built index.html must contain. If the product is ever
+          # renamed again, this line has to move with it.
+          EXPECTED_TITLE: '<title>Acadia</title>'
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          set -uo pipefail
+          fails=""
+
+          # 1. The site serves the real app shell (not a 404 page, not an empty
+          #    body). --fail-with-body is unavailable on older curl; -f is enough
+          #    because we only care whether a 2xx body arrived.
+          body=$(curl -fsSL --max-time 25 --retry 2 --retry-delay 5 "$SITE" || true)
+          if [ -z "$body" ]; then
+            fails="${fails}site: unreachable or empty body at ${SITE}"$'\n'
+          elif ! printf '%s' "$body" | grep -qF "$EXPECTED_TITLE"; then
+            fails="${fails}site: served a page without ${EXPECTED_TITLE}"$'\n'
+          fi
+
+          # 2. GoTrue health: 200 without a session. Cheap, touches no data.
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_ANON_KEY}" ]; then
+            fails="${fails}supabase: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY secrets are not set"$'\n'
+          else
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 --retry 2 --retry-delay 5 \
+                    -H "apikey: ${SUPABASE_ANON_KEY}" "${SUPABASE_URL%/}/auth/v1/health" || echo 000)
+            if [ "$code" != "200" ]; then
+              fails="${fails}supabase auth health: HTTP ${code}"$'\n'
+            fi
+          fi
+
+          if [ -n "$fails" ]; then
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+            {
+              echo 'detail<<PROBE_EOF'
+              printf '%s' "$fails"
+              echo 'PROBE_EOF'
+            } >> "$GITHUB_OUTPUT"
+            echo "Probe FAILED:"
+            printf '%s' "$fails"
+          else
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+            echo "Probe OK: site title present, auth health 200."
+          fi
+
+      # One open issue at a time, matched by exact title. Deliberately NOT
+      # `--search`: the GitHub search index lags by minutes, which on a 15-minute
+      # cron would open duplicate issues. Listing and filtering locally is exact.
+      - name: Open or update the incident issue
+        if: steps.probe.outputs.failed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: Uptime check failed
+          DETAIL: ${{ steps.probe.outputs.detail }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          body=$(printf 'Probe failed at %s.\n\n```\n%s\n```\n\nRun: %s\n' \
+                   "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$DETAIL" "$RUN_URL")
+          existing=$(gh issue list --state open --limit 100 --json number,title \
+                      --jq "[.[] | select(.title == \"$TITLE\")] | .[0].number // empty")
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+            echo "Commented on existing incident #${existing}."
+          else
+            gh issue create --title "$TITLE" --body "$body"
+            echo "Opened a new incident issue."
+          fi
+
+      - name: Close the incident issue on recovery
+        if: steps.probe.outputs.failed == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: Uptime check failed
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          existing=$(gh issue list --state open --limit 100 --json number,title \
+                      --jq "[.[] | select(.title == \"$TITLE\")] | .[0].number // empty")
+          if [ -n "$existing" ]; then
+            gh issue close "$existing" --comment "$(printf 'Recovered at %s — site title present and auth health 200.\n\nRun: %s\n' \
+              "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$RUN_URL")"
+            echo "Closed incident #${existing}."
+          else
+            echo "Healthy, no open incident."
+          fi

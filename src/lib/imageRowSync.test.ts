@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { buildProductImageRow, buildTransforms } from './imageRowSync';
+import {
+  buildProductImageRow,
+  buildTransforms,
+  mergeProductImageRows,
+  stage4ColumnsKnownAvailable,
+  __resetStage4ProbeForTests,
+  type ExistingProductImageRow,
+} from './imageRowSync';
 import type { ClothingItem } from '../App';
 
 /**
@@ -75,5 +82,91 @@ describe('buildProductImageRow', () => {
     expect(row.transforms).toBeNull();
     expect(row.original_name).toBeNull();
     expect(row.alt_text).toBe('Uploaded image');
+  });
+});
+
+/**
+ * mergeProductImageRows — the guard that lets registerItemsInDB keep its
+ * delete-then-reinsert (CLAUDE.md §18 #3) without destroying a group's photo
+ * rows. saveBatchToDatabase writes N rows against the group LEADER with real
+ * `position` values; registerItemsInDB only ever knows one row per item, so
+ * re-inserting just its own rows collapsed the group to a single photo and
+ * flattened every position on EVERY batch open.
+ */
+describe('mergeProductImageRows', () => {
+  const existing = (o: Partial<ExistingProductImageRow> & { product_id: string; image_url: string }) => ({
+    storage_path: null,
+    user_id: 'u1',
+    position: 0,
+    alt_text: 'x',
+    original_name: null,
+    transforms: null,
+    ...o,
+  }) as ExistingProductImageRow;
+
+  it("carries a group leader's other photos across the wipe, renumbered contiguously", () => {
+    const computed = [buildProductImageRow(
+      item({ id: 'LEADER', storagePath: 'u/L/a.jpg' }), 'u1', 0, 'https://cdn/a.jpg', false)];
+    const rows = mergeProductImageRows(computed, [
+      existing({ product_id: 'LEADER', image_url: 'https://cdn/a.jpg', storage_path: 'u/L/a.jpg', position: 0 }),
+      existing({ product_id: 'LEADER', image_url: 'https://cdn/b.jpg', storage_path: 'u/L/b.jpg', position: 1 }),
+      existing({ product_id: 'LEADER', image_url: 'https://cdn/c.jpg', storage_path: 'u/L/c.jpg', position: 2 }),
+    ]);
+    expect(rows.map(r => r.image_url)).toEqual(['https://cdn/a.jpg', 'https://cdn/b.jpg', 'https://cdn/c.jpg']);
+    expect(rows.map(r => r.position)).toEqual([0, 1, 2]);
+  });
+
+  it('keeps the photo in its slot when only the public URL was regenerated, and drops the stale row', () => {
+    const computed = [buildProductImageRow(
+      item({ id: 'P', storagePath: 'u/P/b.jpg' }), 'u1', 0, 'https://cdn/NEW-b.jpg', false)];
+    const rows = mergeProductImageRows(computed, [
+      existing({ product_id: 'P', image_url: 'https://cdn/a.jpg', storage_path: 'u/P/a.jpg', position: 0 }),
+      existing({ product_id: 'P', image_url: 'https://cdn/OLD-b.jpg', storage_path: 'u/P/b.jpg', position: 1 }),
+    ]);
+    expect(rows.map(r => r.image_url)).toEqual(['https://cdn/a.jpg', 'https://cdn/NEW-b.jpg']);
+    expect(rows.map(r => r.position)).toEqual([0, 1]);
+  });
+
+  it('puts a genuinely new photo first (imageUrls[0] is the primary)', () => {
+    const computed = [buildProductImageRow(
+      item({ id: 'P', storagePath: 'u/P/new.jpg' }), 'u1', 0, 'https://cdn/new.jpg', false)];
+    const rows = mergeProductImageRows(computed, [
+      existing({ product_id: 'P', image_url: 'https://cdn/old.jpg', storage_path: 'u/P/old.jpg', position: 0 }),
+    ]);
+    expect(rows.map(r => r.image_url)).toEqual(['https://cdn/new.jpg', 'https://cdn/old.jpg']);
+    expect(rows.map(r => r.position)).toEqual([0, 1]);
+  });
+
+  it('preserves rows for products we are not writing at all', () => {
+    const rows = mergeProductImageRows([], [
+      existing({ product_id: 'OTHER', image_url: 'https://cdn/z.jpg', storage_path: 'u/O/z.jpg', position: 3 }),
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].position).toBe(0);
+    expect(rows[0]).not.toHaveProperty('id');
+  });
+
+  it('de-duplicates identical image_urls and never emits the DB primary key', () => {
+    const rows = mergeProductImageRows([], [
+      existing({ product_id: 'P', image_url: 'https://cdn/a.jpg', position: 0, id: 'row-1' }),
+      existing({ product_id: 'P', image_url: 'https://cdn/a.jpg', position: 1, id: 'row-2' }),
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).not.toHaveProperty('id');
+  });
+
+  it('is a pure pass-through when there is nothing in the DB yet', () => {
+    const computed = [
+      buildProductImageRow(item({ id: 'A', storagePath: 'u/A/a.jpg' }), 'u1', 0, 'https://cdn/a.jpg', false),
+      buildProductImageRow(item({ id: 'B', storagePath: 'u/B/b.jpg' }), 'u1', 0, 'https://cdn/b.jpg', false),
+    ];
+    expect(mergeProductImageRows(computed, [])).toEqual(computed);
+  });
+});
+
+describe('stage4ColumnsKnownAvailable', () => {
+  it('is false until the async probe has resolved positively', () => {
+    __resetStage4ProbeForTests();
+    expect(stage4ColumnsKnownAvailable()).toBe(false);
   });
 });

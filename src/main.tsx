@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { log } from './lib/debugLogger'
 
 // Register the image-caching Service Worker.
 // The SW intercepts all Supabase Storage image requests and caches them for
@@ -14,11 +15,11 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register(swUrl, { scope: import.meta.env.BASE_URL })
       .then((reg) => {
-        console.debug('[SW] registered, scope:', reg.scope);
+        log.app(`[SW] registered, scope: ${reg.scope}`);
       })
       .catch((err) => {
         // Non-fatal — app works fine without the SW, just slower on refresh
-        console.debug('[SW] registration failed:', err);
+        log.app(`[SW] registration failed: ${err}`);
       });
   });
 }

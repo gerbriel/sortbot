@@ -1,6 +1,6 @@
 // Library v3 — user-scoped fetches; product_group deduplication; workflow_batch user_id filter
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { fetchWorkflowBatches, deleteWorkflowBatch, removeItemsFromWorkflowBatch, type WorkflowBatch, type SlimItem } from '../lib/workflowBatchService';
+import React, { useState, useEffect, useLayoutEffect, useRef, memo } from 'react';
+import { fetchWorkflowBatches, deleteWorkflowBatch, removeItemsFromWorkflowBatch, type WorkflowBatch, type PersistedWorkflowItem } from '../lib/workflowBatchService';
 import { deriveLibraryData, type ProductGroup, type ImageRecord } from '../lib/libraryData';
 import { 
   deleteProductGroup, 
@@ -13,51 +13,18 @@ import {
 import { fetchWorkflowBatchesMeta } from '../lib/workflowBatchService';
 import { supabase } from '../lib/supabase';
 import { filterUnreferencedStoragePaths } from '../lib/storageSafety';
-import { Folder, Calendar, Image, Layers, Tag, ArrowRight, Trash2, X, Grid3x3, Package, Edit2, Copy, Check, Search, Plus, Merge, ChevronDown, ChevronRight, Wrench, User } from 'lucide-react';
+import { publicImageUrl } from '../lib/storageUrls';
+import { chunked } from '../lib/chunk';
+import { Folder, Calendar, Image, Layers, Tag, ArrowRight, Trash2, Grid3x3, Package, Edit2, Copy, Check, Search, Plus, Merge, ChevronDown, ChevronRight, Wrench, User } from 'lucide-react';
 import type { ClothingItem } from '../App';
 import { log } from '../lib/debugLogger';
+// The SHARED lazy image (architecture review finding #21). Library had its own
+// copy without the 3x retry + exponential backoff + cache-bust that exists to
+// survive ERR_QUIC_PROTOCOL_ERROR, so Library thumbnails were the one surface in
+// the app missing that fix.
+import LazyImg from './LazyImg';
 import './Library.css';
 
-// ── Lazy-loading image with skeleton shimmer placeholder ──────────────────────
-const LazyImg: React.FC<{ src: string; alt: string; className?: string }> = ({ src, alt, className }) => {
-  const [loaded, setLoaded] = useState(false);
-  const [errored, setErrored] = useState(false);
-  // Reset state when src changes (e.g. navigating between batches)
-  const prevSrc = useRef(src);
-  if (prevSrc.current !== src) {
-    prevSrc.current = src;
-    // useState setters can't be called directly during render — use a ref flag
-  }
-  useEffect(() => {
-    setLoaded(false);
-    setErrored(false);
-  }, [src]);
-
-  const handleError = () => {
-    setLoaded(true);
-    setErrored(true);
-    // Do NOT delete the product_images row on an <img> error — errors fire on
-    // transient failures too, and deleting permanently destroys a reference to a
-    // file that may still exist. Just show the broken placeholder.
-  };
-
-  return (
-    <>
-      {!loaded && !errored && <div className="img-skeleton" aria-hidden="true" />}
-      <img
-        src={src}
-        alt={alt}
-        className={`lazy-img${loaded ? ' loaded' : ''}${className ? ` ${className}` : ''}`}
-        loading="lazy"
-        onLoad={() => setLoaded(true)}
-        onError={handleError}
-        style={errored ? { display: 'none' } : undefined}
-      />
-      {errored && <div className="img-skeleton" style={{ opacity: 0.4 }} aria-hidden="true" />}
-    </>
-  );
-};
-// ─────────────────────────────────────────────────────────────────────────────
 
 type ViewMode = 'batches' | 'groups' | 'images';
 
@@ -65,6 +32,8 @@ type ViewMode = 'batches' | 'groups' | 'images';
 
 interface LibraryProps {
   userId: string;
+  /** Kept so App's call site is unchanged. ToolView's "Back to workflow" is
+   *  the close affordance now, and App wires it to the same callback. */
   onClose: () => void;
   onOpenBatch: (batch: WorkflowBatch) => void;
   onBatchDeleted?: (batchId: string) => void; // notify parent so an active-batch delete tears the session down (prevents auto-save resurrection)
@@ -74,7 +43,12 @@ interface LibraryProps {
 
 // cleanTitle moved to lib/libraryData.ts (only the derivation used it).
 
-export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, onBatchDeleted, refreshTrigger, currentBatchId }) => {
+/* Memoized (perf finding F2). Steps 1-4 all mount at once and App re-renders on
+ * any store/UI change, so without this a Step-3 keystroke re-rendered this whole
+ * subtree. Every prop App passes is now referentially stable (see the
+ * `useEventCallback` block in App.tsx), so the default shallow compare bails out
+ * on renders that have nothing to do with this component. */
+const LibraryInner: React.FC<LibraryProps> = ({ userId, onOpenBatch, onBatchDeleted, refreshTrigger, currentBatchId }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('batches');
   const [batches, setBatches] = useState<WorkflowBatch[]>([]);
   const [productGroups, setProductGroups] = useState<ProductGroup[]>([]);
@@ -594,7 +568,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       if (!batch) return;
 
       // Collect all items across all workflow_state arrays, deduplicated by id
-      const allItems: (ClothingItem | SlimItem)[] = [
+      const allItems: PersistedWorkflowItem[] = [
         ...(batch.workflow_state?.processedItems || []),
         ...(batch.workflow_state?.sortedImages   || []),
         ...(batch.workflow_state?.groupedImages  || []),
@@ -612,7 +586,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       let notFound = 0;
 
       // For each item missing a storagePath, scan storage under userId/itemId/
-      const patchedItems: (ClothingItem | SlimItem)[] = await Promise.all(
+      const patchedItems: PersistedWorkflowItem[] = await Promise.all(
         dedupedItems.map(async (item) => {
           if (item.storagePath) return item; // already has a path — keep as-is
           const prefix = `${userId}/${item.id}`;
@@ -634,15 +608,15 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
       // Rebuild each workflow_state array with patched items (matched by id)
       const patchMap = new Map(patchedItems.map(i => [i.id, i]));
-      const patchArray = <T extends ClothingItem | SlimItem>(arr: T[] | undefined): T[] | undefined =>
+      const patchArray = <T extends PersistedWorkflowItem>(arr: T[] | undefined): T[] | undefined =>
         arr?.map(i => (patchMap.get(i.id) as T) ?? i);
 
       const patchedState: WorkflowBatch['workflow_state'] = {
         ...batch.workflow_state,
-        uploadedImages: patchArray(batch.workflow_state?.uploadedImages as ClothingItem[] | undefined),
-        groupedImages:  patchArray(batch.workflow_state?.groupedImages  as ClothingItem[] | undefined),
-        sortedImages:   patchArray(batch.workflow_state?.sortedImages   as ClothingItem[] | undefined),
-        processedItems: patchArray(batch.workflow_state?.processedItems as ClothingItem[] | undefined),
+        uploadedImages: patchArray(batch.workflow_state?.uploadedImages),
+        groupedImages:  patchArray(batch.workflow_state?.groupedImages),
+        sortedImages:   patchArray(batch.workflow_state?.sortedImages),
+        processedItems: patchArray(batch.workflow_state?.processedItems),
       };
 
       const { error } = await supabase
@@ -1370,9 +1344,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
         }
       }
 
-      const CHUNK = 100;
-      for (let i = 0; i < productIds.length; i += CHUNK) {
-        const chunk = productIds.slice(i, i + CHUNK);
+      for (const chunk of chunked(productIds)) {
 
         // ── Step 1: fetch product_images rows ──────────────────────────────
         const { data: imgRows, error: fetchImgErr } = await supabase
@@ -1480,9 +1452,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       // These are product_images rows with no parent products row — their productGroup
       // is undefined in state, so they're skipped by the normal productIds loop.
       if (orphanImgIds.length > 0) {
-        const OCHUNK = 100;
-        for (let i = 0; i < orphanImgIds.length; i += OCHUNK) {
-          const chunk = orphanImgIds.slice(i, i + OCHUNK);
+        for (const chunk of chunked(orphanImgIds)) {
 
           // Fetch storage paths first so we can clean up storage
           const { data: orphanRows } = await supabase
@@ -1704,9 +1674,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       .slice(0, 4)
       .map(item => {
         const storagePath = (item as ClothingItem).storagePath || item.storagePath;
-        const reconstructed = storagePath
-          ? supabase.storage.from('product-images').getPublicUrl(storagePath).data.publicUrl
-          : '';
+        const reconstructed = publicImageUrl(storagePath);
         return (item as ClothingItem).preview || item.imageUrls?.[0] || reconstructed;
       })
       .filter(Boolean);
@@ -1723,38 +1691,15 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
   if (loading) {
     return (
-      <div className="library-modal">
-        <div className="library-content">
-          <div className="loading-state">
-            <div className="spinner"></div>
-            <p>Loading your library...</p>
-          </div>
-        </div>
+      <div className="loading-state">
+        <div className="spinner"></div>
+        <p>Loading your library...</p>
       </div>
     );
   }
 
   return (
-    <div className="library-modal" onClick={onClose}>
-      <div className="library-content" onClick={(e) => e.stopPropagation()}>
-        <div className="library-header">
-          <div className="header-title">
-            <Folder size={24} />
-            <h2>Library</h2>
-            {viewMode === 'batches' && (
-              <span className="batch-count">({batches.length} {batches.length === 1 ? 'batch' : 'batches'})</span>
-            )}
-            {viewMode === 'groups' && (
-              <span className="batch-count">({productGroups.length} {productGroups.length === 1 ? 'listing' : 'listings'})</span>
-            )}
-            {viewMode === 'images' && (
-              <span className="batch-count">({images.length} {images.length === 1 ? 'image' : 'images'} in {batches.length} {batches.length === 1 ? 'batch' : 'batches'})</span>
-            )}
-          </div>
-          <button className="close-button" onClick={onClose} aria-label="Close">
-            <X size={20} />
-          </button>
-        </div>
+    <div className="library-page">
 
         {/* Delete-failure banner — deletes must never fail silently */}
         {deleteError && (
@@ -1812,7 +1757,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
         {/* Inline Prompt Modal */}
         {promptModal && (
-          <div className="prompt-modal-overlay" onClick={promptModal.onCancel}>
+          <div className="prompt-modal-overlay" data-tv-modal onClick={promptModal.onCancel}>
             <div className="prompt-modal" onClick={e => e.stopPropagation()}>
               <h3 className="prompt-modal-title">{promptModal.title}</h3>
               {promptModal.message && (
@@ -1861,6 +1806,13 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
             <Grid3x3 size={18} />
             <span>Images</span>
           </button>
+          {/* The count belongs to the tab you are looking at, so it lives here
+              now rather than in the modal title bar that ToolView replaced. */}
+          <span className="batch-count">
+            {viewMode === 'batches' && `${batches.length} ${batches.length === 1 ? 'batch' : 'batches'}`}
+            {viewMode === 'groups' && `${productGroups.length} ${productGroups.length === 1 ? 'listing' : 'listings'}`}
+            {viewMode === 'images' && `${images.length} ${images.length === 1 ? 'image' : 'images'} in ${batches.length} ${batches.length === 1 ? 'batch' : 'batches'}`}
+          </span>
         </div>
 
         {/* Search bar + New Batch button */}
@@ -2062,7 +2014,6 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
             )}
           </>
         )}
-      </div>
     </div>
   );
 
@@ -2087,7 +2038,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       // but old batches may have a corrupted processedItems (pre-dbd5d43) that's missing
       // loose images. Use DB-derived productGroups as a supplemental source to get the
       // real count when the DB has more items than workflow_state.
-      const wfItems: (ClothingItem | SlimItem)[] =
+      const wfItems: PersistedWorkflowItem[] =
         (batch.workflow_state?.processedItems?.length  ? batch.workflow_state.processedItems  : null) ||
         (batch.workflow_state?.sortedImages?.length    ? batch.workflow_state.sortedImages    : null) ||
         (batch.workflow_state?.groupedImages?.length   ? batch.workflow_state.groupedImages   : null) ||
@@ -2334,7 +2285,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
       const key = group.batchId || 'no-batch';
       if (!sectionMap.has(key)) {
         sectionMap.set(key, {
-          label: group.batchName || '📁 Unassigned',
+          label: group.batchName || 'Unassigned',
           groups: [],
         });
       }
@@ -2548,7 +2499,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
 
     filtered.forEach(img => {
       const batchKey = img.batchId || 'no-batch';
-      const batchName = img.batchName || '📁 Unassigned';
+      const batchName = img.batchName || 'Unassigned';
       const groupKey = img.productGroup || 'no-group';
       const groupTitle = img.productGroupTitle || 'Ungrouped Images';
 
@@ -2702,7 +2653,7 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
                       }}
                       disabled={workingUnassigned}
                     >
-                      {workingUnassigned ? 'Deleting…' : '🗑 Delete all unassigned'}
+                      {workingUnassigned ? 'Deleting…' : <><Trash2 size={13} /> Delete all unassigned</>}
                     </button>
                   </>
                 )}
@@ -2827,3 +2778,5 @@ export const Library: React.FC<LibraryProps> = ({ userId, onClose, onOpenBatch, 
   }
 };
 
+
+export const Library = memo(LibraryInner);

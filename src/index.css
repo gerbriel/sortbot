@@ -280,10 +280,13 @@ a {
   transition: color var(--dur-fast) var(--ease);
 }
 
+/* Links and buttons never underline (founder rule, Sept 2026). Emphasis on
+   hover comes from the colour shift alone. */
+a, a:hover, a:focus-visible, button, .button { text-decoration: none; }
+
 a:hover {
   color: var(--accent-hover);
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
+  text-decoration: none;
 }
 
 button, .button {

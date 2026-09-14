@@ -1,7 +1,8 @@
-import { forwardRef, useImperativeHandle, useEffect, useState } from 'react';
+import { forwardRef, useImperativeHandle, useEffect, useState, memo } from 'react';
 import { Ban, FileText, CheckCircle2 } from 'lucide-react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
+import { publicImageUrl } from '../lib/storageUrls';
 import { smartSeoTruncate } from '../lib/textAIService';
 import { track } from '../lib/analytics';
 import {
@@ -23,7 +24,7 @@ function resolvePublicUrl(item: ClothingItem): string {
 
   // Fall back to reconstructing from storagePath
   if (item.storagePath) {
-    return supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl;
+    return publicImageUrl(item.storagePath);
   }
 
   // preview may be a blob URL (in-session before page reload) — reject it
@@ -260,6 +261,10 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    // Release the blob URL (F41). Without this, every export pinned a multi-MB CSV
+    // blob in memory for the tab's lifetime. The revoke is deferred a tick because
+    // Safari can still be reading the href when click() returns.
+    setTimeout(() => URL.revokeObjectURL(url), 0);
     track('CSV Exported', { products: products.length });
   };
 
@@ -480,4 +485,12 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
 
 GoogleSheetExporter.displayName = 'GoogleSheetExporter';
 
-export default GoogleSheetExporter;
+/* Memoized (perf finding F2). Steps 1-4 all mount at once and App re-renders on
+ * any store/UI change, so without this a Step-3 keystroke re-rendered this whole
+ * subtree. Every prop App passes is now referentially stable (see the
+ * `useEventCallback` block in App.tsx), so the default shallow compare bails out
+ * on renders that have nothing to do with this component. */
+/* memo(forwardRef(...)) is supported: the ref is not part of the compared props.
+ * `items` is memoized in App (it used to be an inline IIFE, a new array every
+ * render), which is what makes the 54-column preview pipeline stop re-running. */
+export default memo(GoogleSheetExporter);

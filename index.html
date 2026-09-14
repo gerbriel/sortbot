@@ -2,6 +2,62 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Content-Security-Policy (security audit 05, finding #12).
+         GitHub Pages cannot send response headers, so a <meta http-equiv> is the
+         only enforcement point available. The Supabase session (access AND
+         refresh token) lives in localStorage, so any future XSS is a persistent
+         account takeover — this is the mitigation that makes injected script
+         useless.
+
+         Every origin below was proved by grepping src/ + public/ and by reading
+         the built bundle:
+           script-src 'self'   dist/index.html has NO inline script (only
+                               /assets/*.js) and no CDN script anywhere. The
+                               apis.google.com loader and the huggingface calls
+                               that used to be the only exceptions lived in
+                               src/services/api.ts and src/lib/huggingfaceService.ts,
+                               both since deleted as dead code — nothing in the
+                               tree loads a remote script. No 'unsafe-eval': the
+                               one `new Function` in the bundle is the
+                               setimmediate polyfill's non-function argument
+                               branch (via jszip), which jszip never takes.
+           style-src           the inline <style> below, plus React's
+                               style={{…}} attributes, need 'unsafe-inline'.
+           img-src             Supabase Storage photos; images.unsplash.com
+                               (Landing.tsx PHOTO); data: for the SVG select
+                               arrow in ComprehensiveProductForm.css; blob: for
+                               URL.createObjectURL upload previews.
+           connect-src         Supabase REST/auth/storage/Edge Functions over
+                               https, Realtime presence over wss. Nothing else
+                               is fetched. 'self' also covers the dev server's
+                               ws:// HMR socket (CSP3 'self' matches same-origin
+                               ws/wss).
+           worker-src          public/sw.js, same origin.
+           font-src            system font stacks only; data: is belt-and-braces.
+
+         DELIBERATELY ABSENT:
+           frame-ancestors     MUST be ignored in a meta element per spec —
+                               including it only logs a warning. Clickjacking
+                               protection needs a real header, i.e. moving the
+                               origin to a host that can send one (Cloudflare
+                               Pages / Netlify), which also unlocks report-to
+                               and HSTS.
+           upgrade-insecure-requests
+                               would rewrite the dev server's ws:// HMR socket to
+                               wss:// and break `npm run dev`. It buys nothing
+                               here: the app contains no http:// subresource. -->
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self';
+      style-src 'self' 'unsafe-inline';
+      img-src 'self' data: blob: https://*.supabase.co https://images.unsplash.com;
+      font-src 'self' data:;
+      connect-src 'self' https://*.supabase.co wss://*.supabase.co;
+      worker-src 'self';
+      object-src 'none';
+      base-uri 'none';
+      form-action 'self'">
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#000000" />

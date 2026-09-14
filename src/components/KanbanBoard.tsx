@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { KanbanSquare, X, Plus, Trash2, RefreshCw, ListTree, Search } from 'lucide-react';
+import { KanbanSquare, Plus, Trash2, RefreshCw, ListTree, Search, MessageSquare } from 'lucide-react';
 import {
   createCard,
   createColumn,
@@ -346,12 +346,9 @@ export default function KanbanBoard({ orgId, userId, userEmail, onClose }: Kanba
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="kanban-overlay" onClick={onClose}>
-      <div className="kanban-panel" onClick={(e) => e.stopPropagation()}>
+    <div className="kanban-page">
         <div className="kanban-header">
           <div className="kanban-title">
-            <KanbanSquare size={20} />
-            <h2>Board</h2>
             <span className="kanban-scope-badge">workspace — every member can edit</span>
           </div>
           <div className="kanban-header-actions">
@@ -380,7 +377,6 @@ export default function KanbanBoard({ orgId, userId, userEmail, onClose }: Kanba
             <button className="kanban-icon-btn" title="Refresh" disabled={busy || loading} onClick={() => load()}>
               <RefreshCw size={13} />
             </button>
-            <button className="kanban-close" onClick={onClose} aria-label="Close"><X size={18} /></button>
           </div>
         </div>
 
@@ -556,7 +552,6 @@ export default function KanbanBoard({ orgId, userId, userEmail, onClose }: Kanba
             onRun={run}
           />
         )}
-      </div>
     </div>
   );
 }
@@ -616,7 +611,7 @@ function KanbanCardMini({ card, now, busy, dragging, dragOver, onOpen, ...dnd }:
             {formatDueDate(card.due_date)}
           </span>
         )}
-        {commentCount > 0 && <span className="kanban-comment-count">{commentCount} 💬</span>}
+        {commentCount > 0 && <span className="kanban-comment-count">{commentCount} <MessageSquare size={11} /></span>}
         <span className="kanban-card-avatars">
           {card.assignees.map(a => (
             <span key={a.user_id} className="kanban-avatar" title={a.email ?? a.user_id}>

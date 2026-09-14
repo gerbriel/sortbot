@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Plus, Trash2, ChevronRight, ChevronDown, Check, Circle, CircleDot } from 'lucide-react';
+import { X, Plus, Trash2, ChevronRight, ChevronDown, Check, Circle, CircleDot, MessageSquare } from 'lucide-react';
 import {
   createComment,
   createTask,
@@ -285,7 +285,7 @@ function TaskRow({
           </span>
         ))}
 
-        {task.comments.length > 0 && <span className="kanban-comment-count">{task.comments.length} 💬</span>}
+        {task.comments.length > 0 && <span className="kanban-comment-count">{task.comments.length} <MessageSquare size={11} /></span>}
 
         <button className="kanban-icon-btn" title={isOpen ? 'Collapse' : 'Details, dates, comments'}
           disabled={busy} onClick={() => onToggleExpanded(task.id)}>

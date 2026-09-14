@@ -1,0 +1,128 @@
+/* ── Field / TextField / TextareaField / SelectField ────────────────────────
+   Replaces .org-invite-form input|select, .desc-settings-field,
+   .crm-fields label|input, .sw-composer textarea, .auto-group-input,
+   .filter-select, .prompt-modal-input and the bare inputs in
+   ComprehensiveProductForm.
+
+   index.css already styles the bare input/textarea/select elements. As with
+   Button, a single class outranks those element selectors, so nothing here
+   needs !important. */
+
+.ui-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.ui-field--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ui-field__label {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  color: var(--text-secondary);
+}
+
+/* Matches the app's existing section-label treatment (.crm-fields label,
+   .org-section-title). Opt-in, because uppercasing a long label hurts. */
+.ui-field__label--caps {
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+/* The asterisk is decorative: aria-required already carries the meaning, so it
+   is hidden from the accessibility tree to avoid "star" being read out. */
+.ui-field__required { color: var(--danger); margin-left: 0.15em; }
+
+.ui-field__control { display: flex; min-width: 0; }
+.ui-field__control > * { flex: 1; min-width: 0; }
+
+.ui-input {
+  width: 100%;
+  min-height: 3.6rem;
+  padding: var(--space-2) var(--space-3);
+  font-family: inherit;
+  font-size: var(--fs-base);
+  line-height: var(--lh-snug);
+  color: var(--text-primary);
+  background: var(--ink-800);
+  /* --border-control, not --border: WCAG 1.4.11 wants 3:1 on a control's
+     resting boundary, and the decorative border tokens do not reach it. */
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  transition: border-color var(--dur-fast) var(--ease),
+              box-shadow var(--dur-fast) var(--ease);
+}
+
+.ui-input:focus-visible,
+.ui-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.ui-input:disabled {
+  background: var(--ink-900);
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+/* Invalid state is selected by the ARIA attribute, so the red edge cannot
+   appear without the announcement (or vice versa). */
+.ui-input[aria-invalid='true'] { border-color: var(--danger); }
+.ui-input[aria-invalid='true']:focus { box-shadow: 0 0 0 3px var(--danger-dim); }
+
+.ui-input--sm { min-height: 2.7rem; padding: 0.2rem var(--space-2); font-size: var(--fs-xs); }
+
+.ui-input--textarea {
+  min-height: 7rem;
+  padding: var(--space-2) var(--space-3);
+  line-height: var(--lh-normal);
+  resize: vertical;
+}
+
+.ui-input--select {
+  cursor: pointer;
+  /* Keep the platform chevron: a custom one has to be redrawn for every
+     palette, and the native control is the accessible default. */
+  appearance: auto;
+}
+
+/* Native option lists paint with the platform default unless told otherwise. */
+.ui-input--select option { background: var(--ink-800); color: var(--text-primary); }
+
+.ui-field__hint {
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-snug);
+  color: var(--text-muted);
+}
+
+.ui-field__error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  color: var(--danger);
+}
+
+.ui-field__counter {
+  margin-left: auto;
+  font-size: var(--fs-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.ui-field__counter--over { color: var(--danger); font-weight: 700; }
+
+.ui-field__footer { display: flex; align-items: baseline; gap: var(--space-2); }
+
+.ui-field__messages { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }

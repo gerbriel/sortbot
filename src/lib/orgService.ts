@@ -61,13 +61,19 @@ export type OrgBootstrapResult =
  */
 // Dedupe concurrent calls (React StrictMode double-invokes effects in dev;
 // two racing bootstraps could otherwise create two personal workspaces).
-let inFlight: Promise<OrgBootstrapResult> | null = null;
+// KEYED BY USER (finding 15): a single shared promise was handed to ANY caller
+// regardless of which user was passed, so a sign-out/sign-in inside the bootstrap
+// window resolved user B's effect with user A's { org, role } — which then drove
+// setCurrentOrg, the admin-only buttons and setAnalyticsContext. RLS still gated
+// the data, but the UI claimed the wrong workspace.
+const inFlight = new Map<string, Promise<OrgBootstrapResult>>();
 
 export function ensureOrganization(user: User): Promise<OrgBootstrapResult> {
-  if (!inFlight) {
-    inFlight = ensureOrganizationInner(user).finally(() => { inFlight = null; });
-  }
-  return inFlight;
+  const existing = inFlight.get(user.id);
+  if (existing) return existing;
+  const pending = ensureOrganizationInner(user).finally(() => { inFlight.delete(user.id); });
+  inFlight.set(user.id, pending);
+  return pending;
 }
 
 async function ensureOrganizationInner(user: User): Promise<OrgBootstrapResult> {

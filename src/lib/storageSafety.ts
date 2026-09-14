@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { chunked } from './chunk';
 
 /**
  * Reference-count guard for storage deletions.
@@ -27,10 +28,8 @@ export async function filterUnreferencedStoragePaths(
   if (paths.length === 0) return [];
   const deleting = new Set(deletingProductIds);
   const referencedElsewhere = new Set<string>();
-  const CHUNK = 100; // keep the IN() list under PostgREST's URL-length limit
-
-  for (let i = 0; i < paths.length; i += CHUNK) {
-    const chunk = paths.slice(i, i + CHUNK);
+  // chunked() keeps the IN() list under PostgREST's URL-length limit (lib/chunk.ts).
+  for (const chunk of chunked(paths)) {
     const { data, error } = await supabase
       .from('product_images')
       .select('storage_path, product_id')

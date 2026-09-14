@@ -1,5 +1,80 @@
 # Changelog — Acadia
 
+## 2026-09-13 — Engineering review: six passes over the whole codebase
+
+Six audits (architecture, latent defects, performance, UI system, security, DevOps) were run against the tree and each was then implemented. Reports and implementation logs are in `docs/reviews/`. End state: **505 tests / 35 files green** (from 305/24), `npm run build` clean, **254 lint problems** (from 311), **no dependency added or removed**, and no `sortbot_*` storage key renamed.
+
+Most of this is invisible to a user in the good sense — the app does the same things, with fewer ways to lose their work. **Two things need the owner: five SQL migrations to run and a handful of Supabase dashboard settings to turn on.** Both lists are at the bottom.
+
+### Data loss and correctness (`docs/reviews/02-debugging-fixes.md`, `03-performance-fixes.md`)
+
+- **Six queries silently truncated at 1,000 rows and now paginate.** PostgREST caps a response with no error, so a partial read looked like a complete one. The worst of them meant deleting a 1,500-item batch permanently orphaned 500 products' images and storage files; another meant a 1,500-item batch reloaded with 500 items missing every saved field (description, price, tags). A read that cannot be completed now refuses to delete storage rather than guessing.
+- **Field edits in Step 3 could be silently discarded.** The product update treated "0 rows changed" as success, so an RLS-blocked or missing row lost the edit. It is now checked, and it also writes the group *leader* row (the one the restore path reads) before mirroring onto the rest of the group, so no later re-grouping can strand a listing's text on a row nothing reads.
+- **Reopening a batch no longer destroys a group's other photos.** The `product_images` refresh wiped and re-inserted; it now merges against what is already there, keeps positions, drops only genuinely stale rows, and skips the wipe entirely if it could not read the existing rows first.
+- **Deleting a batch is ordered so a failure leaves a recoverable state**: reference-count, claim, confirm the batch row is gone, then children, then storage files last.
+- **Cancelling an upload cleans up after itself** — the rows and files it had already created are deleted (rows before files). One rough edge remains: cancelling during the first chunk leaves an empty batch in the Library.
+- **Duplicating a batch used to produce an empty one.** It now copies the items.
+- **An upload could wedge the whole batch** if a resumable-upload session hung; there is now a 5-minute watchdog that falls back to a normal upload.
+- **Items no longer get stolen between batches** by the Step 2 saves, and the ±24 h orphan-adoption fallback is now restricted to genuinely unassigned rows belonging to the current user.
+- **"No price" is saved as empty instead of $0**, so a reload no longer pins a fake price (and the $0 export block still fires for a real 0).
+- **Library's delete of individual images no longer discards concurrent work** (a compare-and-set on the shared session blob). *Known and still open:* deleting an image in Library while its batch is open can be undone by the open session's next auto-save — the fix is a behaviour change and is waiting on a decision.
+- **A dangerous one-time cleanup was deleted.** It ran unscoped storage-row deletions with no workspace filter on first load per browser; under multi-workspace RLS it could have reached another workspace's rows.
+
+### Speed and memory (`docs/reviews/03-performance-fixes.md`)
+
+- **First load parses ~30% less JavaScript**: the main bundle went 1,250 kB → ~875 kB raw (363 → ~259 kB gzipped) and the render-blocking stylesheet 189 kB → 112 kB (−40%), by loading the ZIP and EXIF libraries only when those features are used and every modal only when it is opened.
+- **Step 2 is dramatically cheaper to render**: date labels on 1,500 cards went from 84.6 ms to 0.07 ms per render, the name sort 19× faster, and rubber-band selection now repaints at most once per frame instead of once per mouse event (and halves its forced layouts).
+- **The tab no longer runs out of memory during bulk crop work.** The decoded-image cache was unbounded (~24 GB at 1,500 images; the tab died somewhere around 130–250) and is now a 512 MB least-recently-used cache.
+- **Auto-save writes half as much**: derived image URLs are no longer stored in the session blob, since every restore path rebuilds them from the storage path anyway (1,066 KB → 508 KB per save at 1,500 items). Items with no storage path keep theirs.
+- **The crash backup no longer blocks the UI on every click** (a ~393 KB synchronous write, now throttled to at most once a second and flushed when the page goes away), and the compress-tracking registry went from an O(n²) rewrite per image to one write.
+- **Saving a batch makes 60% fewer requests** (1,875 → 750 for 1,500 images), and Step 3's preset pass makes one request instead of 375.
+- Unmount now cancels the timers and animation loops that used to keep running against a detached page.
+
+### Security (`docs/reviews/05-security-fixes.md`)
+
+- **Both Edge Functions now verify who is calling.** The public anon key is itself a valid project token, so the built-in JWT check never proved a user: the Shopify function was dumping the founding store's entire product catalog to anyone with the public key, and the description-paragraph function was an unmetered AI proxy on the owner's Cloudflare account. Both now require a real signed-in user; the global Shopify credentials are reachable only by a proven member of the founding workspace; the paragraph function requires that workspace's opt-in, bounds its prompt, and treats the input as data, not instructions. Neither function echoes an upstream error body any more.
+- **Store-domain input is validated**, closing a server-side request forgery vector (`evil.com/.myshopify.com` and friends).
+- **A Content-Security-Policy ships in `index.html`** — the app's session tokens live in browser storage, so this is what makes injected script useless. No remote scripts, no `eval`, network limited to Supabase plus the landing page's photo host.
+- **CSV exports can no longer carry a spreadsheet formula** (`=`, `+`, `@`, leading tab/CR are neutralized; `-12.50` still exports as a number). The golden export snapshot is byte-identical.
+- **Mail links are validated** — a beta applicant's email address could previously inject extra headers into the owner's mail client.
+- **Live updates no longer leak deleted support threads** to every subscriber.
+- **Sign-up requires a 10-character password** (existing accounts are unaffected), and **signing out purges the cached images** the Service Worker was holding for 7 days — relevant on a shared machine.
+
+### Reliability and operations (`docs/reviews/06-devops-monitoring.md`)
+
+- **CI on every pull request** (`.github/workflows/ci.yml`): tests, type-check, production build, verification that the built page keeps its title and its `/sortbot/` asset paths, a scan of the built bundle for credential-shaped strings, a lint ratchet that fails only if the debt grew, a rule that every migration touched by the change documents its rollback and is safe to re-run, and a type-check of the Edge Functions. It has read-only permissions and never deploys.
+- **The app reports its own crashes** into its own `app_errors` table, grouped into issues by a fingerprint that survives a redeploy, readable in **Workspace → Founder tools → Errors**. Messages and stacks are scrubbed of emails and identifiers in the browser; the database itself refuses to store a full user agent; volume is capped three ways so a crash loop cannot flood the table. Inert until the migration is run — the panel shows a setup hint instead of an error.
+- **An uptime probe every 15 minutes** (`.github/workflows/uptime.yml`) checks the deployed page and Supabase's auth health and files a single GitHub issue on failure, closing it on recovery. Its limits are written into the file: a skipped cron run means *unknown*, not healthy, and no probe can see a broken access-control policy.
+- **Optional container packaging** in `deploy/` (Docker + nginx, `/healthz`, SPA fallback, cache headers) for a staging URL, self-hosting, or a rollback artifact that does not depend on re-running CI. GitHub Pages remains production.
+
+### Internal structure (`docs/reviews/01-architecture-refactors.md`, `04-ui-system.md`)
+
+- **20 dead files / 5,819 lines deleted** — all six unused components, the unused presence hook, and the OpenAI / Google-Vision / Llama-vision code paths, which is what makes "there is no third-party API key in this app" true rather than aspirational. Their variables were dropped from `.env.example`.
+- **Five new single-purpose modules** replaced duplicated logic: the database-row→item conversion (two copies plus two 45-field merges, whose seven real differences are now explicit options), the storage-path→URL conversion (23 inline copies — which turns the future private-image migration into a one-function change), ID chunking (18 hand-written loops), preset matching (two diverging matchers), and the crash backup.
+- **The session-blob item type is honest now** — one type instead of a 5-field claim about a 15-field reality, which removed the unchecked casts that claim required.
+- **Library thumbnails get the retry-on-failure behaviour** the rest of the app already had (it had its own copy of the image component).
+- **Diagnostic logging is gated again** — 76 stray console calls routed through the debug logger, with the expensive ones skipped entirely when debug is off.
+- **A tested UI primitive library landed in `src/components/ui/`** (13 components, 76 tests) — real focus traps, keyboard-navigable tabs, required accessible names on icon buttons, one confirm pattern instead of six copies. **It is not adopted yet**: nothing outside that folder uses it, and adoption is an 18-step plan ordered by risk. Nothing in the app changed visually.
+
+### Migrations to run, in this order
+
+All are additive, idempotent, and carry their own rollback. **Take a database backup first.**
+
+1. `supabase/migrations/security_invites_hardening.sql` — closes an invited member's path to workspace owner. Needs `multi_org_tenancy.sql`; must precede step 2.
+2. `supabase/migrations/security_verified_email.sql` — stops email-matching access rules from trusting an unverified address. Precondition: confirm `select count(*) from auth.users where email_confirmed_at is null;` returns 0, and turn **Confirm email** on.
+3. `supabase/migrations/security_abuse_limits.sql` — size/format/rate limits on the three tables the browser can write to. Existing rows are untouched.
+4. `supabase/migrations/security_storage_policies.sql` — stops one workspace overwriting or deleting another's image files. **Inert until you drop the permissive policy that currently exists in the dashboard** (its inventory query finds it), then smoke-test upload, Step 3 crop, "Compress N Images", and deleting a teammate's batch.
+5. `supabase/migrations/app_errors.sql` — turns on error reporting and the Errors panel. Independent of 1–4.
+
+Then `deno check supabase/functions/*/index.ts`, `supabase functions deploy shopify-titles`, `supabase functions deploy generate-prose`, and **rotate `SHOPIFY_ADMIN_TOKEN` and `CF_API_TOKEN`** — assume both were reachable by anyone holding the public key.
+
+### Supabase dashboard settings (code cannot set these)
+
+- Authentication → Providers → Email: **Confirm email** (the precondition for migration 2), **Leaked password protection**, **minimum password length 10** (the dashboard value is the authoritative one).
+- Authentication → **MFA (TOTP)**, especially for founding admins — that role reaches every workspace's membership, the CRM, and all support threads.
+- Authentication → **Rate limits**. Database → **PITR / backups**: the delete paths are irreversible.
+- For the uptime workflow: repository secrets `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+
 ## 2026-09-13 — Founder tools built in: analytics, CRM, messaging (first-party)
 
 The app is 100% self-reliant for these: no third-party service, no external API. Everything is a table in this project's own Supabase database plus React UI. (An earlier same-day pass had integrated Twenty CRM, Plausible and Chatwoot — first hosted, then self-hosted; it was replaced outright by the native features below and no trace of it ships.)

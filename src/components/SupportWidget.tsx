@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import { MessageSquare, X, ChevronLeft, Send, CheckCircle2, RotateCcw, Plus } from 'lucide-react';
 import {
   fetchThreads, fetchMessages, sendMessage, createThread, markThreadRead, setThreadStatus,
@@ -31,7 +31,7 @@ const POLL_MS = 45_000;
  * realtime is not enabled for the tables. Hidden entirely when the migration
  * has not been run (fetchThreads → 'unavailable').
  */
-export default function SupportWidget({ userId, userEmail, orgName, isFounder }: SupportWidgetProps) {
+function SupportWidget({ userId, userEmail, orgName, isFounder }: SupportWidgetProps) {
   const role: SupportRole = isFounder ? 'founder' : 'user';
   const [available, setAvailable] = useState<boolean | null>(null);
   const [open, setOpen] = useState(false);
@@ -316,3 +316,12 @@ export default function SupportWidget({ userId, userEmail, orgName, isFounder }:
     </div>
   );
 }
+
+/* Memoized (perf finding F2). Steps 1-4 all mount at once and App re-renders on
+ * any store/UI change, so without this a Step-3 keystroke re-rendered this whole
+ * subtree. Every prop App passes is now referentially stable (see the
+ * `useEventCallback` block in App.tsx), so the default shallow compare bails out
+ * on renders that have nothing to do with this component. */
+/* SupportWidget is mounted unconditionally for every signed-in user and takes only
+ * primitive props, so this memo is free. */
+export default memo(SupportWidget);

@@ -1,0 +1,53 @@
+/* ── Badge ──────────────────────────────────────────────────────────────────
+   Static, non-interactive pill. Replaces .org-role-badge / .org-role-owner /
+   .org-role-admin, .org-plan-badge, .sw-badge (count), .crm-tag, .crm-source
+   and the assorted inline status pills.
+
+   A badge is NEVER clickable — if it responds to a click it is a ToggleChip,
+   and the difference matters to keyboard users. */
+
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-weight: 700;
+  line-height: var(--lh-snug);
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+.ui-badge--sm { padding: 0.1rem 0.5rem; font-size: var(--fs-2xs); }
+.ui-badge--md { padding: 0.25rem 0.7rem; font-size: var(--fs-xs); }
+
+/* SHOUTY CASE IS OPT-IN. Uppercasing a value that came from user data
+   (a workspace plan, a tag) misrepresents it; the app's own badges uppercase
+   fixed vocabularies only. */
+.ui-badge--caps { text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* Tones pair a --*-dim fill with the solid token as the label. Every pair was
+   picked so the text clears 4.5:1 on its own fill AND on --ink-850 cards —
+   at a 9px root nothing in this UI qualifies for the large-text exemption. */
+.ui-badge--neutral { background: var(--ink-750); color: var(--text-secondary); }
+.ui-badge--accent  { background: var(--accent-dim);  border-color: var(--accent-line); color: var(--accent); }
+.ui-badge--success { background: var(--success-dim); color: var(--success); }
+.ui-badge--warning { background: var(--warning-dim); color: var(--warning); }
+.ui-badge--danger  { background: var(--danger-dim);  color: var(--danger); }
+.ui-badge--info    { background: var(--info-dim);    color: var(--info); }
+.ui-badge--gold    { background: var(--gold-dim);    color: var(--gold); }
+
+/* Solid counter — unread marks, where the pill itself has to carry the weight. */
+.ui-badge--count {
+  background: var(--danger);
+  color: var(--ink-950);
+  min-width: 1.7em;
+  justify-content: center;
+  padding: 0.1rem 0.45rem;
+  font-size: var(--fs-2xs);
+}
+
+.ui-badge--outline {
+  background: transparent;
+  border-color: currentColor;
+}

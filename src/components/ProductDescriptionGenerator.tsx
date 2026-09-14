@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
 import type { ClothingItem } from '../App';
 import { Target, AlertTriangle, Check, Download, Search, Hourglass, Square, Mic, Trash2,
          Brush, ClipboardPaste, Crop, X, Sparkles, Brain, RefreshCw, Palette, ClipboardList,
@@ -8,9 +8,10 @@ import { getCategoryPresets } from '../lib/categoryPresetsService';
 import type { CategoryPreset } from '../lib/categoryPresets';
 import { applyPresetToProductGroup, applyPresetDirectly } from '../lib/applyPresetToGroup';
 import { generateProductDescription, formatVoiceTranscript, smartSeoTruncate } from '../lib/textAIService';
-import { syncGroupFieldsToDatabase } from '../lib/productService';
+import { syncGroupFieldsToDatabase, flushProductPatchKeepalive } from '../lib/productService';
+import { supabase } from '../lib/supabase';
 import LazyImg from './LazyImg';
-import { log } from '../lib/debugLogger';
+import { log, isDebugEnabled } from '../lib/debugLogger';
 import VoiceCommandTable, { VOICE_KEYWORD_TO_FIELD } from './VoiceCommandTable';
 import { useStoreItemArray, liveArrayRef } from '../lib/workflowStore';
 import { buildGroupArray } from '../lib/grouping';
@@ -102,10 +103,21 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [duplicateTitleWarning, setDuplicateTitleWarning] = useState(false);
-  // Debounce timer for auto-saving current group fields to the products table.
-  // Fires 2s after the last processedItems change so a page refresh never loses
-  // voiceDescription, generatedDescription, seoTitle, or any typed field values.
-  const productSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // TWO independent debounce paths, TWO timers (finding 10). They used to share one
+  // ref: an edit both calls debouncedDirectSave AND changes processedItems, so the
+  // [processedItems] effect's cleanup fired immediately afterwards and cleared the
+  // direct save's timer — debouncedDirectSave never actually ran in practice, and
+  // pendingSaveGroupRef was left holding a stale group forever (it is only nulled
+  // inside the timer that never fired).
+  const groupSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const directSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Latest access token, kept current for the keepalive unload flush (which cannot
+  // await a session lookup while the document is being discarded). The user id
+  // goes alongside it so updateProduct can RE-CREATE a products row that went
+  // missing (a per-chunk upload upsert that errored) instead of reporting a
+  // silent success for a write that touched nothing. (finding 1)
+  const accessTokenRef = useRef<string | null>(null);
+  const userIdRef = useRef<string | undefined>(undefined);
   // Direct save ref — holds latest group to save, set by user edits, consumed by
   // debouncedDirectSave. (Historically this bypassed the isResettingRef feedback
   // loop; that loop no longer exists — kept because it's still the most direct
@@ -113,25 +125,32 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const pendingSaveGroupRef = useRef<ClothingItem[] | null>(null);
 
   const debouncedDirectSave = (group: ClothingItem[]) => {
-    console.log('[PDG] debouncedDirectSave SCHEDULED', {
-      id: group[0]?.id,
-      seoTitle: group[0]?.seoTitle,
-      voiceDescription: group[0]?.voiceDescription?.slice(0, 60),
-      generatedDescription: group[0]?.generatedDescription?.slice(0, 60),
-      brand: group[0]?.brand,
-      size: group[0]?.size,
-      price: group[0]?.price,
-    });
+    // Routed through the debug logger (debugging finding 18): these fired
+    // unconditionally on EVERY keystroke of a Step-3 field, and the argument
+    // object with its .slice() calls was built whether or not anyone was looking.
+    // log.* early-returns when disabled but evaluates its arguments eagerly, so
+    // the isDebugEnabled() guard is what actually makes this free.
+    if (isDebugEnabled()) {
+      log.pdg('debouncedDirectSave SCHEDULED', {
+        id: group[0]?.id,
+        seoTitle: group[0]?.seoTitle,
+        voiceDescription: group[0]?.voiceDescription?.slice(0, 60),
+        generatedDescription: group[0]?.generatedDescription?.slice(0, 60),
+        brand: group[0]?.brand,
+        size: group[0]?.size,
+        price: group[0]?.price,
+      });
+    }
     pendingSaveGroupRef.current = group;
-    if (productSaveTimerRef.current) clearTimeout(productSaveTimerRef.current);
-    productSaveTimerRef.current = setTimeout(() => {
+    if (directSaveTimerRef.current) clearTimeout(directSaveTimerRef.current);
+    directSaveTimerRef.current = setTimeout(() => {
       const g = pendingSaveGroupRef.current;
       if (g && g.length > 0) {
-        console.log('[PDG] debouncedDirectSave FIRING for id:', g[0]?.id);
-        syncGroupFieldsToDatabase(g, batchId ?? null).catch((e) => console.error('[PDG] debouncedDirectSave syncGroupFields threw:', e));
+        log.pdg(`debouncedDirectSave FIRING for id=${g[0]?.id}`);
+        syncGroupFieldsToDatabase(g, batchId ?? null, userIdRef.current).catch((e) => console.error('[PDG] debouncedDirectSave syncGroupFields threw:', e));
         pendingSaveGroupRef.current = null;
       } else {
-        console.warn('[PDG] debouncedDirectSave fired but pendingSaveGroupRef was empty/null');
+        log.pdg('debouncedDirectSave fired but pendingSaveGroupRef was empty/null');
       }
     }, 800);
   };
@@ -255,43 +274,70 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // and removing it ensures ComprehensiveProductForm edits are always persisted.
   useEffect(() => {
     if (!hasMountedRef.current) {
-      console.log('[PDG] processedItems debounce effect: skipping (not mounted)');
+      log.pdg('processedItems debounce effect: skipping (not mounted)');
       return;
     }
-    console.log('[PDG] processedItems debounce effect: scheduling save');
-    if (productSaveTimerRef.current) clearTimeout(productSaveTimerRef.current);
-    productSaveTimerRef.current = setTimeout(() => {
+    log.pdg('processedItems debounce effect: scheduling save');
+    if (groupSaveTimerRef.current) clearTimeout(groupSaveTimerRef.current);
+    groupSaveTimerRef.current = setTimeout(() => {
       const group = buildGroupArray(processedItems)[currentGroupIndex];
       if (group && group.length > 0) {
-        console.log('[PDG] processedItems debounce effect FIRED → syncGroupFields', {
-          id: group[0]?.id,
-          seoTitle: group[0]?.seoTitle,
-          voiceDescription: group[0]?.voiceDescription?.slice(0, 60),
-          brand: group[0]?.brand,
-        });
-        syncGroupFieldsToDatabase(group, batchId ?? null).catch((e) => console.error('[PDG] debounce effect syncGroupFields threw:', e));
+        if (isDebugEnabled()) {
+          log.pdg('processedItems debounce effect FIRED → syncGroupFields', {
+            id: group[0]?.id,
+            seoTitle: group[0]?.seoTitle,
+            voiceDescription: group[0]?.voiceDescription?.slice(0, 60),
+            brand: group[0]?.brand,
+          });
+        }
+        syncGroupFieldsToDatabase(group, batchId ?? null, userIdRef.current).catch((e) => console.error('[PDG] debounce effect syncGroupFields threw:', e));
       } else {
-        console.warn('[PDG] processedItems debounce effect fired but group is empty at index', currentGroupIndex);
+        log.pdg(`processedItems debounce effect fired but group is empty at index ${currentGroupIndex}`);
       }
     }, 500);
     return () => {
-      if (productSaveTimerRef.current) clearTimeout(productSaveTimerRef.current);
+      if (groupSaveTimerRef.current) clearTimeout(groupSaveTimerRef.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [processedItems]);
 
-  // Flush pending save on page unload so a quick refresh never loses data
+  // Keep the access token warm for the unload flush below.
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      accessTokenRef.current = data?.session?.access_token ?? null;
+      userIdRef.current = data?.session?.user?.id;
+    }).catch(() => { /* offline — the flush will simply no-op */ });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      accessTokenRef.current = session?.access_token ?? null;
+      userIdRef.current = session?.user?.id;
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  // Flush pending saves on page unload so a quick refresh never loses data.
+  // Uses a keepalive PATCH, not supabase-js: a normal fetch is cancelled the
+  // instant the document is discarded, so the old flush was lost exactly when it
+  // mattered most (finding 9). It also drains pendingSaveGroupRef, which the old
+  // version ignored entirely (finding 10).
   useEffect(() => {
     const flushOnUnload = () => {
-      if (productSaveTimerRef.current) {
-        clearTimeout(productSaveTimerRef.current);
-        productSaveTimerRef.current = null;
+      for (const timer of [groupSaveTimerRef, directSaveTimerRef]) {
+        if (timer.current) { clearTimeout(timer.current); timer.current = null; }
       }
-      const group = buildGroupArray(processedItems)[currentGroupIndex];
-      if (group && group.length > 0) {
-        // Use sendBeacon-friendly sync approach: fire-and-forget
-        syncGroupFieldsToDatabase(group, batchId ?? null).catch(() => {});
-      }
+      const token = accessTokenRef.current;
+      const flushedIds = new Set<string>();
+      const flushGroup = (group: ClothingItem[] | undefined | null) => {
+        if (!group || group.length === 0) return;
+        // Write the LEADER row — the one handleOpenBatch reads back (finding 2).
+        const groupId = group[0].productGroup || group[0].id;
+        const leader = group.find(i => i.id === groupId) ?? group[0];
+        if (!leader.id || flushedIds.has(leader.id)) return;
+        flushedIds.add(leader.id);
+        flushProductPatchKeepalive(leader.id, leader, token);
+      };
+      const pending = pendingSaveGroupRef.current;
+      if (pending) { pendingSaveGroupRef.current = null; flushGroup(pending); }
+      flushGroup(buildGroupArray(processedItemsRef.current)[currentGroupIndex]);
     };
     // beforeunload alone is unreliable on back-button navigation and mobile
     // (bfcache freezes the page without firing it) — pagehide is the dependable
@@ -302,7 +348,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       window.removeEventListener('beforeunload', flushOnUnload);
       window.removeEventListener('pagehide', flushOnUnload);
     };
-  }, [processedItems, currentGroupIndex, batchId]);
+  }, [currentGroupIndex]);
 
   // Stage 2b: the prop-sync effect (batchChanged/lengthChanged/structureKey
   // heuristics + isResettingRef) is GONE — PDG reads the store directly, so
@@ -671,6 +717,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const applyPresetsToAllGroups = async () => {
       if (availablePresets.length === 0) return;
 
+      // Fetch the preset list ONCE for the whole pass. applyPresetToProductGroup
+      // would otherwise re-fetch it for every group — 375 sequential round trips
+      // for a 1 500-image batch, for a list that cannot change mid-loop. Fetched
+      // (not reused from `availablePresets`) so the data is exactly as fresh as
+      // before; `availablePresets` is just this list pre-filtered to is_active.
+      const presetsForPass = await getCategoryPresets();
+
       // Collect patches as a Map<itemId, updatedItem> so we can apply them
       // via functional update (prevents stale-closure from overwriting freshly
       // DB-hydrated seoTitle / voiceDescription / productType).
@@ -717,7 +770,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
         try {
           // Apply preset to this group
-          const updatedGroup = await applyPresetToProductGroup(groupItems, firstItem.category);
+          const updatedGroup = await applyPresetToProductGroup(
+            groupItems, firstItem.category, false, presetsForPass);
           updatedGroup.forEach((updatedItem) => patches.set(updatedItem.id, updatedItem));
         } catch (error) {
           // Silently fail for this group, continue with others
@@ -816,23 +870,25 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
          p.category_name.toLowerCase() === currentItem.category?.toLowerCase())
       );
 
-      console.log('[PRESET AUTO-APPLY] group', currentGroupIndex, {
-        itemId: currentItem.id,
-        category: currentItem.category,
-        productType: currentItem.productType,
-        productTypeIsOverride,
-        hasPresetData,
-        presetCategory,
-        isSameCategory,
-        hasPresetFields,
-        selectedPresetId,
-        productTypePresetName: productTypePreset?.display_name,
-        defaultPresetName: defaultPresetForCategory?.display_name,
-      });
+      if (isDebugEnabled()) {
+        log.pdg('[PRESET AUTO-APPLY] group', currentGroupIndex, {
+          itemId: currentItem.id,
+          category: currentItem.category,
+          productType: currentItem.productType,
+          productTypeIsOverride,
+          hasPresetData,
+          presetCategory,
+          isSameCategory,
+          hasPresetFields,
+          selectedPresetId,
+          productTypePresetName: productTypePreset?.display_name,
+          defaultPresetName: defaultPresetForCategory?.display_name,
+        });
+      }
 
       // Already applied for this exact category — nothing to do
       if (hasPresetData && hasPresetFields && isSameCategory) {
-        console.log('[PRESET AUTO-APPLY] skip — already applied for category');
+        log.pdg('[PRESET AUTO-APPLY] skip — already applied for category');
         return;
       }
 
@@ -841,7 +897,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         selectedPresetId &&
         currentGroup.some(item => item._presetData?.presetId === selectedPresetId);
       if (manualPresetApplied && isSameCategory) {
-        console.log('[PRESET AUTO-APPLY] skip — in-memory selectedPresetId override');
+        log.pdg('[PRESET AUTO-APPLY] skip — in-memory selectedPresetId override');
         return;
       }
 
@@ -849,11 +905,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       // Even if no preset found for productType, still skip to avoid stomping the override.
       if (productTypeIsOverride) {
         if (productTypePreset) {
-          console.log('[PRESET AUTO-APPLY] skip — productType encodes override:', productTypePreset.display_name);
+          log.pdg('[PRESET AUTO-APPLY] skip — productType encodes override:', productTypePreset.display_name);
           setSelectedPresetId(productTypePreset.id);
           setAppliedPresetLabel(productTypePreset.display_name);
         } else {
-          console.log('[PRESET AUTO-APPLY] skip — productType override present but no matching preset found for:', currentItem.productType);
+          log.pdg('[PRESET AUTO-APPLY] skip — productType override present but no matching preset found for:', currentItem.productType);
         }
         return;
       }
@@ -864,7 +920,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       if (!hasPresetData && currentItem?.appliedPresetId) {
         const dbPreset = availablePresets.find(p => p.id === currentItem.appliedPresetId && p.is_active);
         if (dbPreset) {
-          console.log('[PRESET AUTO-APPLY] skip — appliedPresetId from DB:', dbPreset.display_name);
+          log.pdg('[PRESET AUTO-APPLY] skip — appliedPresetId from DB:', dbPreset.display_name);
           setSelectedPresetId(currentItem.appliedPresetId);
           setAppliedPresetLabel(dbPreset.display_name);
           return;
@@ -875,13 +931,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       // (policies, shipsFrom, gender, whoMadeIt) are present, a preset was previously
       // applied — skip auto-apply to avoid overwriting those values.
       if (!hasPresetData && hasPresetFields) {
-        console.log('[PRESET AUTO-APPLY] skip — preset fields persisted from prior session (legacy guard)');
+        log.pdg('[PRESET AUTO-APPLY] skip — preset fields persisted from prior session (legacy guard)');
         return;
       }
 
       try {
         const categoryChanged = !isSameCategory && hasPresetData;
-        console.log('[PRESET AUTO-APPLY] applying default preset for category:', currentItem.category, 'categoryChanged:', categoryChanged);
+        log.pdg('[PRESET AUTO-APPLY] applying default preset for category:', currentItem.category, 'categoryChanged:', categoryChanged);
         const updatedGroup = await applyPresetToProductGroup(currentGroup, currentItem.category, categoryChanged);
         setProcessedItems(prev => {
           const updated = [...prev];
@@ -961,15 +1017,17 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     const resolvedLabel = availablePresets.find(p => p.id === resolvedId)?.display_name ||
       currentItem?._presetData?.displayName || '';
 
-    console.log('[PRESET NAV] group', currentGroupIndex, {
-      itemId: currentItem?.id,
-      productType: currentItem?.productType,
-      presetDataId: fromPresetData,
-      productTypeLookupId: fromProductType,
-      resolvedId,
-      resolvedLabel,
-      availablePresetsCount: availablePresets.length,
-    });
+    if (isDebugEnabled()) {
+      log.pdg('[PRESET NAV] group', currentGroupIndex, {
+        itemId: currentItem?.id,
+        productType: currentItem?.productType,
+        presetDataId: fromPresetData,
+        productTypeLookupId: fromProductType,
+        resolvedId,
+        resolvedLabel,
+        availablePresetsCount: availablePresets.length,
+      });
+    }
 
     setSelectedPresetId(resolvedId);
     setAppliedPresetLabel(resolvedLabel);
@@ -1206,7 +1264,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     log.pdg(`handleSave | group=${currentGroupIndex} groupSize=${currentGroup.length} batchId=${batchId ?? 'none'}`);
     if (!currentGroup.length) { setHasUnsavedChanges(false); return; }
     try {
-      await syncGroupFieldsToDatabase(currentGroup, batchId ?? null);
+      await syncGroupFieldsToDatabase(currentGroup, batchId ?? null, userIdRef.current);
       setHasUnsavedChanges(false);
     } catch {
       // Silently fail — workflow_state blob is the source of truth
@@ -1268,7 +1326,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   /** Handle a cell edit from the VoiceCommandTable — updates fields AND rebuilds voiceDescription */
   const handleTableFieldChange = (fieldKey: string, value: string) => {
-    console.log('[PDG] handleTableFieldChange', { fieldKey, value, currentGroupIndex });
+    log.pdg(`handleTableFieldChange | ${fieldKey}="${value}" groupIndex=${currentGroupIndex}`);
     const latestItems = processedItemsRef.current;
     const latestGroupArray = buildGroupArray(latestItems);
     const latestGroup = latestGroupArray[currentGroupIndex] || [];
@@ -1332,10 +1390,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       }
       return { ...updated, voiceDescription: patchVoiceLine(updated.voiceDescription || '', fieldKey, value) };
     });
-    console.log('[PDG] handleTableFieldChange → debouncedDirectSave with updatedGroup[0]:', {
-      id: updatedGroup[0]?.id,
-      [fieldKey]: (updatedGroup[0] as any)[fieldKey],
-    });
+    if (isDebugEnabled()) {
+      log.pdg('handleTableFieldChange → debouncedDirectSave with updatedGroup[0]', {
+        id: updatedGroup[0]?.id,
+        [fieldKey]: (updatedGroup[0] as any)[fieldKey],
+      });
+    }
     debouncedDirectSave(updatedGroup);
   };
 
@@ -1511,16 +1571,18 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           : null;
         const matchingPreset = bySelectedId ?? byProductType ?? byCategory ?? null;
 
-        console.log('[PRESET REGEN] Step 0 preset resolution', {
-          itemId: item.id,
-          category: item.category,
-          productType: item.productType,
-          selectedPresetId,
-          bySelectedIdName: bySelectedId?.display_name,
-          byProductTypeName: byProductType?.display_name,
-          byCategoryName: byCategory?.display_name,
-          resolvedPresetName: matchingPreset?.display_name,
-        });
+        if (isDebugEnabled()) {
+          log.pdg('[PRESET REGEN] Step 0 preset resolution', {
+            itemId: item.id,
+            category: item.category,
+            productType: item.productType,
+            selectedPresetId,
+            bySelectedIdName: bySelectedId?.display_name,
+            byProductTypeName: byProductType?.display_name,
+            byCategoryName: byCategory?.display_name,
+            resolvedPresetName: matchingPreset?.display_name,
+          });
+        }
 
         if (matchingPreset) {
           // Use the matched preset's productType as the authoritative category for title/tag generation.
@@ -1601,14 +1663,16 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         care:  refreshedItem.care  || ''
       });
 
-      console.log('[REGEN] aiResult', {
-        suggestedTitle: aiResult.suggestedTitle,
-        description: aiResult.description?.slice(0, 80),
-        extractedFields: aiResult.extractedFields,
-        voiceTextUsed: voiceText?.slice(0, 80),
-        refreshedItemSeoTitle: refreshedItem.seoTitle,
-        refreshedItemCategory: refreshedItem.category,
-      });
+      if (isDebugEnabled()) {
+        log.pdg('[REGEN] aiResult', {
+          suggestedTitle: aiResult.suggestedTitle,
+          description: aiResult.description?.slice(0, 80),
+          extractedFields: aiResult.extractedFields,
+          voiceTextUsed: voiceText?.slice(0, 80),
+          refreshedItemSeoTitle: refreshedItem.seoTitle,
+          refreshedItemCategory: refreshedItem.category,
+        });
+      }
 
       const extractedFields = aiResult.extractedFields || {};
       const finalDescription = aiResult.description;
@@ -1658,12 +1722,14 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           ...(aiResult.suggestedTitle && { seoTitle: aiResult.suggestedTitle }),
         };
       });
-      console.log('[REGEN] Flushing to DB immediately:', {
-        id: updatedGroupForSave[0]?.id,
-        seoTitle: updatedGroupForSave[0]?.seoTitle,
-        generatedDescription: updatedGroupForSave[0]?.generatedDescription?.slice(0, 80),
-      });
-      syncGroupFieldsToDatabase(updatedGroupForSave, batchId ?? null).catch((e) => console.error('[REGEN] immediate save threw:', e));
+      if (isDebugEnabled()) {
+        log.pdg('[REGEN] Flushing to DB immediately:', {
+          id: updatedGroupForSave[0]?.id,
+          seoTitle: updatedGroupForSave[0]?.seoTitle,
+          generatedDescription: updatedGroupForSave[0]?.generatedDescription?.slice(0, 80),
+        });
+      }
+      syncGroupFieldsToDatabase(updatedGroupForSave, batchId ?? null, userIdRef.current).catch((e) => console.error('[REGEN] immediate save threw:', e));
     } catch (error) {
       console.error('Regenerate all failed:', error);
     } finally {
@@ -3245,4 +3311,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   );
 };
 
-export default ProductDescriptionGenerator;
+/* Memoized (perf finding F2). Steps 1-4 all mount at once and App re-renders on
+ * any store/UI change, so without this a Step-3 keystroke re-rendered this whole
+ * subtree. Every prop App passes is now referentially stable (see the
+ * `useEventCallback` block in App.tsx), so the default shallow compare bails out
+ * on renders that have nothing to do with this component. */
+/* NOTE: PDG subscribes to workflowStore itself, so it still re-renders on every
+ * item change — as it must. The memo is what stops it re-rendering for a toast,
+ * a storage-meter refresh or a Step-2 selection change. */
+export default memo(ProductDescriptionGenerator);

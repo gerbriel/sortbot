@@ -1,0 +1,78 @@
+/* ── IconButton ─────────────────────────────────────────────────────────────
+   Replaces .org-icon-btn / .org-icon-danger, .sw-icon-btn, .sw-send,
+   .org-panel-close, .button-close, .button-icon and .toast-dismiss.
+
+   Square by design: a glyph-only control with rectangular padding drifts
+   off-centre as soon as the icon's aspect ratio changes. */
+
+.ui-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  font-family: inherit;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
+}
+
+.ui-icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ui-icon-btn:disabled,
+.ui-icon-btn[aria-disabled='true'] { opacity: 0.45; cursor: not-allowed; }
+
+/* 24 / 32 / 40px — the same steps as Button, so an icon button sits flush in a
+   row of labelled buttons without nudging the baseline. */
+.ui-icon-btn--sm { width: 2.7rem; height: 2.7rem; font-size: var(--fs-xs); }
+.ui-icon-btn--md { width: 3.6rem; height: 3.6rem; font-size: var(--fs-base); }
+.ui-icon-btn--lg { width: 4.4rem; height: 4.4rem; font-size: var(--fs-md); }
+
+.ui-icon-btn--round { border-radius: 999px; }
+
+.ui-icon-btn--primary {
+  background: var(--accent);
+  color: var(--ink-950);
+  border-color: var(--accent);
+}
+.ui-icon-btn--primary:hover:not(:disabled):not([aria-disabled='true']) { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+.ui-icon-btn--secondary {
+  background: var(--ink-800);
+  color: var(--text-secondary);
+  border-color: var(--border-control);
+}
+.ui-icon-btn--secondary:hover:not(:disabled):not([aria-disabled='true']) { background: var(--ink-750); color: var(--text-primary); }
+
+.ui-icon-btn--ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: transparent;
+}
+.ui-icon-btn--ghost:hover:not(:disabled):not([aria-disabled='true']) { background: var(--ink-750); color: var(--text-primary); }
+
+.ui-icon-btn--danger {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.ui-icon-btn--danger:hover:not(:disabled):not([aria-disabled='true']) { background: var(--danger-dim); }
+
+/* Toggled-on state for icon buttons that are really toggles (pin, pick mode,
+   debug). aria-pressed drives it, so the visual can never disagree with what
+   a screen reader is told. */
+.ui-icon-btn[aria-pressed='true'] {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+.ui-icon-btn--primary[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--ink-950);
+}

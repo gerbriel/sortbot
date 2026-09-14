@@ -1,0 +1,247 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   ToolView — the full-page shell the header tools open into.
+
+   These views used to be fixed-position modals with modal-scale padding
+   (0.35–0.6rem on the app's 9px root, i.e. 3–5px) inside a 640–1200px box.
+   As pages they get room: the numbers below are the ONE spacing scale every
+   tool view inherits, so no component re-invents its own.
+
+   Against the 9px root:
+     3rem   = 27px   page top padding / section gap
+     6rem   = 54px   page bottom padding
+     2rem   = 18px   card + panel padding
+     1.5rem = 13.5px grid gap (minimum)
+     1.2rem = 10.8px list-row vertical padding
+     4rem   = 36px   minimum form-control height
+     4.5rem = 40.5px minimum table-row height
+
+   Type comes from the --fs-* px scale; spacing and radii stay rem. No literal
+   hex anywhere — this surface is the white page, not the inverted nav.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.tool-view {
+  padding: 3rem clamp(2rem, 4vw, 6rem) 6rem;
+  background: var(--ink-950);
+  /* Fills the window under the black nav, so a short view (Categories with two
+     rows) does not leave the app shell's grey showing beneath it. */
+  min-height: calc(100vh - 10rem);
+  color: var(--text-primary);
+  line-height: var(--lh-normal);
+  /* Wide tables and boards scroll inside their own containers; the page never
+     scrolls sideways. `clip`, not `hidden`: `overflow-x: hidden` forces the
+     other axis to `auto`, which would turn this into a scroll container and
+     silently kill `position: sticky` on the editor columns and tab rails
+     inside it. `clip` does not create a scrollport. */
+  overflow-x: clip;
+
+  /* Clearance for anything `position: sticky` inside a tool view. `.app-header`
+     is sticky at z-index 100 and roughly 6rem tall; without this offset a
+     sticky editor column or tab rail slides underneath it. One variable so the
+     five sticky rules across the tool CSS files stay in step. */
+  --tv-sticky-top: 8.5rem;
+}
+
+.tool-view-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+}
+
+/* Library and Board are grid/column surfaces — a reading measure just wastes
+   the monitor they are being used on. */
+.tool-view--wide .tool-view-inner { max-width: none; }
+
+/* ── Title block ─────────────────────────────────────────────────────────── */
+
+.tool-view-head {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+}
+
+.tool-view-back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.9rem 1.5rem;
+  background: var(--ink-850);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.tool-view-back:hover {
+  background: var(--ink-750);
+  color: var(--text-primary);
+}
+
+.tool-view-titlerow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.tool-view-title {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  min-width: 0;
+}
+
+.tool-view-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+}
+
+.tool-view-title h1 {
+  margin: 0;
+  font-size: var(--fs-2xl);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.025em;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+/* Programmatic focus on mount must not paint a ring; keyboard focus must. */
+.tool-view-title h1:focus { outline: none; }
+.tool-view-title h1:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0.6rem;
+  border-radius: var(--radius-sm);
+}
+
+.tool-view-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.tool-view-desc {
+  margin: 0;
+  max-width: 78ch;
+  font-size: var(--fs-base);
+  line-height: var(--lh-normal);
+  color: var(--text-secondary);
+}
+
+/* ── Tab strip (Analytics: Overview | Errors) ────────────────────────────── */
+
+.tool-view-tabs {
+  display: flex;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--border);
+  /* Pull up out of the 3rem section gap — tabs belong to the title block. */
+  margin-top: -1.6rem;
+  flex-wrap: wrap;
+}
+
+.tool-view-tab {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 1.2rem 1.8rem;
+  margin-bottom: -1px;
+  font-size: var(--fs-base);
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.tool-view-tab:hover { color: var(--text-primary); }
+
+.tool-view-tab--on {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Body ────────────────────────────────────────────────────────────────── */
+
+.tool-view-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+  min-width: 0;
+}
+
+/* ── Shared page primitives the per-tool CSS builds on ───────────────────── */
+
+.tv-card {
+  background: var(--ink-850);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+}
+
+.tv-cols {
+  display: grid;
+  gap: 2rem;
+  align-items: start;
+}
+
+.tv-section-title {
+  margin: 0 0 1.5rem;
+  font-size: var(--fs-lg);
+  line-height: var(--lh-tight);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ── Page-scale minimums that apply to every tool view ───────────────────── */
+
+/* Form controls were sized for modal density; on a page they need a real
+   hit target. Height only — each component keeps its own padding and fill. */
+.tool-view input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+.tool-view select,
+.tool-view textarea {
+  min-height: 4rem;
+  font-size: var(--fs-base);
+  line-height: var(--lh-snug);
+}
+
+.tool-view textarea { min-height: 9rem; }
+
+.tool-view :is(th, td) {
+  padding-top: 1.25rem;
+  padding-bottom: 1.25rem;
+  line-height: var(--lh-snug);
+}
+
+/* Tables carry their own horizontal scroll so the page never does. */
+.tool-view table { max-width: 100%; }
+
+.tool-view :is(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 1024px) {
+  .tool-view .tv-cols { grid-template-columns: 1fr !important; }
+}
+
+@media (max-width: 640px) {
+  .tool-view { padding: 1.5rem 1.5rem 4rem; }
+  .tool-view-inner { gap: 2rem; }
+  .tool-view-title h1 { font-size: var(--fs-xl); }
+  .tool-view-titlerow { align-items: flex-start; }
+  .tool-view-actions { width: 100%; }
+  .tv-card { padding: 1.5rem; }
+}

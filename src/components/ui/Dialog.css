@@ -1,0 +1,124 @@
+/* ── Dialog ─────────────────────────────────────────────────────────────────
+   Replaces .org-panel-overlay/.org-panel, .library-modal/.library-content,
+   .categories-manager-overlay, .presets-manager-overlay/.preset-form-overlay,
+   .vocab-overlay, .kanban-overlay, .prompt-modal-overlay, .field-modal-overlay
+   and .ai-settings-modal — nine hand-rolled scrims with four different
+   z-indexes and no shared focus behaviour.
+
+   Z-INDEX BUDGET (matches what already ships, so a migrated modal keeps its
+   stacking relationship):
+     1000  dialogs                       (was: every overlay in the app)
+     5000  support widget                (SupportWidget.css)
+     9000  toasts                        (Toast.css, above dialogs on purpose —
+           a save failure must be visible over the modal that caused it)
+     9999  debug toggle                  (App.css)
+   Nested dialogs stack by DOM order at the same level, which is correct: the
+   later-mounted one paints last. */
+
+.ui-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  /* No token for a scrim: --accent-* alphas are far too light to separate a
+     white modal from a white page. This is the one deliberate literal, and it
+     is a neutral black alpha rather than a brand colour, so it survives a
+     palette swap. */
+  background: rgba(0, 0, 0, 0.55);
+  animation: ui-dialog-scrim-in var(--dur-fast) var(--ease);
+}
+
+.ui-dialog {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-height: min(86vh, 100%);
+  /* --ink-800 is the popover step. On this light palette it is WHITE — lighter
+     than the --ink-850 cards it floats over. That inversion is intentional
+     (CLAUDE.md §1): elevation moves toward white. */
+  background: var(--ink-800);
+  border-radius: var(--radius-lg);
+  /* --shadow-xl carries a hairline ring, so the panel keeps an edge against the
+     scrim without a border (and therefore without a layout shift). */
+  box-shadow: var(--shadow-xl);
+  animation: ui-dialog-in var(--dur) var(--ease);
+}
+
+.ui-dialog:focus { outline: none; }
+
+.ui-dialog--sm { width: min(420px, 100%); }
+.ui-dialog--md { width: min(640px, 100%); }
+.ui-dialog--lg { width: min(900px, 100%); }
+.ui-dialog--xl { width: min(1200px, 100%); }
+.ui-dialog--full { width: 100%; height: 100%; max-height: none; }
+
+.ui-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ui-dialog__heading { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+
+.ui-dialog__title {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 650;
+  line-height: var(--lh-tight);
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.ui-dialog__title-icon { display: inline-flex; align-items: center; color: var(--text-secondary); }
+
+.ui-dialog__description {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  color: var(--text-secondary);
+}
+
+.ui-dialog__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-5);
+}
+
+.ui-dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-5) var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Pushes everything after it to the right — for a destructive action that
+   belongs at the far left of a footer. */
+.ui-dialog__footer-spacer { margin-right: auto; }
+
+@keyframes ui-dialog-scrim-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ui-dialog-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-dialog-overlay, .ui-dialog { animation: none; }
+}
+
+@media (max-width: 560px) {
+  .ui-dialog-overlay { padding: var(--space-2); align-items: flex-end; }
+  .ui-dialog { width: 100%; max-height: 92vh; }
+  /* Stacked footer: three buttons in a row overflow at phone width. */
+  .ui-dialog__footer { justify-content: stretch; }
+  .ui-dialog__footer > * { flex: 1; }
+  .ui-dialog__footer-spacer { margin-right: 0; }
+}

@@ -35,26 +35,88 @@ export interface SlimWorkflowItem {
   customDescription?: string;
 }
 
+/**
+ * What a restore path ACTUALLY finds in `workflow_state`.
+ *
+ * `slimForWorkflowState` has written `SlimWorkflowItem`s since Stage 3, but the
+ * blob is years old: batches saved before the slimming still hold whole
+ * `ClothingItem`s, and `duplicateBatch` copies whatever the source had. So the
+ * honest type is "at least a SlimWorkflowItem, possibly any ClothingItem field
+ * as well" — which is also what lets consumers read `preview` / `seoTitle` off a
+ * persisted item without an `as ClothingItem` cast on every access.
+ *
+ * This replaced `SlimItem` in workflowBatchService.ts, which claimed the blob
+ * held 5 fields while the writer had been persisting 15 (architecture review
+ * finding #13).
+ */
+export type PersistedWorkflowItem = SlimWorkflowItem & Partial<ClothingItem>;
+
+/**
+ * Widen persisted items to `ClothingItem` for the restore paths.
+ *
+ * This IS a lie and it is deliberately in one place: a persisted item has no
+ * `file` (File objects cannot be serialized, CLAUDE.md §18 #6) and, since the
+ * slimming, no `preview` either — both are required on `ClothingItem`. Every
+ * caller immediately rebuilds `preview`/`imageUrls`/`thumbnailUrl` from
+ * `storagePath` (§11) and nothing reads `file` off a restored item, so the cast
+ * is safe; it was previously spelled `as ClothingItem[]` at each call site with
+ * a comment explaining the same thing.
+ *
+ * Runtime-identical to that cast: it does not add or normalise any field.
+ */
+export const asClothingItems = (
+  items: readonly PersistedWorkflowItem[] | undefined,
+): ClothingItem[] => (items ?? []) as unknown as ClothingItem[];
+
 export const slimForWorkflowState = (items: ClothingItem[]): SlimWorkflowItem[] =>
-  items.map(item => ({
-    id:                  item.id,
-    storagePath:         item.storagePath,
-    imageUrls:           item.imageUrls,
-    thumbnailUrl:        item.thumbnailUrl,
-    productGroup:        item.productGroup,
-    category:            item.category,
-    capturedAt:          item.capturedAt,
-    originalName:        item.originalName,
-    imageRotation:       item.imageRotation,
-    crop:                item.crop,
-    originalStoragePath: item.originalStoragePath,
-    originalUrl:         item.originalUrl,
-    brandCategory:       item.brandCategory,
-    descriptionEdited:   item.descriptionEdited,
-    // Voice/chip-entered freeform note — no products column holds it, so the
-    // workflow_state blob is its only home across reloads.
-    customDescription:   item.customDescription,
-  }));
+  items.map(item => {
+    // ── imageUrls / thumbnailUrl are DERIVED, so they are only persisted for items
+    //    that have nothing to derive them FROM (perf finding F8).
+    //
+    // Both are `getPublicUrl(storagePath)` — `getThumbnailUrl` ignores its `_size`
+    // argument and returns the same plain CDN URL (Storage transforms need a paid
+    // plan), so with a storagePath present all three fields are the same string.
+    // Together they measured **51 % of the 1 067 KB autosave payload** at 1 500
+    // items, re-uploaded on every 2 s debounce fire, TOASTed and WAL-logged by
+    // Postgres each time.
+    //
+    // Every restore path already rebuilds them from `storagePath` and DISCARDS
+    // whatever was saved (verified before this change was made):
+    //   - App.tsx startup restore — "If we have a storagePath, rebuild imageUrls
+    //     entirely from it (ignore saved value)"; thumbnailUrl via getThumbnailUrl.
+    //   - App.tsx handleOpenBatch — `item.imageUrls?.length ? … : [reconstructed]`,
+    //     thumbnailUrl from storagePath.
+    //   - App.tsx handleImagesGrouped — collapses imageUrls to `[canonicalUrl]` built
+    //     from storagePath on every Step-2 action.
+    //   - lib/libraryData.ts pass 1 (both the group and imageList builders) —
+    //     `getPublicUrl(storagePath)` when preview/imageUrls are empty.
+    // `ultraSlimForBackup` has never carried either field, which is the same bet.
+    //
+    // LEGACY ITEMS KEEP THEIRS. An item with no storagePath (uploaded before the
+    // field was preserved) has no other image reference at all — dropping its
+    // imageUrls would lose the picture permanently, which is exactly the case the
+    // two-stage DB fallback in startup restore exists to repair.
+    const derivable = !!item.storagePath;
+    return {
+      id:                  item.id,
+      storagePath:         item.storagePath,
+      imageUrls:           derivable ? undefined : item.imageUrls,
+      thumbnailUrl:        derivable ? undefined : item.thumbnailUrl,
+      productGroup:        item.productGroup,
+      category:            item.category,
+      capturedAt:          item.capturedAt,
+      originalName:        item.originalName,
+      imageRotation:       item.imageRotation,
+      crop:                item.crop,
+      originalStoragePath: item.originalStoragePath,
+      originalUrl:         item.originalUrl,
+      brandCategory:       item.brandCategory,
+      descriptionEdited:   item.descriptionEdited,
+      // Voice/chip-entered freeform note — no products column holds it, so the
+      // workflow_state blob is its only home across reloads.
+      customDescription:   item.customDescription,
+    };
+  });
 
 /** What survives in the synchronous localStorage backup written on every
  *  auto-save call (no debounce) — only the 7 fields needed to detect and win

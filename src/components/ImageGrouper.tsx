@@ -1,11 +1,12 @@
-import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, memo } from 'react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
 import { Package, Image, ArrowDown, ArrowUp, ArrowUpDown, Check, RotateCcw, CornerUpLeft,
          CornerUpRight, Search, X, Camera, Circle, CircleDot, Crosshair, ClipboardPaste,
          Trash2, Scissors } from 'lucide-react';
 import LoadingProgress from './LoadingProgress';
-import { log } from '../lib/debugLogger';
+import { log, isDebugEnabled } from '../lib/debugLogger';
+import { publicImageUrl } from '../lib/storageUrls';
 import './ImageGrouper.css';
 import './ProductDescriptionGenerator.css'; // crop-fs-* styles shared with PDG
 
@@ -31,6 +32,50 @@ function retryImg(e: React.SyntheticEvent<HTMLImageElement>) {
   log.img(`load error → retry ${attempt + 1}/3 in ${delay}ms | src=${originalSrc.split('/').pop()}`);
   setTimeout(() => { img.src = `${originalSrc}?t=${Date.now()}`; }, delay);
 }
+
+/* ── Hoisted Intl instances (F1/F17) ────────────────────────────────────────────
+ * `toLocaleDateString(undefined, {...})` / `localeCompare(x, undefined, {...})` miss
+ * V8's formatter cache whenever an options object is passed, so each call resolves a
+ * fresh Intl object. At 1,500 cards x 2 date calls that measured 82.5 ms of pure
+ * formatting PER ImageGrouper render (and it re-renders on every App render); the sort
+ * comparators built ~17,700 collators per sort. Reusing these instances is
+ * spec-equivalent — identical output, one construction. */
+const CARD_DATE_FMT   = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+const CARD_TIME_FMT   = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+const FILTER_DATE_FMT = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+const EN_CA_DATE_FMT  = new Intl.DateTimeFormat('en-CA');   // YYYY-MM-DD filter keys
+const NAME_COLLATOR   = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+/** "Mar 12, 2026 3:41 PM" for a capturedAt, memoized by timestamp so a re-render is a
+ *  Map lookup instead of two Intl formats. Keyed by the raw number, so the cache is
+ *  bounded by distinct capture times; cleared wholesale past a ceiling (it is a pure
+ *  function of `ts`, so dropping entries only costs a re-derive). */
+const CAPTURE_LABEL_CACHE_MAX = 5000;
+const captureLabelCache = new Map<number, string>();
+function captureLabel(ts: number): string {
+  let label = captureLabelCache.get(ts);
+  if (label === undefined) {
+    if (captureLabelCache.size >= CAPTURE_LABEL_CACHE_MAX) captureLabelCache.clear();
+    const d = new Date(ts);
+    label = `${CARD_DATE_FMT.format(d)} ${CARD_TIME_FMT.format(d)}`;
+    captureLabelCache.set(ts, label);
+  }
+  return label;
+}
+
+/** YYYY-MM-DD local date key for the date filter. Same output as
+ *  `toLocaleDateString('en-CA')`, one hoisted formatter. */
+const localDateKey = (ts: number): string => EN_CA_DATE_FMT.format(new Date(ts));
+
+/* ── Sort helpers — module scope so they are one function per module, not one per
+ *    render, and so the comparators reuse NAME_COLLATOR. Both are pure functions of
+ *    the item; neither closes over component state. */
+const nameKey = (item: ClothingItem): string => {
+  if (item.originalName) return item.originalName.toLowerCase();
+  if (item.storagePath) return item.storagePath.split('/').pop()?.toLowerCase() ?? item.id;
+  return item.id.toLowerCase();
+};
+const naturalCompare = (a: string, b: string): number => NAME_COLLATOR.compare(a, b);
 
 export interface ImageGrouperStats {
   multiImageGroups: number;
@@ -76,7 +121,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const prevBatchIdRef = useRef<string | undefined>(batchId);
   useEffect(() => {
     if (batchId && batchId !== prevBatchIdRef.current) {
-      console.log(`[GROUPER] batchId changed: ${prevBatchIdRef.current} → ${batchId} — resetting internal state (had ${groupedItemsRef.current.length} items)`);
+      log.grouper(`batchId changed: ${prevBatchIdRef.current} → ${batchId} — resetting internal state (had ${groupedItemsRef.current.length} items)`);
       prevBatchIdRef.current = batchId;
       groupedItemsRef.current = [];
       setGroupedItems([]);
@@ -126,7 +171,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const commitFunctional = (mapper: (prev: ClothingItem[]) => ClothingItem[]) => {
     setGroupedItems(prev => {
       const next = mapper(prev);
-      console.log('[commitFunctional] prev.length=', prev.length, '→ next.length=', next.length, 'ref updated synchronously');
+      log.grouper('[commitFunctional] prev.length=', prev.length, '→ next.length=', next.length, 'ref updated synchronously');
       groupedItemsRef.current = next;
       return next;
     });
@@ -223,7 +268,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   useEffect(() => {
     if (!pendingPickRef.current) return;
     if (!pickModeRef.current) { pendingPickRef.current = false; return; }
-    console.log(`[PICK] groupedItems effect | groupedItems=${groupedItems.length} pickMode=true`);
+    log.grouper(`[PICK] groupedItems effect | groupedItems=${groupedItems.length} pickMode=true`);
     pendingPickRef.current = false;
     advancePickSelectionRef.current(groupedItems);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -238,6 +283,21 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     advancePickSelectionRef.current(groupedItemsRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoGroupN]);
+
+  // ── Unmount cleanup for animation frames ─────────────────────────────────
+  // The auto-scroll loop re-queues itself every frame and is only cancelled by
+  // handleReorderDragEnd. A drag that ends abnormally (unmount mid-drag, a batch
+  // switch remounting via the `key` prop, an aborted drop) left a 60 fps rAF
+  // running for the tab's lifetime, calling startAutoScroll against a detached
+  // node. Cancel on unmount, unconditionally.
+  useEffect(() => () => {
+    if (autoScrollRafRef.current !== null) {
+      cancelAnimationFrame(autoScrollRafRef.current);
+      autoScrollRafRef.current = null;
+    }
+  }, []);
+  // (the rubber-band's own rAF is cancelled by its effect cleanup, which React
+  //  runs on unmount as well as on every isSelecting change)
 
   // Grid columns per row (2–12)
   const [columnsPerRow, setColumnsPerRow] = useState<number>(8);
@@ -276,9 +336,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const cropDragRef = useRef<{ mode: CropDragMode; startX: number; startY: number; startCrop: { x: number; y: number; w: number; h: number } } | null>(null);
 
   const getItemUrl = (item: ClothingItem) =>
-    item.storagePath
-      ? supabase.storage.from('product-images').getPublicUrl(item.storagePath).data.publicUrl
-      : (item.imageUrls?.[0] || item.preview || '');
+    publicImageUrl(item.storagePath) || item.imageUrls?.[0] || item.preview || '';
 
   /** Open lightbox by item ID — builds a pool of item IDs for navigation. */
   const openLightboxForItem = (itemId: string) => {
@@ -421,13 +479,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     if (!baseItem) { console.error('[crop] baseItem not found', itemId); return; }
     const rot = rotationOverride !== undefined ? rotationOverride : (baseItem.imageRotation || 0);
     const item = { ...baseItem, imageRotation: rot, crop: cropOverride };
-    console.log('[crop] starting — item:', itemId, 'storagePath:', item.storagePath, 'crop:', cropOverride);
+    log.grouper('[crop] starting — item:', itemId, 'storagePath:', item.storagePath, 'crop:', cropOverride);
     if (!_skipSingleProgress) setCropUploadInProgress(true);
     try {
       const { createTransformedFile } = await import('../lib/imageTransforms');
       const file = await createTransformedFile(item);
       if (!file) { console.error('[crop] createTransformedFile returned null — check CORS or image src'); return; }
-      console.log('[crop] transformed file ok, size:', file.size);
+      log.grouper('[crop] transformed file ok, size:', file.size);
 
       // ── Determine original path to cache ────────────────────────────────────
       // On the FIRST crop the item's storagePath IS the original.
@@ -448,7 +506,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         const dir = oldPath.substring(0, oldPath.lastIndexOf('/') + 1);
         const ext = oldPath.split('.').pop() || 'jpg';
         const freshPath = `${dir}cropped-${Date.now()}.${ext}`;
-        console.log('[crop] uploading to new path:', freshPath);
+        log.grouper('[crop] uploading to new path:', freshPath);
         const { data, error } = await supabase.storage
           .from('product-images')
           .upload(freshPath, file, { cacheControl: '3600', upsert: false });
@@ -456,26 +514,26 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           console.error('[crop] storage upload error:', error.message);
         } else {
           newPath = data.path;
-          newUrl = supabase.storage.from('product-images').getPublicUrl(data.path).data.publicUrl;
-          console.log('[crop] upload ok — newPath:', newPath, 'newUrl:', newUrl);
+          newUrl = publicImageUrl(data.path);
+          log.grouper('[crop] upload ok — newPath:', newPath, 'newUrl:', newUrl);
         }
       }
 
       // Fallback: use uploadTransformedImage with explicit itemId
       if (!newUrl) {
-        console.log('[crop] falling back to uploadTransformedImage');
+        log.grouper('[crop] falling back to uploadTransformedImage');
         const { uploadTransformedImage } = await import('../lib/productService');
         const res = await uploadTransformedImage(file, userId, itemId);
         if (res) { newUrl = res.url; newPath = res.path; }
         else { console.error('[crop] uploadTransformedImage also failed'); return; }
       }
 
-      console.log('[crop] writing to DB — product_id:', itemId, 'newPath:', newPath);
+      log.grouper('[crop] writing to DB — product_id:', itemId, 'newPath:', newPath);
       const { error: upsertErr } = await supabase.from('product_images').insert(
         { product_id: itemId, user_id: userId, image_url: newUrl, storage_path: newPath }
       );
       if (upsertErr) console.error('[crop] product_images insert error:', upsertErr.message);
-      else console.log('[crop] product_images insert ok');
+      else log.grouper('[crop] product_images insert ok');
 
       // ── Delete the previous CROP (not the original) ─────────────────────────
       // If this is a re-crop, the intermediate cropped file is no longer needed.
@@ -485,13 +543,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         if (storageDelErr) console.warn('[crop] prev-crop storage delete error:', storageDelErr.message);
         const { error: dbDelErr } = await supabase.from('product_images').delete().eq('storage_path', prevCropPath);
         if (dbDelErr) console.warn('[crop] prev-crop DB row delete error:', dbDelErr.message);
-        console.log('[crop] deleted previous crop:', prevCropPath);
+        log.grouper('[crop] deleted previous crop:', prevCropPath);
       } else if (isFirstCrop) {
-        console.log('[crop] first crop — original preserved in storage at:', originalPathToCache);
+        log.grouper('[crop] first crop — original preserved in storage at:', originalPathToCache);
       }
 
       // ── Update React state via functional updater (race-condition safe) ──────
-      console.log('[crop] commitFunctional — item:', itemId, 'newPath:', newPath, 'originalCached:', originalPathToCache);
+      log.grouper('[crop] commitFunctional — item:', itemId, 'newPath:', newPath, 'originalCached:', originalPathToCache);
       const cropMapper = (i: ClothingItem): ClothingItem =>
         i.id === itemId
           ? {
@@ -513,7 +571,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       // state until React processes the setGroupedItems call above.
       onGrouped(groupedItemsRef.current.map(cropMapper));
 
-      console.log('[crop] done ✅ item:', itemId, 'newUrl:', newUrl);
+      log.grouper('[crop] done ✅ item:', itemId, 'newUrl:', newUrl);
       // Evict the old URL from the session image cache so a subsequent re-crop
       // loads the freshly-cropped image rather than the stale pre-crop bitmap.
       const { evictCachedImage } = await import('../lib/imageTransforms');
@@ -530,7 +588,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       console.warn('[revert] no original cached for item', itemId);
       return;
     }
-    console.log('[revert] reverting item:', itemId, 'to', item.originalStoragePath);
+    log.grouper('[revert] reverting item:', itemId, 'to', item.originalStoragePath);
     try {
       // Delete the current cropped file from storage (only if it differs from the original)
       if (item.storagePath && item.storagePath !== item.originalStoragePath) {
@@ -555,7 +613,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       commitFunctional(prev => prev.map(revertMapper));
       // Pass computed new items — groupedItemsRef.current is still pre-revert here
       onGrouped(groupedItemsRef.current.map(revertMapper));
-      console.log('[revert] done for item:', itemId);
+      log.grouper('[revert] done for item:', itemId);
     } catch (err) { console.error('[revert] error:', err); }
   };
 
@@ -567,8 +625,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     crop: { x: number; y: number; w: number; h: number },
     rotation: number | null = null,
   ) => {
-    console.log('[paste] runCropBatchPaste START — ids:', targetIds.length, 'crop:', crop, 'rotation:', rotation);
-    console.log('[paste] groupedItemsRef.current.length at start:', groupedItemsRef.current.length);
+    log.grouper('[paste] runCropBatchPaste START — ids:', targetIds.length, 'crop:', crop, 'rotation:', rotation);
+    log.grouper('[paste] groupedItemsRef.current.length at start:', groupedItemsRef.current.length);
     if (targetIds.length === 0) { console.warn('[paste] targetIds empty — nothing to do'); return; }
     const total = targetIds.length;
     const failed: string[] = [];
@@ -584,15 +642,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       const chunk = targetIds.slice(i, i + BATCH);
       await Promise.all(chunk.map(id =>
         applyAndPersistTransformGrouper(id, crop, rotation !== null ? rotation : undefined, true /* skipSingleProgress */)
-          .then(() => { done++; console.log('[paste] ✅ item done:', id, done, '/', total); setCropPasteProgress({ done, total, status: 'running', failed: [...failed] }); })
+          .then(() => { done++; log.grouper('[paste] ✅ item done:', id, done, '/', total); setCropPasteProgress({ done, total, status: 'running', failed: [...failed] }); })
           .catch((err) => { done++; failed.push(id); console.error('[paste] ❌ item failed:', id, err); setCropPasteProgress({ done, total, status: 'running', failed: [...failed] }); })
       ));
     }
     if (wakeLock) { try { await wakeLock.release(); } catch { /* ignore */ } }
-    console.log('[paste] all done — failed:', failed.length, 'groupedItemsRef.current.length:', groupedItemsRef.current.length);
-    console.log('[paste] scheduling deferred onGrouped with', groupedItemsRef.current.length, 'items');
+    log.grouper('[paste] all done — failed:', failed.length, 'groupedItemsRef.current.length:', groupedItemsRef.current.length);
+    log.grouper('[paste] scheduling deferred onGrouped with', groupedItemsRef.current.length, 'items');
     setTimeout(() => {
-      console.log('[paste] deferred onGrouped firing — ref.length:', groupedItemsRef.current.length);
+      log.grouper('[paste] deferred onGrouped firing — ref.length:', groupedItemsRef.current.length);
       onGrouped(groupedItemsRef.current);
     }, 0);
     const snapshot = [...failed];
@@ -669,8 +727,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // listeners on every pixel of movement, causing event drops and an unreliable drag.
   const selectionStartRef = useRef(selectionStart);
   selectionStartRef.current = selectionStart;
-  const selectionBoxRef = useRef(selectionBox);
-  selectionBoxRef.current = selectionBox;
+  // SOURCE OF TRUTH for the in-progress rubber-band rect (F3). It used to be a
+  // per-render mirror of `selectionBox` state; now it is the other way round —
+  // mousemove writes only this ref, and the rAF loop below flushes it into state
+  // at most ONCE PER FRAME. Before, `setSelectionBox` ran on every `mousemove`
+  // AND on every rAF frame, each with a fresh object literal so React could never
+  // bail out: 60-120 full reconciliations of a 1 500-card grid per second, each
+  // one an order of magnitude over the frame budget.
+  const selectionBoxRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+  /** Last rect actually committed to state — lets the frame flush skip a no-op render. */
+  const paintedSelectionBoxRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const selectionThresholdMetRef = useRef(selectionThresholdMet);
   selectionThresholdMetRef.current = selectionThresholdMet;
   const activeContainerRef = useRef(activeContainer);
@@ -740,9 +806,23 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             const currentY  = lastMouseClientRef.current.y - gridRect.top  + gridContainer.scrollTop;
             const x = Math.min(start.x, currentX);
             const y = Math.min(start.y, currentY);
-            setSelectionBox({ x, y, width: Math.abs(currentX - start.x), height: Math.abs(currentY - start.y) });
+            selectionBoxRef.current = { x, y, width: Math.abs(currentX - start.x), height: Math.abs(currentY - start.y) };
           }
         }
+      }
+      // ── One state update per frame, max (F3) ───────────────────────────────
+      // Every mousemove and every scroll step above has written the ref only.
+      // This is the single place the rect reaches React, and it is skipped
+      // entirely when the rect has not actually moved since the last commit.
+      const next = selectionBoxRef.current;
+      const painted = paintedSelectionBoxRef.current;
+      const changed = next === null
+        ? painted !== null
+        : painted === null || next.x !== painted.x || next.y !== painted.y
+          || next.width !== painted.width || next.height !== painted.height;
+      if (changed) {
+        paintedSelectionBoxRef.current = next;
+        setSelectionBox(next);
       }
       rafId = requestAnimationFrame(scrollLoop);
     };
@@ -781,13 +861,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       const width = Math.abs(currentX - start.x);
       const height = Math.abs(currentY - start.y);
 
-      setSelectionBox({ x, y, width, height });
+      // Ref only — the rAF loop above commits it to state once per frame (F3).
+      selectionBoxRef.current = { x, y, width, height };
     };
 
     const handleGlobalMouseUp = (e: MouseEvent) => {
       // Only perform selection if threshold was met
       const box = selectionBoxRef.current;
       if (!box || !currentContainerRef.current || !selectionThresholdMetRef.current) {
+        selectionBoxRef.current = null;
+        paintedSelectionBoxRef.current = null;
         setIsSelecting(false);
         setSelectionStart(null);
         setSelectionBox(null);
@@ -807,11 +890,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       if (container === 'groups') {
         // Select whole group cards that intersect the rubber-band
         const groupCards = containerRef.querySelectorAll<HTMLElement>('.product-group-card[data-group-id]');
+        // Loop-invariant reads hoisted: getBoundingClientRect() forces a layout
+        // flush, and calling it on the container inside the loop doubled the count
+        // (3 000 forced reflows for 1 500 cards instead of 1 501).
+        const containerRect = containerRef.getBoundingClientRect();
+        const scrollLeft = containerRef.scrollLeft;
+        const scrollTop = containerRef.scrollTop;
         groupCards.forEach((element) => {
           const itemRect = element.getBoundingClientRect();
-          const containerRect = containerRef.getBoundingClientRect();
-          const itemX = itemRect.left - containerRect.left + containerRef.scrollLeft;
-          const itemY = itemRect.top - containerRect.top + containerRef.scrollTop;
+          const itemX = itemRect.left - containerRect.left + scrollLeft;
+          const itemY = itemRect.top - containerRect.top + scrollTop;
           const intersects = !(
             box.x + box.width < itemX ||
             box.x > itemX + itemRect.width ||
@@ -831,11 +919,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       } else {
         // Singles section: select individual item cards
         const itemElements = containerRef.querySelectorAll('.single-item-card[data-item-id]');
+        const containerRect = containerRef.getBoundingClientRect();   // see note above
+        const scrollLeft = containerRef.scrollLeft;
+        const scrollTop = containerRef.scrollTop;
         itemElements.forEach((element) => {
           const itemRect = element.getBoundingClientRect();
-          const containerRect = containerRef.getBoundingClientRect();
-          const itemX = itemRect.left - containerRect.left + containerRef.scrollLeft;
-          const itemY = itemRect.top - containerRect.top + containerRef.scrollTop;
+          const itemX = itemRect.left - containerRect.left + scrollLeft;
+          const itemY = itemRect.top - containerRect.top + scrollTop;
           const intersects = !(
             box.x + box.width < itemX ||
             box.x > itemX + itemRect.width ||
@@ -850,6 +940,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       }
 
       log.grouper(`rubberBandSelect | selected=${newSelected.size}`);
+      selectionBoxRef.current = null;
+      paintedSelectionBoxRef.current = null;
       setSelectedItems(newSelected);
       onSelectionChangeRef.current?.(newSelected);
       setIsSelecting(false);
@@ -1016,11 +1108,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       const existingIds = new Set(groupedItemsRef.current.map(i => i.id));
       // Only process truly new items
       const newItems = items.filter(item => !existingIds.has(item.id));
-      console.log(`[GROUPER] initializeItems fired: props.items=${items.length} existing=${existingIds.size} new=${newItems.length} batchId=${batchId}`);
+      log.grouper(`initializeItems fired: props.items=${items.length} existing=${existingIds.size} new=${newItems.length} batchId=${batchId}`);
 
       // If nothing is new, just sync categories/metadata that may have changed externally
       if (newItems.length === 0) {
-        console.log('[GROUPER] no new items — syncing metadata only');
+        log.grouper('no new items — syncing metadata only');
         // Skip the setGroupedItems call entirely when the item set AND all
         // grouping/category metadata are identical — avoids a spurious re-render
         // cascade after deletions or upload-only prop changes.
@@ -1098,16 +1190,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       // Skip the async upload loop entirely and append synchronously via a functional
       // updater so concurrent effect invocations chain correctly and never race.
       if (toUpload.length === 0) {
-        console.log(`[GROUPER] FAST PATH: ${newItems.length} new items, toUpload=0`);
+        log.grouper(`FAST PATH: ${newItems.length} new items, toUpload=0`);
         const incoming = newItems
           .filter(item => !(item.preview?.startsWith('blob:') && !item.file))
           .map(item => ({ ...item, productGroup: item.productGroup || item.id }));
-        console.log(`[GROUPER] incoming after blob filter: ${incoming.length}`);
-        if (incoming.length === 0) { console.log('[GROUPER] FAST PATH: incoming=0, returning early'); return; }
+        log.grouper(`incoming after blob filter: ${incoming.length}`);
+        if (incoming.length === 0) { log.grouper('FAST PATH: incoming=0, returning early'); return; }
         setGroupedItems(prev => {
           const existingIdSet = new Set(prev.map(i => i.id));
           const deduped = incoming.filter(i => !existingIdSet.has(i.id));
-          console.log(`[GROUPER] setGroupedItems: prev=${prev.length} deduped=${deduped.length}`);
+          log.grouper(`setGroupedItems: prev=${prev.length} deduped=${deduped.length}`);
           if (deduped.length === 0) return prev;
           const next = [...prev, ...deduped];
           // Update the ref synchronously inside the updater so the deferred onGrouped
@@ -1116,7 +1208,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           groupedItemsRef.current = next;
           return next;
         });
-        setTimeout(() => { console.log('[GROUPER] deferred onGrouped, groupedItemsRef.current.length=', groupedItemsRef.current.length); onGrouped(groupedItemsRef.current); }, 0);
+        setTimeout(() => { log.grouper('deferred onGrouped, groupedItemsRef.current.length=', groupedItemsRef.current.length); onGrouped(groupedItemsRef.current); }, 0);
         return;
       }
       // ── END FAST PATH ──────────────────────────────────────────────────────
@@ -1243,9 +1335,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         return item;
       }
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('product-images')
-        .getPublicUrl(data.path);
+      const publicUrl = publicImageUrl(data.path);
 
       return {
         ...item,
@@ -1280,7 +1370,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const lastClickedSingleRef = useRef<string | null>(null);
 
   const updateSelection = (next: Set<string>) => {
-    console.log(`[PICK] updateSelection | size=${next.size} pickMode=${pickModeRef.current}`, new Error().stack?.split('\n').slice(1,4).join(' | '));
+    if (isDebugEnabled()) log.grouper(`[PICK] updateSelection | size=${next.size} pickMode=${pickModeRef.current}`, new Error().stack?.split('\n').slice(1,4).join(' | '));
     setSelectedItems(next);
     onSelectionChange?.(next);
   };
@@ -1364,6 +1454,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     const startY = e.clientY - rect.top + containerRef.scrollTop;
     
     currentContainerRef.current = containerRef;
+    selectionBoxRef.current = null;            // rect is ref-owned now (F3)
+    paintedSelectionBoxRef.current = null;
     setIsSelecting(true);
     setSelectionStart({ x: startX, y: startY });
     setActiveContainer(containerType);
@@ -1391,14 +1483,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     // id — not a fresh UUID. Fresh UUIDs broke Step 3's group navigation (every
     // item became its own listing) because nothing validated as the group leader.
     const groupId = grouped[0].id;
-    console.group(`%c[ImageGrouper] GROUP CREATED (${grouped.length} items → group ${groupId.slice(0,8)})`, 'color:#f59e0b;font-weight:bold');
-    console.table(grouped.map(i => ({
-      id:       i.id.slice(0,8),
-      name:     i.originalName ?? '—',
-      imageUrl: i.imageUrls?.[0] ? '✓ ' + i.imageUrls[0].split('/').pop()?.slice(0,40) : '✗',
-      preview:  i.preview ? (i.preview.startsWith('blob:') ? '⚠ blob' : '✓') : '✗',
-    })));
-    console.groupEnd();
+    if (isDebugEnabled()) {
+      console.group(`%c[ImageGrouper] GROUP CREATED (${grouped.length} items → group ${groupId.slice(0,8)})`, 'color:#f59e0b;font-weight:bold');
+      console.table(grouped.map(i => ({
+        id:       i.id.slice(0,8),
+        name:     i.originalName ?? '—',
+        imageUrl: i.imageUrls?.[0] ? '✓ ' + i.imageUrls[0].split('/').pop()?.slice(0,40) : '✗',
+        preview:  i.preview ? (i.preview.startsWith('blob:') ? '⚠ blob' : '✓') : '✗',
+      })));
+      console.groupEnd();
+    }
 
     const updated = items.map(item =>
       selected.has(item.id)
@@ -1414,7 +1508,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     // Pick mode: signal that selection should advance once groupedItems flushes.
     if (pickModeRef.current) {
       pickCursorRef.current = 0;
-      console.log(`[PICK] createGroupFromSelected — setting pendingPick`);
+      log.grouper(`[PICK] createGroupFromSelected — setting pendingPick`);
       updateSelection(new Set());
       pendingPickRef.current = true;
     } else {
@@ -1882,19 +1976,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     onImageDeleted?.();
   };
 
-  // ── Sort helpers — defined once, stable references ────────────────────────
-  const nameKey = (item: ClothingItem): string => {
-    if (item.originalName) return item.originalName.toLowerCase();
-    if (item.storagePath) return item.storagePath.split('/').pop()?.toLowerCase() ?? item.id;
-    return item.id.toLowerCase();
-  };
-  const naturalCompare = (a: string, b: string) =>
-    a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
-
   // Pick-mode helper — updated every render so autoGroupN + sortOrder are always current
   advancePickSelectionRef.current = (currentItems: ClothingItem[]) => {
     const n = Math.max(1, parseInt(autoGroupN, 10) || 1);
-    console.log(`[PICK] advancePickSelection called | totalItems=${currentItems.length} n=${n} sortOrder=${sortOrder}`);
+    log.grouper(`[PICK] advancePickSelection called | totalItems=${currentItems.length} n=${n} sortOrder=${sortOrder}`);
     // Sort using the same order the grid is currently displaying
     const sorted = [...currentItems].sort((a, b) => {
       switch (sortOrder) {
@@ -1919,10 +2004,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     );
     const cursor = pickCursorRef.current;
     const slice = ungrouped.slice(cursor, cursor + n);
-    console.log(`[PICK] ungrouped=${ungrouped.length} cursor=${cursor} slice=${slice.length} ids=${slice.map(i=>i.id.slice(0,6)).join(',')}`);
+    if (isDebugEnabled()) log.grouper(`[PICK] ungrouped=${ungrouped.length} cursor=${cursor} slice=${slice.length} ids=${slice.map(i=>i.id.slice(0,6)).join(',')}`);
     if (slice.length === 0) {
       // No more ungrouped items — turn off pick mode
-      console.log('[PICK] no more ungrouped items — turning off pick mode');
+      log.grouper('[PICK] no more ungrouped items — turning off pick mode');
       setPickMode(false);
       pickModeRef.current = false;
       pickCursorRef.current = 0;
@@ -1931,7 +2016,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     }
     updateSelection(new Set(slice.map(i => i.id)));
     pickCursorRef.current = cursor + slice.length;
-    console.log(`[PICK] selection updated | new cursor=${pickCursorRef.current}`);
+    log.grouper(`[PICK] selection updated | new cursor=${pickCursorRef.current}`);
   };
 
   // ── Memoized derived data — only recomputes when groupedItems / sortOrder /
@@ -1998,7 +2083,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     const dateSet = new Set<string>();
     const catSet  = new Set<string>();
     groupedItems.forEach(item => {
-      if (item.capturedAt) dateSet.add(new Date(item.capturedAt).toLocaleDateString('en-CA'));
+      if (item.capturedAt) dateSet.add(localDateKey(item.capturedAt));
       if (item.category)   catSet.add(item.category);
     });
 
@@ -2012,9 +2097,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   }, [groupedItems, sortOrder, manualOrder]);
 
   // Apply all filters to both lists (AND logic)
-  const toLocalDate = (ts: number) => new Date(ts).toLocaleDateString('en-CA');
   const itemPassesFilters = (item: ClothingItem): boolean => {
-    if (filters.date && !(item.capturedAt && toLocalDate(item.capturedAt) === filters.date)) return false;
+    if (filters.date && !(item.capturedAt && localDateKey(item.capturedAt) === filters.date)) return false;
     if (filters.category === 'uncategorized' && item.category) return false;
     if (filters.category && filters.category !== 'uncategorized' && item.category !== filters.category) return false;
     return true;
@@ -2047,29 +2131,47 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     });
   }, [multiItemGroups.length, singleItems.length, groupedItems.length, onStatsChange]);
 
-  // Notify parent of current action callbacks + selected count so it can render the toolbar
+  // ── Action bundle handed to the parent toolbar (perf finding F38) ──────────
+  // This used to build a FRESH object literal on every `selectedItems` change and
+  // push it into App state, so every selection click cost TWO full App render
+  // passes: one for setSelectedItems/onSelectionChange, then a second for
+  // setGrouperActions. The bundle's identity now changes only when `selectedCount`
+  // actually changes — the one field the parent renders — so a selection change
+  // that keeps the count (swapping which card is selected) makes
+  // `setGrouperActions` a no-op that React bails out of.
+  //
+  // Every method delegates through a ref that is refreshed on EVERY render, so a
+  // memoized bundle can never call a stale closure (the failure mode that produced
+  // the stale-closure saga in CLAUDE.md §15 — `aae35fc`, `993c0cf`, `b0a41a6`).
+  const actionImplRef = useRef({
+    createGroupFromSelected, ungroupSelected, ungroupAll, updateSelection, handleDeleteSelected,
+  });
+  actionImplRef.current = {
+    createGroupFromSelected, ungroupSelected, ungroupAll, updateSelection, handleDeleteSelected,
+  };
+
+  const selectedCount = selectedItems.size;
+  const grouperActionBundle = useMemo<GrouperActions>(() => ({
+    groupSelected:   () => actionImplRef.current.createGroupFromSelected(),
+    ungroupSelected: () => actionImplRef.current.ungroupSelected(),
+    ungroupAll:      () => actionImplRef.current.ungroupAll(),
+    clearSelection:  () => actionImplRef.current.updateSelection(new Set()),
+    deleteSelected:  () => actionImplRef.current.handleDeleteSelected(),
+    selectedCount,
+    onCategoryAssigned: () => {
+      log.grouper(`onCategoryAssigned called | pickMode=${pickModeRef.current}`);
+      if (!pickModeRef.current) { actionImplRef.current.updateSelection(new Set()); return; }
+      // Category applied — signal advance; useEffect([groupedItems, pendingPick])
+      // will fire once initializeItems has synced the category into groupedItems.
+      pickCursorRef.current = 0;
+      actionImplRef.current.updateSelection(new Set());
+      pendingPickRef.current = true;
+    },
+  }), [selectedCount]);
+
   useEffect(() => {
-    onActionsReady?.({
-      groupSelected: createGroupFromSelected,
-      ungroupSelected,
-      ungroupAll,
-      clearSelection: () => updateSelection(new Set()),
-      deleteSelected: handleDeleteSelected,
-      selectedCount: selectedItems.size,
-      onCategoryAssigned: () => {
-        console.log(`[PICK] onCategoryAssigned called | pickMode=${pickModeRef.current}`);
-        if (!pickModeRef.current) { updateSelection(new Set()); return; }
-        // Category applied — signal advance; useEffect([groupedItems, pendingPick])
-        // will fire once initializeItems has synced the category into groupedItems.
-        pickCursorRef.current = 0;
-        updateSelection(new Set());
-        pendingPickRef.current = true;
-      },
-    });
-  // createGroupFromSelected now reads via refs so it's safe to keep a stable dep here;
-  // selectedItems is still needed so selectedCount stays up-to-date.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedItems, onActionsReady]);
+    onActionsReady?.(grouperActionBundle);
+  }, [grouperActionBundle, onActionsReady]);
 
   return (
     <>
@@ -2280,7 +2382,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               <option value="">All dates</option>
               {uniqueFilterDates.map(d => (
                 <option key={d} value={d}>
-                  {new Date(d + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                  {FILTER_DATE_FMT.format(new Date(d + 'T00:00:00'))}
                 </option>
               ))}
             </select>
@@ -2358,7 +2460,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               className={`sort-btn pick-mode-btn${pickMode ? ' pick-mode-active' : ''}`}
               onClick={() => {
                 const next = !pickMode;
-                console.log(`[PICK] toggle | ${pickMode ? 'ON→OFF' : 'OFF→ON'} n=${autoGroupN}`);
+                log.grouper(`[PICK] toggle | ${pickMode ? 'ON→OFF' : 'OFF→ON'} n=${autoGroupN}`);
                 setPickMode(next);
                 pickModeRef.current = next;
                 if (next) {
@@ -2526,7 +2628,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 onClick={async (e) => {
                   e.stopPropagation();
                   const targetIds = [...selectedItems];
-                  console.log('[paste] Paste-to-selected clicked — selectedItems:', targetIds.length, 'copiedCrop:', copiedCrop, 'copiedRotation:', copiedRotation);
+                  log.grouper('[paste] Paste-to-selected clicked — selectedItems:', targetIds.length, 'copiedCrop:', copiedCrop, 'copiedRotation:', copiedRotation);
                   setSelectedItems(new Set());
                   if (copiedCrop !== undefined && copiedCrop !== null) {
                     await runCropBatchPaste(targetIds, copiedCrop, copiedRotation);
@@ -2736,13 +2838,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       {item.originalName && (
                         <div className="original-name-label">{item.originalName}</div>
                       )}
-                      {item.capturedAt ? (
-                        <>
-                          {new Date(item.capturedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                          {' '}
-                          {new Date(item.capturedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
-                        </>
-                      ) : null}
+                      {item.capturedAt ? captureLabel(item.capturedAt) : null}
                     </div>
                   ) : null}
                 </div>
@@ -3123,4 +3219,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   );
 };
 
-export default ImageGrouper;
+/* Memoized (perf finding F2). Steps 1-4 all mount at once and App re-renders on
+ * any store/UI change, so without this a Step-3 keystroke re-rendered this whole
+ * subtree. Every prop App passes is now referentially stable (see the
+ * `useEventCallback` block in App.tsx), so the default shallow compare bails out
+ * on renders that have nothing to do with this component. */
+export default memo(ImageGrouper);

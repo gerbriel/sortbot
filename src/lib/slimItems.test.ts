@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { slimForWorkflowState, ultraSlimForBackup } from './slimItems';
+import { slimForWorkflowState, ultraSlimForBackup, asClothingItems } from './slimItems';
+import type { PersistedWorkflowItem } from './slimItems';
 import type { ClothingItem } from '../App';
 
 /**
@@ -38,8 +39,10 @@ describe('slimForWorkflowState (Supabase workflow_state blob)', () => {
     expect(slim).toEqual({
       id: 'item-1',
       storagePath: 'user/prod/img.jpg',
-      imageUrls: ['https://cdn/img.jpg'],
-      thumbnailUrl: 'https://cdn/img.jpg',
+      // DERIVED from storagePath, so deliberately NOT persisted — see the
+      // "derived image fields" block below for the full contract.
+      imageUrls: undefined,
+      thumbnailUrl: undefined,
       productGroup: 'group-1',
       category: 'tees',
       capturedAt: 1710000000000,
@@ -78,5 +81,104 @@ describe('ultraSlimForBackup (localStorage race backup)', () => {
     expect(Object.keys(backup).sort()).toEqual(
       ['capturedAt', 'category', 'crop', 'id', 'imageRotation', 'productGroup', 'storagePath'].sort()
     );
+  });
+});
+
+/**
+ * F8 — the derived image fields.
+ *
+ * `imageUrls` and `thumbnailUrl` are both `getPublicUrl(storagePath)`, and every
+ * restore path rebuilds them from `storagePath` while discarding whatever was saved
+ * (App startup restore, handleOpenBatch, handleImagesGrouped, libraryData pass 1).
+ * Persisting them was 51 % of a measured 1 067 KB autosave payload for zero
+ * information. They are now omitted WHENEVER a storagePath is present — and kept
+ * whenever it is not, because a legacy item has no other reference to its picture.
+ */
+describe('slimForWorkflowState — derived image fields (F8)', () => {
+  it('omits imageUrls and thumbnailUrl when storagePath can rebuild them', () => {
+    const [slim] = slimForWorkflowState([fullItem()]);
+    expect(slim.storagePath).toBe('user/prod/img.jpg');
+    expect(slim.imageUrls).toBeUndefined();
+    expect(slim.thumbnailUrl).toBeUndefined();
+  });
+
+  it('KEEPS imageUrls and thumbnailUrl for a legacy item with no storagePath', () => {
+    const legacy = { ...fullItem(), storagePath: undefined } as unknown as ClothingItem;
+    const [slim] = slimForWorkflowState([legacy]);
+    expect(slim.storagePath).toBeUndefined();
+    expect(slim.imageUrls).toEqual(['https://cdn/img.jpg']);
+    expect(slim.thumbnailUrl).toBe('https://cdn/img.jpg');
+  });
+
+  it('treats an empty-string storagePath as not derivable', () => {
+    const blank = { ...fullItem(), storagePath: '' } as unknown as ClothingItem;
+    const [slim] = slimForWorkflowState([blank]);
+    expect(slim.imageUrls).toEqual(['https://cdn/img.jpg']);
+  });
+
+  it('drops the two derived keys from the serialized blob entirely', () => {
+    // `undefined` values disappear through JSON.stringify — this is where the
+    // payload saving actually materializes.
+    const json = JSON.stringify(slimForWorkflowState([fullItem()]));
+    expect(json).not.toContain('imageUrls');
+    expect(json).not.toContain('thumbnailUrl');
+    expect(json).toContain('storagePath');
+  });
+
+  it('a 1 000-item batch serializes smaller than it did with the derived fields', () => {
+    const items = Array.from({ length: 1000 }, (_, i) =>
+      ({ ...fullItem(), id: `item-${i}`, storagePath: `user/prod/img-${i}.jpg` } as unknown as ClothingItem));
+    const withDerived = JSON.stringify(
+      slimForWorkflowState(items).map((s, i) => ({
+        ...s,
+        imageUrls: [`https://cdn/img-${i}.jpg`],
+        thumbnailUrl: `https://cdn/img-${i}.jpg`,
+      })),
+    ).length;
+    const actual = JSON.stringify(slimForWorkflowState(items)).length;
+    expect(actual).toBeLessThan(withDerived);
+  });
+});
+
+/**
+ * The unified persisted-item type (architecture review finding #13).
+ *
+ * `workflowBatchService.ts` used to declare its own 5-field `SlimItem` as the
+ * shape of `workflow_state.processedItems` while THIS module's writer had been
+ * persisting 15 fields — so the type understated the blob and every consumer
+ * cast around it. There is now one type; these tests lock the two properties
+ * consumers depend on.
+ */
+describe('PersistedWorkflowItem / asClothingItems', () => {
+  it('admits a slim item written by slimForWorkflowState', () => {
+    const [slim] = slimForWorkflowState([fullItem()]);
+    const persisted: PersistedWorkflowItem = slim;   // type-level assertion
+    expect(persisted.id).toBe('item-1');
+    expect(persisted.storagePath).toBe('user/prod/img.jpg');
+  });
+
+  it('admits a LEGACY whole ClothingItem — old batches still hold them', () => {
+    const persisted: PersistedWorkflowItem = fullItem();   // type-level assertion
+    expect(persisted.seoTitle).toBe('also DB-recovered');
+  });
+
+  it('exposes the ClothingItem fields consumers read off the blob without a cast', () => {
+    const persisted: PersistedWorkflowItem = fullItem();
+    // These four reads are what libraryData's two passes do; they each needed an
+    // `as ClothingItem` cast when the type claimed only 5 fields existed.
+    expect([persisted.preview, persisted.seoTitle, persisted.storagePath, persisted.category])
+      .toEqual(['blob:http://localhost/abc', 'also DB-recovered', 'user/prod/img.jpg', 'tees']);
+  });
+
+  it('asClothingItems widens without adding, removing or normalising any field', () => {
+    const slim = slimForWorkflowState([fullItem()]);
+    const widened = asClothingItems(slim);
+    expect(widened).toBe(slim as unknown as typeof widened);  // same array identity
+    expect(widened[0]).toBe(slim[0] as unknown as typeof widened[0]);
+    expect(Object.keys(widened[0])).toEqual(Object.keys(slim[0]));
+  });
+
+  it('asClothingItems turns undefined into an empty array', () => {
+    expect(asClothingItems(undefined)).toEqual([]);
   });
 });

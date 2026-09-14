@@ -1,0 +1,72 @@
+/* Spinner + Skeleton — the two "content is not here yet" primitives. */
+
+.ui-spinner {
+  display: inline-block;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border-style: solid;
+  /* The track is the recessed surface step; the head is the accent. Two tokens,
+     no gradients — this reads correctly on --ink-950 through --ink-750. */
+  border-color: var(--ink-700);
+  border-top-color: var(--accent);
+  animation: ui-spin 0.75s linear infinite;
+}
+
+.ui-spinner--sm { width: 1.6rem; height: 1.6rem; border-width: 2px; }
+.ui-spinner--md { width: 2.6rem; height: 2.6rem; border-width: 2px; }
+.ui-spinner--lg { width: 4.4rem; height: 4.4rem; border-width: 3px; }
+
+/* Inside a solid-accent fill the track/head pair vanishes (black on black), so
+   the spinner inherits currentColor there instead. */
+.ui-spinner--on-fill {
+  border-color: var(--accent-line);
+  border-top-color: currentColor;
+}
+
+@keyframes ui-spin { to { transform: rotate(360deg); } }
+
+/* ── Skeleton ──────────────────────────────────────────────────────────────
+   Deliberately NOT reusing the global .lazy-skeleton: that one is owned by
+   LazyImg (fills its parent, 2px radius, image-shaped). This one is a text /
+   block placeholder that sizes itself. */
+.ui-skeleton {
+  display: block;
+  background: linear-gradient(
+    90deg,
+    var(--ink-850) 25%,
+    var(--ink-750) 37%,
+    var(--ink-850) 63%
+  );
+  background-size: 1200px 100%;
+  animation: ui-shimmer 1.4s ease-in-out infinite;
+}
+
+.ui-skeleton--text {
+  height: 1em;
+  border-radius: var(--radius-sm);
+}
+
+.ui-skeleton--rect { border-radius: var(--radius-md); }
+
+.ui-skeleton--circle { border-radius: 50%; }
+
+/* Stacked text lines: the last one runs short so the block reads as prose. */
+.ui-skeleton-lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ui-skeleton-lines > .ui-skeleton:last-child:not(:only-child) { width: 62%; }
+
+@keyframes ui-shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position:  600px 0; }
+}
+
+/* index.css already neutralises animation globally under reduced-motion; this
+   restates it so a primitive is never at the mercy of import order. */
+@media (prefers-reduced-motion: reduce) {
+  .ui-spinner { animation: none; }
+  .ui-skeleton { animation: none; background: var(--ink-850); }
+}

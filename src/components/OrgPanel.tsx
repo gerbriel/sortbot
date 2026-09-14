@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Users, X, Pencil, Check, Copy, LogOut, Trash2, RotateCcw, Mail, Search, ChevronRight, ChevronDown, Building2, ShoppingBag, UserCog, History, Contact, BarChart3 } from 'lucide-react';
+import { Users, X, Pencil, Check, Copy, LogOut, Trash2, RotateCcw, Mail, Search, ChevronRight, ChevronDown, Building2, ShoppingBag, UserCog, History } from 'lucide-react';
 import {
   fetchOrgMembers, fetchOrgInvites, inviteToOrg, revokeInvite, removeMember,
   renameOrganization, updateMemberRole, fetchMemberActivity,
@@ -22,8 +22,7 @@ import {
   DEFAULT_DESCRIPTION_SETTINGS, type DescriptionSettings,
 } from '../lib/descriptionSettings';
 import { syncCrmContacts } from '../lib/crmService';
-import AnalyticsPanel from './AnalyticsPanel';
-import CrmPanel from './CrmPanel';
+import { safeMailto } from '../lib/mailto';
 import './OrgPanel.css';
 
 interface OrgPanelProps {
@@ -37,6 +36,9 @@ interface OrgPanelProps {
   onMyRoleChanged?: (role: OrgRole) => void;
   /** Fired after the user leaves the workspace — App should re-bootstrap. */
   onLeftWorkspace?: () => void;
+  /** Tab to open on. Analytics / CRM / Errors are top-level views of their
+   *  own now, so they are no longer a tab in here. */
+  initialTab?: 'members' | 'settings' | 'beta' | 'users';
   /** Fired after description format settings are saved so App can refresh
    *  what it passes to Step 3's generator. */
   onDescriptionSettingsChanged?: (settings: DescriptionSettings) => void;
@@ -52,7 +54,7 @@ const fmtDate = (iso: string | null | undefined) =>
  * sign-in), workspace rename, leave workspace, and (Founding admins only) the
  * beta request queue with approve/deny/reopen/delete, filtering, and search.
  */
-export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated, onMyRoleChanged, onLeftWorkspace, onDescriptionSettingsChanged }: OrgPanelProps) {
+export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated, onMyRoleChanged, onLeftWorkspace, onDescriptionSettingsChanged, initialTab }: OrgPanelProps) {
   const [members, setMembers] = useState<OrgMemberRow[]>([]);
   const [invites, setInvites] = useState<OrgInviteRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,8 +63,8 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // Dashboard tabs — Members (everyone), Settings (org admins),
-  // Beta program + Users + Founder tools (Founding admins)
-  const [panelTab, setPanelTab] = useState<'members' | 'settings' | 'beta' | 'users' | 'tools'>('members');
+  // Beta program + Users (Founding admins)
+  const [panelTab, setPanelTab] = useState<'members' | 'settings' | 'beta' | 'users'>(initialTab ?? 'members');
   // Inline two-step confirm (no native confirm() — Do Not #12). Holds a key
   // like `remove:<userId>`, `leave`, or `beta-delete:<id>`; second click acts.
   const [confirmKey, setConfirmKey] = useState<string | null>(null);
@@ -99,8 +101,6 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   // Pending "add to workspace", keyed by user id.
   const [addDraft, setAddDraft] = useState<Record<string, { orgId: string; role: OrgRole }>>({});
 
-  // Founder tools (Founding admins): first-party Analytics + CRM sub-views.
-  const [toolsView, setToolsView] = useState<'analytics' | 'crm'>('analytics');
 
   // Click-to-expand member details (activity fetched lazily per member)
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
@@ -371,13 +371,16 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
     setBusy(false);
   };
 
-  const mailtoWelcome = (s: BetaSignupRow) => {
-    const subject = encodeURIComponent('Your Acadia beta access is ready');
-    const body = encodeURIComponent(
+  // Null when the stored address is not a plain address — the row then shows no
+  // mail link at all. `email` arrives from the ANONYMOUS beta form, so it can
+  // carry extra mailto headers (`a@b.com?bcc=…`); safeMailto refuses those and
+  // percent-encodes the rest. See src/lib/mailto.ts (audit 05, finding #7).
+  const mailtoWelcome = (s: BetaSignupRow): string | null =>
+    safeMailto(
+      s.email,
+      'Your Acadia beta access is ready',
       `Hi ${s.contact_name},\n\nYour beta request for ${s.org_name} is approved. Sign in at ${appUrl} with this email address and your workspace will be ready.\n\nWelcome aboard!`
     );
-    return `mailto:${s.email}?subject=${subject}&body=${body}`;
-  };
 
   // ── Cross-workspace user management (Founding admins) ─────────────────────
   // Every workspace we can offer as a move/add destination. Sourced from the
@@ -487,46 +490,45 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
     });
 
   return (
-    <div className="org-panel-overlay" onClick={onClose}>
-      <div className="org-panel" onClick={(e) => e.stopPropagation()}>
-        <div className="org-panel-header">
-          <div className="org-panel-title">
-            <Users size={20} />
-            {editingName ? (
-              <span className="org-rename-form">
-                <input
-                  value={nameDraft}
-                  maxLength={60}
-                  autoFocus
-                  onChange={(e) => setNameDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleRenameSave();
-                    if (e.key === 'Escape') setEditingName(false);
-                  }}
-                />
-                <button className="org-icon-btn" title="Save name" disabled={busy || !nameDraft.trim()} onClick={handleRenameSave}><Check size={14} /></button>
-                <button className="org-icon-btn" title="Cancel" disabled={busy} onClick={() => setEditingName(false)}><X size={14} /></button>
-              </span>
-            ) : (
-              <>
-                <h2>{displayName}</h2>
-                {org.plan && org.plan !== 'free' && <span className="org-plan-badge">{org.plan}</span>}
-                {isAdmin && (
-                  <button className="org-icon-btn" title="Rename workspace"
-                    onClick={() => { setNameDraft(displayName); setEditingName(true); }}>
-                    <Pencil size={13} />
-                  </button>
-                )}
-              </>
-            )}
-            <span className={`org-role-badge org-role-${myRole}`}>{myRole}</span>
-          </div>
-          <button className="org-panel-close" onClick={onClose} aria-label="Close"><X size={18} /></button>
+    <div className="org-page">
+      <div className="org-panel-header">
+        <div className="org-panel-title">
+          <Users size={20} />
+          {editingName ? (
+            <span className="org-rename-form">
+              <input
+                value={nameDraft}
+                maxLength={60}
+                autoFocus
+                onChange={(e) => setNameDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleRenameSave();
+                  if (e.key === 'Escape') setEditingName(false);
+                }}
+              />
+              <button className="org-icon-btn" title="Save name" disabled={busy || !nameDraft.trim()} onClick={handleRenameSave}><Check size={14} /></button>
+              <button className="org-icon-btn" title="Cancel" disabled={busy} onClick={() => setEditingName(false)}><X size={14} /></button>
+            </span>
+          ) : (
+            <>
+              <h2>{displayName}</h2>
+              {org.plan && org.plan !== 'free' && <span className="org-plan-badge">{org.plan}</span>}
+              {isAdmin && (
+                <button className="org-icon-btn" title="Rename workspace"
+                  onClick={() => { setNameDraft(displayName); setEditingName(true); }}>
+                  <Pencil size={13} />
+                </button>
+              )}
+            </>
+          )}
+          <span className={`org-role-badge org-role-${myRole}`}>{myRole}</span>
         </div>
+      </div>
 
-        {notice && <div className="org-panel-notice">{notice}</div>}
+      {notice && <div className="org-panel-notice">{notice}</div>}
 
-        <div className="org-tabs">
+      <div className="org-page-body">
+        <nav className="org-tabs" aria-label="Workspace sections">
           <button className={`org-tab ${panelTab === 'members' ? 'org-tab--on' : ''}`} onClick={() => setPanelTab('members')}>
             Members ({members.length})
           </button>
@@ -547,13 +549,9 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
               Users ({allUsers.length})
             </button>
           )}
-          {isBetaAdmin && (
-            <button className={`org-tab ${panelTab === 'tools' ? 'org-tab--on' : ''}`} onClick={() => setPanelTab('tools')}>
-              Founder tools
-            </button>
-          )}
-        </div>
+        </nav>
 
+        <div className="org-page-main">
         {isAdmin && panelTab === 'members' && (
           <div className="org-invite-form">
             <input
@@ -836,7 +834,12 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
                     <li key={s.id} className="org-member-row beta-request-row">
                       <div className="beta-request-info">
                         <span className="org-member-email">
-                          <strong>{s.org_name}</strong> · {s.contact_name} · <a className="beta-email-link" href={`mailto:${s.email}`}>{s.email}</a>
+                          <strong>{s.org_name}</strong> · {s.contact_name} · {(() => {
+                            const href = safeMailto(s.email);
+                            return href
+                              ? <a className="beta-email-link" href={href}>{s.email}</a>
+                              : <span className="beta-email-link">{s.email}</span>;
+                          })()}
                         </span>
                         {(s.store_url || s.volume || s.notes) && (
                           <span className="beta-request-meta">
@@ -857,9 +860,12 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
                         ) : (
                           <>
                             <span className={`org-role-badge beta-status-${s.status}`}>{s.status}</span>
-                            {s.status === 'approved' && (
-                              <a className="org-icon-btn" href={mailtoWelcome(s)} title="Compose welcome email"><Mail size={13} /></a>
-                            )}
+                            {s.status === 'approved' && (() => {
+                              const href = mailtoWelcome(s);
+                              return href
+                                ? <a className="org-icon-btn" href={href} title="Compose welcome email"><Mail size={13} /></a>
+                                : null;
+                            })()}
                             <button className="org-icon-btn" title="Move back to pending" disabled={busy}
                               onClick={() => handleBetaDecision(s.id, 'pending')}><RotateCcw size={13} /></button>
                             {confirmKey === `beta-delete:${s.id}` ? (
@@ -1087,25 +1093,6 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
           </>
         )}
 
-        {/* ── Founder tools (Founding admins) — first-party Analytics + CRM.
-            Both live in this project's own tables (analytics_events, crm_*);
-            there is no third-party service behind either view. Messaging is
-            the floating Messages button (SupportWidget) so founders can answer
-            from any screen. */}
-        {panelTab === 'tools' && isBetaAdmin && (
-          <div className="ft-grid">
-            <div className="ft-subtabs">
-              <button className={`org-tab ${toolsView === 'analytics' ? 'org-tab--on' : ''}`} onClick={() => setToolsView('analytics')}>
-                <BarChart3 size={13} /> Analytics
-              </button>
-              <button className={`org-tab ${toolsView === 'crm' ? 'org-tab--on' : ''}`} onClick={() => setToolsView('crm')}>
-                <Contact size={13} /> CRM
-              </button>
-            </div>
-            {toolsView === 'analytics' ? <AnalyticsPanel /> : <CrmPanel />}
-          </div>
-        )}
-
         {panelTab === 'members' && !loading && canLeave && (
           <div className="org-leave-section">
             {confirmKey === 'leave' ? (
@@ -1126,6 +1113,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
           Everyone in this workspace shares its batches, products, categories, and presets.
           People outside it can't see any of them.
         </p>
+        </div>
       </div>
     </div>
   );

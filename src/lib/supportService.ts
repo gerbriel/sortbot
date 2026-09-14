@@ -137,12 +137,20 @@ export async function setThreadStatus(threadId: string, status: ThreadStatus): P
  * Live updates: any new message or thread change (that RLS lets this user
  * see) calls `onChange`. Returns the unsubscribe. If realtime is not enabled
  * for these tables nothing fires — the widget's polling covers that.
+ *
+ * INSERT and UPDATE only — never `'*'` (security audit 05, finding #11).
+ * support_threads has `replica identity full`, and Supabase Realtime does not
+ * apply RLS to DELETE payloads: subscribing to DELETE would ship a deleted
+ * thread's whole OLD row (user_email, subject, last_message_preview) to every
+ * subscriber the moment a founder cleans up the inbox. Deletions are picked up
+ * by the widget's polling instead.
  */
 export function subscribeToSupport(onChange: () => void): () => void {
   const channel = supabase
     .channel(`support-${Math.random().toString(36).slice(2, 8)}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages' }, () => onChange())
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'support_threads' }, () => onChange())
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_threads' }, () => onChange())
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'support_threads' }, () => onChange())
     .subscribe();
   return () => {
     void supabase.removeChannel(channel);

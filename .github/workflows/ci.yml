@@ -1,0 +1,279 @@
+name: CI
+
+# Pre-merge verification. This workflow NEVER deploys and NEVER needs write
+# access — deploy.yml (push to main) owns the only path to production.
+#
+# Triggers: every pull request, and every push to a branch that is not main.
+# A branch that has an open PR will run twice (once per event); the runs are
+# ~3 minutes and cheap. Drop the `push` trigger if that ever becomes annoying.
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+
+# Least privilege: read the code, nothing else. No pages, no id-token,
+# no contents: write.
+permissions:
+  contents: read
+
+# One run per ref. A new push supersedes the previous, still-running check.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # `npm run lint` baseline, July 2026 (CLAUDE.md §17). The lint step is
+  # informational BELOW this number and fails ABOVE it, so the debt can only
+  # shrink. Lower this line whenever the count drops.
+  LINT_BASELINE: 254
+  # The deployed base path is derived from the GitHub repo name and must not
+  # change (CLAUDE.md §1). GITHUB_ACTIONS=true is set for us by the runner, so
+  # vite.config.ts picks /sortbot/ here exactly as it does in deploy.yml.
+  EXPECTED_BASE_PATH: /sortbot/
+
+jobs:
+  verify:
+    name: test / build / lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history so the migration-hygiene step can diff against the
+          # base branch instead of guessing.
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          # Same major as deploy.yml — CI must build on what production builds on.
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests (Vitest)
+        run: npm test
+
+      - name: Type-check + production build
+        # `npm run build` is `tsc -b && vite build`, so this is the type gate too.
+        # Dummy values only: src/lib/supabase.ts throws at import time when the
+        # two required vars are missing, and Vite inlines whatever is here into
+        # the bundle. A real key must never appear in this file.
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://ci-dummy.invalid
+          VITE_SUPABASE_ANON_KEY: ci-dummy-anon-key-not-real
+          VITE_STORAGE_LIMIT_GB: '1'
+
+      - name: Verify build output
+        run: |
+          set -euo pipefail
+          test -f dist/index.html || { echo "::error::dist/index.html missing after build"; exit 1; }
+
+          # The document title is what the post-deploy smoke test asserts against
+          # the live site, so a rename must be a deliberate, visible change.
+          if ! grep -q '<title>Acadia</title>' dist/index.html; then
+            echo "::error file=index.html::<title>Acadia</title> not found in dist/index.html — update the post-deploy smoke test in deploy.yml if this rename is intentional"
+            exit 1
+          fi
+
+          # Asset URLs must keep the /sortbot/ prefix. Changing the base path
+          # 404s every asset on the deployed site (CLAUDE.md §1).
+          if ! grep -q "src=\"${EXPECTED_BASE_PATH}assets/" dist/index.html; then
+            echo "::error file=vite.config.ts::built asset paths are not under ${EXPECTED_BASE_PATH} — the GitHub Pages base path must not change (CLAUDE.md §1)"
+            grep -oE '(src|href)="[^"]+"' dist/index.html || true
+            exit 1
+          fi
+
+          echo "dist/ OK — title and ${EXPECTED_BASE_PATH} base path verified" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Bundle secret-leak guard
+        # Every VITE_* var is inlined into the public bundle. This catches the
+        # one mistake that cannot be walked back once deployed (README "Security").
+        # CI builds with dummy values, so any real-looking credential in dist/
+        # means it was hardcoded in the source.
+        run: |
+          set -uo pipefail
+          if grep -rlqE 'shpat_[A-Za-z0-9]{4}|service_role|eyJhbGciOi|sk-ant-api|sk-proj-|SUPABASE_SERVICE_ROLE' dist/; then
+            echo "::error::a credential-shaped string was found in the built bundle — it would be readable by every visitor"
+            grep -rloE 'shpat_[A-Za-z0-9]{4}|service_role|eyJhbGciOi|sk-ant-api|sk-proj-|SUPABASE_SERVICE_ROLE' dist/ || true
+            exit 1
+          fi
+          echo "No credential-shaped strings in dist/." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Lint (informational below the baseline)
+        # Non-blocking by design: the repo carries ~254 known problems
+        # (CLAUDE.md §17). This step annotates the count and fails only if the
+        # debt GREW, so the number is a ratchet rather than a wall.
+        run: |
+          set -uo pipefail
+          npm run lint > lint.log 2>&1 || true
+          tail -n 40 lint.log
+
+          count=$(grep -oE '[0-9]+ problems' lint.log | tail -n 1 | grep -oE '[0-9]+' || true)
+          if [ -z "${count:-}" ]; then
+            if grep -qE 'problems|error|warning' lint.log; then
+              echo "::warning::could not parse the eslint problem count — see the step log"
+              count=""
+            else
+              count=0
+            fi
+          fi
+
+          {
+            echo "### Lint"
+            echo ""
+            if [ -z "${count}" ]; then
+              echo "eslint ran but the problem count could not be parsed. Baseline: ${LINT_BASELINE}."
+            else
+              echo "| problems | baseline |"
+              echo "|---|---|"
+              echo "| ${count} | ${LINT_BASELINE} |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          [ -z "${count}" ] && exit 0
+
+          if [ "${count}" -gt "${LINT_BASELINE}" ]; then
+            echo "::error::lint problems increased: ${count} > baseline ${LINT_BASELINE}. Fix the new findings (or justify raising LINT_BASELINE in ci.yml)."
+            exit 1
+          fi
+          if [ "${count}" -lt "${LINT_BASELINE}" ]; then
+            echo "::notice::lint problems are down to ${count} (baseline ${LINT_BASELINE}) — lower LINT_BASELINE in .github/workflows/ci.yml to lock the win in"
+          else
+            echo "::notice::lint problems at the ${LINT_BASELINE} baseline — no new findings"
+          fi
+
+      - name: Migration hygiene
+        # Migrations are applied BY HAND in the Supabase SQL Editor and are not
+        # tracked by the Supabase CLI (CLAUDE.md §5), so the SQL file itself is
+        # the only place a reviewer can learn how to undo it. Every migration
+        # added or edited in this PR must therefore carry:
+        #   * a ROLLBACK section, and
+        #   * proof of re-runnability ("idempotent" or "if not exists").
+        # Only CHANGED files are enforced: 29 of the 45 existing migrations
+        # predate this rule and would fail a repo-wide gate (they are reported
+        # as an informational baseline instead).
+        run: |
+          set -uo pipefail
+          fail=0
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base_ref="origin/${{ github.base_ref }}"
+          else
+            base_ref="origin/${{ github.event.repository.default_branch || 'main' }}"
+          fi
+          git fetch --no-tags origin "+refs/heads/*:refs/remotes/origin/*" >/dev/null 2>&1 || true
+
+          if git rev-parse --verify --quiet "$base_ref" >/dev/null; then
+            changed=$(git diff --name-only --diff-filter=d "$base_ref...HEAD" -- 'supabase/migrations/*.sql' || true)
+          else
+            echo "::warning::could not resolve $base_ref — falling back to the files changed in the last commit"
+            changed=$(git diff --name-only --diff-filter=d HEAD~1 HEAD -- 'supabase/migrations/*.sql' || true)
+          fi
+
+          {
+            echo "### Migration hygiene"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -z "${changed}" ]; then
+            echo "No migration files changed in this PR." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "| migration | ROLLBACK | idempotent / if not exists |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              rb=no; idem=no
+              grep -qi 'rollback' "$f" && rb=yes
+              grep -qiE 'idempotent|if not exists' "$f" && idem=yes
+              echo "| \`$f\` | $rb | $idem |" >> "$GITHUB_STEP_SUMMARY"
+              if [ "$rb" = "no" ]; then
+                echo "::error file=$f::no ROLLBACK section — migrations are applied by hand and must document how to undo themselves"
+                fail=1
+              fi
+              if [ "$idem" = "no" ]; then
+                echo "::error file=$f::no 'idempotent' note and no 'if not exists' — a hand-run migration must be safe to re-run"
+                fail=1
+              fi
+            done <<< "${changed}"
+          fi
+
+          # Informational: the whole-repo baseline, so the debt stays visible.
+          total=0; ok=0
+          for f in supabase/migrations/*.sql; do
+            [ -e "$f" ] || continue
+            total=$((total + 1))
+            if grep -qi 'rollback' "$f" && grep -qiE 'idempotent|if not exists' "$f"; then ok=$((ok + 1)); fi
+          done
+          {
+            echo ""
+            echo "Repo baseline: ${ok}/${total} existing migrations satisfy both rules (pre-existing debt, not enforced)."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::migration hygiene baseline ${ok}/${total} across all migrations"
+
+          # Informational: keep the applied-migration ledger honest, when it exists.
+          if [ -f supabase/migrations/MIGRATIONS.md ] && [ -n "${changed}" ]; then
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              b=$(basename "$f")
+              grep -q "$b" supabase/migrations/MIGRATIONS.md || \
+                echo "::warning file=$f::$b is not listed in supabase/migrations/MIGRATIONS.md — add it to the ledger with its apply status"
+            done <<< "${changed}"
+          fi
+
+          exit $fail
+
+  edge-functions:
+    name: Edge Function typecheck (Deno)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Deno
+        id: deno
+        uses: denoland/setup-deno@v2
+        continue-on-error: true
+        with:
+          deno-version: v2.x
+
+      - name: Deno unavailable
+        if: steps.deno.outcome != 'success'
+        run: echo "::warning::Deno could not be installed on this runner — Edge Function typecheck skipped"
+
+      - name: deno check
+        if: steps.deno.outcome == 'success'
+        # supabase/functions/* is Deno, not Node: tsc -b never sees it, so
+        # without this a broken Edge Function is only discovered at
+        # `supabase functions deploy` time, by hand.
+        #
+        # continue-on-error while this gate is new — the two functions have
+        # never been type-checked in CI. Once a run is green, delete the
+        # continue-on-error line so it blocks.
+        continue-on-error: true
+        id: denocheck
+        run: |
+          set -uo pipefail
+          deno --version
+          status=0
+          for f in supabase/functions/*/index.ts; do
+            echo "--- deno check $f"
+            deno check --no-lock "$f" || status=1
+          done
+          exit $status
+
+      - name: Report typecheck result
+        if: steps.deno.outcome == 'success'
+        run: |
+          if [ "${{ steps.denocheck.outcome }}" = "success" ]; then
+            echo "Edge Functions type-check clean." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::deno check reported problems in supabase/functions — see the step log"
+            echo "Edge Functions: deno check reported problems (non-blocking for now)." >> "$GITHUB_STEP_SUMMARY"
+          fi

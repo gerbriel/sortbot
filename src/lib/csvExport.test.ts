@@ -311,3 +311,43 @@ describe('buildShopifyCsv — golden file', () => {
     expect(csv).toMatchSnapshot();
   });
 });
+
+describe('escapeCsvValue — spreadsheet formula injection (audit 05, #14)', () => {
+  it('neutralizes every formula lead-in', () => {
+    expect(escapeCsvValue('=HYPERLINK("http://evil","click")'))
+      .toBe(`"'=HYPERLINK(""http://evil"",""click"")"`);
+    expect(escapeCsvValue('=1+1')).toBe(`'=1+1`);
+    expect(escapeCsvValue('+1234567890')).toBe(`'+1234567890`);
+    expect(escapeCsvValue('@SUM(A1:A9)')).toBe(`'@SUM(A1:A9)`);
+    expect(escapeCsvValue('\tcmd')).toBe(`'\tcmd`);
+    expect(escapeCsvValue('\rcmd')).toBe(`"'\rcmd"`); // CR → quoted
+    expect(escapeCsvValue('-=1+1')).toBe(`'-=1+1`);
+  });
+
+  it('leaves negative numbers and ordinary text alone', () => {
+    expect(escapeCsvValue('-12.50')).toBe('-12.50');
+    expect(escapeCsvValue('-0')).toBe('-0');
+    expect(escapeCsvValue('45.00')).toBe('45.00');
+    expect(escapeCsvValue('XL - Vintage Y2K Nike 90s Tee')).toBe('XL - Vintage Y2K Nike 90s Tee');
+    expect(escapeCsvValue('Apparel & Accessories > Clothing')).toBe('Apparel & Accessories > Clothing');
+    expect(escapeCsvValue('✠ SIZE- XL')).toBe('✠ SIZE- XL');
+    expect(escapeCsvValue('gid://shopify/Metaobject/1')).toBe('gid://shopify/Metaobject/1');
+  });
+
+  it('keeps the original quoting behavior for blanks and separators', () => {
+    expect(escapeCsvValue(undefined)).toBe('');
+    expect(escapeCsvValue(null)).toBe('');
+    expect(escapeCsvValue(0)).toBe(''); // pre-existing `value || ''` semantics
+    expect(escapeCsvValue('a,b')).toBe('"a,b"');
+    expect(escapeCsvValue('say "hi"')).toBe('"say ""hi"""');
+    expect(escapeCsvValue('line1\nline2')).toBe('"line1\nline2"');
+  });
+
+  it('reaches real rows — a poisoned title is defused in the CSV', () => {
+    const csv = buildShopifyCsv([
+      product({ id: 'a', seoTitle: '=cmd|calc', price: 10, imageUrls: ['https://x/1.jpg'] }),
+    ]);
+    expect(csv).toContain(`,'=cmd|calc,`);
+    expect(csv).not.toContain(',=cmd|calc,');
+  });
+});

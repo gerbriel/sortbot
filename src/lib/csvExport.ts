@@ -498,10 +498,23 @@ export const SHOPIFY_CSV_HEADERS = [
   'Package Dimensions (product.metafields.custom.package_dimensions)',
 ];
 
-/** Escape CSV values properly. */
+/**
+ * A cell Excel / Google Sheets / LibreOffice would evaluate as a FORMULA rather
+ * than display as text. Deliberately conservative (security audit 05, #14):
+ *   - `=` `+` `@` start a formula in every spreadsheet.
+ *   - a leading TAB or CR lets the real first character hide behind whitespace.
+ *   - `-` only counts when what follows is NOT a digit, so "-12.50" stays a
+ *     negative number and never grows a stray apostrophe.
+ * Anything matched is prefixed with a single quote, which spreadsheets strip on
+ * display (and Shopify's importer strips on import) while refusing to evaluate.
+ */
+const CSV_FORMULA_START_RE = /^(?:[=+@\t\r]|-(?![0-9]))/;
+
+/** Escape CSV values properly, and neutralize spreadsheet formulas. */
 export const escapeCsvValue = (value: unknown): string => {
-  const str = String(value || '');
-  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+  let str = String(value || '');
+  if (CSV_FORMULA_START_RE.test(str)) str = `'${str}`;
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;

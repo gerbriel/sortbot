@@ -1,10 +1,11 @@
-import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import JSZip from 'jszip';
-import exifr from 'exifr';
+import type JSZipStatic from 'jszip';   // type only — the value is dynamically imported
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
-import { log } from '../lib/debugLogger';
+import { log, isDebugEnabled } from '../lib/debugLogger';
+import { buildProductImageRow, stage4ColumnsAvailable } from '../lib/imageRowSync';
+import { publicImageUrl } from '../lib/storageUrls';
 import './ImageUpload.css';
 import { XCircle, RefreshCw, X, Archive, CheckCircle2, AlertTriangle } from 'lucide-react';
 
@@ -24,23 +25,90 @@ const COMPRESS_QUALITY = 0.88;
 const RECOMPRESS_SKIP_UNDER_BYTES = 200 * 1024; // 200 KB
 // localStorage key that records which storagePaths have already been compressed.
 const COMPRESSED_PATHS_KEY = 'sortbot_compressed_paths';
+// Hard ceiling for a single TUS file upload before we fall back to the plain PUT.
+// 5 min is generous even for a 6 MB chunk on a very slow link; past that the
+// session is wedged, and one wedged file must never stall the batch.
+const TUS_TIMEOUT_MS = 5 * 60 * 1000;
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Read the set of storage paths that have already been compressed. */
+/* ── Lazily-loaded heavy dependencies ────────────────────────────────────────
+ * jszip (~165 KB) is only reachable from the ZIP import path, and exifr (~56 KB)
+ * only from JPEG capture-time reads. Statically imported, both shipped in the main
+ * chunk to every visitor including logged-out ones on the landing page. Cached
+ * promises, so a 1 500-file batch loads each module at most once. */
+// jszip's .d.ts uses `export = JSZip`, so the module namespace is not a plain
+// record — resolve `default` inside the loader and cache the class itself.
+let jszipPromise: Promise<JSZipStatic> | null = null;
+const loadJSZip = () => (jszipPromise ??= import('jszip').then(m => m.default));
+let exifrPromise: Promise<typeof import('exifr')> | null = null;
+const loadExifr = () => (exifrPromise ??= import('exifr'));
+
+/* ── The "already compressed" registry ───────────────────────────────────────
+ * `markCompressed` used to re-read, re-serialize and re-write the WHOLE path array
+ * for every single image: O(n) per image, so O(n²) per batch. With 5 000 paths
+ * already stored (a ~540 KB JSON array) and 1 500 new images that is ~2.4 GB of
+ * string churn and ~810 MB of BLOCKING localStorage writes, on the main thread,
+ * inside the upload loop (perf finding F10).
+ *
+ * Now: one lazy hydration per session, an in-memory Set (O(1) per image), and a
+ * single coalesced write. Explicit `flushCompressedPaths()` calls at the end of
+ * each run and on page hide make the write durable; the timer is the backstop for
+ * a run that ends some other way.
+ *
+ * `sortbot_compressed_paths` MUST NOT be renamed (CLAUDE.md §1): losing it
+ * re-compresses all 4 854 files in the bucket. */
+let _compressedPaths: Set<string> | null = null;
+let _compressedDirty = false;
+let _compressedFlushTimer: ReturnType<typeof setTimeout> | null = null;
+let _compressedQuotaWarned = false;
+const COMPRESSED_FLUSH_MS = 2000;
+
+/** Read the set of storage paths that have already been compressed.
+ *  Parsed from localStorage once per session, then served from memory. */
 function getCompressedPaths(): Set<string> {
+  if (_compressedPaths) return _compressedPaths;
   try {
     const raw = localStorage.getItem(COMPRESSED_PATHS_KEY);
-    return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
-  } catch { return new Set(); }
+    _compressedPaths = raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+  } catch {
+    _compressedPaths = new Set();
+  }
+  return _compressedPaths;
 }
 
-/** Persist a new path as compressed. */
-function markCompressed(storagePath: string) {
+/** Write the in-memory registry back to localStorage, if it changed. */
+function flushCompressedPaths(): void {
+  if (_compressedFlushTimer !== null) {
+    clearTimeout(_compressedFlushTimer);
+    _compressedFlushTimer = null;
+  }
+  if (!_compressedDirty || !_compressedPaths) return;
+  _compressedDirty = false;
   try {
-    const set = getCompressedPaths();
-    set.add(storagePath);
-    localStorage.setItem(COMPRESSED_PATHS_KEY, JSON.stringify([...set]));
-  } catch { /* ignore quota errors */ }
+    localStorage.setItem(COMPRESSED_PATHS_KEY, JSON.stringify([...(_compressedPaths)]));
+  } catch (err) {
+    // Previously a bare `catch {}`: the registry could die silently and the
+    // recompress buttons would start re-doing the entire bucket with no clue why.
+    // Warn once per session — the in-memory Set still works for this session.
+    if (!_compressedQuotaWarned) {
+      _compressedQuotaWarned = true;
+      console.warn('[upload] compressed-path registry not saved (localStorage full or unavailable). Already-compressed images may be re-compressed in a later session:', err);
+    }
+  }
+}
+
+/** Record a path as compressed. O(1) — the write is coalesced. */
+function markCompressed(storagePath: string) {
+  const set = getCompressedPaths();
+  if (set.has(storagePath)) return;
+  set.add(storagePath);
+  _compressedDirty = true;
+  if (_compressedFlushTimer === null) {
+    _compressedFlushTimer = setTimeout(() => {
+      _compressedFlushTimer = null;
+      flushCompressedPaths();
+    }, COMPRESSED_FLUSH_MS);
+  }
 }
 
 interface ImageUploadProps {
@@ -61,6 +129,12 @@ interface ImageUploadProps {
    * `newItems` contains only the items from this chunk.
    */
   onChunkReady?: (newItems: ClothingItem[]) => void;
+  /**
+   * Called after the user cancels a partially-finished upload, with the ids of
+   * every item this run had already handed to `onChunkReady`. The parent MUST
+   * drop them: their Storage objects and DB rows are deleted by then.
+   */
+  onUploadCancelled?: (cancelledIds: string[]) => void;
   /**
    * Called synchronously at the very start of a new upload batch (before any
    * files are processed). Allows the parent to mint a stable batchId before
@@ -95,6 +169,7 @@ export interface ImageUploadHandle {
 async function getCapturedAt(file: File): Promise<number> {
   if (file.type === 'image/jpeg' || file.type === 'image/jpg') {
     try {
+      const { default: exifr } = await loadExifr();
       const exif = await exifr.parse(file, ['DateTimeOriginal']);
       if (exif?.DateTimeOriginal instanceof Date) {
         return exif.DateTimeOriginal.getTime();
@@ -155,6 +230,7 @@ async function compressImage(file: File): Promise<File> {
 
 /** Extract all image Files from a .zip, preserving lastModified from zip entry dates */
 async function extractImagesFromZip(zipFile: File): Promise<File[]> {
+  const JSZip = await loadJSZip();
   const zip = await JSZip.loadAsync(zipFile);
   const imageFiles: File[] = [];
   const promises: Promise<void>[] = [];
@@ -183,7 +259,7 @@ async function extractImagesFromZip(zipFile: File): Promise<File[]> {
   return imageFiles.sort((a, b) => a.lastModified - b.lastModified);
 }
 
-const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesUploaded, userId, existingItems, onCapturedAtUpdated: _onCapturedAtUpdated, onToast, onChunkReady, onUploadStart, getBatchId }, ref) => {
+const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesUploaded, userId, existingItems, onCapturedAtUpdated: _onCapturedAtUpdated, onToast, onChunkReady, onUploadCancelled, onUploadStart, getBatchId }, ref) => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [extractingZip, setExtractingZip] = useState(false);
@@ -221,6 +297,20 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
   const folderInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
 
+  // The compressed-path registry is now written once per run instead of once per
+  // image (F10). Page hide is the backstop for a run that is interrupted — losing
+  // the registry means re-compressing files that are already compressed.
+  useEffect(() => {
+    const flush = () => flushCompressedPaths();
+    window.addEventListener('pagehide', flush);
+    window.addEventListener('beforeunload', flush);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      window.removeEventListener('beforeunload', flush);
+      flush();
+    };
+  }, []);
+
   // Expose trigger methods to App.tsx so it can place the buttons in the section header
   useImperativeHandle(ref, () => ({
     triggerFolder: () => folderInputRef.current?.click(),
@@ -230,24 +320,37 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
 
   const processFiles = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
-    // Notify parent to mint batchId synchronously before any DB writes happen.
-    // This ensures the products rows we create in the per-chunk write carry the
-    // correct batch_id from the very first chunk.
-    onUploadStart?.();
-    // Clear stale TUS fingerprints so that when the same file is re-dropped,
-    // TUS always uses the fresh UUID path we just generated — not a leftover
-    // partial-session path from a previous broken upload.  Without this, TUS
-    // "resumes" to the old storage path but our code thinks it uploaded to the
-    // new path, writing a DB row that points to a non-existent file (400s).
-    Object.keys(localStorage)
-      .filter(k => k.startsWith('tus::'))
-      .forEach(k => localStorage.removeItem(k));
-    // Prevent concurrent uploads — drop any call that arrives while one is already running
+    // Prevent concurrent uploads — drop any call that arrives while one is already
+    // running. THIS MUST BE FIRST (finding 11): onUploadStart() and the TUS
+    // fingerprint cleanup below used to run before it, so a second drop (or a
+    // folder-input change firing alongside a drop, or a StrictMode double-invoke)
+    // wiped the fingerprints of the upload already in progress.
     if (isProcessingRef.current) {
       log.upload('processFiles | SKIPPED — already in progress (double-fire guard)');
       return;
     }
     isProcessingRef.current = true;
+    // Notify parent to mint batchId synchronously before any DB writes happen.
+    // This ensures the products rows we create in the per-chunk write carry the
+    // correct batch_id from the very first chunk.
+    onUploadStart?.();
+    // Drop only STALE TUS fingerprints. A leftover partial-session fingerprint
+    // makes TUS "resume" to an old storage path while our code believes it wrote
+    // the fresh one (DB row → non-existent file → 400s). But wiping them all on
+    // every upload also permanently defeated `storeFingerprintForResuming` — the
+    // advertised "interrupted uploads resume on next visit" could never fire
+    // (finding 11). Anything inside the resume window is left alone.
+    const TUS_RESUME_TTL_MS = 24 * 60 * 60 * 1000;
+    for (const key of Object.keys(localStorage)) {
+      if (!key.startsWith('tus::')) continue;
+      try {
+        const meta = JSON.parse(localStorage.getItem(key) || '{}');
+        const created = meta?.creationTime ? new Date(meta.creationTime).getTime() : 0;
+        if (!created || Date.now() - created > TUS_RESUME_TTL_MS) localStorage.removeItem(key);
+      } catch {
+        localStorage.removeItem(key); // unparseable — cannot be resumed from anyway
+      }
+    }
     // Reset pause/cancel state for this new upload session
     pausedRef.current    = false;
     cancelledRef.current = false;
@@ -295,8 +398,8 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
               return file;
             })
           : file;
-        console.log(
-          `[upload] 📦 Compressed: ${file.name}`,
+        if (isDebugEnabled()) log.upload(
+          `Compressed: ${file.name}`,
           `${(file.size / 1024).toFixed(0)} KB → ${(fileToUpload.size / 1024).toFixed(0)} KB`,
           `(saved ${((1 - fileToUpload.size / file.size) * 100).toFixed(0)}%)`,
         );
@@ -327,7 +430,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
           return null; // excluded from items
         }
 
-        console.log('[upload] ✅ Uploaded to Storage:', file.name, '→', uploaded.storagePath);
+        log.upload('✅ Uploaded to Storage:', file.name, '→', uploaded.storagePath);
         if (COMPRESS_ON_UPLOAD) markCompressed(uploaded.storagePath);
         uploadedPaths.push(uploaded.storagePath);
         return {
@@ -362,7 +465,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       }
       if (chunkWithStorage.length > 0) {
         const batchId = getBatchId?.() ?? null;
-        console.log(`[upload] 💾 Writing ${chunkWithStorage.length} products + product_images DB rows for chunk ${Math.floor(i / CHUNK) + 1} (batchId=${batchId ?? 'null'})...`);
+        log.upload(`💾 Writing ${chunkWithStorage.length} products + product_images DB rows for chunk ${Math.floor(i / CHUNK) + 1} (batchId=${batchId ?? 'null'})...`);
         // 1) Upsert the products rows FIRST — product_images has an FK constraint
         //    on product_id that requires the parent products row to exist.
         //    ignoreDuplicates: false so that if this is a retry, batch_id is kept.
@@ -381,17 +484,20 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
           //    Plain insert — each storagePath is a fresh UUID-based path so
           //    duplicates are impossible here. (storage_path has no UNIQUE
           //    constraint so upsert ON CONFLICT would fail.)
-          const imgRows = chunkWithStorage.map(r => ({
-            product_id: r.id,
-            user_id: userId,
-            image_url: r.imageUrls![0],
-            storage_path: r.storagePath!,
-          }));
+          // Use the SHARED row builder (finding 12). Hand-rolling the row here
+          // omitted original_name / alt_text / transforms / captured_at, and the
+          // later upsert in handleImagesUploaded passes ignoreDuplicates:true —
+          // so those columns could never be filled and the d0147f0 fix
+          // ("original_name written at upload time") was silently dead.
+          const stage4Chunk = await stage4ColumnsAvailable();
+          const imgRows = chunkWithStorage.map(r =>
+            buildProductImageRow(r as unknown as ClothingItem, userId, 0, r.imageUrls![0], stage4Chunk)
+          );
           const { error: imgErr } = await supabase.from('product_images').insert(imgRows);
           if (imgErr) {
             console.error('[upload] ❌ per-chunk product_images insert error:', imgErr.message);
           } else {
-            console.log(`[upload] ✅ DB rows written for chunk — ${chunkWithStorage.length} items saved to products + product_images`);
+            log.upload(`✅ DB rows written for chunk — ${chunkWithStorage.length} items saved to products + product_images`);
           }
         }
       }
@@ -405,29 +511,46 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     setUploadProgress(null);
     setIsPaused(false);
     setIsCancelling(false);
+    // Persist the compressed-path registry once for the whole run (F10) — the
+    // per-image markCompressed calls above only touched an in-memory Set.
+    flushCompressedPaths();
     if (!cancelledRef.current) {
       log.upload(`upload complete | success=${items.filter(i => i.storagePath).length} fallback=${items.filter(i => !i.storagePath).length} total=${items.length}`);
       onImagesUploaded(items);
     } else {
-      // Delete every file we already pushed to Supabase Storage
-      if (uploadedPaths.length > 0) {
+      // ── Cancel cleanup (finding 3) ──────────────────────────────────────────
+      // Removing the Storage objects alone left products/product_images rows
+      // pointing at files that no longer exist: broken thumbnails in the Library,
+      // and rows that handleOpenBatch's gap-fill re-adopts and — once they pass
+      // the cap — DELETES as "stolen". Undo the DB rows FIRST (while the files
+      // still exist, so a partial failure is recoverable), then the files, then
+      // tell the parent to drop the items it already rendered.
+      const cancelledIds = items.map(i => i.id);
+      const CLEANUP_CHUNK = 100;
+      for (let c = 0; c < cancelledIds.length; c += CLEANUP_CHUNK) {
+        const ids = cancelledIds.slice(c, c + CLEANUP_CHUNK);
+        const { error: imgDelErr } = await supabase.from('product_images').delete().in('product_id', ids);
+        if (imgDelErr) console.error('Cancel cleanup: product_images delete failed', imgDelErr.message);
+        const { error: prodDelErr } = await supabase.from('products').delete().in('id', ids);
+        if (prodDelErr) console.error('Cancel cleanup: products delete failed', prodDelErr.message);
+      }
+      // Storage objects, chunked — one request with 1500 paths is a needlessly
+      // huge body and fails as a unit.
+      for (let c = 0; c < uploadedPaths.length; c += CLEANUP_CHUNK) {
         const { error } = await supabase.storage
           .from('product-images')
-          .remove(uploadedPaths);
-        if (error) {
-          console.error('Cancel cleanup: failed to delete uploaded files', error);
-        } else {
-          log.upload(`cancel cleanup | deleted ${uploadedPaths.length} files from storage`);
-        }
+          .remove(uploadedPaths.slice(c, c + CLEANUP_CHUNK));
+        if (error) console.error('Cancel cleanup: failed to delete uploaded files', error);
       }
-      log.upload('upload cancelled — storage cleaned up');
+      onUploadCancelled?.(cancelledIds);
+      log.upload(`upload cancelled | removed ${cancelledIds.length} DB row set(s) and ${uploadedPaths.length} storage file(s)`);
     }
     } finally {
       isProcessingRef.current = false;
       pausedRef.current    = false;
       cancelledRef.current = false;
     }
-  }, [onImagesUploaded, userId, onUploadStart, getBatchId]);
+  }, [onImagesUploaded, userId, onUploadStart, onUploadCancelled, getBatchId]);
 
   // Re-upload all files that failed during the last processFiles run.
   // Clears the failed list first so the banner disappears immediately, then
@@ -436,7 +559,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     if (failedUploads.length === 0) return;
     const toRetry = [...failedUploads];
     setFailedUploads([]);
-    console.log('[upload] 🔄 Retrying', toRetry.length, 'failed file(s)…');
+    log.upload('🔄 Retrying', toRetry.length, 'failed file(s)…');
     await processFiles(toRetry.map(f => f.file));
   }, [failedUploads, processFiles]);
 
@@ -453,10 +576,19 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       // at, rather than restarting the whole file.  This is the primary upload
       // path for all users; it's especially critical on slow/rural connections.
       try {
-        console.log('[upload] 🔌 Attempting TUS resumable upload for:', filePath);
+        log.upload('🔌 Attempting TUS resumable upload for:', filePath);
         const { tusUploadFile } = await import('../lib/tusUpload');
-        const result = await tusUploadFile(file, filePath);
-        console.log('[upload] ✅ TUS succeeded for:', filePath);
+        // Watchdog: tus-js-client retries transient errors indefinitely, so a wedged
+        // session would otherwise stall this chunk — and the whole loop — forever.
+        // Losing the race just falls through to the standard PUT below. (finding 8)
+        let watchdog: ReturnType<typeof setTimeout> | undefined;
+        const result = await Promise.race([
+          tusUploadFile(file, filePath),
+          new Promise<never>((_, rej) => {
+            watchdog = setTimeout(() => rej(new Error('tus timeout')), TUS_TIMEOUT_MS);
+          }),
+        ]).finally(() => { if (watchdog) clearTimeout(watchdog); });
+        log.upload('✅ TUS succeeded for:', filePath);
         return {
           preview: result.publicUrl,
           imageUrls: [result.publicUrl],
@@ -480,9 +612,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
         return null;
       }
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('product-images')
-        .getPublicUrl(data.path);
+      const publicUrl = publicImageUrl(data.path);
 
       return {
         preview: publicUrl,
@@ -605,6 +735,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
       alreadyDone: alreadyDoneCount,
       errors: [...errors],
     });
+    flushCompressedPaths();   // one write for the whole run (F10)
     log.upload(`recompressExisting done | saved=${(totalSavedBytes/1024/1024).toFixed(2)}MB skipped=${skipped} errors=${errors.length}`);
 
     // Fire a toast summarising the result

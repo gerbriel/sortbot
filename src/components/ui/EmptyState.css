@@ -1,0 +1,64 @@
+/* ── EmptyState ─────────────────────────────────────────────────────────────
+   Replaces the four separate .empty-state blocks (Library.css:83,
+   CategoriesManager.css:165, CategoryPresetsManager.css:77,
+   SavedProducts.css:89), .sw-empty, .kanban-lane-empty, .kanban-atlas-empty
+   and the inline "No categorized items yet" notice in PDG.
+
+   Library's copy set its own font sizes with !important (.empty-subtitle);
+   this version scales by role instead, so it obeys the --fs-* ramp. */
+
+.ui-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  text-align: center;
+  padding: var(--space-10) var(--space-5);
+  min-width: 0;
+}
+
+/* Inline density — for an empty lane or panel section, where the full padding
+   would push the rest of the UI off screen. */
+.ui-empty--inline { padding: var(--space-5) var(--space-4); gap: var(--space-1); }
+
+.ui-empty__icon {
+  display: inline-flex;
+  color: var(--text-faint);
+  margin-bottom: var(--space-1);
+}
+.ui-empty__icon .lucide { width: 2em; height: 2em; }
+.ui-empty--inline .ui-empty__icon .lucide { width: 1.5em; height: 1.5em; }
+
+.ui-empty__title {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+.ui-empty--inline .ui-empty__title { font-size: var(--fs-sm); }
+
+.ui-empty__description {
+  margin: 0;
+  max-width: 46ch;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  /* --text-secondary, not --text-muted: this is the sentence that tells the
+     user what to do next, so it is essential copy and needs the AA-safe step. */
+  color: var(--text-secondary);
+}
+
+.ui-empty__actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
+
+/* Error flavour — same layout, danger-tinted glyph. For "could not load", which
+   is an empty state with a cause. */
+.ui-empty--error .ui-empty__icon { color: var(--danger); }

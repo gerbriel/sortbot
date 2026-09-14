@@ -1,0 +1,126 @@
+/* ── Button / LinkButton ────────────────────────────────────────────────────
+   Replaces .button / .button-primary / .button-secondary / .button-danger
+   (App.css + 3 duplicate copies in component CSS), .org-invite-btn,
+   .org-member-remove, .ptb-btn* and .sw-fab.
+
+   SPECIFICITY NOTE: index.css styles the bare `button` element (padding, font,
+   radius, transition). A single class (0,1,0) outranks that element selector
+   (0,0,1), so every declaration below wins without !important. Keep these as
+   single-class selectors for that reason. */
+
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-family: inherit;
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  text-decoration: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease),
+              box-shadow var(--dur-fast) var(--ease);
+}
+
+.ui-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ui-btn:disabled,
+.ui-btn[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.ui-btn:hover { text-decoration: none; }
+
+/* ── Sizes — min-height owns the hit target; the 9px root makes rem padding
+      alone far too small to hit reliably. 24 / 32 / 40px. ───────────────── */
+.ui-btn--sm { min-height: 2.7rem; padding: var(--space-1) var(--space-3); font-size: var(--fs-xs); }
+.ui-btn--md { min-height: 3.6rem; padding: var(--space-2) var(--space-5); font-size: var(--fs-base); }
+.ui-btn--lg { min-height: 4.4rem; padding: var(--space-3) var(--space-6); font-size: var(--fs-md); }
+
+.ui-btn--full { width: 100%; }
+
+/* ── Variants ───────────────────────────────────────────────────────────────
+   Solid fills set color: var(--ink-950). That token is WHITE on this palette,
+   so black fill + white label falls out for free — and the pair inverts
+   together if the palette ever flips back to dark (CLAUDE.md §1). */
+.ui-btn--primary {
+  background: var(--accent);
+  color: var(--ink-950);
+  border-color: var(--accent);
+}
+.ui-btn--primary:hover:not(:disabled):not([aria-disabled='true']) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.ui-btn--primary:active:not(:disabled) {
+  background: var(--accent-press);
+  border-color: var(--accent-press);
+}
+
+/* --border-control, not --border: WCAG 1.4.11 wants 3:1 on an interactive
+   boundary and the decorative border tokens do not reach it. */
+.ui-btn--secondary {
+  background: var(--ink-800);
+  color: var(--text-primary);
+  border-color: var(--border-control);
+}
+.ui-btn--secondary:hover:not(:disabled):not([aria-disabled='true']) {
+  background: var(--ink-750);
+  border-color: var(--border-strong);
+}
+.ui-btn--secondary:active:not(:disabled) { background: var(--ink-700); }
+
+.ui-btn--ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: transparent;
+}
+.ui-btn--ghost:hover:not(:disabled):not([aria-disabled='true']) {
+  background: var(--ink-750);
+  color: var(--text-primary);
+}
+.ui-btn--ghost:active:not(:disabled) { background: var(--ink-700); }
+
+.ui-btn--danger {
+  background: var(--danger);
+  color: var(--ink-950);
+  border-color: var(--danger);
+}
+/* No --danger-hover token exists, and a literal hex would break the
+   swap-the-palette property. The inset wash in base.css darkens the fill with
+   a token value instead, and paints under the label. */
+.ui-btn--danger:active:not(:disabled) {
+  box-shadow: inset 0 0 0 100vmax var(--accent-line);
+}
+
+/* The app's dominant destructive idiom in dense rows: outline at rest, fills
+   on hover (.org-member-remove, .ptb-btn--danger, .org-icon-danger). */
+.ui-btn--danger-quiet {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.ui-btn--danger-quiet:hover:not(:disabled):not([aria-disabled='true']) {
+  background: var(--danger-dim);
+}
+.ui-btn--danger-quiet:active:not(:disabled) {
+  background: var(--danger);
+  color: var(--ink-950);
+}
+
+/* ── Loading ────────────────────────────────────────────────────────────────
+   The label stays mounted so the button cannot change width mid-action and
+   shift the row it lives in. */
+.ui-btn--loading { cursor: progress; }
+.ui-btn--loading:disabled { cursor: progress; }

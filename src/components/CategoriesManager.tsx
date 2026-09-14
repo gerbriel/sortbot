@@ -55,10 +55,12 @@ const getIconComponent = (iconName: string | undefined, size: number = 20) => {
 };
 
 interface CategoriesManagerProps {
+  /** Kept so App's call site is unchanged; ToolView's "Back to workflow"
+   *  button is what closes the view now, and App wires it to the same fn. */
   onClose: () => void;
 }
 
-const CategoriesManager: React.FC<CategoriesManagerProps> = ({ onClose }) => {
+const CategoriesManager: React.FC<CategoriesManagerProps> = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -190,102 +192,101 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ onClose }) => {
   };
 
   if (loading) {
-    return (
-      <div className="categories-manager-overlay">
-        <div className="categories-manager">
-          <p>Loading categories...</p>
-        </div>
-      </div>
-    );
+    return <p className="categories-page-loading">Loading categories…</p>;
   }
 
   return (
-    <div className="categories-manager-overlay">
-      <div className="categories-manager">
-        <div className="categories-header">
-          <h2>Manage Categories</h2>
-          <div className="header-actions">
-            <button className="button" onClick={handleCreate}>
-              + Add Category
+    /* Page layout: the editor that used to be a modal-over-a-modal is now the
+       left column, permanently in view beside the list it edits. */
+    <div className="categories-page tv-cols">
+      <section className="categories-editor tv-card" aria-labelledby="categories-editor-title">
+        {showForm ? (
+          <>
+            <h2 className="tv-section-title" id="categories-editor-title">
+              {editingCategory ? 'Edit category' : 'New category'}
+            </h2>
+            <form onSubmit={handleSubmit}>
+              <div className="form-group">
+                <label>Internal Name (lowercase, no spaces) *</label>
+                <input
+                  type="text"
+                  value={formData.name || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g., sweatshirts"
+                  required
+                  disabled={!!editingCategory}
+                />
+                <small>Used internally. Cannot be changed after creation.</small>
+              </div>
+
+              <div className="form-group">
+                <label>Display Name *</label>
+                <input
+                  type="text"
+                  value={formData.display_name || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, display_name: e.target.value }))}
+                  placeholder="e.g., Sweatshirts & Hoodies"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Icon</label>
+                <div className="emoji-picker">
+                  {ICON_OPTIONS.map(option => {
+                    const IconComponent = option.component;
+                    return (
+                      <button
+                        key={option.name}
+                        type="button"
+                        className={`emoji-option ${formData.emoji === option.name ? 'selected' : ''}`}
+                        onClick={() => setFormData(prev => ({ ...prev, emoji: option.name }))}
+                        title={option.label}
+                      >
+                        <IconComponent size={24} />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>Color</label>
+                <input
+                  type="color"
+                  value={formData.color || '#fafafa'}
+                  onChange={(e) => setFormData(prev => ({ ...prev, color: e.target.value }))}
+                />
+              </div>
+
+              <div className="form-actions">
+                <button type="submit" className="button button-primary">
+                  {editingCategory ? 'Update' : 'Create'} category
+                </button>
+                <button type="button" className="button" onClick={() => setShowForm(false)}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </>
+        ) : (
+          <>
+            <h2 className="tv-section-title" id="categories-editor-title">New category</h2>
+            <p className="categories-editor-hint">
+              Categories are what you drag product groups onto in Step 2. Each one carries
+              an icon and a colour so it stays recognisable at a glance.
+            </p>
+            <button className="button button-primary" onClick={handleCreate}>
+              + Add category
             </button>
-            <button className="button-close" onClick={onClose} title="Close">
-              ✕
-            </button>
-          </div>
-        </div>
-
-        {showForm && (
-          <div className="category-form-overlay">
-            <div className="category-form-modal">
-              <h3>{editingCategory ? 'Edit' : 'Create'} Category</h3>
-              
-              <form onSubmit={handleSubmit}>
-                <div className="form-group">
-                  <label>Internal Name (lowercase, no spaces) *</label>
-                  <input
-                    type="text"
-                    value={formData.name || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="e.g., sweatshirts"
-                    required
-                    disabled={!!editingCategory}
-                  />
-                  <small>Used internally. Cannot be changed after creation.</small>
-                </div>
-
-                <div className="form-group">
-                  <label>Display Name *</label>
-                  <input
-                    type="text"
-                    value={formData.display_name || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, display_name: e.target.value }))}
-                    placeholder="e.g., Sweatshirts & Hoodies"
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Icon</label>
-                  <div className="emoji-picker">
-                    {ICON_OPTIONS.map(option => {
-                      const IconComponent = option.component;
-                      return (
-                        <button
-                          key={option.name}
-                          type="button"
-                          className={`emoji-option ${formData.emoji === option.name ? 'selected' : ''}`}
-                          onClick={() => setFormData(prev => ({ ...prev, emoji: option.name }))}
-                          title={option.label}
-                        >
-                          <IconComponent size={24} />
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label>Color</label>
-                  <input
-                    type="color"
-                    value={formData.color || '#fafafa'}
-                    onChange={(e) => setFormData(prev => ({ ...prev, color: e.target.value }))}
-                  />
-                </div>
-
-                <div className="form-actions">
-                  <button type="submit" className="button button-primary">
-                    {editingCategory ? 'Update' : 'Create'} Category
-                  </button>
-                  <button type="button" className="button" onClick={() => setShowForm(false)}>
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
+          </>
         )}
+      </section>
 
+      <section className="categories-list-col" aria-labelledby="categories-list-title">
+        <h2 className="tv-section-title" id="categories-list-title">
+          {categories.length} {categories.length === 1 ? 'category' : 'categories'}
+        </h2>
         <div className="categories-list">
           {categories.length === 0 ? (
             <div className="empty-state">
@@ -337,7 +338,7 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ onClose }) => {
             ))
           )}
         </div>
-      </div>
+      </section>
     </div>
   );
 };

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { applyPresetDirectly } from './applyPresetToGroup';
+import { resolvePreset } from './presetResolver';
 import type { CategoryPreset } from './categoryPresets';
 import type { ClothingItem } from '../App';
 
@@ -147,5 +148,57 @@ describe('applyPresetDirectly — field wiring (July 2026 audit fixes)', () => {
     const [itemWins] = applyPresetDirectly([makeItem({ compareAtPrice: 45 })], 'tees',
       makePreset({ suggested_price_max: 60 }));
     expect(itemWins.compareAtPrice).toBe(45);
+  });
+});
+
+/**
+ * resolvePreset — the shared matcher (architecture review duplicate #4).
+ *
+ * Two copies had diverged: CategoryZones' 4-step version (which knows about the
+ * "<name>_default_<rand>" preset createCategory auto-creates) and
+ * applyPresetToGroup's 3-step version. The 4th step is opt-in so migrating either
+ * caller cannot change which preset it picks. These tests are the lock.
+ */
+describe('resolvePreset', () => {
+  const p = (o: Partial<CategoryPreset>) =>
+    ({ is_active: true, is_default: false, category_name: '', ...o }) as CategoryPreset;
+
+  it('prefers an exact product_type match that is default', () => {
+    const list = [p({ id: 'a', product_type: 'tees' }), p({ id: 'b', product_type: 'Tees', is_default: true })];
+    expect(resolvePreset(list, 'TEES')?.id).toBe('b');
+  });
+
+  it('falls back to any exact product_type match when none is default', () => {
+    const list = [p({ id: 'c', category_name: 'tees' }), p({ id: 'd', product_type: 'tees' })];
+    expect(resolvePreset(list, 'tees')?.id).toBe('d');
+  });
+
+  it('falls back to the legacy category_name match last', () => {
+    expect(resolvePreset([p({ id: 'e', category_name: 'hats' })], 'hats')?.id).toBe('e');
+  });
+
+  it('is case-insensitive on both sides', () => {
+    expect(resolvePreset([p({ id: 'f', product_type: 'OuterWear' })], 'outerwear')?.id).toBe('f');
+  });
+
+  it('ignores inactive presets', () => {
+    expect(resolvePreset([p({ id: 'g', product_type: 'hats', is_active: false })], 'hats')).toBeUndefined();
+  });
+
+  it('matches "<name>_default…" ONLY when allowDefaultPrefix is set', () => {
+    const list = [p({ id: 'h', category_name: 'hats_default_91k' })];
+    expect(resolvePreset(list, 'hats')).toBeUndefined();
+    expect(resolvePreset(list, 'hats', { allowDefaultPrefix: true })?.id).toBe('h');
+  });
+
+  it('never falls back to an unrelated default preset (the July 2026 audit fix)', () => {
+    expect(resolvePreset([p({ id: 'i', product_type: 'jeans', is_default: true })], 'hats')).toBeUndefined();
+  });
+
+  it('returns undefined for an empty category, list or undefined input', () => {
+    expect(resolvePreset([p({ id: 'j', product_type: 'hats' })], '')).toBeUndefined();
+    expect(resolvePreset([], 'hats')).toBeUndefined();
+    expect(resolvePreset(undefined, 'hats')).toBeUndefined();
+    expect(resolvePreset([p({ id: 'k', product_type: 'hats' })], undefined)).toBeUndefined();
   });
 });

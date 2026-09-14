@@ -1476,7 +1476,7 @@
   font-size: var(--fs-2xs);
   font-weight: 700;
   padding: 0;
-  text-decoration: underline;
+  text-decoration: none;
 }
 
 .photo-pick-toggle--on {

@@ -1,0 +1,99 @@
+# Acadia — static app container, optionally pointed at a self-hosted Supabase.
+#
+# WHAT THIS FILE IS: the app half of a self-reliant deployment. It builds the
+# SPA image from deploy/Dockerfile and serves it on http://localhost:8088.
+#
+# WHAT THIS FILE IS NOT: a copy of the Supabase stack. Supabase's own compose
+# file is ~15 services (db, auth/gotrue, rest/PostgREST, realtime, storage,
+# imgproxy, kong, meta, studio, analytics, vector, supavisor) with a matching
+# .env and version pins that change often. Duplicating it here would be stale
+# within a month and would silently drift from upstream. Run the official one
+# instead and point this app at it:
+#
+#   git clone --depth 1 https://github.com/supabase/supabase /opt/supabase-docker
+#   cd /opt/supabase-docker/docker
+#   cp .env.example .env        # then set POSTGRES_PASSWORD, JWT_SECRET,
+#                               # ANON_KEY, SERVICE_ROLE_KEY, DASHBOARD_* ...
+#   docker compose up -d
+#
+# Docs: https://supabase.com/docs/guides/self-hosting/docker
+# Compose file: https://github.com/supabase/supabase/blob/master/docker/docker-compose.yml
+#
+# WHAT TO POINT VITE_SUPABASE_URL AT
+#   * Managed Supabase (today's production): https://<project-ref>.supabase.co
+#   * Self-hosted: the KONG gateway, not Postgres and not PostgREST directly.
+#     Kong publishes 8000/8443 and fronts /auth, /rest, /realtime, /storage.
+#       - same host, from the browser:  http://localhost:8000
+#       - behind your own TLS:          https://api.acadia.example.com
+#     The value must be reachable from the USER'S BROWSER, because this app has
+#     no server side: it is the browser that calls Supabase. A container-network
+#     name such as http://kong:8000 will not work.
+#   * VITE_SUPABASE_ANON_KEY must be the ANON key generated for that stack's
+#     JWT_SECRET (self-hosting docs show how). Never the service_role key.
+#
+# Both values are inlined into the JS bundle at build time, so changing either
+# means rebuilding the image — that is a property of Vite, not of this file.
+
+services:
+  app:
+    build:
+      context: ..                     # repo root: the build needs package.json + src/
+      dockerfile: deploy/Dockerfile
+      args:
+        # "/" because this container owns its own hostname. Use /sortbot/ only
+        # when reproducing the GitHub Pages layout behind a path prefix.
+        BASE_PATH: "/"
+        VITE_SUPABASE_URL: "${VITE_SUPABASE_URL:?set VITE_SUPABASE_URL in deploy/.env}"
+        VITE_SUPABASE_ANON_KEY: "${VITE_SUPABASE_ANON_KEY:?set VITE_SUPABASE_ANON_KEY in deploy/.env}"
+        VITE_STORAGE_LIMIT_GB: "${VITE_STORAGE_LIMIT_GB:-100}"
+    image: acadia-app:${APP_VERSION:-local}
+    container_name: acadia-app
+    restart: unless-stopped
+    ports:
+      - "8088:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    read_only: true                   # nothing is written at runtime …
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ── Optional: run the Supabase stack alongside this app ──────────────────────
+# Do NOT redefine Supabase's services here. Compose them side by side instead,
+# from the directory holding both checkouts:
+#
+#   docker compose \
+#     -f /opt/supabase-docker/docker/docker-compose.yml \
+#     -f /path/to/sortingapp/deploy/docker-compose.yml \
+#     up -d
+#
+# or simply run the two stacks independently — the app container never talks to
+# Supabase over the Docker network, only the browser does, so they need no
+# shared network at all.
+#
+# SELF-HOSTING CAVEATS specific to this app:
+#   * Storage: the app expects a bucket named `product-images` (public today —
+#     see README "Known limitation: image files are publicly readable").
+#     Create it in Studio after first boot.
+#   * Edge Functions: `supabase/functions/*` are deployed to managed Supabase
+#     with `supabase functions deploy`. Self-hosted, they run under the
+#     `functions` service (Edge Runtime) by mounting ../supabase/functions into
+#     it. Both are optional: shopify-titles degrades to DB-only title dedup and
+#     generate-prose returns 503 with a rule-based fallback (README "Optional").
+#   * Migrations: the 45 files in supabase/migrations/ still have to be applied
+#     by hand, in dependency order, against the self-hosted Postgres
+#     (docs/reviews/06-devops.md "Supabase operations").
+#   * Backups: managed Supabase does this for you; self-hosted, a nightly
+#     `pg_dump` plus an off-box copy of the storage volume is YOUR job.

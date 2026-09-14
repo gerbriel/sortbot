@@ -1,7 +1,7 @@
-import { supabase } from './supabase';
 import { log } from './debugLogger';
+import { publicImageUrl } from './storageUrls';
 import type { ClothingItem } from '../App';
-import type { WorkflowBatch, SlimItem } from './workflowBatchService';
+import type { WorkflowBatch, PersistedWorkflowItem } from './workflowBatchService';
 
 /**
  * libraryData — the Library's data derivation, extracted VERBATIM from
@@ -96,6 +96,20 @@ export function deriveLibraryData(
 ): LibraryDerivedData {
   const batchesById = new Map<string, WorkflowBatch>(wfBatches.map(b => [b.id, b]));
 
+  // makeBatchName does two `Intl` formats per call, and it used to be called once
+  // PER ITEM and once PER product_images ROW — ~75,000 calls (~2.0 s measured) for a
+  // 50-batch library whenever `batch_name` is null, which is common (CLAUDE.md §14.6).
+  // The name only depends on the batch, so memoize it per batch id. Output identical.
+  const batchNameCache = new Map<string, string>();
+  const batchNameFor = (b: { id: string; batch_name?: string; created_at: string }): string => {
+    let name = batchNameCache.get(b.id);
+    if (name === undefined) {
+      name = makeBatchName(b);
+      batchNameCache.set(b.id, name);
+    }
+    return name;
+  };
+
   // Helper: synthesize a batch entry for any batch_id missing from workflow_batches
   const synthesizeBatch = (
     batchId: string | null | undefined,
@@ -128,13 +142,15 @@ export function deriveLibraryData(
   const groups: ProductGroup[] = [];
 
   wfBatches.forEach(batch => {
-    const items: (ClothingItem | SlimItem)[] =
+    const items: PersistedWorkflowItem[] =
       (batch.workflow_state?.processedItems?.length  ? batch.workflow_state.processedItems  : null) ||
       (batch.workflow_state?.sortedImages?.length    ? batch.workflow_state.sortedImages    : null) ||
       (batch.workflow_state?.groupedImages?.length   ? batch.workflow_state.groupedImages   : null) ||
       [];
 
-    const wfGroupMap = new Map<string, (ClothingItem | SlimItem)[]>();
+    const batchName = batchNameFor(batch);   // hoisted out of the per-group loop (F6)
+
+    const wfGroupMap = new Map<string, PersistedWorkflowItem[]>();
     items.forEach((item) => {
       const gid = item.productGroup || item.id;
       if (!wfGroupMap.has(gid)) wfGroupMap.set(gid, []);
@@ -145,21 +161,18 @@ export function deriveLibraryData(
       const first = groupItems[0];
       groups.push({
         id: groupId,
-        title: cleanTitle((first as ClothingItem).seoTitle),
+        title: cleanTitle(first.seoTitle),
         category: first.category || 'Uncategorized',
         images: groupItems.map(i => {
           // preview and imageUrls are stripped by slim() before saving to workflow_state.
           // Reconstruct the CDN URL from storagePath (always preserved by slim()).
-          const storagePath = (i as ClothingItem).storagePath || i.storagePath;
-          const reconstructed = storagePath
-            ? supabase.storage.from('product-images').getPublicUrl(storagePath).data.publicUrl
-            : '';
-          return (i as ClothingItem).preview || i.imageUrls?.[0] || reconstructed;
+          const reconstructed = publicImageUrl(i.storagePath);
+          return i.preview || i.imageUrls?.[0] || reconstructed;
         }).filter(Boolean),
         itemCount: groupItems.length,
         createdAt: batch.created_at,
         batchId: batch.id,
-        batchName: makeBatchName(batch),
+        batchName,
       });
     });
   });
@@ -220,22 +233,22 @@ export function deriveLibraryData(
   const wfItemIds = new Set<string>();
 
   wfBatches.forEach(batch => {
-    const items: (ClothingItem | SlimItem)[] =
+    const items: PersistedWorkflowItem[] =
       batch.workflow_state?.processedItems ||
       batch.workflow_state?.sortedImages ||
       batch.workflow_state?.groupedImages ||
       batch.workflow_state?.uploadedImages || [];
     if (items.length === 0) return;
+    const wfBatchName = batchNameFor(batch);   // hoisted out of the per-item loop (F6)
     items.forEach((item) => {
       if (wfItemIds.has(item.id)) return; // dedup by item ID
       wfItemIds.add(item.id);
       // Reconstruct public URL from storagePath if preview/imageUrls are empty
       // (slim() strips preview before saving; storagePath is always preserved)
-      const storagePath = (item as ClothingItem).storagePath || item.storagePath;
-      const reconstructed = (!((item as ClothingItem).preview || item.imageUrls?.[0]) && storagePath)
-        ? supabase.storage.from('product-images').getPublicUrl(storagePath).data.publicUrl
+      const reconstructed = (!(item.preview || item.imageUrls?.[0]))
+        ? publicImageUrl(item.storagePath)
         : '';
-      const url = (item as ClothingItem).preview || item.imageUrls?.[0] || reconstructed;
+      const url = item.preview || item.imageUrls?.[0] || reconstructed;
       imageList.push({
         id: item.id,
         preview: url,
@@ -243,7 +256,7 @@ export function deriveLibraryData(
         productGroup: item.productGroup || item.id,
         productGroupTitle: (item as ClothingItem).seoTitle || undefined,
         batchId: batch.id,
-        batchName: makeBatchName(batch),
+        batchName: wfBatchName,
         createdAt: batch.created_at,
         isSaved: false,
       });
@@ -274,7 +287,7 @@ export function deriveLibraryData(
     dbImageUrls.add(img.image_url);
 
     const batchEntry = batchId ? batchesById.get(batchId) : undefined;
-    const batchName = batchEntry ? makeBatchName(batchEntry) : undefined;
+    const batchName = batchEntry ? batchNameFor(batchEntry) : undefined;
     const groupLeaderId = img.products?.product_group || img.products?.id;
     if (!groupLeaderId) {
       // Orphaned product_images row — parent products row is missing.

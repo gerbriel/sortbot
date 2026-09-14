@@ -378,23 +378,43 @@ export const duplicateBatch = async (
       return null;
     }
     
-    // 2. Create duplicate
+    // 2. Create duplicate.
+    // COPY processedItems, NOT uploadedImages (finding 13): autoSaveWorkflow always
+    // writes the single most-progressed list into `processedItems` and leaves the
+    // other three arrays empty, so copying `uploadedImages` produced an EMPTY
+    // duplicate that still advertised the original's total_images — and opening it
+    // fell into the ±24 h orphan query with nothing to match. The restore fallback
+    // chain reads processedItems first, so the copy lands in the right slot.
+    const copiedItems: unknown[] =
+      batch.workflow_state?.processedItems?.length ? batch.workflow_state.processedItems :
+      batch.workflow_state?.sortedImages?.length   ? batch.workflow_state.sortedImages   :
+      batch.workflow_state?.groupedImages?.length  ? batch.workflow_state.groupedImages  :
+      batch.workflow_state?.uploadedImages ?? [];
+    const groupCount = new Set(
+      copiedItems.map((i) => {
+        const it = i as { productGroup?: string; id?: string };
+        return it.productGroup || it.id;
+      }).filter(Boolean)
+    ).size;
+    const categorizedCount = copiedItems.filter(i => !!(i as { category?: string }).category).length;
     const duplicate = {
       user_id: batch.user_id,
       batch_name: batch.batch_name ? `${batch.batch_name} (Copy)` : null,
       batch_number: `batch-${Date.now()}`,
       current_step: 1, // Start from beginning
       is_completed: false,
-      total_images: batch.total_images,
-      product_groups_count: 0,
-      categorized_count: 0,
-      processed_count: 0,
+      // Counters recomputed from what we actually copied, so the Library card can
+      // never promise N images for an empty batch.
+      total_images: copiedItems.length,
+      product_groups_count: groupCount,
+      categorized_count: categorizedCount,
+      processed_count: categorizedCount,
       saved_products_count: 0,
       workflow_state: {
-        uploadedImages: batch.workflow_state?.uploadedImages || [],
+        uploadedImages: [],
         groupedImages: [],
         sortedImages: [],
-        processedItems: [],
+        processedItems: copiedItems,
       },
       thumbnail_url: batch.thumbnail_url,
       tags: batch.tags,

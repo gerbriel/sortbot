@@ -32,6 +32,16 @@
   border-color: rgba(255, 255, 255, 0.20);
 }
 .app-header button:hover { background: rgba(255, 255, 255, 0.18); }
+/* `.button-secondary:hover:not(:disabled)` (specificity 0,3,0) outranks the
+   rule above and repaints a hovered header button with the page's near-white
+   fill while the label stays white — an invisible button. Pin the hover and
+   focus states inside the nav at higher specificity. */
+.app-header .button-secondary:hover:not(:disabled),
+.app-header .button-secondary:focus-visible {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.30);
+  color: #ffffff;
+}
 
 .header-content {
   width: 100%;
@@ -45,10 +55,11 @@
 .app-header h1 {
   font-size: var(--fs-md);
   font-weight: 600;
-  /* --gray-900 was never defined (the legacy ramp stops at 700), so this
-     declaration was dropped by the parser and the title fell back to inherit.
-     Pinned to the real heading token. */
-  color: var(--text-primary);
+  /* The nav is the one inverted surface (CLAUDE.md §1): the wordmark sits on
+     black, so it takes a literal light foreground, never the page's --text-primary
+     (which is black and made the title vanish). Specificity (0,1,1) beats the
+     shared `.app-header … { color:#fff }` pin above, so it must be restated here. */
+  color: #ffffff;
   margin: 0;
 }
 
@@ -696,4 +707,52 @@
 @keyframes toastIn {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Full-page tool views (ToolView) — nav + parked workflow
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* The wordmark switches between <h1> (workflow) and <p> (tool view) so each
+   view has exactly one h1. It therefore needs its own rules rather than the
+   element selector — and, per CLAUDE.md §1, its own explicit light colour:
+   anything added to the black nav that does not set one inherits page-black
+   and vanishes. */
+.app-header .app-wordmark {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0;
+}
+
+/* The workflow is parked behind `hidden`, never unmounted, so uploads in
+   flight and debounced saves survive. `.app-main` sets `display: flex`, which
+   beats the UA's `[hidden] { display: none }` — pin it off explicitly. */
+.app-main[hidden] { display: none; }
+
+/* Header tool buttons carry the active-view state. The nav is the app's one
+   deliberately inverted surface (CLAUDE.md §1), so "active" cannot be the
+   page's black fill — it is a solid white chip with black ink, the same
+   treatment `.ld-nav-login` uses as the only white button on the black bar. */
+.header-actions { gap: var(--space-4); flex-wrap: wrap; }
+
+.app-header .nav-tool-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.app-header .nav-tool-btn--on,
+.app-header .nav-tool-btn--on:hover:not(:disabled),
+.app-header .nav-tool-btn--on:focus-visible {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #000000;
+}
+
+.app-header .nav-tool-btn--on svg { color: #000000; }
+
+@media (max-width: 640px) {
+  .header-content { flex-wrap: wrap; }
+  .header-actions { width: 100%; }
 }

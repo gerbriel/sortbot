@@ -1,0 +1,84 @@
+/* ── Toast / ToastViewport ──────────────────────────────────────────────────
+   Replaces .toast-stack / .toast-item / .toast-dismiss (App.css:652-697).
+
+   Z-INDEX 9000 — ABOVE dialogs (1000) on purpose. A "could not save" toast
+   raised by an action inside a modal has to be visible over that modal;
+   the debug toggle (9999) still wins, which is also correct. */
+
+.ui-toast-viewport {
+  position: fixed;
+  z-index: 9000;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: min(400px, calc(100vw - 2rem));
+  /* The stack itself must not eat clicks in the corner it occupies; each toast
+     re-enables them for itself. */
+  pointer-events: none;
+}
+
+.ui-toast-viewport--bottom-right { bottom: var(--space-6); right: var(--space-6); align-items: flex-end; }
+.ui-toast-viewport--bottom-left  { bottom: var(--space-6); left: var(--space-6);  align-items: flex-start; }
+.ui-toast-viewport--top-right    { top: var(--space-6);    right: var(--space-6); align-items: flex-end; }
+.ui-toast-viewport--top-center   { top: var(--space-6);    left: 50%; transform: translateX(-50%); align-items: center; }
+
+.ui-toast-viewport > * { pointer-events: auto; }
+
+.ui-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  /* Popover step — a lifted white surface with a hairline ring from the shadow. */
+  background: var(--ink-800);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  animation: ui-toast-in var(--dur) var(--ease);
+}
+
+/* Tone lives on the left edge + the icon only. A fully tinted toast fights the
+   page it floats over, and the --*-dim fills are too faint to read as a tone
+   at this size anyway. */
+.ui-toast--success { border-left-color: var(--success); }
+.ui-toast--warning { border-left-color: var(--warning); }
+.ui-toast--danger  { border-left-color: var(--danger); }
+.ui-toast--info    { border-left-color: var(--accent); }
+
+.ui-toast__icon { display: inline-flex; flex-shrink: 0; margin-top: 0.1em; }
+.ui-toast--success .ui-toast__icon { color: var(--success); }
+.ui-toast--warning .ui-toast__icon { color: var(--warning); }
+.ui-toast--danger  .ui-toast__icon { color: var(--danger); }
+.ui-toast--info    .ui-toast__icon { color: var(--text-secondary); }
+
+.ui-toast__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+
+.ui-toast__title { font-weight: 600; color: var(--text-primary); }
+
+.ui-toast__message { color: var(--text-secondary); word-break: break-word; }
+
+.ui-toast__action { margin-top: var(--space-1); }
+
+@keyframes ui-toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-toast { animation: none; }
+}
+
+@media (max-width: 560px) {
+  .ui-toast-viewport {
+    left: var(--space-3);
+    right: var(--space-3);
+    max-width: none;
+    align-items: stretch;
+    transform: none;
+  }
+}

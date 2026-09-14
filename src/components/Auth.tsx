@@ -7,6 +7,10 @@ interface AuthProps {
   onAuthenticated: () => void;
 }
 
+/** Minimum sign-up password length. Keep in step with the Supabase dashboard's
+ *  own minimum (Authentication -> Providers -> Email), which is authoritative. */
+const MIN_PASSWORD_LENGTH = 10;
+
 const Auth: React.FC<AuthProps> = ({ onAuthenticated }) => {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
@@ -18,11 +22,20 @@ const Auth: React.FC<AuthProps> = ({ onAuthenticated }) => {
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError(null);
     setIsOutageError(false);
     setMessage(null);
 
+    // Security audit 05, finding #18: 6 characters was a credential-stuffing
+    // invitation. The DB-side minimum and "leaked password protection" are
+    // Supabase dashboard settings (Authentication -> Providers -> Email) that
+    // must be enabled separately; this is the in-app half.
+    if (isSignUp && password.length < MIN_PASSWORD_LENGTH) {
+      setError(`Use at least ${MIN_PASSWORD_LENGTH} characters — a short password is the easiest way into your workspace.`);
+      return;
+    }
+
+    setLoading(true);
     try {
       if (isSignUp) {
         // Sign up
@@ -123,10 +136,10 @@ const Auth: React.FC<AuthProps> = ({ onAuthenticated }) => {
               onChange={(e) => setPassword(e.target.value)}
               required
               disabled={loading}
-              minLength={6}
+              minLength={isSignUp ? MIN_PASSWORD_LENGTH : undefined}
             />
             {isSignUp && (
-              <small>Minimum 6 characters</small>
+              <small>Minimum {MIN_PASSWORD_LENGTH} characters</small>
             )}
           </div>
 

@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import type { ClothingItem } from '../App';
 import { getCategories } from '../lib/categoriesService';
 import { getCategoryPresets } from '../lib/categoryPresetsService';
 import type { Category } from '../lib/categories';
 import type { CategoryPreset } from '../lib/categoryPresets';
 import { applyPresetDirectly } from '../lib/applyPresetToGroup';
+import { resolvePreset } from '../lib/presetResolver';
 import LazyImg from './LazyImg';
 import { log } from '../lib/debugLogger';
 import { 
@@ -196,16 +197,11 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
   // "<category>_default_<rand>" naming from createCategory. NO wild fallback —
   // a category with no matching preset gets plain category assignment instead
   // of another category's defaults.
-  const findPreset = (categoryName: string): import('../lib/categoryPresets').CategoryPreset | undefined => {
-    const lower = categoryName.toLowerCase();
-    const active = presets.filter(p => p.is_active !== false);
-    return (
-      active.find(p => p.product_type?.toLowerCase() === lower && p.is_default) ||
-      active.find(p => p.product_type?.toLowerCase() === lower) ||
-      active.find(p => p.category_name.toLowerCase() === lower) ||
-      active.find(p => p.category_name.toLowerCase().startsWith(`${lower}_default`))
-    );
-  };
+  // The shared matcher (lib/presetResolver.ts). allowDefaultPrefix keeps this
+  // path's 4th step — the "<name>_default_<rand>" naming createCategory produces —
+  // which the Step-3 paths deliberately do not have.
+  const findPreset = (categoryName: string) =>
+    resolvePreset(presets, categoryName, { allowDefaultPrefix: true });
 
   const applyPreset = (groupItems: ClothingItem[], categoryName: string): ClothingItem[] => {
     const preset = findPreset(categoryName);
@@ -866,4 +862,9 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
   );
 };
 
-export default CategoryZones;
+/* Memoized (perf finding F2). Steps 1-4 all mount at once and App re-renders on
+ * any store/UI change, so without this a Step-3 keystroke re-rendered this whole
+ * subtree. Every prop App passes is now referentially stable (see the
+ * `useEventCallback` block in App.tsx), so the default shallow compare bails out
+ * on renders that have nothing to do with this component. */
+export default memo(CategoryZones);

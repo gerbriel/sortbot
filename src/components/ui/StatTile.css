@@ -1,0 +1,68 @@
+/* ── StatTile / StatGrid ────────────────────────────────────────────────────
+   Replaces .an-tile / .an-tile-label / .an-tile-value / .an-tile-delta(--up|--down)
+   in the analytics panel, and the ad-hoc count blocks in the Step 2 sidebar and
+   Library tab header.
+
+   The delta colour is NOT "up is green": a rising refund count is bad. Direction
+   and sentiment are separate props, so the tile can say "up, and that is bad". */
+
+.ui-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--space-2);
+}
+
+.ui-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: var(--space-3);
+  background: var(--ink-800);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+/* Quiet flavour — for a tile sitting on a card (--ink-850), where a second
+   white box reads as a stacking error. */
+.ui-stat--quiet { background: transparent; border-color: var(--border-subtle); }
+
+.ui-stat__head { display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
+
+.ui-stat__label {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  line-height: var(--lh-snug);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-stat__icon { display: inline-flex; color: var(--text-faint); }
+
+.ui-stat__value {
+  font-size: var(--fs-2xl);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  /* Tabular figures so a ticking counter does not jitter its own width. */
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.ui-stat__value--sm { font-size: var(--fs-xl); }
+
+.ui-stat__foot {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-snug);
+  color: var(--text-muted);
+}
+
+.ui-stat__delta { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ui-stat__delta--good { color: var(--success); }
+.ui-stat__delta--bad  { color: var(--danger); }
+.ui-stat__delta--flat { color: var(--text-muted); }

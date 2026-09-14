@@ -1,6 +1,7 @@
 import type { ClothingItem } from '../App';
 import type { CategoryPreset } from './categoryPresets';
 import { getCategoryPresets } from './categoryPresetsService';
+import { resolvePreset } from './presetResolver';
 
 /**
  * Interpolate a SEO title template string, replacing {placeholder} tokens
@@ -55,35 +56,32 @@ export function applyPresetDirectly(
   return applyPresetFields(items, categoryName, preset, force);
 }
 
+/**
+ * Resolve the matching preset for a category and apply it.
+ *
+ * `presetsIn` lets a caller that already has the preset list supply it instead of
+ * paying another `getCategoryPresets()` round trip. That matters because PDG's
+ * initial-load pass calls this ONCE PER GROUP inside a sequential `for` loop — at
+ * 375 groups that was 375 awaited network requests for a list that never changes
+ * during the loop (perf finding: the same shape as the freeze fixed in `55a46f0`
+ * and `b0a41a6`, which is why CategoryZones already resolves presets locally).
+ * Resolution logic is identical either way.
+ */
 export async function applyPresetToProductGroup(
   items: ClothingItem[],
   categoryName: string,
-  force = false
+  force = false,
+  presetsIn?: CategoryPreset[]
 ): Promise<ClothingItem[]> {
   try {
-    // Get all presets for the user
-    const presets = await getCategoryPresets();
+    // Get all presets for the user (unless the caller already has them)
+    const presets = presetsIn ?? await getCategoryPresets();
     
-    // Find the DEFAULT preset for this category (by product_type)
-    // Look for is_default=true first, fallback to any matching preset
-    let preset = presets.find(
-      p => p.product_type?.toLowerCase() === categoryName.toLowerCase() && p.is_default && p.is_active
-    );
-    
-    // Fallback: if no default preset, try to find any active preset for this category
-    if (!preset) {
-      preset = presets.find(
-        p => p.product_type?.toLowerCase() === categoryName.toLowerCase() && p.is_active
-      );
-    }
-    
-    // Fallback: check old category_name field (backward compatibility)
-    if (!preset) {
-      preset = presets.find(
-        p => p.category_name.toLowerCase() === categoryName.toLowerCase() && p.is_active
-      );
-    }
-    
+    // The shared matcher (lib/presetResolver.ts): product_type + is_default, then
+    // any product_type, then legacy category_name. NO allowDefaultPrefix — this
+    // path never had CategoryZones' 4th step and must not gain it.
+    const preset = resolvePreset(presets, categoryName);
+
     if (!preset) {
       // Still apply category even if no preset exists
       return items.map(item => ({

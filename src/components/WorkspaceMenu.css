@@ -97,3 +97,19 @@
 
 .wsmenu-item--danger { color: var(--danger); }
 .wsmenu-item--danger:hover { background: var(--danger-dim); }
+
+/* The popover is a lifted WHITE surface that lives inside the black nav, so it
+   must opt back out of the nav's forced light foreground and translucent button
+   fill (App.css `.app-header button / svg { color: #fff }`). Without these
+   higher-specificity rules the menu items render white-on-white and vanish. */
+.app-header .wsmenu-menu,
+.app-header .wsmenu-menu svg { color: var(--text-primary); }
+.app-header .wsmenu-menu .wsmenu-item {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+}
+.app-header .wsmenu-menu .wsmenu-item:hover { background: var(--ink-750); }
+.app-header .wsmenu-menu .wsmenu-item--danger,
+.app-header .wsmenu-menu .wsmenu-item--danger svg { color: var(--danger); }
+.app-header .wsmenu-menu .wsmenu-item--danger:hover { background: var(--danger-dim); }

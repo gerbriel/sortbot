@@ -7,6 +7,10 @@ import {
   CRM_STAGES, CRM_STAGE_LABEL,
   type CrmContact, type CrmNote, type CrmStage, type CrmContactPatch, type CrmContactsResult,
 } from '../lib/crmService';
+import { safeMailto } from '../lib/mailto';
+// These three were tabs inside OrgPanel; as top-level views they must pull
+// the shared org/ft/an class styles in themselves.
+import './OrgPanel.css';
 
 const RENDER_CAP = 100;
 
@@ -250,7 +254,10 @@ export default function CrmPanel() {
                   <p className="crm-stats">
                     {c.last_seen_at ? `Last seen ${fmtDate(c.last_seen_at)} · ` : ''}
                     Added {fmtDate(c.created_at)}{c.org_id ? ' · has a workspace' : ''}
-                    {' · '}<a className="beta-email-link" href={`mailto:${c.email}`}>email</a>
+                    {(() => {
+                      const href = safeMailto(c.email);
+                      return href ? <>{' · '}<a className="beta-email-link" href={href}>email</a></> : null;
+                    })()}
                   </p>
 
                   <div className="crm-notes">

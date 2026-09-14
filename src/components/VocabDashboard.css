@@ -1,40 +1,23 @@
-.vocab-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.72);
+/* ════════════════════════════════════════════════════════════════════════════
+   Vocabulary — full page (was a 640px modal at 0.4rem row padding). The list
+   rows, tabs and forms are all rescaled to ToolView's page rhythm: 1.2rem+
+   row padding, 4rem minimum control height, 2rem section gaps.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.vocab-page {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.vocab-toolbar {
   display: flex;
   align-items: center;
-  justify-content: center;
-  z-index: 1000;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--border);
 }
-
-.vocab-panel {
-  background: var(--ink-800);
-  border-radius: 12px;
-  width: min(640px, 94vw);
-  max-height: 84vh;
-  overflow-y: auto;
-  padding: 1.1rem 1.25rem 1.25rem;
-  /* --shadow-xl carries a hairline ring, so the panel keeps an edge against
-     the scrim without adding a border (no layout shift). */
-  box-shadow: var(--shadow-xl);
-}
-
-.vocab-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.6rem;
-}
-
-.vocab-title {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--accent);
-}
-
-.vocab-title h2 { margin: 0; font-size: var(--fs-md); color: var(--text-primary); }
 
 .vocab-scope-badge {
   font-size: var(--fs-2xs);
@@ -47,33 +30,22 @@
   color: var(--accent);
 }
 
-.vocab-close {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--text-muted);
-  padding: 0.25rem;
-  border-radius: 6px;
-}
-
-.vocab-close:hover { background: var(--ink-750); }
-
 .vocab-tabs {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  margin-bottom: 0.6rem;
+  gap: 0.8rem;
   flex-wrap: wrap;
 }
 
 .vocab-tab {
-  background: var(--ink-750);
-  border: 1px solid transparent;
+  background: var(--ink-850);
+  border: 1px solid var(--border);
   color: var(--text-secondary);
   border-radius: 8px;
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   font-weight: 600;
-  padding: 0.35rem 0.7rem;
+  min-height: 4rem;
+  padding: 0.6rem 1.6rem;
   cursor: pointer;
 }
 
@@ -88,12 +60,15 @@
 .vocab-search {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.6rem;
   flex: 1;
-  min-width: 120px;
+  min-width: 22rem;
+  max-width: 46rem;
+  margin-left: auto;
+  min-height: 4rem;
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 0.25rem 0.5rem;
+  padding: 0 1.2rem;
   color: var(--text-muted);
 }
 
@@ -102,7 +77,7 @@
   min-width: 0;
   border: none;
   outline: none;
-  font-size: var(--fs-xs);
+  font-size: var(--fs-base);
   color: var(--text-primary);
   background: transparent;
 }
@@ -112,14 +87,13 @@
   border: 1px solid var(--accent-line);
   color: var(--accent);
   border-radius: 8px;
-  padding: 0.5rem 0.7rem;
-  font-size: var(--fs-sm);
-  margin-bottom: 0.6rem;
+  padding: 1.2rem 1.5rem;
+  font-size: var(--fs-base);
 }
 
 .vocab-help {
-  margin: 0 0 0.6rem;
-  font-size: var(--fs-xs);
+  margin: 0 0 1.5rem;
+  font-size: var(--fs-sm);
   /* Secondary, not muted — this is instructional copy the founder has to read. */
   color: var(--text-secondary);
   line-height: 1.5;
@@ -127,32 +101,34 @@
 
 .vocab-add-form {
   display: flex;
-  gap: 0.4rem;
-  margin-bottom: 0.7rem;
+  gap: 1rem;
+  margin-bottom: 2rem;
   flex-wrap: wrap;
 }
 
 .vocab-add-form input {
   flex: 1;
-  min-width: 140px;
-  padding: 0.45rem 0.6rem;
+  min-width: 20rem;
+  padding: 0 1.2rem;
   border: 1px solid var(--border);
   border-radius: 8px;
-  font-size: var(--fs-sm);
+  font-size: var(--fs-base);
 }
 
 .vocab-add-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.45rem 0.8rem;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 4rem;
+  padding: 0.6rem 1.8rem;
   background: var(--accent);
   /* Dark ink on the light violet fill — a white label sits near 2:1 and fails AA. */
   color: var(--ink-950);
   border: none;
   border-radius: 8px;
   font-weight: 700;
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -165,11 +141,14 @@
 .vocab-row {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0.2rem;
+  gap: 1rem;
+  min-height: 5rem;
+  padding: 1.2rem 1.2rem;
   border-bottom: 1px solid var(--border-subtle);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-base);
 }
+
+.vocab-row:hover { background: var(--ink-900); }
 
 .vocab-row--off { opacity: 0.45; }
 
@@ -432,3 +411,25 @@
 
 .vocab-coverage-make:hover:not(:disabled) { background: var(--warning-dim); }
 .vocab-coverage-make:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Page-scale overrides for the rest of the dense modal styles ─────────── */
+
+.vocab-page .vocab-footnote {
+  margin: 0;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  color: var(--text-secondary);
+}
+
+.vocab-page .vocab-model-form {
+  gap: 1.5rem;
+  padding: 2rem;
+}
+
+.vocab-page .vocab-builtin-title { margin-top: 3rem; }
+
+@media (max-width: 640px) {
+  .vocab-search { margin-left: 0; min-width: 100%; }
+}

@@ -87,5 +87,5 @@
   font-size: var(--fs-xs);
   font-weight: 700;
   cursor: pointer;
-  text-decoration: underline;
+  text-decoration: none;
 }

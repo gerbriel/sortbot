@@ -589,13 +589,6 @@ function hexToRgb(hex: string): [number, number, number] | null {
  */
 export const COLOR_WORDS_LIST: string[] = [];
 
-/**
- * Map from canonical color name → average RGB of its first hex code.
- * Used by colorUtils.ts for pixel-based nearest-neighbor color naming.
- * Only includes entries with real hex codes (no patterns).
- */
-export const COLOR_RGB_MAP: Array<{ name: string; rgb: [number, number, number] }> = [];
-
 for (const [name, ctx] of Object.entries(COLOR_DNA)) {
   const firstHex = ctx.hexCodes[0];
   const rgb = hexToRgb(firstHex);
@@ -603,7 +596,6 @@ for (const [name, ctx] of Object.entries(COLOR_DNA)) {
 
   // Add canonical name
   COLOR_WORDS_LIST.push(name);
-  COLOR_RGB_MAP.push({ name, rgb });
 
   // Add aliases so voice scanning picks up e.g. "army green" → "olive"
   for (const alias of ctx.aliases) {

@@ -30,11 +30,11 @@ Acadia is a web app for vintage clothing resellers. Upload a batch of clothing p
 
 - 🏢 **Multi-org workspace tenancy** — each workspace sees only its own batches, products, and image *records* via org-membership RLS. Invite teammates by email with owner/admin/member roles; membership bootstraps automatically on sign-in. (Runs in a legacy shared-workspace mode until the tenancy migration is applied — the same build supports both. Per-org Shopify connections and the waitlist gate activate with that same migration; until then their UI stays hidden. See [Security](#security) for the current limits of this boundary.)
 - 👤 **Header account menu** — workspace name, role, and email in one dropdown, with links to the workspace dashboard and sign-out.
-- 📊 **Workspace dashboard** — tabbed panel for members and invites, workspace settings, beta request approvals, and (for founding admins) an aggregate directory of all workspaces.
+- 📊 **Workspace dashboard** — tabbed panel for members and invites, workspace settings, beta request approvals, and (for founding admins) an aggregate directory of all workspaces plus the Analytics / CRM / Errors tools.
 - 🔌 **Per-org Shopify connections** — each workspace connects its own Shopify store (Workspace → Settings), so export dedup and per-store metaobject GIDs use that store. The Admin token is **write-only from the client** — only the Edge Function can read it.
 - 🎨 **Per-workspace description format** — customize the measurement prefix, washing/closing lines, hashtag rendering, disclaimers, seller name, and selling-paragraph tone from the workspace panel.
 - 📖 **Vocabulary dashboard (founding admins)** — CRUD the global knowledge base every workspace consumes: Step 3 quick-keyword chips, per-brand keywords (with a searchable built-in 917-brand library to copy from), and a brand/model database.
-- 🛠 **Founder tools (founding admins)** — built in, no third-party services: a **CRM** where every beta request and account becomes a contact automatically (stages, tags, follow-ups, notes), a cookieless **analytics** dashboard (pageviews, sessions, signup→export funnel, referrers, devices), and a **support inbox** for the in-app **Messages** button every signed-in user gets. Everything lives in this project's own Supabase tables. See [Founder tools](#founder-tools--analytics-crm-messaging-first-party).
+- 🛠 **Founder tools (founding admins)** — built in, no third-party services: a **CRM** where every beta request and account becomes a contact automatically (stages, tags, follow-ups, notes), a cookieless **analytics** dashboard (pageviews, sessions, signup→export funnel, referrers, devices), a **support inbox** for the in-app **Messages** button every signed-in user gets, and an **Errors** view that groups the app's own crash reports into issues. Everything lives in this project's own Supabase tables. See [Founder tools](#founder-tools--analytics-crm-messaging-first-party).
 - 🏬 **Marketing landing + private beta** — logged-out visitors get a product tour, pricing, and a beta signup form. New sign-ups without a workspace or invite hit a waitlist gate; founding admins approve or deny requests, and approval auto-creates the workspace on next sign-in.
 - 🐛 **Debug logger** — a corner toggle enables categorized, colour-coded console logging plus DOM event tracing. Zero-cost when off; persisted across sessions.
 
@@ -45,12 +45,14 @@ Acadia is a web app for vintage clothing resellers. Upload a batch of clothing p
 | Frontend | React 19 + TypeScript 5.9 |
 | Build | Vite 7 |
 | Backend / DB | Supabase (Postgres + RLS, Storage, Auth, two Deno Edge Functions) |
-| Tests | Vitest 4 + happy-dom |
+| Tests | Vitest 4 + happy-dom (505 tests, 35 files) |
 | Uploads | tus-js-client (resumable, 6 MB chunks) |
 | Styling | Plain CSS, component-scoped files |
 | Speech | Web Speech API (Chrome/Edge) |
 | Images | Canvas compression, exifr (EXIF), Service Worker CDN cache |
 | Icons | Lucide React |
+| CI | GitHub Actions: tests, type-check, build verification, bundle secret-leak scan, lint ratchet, migration hygiene, `deno check` |
+| Monitoring | First-party: `app_errors` table + a founder Errors panel, plus a 15-minute uptime probe. No Sentry, no third-party monitor. |
 
 There is no application server — the app is a static SPA talking directly to Supabase. The only server-side code is the two Edge Functions in `supabase/functions/`:
 
@@ -100,7 +102,29 @@ npm run lint       # eslint
 npm run preview    # preview the production build
 ```
 
-Tests are characterization tests that lock in workflow-critical behavior: the title/size/voice engine, preset priority, the CSV builder (golden snapshot), Library data derivation, grouping conventions, the save→reload field whitelist, and batch-delete tombstones. Snapshots live in `src/lib/__snapshots__/` — update deliberately with `npx vitest run -u` only when output changes on purpose.
+Tests are characterization tests that lock in workflow-critical behavior: the title/size/voice engine, preset priority and preset resolution, the CSV builder (golden snapshot) and its formula-injection guard, Library data derivation, grouping conventions, the save→reload field whitelist, batch-delete tombstones, query pagination and chunk sizes, the compare-and-set on the workflow blob, the LRU image cache, the error reporter's privacy and fingerprint contracts, and the UI primitives' keyboard/ARIA behavior. Snapshots live in `src/lib/__snapshots__/` — update deliberately with `npx vitest run -u` only when output changes on purpose.
+
+### CI and monitoring
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `.github/workflows/deploy.yml` | push to `main` | Builds and publishes `dist/` to GitHub Pages. The only path to production. |
+| `.github/workflows/ci.yml` | every PR + every push to a non-`main` branch | `npm ci` → `npm test` → `npm run build` (dummy `VITE_*` values) → verifies `dist/index.html` has the right `<title>` and the `/sortbot/` base path → **greps the built bundle for credential-shaped strings** → lint ratchet (fails only if the problem count grew past `LINT_BASELINE`) → migration hygiene (every SQL file the PR changes must carry a ROLLBACK section and an idempotency note, because migrations are applied by hand) → `deno check` on the Edge Functions. Permissions are `contents: read`; it never deploys. |
+| `.github/workflows/uptime.yml` | `*/15 * * * *` + manual | Curls the deployed page (must contain the app title) and `${VITE_SUPABASE_URL}/auth/v1/health` (must return 200), then files/comments on a single GitHub issue and closes it on recovery. Needs the `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` repository secrets. `schedule` is best-effort, so a missing run means *unknown*, not healthy. |
+
+Crashes are reported by the app itself into its own `app_errors` table and read in **Workspace → Founder tools → Errors** (see [Founder tools](#founder-tools--analytics-crm-messaging-first-party)).
+
+### Optional: run it as a container
+
+Production is GitHub Pages; `deploy/` exists for the three things Pages cannot do — a staging URL, a fully self-hosted deployment, and a rollback artifact that does not depend on re-running CI.
+
+```bash
+cp .env deploy/.env
+docker compose -f deploy/docker-compose.yml up --build -d   # http://localhost:8088
+curl -fsS http://localhost:8088/healthz                     # -> ok
+```
+
+Two stages: `node:24-alpine` runs `npm ci`, `npm test` and `npm run build`; `nginx:1.27-alpine` serves `dist/` with SPA fallback, immutable asset caching and a never-cached `index.html`/`sw.js`. Every `VITE_*` value is baked in at build time, so **one image per environment** — and never pass a `service_role` key or a Shopify Admin token as a build arg (the Dockerfile fails the build if it finds a credential-shaped string in `dist/`). `deploy/README.md` covers pointing the image at a self-hosted Supabase (use the **Kong** gateway URL, not Postgres), the `BASE_PATH` arg, adding a per-environment CSP to `nginx.conf`, and why Kubernetes is the wrong tool for a static SPA plus managed Postgres.
 
 ### Optional: Shopify title dedup
 
@@ -138,8 +162,11 @@ Acadia has its own analytics, CRM and support messaging. They are **features of 
 | **Analytics** — cookieless pageviews + funnel events (Beta Signup → Account Created → Batch Created → CSV Exported), daily chart, referrers, devices | `analytics_events.sql` | Tracking runs for every visitor (Do Not Track honored, localhost skipped). Dashboard: Founding admins, **Workspace → Founder tools → Analytics** |
 | **CRM** — one contact per email with stage (lead → approved → active → churned / lost), tags, next follow-up, notes. Beta requests and accounts (with their workspace) become contacts automatically via `crm_sync_contacts()` | `crm.sql` | Founding admins, **Workspace → Founder tools → CRM** |
 | **Messaging** — the floating **Messages** button: users write to the founders, founders answer from the same button (it becomes the inbox), live via Supabase Realtime with polling fallback | `support_messaging.sql` | Every signed-in user (waitlisted users included); inbox for Founding admins |
+| **Errors** — one row per uncaught error, rejected promise, or caught render error, grouped into issues by a fingerprint that survives a redeploy. KPI tiles, a top-issues table (with the full message for copy/paste), plus daily and by-screen breakdowns | `app_errors.sql` | Reporting runs for every visitor (localhost skipped). Dashboard: Founding admins, **Workspace → Founder tools → Errors** |
 
 Privacy: analytics rows carry a random per-tab session id, the referrer host, a coarse device class and — for signed-in users — their own user/workspace id. No cookies, no IP, no user agent. `select public.analytics_prune(365);` trims history.
+
+Error rows are held to the same standard, and the database enforces it: `user_agent_class` is a closed vocabulary in a CHECK constraint (a browser family, never a full user agent), `path` is `location.pathname` with no query string or hash, and the message and stack are scrubbed of emails, UUIDs and opaque tokens **in the browser** before they are sent. Volume is capped three ways (one row per issue per 60 s, 20 per page load, 20 per session per 10 minutes in the database), because a crash loop is exactly the situation this table exists to catch. `select public.app_errors_prune(90);` trims history. Deliberate exception to the analytics rules: error reporting does not honor Do Not Track — DNT is about cross-site tracking, and a crash report about our own code is neither behavioural nor cross-site.
 
 ## Security
 
@@ -147,13 +174,34 @@ Privacy: analytics rows carry a random per-tab session id, the referrer host, a 
 - **Real secrets live only as Supabase Edge Function secrets** (`SHOPIFY_ADMIN_TOKEN`, `CF_API_TOKEN`), set via `supabase secrets set` and read server-side with `Deno.env`. They are never bundled, never committed, and never returned to the client.
 - **Per-workspace Shopify tokens are write-only from the client**, enforced with column-level grants — the browser can store a token but cannot read one back. Only the Edge Function (service role) reads it.
 - **`.env` is gitignored and must never be committed.** `.env.example` contains placeholders only.
-- **Never add a `service_role` key to this repo or to any `VITE_` variable.** It bypasses all RLS and would expose every workspace's data.
+- **Never add a `service_role` key to this repo or to any `VITE_` variable.** It bypasses all RLS and would expose every workspace's data. CI greps the built bundle for credential-shaped strings on every pull request, because this is the one mistake that cannot be walked back once deployed.
+- **There is no third-party API key of any kind.** The OpenAI, Google Vision, Google Drive and Llama-vision code paths were deleted in Sept 2026 (they were dead), and their variables were dropped from `.env.example`. Only three `VITE_` variables exist.
+- **A Content-Security-Policy ships in `index.html`.** GitHub Pages cannot send response headers, so it is a `<meta http-equiv>`; it matters because the Supabase session lives in `localStorage`, where any XSS would be a persistent account takeover. `script-src 'self'` with no `'unsafe-eval'` and no CDN; `connect-src` limited to `https://*.supabase.co` + `wss://*.supabase.co`; `img-src` adds only `data:`, `blob:` and `images.unsplash.com` (the landing-page photos); `object-src`/`base-uri` are `'none'`. Every origin was verified against the built bundle. Two directives are deliberately absent and documented in the file: `frame-ancestors` (ignored in a `<meta>` by spec — clickjacking protection needs a real header, i.e. a host that can send one) and `upgrade-insecure-requests` (it would break the dev server's HMR socket and buys nothing). **If you add an origin, update the meta tag — a blocked subresource fails silently.**
+- **Both Edge Functions verify the caller, not just the JWT.** The Supabase anon key is itself a validly signed project JWT, so `verify_jwt` alone never proved a user: both functions resolve the caller through `/auth/v1/user` and return 401 without one. The global Shopify credentials are reachable only by a proven member of the founding workspace; the prose function additionally requires that workspace's `proseEnabled` opt-in, bounds its prompt, and treats the input as data. Neither echoes an upstream error body.
+- **Passwords require 10 characters on sign-up.** Existing shorter passwords still work for sign-in. The server-side minimum and breach checking are dashboard settings — see below.
+
+### Security work that is written but NOT yet applied
+
+Code can only go so far. These are in the repo and waiting on the owner, in this order, after a database backup:
+
+| Step | What | Notes |
+|---|---|---|
+| 1 | `supabase/migrations/security_invites_hardening.sql` | Closes an invited member's path to workspace **owner**. Needs `multi_org_tenancy.sql`; must run before step 2. |
+| 2 | `supabase/migrations/security_verified_email.sql` | Stops every email-matching RLS policy from trusting the unverified JWT email claim. Precondition: confirm `select count(*) from auth.users where email_confirmed_at is null;` returns 0 first, and turn **Confirm email** on in the dashboard. |
+| 3 | `supabase/migrations/security_abuse_limits.sql` | Size, format and rate limits on the three client-writable tables (analytics, beta signups, support messaging). All constraints are `NOT VALID`, so existing rows are untouched. |
+| 4 | `supabase/migrations/security_storage_policies.sql` | Org-scoped write/delete policies on `storage.objects`. **Inert until you drop the permissive policy that exists in the dashboard** — RLS policies are OR'ed. Run its inventory query first, then smoke-test upload, Step 3 crop, "Compress N Images", and deleting a teammate's batch. |
+| 5 | `supabase/migrations/app_errors.sql` | Turns on error reporting and the founder Errors panel. Independent of 1–4; needs `multi_org_tenancy.sql` + `beta_signups.sql`. |
+| 6 | `deno check supabase/functions/*/index.ts` then `supabase functions deploy shopify-titles generate-prose` | **Then rotate `SHOPIFY_ADMIN_TOKEN` and `CF_API_TOKEN`** — assume both were reachable by anyone holding the public anon key. |
+
+Supabase dashboard settings no code can set: Authentication → Providers → Email → **Confirm email**, **Leaked password protection**, **minimum password length 10** (the dashboard value is authoritative); Authentication → **MFA (TOTP)**, especially for founding admins, whose access reaches every workspace's membership, the CRM and all support threads; Authentication → **Rate limits**; Database → **PITR / backups**, because the delete paths are irreversible.
 
 ### Known limitation: image files are publicly readable
 
-⚠️ **RLS scopes database rows, not image bytes.** The `product-images` Storage bucket is **public**: every image is served through an unauthenticated CDN URL (`getPublicUrl`), and no migration applies policies to `storage.objects`. Anyone who has (or guesses) an image URL can fetch that photo without signing in — including after the tenancy migration, which scopes the `product_images` *rows* but not the files they point at.
+⚠️ **RLS scopes database rows, not image bytes.** The `product-images` Storage bucket is **public**: every image is served through an unauthenticated CDN URL, so anyone who has (or guesses) an image URL can fetch that photo without signing in — including after the tenancy migration, which scopes the `product_images` *rows* but not the files they point at.
 
-Paths follow `{userId}/{productId}/{timestamp}-{random}.{ext}`, so URLs are unguessable in practice rather than by design. Treat uploaded photos as public data until private buckets + signed URLs land (tracked in [ANALYSIS.md](ANALYSIS.md) / CLAUDE.md §16).
+Paths follow `{userId}/{productId}/{timestamp}-{random}.{ext}`, so URLs are unguessable in practice rather than by design. Treat uploaded photos as public data until private buckets + signed URLs land — every path→URL call in the app now goes through one helper (`src/lib/storageUrls.ts`), so that migration is a single function body rather than 23 call sites (tracked in [ANALYSIS.md](ANALYSIS.md) / CLAUDE.md §16).
+
+`security_storage_policies.sql` (step 4 above) closes the **write** half of this — today any signed-in user of any workspace can overwrite or delete any other tenant's photos by path — and deliberately leaves SELECT public, because making it private is the separate signed-URL project. One mitigation already ships: signing out purges the Service Worker's image cache, so the next person on a shared machine cannot pull the previous workspace's photos out of it.
 
 ## Workflow
 
@@ -174,7 +222,7 @@ The core workflow tables (`products`, `product_images`, `categories`, `category_
 | Integrations | `org_shopify_connections` (client-write-only Admin token) |
 | Vocabulary | `descriptor_chips`, `brand_keywords`, `vocab_models` |
 | Beta program | `beta_signups` |
-| Founder tools | `analytics_events` (+ `analytics_summary()` / `analytics_prune()`), `crm_contacts`, `crm_notes` (+ `crm_sync_contacts()`), `support_threads`, `support_messages` |
+| Founder tools | `analytics_events` (+ `analytics_summary()` / `analytics_prune()`), `crm_contacts`, `crm_notes` (+ `crm_sync_contacts()`), `support_threads`, `support_messages`, `app_errors` (+ `app_errors_summary()` / `app_errors_prune()`) |
 
 ## Browser Support
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BookMarked, X, Plus, Pencil, Check, Trash2, Search } from 'lucide-react';
+import { X, Plus, Pencil, Check, Trash2, Search } from 'lucide-react';
 import {
   fetchAllChips, createChip, updateChip, deleteChip,
   fetchAllBrandKeywords, createBrandKeywords, updateBrandKeywords, deleteBrandKeywords,
@@ -13,10 +13,6 @@ import type { BuiltinBrandEntry } from '../lib/builtinBrandVocab';
 import type { ModelContext } from '../lib/brandCategorySystem';
 import './VocabDashboard.css';
 
-interface VocabDashboardProps {
-  onClose: () => void;
-}
-
 /**
  * Vocabulary dashboard — Founding Workspace admins only (App gates rendering;
  * RLS enforces writes server-side). Curates the GLOBAL vocabulary every
@@ -27,7 +23,9 @@ interface VocabDashboardProps {
  *                (and the #hashtags) whenever an item's brand matches.
  * Beta users see and use all of it; only founders can change it.
  */
-export default function VocabDashboard({ onClose }: VocabDashboardProps) {
+/* No props: as a full view its only chrome is ToolView's, and closing is
+   ToolView's "Back to workflow" button. */
+export default function VocabDashboard() {
   const [tab, setTab] = useState<'chips' | 'brands' | 'models'>('chips');
   const [chips, setChips] = useState<DescriptorChip[]>([]);
   const [brands, setBrands] = useState<BrandKeywordRow[]>([]);
@@ -272,17 +270,9 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
   const dbModelKeys = new Set(dbModels.map(m => `${m.brand.toLowerCase()}|${m.model_name.toLowerCase()}`));
 
   return (
-    <div className="vocab-overlay" onClick={onClose}>
-      <div className="vocab-panel" onClick={(e) => e.stopPropagation()}>
-        <div className="vocab-header">
-          <div className="vocab-title">
-            <BookMarked size={20} />
-            <h2>Vocabulary</h2>
-            <span className="vocab-scope-badge">global — all workspaces</span>
-          </div>
-          <button className="vocab-close" onClick={onClose} aria-label="Close"><X size={18} /></button>
-        </div>
-
+    <div className="vocab-page">
+      <div className="vocab-toolbar">
+        <span className="vocab-scope-badge">global — all workspaces</span>
         <div className="vocab-tabs">
           <button className={`vocab-tab ${tab === 'chips' ? 'vocab-tab--on' : ''}`} onClick={() => { setTab('chips'); setEditId(null); setConfirmDeleteId(null); }}>
             Quick keyword chips ({chips.length})
@@ -293,11 +283,12 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
           <button className={`vocab-tab ${tab === 'models' ? 'vocab-tab--on' : ''}`} onClick={() => { setTab('models'); setEditId(null); setConfirmDeleteId(null); }}>
             Models ({dbModels.length})
           </button>
-          <div className="vocab-search">
-            <Search size={13} />
-            <input placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
         </div>
+        <div className="vocab-search">
+          <Search size={14} />
+          <input placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+      </div>
 
         {notice && <div className="vocab-notice">{notice}</div>}
 
@@ -620,11 +611,10 @@ export default function VocabDashboard({ onClose }: VocabDashboardProps) {
           </>
         )}
 
-        <p className="vocab-footnote">
-          Changes apply to every workspace the next time they open Step 3 or generate a description.
-          Only Founding Workspace admins can edit; everyone else just gets the results.
-        </p>
-      </div>
+      <p className="vocab-footnote">
+        Changes apply to every workspace the next time they open Step 3 or generate a description.
+        Only Founding Workspace admins can edit; everyone else just gets the results.
+      </p>
     </div>
   );
 }

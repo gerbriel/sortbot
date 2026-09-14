@@ -1,25 +1,3 @@
-.org-panel-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.72);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.org-panel {
-  background: var(--ink-800);
-  border-radius: 12px;
-  width: min(640px, 94vw);
-  max-height: 80vh;
-  overflow-y: auto;
-  padding: 1.1rem 1.25rem 1.25rem;
-  /* --shadow-xl carries a hairline ring, so the panel still has an edge
-     against the scrim without adding a border (no layout shift). */
-  box-shadow: var(--shadow-xl);
-}
-
 .org-panel-header {
   display: flex;
   align-items: center;
@@ -40,16 +18,6 @@
   color: var(--text-primary);
 }
 
-.org-panel-close {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--text-muted);
-  padding: 0.25rem;
-  border-radius: 6px;
-}
-
-.org-panel-close:hover { background: var(--ink-750); }
 
 .org-panel-notice {
   background: var(--accent-dim);
@@ -385,7 +353,7 @@
 }
 
 .beta-email-link { color: var(--accent); text-decoration: none; }
-.beta-email-link:hover { text-decoration: underline; }
+.beta-email-link:hover { text-decoration: none; opacity: 0.8; }
 
 .beta-request-actions { align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 
@@ -810,3 +778,212 @@
   font-size: var(--fs-sm);
 }
 .crm-danger { display: flex; justify-content: flex-end; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PAGE MODE — Workspace, Analytics, CRM and Errors as full views
+   ════════════════════════════════════════════════════════════════════════════
+
+   These four used to live inside a 640px modal at ~0.35–0.9rem padding (3–8px
+   on the 9px root). Scoped under `.tool-view` so the numbers below only apply
+   on the page, and the shared `org-*` / `ft-*` / `an-*` / `beta-*` classes keep
+   their original definitions above untouched.
+
+   The scale is ToolView's: 2rem card padding, 2rem–3rem section gaps,
+   1.2rem+ row padding, 4rem minimum control height, 4.5rem table rows. */
+
+.org-page {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+.tool-view .org-panel-header {
+  margin-bottom: 0;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tool-view .org-panel-title h2 { font-size: var(--fs-lg); }
+
+/* Tabs become a left rail: a vertical list of destinations beside the content,
+   instead of a wrapped chip row squeezed above it. */
+.org-page-body {
+  display: grid;
+  grid-template-columns: 26rem minmax(0, 1fr);
+  gap: 3rem;
+  align-items: start;
+}
+
+.tool-view .org-page-body .org-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+  position: sticky;
+  top: var(--tv-sticky-top, 8.5rem);
+}
+
+.tool-view .org-page-body .org-tab {
+  text-align: left;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 4.4rem;
+  padding: 0.8rem 1.6rem;
+  font-size: var(--fs-base);
+  background: transparent;
+  border-color: transparent;
+}
+
+.tool-view .org-page-body .org-tab:hover { background: var(--ink-850); }
+
+.tool-view .org-page-body .org-tab--on {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--text-primary);
+}
+
+.org-page-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* ── Rows, forms and cards at page scale ─────────────────────────────────── */
+
+.tool-view .org-member-row {
+  padding: 1.4rem 1.6rem;
+  gap: 1.5rem;
+  font-size: var(--fs-base);
+}
+
+.tool-view .org-member-list { gap: 0.8rem; }
+
+.tool-view .org-invite-form {
+  gap: 1rem;
+  padding: 2rem;
+  background: var(--ink-850);
+  border-radius: var(--radius-lg);
+}
+
+.tool-view .org-invite-form input,
+.tool-view .org-invite-form select { padding: 0 1.2rem; font-size: var(--fs-base); }
+
+.tool-view .org-panel-notice {
+  padding: 1.4rem 1.8rem;
+  font-size: var(--fs-base);
+}
+
+.tool-view .org-panel-footnote {
+  margin-top: 1rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+}
+
+.tool-view .beta-chip {
+  min-height: 4rem;
+  padding: 0.5rem 1.4rem;
+  font-size: var(--fs-sm);
+}
+
+.tool-view .beta-search {
+  min-height: 4rem;
+  padding: 0 1.2rem;
+  min-width: 24rem;
+}
+
+.tool-view .beta-search input { font-size: var(--fs-base); }
+
+/* ── Founder tools: Analytics / CRM / Errors ─────────────────────────────── */
+
+.tool-view .ft-card {
+  padding: 2rem;
+  border-radius: var(--radius-lg);
+}
+
+.tool-view .ft-toolbar {
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.tool-view .ft-chips { gap: 0.8rem; }
+
+.tool-view .ft-help,
+.tool-view .ft-result,
+.tool-view .ft-setup {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  margin-bottom: 1.5rem;
+}
+
+/* KPI row, then the chart, then the tables two-up — the layout the numbers
+   actually want once they are not fighting a 640px modal. */
+.tool-view .an-kpis {
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 3rem;
+}
+
+.tool-view .an-tile { padding: 2rem; }
+.tool-view .an-tile-label { font-size: var(--fs-sm); }
+.tool-view .an-tile-value { font-size: var(--fs-3xl); }
+.tool-view .an-tile-delta { font-size: var(--fs-xs); }
+
+.tool-view .an-tables {
+  grid-template-columns: repeat(auto-fit, minmax(42rem, 1fr));
+  gap: 3rem;
+}
+
+.tool-view .an-h {
+  font-size: var(--fs-lg);
+  margin-bottom: 1.5rem;
+}
+
+.tool-view .an-table { font-size: var(--fs-base); }
+
+.tool-view .an-table th,
+.tool-view .an-table td { padding: 1.25rem 1rem 1.25rem 0; }
+
+/* ── CRM: filters + list, with the expanded contact as a wide detail card ── */
+
+.tool-view .crm-row { padding: 0; }
+.tool-view .crm-head { padding: 1.4rem 1.6rem; gap: 1.5rem; }
+
+.tool-view .crm-detail {
+  padding: 2rem;
+  background: var(--ink-900);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.tool-view .crm-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(26rem, 1fr));
+  gap: 1.5rem;
+}
+
+.tool-view .crm-add { flex-wrap: wrap; }
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 1024px) {
+  .org-page-body { grid-template-columns: 1fr; gap: 2rem; }
+
+  .tool-view .org-page-body .org-tabs {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tool-view .org-page-body .org-tab { width: auto; }
+}
+
+@media (max-width: 640px) {
+  .tool-view .beta-search { min-width: 100%; }
+  .tool-view .an-tables { grid-template-columns: 1fr; gap: 2rem; }
+}

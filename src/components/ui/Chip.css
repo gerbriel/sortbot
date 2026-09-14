@@ -1,0 +1,119 @@
+/* ── Chip / ToggleChip ──────────────────────────────────────────────────────
+   Replaces .beta-chip / .beta-chip--active, .sw-chip / .sw-chip--on, the
+   .filter-btn-group toggles in ImageGrouper, and the .ptb-btn--active
+   pattern where the button is really a persistent on/off.
+
+   The ONLY structural difference from Badge: a chip is a <button>. If it can be
+   clicked it must be focusable, and if it has an on/off state that state must
+   be aria-pressed — never a class alone. */
+
+.ui-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  /* Chips sit in dense toolbars. min-height keeps a 22px target without
+     inflating the row the way Button's 24px step would. */
+  min-height: 2.4rem;
+  padding: 0.2rem 0.7rem;
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  white-space: nowrap;
+  background: var(--ink-750);
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
+}
+
+.ui-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ui-chip:hover:not(:disabled) { background: var(--ink-700); color: var(--text-primary); }
+
+.ui-chip:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.ui-chip--sm { min-height: 2rem; padding: 0.1rem 0.55rem; font-size: var(--fs-2xs); }
+
+/* THE ON STATE IS SELECTED BY THE ARIA ATTRIBUTE, NOT A CLASS. Deleting the
+   attribute therefore also deletes the highlight, which makes the bug visible
+   instead of silent. */
+.ui-chip[aria-pressed='true'] {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+.ui-chip[aria-pressed='true']:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+/* Filled variant — for the rare chip that has to win attention in a toolbar
+   (a live filter count, a "pick mode" affordance). */
+.ui-chip--strong[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--ink-950);
+}
+
+/* Quiet variant — transparent at rest, for chips laid over a card surface where
+   the default --ink-750 fill would read as a second background layer. */
+.ui-chip--quiet {
+  background: transparent;
+  border-color: var(--border-control);
+}
+.ui-chip--quiet:hover:not(:disabled) { background: var(--ink-750); }
+
+/* Removable chip: TWO SIBLING controls joined into one pill shape. The label
+   half and the dismiss half each keep their own tab stop and focus ring; the
+   radius is split so they read as a single object. */
+.ui-chip-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.ui-chip-pair {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+/* A label half with no action is not a button — a plain span keeps it out of
+   the tab order without the lie of a disabled/tabindex=-1 button. */
+.ui-chip--static { cursor: default; }
+.ui-chip--static:hover { background: var(--ink-750); color: var(--text-secondary); }
+
+.ui-chip--paired {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  padding-right: var(--space-2);
+}
+
+.ui-chip__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  padding: 0;
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1;
+  background: var(--ink-750);
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  border-left: 1px solid var(--border-subtle);
+  border-radius: 0 999px 999px 0;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.ui-chip__remove:hover:not(:disabled) { background: var(--ink-700); color: var(--danger); }
+.ui-chip__remove:disabled { opacity: 0.45; cursor: not-allowed; }
+.ui-chip__remove:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
