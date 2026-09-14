@@ -55,7 +55,7 @@ const loadExifr = () => (exifrPromise ??= import('exifr'));
  * each run and on page hide make the write durable; the timer is the backstop for
  * a run that ends some other way.
  *
- * `sortbot_compressed_paths` MUST NOT be renamed (CLAUDE.md §1): losing it
+ * `sortbot_compressed_paths` MUST NOT be renamed (AGENTS.md §1): losing it
  * re-compresses all 4 854 files in the bucket. */
 let _compressedPaths: Set<string> | null = null;
 let _compressedDirty = false;

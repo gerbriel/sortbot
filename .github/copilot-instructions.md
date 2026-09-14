@@ -1,9 +1,9 @@
 # AI Agent Instructions
 
-> **The authoritative codebase reference is `CLAUDE.md` at the project root.**
+> **The authoritative codebase reference is `AGENTS.md` at the project root.**
 > Read it in full before writing any code.
 
-`CLAUDE.md` covers:
+`AGENTS.md` covers:
 - Project identity and what the app does
 - Full tech stack with versions and which dependencies are dead/unused
 - How to run, build, lint, and deploy

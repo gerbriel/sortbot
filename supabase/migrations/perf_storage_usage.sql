@@ -44,7 +44,7 @@
 -- path segment equals `auth.uid()`, so a caller cannot read another user's
 -- total, and it returns two integers — never a path, a name or an id.
 --
--- ── SHAPE: CLAUDE.md §18 rule 20, post-security_rpc_wrappers form ───────────
+-- ── SHAPE: AGENTS.md §18 rule 20, post-security_rpc_wrappers form ───────────
 -- Client-called RPC → the SECURITY DEFINER body lives in `app_private`
 -- (unexposed, so linter 0028/0029 cannot see it) and a SECURITY INVOKER wrapper
 -- with an IDENTICAL signature stays in `public` so `/rest/v1/rpc/storage_usage_bytes`

@@ -55,7 +55,7 @@
 .app-header h1 {
   font-size: var(--fs-md);
   font-weight: 600;
-  /* The nav is the one inverted surface (CLAUDE.md §1): the wordmark sits on
+  /* The nav is the one inverted surface (AGENTS.md §1): the wordmark sits on
      black, so it takes a literal light foreground, never the page's --text-primary
      (which is black and made the title vanish). Specificity (0,1,1) beats the
      shared `.app-header … { color:#fff }` pin above, so it must be restated here. */
@@ -715,7 +715,7 @@
 
 /* The wordmark switches between <h1> (workflow) and <p> (tool view) so each
    view has exactly one h1. It therefore needs its own rules rather than the
-   element selector — and, per CLAUDE.md §1, its own explicit light colour:
+   element selector — and, per AGENTS.md §1, its own explicit light colour:
    anything added to the black nav that does not set one inherits page-black
    and vanishes. */
 .app-header .app-wordmark {
@@ -736,7 +736,7 @@
 .header-actions { gap: var(--space-4); flex-wrap: nowrap; }
 
 /* Unread count on the workspace trigger. The nav is the app's one
-   deliberately inverted surface (CLAUDE.md §1), so this sets its own literal
+   deliberately inverted surface (AGENTS.md §1), so this sets its own literal
    foreground instead of inheriting page-black — and it reads the same whether
    the button is outlined on black or filled white as the active view. Same
    look as the floating widget's .sw-badge, kept in step by hand because the
@@ -941,7 +941,7 @@
     overflow-y: auto;
     margin-top: var(--space-3);
     padding: 0.5rem 0.75rem;
-    /* Popover surface — lifted above the grey page, per CLAUDE.md §1 the
+    /* Popover surface — lifted above the grey page, per AGENTS.md §1 the
        elevation direction on this light theme is toward white. Rounded top
        rather than full bleed: bleeding would need a negative margin sized to
        ancestor padding, and a wrong guess is a horizontal page scroll. */
@@ -995,5 +995,5 @@
 
 /* Brand wordmark inside the inverted nav: Outfit via .wordmark (index.css),
    sized up for the header and pinned to a literal light foreground because
-   the nav never takes --text-* tokens (CLAUDE.md §1). */
+   the nav never takes --text-* tokens (AGENTS.md §1). */
 .app-header .wordmark { font-size: var(--fs-xl); color: #ffffff; }

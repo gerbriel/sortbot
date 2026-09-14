@@ -15,7 +15,7 @@ verified against a throwaway local Postgres 14 (§6). `src/App.tsx`,
 `ProductDescriptionGenerator.tsx`, `ImageGrouper.tsx` and `Library.tsx` were
 **not edited**; the exact wiring they need is in §7 for the orchestrator.
 
-Everything is first-party, per CLAUDE.md §9. The Code 128 encoder is ours
+Everything is first-party, per AGENTS.md §9. The Code 128 encoder is ours
 (§3) — no barcode library, no WASM decoder, no fee API. Three tables' worth of
 schema, two pure libraries, three components.
 
@@ -55,7 +55,7 @@ description engine reads the key — the golden description snapshot is untouche
 ### Two invariants that are not negotiable
 
 **1. `$0` passes through untouched.** The exporter hard-blocks any export where a
-product has no price or $0 (CLAUDE.md §10). If a `.99` rounding rule could turn
+product has no price or $0 (AGENTS.md §10). If a `.99` rounding rule could turn
 `0` into `0.99`, *selecting a platform would silently defeat that gate* and ship
 unpriced products to Shopify. So anything that is not a positive finite number is
 returned exactly as it arrived. Locked by an exhaustive test over the whole rule
@@ -296,7 +296,7 @@ renders nothing at all.
 
 **Read-only on the workflow.** It consumes `workflowStore.processedItems` via the
 same `useStoreItemArray` hook Step 3 uses and never writes an item back
-(CLAUDE.md §18.11). The one mutation it performs is `ensureSkus`, which writes
+(AGENTS.md §18.11). The one mutation it performs is `ensureSkus`, which writes
 `products.sku` directly and touches no in-memory item — so printing labels can
 never disturb a batch mid-edit. Rows come from `buildGroupArray`, the same
 leader-tolerant builder Step 3 navigates with, so the sheet and the description
@@ -368,7 +368,7 @@ preview scales down rather than forcing a horizontal page scroll (a screen
 concern only — print output is unaffected); `prefers-reduced-motion` disables
 both spinners.
 
-No hardcoded hex outside the label swatches, which are **data** (CLAUDE.md §1's
+No hardcoded hex outside the label swatches, which are **data** (AGENTS.md §1's
 carve-out) and must survive a thermal printer, where a theme token does not
 resolve at all. No emoji — `lucide-react` throughout.
 
@@ -604,7 +604,7 @@ one loader, not two copies of the fetch.
 ## 10. Not built, deliberately
 
 * **Writing labels or SKUs to Shopify.** Publishing is still CSV; a write path is
-  its own feature (CLAUDE.md §16).
+  its own feature (AGENTS.md §16).
 * **Label assignment from Step 2.** The picker takes `productIds: string[]` and
   is already reusable for a multi-select, but Step 2 is another agent's file.
 * **A label filter in Library.** The join table supports it; no UI yet.
@@ -689,7 +689,7 @@ batch, scrolling to Step 3 would park the user on an unrelated listing and look
 like a successful jump — so it raises a toast naming the real situation ("find it
 in the Library and open its batch first") and navigates nowhere. The membership
 test reads `processedItemsRef.current`, the live store view, never a
-render-captured array (CLAUDE.md §14).
+render-captured array (AGENTS.md §14).
 
 ### Gates after wiring
 

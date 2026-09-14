@@ -425,7 +425,7 @@ select option {
   .button:active:not(:disabled) {
     box-shadow: inset 0 0 0 999px rgba(0, 0, 0, 0.10);
   }
-  /* The nav is the app's one inverted surface (CLAUDE.md §1): a black wash on
+  /* The nav is the app's one inverted surface (AGENTS.md §1): a black wash on
      a black bar is invisible, so it takes an explicit light one. */
   .app-header button:active:not(:disabled),
   .ld-nav button:active:not(:disabled) {

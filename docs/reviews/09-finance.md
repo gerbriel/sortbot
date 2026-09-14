@@ -8,7 +8,7 @@ No dependency added. No SQL run against Supabase — the migration is a file, an
 it was verified against a throwaway local Postgres 14 instead (§5). `src/App.tsx`
 was **not** edited; the exact wiring is in §6 for the orchestrator to apply.
 
-Everything is first-party, per CLAUDE.md §9's self-reliant rule: three tables and
+Everything is first-party, per AGENTS.md §9's self-reliant rule: three tables and
 one RPC in the project's own Postgres, plus React. No payment processor, no
 accounting vendor, no external API, no import of a bank feed.
 
@@ -358,7 +358,7 @@ timers so the "year to date" default cannot make the suite date-dependent.
 
 ---
 
-## 9. CLAUDE.md lines to add
+## 9. AGENTS.md lines to add
 
 **§5 (folder structure)** — under `src/components/`:
 

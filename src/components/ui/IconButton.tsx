@@ -14,7 +14,7 @@ export interface IconButtonProps
    * label is discoverable by mouse users too.
    */
   label: string;
-  /** The glyph. A lucide icon element; never an emoji (CLAUDE.md §1). */
+  /** The glyph. A lucide icon element; never an emoji (AGENTS.md §1). */
   icon: ReactNode;
   variant?: IconButtonVariant;
   size?: IconButtonSize;

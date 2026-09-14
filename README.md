@@ -4,7 +4,7 @@ Arcadian is a web app for vintage clothing resellers. Upload a batch of clothing
 
 **Live app:** https://gerbriel.github.io/sortbot (deployed from `main` via GitHub Actions)
 
-> **Contributors / AI agents:** read [CLAUDE.md](CLAUDE.md) first. It is the authoritative codebase reference — architecture, data model, invariants, and a long list of things that look wrong but are deliberate.
+> **Contributors / AI agents:** read [AGENTS.md](AGENTS.md) first. It is the authoritative codebase reference — architecture, data model, invariants, and a long list of things that look wrong but are deliberate.
 
 ---
 
@@ -216,7 +216,7 @@ Supabase dashboard settings no code can set: Authentication → Providers → Em
 
 ⚠️ **RLS scopes database rows, not image bytes.** The `product-images` Storage bucket is **public**: every image is served through an unauthenticated CDN URL, so anyone who has (or guesses) an image URL can fetch that photo without signing in — including after the tenancy migration, which scopes the `product_images` *rows* but not the files they point at.
 
-Paths follow `{userId}/{productId}/{timestamp}-{random}.{ext}`, so URLs are unguessable in practice rather than by design. Treat uploaded photos as public data until private buckets + signed URLs land — every path→URL call in the app now goes through one helper (`src/lib/storageUrls.ts`), so that migration is a single function body rather than 23 call sites (tracked in [ANALYSIS.md](ANALYSIS.md) / CLAUDE.md §16).
+Paths follow `{userId}/{productId}/{timestamp}-{random}.{ext}`, so URLs are unguessable in practice rather than by design. Treat uploaded photos as public data until private buckets + signed URLs land — every path→URL call in the app now goes through one helper (`src/lib/storageUrls.ts`), so that migration is a single function body rather than 23 call sites (tracked in [ANALYSIS.md](ANALYSIS.md) / AGENTS.md §16).
 
 `security_storage_policies.sql` (step 4 above) closes the **write** half of this — today any signed-in user of any workspace can overwrite or delete any other tenant's photos by path — and deliberately leaves SELECT public, because making it private is the separate signed-URL project. One mitigation already ships: signing out purges the Service Worker's image cache, so the next person on a shared machine cannot pull the previous workspace's photos out of it.
 
@@ -231,7 +231,7 @@ Paths follow `{userId}/{productId}/{timestamp}-{random}.{ext}`, so URLs are ungu
 
 ## Database
 
-The core workflow tables (`products`, `product_images`, `categories`, `category_presets`) are typed in `src/lib/supabase.ts`; the rest are typed in their own service modules (`workflowBatchService.ts`, `orgService.ts`, `shopifyConnectionService.ts`, `vocabService.ts`, `betaService.ts`). Schema and migration SQL live in `supabase/migrations/` (**read the warnings in CLAUDE.md before running any of them** — several rewrite RLS policies).
+The core workflow tables (`products`, `product_images`, `categories`, `category_presets`) are typed in `src/lib/supabase.ts`; the rest are typed in their own service modules (`workflowBatchService.ts`, `orgService.ts`, `shopifyConnectionService.ts`, `vocabService.ts`, `betaService.ts`). Schema and migration SQL live in `supabase/migrations/` (**read the warnings in AGENTS.md before running any of them** — several rewrite RLS policies).
 
 **Two workflow migrations are written but not yet applied** (both additive, idempotent, with rollback at the bottom, both verified against a throwaway Postgres 14, and both to be run after `multi_org_tenancy.sql`):
 
@@ -266,7 +266,7 @@ There is also **one one-off data repair** that is deliberately not a migration: 
 
 ## Project Docs
 
-- [CLAUDE.md](CLAUDE.md) — full codebase reference (read before contributing)
+- [AGENTS.md](AGENTS.md) — full codebase reference (read before contributing)
 - [CHANGELOG.md](CHANGELOG.md) — release history
 - [ANALYSIS.md](ANALYSIS.md) — strengths/weaknesses assessment and the multi-org SaaS scaling roadmap
 

@@ -22,7 +22,7 @@ given.
 
 ### 1.1 One `activeView`, six booleans deleted
 
-`src/App.tsx` now has a single union (exported, because CLAUDE.md §6 documents it):
+`src/App.tsx` now has a single union (exported, because AGENTS.md §6 documents it):
 
 ```ts
 export type ActiveView =
@@ -144,7 +144,7 @@ by the four sticky rules across the tool CSS files.
 
 **The header wordmark switches tag.** `const Wordmark = activeView === 'workflow'
 ? 'h1' : 'p'`. Without it a tool view has two `<h1>`s (the app mark and the view
-title). This also required a `.app-header .app-wordmark` rule — and per CLAUDE.md
+title). This also required a `.app-header .app-wordmark` rule — and per AGENTS.md
 §1, anything added to the nav must set its own light colour. Which surfaced a
 pre-existing bug, below.
 
@@ -212,6 +212,6 @@ Files changed: `src/App.tsx`, `src/App.css`, and the `.tsx`/`.css` pairs for
 CategoriesManager, CategoryPresetsManager, Library, OrgPanel, VocabDashboard,
 KanbanBoard, plus a one-line CSS import in AnalyticsPanel / CrmPanel /
 ErrorsPanel. Added: `ToolView.tsx`, `ToolView.css`, `ToolView.test.tsx`.
-Docs: CLAUDE.md §5 (ToolView + revised component entries), §6 (route map
+Docs: AGENTS.md §5 (ToolView + revised component entries), §6 (route map
 rewritten), one §15 bullet. `git diff --stat` shows no file outside that set
 changed by this pass.

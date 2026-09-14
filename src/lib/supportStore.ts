@@ -2,7 +2,7 @@
  * supportStore — ONE copy of the support thread list, shared by every consumer.
  *
  * WHY IT EXISTS: support messaging has two front ends now — the floating
- * SupportWidget and the full-page MessagesView (CLAUDE.md §6, view 'messages').
+ * SupportWidget and the full-page MessagesView (AGENTS.md §6, view 'messages').
  * Each used to be free to open its own Realtime channel and its own 45 s poll,
  * which would mean two channels, two timers and two thread lists that drift
  * apart the moment one of them writes.

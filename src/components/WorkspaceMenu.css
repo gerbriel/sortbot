@@ -1,7 +1,7 @@
 /* ════════════════════════════════════════════════════════════════════════════
    WorkspaceMenu — the app's single navigation surface.
 
-   The TRIGGER lives in the black nav, so per CLAUDE.md §1 anything added to it
+   The TRIGGER lives in the black nav, so per AGENTS.md §1 anything added to it
    must state a literal light foreground or it inherits page-black and vanishes.
    The POPOVER does not: it is portaled to <body>, outside the nav's cascade
    entirely, so it takes --ink- / --text- tokens like any other white surface.

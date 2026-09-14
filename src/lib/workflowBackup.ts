@@ -1,7 +1,7 @@
 /**
  * workflowBackup — the synchronous localStorage safety net for in-flight work.
  *
- * WHY IT EXISTS: the Supabase `workflow_state` write is debounced 2 s (CLAUDE.md §11:
+ * WHY IT EXISTS: the Supabase `workflow_state` write is debounced 2 s (AGENTS.md §11:
  * never below 1 000 ms). A page refresh inside that window would lose every grouping /
  * category change made since the last successful round trip, so App also mirrors the
  * items into `localStorage` under the key below and reads them back on startup restore.
@@ -24,11 +24,11 @@
  * still "everything up to the moment the tab went away", as before — the only thing
  * that changed is that the write now happens once per second instead of once per click.
  *
- * `sortbot_workflow_backup` MUST NOT be renamed (CLAUDE.md §1 naming table) — renaming
+ * `sortbot_workflow_backup` MUST NOT be renamed (AGENTS.md §1 naming table) — renaming
  * it silently drops every user's in-progress batch on their next load.
  */
 
-/** The localStorage key. Load-bearing name — see CLAUDE.md §1. */
+/** The localStorage key. Load-bearing name — see AGENTS.md §1. */
 export const WORKFLOW_BACKUP_KEY = 'sortbot_workflow_backup';
 
 /** Trailing-throttle window. Kept well under the 2 s Supabase debounce: the backup's

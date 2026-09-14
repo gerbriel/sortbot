@@ -53,7 +53,7 @@
 /* ── Variants ───────────────────────────────────────────────────────────────
    Solid fills set color: var(--ink-950). That token is WHITE on this palette,
    so black fill + white label falls out for free — and the pair inverts
-   together if the palette ever flips back to dark (CLAUDE.md §1). */
+   together if the palette ever flips back to dark (AGENTS.md §1). */
 .ui-btn--primary {
   background: var(--accent);
   color: var(--ink-950);
@@ -133,7 +133,7 @@
    it just stops being a dart board.
 
    44px is written as an absolute literal on purpose. Every other length here is
-   rem against the 9px root (CLAUDE.md §16), but a touch target is a physical
+   rem against the 9px root (AGENTS.md §16), but a touch target is a physical
    constant: if the root size is ever retuned, 4.9rem would silently drift off
    the accessibility floor while `44px` cannot. */
 @media (max-width: 640px) {

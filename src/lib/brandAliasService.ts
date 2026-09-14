@@ -130,7 +130,7 @@ let builtinInFlight: Promise<BrandCandidate[]> | null = null;
  *
  * DYNAMICALLY IMPORTED AND ONLY ON DEMAND. builtinBrandVocab pulls in BRAND_DNA
  * and its four expansions — its own ~361 KB chunk. It must never appear in a
- * main-bundle import path (CLAUDE.md §15), so this is awaited lazily, at most
+ * main-bundle import path (AGENTS.md §15), so this is awaited lazily, at most
  * once per session, and only after the cheap sources have failed to produce a
  * confident match. Failure is silent: no library, no suggestion.
  */

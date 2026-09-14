@@ -12,7 +12,7 @@
    selector. --accent is black on this palette, which reads on every surface
    step from --ink-950 to --ink-700.
 
-   CAUTION — THE NAV IS AN INVERTED SURFACE (CLAUDE.md §1). A primitive placed
+   CAUTION — THE NAV IS AN INVERTED SURFACE (AGENTS.md §1). A primitive placed
    inside .app-header / .ld-nav will draw black-on-black. Those bars need
    their own explicit light overrides; do not add them here. */
 

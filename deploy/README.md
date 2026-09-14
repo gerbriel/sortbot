@@ -52,7 +52,7 @@ docker run --rm -p 8088:80 acadia-app:local
 
 `vite.config.ts` sets `base: process.env.GITHUB_ACTIONS ? '/sortbot/' : '/'`.
 That file is not edited here — `/sortbot/` is pinned to the GitHub repo name and
-changing it 404s every asset on the live site (CLAUDE.md §1). The image passes
+changing it 404s every asset on the live site (AGENTS.md §1). The image passes
 `--base` to `vite build` on the command line instead:
 
 ```
@@ -115,7 +115,7 @@ Self-hosting checklist for this app specifically:
    migrations that depend on it (`beta_signups.sql`, `analytics_events.sql`,
    `crm.sql`, `support_messaging.sql`, `org_shopify_connections.sql`,
    `founding_user_admin.sql`, `vocab_*.sql`). Several are destructive — read the
-   warnings in CLAUDE.md §5 first.
+   warnings in AGENTS.md §5 first.
 3. Edge Functions are optional. Without them `shopify-titles` falls back to
    database-only title dedup and `generate-prose` returns 503 with the
    rule-based description path intact.

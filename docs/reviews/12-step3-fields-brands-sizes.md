@@ -305,7 +305,7 @@ that merely contains the word "Vintage".
 - `applyPresetToGroup.ts:167` → `brand: scrubSellerBrand(item.brand, [preset.vendor])`.
   Applying a preset is the one moment both the brand and the vendor it came from
   are in scope, so it is where the poisoned value is dropped. A preset's vendor
-  still cannot *fill* brand — the contradiction in CLAUDE.md §15 is resolved in
+  still cannot *fill* brand — the contradiction in AGENTS.md §15 is resolved in
   favour of **brand = garment brand only**, in both directions.
 - **PDG** clears a brand equal to this workspace's `descriptionSettings.vendorName`
   as each listing opens, persisted by the normal per-group save. It runs at most
@@ -341,7 +341,7 @@ vendor in brand. Plus 9 in `brandSpelling.test.ts`.
    `preset.vendor` into the snake_case `vendor` key, i.e. the very column that
    hydrates back into `brand`. Anyone wiring it up re-creates the bug. Delete it
    or route it through `scrubSellerBrand`.
-4. **CLAUDE.md §15 is stale** — "Preset audit fixes" item (4), "preset `vendor`
+4. **AGENTS.md §15 is stale** — "Preset audit fixes" item (4), "preset `vendor`
    wired as the default brand", is factually wrong for the current code and
    contradicts the correct entry two lines above it. Orchestrator's file.
 
@@ -552,14 +552,14 @@ returned to 252 when they finished; **none of the three were on my lines.**
 did not enter the main bundle.
 
 No `confirm()`/`prompt()`, no new dependency, no emoji in rendered UI, no literal
-colours outside the nav, no CLAUDE.md/README/CHANGELOG edits, nothing committed.
+colours outside the nav, no AGENTS.md/README/CHANGELOG edits, nothing committed.
 
 ## For the orchestrator
 
 1. **Report 23 is half-landed.** The code no longer creates the bug and now heals
    it at two points, but `productRow.ts` still lets `products.vendor` beat a live
    edit, and the poisoned rows are still in the database. See §23 Deferred (4
-   items, one of them a CLAUDE.md correction).
+   items, one of them a AGENTS.md correction).
 2. **`brand_aliases.sql` must be run** before the Step 3 surface appears at all.
    Until then every path reports `'unavailable'` and Step 3 behaves exactly as
    today — safe to ship code first.
@@ -571,7 +571,7 @@ colours outside the nav, no CLAUDE.md/README/CHANGELOG edits, nothing committed.
    measurement titles end a value only when a digit follows (extractor), always
    (live parser). Unifying them means teaching the live parser spoken-word
    numbers first.
-5. **CLAUDE.md updates the orchestrator owns:** §3 test coverage (`brandSpelling`,
+5. **AGENTS.md updates the orchestrator owns:** §3 test coverage (`brandSpelling`,
    `brandAliasService`, `magnifierPosition`), §5 folder map (four new libs, one
    new component, one new migration), §7 (the `brand_aliases` table), §10 Step 3
    (Save button, brand corrections), §15 (sizes, stop words, the report-23

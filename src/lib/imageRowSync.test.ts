@@ -87,7 +87,7 @@ describe('buildProductImageRow', () => {
 
 /**
  * mergeProductImageRows — the guard that lets registerItemsInDB keep its
- * delete-then-reinsert (CLAUDE.md §18 #3) without destroying a group's photo
+ * delete-then-reinsert (AGENTS.md §18 #3) without destroying a group's photo
  * rows. saveBatchToDatabase writes N rows against the group LEADER with real
  * `position` values; registerItemsInDB only ever knows one row per item, so
  * re-inserting just its own rows collapsed the group to a single photo and

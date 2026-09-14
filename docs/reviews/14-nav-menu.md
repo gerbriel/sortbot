@@ -190,7 +190,7 @@ A signed-in pass of Workflow → menu → CRM → Back → More → Library is s
 
 ---
 
-## 5. Paste-ready CLAUDE.md lines
+## 5. Paste-ready AGENTS.md lines
 
 **§5 (folder structure) — replace the `WorkspaceMenu` and `MobileNav` entries:**
 

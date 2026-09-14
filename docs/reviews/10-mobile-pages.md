@@ -21,7 +21,7 @@ Almost every rule below is one of two fixes, so they are worth stating once.
 
 ### 0.1 The 9px root makes every hand-rolled control a dart board
 
-`html { font-size: 9px }` (CLAUDE.md §16) means rem padding reads about ⅔ smaller
+`html { font-size: 9px }` (AGENTS.md §16) means rem padding reads about ⅔ smaller
 than it looks in source. `.org-confirm-yes { padding: 0.2rem 0.55rem }` is
 **1.8px × 5px**, so that button is ~16px tall. `.org-icon-btn` is ~20px square.
 `.beta-chip` is ~19px. These are fine with a mouse and unusable with a thumb.

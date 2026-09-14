@@ -1374,7 +1374,7 @@
    One card per marketplace. The card is read top-down: what it is called and
    how it adjusts (row 1), then the consequence in dollars and the switches
    (row 2), then the same rule in a sentence. Everything resolves through
-   tokens so a palette swap carries it (CLAUDE.md §1). */
+   tokens so a palette swap carries it (AGENTS.md §1). */
 
 .plat-list {
   display: flex;

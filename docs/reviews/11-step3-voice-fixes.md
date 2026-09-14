@@ -306,7 +306,7 @@ from callbacks and effects.
    left alone.
 3. **`applyTableFieldRef.current = handleTableFieldChange` is still a render-time
    ref write** (pre-existing, PDG:~1255). Not added to; worth retiring.
-4. **CLAUDE.md updates the orchestrator owns:** §3 test coverage (add
+4. **AGENTS.md updates the orchestrator owns:** §3 test coverage (add
    `voiceGrammar.test.ts`), §5 folder map (`src/lib/voiceGrammar.ts`), §10 Step 3
    (the grammar no longer requires "period"; `.` key and Period button), and §15
    (the "Voice description overhaul" entry now has a successor).

@@ -4,7 +4,7 @@
 
 ### Brand
 - **Outfit is the UI typeface** — self-hosted (SIL OFL, `src/assets/fonts/`, variable 300–700, latin), declared once in `index.css` as `--font-sans`; no font CDN, so the CSP stays `font-src 'self'`. **The logo is now the wordmark**: `Arcadian` set in Outfit 500 with tight tracking, no icon, everywhere the brand appears (header, landing nav, sign-in, waitlist); new geometric "A" favicon.
-- **Acadia → Arcadian** across every user-visible surface (landing, auth, waitlist gate, header wordmark, tool-view copy, support widget and Messages, invite and approval emails, browser title and meta description, the beta.html redirect, CI and uptime title assertions, deploy configs, README, CLAUDE.md). Structural identifiers unchanged: the `/sortbot/` base path, every `sortbot_*` key, the `ACD-` SKU prefix and the `acadia-app` container names.
+- **Acadia → Arcadian** across every user-visible surface (landing, auth, waitlist gate, header wordmark, tool-view copy, support widget and Messages, invite and approval emails, browser title and meta description, the beta.html redirect, CI and uptime title assertions, deploy configs, README, AGENTS.md). Structural identifiers unchanged: the `/sortbot/` base path, every `sortbot_*` key, the `ACD-` SKU prefix and the `acadia-app` container names.
 
 ### Navigation
 - **The header toolbar is gone.** Every tool (Library, Labels, Scan, Inbox, Manage Categories, Category Presets, Workspace dashboard, and for founding admins Vocabulary, Analytics, CRM, Finance, Board) is now a grouped option in the workspace menu at the top right, which shows the unread-message count on its trigger. Keyboard-complete (arrows, Home/End, Escape). On phones the same menu opens as a bottom sheet, and the bottom bar's More tab opens it too.
@@ -20,7 +20,7 @@
   answers exactly as before and **no client code changed** (verified: identical result hash, founder access,
   42501 for non-founders, zero anon reachability across all 18 functions, and a byte-identical layered
   rollback). Supabase's linter now reports nothing: 0011, 0028 and 0029 all clear. Note that this also means
-  the linter can no longer flag a NEW SECURITY DEFINER function — CLAUDE.md §18 is the guard from here.
+  the linter can no longer flag a NEW SECURITY DEFINER function — AGENTS.md §18 is the guard from here.
 - **Database function hardening (linter 0011 / 0028 / 0029)** — `CREATE FUNCTION` grants EXECUTE to PUBLIC,
   so all 27 SECURITY DEFINER functions were callable by the logged-out `anon` role. New migration
   `supabase/migrations/security_function_hardening.sql`: the eight helpers that policies and `org_id` column
@@ -289,20 +289,20 @@ The app is 100% self-reliant for these: no third-party service, no external API.
 - Floating **Messages** button (bottom-right) for every signed-in user — waitlisted users at the gate included — with an unread badge, conversation list, new-conversation composer, Enter-to-send. For Founding admins the same button is the **Inbox**: open/closed filter, unread-first ordering, reply, close/reopen.
 
 ### Plumbing
-- New keys: `sortbot_analytics_session` (sessionStorage) and `sortbot_analytics_force` (localStorage) — listed in CLAUDE.md §1. No env vars, no Edge Function, no new dependency.
+- New keys: `sortbot_analytics_session` (sessionStorage) and `sortbot_analytics_force` (localStorage) — listed in AGENTS.md §1. No env vars, no Edge Function, no new dependency.
 - 16 new tests: tracker privacy contract (session id, DNT/localhost gating, referrer host, row shape), dashboard math (funnel, compact numbers, deltas, tick ceilings), CRM list logic (tags, follow-up urgency, filter/sort/counts), messaging unread/ordering/timestamps.
 
 ## 2026-09-13 — Rename to Acadia
 
 ### Brand
-- **Arcatya → Acadia** across every user-visible surface: landing page, auth, waitlist gate, app header wordmark, invite and beta-approval emails, browser title and meta description, the beta.html redirect page, the index.css header comment, README, ANALYSIS, CLAUDE.md
-- No structural identifier changed — the `/sortbot/` base path and every `sortbot_*` localStorage key still read `sortbot` (see CLAUDE.md §1)
+- **Arcatya → Acadia** across every user-visible surface: landing page, auth, waitlist gate, app header wordmark, invite and beta-approval emails, browser title and meta description, the beta.html redirect page, the index.css header comment, README, ANALYSIS, AGENTS.md
+- No structural identifier changed — the `/sortbot/` base path and every `sortbot_*` localStorage key still read `sortbot` (see AGENTS.md §1)
 
 ## 2026-07-29 — Rebrand to Arcatya + dark theme
 
 ### Brand
 - **Sortbot → Arcatya** across every user-visible surface: landing page, auth, waitlist gate, app header (now a wordmark, with the descriptor moved to the subtitle), invite emails, browser title, README, CHANGELOG
-- Structural identifiers deliberately still read `sortbot` and must not be renamed without a migration — the `/sortbot/` base path (derived from the GitHub repo name; changing it 404s every asset) and the `sortbot_*` localStorage keys (in-progress batch, delete tombstones, the compressed-paths set covering all 4,854 storage files, debug toggle). Documented as a table in CLAUDE.md §1.
+- Structural identifiers deliberately still read `sortbot` and must not be renamed without a migration — the `/sortbot/` base path (derived from the GitHub repo name; changing it 404s every asset) and the `sortbot_*` localStorage keys (in-progress batch, delete tombstones, the compressed-paths set covering all 4,854 storage files, debug toggle). Documented as a table in AGENTS.md §1.
 
 ### Dark theme
 - `src/index.css` is now the single source of truth for color, elevation and motion: near-black canvas (`--ink-950` `#08080a`, never pure black), violet accent (`--accent` `#b087ff`), gold secondary, one shared easing curve
@@ -359,7 +359,7 @@ The app is 100% self-reliant for these: no third-party service, no external API.
 - Centralized debug logger with per-category colors and DOM event tracing
 - Voice command table with inline editing; Shopify taxonomy mapping in CSV export
 
-See `CLAUDE.md` §15 for the exhaustive commit-by-commit record.
+See `AGENTS.md` §15 for the exhaustive commit-by-commit record.
 
 ---
 

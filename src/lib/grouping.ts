@@ -7,7 +7,7 @@ import type { ClothingItem } from '../App';
  * THE BUG THIS FIXED (July 2026): grouping features (Group Selected, auto-group
  * by N) assign a FRESH crypto.randomUUID() as productGroup, but the old
  * validation here only accepted a productGroup that matched some item's id
- * (the "leader" convention from CLAUDE.md §11). Fresh-UUID groups failed that
+ * (the "leader" convention from AGENTS.md §11). Fresh-UUID groups failed that
  * check and every item silently became its own listing — Step 3's Next/Prev
  * cycled per-image instead of per-product (the long-standing §16 mystery bug,
  * reproduced live with a 42-image / 11-group batch).

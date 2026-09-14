@@ -5,7 +5,7 @@
  * panel spanning the full width so a found listing is never squeezed.
  *
  * Only the label chips carry inline colour — that is the label's own swatch,
- * i.e. data (CLAUDE.md §1's carve-out). Everything else is tokens.
+ * i.e. data (AGENTS.md §1's carve-out). Everything else is tokens.
  */
 
 .bsv {
@@ -129,7 +129,7 @@
 .bsv-btn:hover:not(:disabled) { background: var(--ink-750); }
 .bsv-btn:disabled { opacity: 0.45; cursor: default; }
 
-/* Solid accent fill; --ink-950 is white on this palette (CLAUDE.md §1). */
+/* Solid accent fill; --ink-950 is white on this palette (AGENTS.md §1). */
 .bsv-btn--primary {
   background: var(--accent);
   border-color: var(--accent);

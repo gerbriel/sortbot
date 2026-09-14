@@ -603,7 +603,7 @@ export const buildProductPatch = (
  * description/title/price. `.select('id')` proves a row was actually touched; on
  * 0 rows we create the row instead (upsert on `id`, which is the item id and can
  * never collide across batches — and deliberately carries NO batch_id, per
- * CLAUDE.md §18 #3).
+ * AGENTS.md §18 #3).
  */
 export const updateProduct = async (
   productId: string,

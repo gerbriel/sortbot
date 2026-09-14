@@ -98,7 +98,7 @@ export function deriveLibraryData(
 
   // makeBatchName does two `Intl` formats per call, and it used to be called once
   // PER ITEM and once PER product_images ROW — ~75,000 calls (~2.0 s measured) for a
-  // 50-batch library whenever `batch_name` is null, which is common (CLAUDE.md §14.6).
+  // 50-batch library whenever `batch_name` is null, which is common (AGENTS.md §14.6).
   // The name only depends on the batch, so memoize it per batch id. Output identical.
   const batchNameCache = new Map<string, string>();
   const batchNameFor = (b: { id: string; batch_name?: string; created_at: string }): string => {

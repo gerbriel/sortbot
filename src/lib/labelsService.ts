@@ -166,7 +166,7 @@ export async function deleteLabel(id: string): Promise<{ ok: boolean; error?: st
 
 /**
  * Labels for a set of products, chunked so a whole batch's worth of ids cannot
- * blow the PostgREST URL-length limit (chunk.ts, CLAUDE.md §11).
+ * blow the PostgREST URL-length limit (chunk.ts, AGENTS.md §11).
  */
 export async function fetchLabelsForProducts(
   productIds: readonly string[],
@@ -207,7 +207,7 @@ export async function fetchLabelsForProducts(
  * `ignoreDuplicates` because the composite primary key already guarantees
  * at-most-once: two people tagging the same listing at the same moment, or a
  * double-tap on a phone, should be a no-op rather than a 409 the user has to
- * read. Same reasoning as the product_images upsert (CLAUDE.md §13).
+ * read. Same reasoning as the product_images upsert (AGENTS.md §13).
  */
 export async function assignLabel(
   productIds: readonly string[], labelId: string,
@@ -344,7 +344,7 @@ export type ScanResult =
  * human keying our own codes off a printed label needs — see
  * barcode.skuLookupCandidates for why that is a second attempt and not an edit
  * to the first. RLS scopes the search to the caller's workspace; there is no
- * `.eq('org_id')` here on purpose (CLAUDE.md §18.1).
+ * `.eq('org_id')` here on purpose (AGENTS.md §18.1).
  */
 export async function findProductBySku(raw: string): Promise<ScanResult> {
   const candidates = skuLookupCandidates(raw);

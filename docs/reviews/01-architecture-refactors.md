@@ -280,7 +280,7 @@ Every site whose arguments do real work is now wrapped in `isDebugEnabled()`:
   crop-param strings.
 - `tusUpload.ts` — the per-25%-milestone progress string and the per-6 MB-chunk PATCH log.
 
-Emoji inside log strings and code comments were preserved verbatim (CLAUDE.md allows them there and
+Emoji inside log strings and code comments were preserved verbatim (AGENTS.md allows them there and
 explicitly not in rendered UI).
 
 ### B12 · finding #2 — two unsynchronised writers to `workflow_state` · **half done, half proposed**
@@ -392,9 +392,9 @@ testing/supabaseMock.ts}`
 
 ---
 
-## CLAUDE.md sections that now need updating
+## AGENTS.md sections that now need updating
 
-I did not edit `CLAUDE.md`. These are the specific edits it needs:
+I did not edit `AGENTS.md`. These are the specific edits it needs:
 
 1. **§5 folder structure — remove the deleted entries.** All six dead components and their `.css`,
    `src/hooks/useUserPresence.ts` (and the `hooks/` directory), `src/services/api.ts` (and

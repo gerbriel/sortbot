@@ -8,7 +8,7 @@
    Written mobile-first: the base rules describe the phone and the one
    `max-width` query is what turns the bar on. Nothing here exists above 640px.
 
-   THE BAR IS PART OF THE BLACK NAV, so per CLAUDE.md §1 every foreground inside
+   THE BAR IS PART OF THE BLACK NAV, so per AGENTS.md §1 every foreground inside
    it is a literal light value, never an --ink- or --text- token: those resolve
    to page-black and would vanish.
 

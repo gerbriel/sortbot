@@ -74,7 +74,7 @@ you are instead of going blank on, say, CRM.
 | `src/components/MobileNav.css` *(new)* | Mobile-first: base rules describe the phone, `min-width` queries take things away. Rail, tab bar, sheet list. |
 | `src/components/ToolView.css` | Phone block: 1.5rem gutters, 2rem section gaps, `padding-bottom: calc(4rem + var(--tabbar-h))`, `min-height` in `dvh`, a stacking title row, a 44px Back control, 44px tabs, and a 44px/16px floor for any control a tool page renders. |
 | `src/components/SupportWidget.css` | Phone block: FAB lifts by `--tabbar-h`; the panel becomes a full-screen `100dvh` sheet with safe-area padding and the composer pinned to the bottom; textarea at `--fs-md`; square 44px icon and send buttons. |
-| `src/components/Landing.css` | Phone block (px-based, per CLAUDE.md §1): 44px nav actions, a hero clamp that is actually live at phone width, stacked full-width CTAs, smaller section headings, 16px/44px signup fields. Plus a real bug fix — see §4. |
+| `src/components/Landing.css` | Phone block (px-based, per AGENTS.md §1): 44px nav actions, a hero clamp that is actually live at phone width, stacked full-width CTAs, smaller section headings, 16px/44px signup fields. Plus a real bug fix — see §4. |
 | `src/components/Auth.css`, `WaitlistGate.css` | 16px + 44px form controls, 44px link-buttons, safe-area gutters. |
 
 `src/main.tsx` and `WorkspaceMenu.tsx` needed no change (`WorkspaceMenu.css` is

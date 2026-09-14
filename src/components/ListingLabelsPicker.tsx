@@ -152,7 +152,7 @@ export default function ListingLabelsPicker({ productIds, readOnly, onChanged }:
               type="button"
               className={`llp-chip llp-chip--${state}${readOnly ? ' llp-chip--static' : ''}`}
               // A colour swatch is data, not chrome — it is the one place in
-              // this app where an inline colour is correct (CLAUDE.md §1's
+              // this app where an inline colour is correct (AGENTS.md §1's
               // carve-out for data colours), and it must survive printing.
               style={state === 'off' ? undefined : { background: swatch.bg, color: swatch.fg, borderColor: swatch.bg }}
               onClick={() => toggle(label)}

@@ -7,7 +7,7 @@
  * drift.
  *
  * Colour follows the tokens everywhere EXCEPT the label chips, which carry the
- * label's own swatch inline. That is data (CLAUDE.md §1's carve-out), and a
+ * label's own swatch inline. That is data (AGENTS.md §1's carve-out), and a
  * printed chip cannot resolve a theme token at all.
  *
  * Mobile-first: the scanner and the label list both get used on a phone in a
@@ -92,7 +92,7 @@
 .lpv-btn:disabled { opacity: 0.45; cursor: default; }
 
 /* Solid accent fill. --ink-950 is white on this palette, which is what makes a
-   black button with a white label fall out for free (CLAUDE.md §1). */
+   black button with a white label fall out for free (AGENTS.md §1). */
 .lpv-btn--primary {
   background: var(--accent);
   border-color: var(--accent);

@@ -39,7 +39,7 @@ a diff in §4.3.
 | Analytics | First-party `analytics_events` + `analytics_summary()` RPC | `supabase/migrations/analytics_events.sql:23`, `src/lib/analytics.ts:1-25` |
 | Uptime check | None | no workflow, no external monitor |
 | Test suite | 229 tests in 19 files, ~0.9 s — verified locally | `npm test` |
-| Lint | 311 problems (295 errors, 16 warnings) — verified locally, matches the CLAUDE.md §17 baseline | `npm run lint` |
+| Lint | 311 problems (295 errors, 16 warnings) — verified locally, matches the AGENTS.md §17 baseline | `npm run lint` |
 
 Two structural facts shape everything below:
 
@@ -132,7 +132,7 @@ Recommended, minimal change:
 * Migrations get their own PR whenever possible, so the SQL is reviewed
   separately from the code that depends on it (the code is already written to
   tolerate an unapplied migration — see `src/lib/betaService.ts` `'unavailable'`
-  fallback pattern described in CLAUDE.md §5).
+  fallback pattern described in AGENTS.md §5).
 
 ### 3.2 Preview / staging, given one Pages environment
 
@@ -158,7 +158,7 @@ available without a second host. Three options, in ascending cost:
 
 Whichever is chosen, **staging must point at a separate Supabase project.**
 Sharing one project means staging writes land in production tables, and the
-destructive migrations in `supabase/migrations/` (CLAUDE.md §5) get tested on
+destructive migrations in `supabase/migrations/` (AGENTS.md §5) get tested on
 real customer data. A second free-tier project is the right place to rehearse
 every migration before it touches production.
 
@@ -203,7 +203,7 @@ Two jobs, `permissions: contents: read`, concurrency-cancelled per ref.
    (`tsc -b`).
 4. **Build-output verification** — asserts `dist/index.html` contains
    `<title>Acadia</title>` (`index.html:9`) and that assets are emitted under
-   `/sortbot/`. The second check is a guard on the invariant in CLAUDE.md §1:
+   `/sortbot/`. The second check is a guard on the invariant in AGENTS.md §1:
    `GITHUB_ACTIONS` is set in any runner, so CI builds with the same base as
    production and a base-path regression fails here instead of 404-ing the live
    site.
@@ -219,7 +219,7 @@ Two jobs, `permissions: contents: read`, concurrency-cancelled per ref.
 7. **Migration hygiene** — for every `supabase/migrations/*.sql` **changed in
    this PR**, requires a `ROLLBACK` section and either the word `idempotent` or
    `if not exists`. Rationale: these files are applied by hand in the SQL Editor
-   (CLAUDE.md §5), so the file itself is the only rollback documentation that
+   (AGENTS.md §5), so the file itself is the only rollback documentation that
    will ever exist. The step also reports a repo-wide baseline as an
    informational notice.
 
@@ -456,7 +456,7 @@ bytes in Storage.
   storage/DB cleanup that deleted rows another batch still referenced (the
   reason `src/lib/storageSafety.ts` exists).
 * **Storage is not covered by a Postgres backup.** 4,854 files across three user
-  folders (CLAUDE.md §15, compression run of April 2026). A weekly off-box copy
+  folders (AGENTS.md §15, compression run of April 2026). A weekly off-box copy
   is a small script over the same listing loop the compression tool already
   uses; without it, a bucket-level mistake is unrecoverable.
 * **Test one restore.** An untested backup is a belief. Restore into a scratch
@@ -538,7 +538,7 @@ if any of these patterns ever reaches `dist/`.
   it monthly.
 * **Storage size / egress** — the bucket is public and thumbnails are full-size
   downloads (transforms are Pro-only; `getThumbnailUrl()` deliberately returns
-  the plain CDN URL, CLAUDE.md §7). Egress is therefore the cost line that will
+  the plain CDN URL, AGENTS.md §7). Egress is therefore the cost line that will
   surprise first.
 * **Auth email rate limits** — sign-up confirmations are on the built-in SMTP
   until a real sender is configured; hitting the cap silently blocks
@@ -559,7 +559,7 @@ Today a render crash outside Step 2 produces a white screen and a console
 message nobody sees: the only boundary is `GrouperErrorBoundary`
 (`src/App.tsx:210`), used twice (`src/App.tsx:2790,2811`), and a repo-wide grep
 finds no `window.onerror` or `unhandledrejection` listener. Silent failure is
-also the codebase's documented default (CLAUDE.md §13 "Error Handling Pattern").
+also the codebase's documented default (AGENTS.md §13 "Error Handling Pattern").
 
 The migration below follows the exact conventions of
 `supabase/migrations/analytics_events.sql`: additive, idempotent, RLS with an
@@ -873,7 +873,7 @@ There is no fallback path — the browser is the only client. Behaviour today:
   `getSession()` fails and the app is stuck on the loading screen or the Auth
   screen.
 * **Mid-session:** the app keeps working locally to a surprising degree. The
-  four item arrays live in `workflowStore` (CLAUDE.md §8), so grouping and
+  four item arrays live in `workflowStore` (AGENTS.md §8), so grouping and
   editing continue; the 2 s debounced auto-save just fails
   (`src/App.tsx:1906`), and a synchronous localStorage backup of the current
   items was already written before the network call
@@ -881,7 +881,7 @@ There is no fallback path — the browser is the only client. Behaviour today:
   (`public/sw.js:66-99`, which returns a stale entry on network error at
   `public/sw.js:96`).
 * **What is actually lost:** anything not in that localStorage backup — and the
-  backup is `ultraSlimForBackup`, 7 fields (CLAUDE.md §11). Descriptions,
+  backup is `ultraSlimForBackup`, 7 fields (AGENTS.md §11). Descriptions,
   prices and tags typed during the outage are held in memory only until the next
   successful save.
 * **Gap worth closing:** the user is never told. Auto-save failure is silent, so
@@ -909,15 +909,15 @@ Operational consequences:
 * `app_errors` (§6.1) should receive an explicit `reportError('manual', ...)`
   from the 0-rows branches; they are currently `console.warn` only.
 * Before debugging any duplicate-batch report, confirm which RLS state
-  production is in (CLAUDE.md §16 flags this as unverified).
+  production is in (AGENTS.md §16 flags this as unverified).
 
 ### 7.3 Auto-save and the localStorage backup
 
 Debounce is 2000 ms with an in-flight mutex (`src/App.tsx:1853-1857,1906`), and
 the mutex exists because two concurrent saves both seeing "0 rows updated" used
-to create duplicate batches. Do not reduce the debounce (CLAUDE.md §11). The
+to create duplicate batches. Do not reduce the debounce (AGENTS.md §11). The
 localStorage keys are load-bearing and renaming any of them drops user work
-(CLAUDE.md §1) — worth repeating here because it is an *operational* hazard, not
+(AGENTS.md §1) — worth repeating here because it is an *operational* hazard, not
 just a coding one: a well-meaning "rebrand the storage keys to acadia_*" commit
 would silently discard every in-progress batch on the next load.
 
@@ -940,7 +940,7 @@ Residual staleness risks, in order:
    also makes `app_errors.app_version` meaningful.
 2. **Image cache TTL.** 7 days (`public/sw.js:29`) with
    stale-while-revalidate. After a crop re-upload to the *same* storage path
-   (CLAUDE.md §15), a user can see the pre-crop image until the background
+   (AGENTS.md §15), a user can see the pre-crop image until the background
    refresh lands. To bust it deliberately, bump `CACHE_NAME`
    (`public/sw.js:28`) — the activate handler deletes every other cache name.
    Note that bumping it discards all 4,854 cached images, so do it only when the
@@ -973,7 +973,7 @@ Residual staleness risks, in order:
 Pages + CDN scales past any realistic user count for this product. The relevant
 limits are per-session, not per-fleet: the entry bundle is 1.24 MB raw / 361 kB
 gzip (measured via `npm run build`), plus a 361 kB lazy chunk for the built-in
-brand vocabulary that only loads when the Brands tab opens (CLAUDE.md §15).
+brand vocabulary that only loads when the Brands tab opens (AGENTS.md §15).
 Acceptable for a daily-driver tool on desktop; a code-split of the 1.24 MB entry
 chunk is a performance task, not an ops one.
 
@@ -981,7 +981,7 @@ chunk is a performance task, not an ops one.
 
 * **Free tier is not viable for production.** Projects pause after inactivity,
   there are no backups, and storage transforms are unavailable — which is why
-  `getThumbnailUrl()` returns full-size CDN URLs (CLAUDE.md §7). Pro (~$25/mo)
+  `getThumbnailUrl()` returns full-size CDN URLs (AGENTS.md §7). Pro (~$25/mo)
   is the day-one cost and unlocks real thumbnails, daily backups and PITR.
 * **Compute:** the workload is thin — mostly single-row upserts and a few
   paginated scans. The micro instance suffices until the `products` /
@@ -995,7 +995,7 @@ chunk is a performance task, not an ops one.
 
 ### 8.3 Storage and egress — the real cost line
 
-4,854 files, all already compressed to ~400 kB average (CLAUDE.md §15: 2,260 MB
+4,854 files, all already compressed to ~400 kB average (AGENTS.md §15: 2,260 MB
 saved, 89% reduction). That is roughly 2 GB of objects. The problem is not
 storage, it is **egress**: the bucket is public, thumbnails are full-size
 downloads, and Step 2 renders hundreds of images per session. One user opening a
@@ -1017,19 +1017,19 @@ Levers, cheapest first:
 * **PostgREST caps responses at 1000 rows.** The two big reads paginate
   explicitly (`src/lib/libraryService.ts:22-23,59,94-95,121`). Any new
   full-table read must do the same or it silently truncates.
-* **URL length on `IN()` lists.** Chunked at 100 IDs (CLAUDE.md §11); 794+ IDs
+* **URL length on `IN()` lists.** Chunked at 100 IDs (AGENTS.md §11); 794+ IDs
   in one clause returns 400.
 * **Realtime:** one presence channel plus a per-session support channel
   (`src/lib/supportService.ts:143`). Concurrent-connection limits are
   plan-bound; the polling fallback means an exceeded limit degrades rather than
   breaks.
 * **Edge Functions:** `shopify-titles` paginates Shopify 250/page with a
-  200-page cap (CLAUDE.md §5). A merchant with >50k products silently truncates
+  200-page cap (AGENTS.md §5). A merchant with >50k products silently truncates
   the dedup set — a correctness cliff worth an explicit log line.
 
 ### 8.5 Multi-tenancy readiness
 
-`multi_org_tenancy.sql` is code-complete but, per CLAUDE.md §16, **not yet
+`multi_org_tenancy.sql` is code-complete but, per AGENTS.md §16, **not yet
 applied**. Until it is, every workspace shares one dataset. That is the single
 biggest blocker to onboarding a second paying customer, and it is a *migration*
 task, not a code task — which is exactly why §5.1's ledger and §3.2's staging
@@ -1049,7 +1049,7 @@ project matter more than anything else in this review.
 - [ ] If the change touches an Edge Function: `deno check` clean, and the
       function's secrets exist in the target project.
 - [ ] If the change touches storage-key names, `slim()` fields, or RLS: re-read
-      CLAUDE.md §18 "Do Not" first.
+      AGENTS.md §18 "Do Not" first.
 
 ### Deploy
 
@@ -1104,7 +1104,7 @@ project matter more than anything else in this review.
   headers per location.
 * **Which migrations are actually applied to production.** Not knowable from the
   repo; `supabase/migrations/README.md:1` is a one-line stub. §5.1 gives the
-  queries to reconstruct it. This also means CLAUDE.md §16's "migration not yet
+  queries to reconstruct it. This also means AGENTS.md §16's "migration not yet
   run" entries could not be confirmed.
 * **Whether Supabase is on Free or Pro**, and whether PITR is enabled.
   `VITE_STORAGE_LIMIT_GB` defaults to 100 in code (`src/App.tsx:2638`), which

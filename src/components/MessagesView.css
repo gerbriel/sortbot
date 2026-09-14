@@ -95,7 +95,7 @@
   background: var(--accent);
   border-color: var(--accent);
   /* Solid accent fill + --ink-950 label: the convention that makes the palette
-     swappable in either direction (CLAUDE.md §1). */
+     swappable in either direction (AGENTS.md §1). */
   color: var(--ink-950);
 }
 

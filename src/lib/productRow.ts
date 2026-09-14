@@ -36,7 +36,7 @@ import { publicImageUrl, thumbnailImageUrl } from './storageUrls';
  *     Step-2 card / Step-3 preview then CSS-rotate it a second time. 90 + 90 =
  *     180, i.e. exactly "upside down". Which of the two rows sorted first was a
  *     `position` tie, i.e. arbitrary DB row order — hence "randomly".
- *     `storagePath` is the authoritative image reference (CLAUDE.md §11); the
+ *     `storagePath` is the authoritative image reference (AGENTS.md §11); the
  *     DB list stays the fallback for items that have none.
  *  3. `descriptionStrategy` — startup: `plain(row) || item || ''` (falls back to
  *     the item when the row's HTML renders empty). open-batch:
@@ -122,7 +122,7 @@ export function cleanSzTitle(title: string): string {
  * and during gap-fill. Both original copies were byte-identical.
  *
  * `capturedAt` is deliberately absent: no `products` column holds it, so
- * DB-built items have no date until the EXIF rescan runs (CLAUDE.md §14 #17).
+ * DB-built items have no date until the EXIF rescan runs (AGENTS.md §14 #17).
  */
 export function productRowToClothingItem(
   row: ProductRowLite,

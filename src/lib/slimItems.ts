@@ -5,7 +5,7 @@ import type { ClothingItem } from '../App';
  * verbatim from App.tsx:autoSaveWorkflow (refactor Stage 3) so the
  * save→reload contract is unit-testable.
  *
- * INVARIANT (CLAUDE.md §11): anything NOT preserved here must be recoverable
+ * INVARIANT (AGENTS.md §11): anything NOT preserved here must be recoverable
  * from the products/product_images tables or reconstructible from storagePath.
  * Adding a field to ClothingItem that can't be recovered from the DB means
  * adding it here too — otherwise it silently vanishes on reload.
@@ -55,7 +55,7 @@ export type PersistedWorkflowItem = SlimWorkflowItem & Partial<ClothingItem>;
  * Widen persisted items to `ClothingItem` for the restore paths.
  *
  * This IS a lie and it is deliberately in one place: a persisted item has no
- * `file` (File objects cannot be serialized, CLAUDE.md §18 #6) and, since the
+ * `file` (File objects cannot be serialized, AGENTS.md §18 #6) and, since the
  * slimming, no `preview` either — both are required on `ClothingItem`. Every
  * caller immediately rebuilds `preview`/`imageUrls`/`thumbnailUrl` from
  * `storagePath` (§11) and nothing reads `file` off a restored item, so the cast

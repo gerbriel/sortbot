@@ -73,7 +73,7 @@ Three sit inside per-item loops, which is what makes them a performance problem 
 `debugLogger.dbg()` early-returns when disabled, but **its arguments are evaluated eagerly at the
 call site**: `App.tsx:1526` builds `[...new Set(items.map(...).filter(...))].join()` over 1,500
 items on every category assignment with debug *off* (same at `App.tsx:1624`,
-`ImageUpload.tsx:409`). CLAUDE.md §5's "zero-cost when disabled" holds for formatting, not for
+`ImageUpload.tsx:409`). AGENTS.md §5's "zero-cost when disabled" holds for formatting, not for
 argument construction.
 
 ---
@@ -90,7 +90,7 @@ Risk = chance of behavioural change.
 | F3 | **High** | `ImageGrouper.tsx:784`, `:743` | `setSelectionBox()` on **every** `mousemove` and **every** rAF frame → 60–120 full 1,500-card renders/second during a rubber-band drag | Keep the box in a ref, write `style` imperatively, `setState` only on mouseup | **M** | Med |
 | F4 | **High** | `productService.ts:251-318` + `:351-366` | `saveBatchToDatabase` awaits one `product_images` upsert **per image** inside a sequential per-group loop → **~1,875 serial round trips ≈ 150 s** for one Save Batch | Collect rows, one chunked bulk upsert | **M** | Low |
 | F5 | **High** | `imageTransforms.ts:17` | `_imgCache` is an unbounded `Map<string, HTMLImageElement>` for the tab's lifetime. Decoded RGBA = `w·h·4` → **16 MB/image, 24 GB at 1,500**. Tab OOMs at ~130–250 images | Byte-budgeted LRU (~50 entries), or `ImageBitmap` + `close()` | **M** | Low |
-| F6 | **High** | `libraryData.ts:246` (also `:162`, `:277`) | `makeBatchName(batch)` called **per item**, not per batch → **~2.0 s of `Intl` work** inside every `Library.loadAll` when `batch_name` is null (common — CLAUDE.md §14.6) | Hoist above the loop / memoize per batch id | **S** | None |
+| F6 | **High** | `libraryData.ts:246` (also `:162`, `:277`) | `makeBatchName(batch)` called **per item**, not per batch → **~2.0 s of `Intl` work** inside every `Library.loadAll` when `batch_name` is null (common — AGENTS.md §14.6) | Hoist above the loop / memoize per batch id | **S** | None |
 | F7 | **High** | `App.tsx:1819-1830` | The localStorage backup is **deliberately un-debounced**: a 393 KB `map` + `JSON.stringify` + synchronous `setItem` on every one of 7 call sites, i.e. every group/category click and every keystroke. `QuotaExceededError` swallowed at `:1834` | Debounce to ~1 s, or fold into the existing 2 s timer | **S** | Low |
 | F8 | **High** | `slimItems.ts:41-43` | `imageUrls` + `thumbnailUrl` are **51 % of the 1,067 KB autosave payload** and both are byte-identical re-derivations of `storagePath` — restore rebuilds them from `storagePath` anyway (`App.tsx:686-695`) | Omit both when `storagePath` is present | **S** | Low |
 | F9 | **High** | `App.tsx:301-322` | `fetchStorageUsage` lists the bucket root then issues **one more `storage.list()` per product folder** (folders always have `metadata: null`) → **~2,500 sequential requests** on every sign-in and after every upload | One recursive/paginated listing, or a stored counter | **M** | Low |
@@ -102,7 +102,7 @@ Risk = chance of behavioural change.
 | F15 | Med | `ImageGrouper.tsx:1046-1048` | `prev.map(existing => items.find(...))` — **O(n²) ≈ 1.1 M comparisons** per `items` change. An id→item Map is already built at `:1032` and not used | Use the Map | **S** | None |
 | F16 | Med | `ComprehensiveProductForm.tsx:25-40` | `updateGroupField` copies the 1,500-array, does an **O(n) `findIndex` per group member**, and then **mutates the live store objects in place** (`:31`, `:36`) — which makes per-item memoization structurally impossible | Map lookup + immutable per-item copy | **S** | Low |
 | F17 | Med | `ImageGrouper.tsx:1891-1892`, `:1886` | `localeCompare` with an options object never hits V8's fast path → **~17,700 `Intl.Collator` builds + ~35,400 `nameKey` calls** per sort (26–106 ms) | Module-level `Intl.Collator` + precomputed sort keys | **S** | None |
-| F18 | Med | `GoogleSheetExporter.tsx:346-440` | The preview table renders **every** product × 54 columns with per-cell inline styles — 375 rows = **20,250 `<td>`** — unmemoized, inside an always-mounted `<details>`. (CLAUDE.md says "up to 10 products"; the code has no cap) | Cap at 10 rows + `useMemo` the pipeline | **S** | Low |
+| F18 | Med | `GoogleSheetExporter.tsx:346-440` | The preview table renders **every** product × 54 columns with per-cell inline styles — 375 rows = **20,250 `<td>`** — unmemoized, inside an always-mounted `<details>`. (AGENTS.md says "up to 10 products"; the code has no cap) | Cap at 10 rows + `useMemo` the pipeline | **S** | Low |
 | F19 | Med | `imageTransforms.ts:35,39,49,77,86,101,130,149,150` | 6–9 unconditional `console.log`s **per image** in `createTransformedFile` → ~10,000 console entries per 1,500-item paste-crop | Route through `log.*` | **S** | None |
 | F20 | Med | `PDG:2120`, `:2130` | `handlePasteCrop` calls `setProcessedItems(prev => prev.map(...))` **once per item** → 1,500 full array rebuilds, 1,500 store notifications, 1,500 App+PDG render pairs, 1,500 × 393 KB synchronous localStorage writes (**≈ 533 MB**) | Batch per concurrency group | **M** | Low |
 | F21 | Med | `PDG:2284`, `:2325`; `:1972-2010` | Magnifier and crop-drag `setState` a **new object per mouse event**, unthrottled → full PDG subtree render at 60–120 Hz (incl. ~42 `new RegExp` from the chip row and 14 `PresetBadge` remounts) | rAF-coalesce, or drive with CSS vars on a ref | **M** | Low |
@@ -326,7 +326,7 @@ impossible), F38, F28, F39, F21, F18's `useMemo`. Expected effect: a Step-3 keys
 touching Step 2 entirely.
 **Risk note:** `ComprehensiveProductForm`'s props are already referentially stable, so memoizing
 it is free. `VoiceCommandTable` needs `handleTableFieldChange` in a `useCallback` first or the memo
-is defeated every render. Verify F2 against CLAUDE.md §18.11 (PDG writes must stay targeted
+is defeated every render. Verify F2 against AGENTS.md §18.11 (PDG writes must stay targeted
 per-id/per-group patches) and the 104-test suite.
 
 **Tier 3 — hot-path rewrites (≈3–5 days).**

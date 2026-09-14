@@ -41,7 +41,7 @@ COPY . .
 # Where the app will be served from. "/" for a container behind its own
 # hostname; "/sortbot/" only if you are reproducing the GitHub Pages layout.
 # vite.config.ts derives the base from GITHUB_ACTIONS, so it is overridden here
-# on the command line instead of editing that file (CLAUDE.md §1 pins the Pages
+# on the command line instead of editing that file (AGENTS.md §1 pins the Pages
 # value). `npm run build -- --base=X` appends the flag to `vite build`.
 ARG BASE_PATH=/
 

@@ -96,7 +96,7 @@ the startup path.
 (`src/lib/productRow.ts`), matching the open-batch path.
 
 A restored item now resolves its image from its **own** `storagePath` (the authoritative
-reference per CLAUDE.md §11), which is the *un*-baked original — so the single CSS rotation
+reference per AGENTS.md §11), which is the *un*-baked original — so the single CSS rotation
 is correct. The row's list stays the fallback for an item that has no image reference at all,
 which is the legacy-recovery case the two-stage DB fallback exists for. Nothing else needed
 changing: `createTransformedFile` reads `item.preview` and is idempotent across repeat Save
@@ -402,7 +402,7 @@ saveStatus.begin(); saveStatus.end(true);
 2. **`registerItemsInDB`'s comment was wrong, not its code.** It claims to keep
    `product_group` in sync; `ignoreDuplicates: true` means it never can. Left as-is
    deliberately (§18 #3) — the restore no longer depends on that column.
-3. **CLAUDE.md updates the orchestrator owns:** §11 should record that the restore
+3. **AGENTS.md updates the orchestrator owns:** §11 should record that the restore
    arbitration lives in `lib/restoreSource.ts` and keys on `workflow_state.lastEditedAt`, not
    `last_opened_at`; §5 needs `restoreSource.ts` and `selectionGesture.ts`; §3's coverage list
    needs their two test files; §14 can drop "auto-save failures are silent".

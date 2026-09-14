@@ -19,7 +19,7 @@ to prove impact.
 | 3 | Critical | CONFIRMED | `src/components/ImageUpload.tsx:282` + `:363` + `:411` | Cancelling an upload deletes the Storage files but leaves the `products`/`product_images` rows **and** the items already pushed to state | user cancels a large upload | delete DB rows for `uploadedPaths` before the storage remove; tell parent to drop the items | M | Low |
 | 4 | High | CONFIRMED | `src/lib/workflowBatchService.ts:254` | `.in('product_id', batchProductIds)` is **unchunked** → PostgREST 400 above ~700 ids → `imageRows` undefined → **every storage file in the batch leaks** | deleting a batch with >~700 images | chunk at 100 like every other call site | S | Low |
 | 5 | High | CONFIRMED | `src/lib/workflowBatchService.ts:289`,`:319` vs `:322` | Storage files and `products` rows are deleted **before** the authoritative `workflow_batches` delete is confirmed; the products/images deletes are never checked for 0 rows | RLS-blocked delete, or the batch-row delete fails | delete the batch row first (or verify claim-ownership succeeded) and check affected rows at every step | M | Med |
-| 6 | High | CONFIRMED | `src/App.tsx:1732` (+ `:1602`) | Debounced `products` upsert writes `batch_id` with `ignoreDuplicates: false` — the exact `batch_id`-theft pattern CLAUDE.md §18 #3 forbids | items in the working set whose DB row belongs to another batch | drop `batch_id` from these two upserts | S | Low |
+| 6 | High | CONFIRMED | `src/App.tsx:1732` (+ `:1602`) | Debounced `products` upsert writes `batch_id` with `ignoreDuplicates: false` — the exact `batch_id`-theft pattern AGENTS.md §18 #3 forbids | items in the working set whose DB row belongs to another batch | drop `batch_id` from these two upserts | S | Low |
 | 7 | High | CONFIRMED | `src/App.tsx:2096` | ±24 h orphan-product query has **no batch / user / org filter and no limit**, with the full nested select | opening any batch that has no `products` rows | scope by `user_id`/`org_id`, add `.limit()`, select only `id` + image urls | S | Low |
 | 8 | High | CONFIRMED | `src/lib/tusUpload.ts:51` | `new Promise(async (resolve, reject) => …)` — a throw from `getSession()` becomes an **unhandled rejection and the promise never settles** → the upload loop hangs forever | `auth.getSession()` rejects (offline blip) | move the async body inside, wrap in try/catch, reject on throw | S | Low |
 | 9 | High | CONFIRMED | `src/components/ProductDescriptionGenerator.tsx:284` | Unload flush uses a plain `fetch` (no `keepalive`/`sendBeacon`) despite the comment claiming otherwise → edits made in the last 500 ms are lost on tab close | close/refresh within the debounce window | `sendBeacon` to the REST endpoint, or `fetch(..., {keepalive:true})` | M | Low |
@@ -436,7 +436,7 @@ it('does not delete storage or products when the batch row delete affects 0 rows
 
 ## 4. `batch_id` theft is still live in two upserts (finding 6) + the unscoped orphan window (7)
 
-CLAUDE.md §18 #3 says `registerItemsInDB`'s `products` upsert must never overwrite
+AGENTS.md §18 #3 says `registerItemsInDB`'s `products` upsert must never overwrite
 `batch_id`, and it does not (`App.tsx:529` uses `ignoreDuplicates: true`). But two other
 upserts do exactly what the rule forbids:
 
@@ -858,7 +858,7 @@ restore bug twice as hard to read and races `registerItemsInDB` against itself.
 
 ---
 
-## 9. CLAUDE.md §14 known-bugs check
+## 9. AGENTS.md §14 known-bugs check
 
 | § | Claim | Verdict |
 |---|---|---|

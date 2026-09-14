@@ -51,7 +51,7 @@
 -- FUNCTION — every one of them sits in `app_private`, or has EXECUTE revoked
 -- from anon and authenticated. That is the goal, and it is also the hazard:
 -- the linter will no longer warn you about the NEXT one. The grouping rules in
--- CLAUDE.md §18 are from here on the only thing standing between a new
+-- AGENTS.md §18 are from here on the only thing standing between a new
 -- SECURITY DEFINER function and the anonymous role. Read them before adding
 -- one.
 -- ============================================================================

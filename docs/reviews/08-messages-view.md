@@ -3,7 +3,7 @@
 Implemented against the working tree at commit `c60e437` (branch `main`, tree
 already dirty from passes 01–07 and a concurrent Finance module in new files).
 Nothing was committed. No dependency added, no `sortbot_*` key renamed, no
-`confirm()`/`prompt()` introduced, no `CLAUDE.md` / `README.md` / `CHANGELOG.md`
+`confirm()`/`prompt()` introduced, no `AGENTS.md` / `README.md` / `CHANGELOG.md`
 edit.
 
 **The request, verbatim:** *"i like the inbox window but also want new messages
@@ -21,7 +21,7 @@ timers and two thread lists that disagree the moment one of them writes.
 ### 1.1 `src/lib/supportStore.ts` — one list, one channel, one timer
 
 A dependency-free store on React's own `useSyncExternalStore`, mirroring
-`workflowStore.ts` (CLAUDE.md §8). It holds the thread list and the availability
+`workflowStore.ts` (AGENTS.md §8). It holds the thread list and the availability
 flag, and **owns the subscription**:
 
 ```ts
@@ -138,7 +138,7 @@ description), `wide`, spacing from the shell's scale — `2rem` panel padding,
   landing page and left `available` false for up to 45 s after sign-in.
 - Lazy-loaded like the other tool views (`MessagesView`, 12.6 kB / 4.4 kB gz).
 - `.app-header .nav-badge` in `App.css` — the nav is the one inverted surface
-  (CLAUDE.md §1), so it sets its own literal `#ffffff` on `var(--danger)` and
+  (AGENTS.md §1), so it sets its own literal `#ffffff` on `var(--danger)` and
   reads correctly both outlined-on-black and filled-white-when-active.
 - `handleSignOut` calls `supportStore.reset()` so the next person on the machine
   never sees a flash of the previous account's conversations.
@@ -199,7 +199,7 @@ unverified:
 
 ---
 
-## 4. CLAUDE.md lines for the orchestrator to add
+## 4. AGENTS.md lines for the orchestrator to add
 
 **§5 (folder structure), under `components/`:**
 

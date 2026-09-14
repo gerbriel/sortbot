@@ -82,7 +82,7 @@ new_card as (
   insert into public.kanban_cards (org_id, column_id, title, notes, is_epic, rank, completed_at)
   select org.id, col.id,
          '[Upload] Compress All Batches (bucket-walk v2)',
-         'The cross-batch recompression tool (DB query + full storage-bucket walk) documented in CLAUDE.md has been removed from current source — only a placeholder comment remains (''Button hidden — compression runs automatically on import''); recompressAllBatches no longer exists in ImageUpload.tsx.
+         'The cross-batch recompression tool (DB query + full storage-bucket walk) documented in AGENTS.md has been removed from current source — only a placeholder comment remains (''Button hidden — compression runs automatically on import''); recompressAllBatches no longer exists in ImageUpload.tsx.
 
 Subsystem: Step 1 — Image upload pipeline
 Atlas status at seed: dead (cleanup / deletion candidate)
@@ -118,14 +118,14 @@ new_card as (
   insert into public.kanban_cards (org_id, column_id, title, notes, is_epic, rank, completed_at)
   select org.id, col.id,
          '[Group] Step 2 sidebar preset picker (removed)',
-         'The former handleApplyPreset flow and green per-preset buttons in the Step 2 right sidebar no longer exist in App.tsx — preset application now happens exclusively through CategoryZones preset zones (CLAUDE.md still documents the old path).
+         'The former handleApplyPreset flow and green per-preset buttons in the Step 2 right sidebar no longer exist in App.tsx — preset application now happens exclusively through CategoryZones preset zones (AGENTS.md still documents the old path).
 
 Subsystem: Step 2 — Grouping, categorization, presets application
 Atlas status at seed: dead (cleanup / deletion candidate)
 
 Wiring:
 • superseded by: CategoryZones preset drop zones + click-assign
-• doc drift: CLAUDE.md §10/§15 still describe handleApplyPreset and the preset pill buttons
+• doc drift: AGENTS.md §10/§15 still describe handleApplyPreset and the preset pill buttons
 
 [seeded: feature-atlas 2026-07-19]',
          false,
@@ -471,7 +471,7 @@ new_card as (
   insert into public.kanban_cards (org_id, column_id, title, notes, is_epic, rank, completed_at)
   select org.id, col.id,
          '[Upload] Manual EXIF rescan button / onCapturedAtUpdated callback',
-         'App.tsx still defines handleCapturedAtUpdated (patches capturedAt across all four arrays + auto-saves) and passes it as the onCapturedAtUpdated prop, but ImageUpload renames it to _onCapturedAtUpdated and never calls it — the yellow ''Fix Sort Order (EXIF rescan)'' button described in CLAUDE.md no longer exists in the component.
+         'App.tsx still defines handleCapturedAtUpdated (patches capturedAt across all four arrays + auto-saves) and passes it as the onCapturedAtUpdated prop, but ImageUpload renames it to _onCapturedAtUpdated and never calls it — the yellow ''Fix Sort Order (EXIF rescan)'' button described in AGENTS.md no longer exists in the component.
 
 Subsystem: Step 1 — Image upload pipeline
 Atlas status at seed: built-not-wired
@@ -1000,7 +1000,7 @@ Atlas status at seed: partial
 Wiring:
 • triggered by: batch card Duplicate button
 • creates the hazard mitigated by: storageSafety shared-file guard
-• noted in CLAUDE.md as: behavior after duplication not fully tested
+• noted in AGENTS.md as: behavior after duplication not fully tested
 
 [seeded: feature-atlas 2026-07-19]',
          false,
@@ -3748,7 +3748,7 @@ insert into public.kanban_tasks (org_id, card_id, title, notes, status, rank, co
 select nc.org_id, nc.id, t.title, t.notes, 'done', t.rank, now()
 from new_card nc
 cross join (values
-  ('Native confirm() guard', 'Uses window.confirm — a known inconsistency with the app''s inline-modal convention (CLAUDE.md Do-Not #12 acknowledges it).', 1000.0),
+  ('Native confirm() guard', 'Uses window.confirm — a known inconsistency with the app''s inline-modal convention (AGENTS.md Do-Not #12 acknowledges it).', 1000.0),
   ('Session teardown', 'Clears currentBatchId/ref, sortbot_current_batch_id + batch_number localStorage, batchRowInsertedRef, pending upload chunk timer.', 2000.0)
 ) as t(title, notes, rank);
 
@@ -5564,7 +5564,7 @@ Atlas status at seed: done
 Wiring:
 • consumed by: ~20 files — App, Library, ImageGrouper, ImageUpload, PDG, CategoryZones, KanbanBoard, LazyImg, and nearly every lib service (workflowBatchService, orgService, kanbanService, vocabService, proseService, etc.)
 • triggered by: 🐛 button in App.tsx or window.__SORTBOT_DEBUG__ = true in DevTools
-• known gap: ~100 raw console.log calls have crept back in outside this system (CLAUDE.md Known Bugs #15)
+• known gap: ~100 raw console.log calls have crept back in outside this system (AGENTS.md Known Bugs #15)
 
 [seeded: feature-atlas 2026-07-19]',
          true,
@@ -5846,13 +5846,13 @@ new_card as (
   insert into public.kanban_cards (org_id, column_id, title, notes, is_epic, rank, completed_at)
   select org.id, col.id,
          '[Infra] Step 2 render error boundary (GrouperErrorBoundary)',
-         'Class-based React error boundary wrapping ImageGrouper + CategoryZones: catches render errors, shows the message with a please-report banner and a Retry button that re-mounts the grouper without losing app state. CLAUDE.md §16 still lists error boundaries as missing — doc drift.
+         'Class-based React error boundary wrapping ImageGrouper + CategoryZones: catches render errors, shows the message with a please-report banner and a Retry button that re-mounts the grouper without losing app state. AGENTS.md §16 still lists error boundaries as missing — doc drift.
 
 Subsystem: Infrastructure, performance, debug, dead/unwired code
 Atlas status at seed: done
 
 Wiring:
-• note: contradicts CLAUDE.md §16 Error boundaries Missing (doc drift)
+• note: contradicts AGENTS.md §16 Error boundaries Missing (doc drift)
 • wraps: Step 2 ImageGrouper + CategoryZones in App.tsx
 
 [seeded: feature-atlas 2026-07-19]',

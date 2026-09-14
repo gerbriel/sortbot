@@ -1,6 +1,6 @@
 # 13 — Function hardening (Supabase linter 0011 / 0028 / 0029)
 
-**Date:** 2026-09-14 · **Deliverable:** `supabase/migrations/security_function_hardening.sql` (one file, additive, idempotent, rollback included) · **No source file, CLAUDE.md, README or CHANGELOG was touched. No SQL was run against Supabase.**
+**Date:** 2026-09-14 · **Deliverable:** `supabase/migrations/security_function_hardening.sql` (one file, additive, idempotent, rollback included) · **No source file, AGENTS.md, README or CHANGELOG was touched. No SQL was run against Supabase.**
 
 ---
 
@@ -163,7 +163,7 @@ Expected linter result: **0011 gone**, **0028 gone**, **0029 down to the nine Gr
 
 ## 6. Ready-to-paste doc lines
 
-### CLAUDE.md §9 — under *Supabase*, after the **RLS** bullets
+### AGENTS.md §9 — under *Supabase*, after the **RLS** bullets
 
 ```markdown
 - **Function privileges (Sept 2026, `supabase/migrations/security_function_hardening.sql`):** `CREATE FUNCTION`
@@ -183,13 +183,13 @@ Expected linter result: **0011 gone**, **0028 gone**, **0029 down to the nine Gr
   hardening file afterwards.**
 ```
 
-### CLAUDE.md §16 — new row in the status table
+### AGENTS.md §16 — new row in the status table
 
 ```markdown
 | Function-privilege hardening (linter 0011/0028/0029) | **Written — migration not yet run** | `supabase/migrations/security_function_hardening.sql`: moves the 8 policy/default helpers into `app_private` behind same-name SECURITY INVOKER wrappers, revokes PUBLIC/anon from every SECURITY DEFINER function, revokes `authenticated` too from the 15 trigger/guard/maintenance ones, and pins `search_path` on `crm_touch_updated_at` + `finance_touch_updated_at`. Additive, idempotent, rollback at the bottom; verified on a throwaway PG 14 (rollback restores the exact pre-state). Ship code first — no client change is needed — then run the SQL. |
 ```
 
-### CLAUDE.md §18 — new "Do Not" entries
+### AGENTS.md §18 — new "Do Not" entries
 
 ```markdown
 18. **Do not `create or replace` one of the eight org/founder helpers in `public`.** `is_beta_admin`,
@@ -293,11 +293,11 @@ General rule, unchanged and now measured: **after replaying any migration, run `
 
 ### 7.4 ⚠ The linter is now blind — §18 is the only remaining guard
 
-After this file **no SECURITY DEFINER function anywhere in the exposed schema is executable by `anon` or `authenticated`** (measured: `NONE`). That is the goal, and it is also the hazard: **0028 and 0029 have nothing left to report, so they will not warn you about the next one either.** Ten SECURITY DEFINER functions still sit in `public` (the triggers, guards and prune routines) — they are invisible to the linter only because their EXECUTE is revoked, and a single stray `grant execute … to authenticated` would re-expose one without a peep. From here on, the grouping rules in CLAUDE.md §18 are the control, not the linter.
+After this file **no SECURITY DEFINER function anywhere in the exposed schema is executable by `anon` or `authenticated`** (measured: `NONE`). That is the goal, and it is also the hazard: **0028 and 0029 have nothing left to report, so they will not warn you about the next one either.** Ten SECURITY DEFINER functions still sit in `public` (the triggers, guards and prune routines) — they are invisible to the linter only because their EXECUTE is revoked, and a single stray `grant execute … to authenticated` would re-expose one without a peep. From here on, the grouping rules in AGENTS.md §18 are the control, not the linter.
 
 ### 7.5 Paste-ready doc lines (follow-up)
 
-**CLAUDE.md §9 — replace the last sentence of the §6 block above ("…keep `authenticated` … 42501.") with:**
+**AGENTS.md §9 — replace the last sentence of the §6 block above ("…keep `authenticated` … 42501.") with:**
 
 ```markdown
   (3) **The nine RPC-facing functions are split** (`security_rpc_wrappers.sql`): the SECURITY DEFINER body
@@ -312,13 +312,13 @@ After this file **no SECURITY DEFINER function anywhere in the exposed schema is
   the reverse (the first file's `drop schema app_private restrict` refuses otherwise).
 ```
 
-**CLAUDE.md §16 — replace the row from §6 with:**
+**AGENTS.md §16 — replace the row from §6 with:**
 
 ```markdown
 | Function-privilege hardening (linter 0011/0028/0029) | **Done — both migrations run** | `security_function_hardening.sql` (helpers → `app_private` behind invoker wrappers; EXECUTE revoked from PUBLIC/anon everywhere, and from `authenticated` too on the 15 trigger/guard/maintenance functions; `search_path` pinned on the two touch triggers) then `security_rpc_wrappers.sql` (the nine client RPCs split into an `app_private` definer body + an identical-signature `public` invoker wrapper). Linter: 0011, 0028 and 0029 all clear. No client code changed. `app_errors.sql` is **not applied in production** — its function is handled but inert. Both files are idempotent; re-run them in that order after replaying any migration. |
 ```
 
-**CLAUDE.md §18 — amend rule 18 and add rule 21:**
+**AGENTS.md §18 — amend rule 18 and add rule 21:**
 
 ```markdown
 18. **Do not `create or replace` an org/founder helper OR a client RPC in `public`.** The eight helpers
@@ -349,17 +349,17 @@ After this file **no SECURITY DEFINER function anywhere in the exposed schema is
   answers exactly as before and **no client code changed** (verified: identical result hash, founder access,
   42501 for non-founders, zero anon reachability across all 18 functions, and a byte-identical layered
   rollback). Supabase's linter now reports nothing: 0011, 0028 and 0029 all clear. Note that this also means
-  the linter can no longer flag a NEW SECURITY DEFINER function — CLAUDE.md §18 is the guard from here.
+  the linter can no longer flag a NEW SECURITY DEFINER function — AGENTS.md §18 is the guard from here.
 ```
 
 ---
 
 ## Summary
 
-- Two new migrations, no source/CLAUDE.md/README/CHANGELOG edits, nothing committed, no SQL run against Supabase.
+- Two new migrations, no source/AGENTS.md/README/CHANGELOG edits, nothing committed, no SQL run against Supabase.
 - `security_function_hardening.sql` (§1–§6) shipped and is **live**: linter 0011 and 0028 gone, 0029 down to the nine client RPCs, exactly as predicted.
 - `security_rpc_wrappers.sql` (§7) clears those nine by splitting each into an `app_private` SECURITY DEFINER body + an identical-signature `public` SECURITY INVOKER wrapper — same arg names, DEFAULTs, `returns table` column order and volatility, so PostgREST and `src/` are untouched.
 - Verified on a throwaway PG 14 and destroyed: identical RPC result hash before/after, founder access intact, 42501 for non-founders, **0 of 18** anon-reachable, idempotent across three runs, layered rollback byte-identical.
 - Two rollback bugs were found *by* the harness and fixed: file 1 cascading over replay-bound policies, and file 2 restoring PUBLIC instead of the file-1 privilege shape.
 - `app_errors.sql` is **not applied in production** (its function is missing from the linter output) — handled but inert in both files; the Errors view stays empty until it is run.
-- After both files the linter can no longer see any SECURITY DEFINER function, so **CLAUDE.md §18 is the only remaining guard** — paste-ready §9/§16/§18/CHANGELOG text is in §6 and §7.5.
+- After both files the linter can no longer see any SECURITY DEFINER function, so **AGENTS.md §18 is the only remaining guard** — paste-ready §9/§16/§18/CHANGELOG text is in §6 and §7.5.

@@ -1,6 +1,6 @@
 # Arcadian — Deep Analysis & Scaling Roadmap
 
-*Written July 2026 against commit `28e9d9b`. Companion to [CLAUDE.md](CLAUDE.md) (codebase reference). Goal state: a multi-organization SaaS where each org has its own private workspace, team, categories/presets, and Shopify store connection — marketed to vintage resellers, starting in California.*
+*Written July 2026 against commit `28e9d9b`. Companion to [AGENTS.md](AGENTS.md) (codebase reference). Goal state: a multi-organization SaaS where each org has its own private workspace, team, categories/presets, and Shopify store connection — marketed to vintage resellers, starting in California.*
 
 ---
 
@@ -31,7 +31,7 @@ TUS resumable uploads (6 MB chunks that survive dropped connections), canvas com
 Static SPA + Supabase. No servers to babysit; the entire infra bill today is roughly one Supabase project. Every dollar of early revenue is margin.
 
 ### 2.7 The failure history is documented
-CLAUDE.md §15 is an unusually honest record of every race condition, RLS trap, and stale-closure bug found and fixed. For scaling, this is an asset: the sharp edges are *known and written down*, which is far better than unknown.
+AGENTS.md §15 is an unusually honest record of every race condition, RLS trap, and stale-closure bug found and fixed. For scaling, this is an asset: the sharp edges are *known and written down*, which is far better than unknown.
 
 ---
 
@@ -90,7 +90,7 @@ Ordered so that each phase de-risks the next. Rough sizing assumes current solo 
    org_invites   (org_id, email, role, token, expires_at)
    ```
    Add `org_id` (NOT NULL, FK) to `workflow_batches`, `products`, `product_images`, `categories`, `category_presets`, `export_batches`. Backfill everything current into a "founding org."
-2. **RLS rewrite:** replace shared-workspace policies with org-membership policies — `org_id IN (SELECT org_id FROM org_members WHERE user_id = auth.uid())` for SELECT/INSERT/UPDATE (use a `SECURITY DEFINER` helper function so the subquery is planned once); DELETE gated to `owner`/`admin` roles. **This preserves the collaborative feel** — the whole point of the current shared workspace survives, just scoped to the org. CLAUDE.md §18 items 1–2 get retired.
+2. **RLS rewrite:** replace shared-workspace policies with org-membership policies — `org_id IN (SELECT org_id FROM org_members WHERE user_id = auth.uid())` for SELECT/INSERT/UPDATE (use a `SECURITY DEFINER` helper function so the subquery is planned once); DELETE gated to `owner`/`admin` roles. **This preserves the collaborative feel** — the whole point of the current shared workspace survives, just scoped to the org. AGENTS.md §18 items 1–2 get retired.
 3. **Storage:** new path convention `{orgId}/{productId}/…`; flip bucket to **private** with signed URLs (or per-org-prefix policies). Every URL-reconstruction seam already funnels through `storagePath` → `getPublicUrl()`, so this is one function swap (`createSignedUrl`) plus cache handling — the discipline around `storagePath` finally pays off.
 4. **App layer:** an `OrgContext` (first justified use of React Context here), an org switcher in the header, invite/accept flow, member management page. Categories and presets become org-scoped, which they already almost are.
 5. **Migration for existing data:** founding org gets all current batches; the three existing user folders in storage map into it.
@@ -107,7 +107,7 @@ Ordered so that each phase de-risks the next. Rough sizing assumes current solo 
 4. **Security posture for customers:** private bucket (done in Phase 1), leaked-password protection on, rate limiting, signup email verification, a written privacy policy + ToS + DPA template.
 
 ### Phase 4 — The AI upgrade (post-revenue differentiator)
-1. **Vision auto-fill:** send each group's photos to a vision model (e.g. Claude via one Edge Function) to pre-fill brand, garment type, colors, era guess, condition notes, and flaw detection — voice becomes the *correction* layer instead of the entry layer. Pennies per listing; gate by plan. This turns "45 seconds per listing" into "10 seconds per listing" and is the demo that sells the product.
+1. **Vision auto-fill:** send each group's photos to a vision model (via one Edge Function) to pre-fill brand, garment type, colors, era guess, condition notes, and flaw detection — voice becomes the *correction* layer instead of the entry layer. Pennies per listing; gate by plan. This turns "45 seconds per listing" into "10 seconds per listing" and is the demo that sells the product.
 2. **Transcription fallback:** server-side Whisper-class STT for Safari/Firefox/iPad, removing the Chrome-only constraint.
 3. **Pricing intelligence (later):** comp suggestions from sold listings would be the third leg, but it needs data partnerships — park it.
 
@@ -130,7 +130,7 @@ Ordered so that each phase de-risks the next. Rough sizing assumes current solo 
    d. Stop writing the blob; `workflow_batches` becomes metadata only. The gap-fill cap, ±24h orphan window, and stolen-row deletion — the scariest heuristics in the app — all become dead code, because there's no second copy left to reconcile.
 
 ### Vision AI — a model with eyes, feeding the existing template engine
-- **Architecture:** one Edge Function `vision-analyze` (same server-side-key pattern as `shopify-titles`). Client sends a group's image URLs; the function calls Claude (Sonnet default, Haiku for cost) with a structured-output prompt returning strict JSON: brand, garment type, colors, era, material guess, condition notes, flaws[], printed text, per-field confidence.
+- **Architecture:** one Edge Function `vision-analyze` (same server-side-key pattern as `shopify-titles`). Client sends a group's image URLs; the function calls the vision model (Sonnet default, Haiku for cost) with a structured-output prompt returning strict JSON: brand, garment type, colors, era, material guess, condition notes, flaws[], printed text, per-field confidence.
 - **The knowledge bases become the grader, not casualties:** the prompt embeds the allowed vocabularies (57 COLOR_DNA names, category list, letter sizes) so vision output snaps to values the template/preset pipeline already understands. Vision fills fields → existing `generateProductDescription` runs unchanged → voice stays as the correction layer. Vision replaces typing, not the Mad Libs engine.
 - **UX:** "🔮 Analyze photos" per listing + "Analyze all" batch run (chunked with progress, like the compress tools). Results appear as visibly-AI suggestions; never overwrite a non-empty user field (same rule presets follow).
 - **Cost:** send the already-compressed 2000 px images (ideal input size); ≈ $0.01–0.04 per listing depending on model — ~$10/week at 300 listings. Gate by plan later.
@@ -171,7 +171,7 @@ Ordered so that each phase de-risks the next. Rough sizing assumes current solo 
 | 7 | Org switcher, invites, roles in the UI | 1 | Makes tenancy sellable |
 | 8 | Per-org Shopify connection + `shopify-publish` Edge Function | 2 | Converts "CSV exporter" into "lists to your store" |
 | 9 | Stripe billing tied to org plan + onboarding flow | 3 | Revenue switch |
-| 10 | Vision auto-fill Edge Function (Claude) + Safari STT fallback | 4 | The demo that closes California shops |
+| 10 | Vision auto-fill Edge Function (vision model) + Safari STT fallback | 4 | The demo that closes California shops |
 
 ---
 

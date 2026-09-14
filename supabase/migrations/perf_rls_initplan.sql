@@ -48,7 +48,7 @@
 -- the fact that every one of those policies sits on a table with tens of rows,
 -- not tens of thousands. Do not expect a plan change there; do not "fix" it by
 -- inlining the function body into the policy — that duplicates a security
--- boundary in two places (CLAUDE.md §18).
+-- boundary in two places (AGENTS.md §18).
 --
 -- ── `org_id in (select public.user_org_ids())` IS ALREADY OPTIMAL ───────────
 -- Every org-scoped policy from multi_org_tenancy.sql / listing_labels.sql /

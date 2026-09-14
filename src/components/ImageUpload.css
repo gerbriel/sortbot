@@ -845,7 +845,7 @@
 .dz-action--primary {
   background: var(--accent);
   border-color: var(--accent);
-  /* Solid accent fill takes the canvas ink — see CLAUDE.md §1. */
+  /* Solid accent fill takes the canvas ink — see AGENTS.md §1. */
   color: var(--ink-950);
 }
 

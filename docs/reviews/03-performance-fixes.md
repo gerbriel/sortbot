@@ -138,7 +138,7 @@ field, which is the same bet, already in production.
    — one URL **per group member**, not from one item's array — and `handleImagesGrouped` collapses
    the array to one element on the next Step-2 action anyway.
 
-> **CLAUDE.md §11 needs updating** (orchestrator): the `slim()` whitelist paragraph should say
+> **AGENTS.md §11 needs updating** (orchestrator): the `slim()` whitelist paragraph should say
 > `imageUrls`/`thumbnailUrl` are persisted **only for items with no `storagePath`**, and that
 > anything reading `workflow_state` must reconstruct both from `storagePath` — which §11 already
 > requires for `preview`. The §18 #5 warning ("do not call `slim()` without understanding what it
@@ -191,7 +191,7 @@ go through a ref refreshed every render rather than capturing the callbacks dire
 
 | # | Why not |
 |---|---|
-| **F18** — preview table renders *all* products × 54 columns, uncapped | The `useMemo` half is largely delivered by F2 (the exporter is memoized and its `items` prop is now stable, so the pipeline and the ~20,250 `<td>`s are built when items change, not on every App render). The **row cap was deliberately not added**: it is a visible change (fewer preview rows) and the gate for this pass is no behaviour change — even though CLAUDE.md §15 already *claims* "shows up to 10 products", so arguably the uncapped render is the regression. Exact code is in **Deferred** below. Wrapping the in-component pipeline in its own `useMemo` was also skipped: it is ~100 lines of interdependent consts feeding `rawProducts`, and the remaining re-runs are only the component's own two state updates per mount. |
+| **F18** — preview table renders *all* products × 54 columns, uncapped | The `useMemo` half is largely delivered by F2 (the exporter is memoized and its `items` prop is now stable, so the pipeline and the ~20,250 `<td>`s are built when items change, not on every App render). The **row cap was deliberately not added**: it is a visible change (fewer preview rows) and the gate for this pass is no behaviour change — even though AGENTS.md §15 already *claims* "shows up to 10 products", so arguably the uncapped render is the regression. Exact code is in **Deferred** below. Wrapping the in-component pipeline in its own `useMemo` was also skipped: it is ~100 lines of interdependent consts feeding `rawProducts`, and the remaining re-runs are only the component's own two state updates per mount. |
 | **F36** — `console.log(..., new Error().stack)` on every selection update; **F19** — 6–9 logs per image in `imageTransforms` | Outside the brief's "App restore/merge and PDG persistence" scope. Both are one-line deletions/`log.*` swaps and remain good next candidates. (The imageTransforms agent did retune one existing `[imgCache]` log to report the new byte accounting rather than a now-meaningless size.) |
 | **F9** (`fetchStorageUsage` ~2,500 sequential requests), **F11** (Library select-narrowing), **F15**, **F16**, **F20**–**F22**, **F26**–**F37**, **F39**, **F40**, **F42**–**F45** | Not in the seven-step brief. F16 (`updateGroupField` mutating live store objects in place) is worth flagging as the natural next step: it is what blocks *per-item* memoization, and F2 has now made everything above it memoizable. |
 | Restoring the React-Compiler purity guard (hoisting ImageGrouper's three in-body `await import(...)`) | Not in the brief, and it would change how those dynamic imports are structured in a file this pass already edited heavily. Worth doing on its own — the report is right that clean lint on `ImageGrouper`/`CategoryZones`/`PDG` is currently *not* evidence of render purity. |
@@ -280,7 +280,7 @@ which `stripCacheBust` does not remove, so each retry mints a **new cache key fo
     u.searchParams.delete('_retry');   // imageTransforms.ts retry suffix — same bytes, must share a key
 ```
 
-### `docs/reviews/…` / CLAUDE.md (this pass must not edit them)
+### `docs/reviews/…` / AGENTS.md (this pass must not edit them)
 
 1. **§11 slim contract** — see the F8 box above. This is the one documentation change that is
    load-bearing rather than cosmetic.
@@ -300,7 +300,7 @@ which `stripCacheBust` does not remove, so each retry mints a **new cache key fo
 
 ```diff
 -                  {products.map((product, idx) => {
-+                  {/* Capped at 10 rows, as CLAUDE.md §15 already describes. Uncapped this
++                  {/* Capped at 10 rows, as AGENTS.md §15 already describes. Uncapped this
 +                      built products x 54 <td> with per-cell inline styles — 20 250 cells at
 +                      375 products — inside an always-mounted <details> that only CSS hides. */}
 +                  {products.slice(0, 10).map((product, idx) => {

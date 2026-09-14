@@ -5,7 +5,7 @@ import { supabase } from './supabase';
  * browser can load.
  *
  * WHY THIS EXISTS: `storagePath` is the only image reference that survives
- * slimForWorkflowState (CLAUDE.md §11), so every restore path has to turn paths
+ * slimForWorkflowState (AGENTS.md §11), so every restore path has to turn paths
  * back into URLs. That expression was inlined at ~20 call sites, which made the
  * planned public→private bucket migration (ANALYSIS §4 Phase 1b) a 20-site edit
  * with three different async-ness assumptions. Route everything through here and

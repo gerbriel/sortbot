@@ -18,7 +18,7 @@ import type {
  * the workspace can read and write the whole board.
  *
  * Reads DO filter by org_id, which is not the `.eq('user_id')` anti-pattern
- * CLAUDE.md §18 bans. RLS decides PERMISSION; it cannot decide SCOPE. Its test
+ * AGENTS.md §18 bans. RLS decides PERMISSION; it cannot decide SCOPE. Its test
  * is `org_id in (select user_org_ids())` — every org you belong to — so the day
  * anyone holds two memberships, an unfiltered read merges both boards into one
  * (two "Backlog" lanes, foreign cards interleaved by rank). The filter names the

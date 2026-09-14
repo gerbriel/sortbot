@@ -5,7 +5,7 @@ Reviewer: incoming senior engineer. Read-only pass over `src/` (48,622 LOC, 108 
 Baseline: `main` @ `0cdfacd`. `npm test` → **19 files / 229 tests, all passing, 852 ms**.
 `npx eslint src` → **309 problems** (293 errors), 228 of them `no-explicit-any`.
 
-Companion to `CLAUDE.md` (reference) and `ANALYSIS.md` (product/scaling roadmap). This document
+Companion to `AGENTS.md` (reference) and `ANALYSIS.md` (product/scaling roadmap). This document
 does **not** restate either; it audits what the code actually does today, after the July 2026
 Stage 2/3/4 refactors and this week's founder tools (analytics, CRM, support, kanban).
 
@@ -274,7 +274,7 @@ graph LR
 
 9. **Errors are swallowed by default.** `productService.ts:246-248, 321-323` return `null` on
    failure with no log; `GrouperErrorBoundary` (`App.tsx:210-231`) is the only boundary and it
-   exists to hide render errors. The result is that the persistence bugs in CLAUDE.md §15 could
+   exists to hide render errors. The result is that the persistence bugs in AGENTS.md §15 could
    only be discovered by a user noticing missing data.
 
 ---
@@ -357,7 +357,7 @@ graph LR
   restore paths (`handleOpenBatch`, startup) — the code that *deletes rows*; the merge whitelists
   (`userFields`, `PRESET_OWNED`); `registerItemsInDB`'s delete-then-upsert ordering; any component
   test at all (there are zero, and no Playwright smoke run).
-- **Documentation debt of a different kind:** `CLAUDE.md` is 1,059 lines and states several things
+- **Documentation debt of a different kind:** `AGENTS.md` is 1,059 lines and states several things
   the code has since contradicted (three `product_images` writers — there are six; "all three share
   `buildProductImageRow`" — two do not). The doc is the map; it needs the same review discipline as
   the code, or agents will keep trusting it over the source.
@@ -455,7 +455,7 @@ import { supabase } from './supabase';
  * browser can load.
  *
  * WHY THIS EXISTS: `storagePath` is the only image reference that survives
- * slimForWorkflowState (CLAUDE.md §11), so every restore path has to turn paths
+ * slimForWorkflowState (AGENTS.md §11), so every restore path has to turn paths
  * back into URLs. That expression was inlined at 24 call sites, which made the
  * planned public→private bucket migration (ANALYSIS §4 Phase 1b) a 24-site edit
  * with three different async-ness assumptions. Route everything through here and
@@ -490,7 +490,7 @@ export function thumbnailImageUrl(storagePath?: string | null, _size = 300): str
  *   storagePath (authoritative — imageUrls[0] can be stale after a merge)
  *   → imageUrls[0] → a non-blob preview → ''.
  * blob: URLs are rejected: they are valid only in the session that created them
- * and 404 after any reload (CLAUDE.md §18.10).
+ * and 404 after any reload (AGENTS.md §18.10).
  */
 export function resolveImageUrl(item: {
   storagePath?: string;
@@ -511,7 +511,7 @@ export function resolveImageUrl(item: {
 ```ts
 /**
  * PostgREST returns 400 once an `IN(...)` list makes the request URL too long —
- * observed at ~794 ids (CLAUDE.md §11). 100 is the value every call site already
+ * observed at ~794 ids (AGENTS.md §11). 100 is the value every call site already
  * uses; it was just spelled six different ways (DELETE_CHUNK_SIZE, CHUNK, OCHUNK,
  * CLAIM_CHUNK, and two bare literals).
  */
@@ -761,7 +761,7 @@ export function productRowToClothingItem(
     originalName,
     productGroup: row.product_group || row.id,
     // capturedAt is NOT in any products column — gap-filled items have no date
-    // until the EXIF rescan runs (CLAUDE.md §14.17).
+    // until the EXIF rescan runs (AGENTS.md §14.17).
     voiceDescription:          r.voice_description   || '',
     generatedDescription:      htmlToPlain(r.description || ''),
     seoTitle:                  cleanSzTitle(r.seo_title || ''),

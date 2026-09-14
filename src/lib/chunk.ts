@@ -2,7 +2,7 @@
  * chunk — the ONE way this codebase splits an id list into request-sized batches.
  *
  * WHY 100: PostgREST returns 400 once an `IN(...)` list makes the request URL too
- * long — observed at ~794 ids (CLAUDE.md §11). 100 is the value every call site
+ * long — observed at ~794 ids (AGENTS.md §11). 100 is the value every call site
  * already used; it was just spelled six different ways (`DELETE_CHUNK_SIZE`,
  * `CHUNK`, `OCHUNK`, and several bare `100` literals) across ~18 hand-written
  * `for (let i = 0; i < xs.length; i += N)` loops (architecture review duplicate #8).

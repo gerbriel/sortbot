@@ -16,7 +16,7 @@
 
    Every primitive resolves ALL colour, type and motion through the tokens in
    src/index.css. None of them declares a hex value, so a palette swap in
-   `:root` re-skins the set with no edits here (CLAUDE.md §1). */
+   `:root` re-skins the set with no edits here (AGENTS.md §1). */
 
 export { Button, LinkButton } from './Button';
 export type { ButtonProps, ButtonSize, ButtonVariant, LinkButtonProps } from './Button';

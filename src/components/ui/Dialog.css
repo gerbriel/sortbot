@@ -38,7 +38,7 @@
   max-height: min(86vh, 100%);
   /* --ink-800 is the popover step. On this light palette it is WHITE — lighter
      than the --ink-850 cards it floats over. That inversion is intentional
-     (CLAUDE.md §1): elevation moves toward white. */
+     (AGENTS.md §1): elevation moves toward white. */
   background: var(--ink-800);
   border-radius: var(--radius-lg);
   /* --shadow-xl carries a hairline ring, so the panel keeps an edge against the

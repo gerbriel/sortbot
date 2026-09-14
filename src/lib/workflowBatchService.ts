@@ -31,7 +31,7 @@ export interface WorkflowBatch {
     // All four are PersistedWorkflowItem[]: new saves hold slim items, legacy
     // batches hold whole ClothingItems, and the type admits both. In practice
     // autoSaveWorkflowBatch writes only `processedItems` and leaves the other
-    // three empty (CLAUDE.md §11) — but every restore path still falls back
+    // three empty (AGENTS.md §11) — but every restore path still falls back
     // through all four, so they are all typed.
     uploadedImages?: PersistedWorkflowItem[];
     groupedImages?: PersistedWorkflowItem[];
@@ -192,7 +192,7 @@ export function resetAutoSaveFingerprints(): void {
  * (`batch_number`, `last_opened_at`).
  *
  * DELIBERATELY OMITTED because nothing reads them here: `thumbnail_url` (a long
- * URL per row), `tags` and `notes` (CLAUDE.md §7 marks both "not used"). The
+ * URL per row), `tags` and `notes` (AGENTS.md §7 marks both "not used"). The
  * three remaining count columns are kept only because `WorkflowBatch` declares
  * them non-optional, so dropping them would make the type a lie.
  *
@@ -452,7 +452,7 @@ export async function removeItemsFromWorkflowBatch(
  *    every file in the batch leaked into the bucket forever (the DB still came out
  *    clean via the products cascade, which is why it went unnoticed);
  *  - `filterUnreferencedStoragePaths` MUST run while the product_images rows still
- *    exist (CLAUDE.md §18 #15), so safePaths is computed FIRST;
+ *    exist (AGENTS.md §18 #15), so safePaths is computed FIRST;
  *  - nothing destructive happens until the authoritative `workflow_batches` delete
  *    is CONFIRMED. Previously storage and products were destroyed before it, so an
  *    RLS-blocked batch delete returned false to a Library that had already lost the

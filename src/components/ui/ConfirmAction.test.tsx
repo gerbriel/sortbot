@@ -5,7 +5,7 @@ import { mount, cleanup, click, keyDown, one, buttonByText } from './testUtils';
 
 /**
  * The two-step inline confirm. `window.confirm()` is banned in this codebase
- * (CLAUDE.md Do Not #12 — it blocks the event loop mid-auto-save and cannot be
+ * (AGENTS.md Do Not #12 — it blocks the event loop mid-auto-save and cannot be
  * styled or tested), so every destructive control grew its own `confirmKey`
  * state plus a copy-pasted yes/no pair. This locks the shared behaviour,
  * including the controlled form that the existing `confirmKey` maps onto.

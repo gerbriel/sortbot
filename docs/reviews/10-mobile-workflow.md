@@ -121,7 +121,7 @@ a `width: 100%` container, so they already stack full-bleed; the only thing adde
 is `overflow-wrap: anywhere` so a long failed filename cannot push the panel
 wider than the screen. **The EXIF-rescan panel no longer exists** in this
 component — it was removed when the rescan became automatic on batch open
-(CLAUDE.md §15), so there was nothing to stack. The storage meter is rendered by
+(AGENTS.md §15), so there was nothing to stack. The storage meter is rendered by
 App.tsx and was left alone.
 
 ---
@@ -130,7 +130,7 @@ App.tsx and was left alone.
 
 ### 4.1 Sidebar → top toolbar (≤640px)
 
-Verified: the sidebar already collapses at ≤768px (CLAUDE.md §15). What it did
+Verified: the sidebar already collapses at ≤768px (AGENTS.md §15). What it did
 *not* do was fit. Stats, 4 sort buttons, view toggles, a date select, N category
 buttons, a clear button, the auto-group input + Apply + Pick + slider, and the
 columns slider all rendered inline — roughly a full screen before the first
@@ -325,7 +325,7 @@ reason.
 ## 9. Proposals — NOT implemented (they touch selection logic)
 
 Per the brief, anything needing a change to the Step-2 selection handlers is
-written down rather than done. CLAUDE.md §15 lists nine separate commits fixing
+written down rather than done. AGENTS.md §15 lists nine separate commits fixing
 that code and I cannot sign in to smoke-test.
 
 1. **Add `.grouper-header` to the click-outside safe-selector list**

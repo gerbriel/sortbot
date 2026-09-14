@@ -1,7 +1,7 @@
 /**
  * barcode — a first-party Code 128 encoder and SKU generator.
  *
- * WHY WE WROTE OUR OWN (CLAUDE.md §9, the self-reliant rule): a barcode is a
+ * WHY WE WROTE OUR OWN (AGENTS.md §9, the self-reliant rule): a barcode is a
  * lookup table and a modulo-103 checksum. Every JS barcode library is a
  * dependency, a bundle, and a supply-chain surface for ~150 lines of arithmetic
  * that has not changed since ISO/IEC 15417 was published. Nothing here touches

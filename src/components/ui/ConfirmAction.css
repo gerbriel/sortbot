@@ -1,6 +1,6 @@
 /* ── ConfirmAction ──────────────────────────────────────────────────────────
    The two-step inline confirm that replaced native confirm() across the app
-   (CLAUDE.md Do Not #12). Replaces the hand-copied .org-confirm-actions /
+   (AGENTS.md Do Not #12). Replaces the hand-copied .org-confirm-actions /
    .org-confirm-yes / .org-confirm-no trio and its six duplicates in
    KanbanBoard, KanbanCardDetail and OrgPanel.
 

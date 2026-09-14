@@ -70,7 +70,7 @@ describe('updateProduct — 0 rows is a failure, not a success', () => {
     const payload = up[0].payload as Record<string, unknown>;
     expect(payload.id).toBe('p1');
     expect(payload.user_id).toBe('u1');
-    // CLAUDE.md §18 #3 — a products write from this path must never carry batch_id.
+    // AGENTS.md §18 #3 — a products write from this path must never carry batch_id.
     expect(payload).not.toHaveProperty('batch_id');
   });
 

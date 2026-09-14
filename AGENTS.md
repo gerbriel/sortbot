@@ -1,6 +1,6 @@
-# CLAUDE.md — Arcadian Codebase Reference
+# AGENTS.md — Arcadian Codebase Reference
 
-> **For any AI agent reading this file:**
+> **For any coding agent or contributor reading this file:**
 > 1. Read this file **in full** before writing any code.
 > 2. After every task, report: what files were modified, what moved from in-progress to done, and what new gaps were introduced.
 > 3. Check this file before assuming any type, utility, or component doesn't exist — it probably does.
@@ -1406,8 +1406,8 @@ Every diagnostic goes through `log.*` / `dbg()` from `lib/debugLogger.ts`. `grep
 - ✅ Dead components (`SavedProducts`, `TestLlamaVision`, `LiveWorkspaceSelector`, `RemoteCursors`, `AISettings`) marked with `// UNUSED` banners — **all six are DELETED as of Sept 2026** (see the refactor entry below)
 - ✅ Dead dependencies removed from `package.json` (`axios`, `react-speech-recognition`, `@google-cloud/vision`, `@huggingface/inference`, `openai`, `cors`, `express`, `node-fetch`)
 - ✅ `proxy.log` added to `.gitignore`
-- ✅ ~140 stale root-level `.md` files deleted; only `README.md`, `CLAUDE.md`, `CHANGELOG.md` remain
-- ✅ `.github/copilot-instructions.md` updated to point to `CLAUDE.md`
+- ✅ ~140 stale root-level `.md` files deleted; only `README.md`, `AGENTS.md`, `CHANGELOG.md` remain
+- ✅ `.github/copilot-instructions.md` updated to point to `AGENTS.md`
 - ✅ Batch open performance: `getThumbnailUrl()` (plain CDN URL) used for ImageGrouper card `<img>` tags; `loading="lazy"` on both bare `<img>` tags in ImageGrouper; state set immediately from `workflowItems` before DB product fetch so images render before descriptions load; `registerItemsInDB` skipped when re-opening the already-active batch
 - ✅ `getThumbnailUrl()` returns plain CDN URL — Supabase Storage transform API requires paid Pro plan; free-tier transform URLs return errors, so transform params are intentionally omitted
 - ✅ `registerItemsInDB` deletes chunked to 100 IDs at a time (`DELETE_CHUNK_SIZE = 100`) — PostgREST 400 URL-length limit hit with 794+ IDs in a single `IN()` clause
@@ -1494,7 +1494,7 @@ Every diagnostic goes through `log.*` / `dbg()` from `lib/debugLogger.ts`. `grep
 - ✅ **Vertical sidebar collapses to horizontal top bar on mobile** (commit `aa99c50`) — `@media (max-width: 768px)` in `ImageGrouper.css` reverts the sidebar layout: `.image-grouper-container` switches back to `flex-direction: column`, `.grouper-header` becomes `width: 100%; height: auto; position: static` (full-width horizontal bar), stats/filter/auto-group controls revert to `flex-direction: row`; tablet breakpoint (`max-width: 1024px and min-width: 769px`) shrinks sidebar to `160px` with tighter padding in `App.css`
 - ✅ **Step 2 right panel mobile responsiveness** (commit `8ebc7ea`) — CategoryZones right panel in Step 2 had `position: sticky; height: 75vh; overflow-y: auto` as React inline styles, which CSS `@media` queries could not override; moved to a `.step2-right-panel` CSS class in `App.css`; `@media (max-width: 1024px)` resets it to `position: static; height: auto; overflow-y: visible` so panels stack correctly on tablet/mobile; `@media (max-width: 480px)` hides `.step2-split .step-description` and shrinks action button text; `step2-split` grid still declares `1fr 340px` inline but is overridden with `!important` in CSS at ≤1024px
 
-### June–July 2026 (post-June-10 CLAUDE.md update)
+### June–July 2026 (post-June-10 AGENTS.md update)
 
 - ✅ **UI density pass** (commits `0eae362`, `4d2f71d`, `4c788bf`, `5354909`, `83cfc9d`, `bd7e8e4`) — base font-size set to **9px** (matches the user's preferred 67%-zoom look at 100%); Step 2 right sidebar narrowed to 227px; image-grid gutters equalized at 3rem/3.5rem; `ComprehensiveProductForm` scaled to match `VoiceCommandTable` sizing; shortcut cheatsheet fonts doubled
 - ✅ **Preset persistence saga** (~15 commits, `3ab0e96` → `cc4be33`) — the per-group preset override now survives page refresh end-to-end: `applied_preset_id` column added to `products` (root-level `ADD_APPLIED_PRESET_ID.sql`) and included in `hydrateSelect`; `selectedPresetId` restored from `_presetData.presetId` on group navigation; preset override detection uses direct string comparison on `productType` (loose matching collapsed two presets to the same ID); auto-apply is skipped when preset fields were already persisted in a prior session; `isResettingRef` set before `applyPresetsToAllGroups` to stop an `onProcessed` feedback loop; brand/size/color/price preserved through all auto-apply merges; force-apply when the user explicitly switches preset or re-categorizes a group; green preset box always shows the currently active preset

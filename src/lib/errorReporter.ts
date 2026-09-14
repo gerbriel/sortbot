@@ -5,7 +5,7 @@
  *
  * WHY: today a render crash outside Step 2 is a white screen plus a console
  * message nobody sees, and silent failure is the codebase's documented default
- * (CLAUDE.md §13). The only other error signal is a user writing into the
+ * (AGENTS.md §13). The only other error signal is a user writing into the
  * support inbox — hours late, from the few who bother, with no stack.
  *
  * PRIVACY MODEL: the same random per-tab session id analytics uses

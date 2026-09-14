@@ -20,7 +20,7 @@ import './LabelPrintView.css';
  * again without anyone typing a UUID.
  *
  * READ-ONLY ON THE WORKFLOW. It consumes workflowStore's processedItems through
- * the same hook Step 3 uses, but never writes an item back (CLAUDE.md §18.11) —
+ * the same hook Step 3 uses, but never writes an item back (AGENTS.md §18.11) —
  * the one mutation it performs is `ensureSkus`, which writes `products.sku`
  * directly and touches no in-memory item. So printing labels can never disturb
  * a batch mid-edit.

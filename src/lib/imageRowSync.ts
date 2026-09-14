@@ -119,7 +119,7 @@ export interface ExistingProductImageRow extends ProductImageRow {
  * writes N rows against the group LEADER (one per group photo, with real
  * `position` values). Re-opening the batch therefore collapsed those N rows to 1
  * and flattened every position — the concrete cause of "photo reorder does not
- * persist". Removing the delete is not an option (CLAUDE.md §18 #3: it is what
+ * persist". Removing the delete is not an option (AGENTS.md §18 #3: it is what
  * stops stale rows accumulating when a CDN URL changes between sessions), so
  * instead we carry the still-valid rows across the wipe.
  *

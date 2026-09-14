@@ -23,12 +23,12 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # `npm run lint` baseline, July 2026 (CLAUDE.md §17). The lint step is
+  # `npm run lint` baseline, July 2026 (AGENTS.md §17). The lint step is
   # informational BELOW this number and fails ABOVE it, so the debt can only
   # shrink. Lower this line whenever the count drops.
   LINT_BASELINE: 254
   # The deployed base path is derived from the GitHub repo name and must not
-  # change (CLAUDE.md §1). GITHUB_ACTIONS=true is set for us by the runner, so
+  # change (AGENTS.md §1). GITHUB_ACTIONS=true is set for us by the runner, so
   # vite.config.ts picks /sortbot/ here exactly as it does in deploy.yml.
   EXPECTED_BASE_PATH: /sortbot/
 
@@ -82,9 +82,9 @@ jobs:
           fi
 
           # Asset URLs must keep the /sortbot/ prefix. Changing the base path
-          # 404s every asset on the deployed site (CLAUDE.md §1).
+          # 404s every asset on the deployed site (AGENTS.md §1).
           if ! grep -q "src=\"${EXPECTED_BASE_PATH}assets/" dist/index.html; then
-            echo "::error file=vite.config.ts::built asset paths are not under ${EXPECTED_BASE_PATH} — the GitHub Pages base path must not change (CLAUDE.md §1)"
+            echo "::error file=vite.config.ts::built asset paths are not under ${EXPECTED_BASE_PATH} — the GitHub Pages base path must not change (AGENTS.md §1)"
             grep -oE '(src|href)="[^"]+"' dist/index.html || true
             exit 1
           fi
@@ -107,7 +107,7 @@ jobs:
 
       - name: Lint (informational below the baseline)
         # Non-blocking by design: the repo carries ~254 known problems
-        # (CLAUDE.md §17). This step annotates the count and fails only if the
+        # (AGENTS.md §17). This step annotates the count and fails only if the
         # debt GREW, so the number is a ratchet rather than a wall.
         run: |
           set -uo pipefail
@@ -150,7 +150,7 @@ jobs:
 
       - name: Migration hygiene
         # Migrations are applied BY HAND in the Supabase SQL Editor and are not
-        # tracked by the Supabase CLI (CLAUDE.md §5), so the SQL file itself is
+        # tracked by the Supabase CLI (AGENTS.md §5), so the SQL file itself is
         # the only place a reviewer can learn how to undo it. Every migration
         # added or edited in this PR must therefore carry:
         #   * a ROLLBACK section, and

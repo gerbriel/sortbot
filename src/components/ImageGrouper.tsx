@@ -347,7 +347,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const columnSliderBounds = gridColumnBounds(isPhone);
 
   /* Phone-only disclosure for the sort/filter/auto-group controls. On a phone the
-   * sidebar collapses to a top bar (CLAUDE.md §15); showing every control inline
+   * sidebar collapses to a top bar (AGENTS.md §15); showing every control inline
    * there would push the photo grid a full screen down, so they live behind a
    * "Tools" toggle. The class is inert above 640px — all the rules that read it
    * are inside the phone media query. */
@@ -1681,7 +1681,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     log.grouper(`createGroup | selected=${selected.size}`);
 
     const grouped = items.filter(i => selected.has(i.id));
-    // Leader convention (CLAUDE.md §11): the group id is the FIRST member's item
+    // Leader convention (AGENTS.md §11): the group id is the FIRST member's item
     // id — not a fresh UUID. Fresh UUIDs broke Step 3's group navigation (every
     // item became its own listing) because nothing validated as the group leader.
     const groupId = grouped[0].id;
@@ -1854,7 +1854,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     log.grouper(`applyAutoGrouping | n=${n} total=${sorted.length} chunks=${Math.ceil(sorted.length / n)}`);
 
     // Group id per chunk = the FIRST item of the chunk's id (leader convention,
-    // CLAUDE.md §11). Fresh UUIDs here broke Step 3's per-group navigation.
+    // AGENTS.md §11). Fresh UUIDs here broke Step 3's per-group navigation.
     const numChunks = Math.ceil(sorted.length / n);
     const chunkIds = Array.from({ length: numChunks }, (_, c) => sorted[c * n].id);
 
@@ -2352,7 +2352,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   //
   // Every method delegates through a ref that is refreshed on EVERY render, so a
   // memoized bundle can never call a stale closure (the failure mode that produced
-  // the stale-closure saga in CLAUDE.md §15 — `aae35fc`, `993c0cf`, `b0a41a6`).
+  // the stale-closure saga in AGENTS.md §15 — `aae35fc`, `993c0cf`, `b0a41a6`).
   const actionImplRef = useRef({
     createGroupFromSelected, ungroupSelected, ungroupAll, updateSelection, handleDeleteSelected,
   });

@@ -324,7 +324,7 @@
    EVERYTHING BELOW IS SCOPED TO `.categories-page` ON PURPOSE. `.button`,
    `.button-icon`, `.form-group`, `.form-actions`, `.emoji-picker` and
    `.emoji-option` are GLOBAL class names that App.css and
-   CategoryPresetsManager.css also define (CLAUDE.md's own review notes call this
+   CategoryPresetsManager.css also define (AGENTS.md's own review notes call this
    out as a known collision). An unscoped `.button { min-height: 44px }` here
    would silently resize buttons in the workflow steps, which this pass does not
    own. The page-root prefix keeps the blast radius at exactly this view. */

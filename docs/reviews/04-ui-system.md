@@ -105,7 +105,7 @@ src/components/ui/
 ## 4. API design, per component
 
 Common to all: `className` appended; lucide icons in `icon` slots (**never emoji** —
-CLAUDE.md §1); state that a screen reader must know is carried by an ARIA attribute and
+AGENTS.md §1); state that a screen reader must know is carried by an ARIA attribute and
 **the CSS keys off that attribute**, so the visual and the announced state cannot drift.
 
 ### Button / LinkButton

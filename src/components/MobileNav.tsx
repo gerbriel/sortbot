@@ -22,7 +22,7 @@ import './MobileNav.css';
    `position: sticky; z-index: 100`, i.e. a stacking context, and a fixed child
    of it is trapped at that level relative to the page.
 
-   THE BAR IS PART OF THE BLACK NAV, so per CLAUDE.md §1 every foreground in it
+   THE BAR IS PART OF THE BLACK NAV, so per AGENTS.md §1 every foreground in it
    is a literal light value, never an --ink- or --text- token: those resolve to
    page-black and would vanish.
 

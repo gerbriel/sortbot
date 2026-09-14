@@ -73,7 +73,7 @@ installErrorReporter();
  * The returned function NEVER changes identity, and always invokes the most recent
  * render's `fn`. That is the whole point: it is what lets `React.memo` bail out on
  * the big workflow children without any dependency-array archaeology, and — given
- * this codebase's history of stale-closure bugs (CLAUDE.md §14 #14, §15's
+ * this codebase's history of stale-closure bugs (AGENTS.md §14 #14, §15's
  * `aae35fc`/`993c0cf`/`b0a41a6`) — it is strictly safer than `useCallback([...])`:
  * a `useCallback` with a wrong dep list silently freezes state, while this can only
  * ever call the newest closure. Semantics are identical to the inline arrow it
@@ -406,7 +406,7 @@ class GrouperErrorBoundary extends Component<{ children: ReactNode }, GrouperBou
 let startupRestoreInFlight = false;
 
 /**
- * Supabase workflow_state debounce. CLAUDE.md §11: never below 1 000 ms.
+ * Supabase workflow_state debounce. AGENTS.md §11: never below 1 000 ms.
  *
  * Raised 2 000 → 5 000 (DB CPU). §11's rail is a FLOOR, not a target, and the
  * two things it protects are both still in place and were re-read before this
@@ -908,7 +908,7 @@ function App() {
         //     function only knows one row per item. Re-inserting just our rows
         //     collapsed the group's photo list and flattened every position on every
         //     batch open. mergeProductImageRows carries those rows across the wipe.
-        //     The wipe itself STAYS (CLAUDE.md §18 #3) — it is still what clears a
+        //     The wipe itself STAYS (AGENTS.md §18 #3) — it is still what clears a
         //     stale row whose CDN URL changed for a file we are re-writing.
         const existingRowSelect = 'product_id, image_url, storage_path, position, alt_text, original_name, transforms, user_id'
           + (stage4 ? ', captured_at, original_storage_path' : '');
@@ -2109,7 +2109,7 @@ function App() {
       const registerable = items.filter(i => i.imageUrls?.[0] || i.storagePath);
       if (registerable.length > 0) {
         await supabase.from('products').upsert(
-          // NO batch_id (finding 6 / CLAUDE.md §18 #3): batch_id is assigned
+          // NO batch_id (finding 6 / AGENTS.md §18 #3): batch_id is assigned
           // authoritatively at upload time. Re-asserting it here with
           // ignoreDuplicates:false silently re-tags any row that belongs to
           // another batch — the batch_id theft that made gap-fill grow
@@ -2566,7 +2566,7 @@ function App() {
 
     // processedItems is now the single saved list (others are empty arrays in new format).
     // Fall back through all arrays for older batch formats. DO NOT break this chain
-    // without updating the startup restore too (CLAUDE.md §18 #4).
+    // without updating the startup restore too (AGENTS.md §18 #4).
     // asClothingItems is the ONE documented widening: a persisted item has no `file`
     // and (since the slimming) no `preview`; both are rebuilt from `storagePath` below.
     const rawWorkflowItems = asClothingItems(

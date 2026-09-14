@@ -1433,7 +1433,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
    * a network hiccup must not lose dictation. An exact alias then rewrites the
    * field and says so; a strong-but-unsaved match only asks.
    *
-   * The built-in library is a ~361 KB lazy chunk (CLAUDE.md §15), so it is only
+   * The built-in library is a ~361 KB lazy chunk (AGENTS.md §15), so it is only
    * fetched when the two cheap sources produced nothing — i.e. once, on the first
    * genuinely unknown brand of a session, and never for a shop whose aliases and
    * vocabulary already cover its inventory.

@@ -17,7 +17,7 @@
  * TWO INVARIANTS THAT ARE NOT NEGOTIABLE
  *
  *   1. **$0 passes through untouched.** GoogleSheetExporter hard-blocks an
- *      export where any product has no price or $0 (CLAUDE.md §10). If a
+ *      export where any product has no price or $0 (AGENTS.md §10). If a
  *      rounding rule could turn 0 into 0.99, a platform selection would
  *      silently defeat that gate and ship unpriced products to Shopify. So
  *      anything that is not a positive, finite number is returned exactly as

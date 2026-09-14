@@ -13,7 +13,7 @@ import './BarcodeScannerView.css';
  * THREE WAYS IN, because a stock room has three kinds of hardware and the one
  * you have is the one that must work:
  *   1. The phone camera, via the browser's own `BarcodeDetector`. No library,
- *      no WASM, no vendor — CLAUDE.md §9. Chrome and Edge on Android and
+ *      no WASM, no vendor — AGENTS.md §9. Chrome and Edge on Android and
  *      desktop have it; Safari and Firefox do not, and that is fine, because…
  *   2. …a USB/Bluetooth scanner is just a keyboard: it types the code and
  *      presses Enter. The "scan here" field captures that verbatim.

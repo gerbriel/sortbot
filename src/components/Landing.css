@@ -719,7 +719,7 @@
 .landing .ld-tier-includes svg { flex: 0 0 auto; margin-top: 2px; color: var(--success); }
 
 /* ── Phone (≤560px) ─────────────────────────────────────────────────────────
-   Landing.css is px-based ON PURPOSE (CLAUDE.md §1): this page renders at the
+   Landing.css is px-based ON PURPOSE (AGENTS.md §1): this page renders at the
    main URL for logged-out visitors and must not inherit the app's 9px root, or
    the hero collapses. So everything below is px and clamp(px) — the --fs-*
    tokens are deliberately NOT used here.

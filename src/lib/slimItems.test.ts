@@ -4,7 +4,7 @@ import type { PersistedWorkflowItem } from './slimItems';
 import type { ClothingItem } from '../App';
 
 /**
- * The save→reload contract (CLAUDE.md §11). If these fail, either a field
+ * The save→reload contract (AGENTS.md §11). If these fail, either a field
  * silently stopped surviving page reloads, or heavy/unserializable data
  * (File objects, blob previews) started leaking into the Supabase JSONB blob.
  */
