@@ -43,6 +43,18 @@ html {
    literal light foregrounds, not tokens. Anything added inside a nav needs an
    explicit light colour or it inherits page-black and disappears.
    ══════════════════════════════════════════════════════════════════════════ */
+/* Self-hosted brand typeface — see the Typography block in :root. Vite hashes
+   the file into dist/assets and rewrites this relative URL with the base path,
+   so it works at / locally and at /sortbot/ on GitHub Pages. */
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('./assets/fonts/outfit-latin-300-700.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
   /* ── Surfaces ─────────────────────────────────────────────────────────── */
   --ink-950: #ffffff;   /* page canvas */
@@ -211,8 +223,13 @@ html {
   --shadow-accent: 0 0 0 1px rgba(0, 0, 0, 0.22), 0 4px 16px rgba(0, 0, 0, 0.12);
 
   /* ── Typography ───────────────────────────────────────────────────────── */
-  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display',
+  /* Outfit (SIL OFL, self-hosted from src/assets/fonts — the CSP allows
+     font-src 'self' only, and the app never loads from a font CDN). The
+     variable file covers weights 300–700 for the latin range; every other
+     script falls through to the system stack. */
+  --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display',
                'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  font-family: var(--font-sans);
   line-height: 1.6;
   font-weight: 400;
   color: var(--text-primary);
@@ -486,4 +503,16 @@ img.lazy-img.loaded {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ── Brand wordmark ──────────────────────────────────────────────────────────
+   The logo IS the name set in Outfit: medium weight, tight tracking, no icon.
+   Rendered by <Wordmark/>; contexts only change size/colour. */
+.wordmark {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  white-space: nowrap;
+  font-feature-settings: 'kern' 1;
 }

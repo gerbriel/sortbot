@@ -38,6 +38,30 @@ import { log } from './debugLogger';
  *  are deliberately not subscribed to; see supportService). */
 export const SUPPORT_POLL_MS = 45_000;
 
+/** Poll interval once the Realtime channel reports SUBSCRIBED. At that point the
+ *  channel delivers every INSERT and thread UPDATE within milliseconds and the
+ *  timer's only remaining job is covering DELETEs (not subscribed) and a channel
+ *  that dies without telling us — a 3-minute backstop, not a refresh loop. */
+export const SUPPORT_POLL_SUBSCRIBED_MS = 180_000;
+
+/**
+ * How often to re-read the thread list, given what the channel and the tab are
+ * doing. Pure — this is the whole decision, and it is unit-tested.
+ *
+ * `null` means DO NOT POLL AT ALL: a hidden tab has nothing to render and
+ * nobody to render it for, and browsers already throttle its timers to ~1/min
+ * — so the only thing a background poll reliably produces is Postgres load,
+ * multiplied by every stale tab every user has left open. The store refetches
+ * immediately on visibility regain, so a returning tab is never stale.
+ */
+export function supportPollInterval(
+  visible: boolean,
+  realtimeSubscribed: boolean,
+): number | null {
+  if (!visible) return null;
+  return realtimeSubscribed ? SUPPORT_POLL_SUBSCRIBED_MS : SUPPORT_POLL_MS;
+}
+
 export interface SupportStoreState {
   threads: SupportThread[];
   /** null = not checked yet · false = tables missing / unreachable · true = live. */
@@ -135,6 +159,17 @@ let unsubRealtime: (() => void) | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 /** Deduped in-flight refetch — a Realtime burst and the poll must not stampede. */
 let inFlight: Promise<void> | null = null;
+/** Last interval `applyPollInterval` installed, so a no-op change doesn't churn
+ *  the timer (and reset its phase) on every visibility flicker. */
+let pollIntervalMs: number | null = null;
+let realtimeSubscribed = false;
+let onVisibility: (() => void) | null = null;
+
+function documentVisible(): boolean {
+  // `document` is absent in a non-DOM test env; treat that as visible so the
+  // store behaves exactly as it does today when nothing is driving visibility.
+  return typeof document === 'undefined' || document.visibilityState === 'visible';
+}
 
 async function runRefresh(): Promise<void> {
   const r = await fetchThreads();
@@ -155,18 +190,47 @@ function refresh(): Promise<void> {
   return inFlight;
 }
 
+/** Install the interval the current (visibility, channel) state calls for. */
+function applyPollInterval(): void {
+  const next = supportPollInterval(documentVisible(), realtimeSubscribed);
+  if (next === pollIntervalMs) return;
+  pollIntervalMs = next;
+  if (pollTimer !== null) { clearInterval(pollTimer); pollTimer = null; }
+  if (next !== null) pollTimer = setInterval(() => { void refresh(); }, next);
+  log.service(`supportStore | poll interval → ${next === null ? 'paused (tab hidden)' : `${next / 1000}s`}`);
+}
+
 function start(): void {
   void refresh();
-  unsubRealtime = subscribeToSupport(() => { void refresh(); });
-  pollTimer = setInterval(() => { void refresh(); }, SUPPORT_POLL_MS);
+  realtimeSubscribed = false;
+  unsubRealtime = subscribeToSupport(
+    () => { void refresh(); },
+    subscribed => { realtimeSubscribed = subscribed; applyPollInterval(); },
+  );
+  onVisibility = () => {
+    // Coming back to the tab: refetch at once, so "paused while hidden" can
+    // never show a stale list. Then re-install the right interval.
+    if (documentVisible()) void refresh();
+    applyPollInterval();
+  };
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', onVisibility);
+  }
+  applyPollInterval();
   log.service('supportStore | live updates started');
 }
 
 function stop(): void {
   unsubRealtime?.();
   unsubRealtime = null;
+  if (typeof document !== 'undefined' && onVisibility) {
+    document.removeEventListener('visibilitychange', onVisibility);
+  }
+  onVisibility = null;
+  realtimeSubscribed = false;
   if (pollTimer !== null) clearInterval(pollTimer);
   pollTimer = null;
+  pollIntervalMs = null;
   log.service('supportStore | live updates stopped');
 }
 
@@ -189,15 +253,25 @@ export const supportStore = {
   /** Signing out: drop the previous account's threads so nothing flashes on
    *  the next sign-in. Also the reset hook for tests. */
   reset(): void {
-    if (listeners.size > 0) stop();
+    // Unconditional: every branch of stop() is null-guarded, so it is a no-op
+    // when nothing is running — and it is the only thing that removes the
+    // visibilitychange listener.
+    stop();
     listeners.clear();
     state = emptyState;
     inFlight = null;
   },
 
-  /** Test/diagnostic view of the shared lifecycle. */
+  /** Test/diagnostic view of the shared lifecycle. `isLive` means "subscribed",
+   *  which is no longer the same as "a timer is running" — a hidden tab is
+   *  still live, it just is not polling. */
   isLive(): boolean {
-    return pollTimer !== null;
+    return unsubRealtime !== null;
+  },
+
+  /** Test/diagnostic: the interval currently installed (null = not polling). */
+  pollIntervalMs(): number | null {
+    return pollIntervalMs;
   },
 };
 

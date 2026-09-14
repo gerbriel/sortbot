@@ -66,6 +66,7 @@ const deletedBatchIds = new Set<string>((() => {
 
 export function markBatchDeleted(batchId: string): void {
   deletedBatchIds.add(batchId);
+  forgetAutoSaveFingerprint(batchId);
   try {
     // Keep the persisted list bounded — 200 most recent is far more than enough.
     localStorage.setItem(TOMBSTONES_KEY, JSON.stringify([...deletedBatchIds].slice(-200)));
@@ -86,6 +87,93 @@ const confirmedBatchIds = new Set<string>();
  *  (App.tsx startup restore and handleOpenBatch fetch rows directly). */
 export function markBatchConfirmed(batchId: string): void {
   confirmedBatchIds.add(batchId);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Unchanged-payload skip (DB CPU) ──────────────────────────────────────────
+// Step 3 is the worst offender the profiler found: every keystroke in a product
+// field fires `onProcessed` → `autoSaveWorkflow`, and the resulting UPDATE
+// rewrites the WHOLE `workflow_state` JSONB — up to ~500 KB after the slim pass
+// — even though none of those fields is IN the slim payload (they live in
+// `products`, written separately by PDG's own 500 ms save). Postgres pays for
+// that twice: a TOAST rewrite and a full WAL record, per save, per user.
+//
+// So: hash the payload, and if it is byte-identical to the last one Postgres
+// ACCEPTED for this batch, don't send the UPDATE at all.
+//
+// WHAT IS DELIBERATELY EXCLUDED FROM THE HASH: `lastEditedAt`, which
+// `autoSaveWorkflow` stamps with `new Date().toISOString()` on every single
+// call. Include it and nothing is ever equal. `lastEditedBy` IS included, so a
+// different teammate editing the same batch always writes (the Library's
+// "edited by X" stays correct).
+//
+// AND THE ONE OBSERVABLE DIFFERENCE, STATED PLAINLY: a skipped save does not
+// advance `updated_at` / `last_opened_at`. A long Step-3 session that only
+// edits `products` fields therefore no longer re-sorts the batch to the top of
+// the Library on every keystroke. `AUTOSAVE_FINGERPRINT_MAX_AGE_MS` bounds that:
+// after this long, the next save goes through even if nothing changed, so the
+// timestamps still advance during an active session — just once every few
+// minutes instead of once every few seconds.
+export const AUTOSAVE_FINGERPRINT_MAX_AGE_MS = 5 * 60_000;
+
+const lastSavedFingerprints = new Map<string, { hash: string; at: number }>();
+
+/**
+ * cyrb53 — a fast, well-distributed non-cryptographic 53-bit hash. Prefixed with
+ * the serialized length so two payloads must collide in BOTH to be treated as
+ * equal. This is a write-elision optimisation, not a security boundary.
+ */
+function cyrb53(str: string): number {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+}
+
+/** Stable fingerprint of a workflow_state payload, ignoring `lastEditedAt`. Pure. */
+export function workflowStateFingerprint(state: WorkflowBatch['workflow_state']): string {
+  const json = JSON.stringify(state, (k, v) => (k === 'lastEditedAt' ? undefined : v)) ?? '';
+  return `${json.length}:${cyrb53(json).toString(36)}`;
+}
+
+/**
+ * True when this exact payload was already accepted for this batch recently
+ * enough that re-sending it would be pure waste. Pure w.r.t. its arguments —
+ * the registry is module state, seeded only by `rememberAutoSaveFingerprint`.
+ */
+export function shouldSkipAutoSave(
+  batchId: string | null,
+  hash: string,
+  now: number = Date.now(),
+): boolean {
+  if (!batchId) return false;
+  const prev = lastSavedFingerprints.get(batchId);
+  if (!prev || prev.hash !== hash) return false;
+  return now - prev.at < AUTOSAVE_FINGERPRINT_MAX_AGE_MS;
+}
+
+/** Record a payload Postgres ACCEPTED. Never call this for a failed/blocked write. */
+export function rememberAutoSaveFingerprint(
+  batchId: string,
+  hash: string,
+  now: number = Date.now(),
+): void {
+  lastSavedFingerprints.set(batchId, { hash, at: now });
+}
+
+/** Drop a batch's fingerprint — deletion, or any path that invalidates the row. */
+export function forgetAutoSaveFingerprint(batchId: string): void {
+  lastSavedFingerprints.delete(batchId);
+}
+
+/** Test hook. */
+export function resetAutoSaveFingerprints(): void {
+  lastSavedFingerprints.clear();
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -579,6 +667,10 @@ export type AutoSaveOutcome =
   | 'updated'
   /** No row existed for a never-confirmed id; a fresh batch was created. */
   | 'created'
+  /** The payload was byte-identical to the last one Postgres accepted for this
+   *  batch, so no UPDATE was sent. The DB already holds this state — this is a
+   *  SUCCESS, and `autoSaveSucceeded` reports it as one. */
+  | 'unchanged'
   /** The row exists but RLS refused the UPDATE — NOTHING WAS SAVED. */
   | 'rls-blocked'
   /** The batch is tombstoned or was deleted elsewhere; the save was dropped. */
@@ -593,9 +685,10 @@ export interface AutoSaveResult {
   message?: string;
 }
 
-/** True when the workflow_state write actually landed in Postgres. */
+/** True when the caller's state is what Postgres holds — including the
+ *  `unchanged` case, where it already was and no write was needed. */
 export function autoSaveSucceeded(r: AutoSaveResult): boolean {
-  return r.outcome === 'updated' || r.outcome === 'created';
+  return r.outcome === 'updated' || r.outcome === 'created' || r.outcome === 'unchanged';
 }
 
 /**
@@ -631,6 +724,16 @@ export async function autoSaveWorkflowBatchDetailed(
     const stats = calculateWorkflowStats(workflowState);
     const currentStep = determineCurrentStep(workflowState);
 
+    // Elide the UPDATE entirely when this exact payload is already in the row.
+    // Computed BEFORE the round-trip and only trusted for a batch whose write
+    // this session has previously seen SUCCEED (rememberAutoSaveFingerprint is
+    // called nowhere else), so a first save, a re-opened batch and a recovery
+    // INSERT all still go through.
+    const fingerprint = workflowStateFingerprint(workflowState);
+    if (batchId && shouldSkipAutoSave(batchId, fingerprint)) {
+      return { batchId, outcome: 'unchanged' };
+    }
+
     if (batchId) {
       // Blind UPDATE — no pre-flight SELECT round-trip.
       // If the batch no longer exists the update silently affects 0 rows; we
@@ -649,6 +752,7 @@ export async function autoSaveWorkflowBatchDetailed(
       if (!updateError && updated && updated.length > 0) {
         // Update succeeded — remember that this row is known to exist.
         confirmedBatchIds.add(batchId);
+        rememberAutoSaveFingerprint(batchId, fingerprint);
         return { batchId, outcome: 'updated' };
       } else if (!updateError && (!updated || updated.length === 0)) {
         // UPDATE affected 0 rows. Two very different causes:
@@ -696,6 +800,7 @@ export async function autoSaveWorkflowBatchDetailed(
         }
         console.warn(`Batch ${batchId} never confirmed and not found — creating new batch (stub insert recovery)`);
         const batch = await createWorkflowBatch(batchNumber, workflowState, stats);
+        if (batch?.id) rememberAutoSaveFingerprint(batch.id, fingerprint);
         return batch?.id
           ? { batchId: batch.id, outcome: 'created' }
           : { batchId: null, outcome: 'error', message: 'Could not create the batch row.' };
@@ -706,6 +811,7 @@ export async function autoSaveWorkflowBatchDetailed(
     } else {
       // Create new batch
       const batch = await createWorkflowBatch(batchNumber, workflowState, stats);
+      if (batch?.id) rememberAutoSaveFingerprint(batch.id, fingerprint);
       return batch?.id
         ? { batchId: batch.id, outcome: 'created' }
         : { batchId: null, outcome: 'error', message: 'Could not create the batch row.' };

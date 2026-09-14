@@ -89,7 +89,11 @@ declare
     'public.founding_list_users()',
     'public.founding_set_membership(uuid, uuid, text)',
     'public.founding_remove_membership(uuid, uuid)',
-    'public.founding_move_user(uuid, uuid, uuid, text)'
+    'public.founding_move_user(uuid, uuid, uuid, text)',
+    -- perf_storage_usage.sql already ships in the split shape; listed so a
+    -- replay of that file (which plants a definer copy in public) is repaired
+    -- here like every other RPC.
+    'public.storage_usage_bytes()'
   ];
 begin
   foreach sig in array sigs loop
@@ -148,6 +152,16 @@ if to_regprocedure('app_private.finance_summary(date, date)') is not null then
     returns jsonb language sql security invoker
     set search_path = public
     as $body$ select app_private.finance_summary(p_from, p_to) $body$
+  $f$;
+end if;
+
+-- storage_usage_bytes() -> jsonb                      [src/App.tsx storage meter]
+if to_regprocedure('app_private.storage_usage_bytes()') is not null then
+  execute $f$
+    create or replace function public.storage_usage_bytes()
+    returns jsonb language sql stable security invoker
+    set search_path = app_private, public
+    as $body$ select app_private.storage_usage_bytes() $body$
   $f$;
 end if;
 

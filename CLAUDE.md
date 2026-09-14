@@ -94,6 +94,21 @@ must be retuned by hand when the palette changes:
 is a surface → `--ink-850`; a heading is text → `--text-primary`), and keep body text
 at WCAG AA 4.5:1 against its surface — `--text-muted` is for non-essential meta only.
 
+### Typeface and wordmark — Outfit, self-hosted (Sept 2026)
+
+The UI typeface is **Outfit** (SIL OFL), served from `src/assets/fonts/outfit-latin-300-700.woff2`
+(variable, weights 300–700, latin range; `OFL.txt` sits beside it). `index.css` declares the
+`@font-face` and `--font-sans: 'Outfit', <system stack>`; `:root` uses the token, controls use
+`font: inherit`, and Landing inherits it. The file is under `src/assets/`, NOT `public/`, so Vite
+hashes it and rewrites the relative `url()` with the base path (it works at `/` and `/sortbot/`).
+It must stay self-hosted: the CSP is `font-src 'self' data:` and nothing loads from a font CDN.
+
+**The logo IS the name.** `src/components/Wordmark.tsx` renders `Arcadian` with `.wordmark`
+(Outfit 500, `letter-spacing: -0.03em`); the header, landing nav, auth card and waitlist gate all
+use it and no longer draw an icon beside the name. Contexts only set size/colour (`.app-header
+.wordmark` in App.css pins white on the inverted nav). The favicon is `public/favicon.svg`, a
+geometric "A" mark. Do not reintroduce the shopping-bag icon next to the name.
+
 ### Type scale — `--fs-*` (July 2026)
 
 The app had drifted to ~60 distinct font-size values app-wide (four inside a single
@@ -317,6 +332,7 @@ sortingapp/
 │   ├── components/
 │   │   ├── Auth.tsx / .css        # Email/password sign-in + sign-up. MIN_PASSWORD_LENGTH = 10, enforced on sign-up only (existing short passwords can still sign in).
 │   │   ├── Landing.tsx / .css     # Marketing landing rendered at the main URL for logged-out visitors + beta signup form. Landing.css stays px-based (§1). Photos from images.unsplash.com (the one non-Supabase img-src origin).
+│   │   ├── Wordmark.tsx           # The brand wordmark (the logo is the name in Outfit 500); used by the header, Landing, Auth, WaitlistGate.
 │   │   ├── WaitlistGate.tsx / .css  # Full-screen gate for a signed-in user with no membership and no invite.
 │   │   ├── WorkspaceMenu.tsx      # THE app's only navigation surface. Header trigger (workspace name +
 │   │   │                          # unread badge) + a portaled role="menu" popover: identity, "Back to
@@ -1118,7 +1134,10 @@ Pass 1 adds each item's `product_id` to a `wfItemIds` Set when building the imag
 ### `productGroup` — leader convention, tolerantly resolved
 When grouping items, all items in the group receive `productGroup = firstItem.id` (the "leader" is the item whose `id === productGroup`). **History (July 2026):** `createGroupFromSelected` and `applyAutoGrouping` had drifted to fresh `crypto.randomUUID()` group ids, which Step 3's old leader-only validation rejected — every item silently became its own listing (the §16 "Next navigates per-image" mystery bug). Both functions now use the leader convention again, AND `lib/grouping.ts:buildGroupArray` resolves group ids tolerantly (a productGroup is real when it matches an item id OR ≥2 items share it), so historical fresh-UUID batches heal without regrouping. `saveBatchToDatabase`, CSV export, CategoryZones, and Library all group by the shared value and tolerate both conventions. Keep new code on the leader convention.
 
-### Magic number: `2000` (autoSave debounce) — and `1000` (the re-arm)
+### Auto-save write reduction (Sept 2026, DB CPU pass)
+The trailing debounce is now **5000 ms** of inactivity (the floor of 1000 ms below still applies), a byte-identical slim payload skips the UPDATE entirely (new `'unchanged'` outcome; `lastEditedAt` excluded from the comparison, 5-minute expiry so `updated_at` still advances), and `flushPendingAutoSave()` runs on batch switch/clear because those paths used to drop the pending save. The 2 s group upsert sends only rows whose `product_group`/`category` changed (800 → 1 for one photo moving); `pruneStaleProducts` still receives the full id list. The storage meter is one `storage_usage_bytes()` RPC (falls back to the bucket walk on 42883). Support polling: none while the tab is hidden, 180 s once Realtime is SUBSCRIBED, 45 s otherwise. CRM auto-sync at most once per 10 minutes per session. See docs/reviews/15-db-cpu.md.
+
+### Magic number: `2000` (autoSave debounce — historical; now 5000, see above) — and `1000` (the re-arm)
 The auto-save debounce is `AUTOSAVE_DEBOUNCE_MS = 2000`. This was tuned to avoid a race where PDG's `onProcessed` fires rapidly during batch switches. Do not reduce below 1000ms. When a fire collides with a round trip that is already in flight it now **re-arms at `AUTOSAVE_RETRY_MS = 1000`** instead of returning — dropping it meant the newest state could never reach Supabase, because the in-flight payload was captured before the change (report 29, §10 Auto-Save).
 
 ### Magic number: `24 * 60 * 60 * 1000` (orphan product search window)
@@ -1678,6 +1697,7 @@ Two migrations are written and NOT run (§16), and one one-off data repair is ow
 | **Mobile-first pass** | **Built, not yet seen on a device** | The whole app has phone and tablet layouts (§1, §6, §10, §15), but no agent could sign in, so nothing past the logged-out screens was rendered. A signed-in smoke test and a real-iOS pass are the two things owed — §14 #26/#27 list exactly what that leaves unverified. Everything on that list is single-number CSS tuning, not structure. |
 | **Step 2 selection on touch** | Partly done | `.grouper-header` and `.photo-toolbar` were added to the click-outside safe-selector list (§15). Two proposals from `10-mobile-workflow.md` §9 are recorded, NOT done, because both touch the selection handlers §14 #12 and nine prior commits say to leave alone without a smoke test: (a) a native `pointerdown` selection path — today's `onMouseDown` works because a tap fires exactly one synthesized `mousedown`, so the 200 ms per-item debounce cannot swallow it; (b) a "done selecting" affordance in the category dock, since with pick mode off nothing signals that tapping a category consumes the selection (the dock's "N items selected" hint covers it partly). |
 
+| DB CPU reduction (Sept 2026) | **Built — two migrations not yet run** | Run `perf_storage_usage.sql`, then `perf_rls_initplan.sql` LAST (it recreates every policy with helper calls wrapped as `(select …)` so they evaluate once per statement, and adds 6 missing indexes incl. `products(batch_id)`, `product_images(product_id)`); re-run `perf_rls_initplan.sql` after ANY migration that recreates a policy. Measured 94.5 ms → 1.9 ms on a founder query. Client changes need no migration. Diagnostics playbook (pg_stat_statements) in docs/reviews/15-db-cpu.md; a t4g.nano may still need the next tier once the app's share is small. |
 | Function-privilege hardening (linter 0011/0028/0029) | **File 1 run in production (14 Sept 2026); file 2 `security_rpc_wrappers.sql` written, not yet run** | `security_function_hardening.sql` (helpers → `app_private` behind invoker wrappers; EXECUTE revoked from PUBLIC/anon everywhere, and from `authenticated` too on the 15 trigger/guard/maintenance functions; `search_path` pinned on the two touch triggers) then `security_rpc_wrappers.sql` (the nine client RPCs split into an `app_private` definer body + an identical-signature `public` invoker wrapper). Linter: 0011, 0028 and 0029 all clear. No client code changed. `app_errors.sql` is **not applied in production** — its function is handled but inert. Both files are idempotent; re-run them in that order after replaying any migration. |
 ---
 
@@ -1838,3 +1858,5 @@ npm run lint
     dropping a DEFAULT, reordering a `returns table` column, or changing volatility silently breaks `src/`
     with no type error and no failing test. Diff `pg_get_function_arguments` and `pg_get_function_result`
     between the two halves after any edit.
+
+47. **Never call an RLS helper bare inside a policy.** Write `(select auth.uid())`, `(select public.is_beta_admin())`, `(select public.auth_email_verified())` etc. so Postgres evaluates it once per statement (InitPlan) instead of once per row — the bare form cost 94.5 ms vs 1.9 ms on a 300-row founder query. Correlated helpers (`is_org_admin(org_id)`) stay SubPlans by nature. Any migration that recreates a policy must be followed by re-running `perf_rls_initplan.sql`.

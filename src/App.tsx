@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, Suspense, Component, type ReactNode } from 'react';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
-import { Tag, Settings, Package, ShoppingBag, Link2, Scissors, X, Trash2, Bug, BookMarked, KanbanSquare,
+import { Tag, Settings, Package, Link2, Scissors, X, Trash2, Bug, BookMarked, KanbanSquare,
          Cloud, AlertTriangle, RefreshCw, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users, MessageSquare, Wallet, Printer, ScanLine } from 'lucide-react';
 import { log, setDebugEnabled, isDebugEnabled } from './lib/debugLogger';
+import BrandWordmark from './components/Wordmark';
 import Auth from './components/Auth';
 import ImageUpload, { type ImageUploadHandle } from './components/ImageUpload';
 import ImageGrouper from './components/ImageGrouper';
@@ -16,6 +17,7 @@ import type { GoogleSheetExporterHandle } from './components/GoogleSheetExporter
 import { saveBatchToDatabase } from './lib/productService';
 import { publicImageUrl, thumbnailImageUrl } from './lib/storageUrls';
 import { chunked } from './lib/chunk';
+import { filterChangedForUpsert, rememberUpserted } from './lib/productUpsertDedupe';
 import {
   productRowToClothingItem, mergeProductRowIntoItem,
   STARTUP_MERGE_OPTIONS, OPEN_BATCH_MERGE_OPTIONS, type ProductRowLite,
@@ -403,8 +405,25 @@ class GrouperErrorBoundary extends Component<{ children: ReactNode }, GrouperBou
  */
 let startupRestoreInFlight = false;
 
-/** Supabase workflow_state debounce. CLAUDE.md §11: never below 1 000 ms. */
-const AUTOSAVE_DEBOUNCE_MS = 2000;
+/**
+ * Supabase workflow_state debounce. CLAUDE.md §11: never below 1 000 ms.
+ *
+ * Raised 2 000 → 5 000 (DB CPU). §11's rail is a FLOOR, not a target, and the
+ * two things it protects are both still in place and were re-read before this
+ * change:
+ *   1. The synchronous-loss guarantee belongs to `scheduleWorkflowBackup`
+ *      (lib/workflowBackup.ts) — a 1 s TRAILING THROTTLE, i.e. it fires during a
+ *      continuous stream of edits rather than being pushed out by them — plus
+ *      `flushWorkflowBackup()` wired to BOTH `pagehide` and `beforeunload` and
+ *      to the teardown effect. A refresh never loses grouping regardless of what
+ *      this constant says.
+ *   2. Switching or clearing a batch USED to just drop the pending timer; the
+ *      wider window made that a real (if small) loss, so `flushPendingAutoSave()`
+ *      below now fires it first.
+ * What 5 s buys: Step-2 grouping bursts and Step-3 typing coalesce into ~40 % as
+ * many round-trips, each of which is a full JSONB rewrite of the batch blob.
+ */
+const AUTOSAVE_DEBOUNCE_MS = 5000;
 /** How long a fire that collided with an in-flight save waits before retrying.
  *  Still ≥ 1 000 ms, and it re-arms rather than dropping the newest state. */
 const AUTOSAVE_RETRY_MS = 1000;
@@ -412,6 +431,39 @@ const AUTOSAVE_RETRY_MS = 1000;
  *  the workflow_state save so rapid group/ungroup clicks don't fire an 800-row
  *  upsert each (aae35fc) — which is also why the two mirrors can disagree. */
 const GROUP_UPSERT_DEBOUNCE_MS = 2000;
+
+/**
+ * The bucket walk this used to be, and still is when the RPC is absent:
+ * one `list()` for the user's product folders, then one MORE per folder.
+ * The founder's prefix holds 2 517 folders, so drawing the meter was ~2 518
+ * authenticated round trips — each one a `storage.objects` query under RLS,
+ * and that RLS calls `storage_prefix_writable()`, which runs its own
+ * `exists (select … from org_members …)`. Kept verbatim as the fallback so
+ * the meter still works on a project where perf_storage_usage.sql has not
+ * been run.
+ */
+async function walkStorageUsage(userId: string): Promise<{ usedBytes: number; fileCount: number }> {
+  let totalBytes = 0;
+  let totalFiles = 0;
+  const { data: productFolders } = await supabase.storage
+    .from('product-images')
+    .list(userId, { limit: 10000 });
+  for (const folder of (productFolders ?? [])) {
+    if (folder.metadata) {
+      totalBytes += (folder.metadata as { size?: number }).size ?? 0;
+      totalFiles++;
+    } else {
+      const { data: files } = await supabase.storage
+        .from('product-images')
+        .list(`${userId}/${folder.name}`, { limit: 1000 });
+      for (const f of (files ?? [])) {
+        totalBytes += (f.metadata as { size?: number } | null)?.size ?? 0;
+        totalFiles++;
+      }
+    }
+  }
+  return { usedBytes: totalBytes, fileCount: totalFiles };
+}
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -516,32 +568,48 @@ function App() {
     loading: boolean;
   } | null>(null);
 
-  const fetchStorageUsage = async (userId: string) => {
+  // Session cache: the meter's number cannot change except through this tab's
+  // own uploads and deletes, and both of those already call fetchStorageUsage
+  // with `force`. Without this, every re-render path that touched the effect
+  // re-ran the whole walk.
+  const storageUsageCacheRef = useRef<{ usedBytes: number; fileCount: number } | null>(null);
+  // Set once the RPC has answered with 42883 (undefined_function) — i.e. the
+  // migration is not run on this project. Stops us paying for a failed RPC
+  // before every fallback walk.
+  const storageRpcMissingRef = useRef(false);
+
+  const fetchStorageUsage = async (userId: string, force = false) => {
+    if (!force && storageUsageCacheRef.current) {
+      setStorageInfo({ ...storageUsageCacheRef.current, loading: false });
+      return;
+    }
     setStorageInfo(prev => ({
       usedBytes: prev?.usedBytes ?? 0,
       fileCount: prev?.fileCount ?? 0,
       loading: true,
     }));
-    let totalBytes = 0;
-    let totalFiles = 0;
-    const { data: productFolders } = await supabase.storage
-      .from('product-images')
-      .list(userId, { limit: 10000 });
-    for (const folder of (productFolders ?? [])) {
-      if (folder.metadata) {
-        totalBytes += (folder.metadata as { size?: number }).size ?? 0;
-        totalFiles++;
-      } else {
-        const { data: files } = await supabase.storage
-          .from('product-images')
-          .list(`${userId}/${folder.name}`, { limit: 1000 });
-        for (const f of (files ?? [])) {
-          totalBytes += (f.metadata as { size?: number } | null)?.size ?? 0;
-          totalFiles++;
-        }
+
+    let result: { usedBytes: number; fileCount: number } | null = null;
+
+    // One query (perf_storage_usage.sql). Sums the SAME rows the walk visits —
+    // objects under this user's own uid prefix in the product-images bucket.
+    if (!storageRpcMissingRef.current) {
+      const { data, error } = await supabase.rpc('storage_usage_bytes');
+      if (error) {
+        // 42883 = the migration has not been run here. Anything else (a network
+        // blip) is transient, so don't latch the flag for it.
+        if (error.code === '42883') storageRpcMissingRef.current = true;
+        log.app(`fetchStorageUsage | RPC unavailable (${error.code ?? ''}) — falling back to the bucket walk`);
+      } else if (data) {
+        const d = data as { used_bytes?: number | string; file_count?: number | string };
+        result = { usedBytes: Number(d.used_bytes ?? 0), fileCount: Number(d.file_count ?? 0) };
       }
     }
-    setStorageInfo({ usedBytes: totalBytes, fileCount: totalFiles, loading: false });
+
+    if (!result) result = await walkStorageUsage(userId);
+
+    storageUsageCacheRef.current = result;
+    setStorageInfo({ ...result, loading: false });
   };
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -575,6 +643,14 @@ function App() {
   // In-flight guard — prevents two concurrent autoSaveWorkflowBatch calls from both
   // hitting "0 rows updated → INSERT new batch" when the row doesn't exist yet.
   const autoSaveInFlightRef = useRef(false);
+  // The pending debounced save's own `fire`, so a batch switch / clear can run it
+  // instead of silently dropping it. Set whenever the timer is armed, cleared
+  // when it fires. See flushPendingAutoSave.
+  const pendingAutoSaveFireRef = useRef<(() => void) | null>(null);
+  // Per-item fingerprint of what the products mirror upsert last WROTE, so the
+  // 2 s group-upsert can send only the rows that actually changed. See
+  // lib/productUpsertDedupe.ts.
+  const upsertedProductKeysRef = useRef(new Map<string, string>());
   // Debounce timer for the products-table upsert in handleImagesGrouped.
   // Separate from autoSaveTimerRef so the workflow_state save and the products upsert
   // can debounce independently. Both fire after 2 s of inactivity.
@@ -1603,6 +1679,9 @@ function App() {
       // Same reason handleOpenBatch drops it: this timer's callback prunes
       // products rows for whatever batch is current when it FIRES.
       if (groupUpsertTimerRef.current) { clearTimeout(groupUpsertTimerRef.current); groupUpsertTimerRef.current = null; }
+      // The batch ROW survives a clear (only the session detaches), so the last
+      // few seconds of edits are still worth writing — flush, don't drop.
+      flushPendingAutoSave();
       if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null; }
       // No batch left to save — don't leave a stale 'saved'/'error' on the indicator.
       saveStatus.reset();
@@ -1618,10 +1697,18 @@ function App() {
   const handleBatchDeleted = (batchId: string) => {
     const isActive = batchId === currentBatchIdRef.current;
     log.app(`handleBatchDeleted | batchId=${batchId} active=${isActive}`);
+    // A batch delete removes its storage files, so the cached meter number is
+    // stale whether or not the deleted batch was the active one — re-read it
+    // (one RPC now, not a 2 500-call walk).
+    if (user) void fetchStorageUsage(user.id, true);
     if (!isActive) return;
     if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null; }
     if (groupUpsertTimerRef.current) { clearTimeout(groupUpsertTimerRef.current); groupUpsertTimerRef.current = null; }
     if (chunkTimerRef.current) { clearTimeout(chunkTimerRef.current); chunkTimerRef.current = null; }
+    // DROPPED, never flushed: the row is gone, and firing the pending save is
+    // exactly the "deleted batch comes back" bug. (The service tombstone would
+    // refuse the write anyway; this keeps the intent visible at the call site.)
+    pendingAutoSaveFireRef.current = null;
     pendingChunkRef.current = [];
     isUploadingRef.current = false;
     batchRowInsertedRef.current = false;
@@ -1906,8 +1993,9 @@ function App() {
       const totalCount = uploadedImages.length + items.length;
       addToast(`${totalCount} image${totalCount !== 1 ? 's' : ''} uploaded`);
 
-      // Refresh storage meter after new upload
-      fetchStorageUsage(user.id);
+      // Refresh storage meter after new upload — `force`, because this tab is
+      // exactly what made the cached number stale.
+      fetchStorageUsage(user.id, true);
     }
   };
 
@@ -2160,13 +2248,28 @@ function App() {
       const allRegisterable = itemsWithCategories.filter(i => i.imageUrls?.[0] || i.storagePath);
       if (allRegisterable.length === 0) return;
 
+      // Only the rows whose mirrored content actually differs from what this
+      // session last wrote (lib/productUpsertDedupe.ts). One photo moving groups
+      // used to re-upsert all 800 items in the batch; now it upserts the handful
+      // that changed. `allRegisterable` is still what pruneStaleProducts gets —
+      // handing IT the filtered list would delete every unchanged row.
+      const changed = filterChangedForUpsert(allRegisterable, upsertedProductKeysRef.current);
+      if (changed.length === 0) {
+        log.app(`handleImagesGrouped | products upsert skipped — 0 of ${allRegisterable.length} rows changed`);
+        // The prune still runs: "no row changed" says nothing about rows that
+        // were DELETED from the batch since the last fire.
+        if (upsertBatchId) await pruneStaleProducts(upsertBatchId, allRegisterable.map(i => i.id));
+        return;
+      }
+      log.app(`handleImagesGrouped | products upsert | ${changed.length} of ${allRegisterable.length} rows changed`);
+
       // This write is the `products.product_group` MIRROR. It used to fail with
       // nothing but a console.warn, and a silent failure here is what leaves the
       // mirror stale (report 29) — so it reports into the same indicator.
       saveStatus.begin();
       // Upsert in chunks to avoid PostgREST URL-length limit (lib/chunk.ts)
       let hadError = false;
-      for (const chunk of chunked(allRegisterable)) {
+      for (const chunk of chunked(changed)) {
         const { error: grpErr } = await supabase.from('products').upsert(
           // NO batch_id — see the note in handleImagesSorted (finding 6).
           chunk.map(item => ({
@@ -2192,7 +2295,7 @@ function App() {
         // ImageGrouper (bypassing handleImagesUploaded).  Without this, those items
         // have products rows but no product_images rows — so Library / open-item
         // views show blank images after the first group action.
-        const withImages = allRegisterable.filter(i => i.imageUrls?.[0] || i.storagePath);
+        const withImages = changed.filter(i => i.imageUrls?.[0] || i.storagePath);
         if (withImages.length > 0) {
           const productImageRows = withImages.map((item) => {
             const imageUrl = item.imageUrls?.[0] || publicImageUrl(item.storagePath) || null;
@@ -2221,6 +2324,9 @@ function App() {
         if (upsertBatchId) {
           await pruneStaleProducts(upsertBatchId, allRegisterable.map(i => i.id));
         }
+        // Only now, after the round-trip landed: a remembered key whose write
+        // failed would suppress the retry and leave the mirror stale forever.
+        rememberUpserted(changed, upsertedProductKeysRef.current);
         setLibraryRefreshTrigger(prev => prev + 1);
         saveStatus.end(true);
       }
@@ -2279,6 +2385,7 @@ function App() {
 
     const fire = async () => {
       autoSaveTimerRef.current = null;
+      pendingAutoSaveFireRef.current = null;
       // Guard: if session hasn't resolved yet (getSession().then() still in flight),
       // currentBatchIdRef.current will be null and we'd create a spurious new batch.
       // This happens when PDG mounts immediately and calls handleItemsProcessed before
@@ -2299,6 +2406,7 @@ function App() {
       // write LANDED. Re-arm instead: the newest state always gets a turn.
       if (autoSaveInFlightRef.current) {
         log.app('autoSaveWorkflow | save already in flight — re-arming');
+        pendingAutoSaveFireRef.current = fire;
         autoSaveTimerRef.current = setTimeout(fire, AUTOSAVE_RETRY_MS);
         return;
       }
@@ -2367,7 +2475,31 @@ function App() {
       }
     };
 
-    autoSaveTimerRef.current = setTimeout(fire, AUTOSAVE_DEBOUNCE_MS); // wait 2 s of inactivity before hitting Supabase
+    pendingAutoSaveFireRef.current = fire;
+    autoSaveTimerRef.current = setTimeout(fire, AUTOSAVE_DEBOUNCE_MS); // wait for quiet before hitting Supabase
+  };
+
+  /**
+   * Run a pending debounced save NOW instead of dropping it.
+   *
+   * `handleOpenBatch` and `handleClearBatch` both clear `autoSaveTimerRef` —
+   * they have to, because the callback prunes and writes against whatever batch
+   * is current when it fires. But clearing it also threw away every edit made
+   * inside the debounce window, and widening that window to 5 s made the loss
+   * worth fixing rather than tolerating.
+   *
+   * MUST be called BEFORE `currentBatchIdRef.current` is reassigned: `fire`
+   * reads that ref at call time, which is the whole reason the drop existed.
+   * Fire-and-forget by design — the outgoing batch's write does not block the
+   * incoming batch's open.
+   */
+  const flushPendingAutoSave = () => {
+    const pending = pendingAutoSaveFireRef.current;
+    if (!pending) return;
+    pendingAutoSaveFireRef.current = null;
+    if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null; }
+    log.app('autoSaveWorkflow | flushing pending save before batch switch');
+    pending();
   };
 
   // Register restored workflow items in products + product_images so Library sees them.
@@ -2406,6 +2538,9 @@ function App() {
     //    (key={currentBatchId} is set on the ImageGrouper JSX element)
     // 3. Compute isAlreadyActiveBatch against the OLD ref BEFORE we update it.
     const isAlreadyActiveBatch = batch.id === currentBatchIdRef.current;
+    // Before the ref moves: run any save still sitting in the debounce window
+    // for the OUTGOING batch, rather than dropping it with the timer below.
+    if (!isAlreadyActiveBatch) flushPendingAutoSave();
     currentBatchIdRef.current = batch.id;
     batchRowInsertedRef.current = true;
     markBatchConfirmed(batch.id); // row verified — if it vanishes later, it was deleted (never re-create)
@@ -2910,11 +3045,8 @@ function App() {
                 It is the page's <h1> on the workflow; inside a tool view
                 ToolView's title takes that role, so the mark steps down to a
                 <p> and every view keeps exactly one h1. */}
-            <Wordmark className="app-wordmark" style={{
-              display: 'flex', alignItems: 'center', gap: '0.6rem',
-              letterSpacing: '-0.045em', fontWeight: 650, marginBottom: '0.2rem',
-            }}>
-              <ShoppingBag size={28} /> Arcadian
+            <Wordmark className="app-wordmark" style={{ display: 'flex', alignItems: 'center', marginBottom: '0.2rem' }}>
+              <BrandWordmark />
             </Wordmark>
             <p className="header-subtitle">Upload, sort, describe, and export to Shopify</p>
           </div>
@@ -2975,7 +3107,7 @@ function App() {
             })()}
             <button
               className="storage-refresh-btn"
-              onClick={() => fetchStorageUsage(user.id)}
+              onClick={() => fetchStorageUsage(user.id, true)}
               disabled={storageInfo.loading}
               title="Refresh storage usage"
               style={{ marginLeft: 'auto' }}

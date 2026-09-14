@@ -7,7 +7,9 @@ vi.mock('./supabase', async () => {
 
 import { supabase } from './supabase';
 import { markBatchDeleted, isBatchDeleted, deleteWorkflowBatch, fetchWorkflowBatches, removeItemsFromWorkflowBatch,
-  autoSaveWorkflowBatchDetailed, autoSaveWorkflowBatch, autoSaveSucceeded, markBatchConfirmed } from './workflowBatchService';
+  autoSaveWorkflowBatchDetailed, autoSaveWorkflowBatch, autoSaveSucceeded, markBatchConfirmed,
+  workflowStateFingerprint, shouldSkipAutoSave, rememberAutoSaveFingerprint, resetAutoSaveFingerprints,
+  AUTOSAVE_FINGERPRINT_MAX_AGE_MS } from './workflowBatchService';
 import type { MockedSupabaseClient, MockCall } from './testing/supabaseMock';
 
 const mock = (supabase as unknown as MockedSupabaseClient).__mock;
@@ -528,5 +530,110 @@ describe('autoSaveWorkflowBatchDetailed — outcomes', () => {
     mock.responder = (c: MockCall) =>
       c.table === 'workflow_batches' && c.op === 'update' ? { data: [{ id }], error: null } : undefined;
     expect(await autoSaveWorkflowBatch(id, 'batch-1', state)).toBe(id);
+  });
+});
+
+/**
+ * Unchanged-payload skip (Sept 2026, DB CPU). Step 3 fires an auto-save on every
+ * keystroke, but none of the fields being typed is IN the slim payload — so the
+ * UPDATE rewrote the whole workflow_state JSONB to change nothing. These tests
+ * pin BOTH halves: that an identical payload is elided, and that every way a
+ * payload can differ still writes.
+ */
+describe('auto-save unchanged-payload skip', () => {
+  const state = (items: unknown[]) => ({ processedItems: items as never });
+
+  beforeEach(() => {
+    mock.reset();
+    mock.authUser = { id: 'user-1' };
+    resetAutoSaveFingerprints();
+  });
+
+  it('ignores lastEditedAt — the field that changes on every single call', () => {
+    const a = { ...state([{ id: 'i1' }]), lastEditedBy: 'a@b.c', lastEditedAt: '2026-01-01T00:00:00.000Z' };
+    const b = { ...state([{ id: 'i1' }]), lastEditedBy: 'a@b.c', lastEditedAt: '2026-09-14T11:22:33.444Z' };
+    expect(workflowStateFingerprint(a)).toBe(workflowStateFingerprint(b));
+  });
+
+  it('does NOT ignore lastEditedBy — a different teammate must still write', () => {
+    const a = { ...state([{ id: 'i1' }]), lastEditedBy: 'a@b.c' };
+    const b = { ...state([{ id: 'i1' }]), lastEditedBy: 'z@b.c' };
+    expect(workflowStateFingerprint(a)).not.toBe(workflowStateFingerprint(b));
+  });
+
+  it('changes when any item field changes', () => {
+    const base = workflowStateFingerprint(state([{ id: 'i1', productGroup: 'i1', category: 'tees' }]));
+    expect(workflowStateFingerprint(state([{ id: 'i1', productGroup: 'i1', category: 'hats' }]))).not.toBe(base);
+    expect(workflowStateFingerprint(state([{ id: 'i1', productGroup: 'g9', category: 'tees' }]))).not.toBe(base);
+    expect(workflowStateFingerprint(state([{ id: 'i1', productGroup: 'i1', category: 'tees' }, { id: 'i2' }]))).not.toBe(base);
+    expect(workflowStateFingerprint(state([]))).not.toBe(base);
+  });
+
+  it('shouldSkipAutoSave is false until a payload has been REMEMBERED', () => {
+    const h = workflowStateFingerprint(state([{ id: 'i1' }]));
+    expect(shouldSkipAutoSave('b1', h)).toBe(false);
+    rememberAutoSaveFingerprint('b1', h, 1_000);
+    expect(shouldSkipAutoSave('b1', h, 1_000)).toBe(true);
+  });
+
+  it('shouldSkipAutoSave is false for a null batch id, a different id, and a different hash', () => {
+    rememberAutoSaveFingerprint('b1', 'hash-a', 1_000);
+    expect(shouldSkipAutoSave(null, 'hash-a', 1_000)).toBe(false);
+    expect(shouldSkipAutoSave('b2', 'hash-a', 1_000)).toBe(false);
+    expect(shouldSkipAutoSave('b1', 'hash-b', 1_000)).toBe(false);
+  });
+
+  it('expires after AUTOSAVE_FINGERPRINT_MAX_AGE_MS so updated_at still advances', () => {
+    rememberAutoSaveFingerprint('b1', 'hash-a', 1_000);
+    expect(shouldSkipAutoSave('b1', 'hash-a', 1_000 + AUTOSAVE_FINGERPRINT_MAX_AGE_MS - 1)).toBe(true);
+    expect(shouldSkipAutoSave('b1', 'hash-a', 1_000 + AUTOSAVE_FINGERPRINT_MAX_AGE_MS)).toBe(false);
+  });
+
+  it('the SECOND identical save sends no UPDATE at all, and reports success', async () => {
+    const id = `skip-${crypto.randomUUID()}`;
+    mock.responder = (c: MockCall) =>
+      c.table === 'workflow_batches' && c.op === 'update' ? { data: [{ id }], error: null } : undefined;
+
+    const first = await autoSaveWorkflowBatchDetailed(id, 'batch-1', state([{ id: 'i1' }]));
+    expect(first.outcome).toBe('updated');
+    expect(mock.callsFor('workflow_batches', 'update')).toHaveLength(1);
+
+    const second = await autoSaveWorkflowBatchDetailed(id, 'batch-1', state([{ id: 'i1' }]));
+    expect(second).toEqual({ batchId: id, outcome: 'unchanged' });
+    expect(autoSaveSucceeded(second)).toBe(true);
+    expect(mock.callsFor('workflow_batches', 'update')).toHaveLength(1); // still ONE
+  });
+
+  it('a CHANGED payload after a skip writes again', async () => {
+    const id = `skip2-${crypto.randomUUID()}`;
+    mock.responder = (c: MockCall) =>
+      c.table === 'workflow_batches' && c.op === 'update' ? { data: [{ id }], error: null } : undefined;
+
+    await autoSaveWorkflowBatchDetailed(id, 'b', state([{ id: 'i1' }]));
+    await autoSaveWorkflowBatchDetailed(id, 'b', state([{ id: 'i1' }]));          // skipped
+    await autoSaveWorkflowBatchDetailed(id, 'b', state([{ id: 'i1', category: 'tees' }]));
+    expect(mock.callsFor('workflow_batches', 'update')).toHaveLength(2);
+  });
+
+  it('an RLS-BLOCKED save is never remembered — the next attempt must still try', async () => {
+    const id = `rlsskip-${crypto.randomUUID()}`;
+    mock.responder = (c: MockCall) => {
+      if (c.table === 'workflow_batches' && c.op === 'update') return { data: [], error: null };
+      if (c.table === 'workflow_batches' && c.op === 'select') return { data: { id }, error: null };
+      return undefined;
+    };
+    const a = await autoSaveWorkflowBatchDetailed(id, 'b', state([{ id: 'i1' }]));
+    expect(a.outcome).toBe('rls-blocked');
+    const b = await autoSaveWorkflowBatchDetailed(id, 'b', state([{ id: 'i1' }]));
+    expect(b.outcome).toBe('rls-blocked');
+    expect(mock.callsFor('workflow_batches', 'update')).toHaveLength(2); // tried both times
+  });
+
+  it('deleting a batch forgets its fingerprint (a re-created id must not be skipped)', () => {
+    const id = `forget-${crypto.randomUUID()}`;
+    rememberAutoSaveFingerprint(id, 'hash-a');
+    expect(shouldSkipAutoSave(id, 'hash-a')).toBe(true);
+    markBatchDeleted(id);
+    expect(shouldSkipAutoSave(id, 'hash-a')).toBe(false);
   });
 });

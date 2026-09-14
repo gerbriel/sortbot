@@ -3,12 +3,14 @@
 ## 2026-09-14 — Rename to Arcadian
 
 ### Brand
+- **Outfit is the UI typeface** — self-hosted (SIL OFL, `src/assets/fonts/`, variable 300–700, latin), declared once in `index.css` as `--font-sans`; no font CDN, so the CSP stays `font-src 'self'`. **The logo is now the wordmark**: `Arcadian` set in Outfit 500 with tight tracking, no icon, everywhere the brand appears (header, landing nav, sign-in, waitlist); new geometric "A" favicon.
 - **Acadia → Arcadian** across every user-visible surface (landing, auth, waitlist gate, header wordmark, tool-view copy, support widget and Messages, invite and approval emails, browser title and meta description, the beta.html redirect, CI and uptime title assertions, deploy configs, README, CLAUDE.md). Structural identifiers unchanged: the `/sortbot/` base path, every `sortbot_*` key, the `ACD-` SKU prefix and the `acadia-app` container names.
 
 ### Navigation
 - **The header toolbar is gone.** Every tool (Library, Labels, Scan, Inbox, Manage Categories, Category Presets, Workspace dashboard, and for founding admins Vocabulary, Analytics, CRM, Finance, Board) is now a grouped option in the workspace menu at the top right, which shows the unread-message count on its trigger. Keyboard-complete (arrows, Home/End, Escape). On phones the same menu opens as a bottom sheet, and the bottom bar's More tab opens it too.
 
 ### Database
+- **Database CPU reduction** — `perf_rls_initplan.sql` recreates every RLS policy with helper calls wrapped as `(select …)` (once per statement instead of once per row: 94.5 ms → 1.9 ms measured) and adds six missing indexes; `perf_storage_usage.sql` replaces the ~2,500-call storage-bucket walk with one `storage_usage_bytes()` RPC. Client: auto-save skips byte-identical payloads and debounces at 5 s with a flush on batch switch, the group upsert sends only changed rows, support polling pauses in hidden tabs and backs off to 180 s while Realtime is connected, the CRM auto-sync runs at most every 10 minutes. Run order: storage usage, then the policy file last, and re-run the policy file after any migration that recreates a policy.
 - **The last nine database linter warnings cleared** — `supabase/migrations/security_rpc_wrappers.sql`
   finishes what `security_function_hardening.sql` started. The nine functions the client calls through
   `supabase.rpc(...)` kept warning 0029 because they had to stay in the exposed schema to be callable; that

@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import {
-  ShoppingBag, Target, RotateCcw, RotateCw, Trash2, Scissors, Mic, Download,
+  Target, RotateCcw, RotateCw, Trash2, Scissors, Mic, Download,
   BadgeDollarSign, MessageSquare, Users, Package, Check, Shirt, Layers, Clock,
 } from 'lucide-react';
 import { requestBetaAccess } from '../lib/betaService';
+import Wordmark from './Wordmark';
 import { track } from '../lib/analytics';
 import './Landing.css';
 
@@ -120,7 +121,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
     <div className="landing">
       {/* ── Nav ── */}
       <nav className="ld-nav">
-        <span className="ld-logo"><ShoppingBag size={22} /> Arcadian <span className="ld-chip">BETA</span></span>
+        <span className="ld-logo"><Wordmark /> <span className="ld-chip">BETA</span></span>
         <span className="ld-nav-actions">
           <a href="#pricing" className="ld-nav-link">Pricing</a>
           <a href="#signup" className="ld-nav-cta">Request access</a>

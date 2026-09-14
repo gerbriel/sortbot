@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ShoppingBag } from 'lucide-react';
+import Wordmark from './Wordmark';
 import { requestBetaAccess } from '../lib/betaService';
 import './WaitlistGate.css';
 
@@ -38,7 +38,7 @@ export default function WaitlistGate({ status, email, onSignOut, onRequested }: 
   return (
     <div className="waitlist-gate">
       <div className="waitlist-card">
-        <div className="waitlist-brand"><ShoppingBag size={20} /> Arcadian <span className="waitlist-chip">BETA</span></div>
+        <div className="waitlist-brand"><Wordmark /> <span className="waitlist-chip">BETA</span></div>
 
         {status === 'pending' && (
           <>

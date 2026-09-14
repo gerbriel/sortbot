@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { track } from '../lib/analytics';
+import Wordmark from './Wordmark';
 import './Auth.css';
 
 interface AuthProps {
@@ -89,7 +90,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthenticated }) => {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-header">
-          <h1>Arcadian</h1>
+          <h1><Wordmark /></h1>
           <p>From camera roll to Shopify-ready listings</p>
         </div>
 

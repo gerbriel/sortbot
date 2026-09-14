@@ -3,6 +3,18 @@
  * follow-ups and notes, stored in our own Supabase project (`crm_contacts`,
  * `crm_notes`; migration crm.sql). There is no external CRM behind this.
  *
+ * NOTE FOR LATER — `crm_sync_contacts()` could be INCREMENTAL, and is not.
+ * It re-derives and re-upserts EVERY contact from beta_signups + auth.users +
+ * organizations on every call (architecture review #18). A `where
+ * greatest(u.created_at, o.created_at, b.created_at) > (select max(last_seen_at)
+ * from crm_contacts)` — or simply a `p_since timestamptz default null` argument
+ * the panel passes from the newest contact it holds — would turn an O(all users)
+ * write into an O(new users) one. NOT rewritten here: it is a SECURITY DEFINER
+ * body with its own correctness story (the `updated` count is "rows re-checked",
+ * which an incremental version would silently change), and the throttle below
+ * removes the repeat-call cost without touching the function's semantics. Do
+ * that rewrite on its own, with its own before/after.
+ *
  * `syncCrmContacts()` calls the `crm_sync_contacts()` RPC, which mirrors beta
  * requests and real accounts (+ their workspace) into contacts — that is how
  * new orgs and users show up by themselves. It never overwrites hand edits.
@@ -67,6 +79,49 @@ export async function fetchCrmContacts(): Promise<CrmContactsResult> {
     return { status: 'unavailable' };
   }
   return { status: 'ok', contacts: (data ?? []) as CrmContact[] };
+}
+
+/**
+ * How long an automatic (panel-open) sync stays "recent enough" that opening the
+ * panel again should not re-run it. Session-scoped, in memory — a reload syncs.
+ */
+export const CRM_AUTO_SYNC_TTL_MS = 10 * 60_000;
+
+/** null = this session has never auto-synced. Not 0: with a real epoch clock, 0
+ *  happens to work, but a test (or a fake timer) starting near t=0 would read it
+ *  as "synced a moment ago" and suppress the first sync. */
+let lastAutoSyncAt: number | null = null;
+
+/**
+ * Should the AUTOMATIC sync on panel open actually run?
+ *
+ * `crm_sync_contacts()` is not cheap: it re-derives the whole contact list from
+ * `beta_signups` + `auth.users` + `organizations` and upserts every row, every
+ * time (architecture review #18). It is idempotent, which is exactly why running
+ * it on every panel open was easy to miss — the result never changes, only the
+ * CPU bill does. The founder opens the CRM tab repeatedly in a session; the data
+ * it syncs FROM changes when somebody signs up, i.e. rarely.
+ *
+ * The MANUAL Sync button bypasses this entirely — a human asking for fresh data
+ * gets fresh data, always. So does the post-approve/deny sync in OrgPanel, which
+ * is user-triggered and follows a write that genuinely changed the source rows.
+ *
+ * Pure w.r.t. its arguments; the timestamp is module state set only by
+ * `markCrmAutoSynced`.
+ */
+export function shouldAutoSyncCrm(now: number = Date.now()): boolean {
+  if (lastAutoSyncAt === null) return true;
+  return now - lastAutoSyncAt >= CRM_AUTO_SYNC_TTL_MS;
+}
+
+/** Record that an automatic sync ran. Call only after one actually succeeded. */
+export function markCrmAutoSynced(now: number = Date.now()): void {
+  lastAutoSyncAt = now;
+}
+
+/** Test hook. */
+export function resetCrmAutoSync(): void {
+  lastAutoSyncAt = null;
 }
 
 export async function syncCrmContacts(): Promise<CrmSyncResult> {

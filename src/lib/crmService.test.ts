@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   parseTags, followUpStatus, filterContacts, sortContacts, stageCounts, todayKey, isEmail,
+  shouldAutoSyncCrm, markCrmAutoSynced, resetCrmAutoSync, CRM_AUTO_SYNC_TTL_MS,
   type CrmContact,
 } from './crmService';
 
@@ -69,5 +70,52 @@ describe('crmService — pure helpers', () => {
     expect(isEmail('shop@example.com')).toBe(true);
     expect(isEmail('nope')).toBe(false);
     expect(todayKey(new Date(2026, 8, 5))).toBe('2026-09-05');
+  });
+});
+
+/**
+ * Automatic-sync throttle (Sept 2026, DB CPU). `crm_sync_contacts()` re-derives
+ * and re-upserts EVERY contact from beta_signups + auth.users + organizations on
+ * every call (architecture review #18), and CrmPanel ran it on every mount. The
+ * manual Sync button is deliberately NOT throttled.
+ */
+describe('CRM automatic-sync throttle', () => {
+  beforeEach(() => resetCrmAutoSync());
+
+  it('allows the first automatic sync of a session', () => {
+    expect(shouldAutoSyncCrm(1_000)).toBe(true);
+  });
+
+  it('suppresses a second automatic sync inside the TTL', () => {
+    markCrmAutoSynced(1_000);
+    expect(shouldAutoSyncCrm(1_000)).toBe(false);
+    expect(shouldAutoSyncCrm(1_000 + CRM_AUTO_SYNC_TTL_MS - 1)).toBe(false);
+  });
+
+  it('allows it again once the TTL has elapsed', () => {
+    markCrmAutoSynced(1_000);
+    expect(shouldAutoSyncCrm(1_000 + CRM_AUTO_SYNC_TTL_MS)).toBe(true);
+    expect(shouldAutoSyncCrm(1_000 + CRM_AUTO_SYNC_TTL_MS * 5)).toBe(true);
+  });
+
+  it('the TTL is ten minutes', () => {
+    expect(CRM_AUTO_SYNC_TTL_MS).toBe(10 * 60_000);
+  });
+
+  it('opening the panel ten times in a session costs ONE sync', () => {
+    let syncs = 0;
+    let now = 0;
+    for (let i = 0; i < 10; i++) {
+      now += 20_000;                       // a panel open every 20 s
+      if (shouldAutoSyncCrm(now)) { syncs++; markCrmAutoSynced(now); }
+    }
+    expect(syncs).toBe(1);
+  });
+
+  it('resetCrmAutoSync clears the timestamp (a reload re-syncs)', () => {
+    markCrmAutoSynced(1_000);
+    expect(shouldAutoSyncCrm(1_000)).toBe(false);
+    resetCrmAutoSync();
+    expect(shouldAutoSyncCrm(1_000)).toBe(true);
   });
 });

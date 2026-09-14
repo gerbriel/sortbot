@@ -145,13 +145,19 @@ export async function setThreadStatus(threadId: string, status: ThreadStatus): P
  * subscriber the moment a founder cleans up the inbox. Deletions are picked up
  * by the widget's polling instead.
  */
-export function subscribeToSupport(onChange: () => void): () => void {
+export function subscribeToSupport(
+  onChange: () => void,
+  /** Reports the channel's own view of whether it is live. `supportStore` uses
+   *  it to decide whether the poll is the PRIMARY path (Realtime is down: keep
+   *  it fast) or a mere backstop (Realtime is up: stretch it right out). */
+  onStatus?: (subscribed: boolean) => void,
+): () => void {
   const channel = supabase
     .channel(`support-${Math.random().toString(36).slice(2, 8)}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages' }, () => onChange())
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_threads' }, () => onChange())
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'support_threads' }, () => onChange())
-    .subscribe();
+    .subscribe(status => onStatus?.(status === 'SUBSCRIBED'));
   return () => {
     void supabase.removeChannel(channel);
   };

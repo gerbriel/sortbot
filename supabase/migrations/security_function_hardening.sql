@@ -286,7 +286,12 @@ select app_private._harden(array[
   'public.founding_list_users()',
   'public.founding_set_membership(uuid, uuid, text)',
   'public.founding_remove_membership(uuid, uuid)',
-  'public.founding_move_user(uuid, uuid, uuid, text)'
+  'public.founding_move_user(uuid, uuid, uuid, text)',
+  -- perf_storage_usage.sql (Sept 2026): storage meter, one query instead of a
+  -- ~2 500-call bucket walk. Ships as an app_private body + a public invoker
+  -- wrapper, so BOTH names are listed — this one hardens whichever exists.
+  'public.storage_usage_bytes()',
+  'app_private.storage_usage_bytes()'
 ], array['authenticated', 'service_role']);
 
 

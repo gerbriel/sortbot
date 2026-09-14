@@ -4,6 +4,7 @@ import {
   fetchCrmContacts, syncCrmContacts, createCrmContact, updateCrmContact, deleteCrmContact,
   fetchCrmNotes, addCrmNote, deleteCrmNote,
   filterContacts, sortContacts, stageCounts, followUpStatus, parseTags, todayKey,
+  shouldAutoSyncCrm, markCrmAutoSynced,
   CRM_STAGES, CRM_STAGE_LABEL,
   type CrmContact, type CrmNote, type CrmStage, type CrmContactPatch, type CrmContactsResult,
 } from '../lib/crmService';
@@ -19,11 +20,19 @@ interface CrmLoad {
   result: CrmContactsResult;
 }
 
-/** Optional sync, then the contact list. No React state here — callers apply it. */
-async function loadCrm(withSync: boolean): Promise<CrmLoad> {
+/**
+ * Optional sync, then the contact list. No React state here — callers apply it.
+ *
+ * `mode: 'auto'` is the mount path and is throttled to once per
+ * CRM_AUTO_SYNC_TTL_MS per session (see shouldAutoSyncCrm). `mode: 'manual'` is
+ * the Sync button and always runs. `mode: 'none'` would fetch only.
+ */
+async function loadCrm(mode: 'auto' | 'manual' | 'none'): Promise<CrmLoad> {
   let note: string | null = null;
-  if (withSync) {
+  const doSync = mode === 'manual' || (mode === 'auto' && shouldAutoSyncCrm());
+  if (doSync) {
     const s = await syncCrmContacts();
+    if (s.status === 'ok' && mode === 'auto') markCrmAutoSynced();
     note = s.status === 'ok' ? `${s.inserted} new · ${s.updated} refreshed` : null;
   }
   return { note, result: await fetchCrmContacts() };
@@ -73,7 +82,7 @@ export default function CrmPanel() {
 
   useEffect(() => {
     let cancelled = false;
-    loadCrm(true).then(x => { if (!cancelled) applyLoad(x); });
+    loadCrm('auto').then(x => { if (!cancelled) applyLoad(x); });
     return () => { cancelled = true; };
   }, [applyLoad]);
 
@@ -81,7 +90,7 @@ export default function CrmPanel() {
     if (syncing) return;
     setSyncing(true);
     setSyncNote(null);
-    loadCrm(true).then(applyLoad);
+    loadCrm('manual').then(applyLoad);
   };
 
   const counts = useMemo(() => stageCounts(contacts), [contacts]);

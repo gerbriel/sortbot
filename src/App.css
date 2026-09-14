@@ -992,3 +992,8 @@
   }
 }
 /* ▲▲▲ END MOBILE WORKFLOW BLOCK ▲▲▲ */
+
+/* Brand wordmark inside the inverted nav: Outfit via .wordmark (index.css),
+   sized up for the header and pinned to a literal light foreground because
+   the nav never takes --text-* tokens (CLAUDE.md §1). */
+.app-header .wordmark { font-size: var(--fs-xl); color: #ffffff; }

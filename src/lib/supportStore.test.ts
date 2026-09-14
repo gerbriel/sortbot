@@ -8,6 +8,7 @@ vi.mock('./supabase', async () => {
 import { supabase } from './supabase';
 import {
   supportStore, supportActions, applyReadStamp, applySentMessage, applyStatus, filterThreads, readStampKey,
+  supportPollInterval, SUPPORT_POLL_MS, SUPPORT_POLL_SUBSCRIBED_MS,
 } from './supportStore';
 import { isUnread, unreadThreadCount, type SupportThread } from './supportService';
 import type { MockedSupabaseClient } from './testing/supabaseMock';
@@ -287,5 +288,44 @@ describe('supportStore — optimistic writes and reconciliation', () => {
     expect(supportStore.isLive()).toBe(false);
     unsub(); // the component's cleanup still runs later — must not throw or re-stop
     expect(supportStore.isLive()).toBe(false);
+  });
+});
+
+/**
+ * Poll-interval selection (Sept 2026, DB CPU). The support poll was a flat 45 s
+ * timer that ran in every tab, forever, whether or not anyone was looking and
+ * whether or not Realtime was already delivering every change within
+ * milliseconds. Each tick is a `support_threads` SELECT whose RLS calls
+ * `is_beta_admin()`.
+ *
+ * `supportPollInterval` is the entire decision, and it is pure.
+ */
+describe('supportPollInterval', () => {
+  it('does not poll at all while the tab is hidden', () => {
+    expect(supportPollInterval(false, false)).toBeNull();
+    expect(supportPollInterval(false, true)).toBeNull();
+  });
+
+  it('keeps the fast interval when Realtime is NOT subscribed — the poll is the only path', () => {
+    expect(supportPollInterval(true, false)).toBe(SUPPORT_POLL_MS);
+    expect(SUPPORT_POLL_MS).toBe(45_000);
+  });
+
+  it('stretches to the backstop interval once Realtime reports SUBSCRIBED', () => {
+    expect(supportPollInterval(true, true)).toBe(SUPPORT_POLL_SUBSCRIBED_MS);
+    expect(SUPPORT_POLL_SUBSCRIBED_MS).toBe(180_000);
+  });
+
+  it('the subscribed interval is a real reduction, never an increase in load', () => {
+    expect(SUPPORT_POLL_SUBSCRIBED_MS).toBeGreaterThan(SUPPORT_POLL_MS);
+  });
+
+  it('is total — every (visible, subscribed) combination has an answer', () => {
+    for (const visible of [true, false]) {
+      for (const subscribed of [true, false]) {
+        const v = supportPollInterval(visible, subscribed);
+        expect(v === null || v > 0).toBe(true);
+      }
+    }
   });
 });

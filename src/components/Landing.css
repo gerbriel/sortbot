@@ -28,7 +28,7 @@
 
 /* ── Nav sits on the BLACK bar, so everything in it is inverted from the page
    and uses literal light values rather than page tokens. ─────────────────── */
-.ld-logo { display: flex; align-items: center; gap: 8px; font-size: 19px; font-weight: 800; color: #ffffff; }
+.ld-logo { display: flex; align-items: center; gap: 8px; font-size: 22px; color: #ffffff; }
 
 .ld-chip {
   font-size: 10px;
