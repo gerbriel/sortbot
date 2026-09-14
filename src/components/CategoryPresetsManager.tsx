@@ -654,8 +654,8 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
               <form id="preset-form" onSubmit={handleSubmit}>
 
                 {/* Basic Info */}
-                <div className="form-section">
-                  <h4>Basic Information</h4>
+                <details className="form-section" open>
+                  <summary>Basic Information</summary>
                   <div className="form-group">
                     <label>Category *</label>
                     {editingPreset ? (
@@ -697,11 +697,11 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
                     onMoveUp={fieldId => moveFieldUp('__basic__', fieldId)}
                     onMoveDown={fieldId => moveFieldDown('__basic__', fieldId)}
                   />
-                </div>
+                </details>
 
                 {/* Shipping */}
-                <div className="form-section">
-                  <h4>Shipping & Physical Attributes</h4>
+                <details className="form-section" open>
+                  <summary>Shipping & Physical Attributes</summary>
                   <div className="form-row">
                     <div className="form-group">
                       <label>Default Weight</label>
@@ -731,11 +731,11 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
                     onMoveUp={fieldId => moveFieldUp('__shipping__', fieldId)}
                     onMoveDown={fieldId => moveFieldDown('__shipping__', fieldId)}
                   />
-                </div>
+                </details>
 
                 {/* Classification */}
-                <div className="form-section">
-                  <h4>Product Classification</h4>
+                <details className="form-section" open>
+                  <summary>Product Classification</summary>
                   <div className="form-group">
                     <label>Product Type</label>
                     <input type="text" value={formData.product_type || ''} onChange={e => setFormData(prev => ({ ...prev, product_type: e.target.value }))} placeholder="e.g., Apparel" />
@@ -756,11 +756,11 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
                     onMoveUp={fieldId => moveFieldUp('__classification__', fieldId)}
                     onMoveDown={fieldId => moveFieldDown('__classification__', fieldId)}
                   />
-                </div>
+                </details>
 
                 {/* Pricing */}
-                <div className="form-section">
-                  <h4>Pricing Guidance</h4>
+                <details className="form-section" open>
+                  <summary>Pricing Guidance</summary>
                   <div className="form-row">
                     <div className="form-group">
                       <label>Min Price ($)</label>
@@ -779,11 +779,11 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
                     onMoveUp={fieldId => moveFieldUp('__pricing__', fieldId)}
                     onMoveDown={fieldId => moveFieldDown('__pricing__', fieldId)}
                   />
-                </div>
+                </details>
 
                 {/* Attributes */}
-                <div className="form-section">
-                  <h4>Product Attributes</h4>
+                <details className="form-section" open>
+                  <summary>Product Attributes</summary>
                   <div className="form-group">
                     <label>Default Material</label>
                     <input type="text" value={formData.default_material || ''} onChange={e => setFormData(prev => ({ ...prev, default_material: e.target.value }))} placeholder="e.g., Cotton, Polyester" />
@@ -811,11 +811,11 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
                     onMoveUp={fieldId => moveFieldUp('__attributes__', fieldId)}
                     onMoveDown={fieldId => moveFieldDown('__attributes__', fieldId)}
                   />
-                </div>
+                </details>
 
                 {/* Shipping CSV */}
-                <div className="form-section">
-                  <h4>Shipping & Packaging (CSV Export)</h4>
+                <details className="form-section" open>
+                  <summary>Shipping & Packaging (CSV Export)</summary>
                   <div className="form-group">
                     <label>Package Dimensions</label>
                     <input type="text" value={(formData as any).package_dimensions || ''} onChange={e => setFormData(prev => ({ ...prev, package_dimensions: e.target.value } as any))} placeholder="12 in - 10 in - 4 in" />
@@ -850,11 +850,11 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
                     onMoveUp={fieldId => moveFieldUp('__shipping_csv__', fieldId)}
                     onMoveDown={fieldId => moveFieldDown('__shipping_csv__', fieldId)}
                   />
-                </div>
+                </details>
 
                 {/* Classification CSV */}
-                <div className="form-section">
-                  <h4>Product Classification (CSV Export)</h4>
+                <details className="form-section" open>
+                  <summary>Product Classification (CSV Export)</summary>
                   <div className="form-row">
                     <div className="form-group">
                       <label>Size Type</label>
@@ -904,11 +904,11 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
                     onMoveUp={fieldId => moveFieldUp('__classification_csv__', fieldId)}
                     onMoveDown={fieldId => moveFieldDown('__classification_csv__', fieldId)}
                   />
-                </div>
+                </details>
 
                 {/* Policies */}
-                <div className="form-section">
-                  <h4>Policies & Marketplace (CSV Export)</h4>
+                <details className="form-section" open>
+                  <summary>Policies & Marketplace (CSV Export)</summary>
                   <div className="form-group">
                     <label>Policies</label>
                     <input type="text" value={(formData as any).policies || ''} onChange={e => setFormData(prev => ({ ...prev, policies: e.target.value } as any))} placeholder="No Returns; No Exchanges" />
@@ -951,11 +951,11 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
                     onMoveUp={fieldId => moveFieldUp('__policies__', fieldId)}
                     onMoveDown={fieldId => moveFieldDown('__policies__', fieldId)}
                   />
-                </div>
+                </details>
 
                 {/* Measurements */}
-                <div className="form-section">
-                  <h4>Measurement Template</h4>
+                <details className="form-section" open>
+                  <summary>Measurement Template</summary>
                   <p className="form-hint">Select which measurements apply to this category</p>
                   {formData.category_name && DEFAULT_MEASUREMENT_TEMPLATES[formData.category_name] && (
                     <button type="button" className="button button-secondary" onClick={() => loadDefaultTemplate(formData.category_name!)} style={{ marginBottom: '1rem' }}>
@@ -982,11 +982,11 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
                     onMoveUp={fieldId => moveFieldUp('__measurements__', fieldId)}
                     onMoveDown={fieldId => moveFieldDown('__measurements__', fieldId)}
                   />
-                </div>
+                </details>
 
                 {/* Tags & SEO */}
-                <div className="form-section">
-                  <h4>Tags & SEO</h4>
+                <details className="form-section" open>
+                  <summary>Tags & SEO</summary>
                   <div className="form-group">
                     <label>Default Tags (comma-separated)</label>
                     <input type="text" value={formData.default_tags?.join(', ') || ''} onChange={e => handleTagsChange(e.target.value)} placeholder="sweatshirt, pullover, vintage" />
@@ -1018,7 +1018,7 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
                     onMoveUp={fieldId => moveFieldUp('__tags__', fieldId)}
                     onMoveDown={fieldId => moveFieldDown('__tags__', fieldId)}
                   />
-                </div>
+                </details>
 
                 {/* ── Custom Sections ─────────────────────────────────────── */}
                 <div className="form-section custom-sections-wrapper">

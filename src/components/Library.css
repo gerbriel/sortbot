@@ -1573,6 +1573,22 @@
   font-size: var(--fs-base);
 }
 
+/* ── Phone ───────────────────────────────────────────────────────────────────
+   The grids drop their own scrollports here and let the PAGE scroll. That is a
+   deliberate exception to the page-mode note above: the reason the grids keep
+   `overflow-y: auto` on a desktop is the rubber-band's edge auto-scroll, which
+   writes `container.scrollTop` — and rubber-band is a mouse-drag gesture that
+   does not exist on a touch screen (a finger drag over the grid scrolls it).
+   Nothing about the rubber-band code path is touched; it simply has no work to
+   do at this width.
+
+   MULTI-SELECT ON TOUCH — verified by reading Library.tsx, not assumed:
+   `handleItemClick` toggles membership in `selectedItems` on a PLAIN click and
+   only consults `event.shiftKey` to decide the same thing, so a tap already
+   adds to the selection with no modifier. The tap target is the whole card
+   (`onClick` sits on `.batch-card` / `.group-card` / `.image-card`, which skips
+   the handler when the tap landed on a button), so it is ~165 × 200px at two
+   columns — far past the 44px floor, and nothing smaller needs introducing. */
 @media (max-width: 640px) {
   .tool-view .batch-grid,
   .tool-view .library-groups-grid,
@@ -1581,7 +1597,144 @@
     min-height: 0;
     overflow-y: visible;
     gap: 1.5rem;
+    padding-bottom: 0;
+  }
+
+  /* ── Two columns, not one ────────────────────────────────────────────────
+     The ≤480px rule further up drops `.batch-grid` to a single column, which
+     turns a twelve-batch library into twelve full screens. Two tracks at 390px
+     give ~165px cards — still a legible thumbnail, and half the scrolling.
+     `minmax(0, 1fr)` rather than `1fr`: a long batch name would otherwise force
+     its track wider than the viewport and take the page into horizontal scroll.
+     `.tool-view` prefix beats the bare `.batch-grid` selector in the ≤480 block. */
+  .tool-view .batch-grid,
+  .tool-view .images-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tool-view .image-group-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.2rem;
+  }
+
+  .tool-view .images-grid { grid-auto-rows: minmax(200px, auto); }
+  .tool-view .image-card { min-height: 200px; }
+
+  /* ── Controls that were revealed on hover ────────────────────────────────
+     A touch screen has no hover, so an `opacity: 0` control is simply a control
+     that does not exist. All three reveal permanently here; the batch overlay
+     already did this at ≤768px and the group/image ones were missed. */
+  .tool-view .group-actions,
+  .tool-view .group-card .group-actions { opacity: 1; }
+  .tool-view .image-delete { opacity: 1; }
+
+  /* ── Tap targets inside cards ────────────────────────────────────────────
+     `.action-button` loses its label at ≤480px and becomes a 10px-padded icon
+     (~34px). Square it off at the floor instead. */
+  .tool-view .action-button {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0.8rem;
+  }
+
+  .tool-view .image-delete {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .tool-view .batch-actions { padding: 1.2rem; gap: 0.8rem; }
+
+  /* The selected badge is decoration, not a target (the card is the target) —
+     it only needs to be visible at arm's length. */
+  .tool-view .selection-indicator { width: 32px; height: 32px; }
+
+  /* ── Tab bar: wraps, with the count on its own line ──────────────────────── */
+  .tool-view .view-switcher {
+    gap: 0.8rem;
+    padding-bottom: 1.2rem;
+  }
+
+  .tool-view .view-tab {
+    min-height: 44px;
+    flex: 1 1 auto;
+    justify-content: center;
+    padding: 0.8rem 1.2rem;
   }
 
   .tool-view .view-switcher .batch-count { margin-left: 0; width: 100%; }
+
+  /* ── Selection toolbar ───────────────────────────────────────────────────
+     Sticky is kept (it is how you reach "Delete 40 images" after scrolling to
+     find them), but the row stacks: the count on one line, the actions wrapping
+     beneath at full height. */
+  .tool-view .selection-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+    padding: 1.2rem;
+  }
+
+  .tool-view .selection-actions {
+    flex-wrap: wrap;
+    gap: 0.8rem;
+  }
+
+  .tool-view .selection-actions button {
+    flex: 1 1 auto;
+    min-height: 44px;
+    justify-content: center;
+    padding: 0.8rem 1.2rem;
+  }
+
+  .tool-view .selection-info { font-size: var(--fs-md); }
+
+  /* ── Sections ────────────────────────────────────────────────────────────── */
+  .tool-view .batch-section-header { padding: 1.2rem; flex-wrap: wrap; gap: 0.8rem; }
+  .tool-view .collapse-toggle,
+  .tool-view .section-select-all { min-height: 44px; min-width: 44px; }
+  .tool-view .batch-section-cards { padding-left: 0; }
+  .tool-view .image-group-header { flex-wrap: wrap; gap: 0.8rem; }
+
+  .library-delete-error { margin-inline: 0; flex-wrap: wrap; }
+  .library-delete-error-dismiss { min-width: 44px; min-height: 44px; }
+
+  /* ── Rename / confirm prompt: a bottom sheet ─────────────────────────────
+     `min-width: 340px` is wider than the content box of a 360px phone once the
+     overlay's own padding is counted, so the card overflowed the viewport and
+     took the page into horizontal scroll. Flush to the bottom edge instead,
+     capped against the DYNAMIC viewport — plain `vh` on iOS is measured with
+     the browser toolbars retracted, which would hide the sheet's own buttons
+     behind them. */
+  .prompt-modal-overlay { padding: 0; align-items: flex-end; }
+
+  .prompt-modal {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    max-height: 92vh;
+    max-height: 92dvh;
+    overflow-y: auto;
+    gap: 1.2rem;
+    padding: 1.5rem 1.5rem calc(1.5rem + var(--safe-b));
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  }
+
+  .prompt-modal-actions { gap: 0.8rem; }
+  .prompt-modal-actions .prompt-btn { flex: 1; min-height: 44px; }
+
+  /* 16px, or focusing the rename field zooms the page and leaves it zoomed.
+     The :not() chain out-specifies ToolView.css's (0,5,1) blanket control rule
+     — see the note in ui/Field.css. */
+  .tool-view .library-page input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+  .prompt-modal-input {
+    min-height: 44px;
+    font-size: var(--fs-md);
+  }
+  .tool-view .library-page :is(select, textarea) {
+    min-height: 44px;
+    font-size: var(--fs-md);
+  }
 }

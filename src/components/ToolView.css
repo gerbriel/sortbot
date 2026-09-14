@@ -238,10 +238,65 @@
 }
 
 @media (max-width: 640px) {
-  .tool-view { padding: 1.5rem 1.5rem 4rem; }
+  .tool-view {
+    /* 1.5rem gutters (13.5px on the 9px root), and a bottom that clears BOTH
+       the fixed tab bar and the home indicator: --tabbar-h carries the
+       safe-area inset and is 0 at every wider breakpoint, so this one calc is
+       correct everywhere and nothing has to undo it. */
+    padding: 1.5rem;
+    padding-bottom: calc(4rem + var(--tabbar-h));
+    /* Landscape notch. max() means the inset can only add room. */
+    padding-left: max(1.5rem, var(--safe-l));
+    padding-right: max(1.5rem, var(--safe-r));
+    /* dvh tracks Safari's collapsing toolbar; vh is the largest viewport, so a
+       vh-based min-height leaves a scroll the page did not need. */
+    min-height: calc(100dvh - 10rem);
+    /* The header loses its subtitle and its tool row at this width, so it is
+       about half as tall — a sticky column inside a view should not reserve
+       the desktop offset. */
+    --tv-sticky-top: 6rem;
+  }
+
   .tool-view-inner { gap: 2rem; }
   .tool-view-title h1 { font-size: var(--fs-xl); }
-  .tool-view-titlerow { align-items: flex-start; }
+
+  /* The title row stacks: heading first, then its actions full-width beneath.
+     Side by side they each get half of 390px, which is not enough for either.
+     (Back is already a separate row above — it is a sibling of .tool-view-titlerow,
+     not a child, so it needs nothing here.) */
+  .tool-view-titlerow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1.2rem;
+  }
+
   .tool-view-actions { width: 100%; }
+
+  /* 0.9rem of padding against a 9px root is an 8px inset — a 33px control.
+     Back is the only way out of a view on a phone, so it gets a real target. */
+  .tool-view-back {
+    min-height: var(--tap);
+    padding-left: 1.8rem;
+    padding-right: 1.8rem;
+  }
+
   .tv-card { padding: 1.5rem; }
+
+  /* Tabs were sized for a mouse; they are the primary in-view navigation. */
+  .tool-view-tab { min-height: var(--tap); }
+
+  /* The page-scale minimum above is `min-height: 4rem` — 36px on the 9px root,
+     which was generous for a modal and is under the touch floor on a phone.
+     index.css cannot raise it: its bare `input` selector (0,0,1) loses to
+     `.tool-view input` (0,1,1), so the floor is restated at this specificity
+     for every control a tool page puts on the page. */
+  .tool-view input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+  .tool-view select,
+  .tool-view textarea {
+    min-height: var(--tap);
+    /* 16px: below it, focusing a field zooms iOS Safari and it never zooms back. */
+    font-size: var(--fs-md);
+  }
+
+  .tool-view textarea { min-height: 9rem; }
 }

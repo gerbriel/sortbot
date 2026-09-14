@@ -86,3 +86,30 @@
    content. It must never show a ring on programmatic focus. */
 .ui-tabpanel:focus { outline: none; }
 .ui-tabpanel:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── Phone: one scrolling row, never four stacked lines ─────────────────────
+   `flex-wrap: wrap` is right on a desktop, where a 6-tab set fits on one line
+   and a 12-tab set folds to two. At 390px it folds EVERY set to four or five
+   lines and pushes the panel below the fold. A single no-wrap row that scrolls
+   sideways keeps the tablist one row tall at any count, and the roving-tabindex
+   keyboard model is unaffected (arrow keys still move selection; the browser
+   scrolls the focused tab into view for free).
+
+   The scrollbar is hidden because this row is finger-scrolled, and a painted
+   bar would eat 8px of a 44px target. */
+@media (max-width: 640px) {
+  .ui-tablist {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ui-tablist::-webkit-scrollbar { display: none; }
+
+  .ui-tab {
+    min-height: 44px;
+    flex: 0 0 auto;   /* no shrinking: a squeezed tab label is unreadable */
+  }
+
+  .ui-tablist--underline { gap: var(--space-3); }
+}

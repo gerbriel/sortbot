@@ -1496,3 +1496,322 @@
 .group-image-item.photo-picked img {
   opacity: 0.85;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE-FIRST STEP 2
+   Additive. Everything that changes layout is inside a media query; the only
+   unconditional rules are `touch-action` declarations, which are inert on a
+   mouse. ≤640px = phone, ≤1024px = tablet. Desktop is unchanged.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Touch gesture contracts ───────────────────────────────────────────────
+   The rubber-band selector is mouse-only (mousedown + mousemove); a tap never
+   meets its drag threshold, so it can't fire by accident. What DOES need
+   declaring is that a finger dragging over the grid scrolls the page instead of
+   being swallowed. `pinch-zoom` is kept deliberately — dropping it would break
+   WCAG 1.4.4 on a screen full of small garment photos. Declaring any value
+   other than `auto` also removes the 300ms double-tap-zoom click delay, which
+   is what makes tap-to-select feel instant. */
+.items-grid,
+.groups-grid,
+.grouper-scroll-content {
+  touch-action: pan-y pinch-zoom;
+}
+
+/* Cards are pure tap targets — selection happens on mousedown, which the browser
+   synthesises from a tap. `manipulation` intersects with the grid's `pan-y
+   pinch-zoom` above, so the effective behaviour stays "scroll and pinch, no
+   double-tap zoom". */
+.single-item-card,
+.product-group-card,
+.group-select-bar,
+.group-image-item,
+.ptb-btn,
+.sort-btn,
+.group-menu-btn,
+.group-menu-item {
+  touch-action: manipulation;
+  /* iOS paints a grey flash over any element that receives a tap; on a wall of
+     photos that reads as a rendering glitch rather than feedback. The card's own
+     .selected ring is the feedback. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Phone-only tools disclosure — inert above 640px. */
+.grouper-tools-toggle {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .image-grouper-container {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  /* ── Sidebar → compact top toolbar ─────────────────────────────────────
+     Deliberately NOT sticky: the app's own black nav is position:sticky at
+     z-index 100, so a second sticky bar at top:0 would slide underneath it and
+     vanish. The photo toolbar inside the scroll container is the sticky one. */
+  .grouper-header {
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    position: static;
+    border-radius: 10px;
+    padding: 0.5rem;
+    gap: 0.5rem;
+    overflow: visible;
+  }
+
+  .grouper-tools-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    min-height: var(--tap, 44px);
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--ink-800);
+    color: var(--text-primary);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  /* Stats stay visible at all times — they are the "where am I" readout — but
+     scroll sideways instead of wrapping into four stacked rows. */
+  .stats {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    gap: 0.4rem;
+    padding-bottom: 0.15rem;
+    justify-content: flex-start;
+    font-size: var(--fs-xs);
+  }
+
+  .stats > span {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    min-height: 32px;
+    align-items: center;
+  }
+
+  /* Undo / Redo inside .stats are real buttons — give them a full target. */
+  .stats > span[title^="Undo"],
+  .stats > span[title^="Redo"] {
+    min-height: var(--tap, 44px);
+    padding-inline: 0.7rem;
+  }
+
+  /* Everything below the stats collapses behind the Tools toggle. */
+  .grouper-header .sort-control,
+  .grouper-header .filter-bar {
+    display: none;
+  }
+
+  .grouper-header--tools-open .sort-control {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.4rem;
+  }
+
+  .grouper-header--tools-open .filter-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  /* Sheet controls are full-width and thumb-sized. */
+  .grouper-header--tools-open .sort-btn,
+  .grouper-header--tools-open .auto-group-btn,
+  .grouper-header--tools-open .pick-mode-btn {
+    min-height: var(--tap, 44px);
+    justify-content: center;
+    font-size: var(--fs-sm);
+    padding: 0.5rem 0.75rem;
+  }
+
+  .grouper-header--tools-open .filter-btn-group {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem;
+    border-left: none;
+    padding-left: 0;
+  }
+
+  /* The date dropdown is the one control that must never be a 12px hit strip —
+     full width, 44px, and ≥16px text so iOS does not zoom the page on focus. */
+  .grouper-header--tools-open .filter-select {
+    width: 100%;
+    min-height: var(--tap, 44px);
+    font-size: var(--fs-md);
+  }
+
+  .grouper-header--tools-open .auto-group-control {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    border-top: 1px solid var(--border);
+    border-left: none;
+    padding: 0.6rem 0 0;
+    margin-top: 0;
+  }
+
+  .grouper-header--tools-open .auto-group-label {
+    width: 100%;
+  }
+
+  .grouper-header--tools-open .auto-group-input {
+    min-height: var(--tap, 44px);
+    width: 72px;
+    font-size: var(--fs-md);
+  }
+
+  .grouper-header--tools-open .auto-group-slider,
+  .grouper-header--tools-open .columns-slider {
+    flex: 1 1 100%;
+    width: 100%;
+    min-height: var(--tap, 44px);
+  }
+
+  /* ── Photo grid ────────────────────────────────────────────────────────
+     Kept as its own scroll container rather than flowing into the page: the
+     photo toolbar sticks to the TOP OF THIS BOX, which is a position the black
+     app nav can never cover. */
+  .grouper-scroll-content {
+    /* Leaves room for the sticky category dock (max 38vh) below it without the
+       two fighting for the same pixels. */
+    max-height: 56vh;
+    padding: 0.4rem;
+    border-radius: 10px;
+  }
+
+  .singles-section,
+  .groups-section {
+    padding: 0.15rem;
+    /* crosshair is a rubber-band affordance; there is no rubber band on touch. */
+    cursor: default;
+  }
+
+  .singles-section h3,
+  .groups-section h3 {
+    font-size: var(--fs-sm);
+    margin-bottom: 0.5rem;
+  }
+
+  .items-grid,
+  .groups-grid {
+    gap: 0.4rem !important;
+  }
+
+  /* Long-press on a photo otherwise raises iOS's image callout ("Save Image…")
+     right in the middle of a multi-select. Nothing here is meant to be copied. */
+  .single-item-card,
+  .product-group-card {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* Group cards carry a thumbnail strip, so they get wider slots than singles.
+     The count itself is clamped in JS (responsiveGrid.ts) because the grid
+     template is an inline style. */
+  .group-images {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 3px !important;
+  }
+
+  /* Whole bar is the group's select target. */
+  .group-select-bar {
+    min-height: var(--tap, 44px);
+    padding: 0.4rem 0.45rem !important;
+  }
+
+  .group-select-check {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+  }
+
+  .group-menu-btn {
+    width: var(--tap, 44px);
+    height: var(--tap, 44px);
+    font-size: var(--fs-lg);
+  }
+
+  /* Stays narrower than a 2-up group card (~162px at 390px) so the right-aligned
+     dropdown cannot spill past the scroll container's left edge and get clipped. */
+  .group-menu {
+    min-width: 150px;
+  }
+
+  .group-menu-item {
+    min-height: var(--tap, 44px);
+    display: flex;
+    align-items: center;
+    font-size: var(--fs-sm);
+    padding: 0.5rem 0.75rem;
+  }
+
+  /* Drag-only affordances: HTML5 drag-and-drop does not exist on touch, so the
+     "drag photos here" strip is dead weight on a phone. */
+  .drop-zone-placeholder {
+    display: none;
+  }
+
+  /* ── Photo toolbar ─────────────────────────────────────────────────────
+     Stays sticky (inside the scroll container) and wraps rather than scrolling
+     sideways, so no action is ever hidden off-screen. */
+  .photo-toolbar {
+    gap: 0.35rem;
+    padding: 0.4rem;
+    border-radius: 8px;
+  }
+
+  .ptb-btn {
+    min-height: var(--tap, 44px);
+    padding: 0.4rem 0.7rem;
+    font-size: var(--fs-sm);
+  }
+
+  .ptb-btn--ghost {
+    font-size: var(--fs-xs);
+  }
+
+  .ptb-divider {
+    display: none;
+  }
+
+  .ptb-status {
+    flex: 1 1 100%;
+    font-size: var(--fs-xs);
+  }
+
+  /* Hover-reveal controls never reveal on touch — pin them visible. */
+  .group-image-item .rotate-btn {
+    opacity: 1;
+  }
+
+  .rotate-btn {
+    min-width: 32px;
+    min-height: 32px;
+  }
+}
+
+/* Tablet: the sidebar is still a column but a narrow one, so its controls need
+   to stop assuming 210px of width. */
+@media (max-width: 1024px) and (min-width: 641px) {
+  .grouper-header .sort-btn,
+  .grouper-header .filter-select {
+    min-height: 36px;
+  }
+}

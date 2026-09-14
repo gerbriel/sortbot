@@ -52,8 +52,18 @@ interface Builder extends PromiseLike<QueryResult> {
   single(): Promise<QueryResult>;
 }
 
+export interface MockChannel {
+  name: string;
+  on(...args: unknown[]): MockChannel;
+  subscribe(): MockChannel;
+}
+
 export interface SupabaseMockControls {
   calls: MockCall[];
+  /** Realtime channel names opened via `channel()`, in order. */
+  channels: string[];
+  /** How many channels were handed back to `removeChannel()`. */
+  removedChannels: number;
   storageRemoveCalls: string[][];
   storageRemoveError: unknown;
   authUser: unknown;
@@ -86,12 +96,17 @@ export interface MockedSupabaseClient {
       getPublicUrl(path: string): { data: { publicUrl: string } };
     };
   };
+  /** Realtime stub — enough for subscribe/unsubscribe accounting, no events. */
+  channel(name: string): MockChannel;
+  removeChannel(channel: MockChannel): Promise<'ok'>;
   __mock: SupabaseMockControls;
 }
 
 export function createSupabaseMock(): MockedSupabaseClient {
   const controls: SupabaseMockControls = {
     calls: [],
+    channels: [],
+    removedChannels: 0,
     storageRemoveCalls: [],
     storageRemoveError: null,
     authUser: { id: 'test-user' },
@@ -100,6 +115,8 @@ export function createSupabaseMock(): MockedSupabaseClient {
     responder: () => undefined,
     reset() {
       controls.calls = [];
+      controls.channels = [];
+      controls.removedChannels = 0;
       controls.storageRemoveCalls = [];
       controls.storageRemoveError = null;
       controls.authUser = { id: 'test-user' };
@@ -172,6 +189,19 @@ export function createSupabaseMock(): MockedSupabaseClient {
       onAuthStateChange() {
         return { data: { subscription: { unsubscribe() { /* no-op */ } } } };
       },
+    },
+    channel(name: string): MockChannel {
+      controls.channels.push(name);
+      const ch: MockChannel = {
+        name,
+        on() { return ch; },
+        subscribe() { return ch; },
+      };
+      return ch;
+    },
+    async removeChannel() {
+      controls.removedChannels += 1;
+      return 'ok' as const;
     },
     storage: {
       from() {

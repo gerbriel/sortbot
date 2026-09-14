@@ -30,13 +30,20 @@ Acadia is a web app for vintage clothing resellers. Upload a batch of clothing p
 
 - 🏢 **Multi-org workspace tenancy** — each workspace sees only its own batches, products, and image *records* via org-membership RLS. Invite teammates by email with owner/admin/member roles; membership bootstraps automatically on sign-in. (Runs in a legacy shared-workspace mode until the tenancy migration is applied — the same build supports both. Per-org Shopify connections and the waitlist gate activate with that same migration; until then their UI stays hidden. See [Security](#security) for the current limits of this boundary.)
 - 👤 **Header account menu** — workspace name, role, and email in one dropdown, with links to the workspace dashboard and sign-out.
-- 📊 **Workspace dashboard** — tabbed panel for members and invites, workspace settings, beta request approvals, and (for founding admins) an aggregate directory of all workspaces plus the Analytics / CRM / Errors tools.
+- 📊 **Workspace dashboard** — tabbed panel for members and invites, workspace settings, beta request approvals, and (for founding admins) an aggregate directory of all workspaces and cross-workspace user management. Analytics, CRM, Finance and Errors are their own full-page views opened from the header.
 - 🔌 **Per-org Shopify connections** — each workspace connects its own Shopify store (Workspace → Settings), so export dedup and per-store metaobject GIDs use that store. The Admin token is **write-only from the client** — only the Edge Function can read it.
 - 🎨 **Per-workspace description format** — customize the measurement prefix, washing/closing lines, hashtag rendering, disclaimers, seller name, and selling-paragraph tone from the workspace panel.
 - 📖 **Vocabulary dashboard (founding admins)** — CRUD the global knowledge base every workspace consumes: Step 3 quick-keyword chips, per-brand keywords (with a searchable built-in 917-brand library to copy from), and a brand/model database.
-- 🛠 **Founder tools (founding admins)** — built in, no third-party services: a **CRM** where every beta request and account becomes a contact automatically (stages, tags, follow-ups, notes), a cookieless **analytics** dashboard (pageviews, sessions, signup→export funnel, referrers, devices), a **support inbox** for the in-app **Messages** button every signed-in user gets, and an **Errors** view that groups the app's own crash reports into issues. Everything lives in this project's own Supabase tables. See [Founder tools](#founder-tools--analytics-crm-messaging-first-party).
+- 💬 **Messages (everyone)** — every signed-in user gets a floating **Messages** button *and* a full **Messages** page from the header, with an unread badge. Search your conversations, keep the thread open beside the list, send with Enter. For founding admins the same page is the **Inbox**: every conversation from every workspace, Open/Closed/All filters, unread first, close and reopen. Both views and the badge share one live connection, so they never disagree.
+- 🛠 **Founder tools (founding admins)** — built in, no third-party services: a **CRM** where every beta request and account becomes a contact automatically (stages, tags, follow-ups, notes), a cookieless **analytics** dashboard (pageviews, sessions, signup→export funnel, referrers, devices), the **Inbox** half of Messages, a **Finance** module (income/expense ledger, monthly profit-and-loss, what the customer base is worth, CSV + printable reports), and an **Errors** view that groups the app's own crash reports into issues. Everything lives in this project's own Supabase tables. See [Founder tools](#founder-tools--analytics-crm-messaging-first-party).
 - 🏬 **Marketing landing + private beta** — logged-out visitors get a product tour, pricing, and a beta signup form. New sign-ups without a workspace or invite hit a waitlist gate; founding admins approve or deny requests, and approval auto-creates the workspace on next sign-in.
 - 🐛 **Debug logger** — a corner toggle enables categorized, colour-coded console logging plus DOM event tracing. Zero-cost when off; persisted across sessions.
+
+### Mobile
+
+The app is usable on a phone end to end. **Step 1 takes photos directly from the camera** ("Take photos") or the camera roll ("Choose from library") — the same compression, EXIF and resumable-upload pipeline as a desktop drop. Navigation changes with the screen: the full tool row on desktop, a scrolling rail on a tablet, and a **bottom tab bar** (Workflow / Library / Messages / More) on a phone, with everything else behind More. Tool pages reflow — wide tables become cards or scroll inside themselves, dialogs become bottom sheets, and every control is at least 44px with 16px text so iOS does not zoom the page.
+
+**Desktop-only, by design:** dragging groups onto a category (on a phone you select photos and tap a category instead), drag-to-reorder photos, rubber-band selection, and the cursor-following magnifier. Crop works on touch. Voice dictation still needs Chrome or Edge.
 
 ## Tech Stack
 
@@ -45,7 +52,7 @@ Acadia is a web app for vintage clothing resellers. Upload a batch of clothing p
 | Frontend | React 19 + TypeScript 5.9 |
 | Build | Vite 7 |
 | Backend / DB | Supabase (Postgres + RLS, Storage, Auth, two Deno Edge Functions) |
-| Tests | Vitest 4 + happy-dom (505 tests, 35 files) |
+| Tests | Vitest 4 + happy-dom (570 tests, 39 files) |
 | Uploads | tus-js-client (resumable, 6 MB chunks) |
 | Styling | Plain CSS, component-scoped files |
 | Speech | Web Speech API (Chrome/Edge) |
@@ -112,7 +119,7 @@ Tests are characterization tests that lock in workflow-critical behavior: the ti
 | `.github/workflows/ci.yml` | every PR + every push to a non-`main` branch | `npm ci` → `npm test` → `npm run build` (dummy `VITE_*` values) → verifies `dist/index.html` has the right `<title>` and the `/sortbot/` base path → **greps the built bundle for credential-shaped strings** → lint ratchet (fails only if the problem count grew past `LINT_BASELINE`) → migration hygiene (every SQL file the PR changes must carry a ROLLBACK section and an idempotency note, because migrations are applied by hand) → `deno check` on the Edge Functions. Permissions are `contents: read`; it never deploys. |
 | `.github/workflows/uptime.yml` | `*/15 * * * *` + manual | Curls the deployed page (must contain the app title) and `${VITE_SUPABASE_URL}/auth/v1/health` (must return 200), then files/comments on a single GitHub issue and closes it on recovery. Needs the `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` repository secrets. `schedule` is best-effort, so a missing run means *unknown*, not healthy. |
 
-Crashes are reported by the app itself into its own `app_errors` table and read in **Workspace → Founder tools → Errors** (see [Founder tools](#founder-tools--analytics-crm-messaging-first-party)).
+Crashes are reported by the app itself into its own `app_errors` table and read in the header **Analytics** view, Errors tab (see [Founder tools](#founder-tools--analytics-crm-messaging-first-party)).
 
 ### Optional: run it as a container
 
@@ -155,14 +162,17 @@ Then enable it per workspace in **Workspace → Settings**. It is **off by defau
 
 ### Founder tools — analytics, CRM, messaging (first-party)
 
-Acadia has its own analytics, CRM and support messaging. They are **features of this app, stored in this project's own Supabase tables** — no third-party service, no external API, no keys to configure. Each one is a migration in `supabase/migrations/` (run in the SQL Editor after `multi_org_tenancy.sql` + `beta_signups.sql`); the UI hides itself until its tables exist, so the code can ship first.
+Acadia has its own analytics, CRM, support messaging and finance. They are **features of this app, stored in this project's own Supabase tables** — no third-party service, no external API, no payment processor, no keys to configure. Each one is a migration in `supabase/migrations/` (run in the SQL Editor after `multi_org_tenancy.sql` + `beta_signups.sql`); the UI hides itself until its tables exist, so the code can ship first.
 
 | Feature | Migration | Who sees it |
 |---|---|---|
-| **Analytics** — cookieless pageviews + funnel events (Beta Signup → Account Created → Batch Created → CSV Exported), daily chart, referrers, devices | `analytics_events.sql` | Tracking runs for every visitor (Do Not Track honored, localhost skipped). Dashboard: Founding admins, **Workspace → Founder tools → Analytics** |
-| **CRM** — one contact per email with stage (lead → approved → active → churned / lost), tags, next follow-up, notes. Beta requests and accounts (with their workspace) become contacts automatically via `crm_sync_contacts()` | `crm.sql` | Founding admins, **Workspace → Founder tools → CRM** |
-| **Messaging** — the floating **Messages** button: users write to the founders, founders answer from the same button (it becomes the inbox), live via Supabase Realtime with polling fallback | `support_messaging.sql` | Every signed-in user (waitlisted users included); inbox for Founding admins |
-| **Errors** — one row per uncaught error, rejected promise, or caught render error, grouped into issues by a fingerprint that survives a redeploy. KPI tiles, a top-issues table (with the full message for copy/paste), plus daily and by-screen breakdowns | `app_errors.sql` | Reporting runs for every visitor (localhost skipped). Dashboard: Founding admins, **Workspace → Founder tools → Errors** |
+| **Analytics** — cookieless pageviews + funnel events (Beta Signup → Account Created → Batch Created → CSV Exported), daily chart, referrers, devices | `analytics_events.sql` | Tracking runs for every visitor (Do Not Track honored, localhost skipped). Dashboard: Founding admins, header **Analytics** button |
+| **CRM** — one contact per email with stage (lead → approved → active → churned / lost), tags, next follow-up, notes. Beta requests and accounts (with their workspace) become contacts automatically via `crm_sync_contacts()` | `crm.sql` | Founding admins, header **CRM** button |
+| **Messaging** — two ways into the same conversations: the floating **Messages** button, and a full **Messages** page from the header (the **Inbox** for founders) with search, an unread badge, keyboard navigation and Enter-to-send. Live via Supabase Realtime with a polling fallback — one connection shared by both views and the badge | `support_messaging.sql` | Every signed-in user (waitlisted users get the floating button); the Inbox for Founding admins |
+| **Finance** — the founder's books: an income/expense ledger with recurring entries, monthly profit-and-loss over any range, per-workspace revenue, projected monthly recurring revenue at list price and after the founding discount, two CSV exports and a printable statement | `finance.sql` | Founding admins, header **Finance** button |
+| **Errors** — one row per uncaught error, rejected promise, or caught render error, grouped into issues by a fingerprint that survives a redeploy. KPI tiles, a top-issues table (with the full message for copy/paste), plus daily and by-screen breakdowns | `app_errors.sql` | Reporting runs for every visitor (localhost skipped). Dashboard: Founding admins, header **Analytics** button → Errors tab |
+
+**Not yet applied:** `analytics_events.sql`, `crm.sql`, `support_messaging.sql`, `app_errors.sql` and `finance.sql` are all written, additive, idempotent and carry their own rollback, but they must be run by hand in the Supabase SQL Editor. Until a tool's migration is run, that tool reports itself unavailable and shows a setup step instead of an error — Finance, for example, is safe to expose on the header before its tables exist. `finance.sql` seeds plan prices to match the pricing on the landing page (Starter $50, Basic $90, Growth $150, Pro $250, Business $350, Scale $700, Enterprise $1,200 per month) and a 30% founding discount, and seeds with `on conflict do nothing` so re-running it never overwrites a price you edited in the app.
 
 Privacy: analytics rows carry a random per-tab session id, the referrer host, a coarse device class and — for signed-in users — their own user/workspace id. No cookies, no IP, no user agent. `select public.analytics_prune(365);` trims history.
 
@@ -223,6 +233,7 @@ The core workflow tables (`products`, `product_images`, `categories`, `category_
 | Vocabulary | `descriptor_chips`, `brand_keywords`, `vocab_models` |
 | Beta program | `beta_signups` |
 | Founder tools | `analytics_events` (+ `analytics_summary()` / `analytics_prune()`), `crm_contacts`, `crm_notes` (+ `crm_sync_contacts()`), `support_threads`, `support_messages`, `app_errors` (+ `app_errors_summary()` / `app_errors_prune()`) |
+| Finance | `finance_transactions` (the ledger — a row with a recurrence is a *template*, its repeats are expanded when read, never stored), `finance_plan_prices` (plan → monthly list price), `finance_settings` (founding discount percent and cutoff date) (+ `finance_summary()`) |
 
 ## Browser Support
 

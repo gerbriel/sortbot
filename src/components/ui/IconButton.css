@@ -76,3 +76,14 @@
   background: var(--accent);
   color: var(--ink-950);
 }
+
+/* ── Phone: square, and big enough to hit ───────────────────────────────────
+   A glyph-only control has no label to widen it, so it is the worst offender
+   on touch: --sm is a 24px square. All three steps go to 44 × 44 on a phone
+   (see Button.css for why the literal px rather than rem). The icon inside is
+   untouched — it centres in a bigger box. */
+@media (max-width: 640px) {
+  .ui-icon-btn--sm,
+  .ui-icon-btn--md,
+  .ui-icon-btn--lg { width: 44px; height: 44px; }
+}

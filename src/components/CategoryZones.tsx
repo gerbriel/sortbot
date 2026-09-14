@@ -654,12 +654,18 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     setDragOverPhotoId(null);
   };
 
+  /* Drives the phone bottom-dock layout: the dock only grows to show the
+     assign actions once there is a selection to act on. Purely a styling hook —
+     read via :has() in App.css, so an engine without :has() simply keeps the
+     dock in its expanded state (functional, just taller). */
+  const hasSelection = !!selectedItemIds && selectedItemIds.size > 0;
+
   return (
-    <div className={`category-zones-container${compactMode ? ' compact' : ''}`}>
+    <div className={`category-zones-container${compactMode ? ' compact' : ''}${hasSelection ? ' has-selection' : ''}`}>
       {/* Category Zones */}
       <div className="category-zones">
         {/* Gender filter toggles */}
-        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', justifyContent: 'center' }}>
+        <div className="cz-gender-row" style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', justifyContent: 'center' }}>
           {([
             { key: 'Men',   label: 'Men',   Icon: Users },
             { key: 'Women', label: 'Women', Icon: UserRound },
@@ -692,9 +698,10 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
         </div>
 
         {/* Category search */}
-        <div style={{ position: 'relative', marginBottom: '0.5rem' }}>
+        <div className="cz-search" style={{ position: 'relative', marginBottom: '0.5rem' }}>
           <input
             type="text"
+            className="cz-search-input"
             value={categorySearch}
             onChange={e => setCategorySearch(e.target.value)}
             placeholder="Search categories…"
@@ -733,9 +740,9 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
           )}
         </div>
 
-        <h3><Tag size={13} style={{ flexShrink: 0 }} /> {compactMode ? 'Drop Here to Categorize' : 'Drag Groups Here to Categorize'}</h3>
+        <h3 className="cz-heading"><Tag size={13} style={{ flexShrink: 0 }} /> {compactMode ? 'Drop Here to Categorize' : 'Drag Groups Here to Categorize'}</h3>
         {compactMode && selectedItemIds && selectedItemIds.size > 0 && (
-          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', margin: '0 0 0.5rem', textAlign: 'center' }}>
+          <p className="cz-selection-hint" style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', margin: '0 0 0.5rem', textAlign: 'center' }}>
             {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} selected — click a category to assign
           </p>
         )}

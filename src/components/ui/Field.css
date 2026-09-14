@@ -126,3 +126,35 @@
 .ui-field__footer { display: flex; align-items: baseline; gap: var(--space-2); }
 
 .ui-field__messages { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+
+/* ── Phone: 16px is not a style choice, it is a zoom trigger ────────────────
+   Mobile Safari zooms the whole page when a control smaller than 16px takes
+   focus, and then leaves the viewport zoomed — the single most common reason a
+   form "feels broken" on an iPhone. --fs-md IS 16px, so every control steps up
+   to it on a phone; --fs-base (14px) is below the line.
+
+   THE SECOND SELECTOR IS NOT A DUPLICATE. ToolView.css pins every control in a
+   tool view with
+
+     .tool-view input:not([type='checkbox']):not([type='radio'])
+                     :not([type='range']):not([type='color'])   →  (0,5,1)
+
+   which outranks a plain `.ui-input` (0,1,0) — so inside a page view the
+   primitive's own font-size never applied in the first place. Restating it with
+   the same :not() chain lands at (0,6,0) and wins. The checkbox/radio/range/color
+   exclusions are carried over verbatim so those controls keep their native box. */
+@media (max-width: 640px) {
+  .ui-input,
+  .ui-input--sm { min-height: 44px; font-size: var(--fs-md); }
+
+  .tool-view .ui-input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+  .tool-view textarea.ui-input,
+  .tool-view select.ui-input { min-height: 44px; font-size: var(--fs-md); }
+
+  /* A textarea's min-height is a line count, not a hit target. */
+  .ui-input--textarea,
+  .tool-view textarea.ui-input--textarea { min-height: 9rem; }
+
+  /* Stacked, an inline field's label and control each get the full width. */
+  .ui-field--inline { flex-direction: column; align-items: stretch; }
+}

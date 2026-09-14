@@ -124,3 +124,24 @@
    shift the row it lives in. */
 .ui-btn--loading { cursor: progress; }
 .ui-btn--loading:disabled { cursor: progress; }
+
+/* ── Phone: the hit target, not the type, is what has to grow ───────────────
+   The three size steps are 24 / 32 / 40px tall, which is right for a mouse and
+   wrong for a thumb. On a phone every one of them is floored at the 44px
+   Apple HIG / WCAG 2.5.5 target. Only the BOX changes — font-size, padding-inline
+   and the variants are untouched, so a --sm button still reads as the small one,
+   it just stops being a dart board.
+
+   44px is written as an absolute literal on purpose. Every other length here is
+   rem against the 9px root (CLAUDE.md §16), but a touch target is a physical
+   constant: if the root size is ever retuned, 4.9rem would silently drift off
+   the accessibility floor while `44px` cannot. */
+@media (max-width: 640px) {
+  .ui-btn--sm,
+  .ui-btn--md,
+  .ui-btn--lg { min-height: 44px; }
+
+  /* --sm is the one whose padding was tuned so tight that a 44px box would
+     leave the label floating in a wide, empty pill. */
+  .ui-btn--sm { padding-inline: var(--space-3); }
+}

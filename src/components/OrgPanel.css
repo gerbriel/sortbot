@@ -987,3 +987,385 @@
   .tool-view .beta-search { min-width: 100%; }
   .tool-view .an-tables { grid-template-columns: 1fr; gap: 2rem; }
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PHONE — the shared founder-tool layer (≤ 640px)
+   ════════════════════════════════════════════════════════════════════════════
+
+   This file is imported by FIVE views — OrgPanel, AnalyticsPanel, ErrorsPanel,
+   CrmPanel and FinanceView — so everything that is common to them is solved
+   once here and nowhere else. Per-view specifics live in their own files.
+
+   `@media screen and …` rather than a bare width query: FinanceView.css ships a
+   real `@media print` statement that re-styles `.an-table`, and a printer with a
+   narrow page box must not pick up the card layouts below. Print is a separate
+   medium and stays on the desktop table rules.
+
+   THE TWO RECURRING PROBLEMS THIS BLOCK SOLVES
+
+   1. Hit targets. Almost every control in these views is hand-rolled with rem
+      padding against the 9px root — `padding: 0.2rem 0.55rem` is 1.8px × 5px,
+      so `.org-confirm-yes` is a ~16px-tall button. Fine with a mouse, unusable
+      with a thumb. Everything interactive is floored at 44px (Apple HIG /
+      WCAG 2.5.5). 44 is written as a literal px: it is a physical constant, and
+      a rem value would silently drift off the floor if the 9px root ever moved.
+
+   2. Specificity. ToolView.css pins EVERY control inside a tool view with
+
+        .tool-view input:not([type='checkbox']):not([type='radio'])
+                        :not([type='range']):not([type='color'])    →  (0,5,1)
+
+      which already outranks every per-component input rule in this file. So a
+      plain `.beta-search input` (0,2,1) cannot raise the font size; the rules
+      below re-use the same :not() chain behind an `:is()` of the three page
+      roots to land at (0,6,1) and win. Selects and textareas only need two
+      classes to beat `.tool-view select` (0,1,1). */
+
+@media screen and (max-width: 640px) {
+
+  /* ── 16px controls: a zoom trigger, not a style choice ───────────────────
+     Mobile Safari zooms the page when a control under 16px takes focus and
+     leaves it zoomed. --fs-md IS 16px; --fs-base (14px) is below the line. */
+  .tool-view :is(.org-page, .fin-view, .ft-card) input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']) {
+    min-height: 44px;
+    font-size: var(--fs-md);
+  }
+
+  .tool-view :is(.org-page, .fin-view, .ft-card) :is(select, textarea) {
+    min-height: 44px;
+    font-size: var(--fs-md);
+  }
+
+  .tool-view :is(.org-page, .fin-view, .ft-card) textarea { min-height: 9rem; }
+
+  /* Checkboxes are excluded above (a 44px checkbox is a grey slab), so they get
+     a real target from size instead. */
+  .tool-view :is(.org-page, .fin-view, .ft-card) input[type='checkbox'] {
+    width: 22px;
+    height: 22px;
+  }
+
+  /* ── Touch floor on every hand-rolled control ───────────────────────────── */
+  .tool-view :is(.org-invite-btn, .org-member-remove, .org-leave-btn,
+                 .beta-approve, .beta-deny, .org-confirm-yes, .org-confirm-no,
+                 .beta-chip, .org-tab) {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding-inline: 1.6rem;
+    font-size: var(--fs-sm);
+  }
+
+  .tool-view :is(.org-icon-btn, .org-member-toggle) {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Selects that are really controls in a row, not form fields. */
+  .tool-view :is(.org-role-select, .fa-move-select, .crm-date, .crm-stage) {
+    min-height: 44px;
+    font-size: var(--fs-md);
+    padding-inline: 1rem;
+  }
+
+  .tool-view .beta-search { min-height: 44px; padding-inline: 1.2rem; }
+
+  /* ── Toolbars: wrap, and let the chip row scroll ─────────────────────────
+     `.ft-chips` is a filter row (ranges, stages, kinds). Wrapping it turns a
+     one-line control into three ragged lines that push the content off screen;
+     a single sideways-scrolling row keeps it one row tall at any chip count. */
+  /* 1.5rem to match ToolView's own `.tv-card` phone padding — which is also
+     what the -1.5rem bleeds below are measured against, so a scrolling chip row
+     ends exactly on the card edge rather than 4px short of it. */
+  .tool-view .ft-card { padding: 1.5rem; }
+
+  .tool-view :is(.ft-toolbar, .beta-toolbar) {
+    gap: 1rem;
+    align-items: stretch;
+  }
+
+  .tool-view :is(.ft-chips, .beta-filter-chips) {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    /* Bleed to the card edge so the row reads as scrollable rather than
+       clipped, then pad the content back to the original inset. */
+    margin-inline: -1.5rem;
+    padding-inline: 1.5rem;
+  }
+  .tool-view :is(.ft-chips, .beta-filter-chips)::-webkit-scrollbar { display: none; }
+  .tool-view :is(.ft-chips, .beta-filter-chips) > * { flex: 0 0 auto; }
+
+  .tool-view .ft-toolbar .beta-search { flex: 1 1 100%; min-width: 0; }
+  .tool-view .ft-toolbar > .org-icon-btn { flex: 0 0 auto; }
+
+  /* ── KPI tiles: two up ───────────────────────────────────────────────────
+     `auto-fit minmax(20rem, 1fr)` is 180px minimum, so at 390px minus gutters
+     it collapses to ONE column and a four-tile row becomes four screens of
+     scrolling. Two fixed tracks fit, and `minmax(0, 1fr)` (not `1fr`) stops a
+     long value from forcing the track wider than the screen.
+
+     The value drops from --fs-3xl (36px) to --fs-xl (22px): "$12,480" at 36px
+     does not fit half of 390px, and an overflowing number is worse than a
+     smaller one. */
+  .tool-view .an-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .tool-view .an-tile { padding: 1.4rem; min-width: 0; }
+  .tool-view .an-tile-value { font-size: var(--fs-xl); overflow-wrap: anywhere; }
+  .tool-view .an-tile-label { font-size: var(--fs-xs); }
+  .tool-view .an-tile-delta { font-size: var(--fs-2xs); }
+
+  /* ── Chart: scrolls inside its own container ─────────────────────────────
+     90 days of bars in 340px is 3.7px per bar — a grey smear. The plot keeps a
+     readable minimum width and the wrapper scrolls.
+
+     The wrapper is a real element (added in AnalyticsPanel.tsx / FinanceView.tsx)
+     rather than `overflow-x` on `.an-chart` itself, because the y-axis tick
+     labels are positioned at `left: -2.4rem` — inside `.an-chart`'s left
+     padding but OUTSIDE `.an-plot`. Scrolling the chart element would clip them.
+
+     `padding-top` is load-bearing: `overflow-x: auto` computes the other axis to
+     `auto` too, so the tooltip — `top: -0.5rem` then translated up 100% of its
+     own height — would be clipped by the scrollport. The padding gives it room
+     INSIDE the box. The legend's bottom margin is zeroed to pay for it. */
+  .an-chart-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-top: 5rem;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .an-chart-scroll > .an-chart { min-width: 52rem; }
+
+  /* ── Tables ──────────────────────────────────────────────────────────────
+     Two treatments, picked per table rather than one blanket rule.
+
+     (a) DEFAULT — stays a table, scrolls inside itself. `display: block` makes
+         the <table> its own scrollport; the rows keep working because the
+         browser re-wraps them in an anonymous table box that sizes to its
+         content and overflows. The first column is sticky so a row never loses
+         the thing it is about while its numbers scroll past.
+
+     (b) `.an-table--cards` — stops being a table. For rows with more facts than
+         a 390px line can hold, or whose first column is prose rather than a key.
+         Each <td> carries a `data-label` and renders as one label/value line. */
+  .tool-view .an-table:not(.an-table--cards) {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* `white-space: nowrap` is LOAD-BEARING, not cosmetic. With `display: block`
+     the rows are re-wrapped in an anonymous table box whose auto layout clamps
+     it to the available width — so the table would squeeze to fit and never
+     overflow, and `overflow-x: auto` would have nothing to scroll. Refusing to
+     wrap raises the min-content width past the scrollport, which is what
+     produces the scroll. Remove it and the treatment silently stops working. */
+  .tool-view .an-table:not(.an-table--cards) :is(th, td) {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    padding-right: 1.2rem;
+    white-space: nowrap;
+  }
+
+  .tool-view .an-table:not(.an-table--cards) :is(th, td):first-child {
+    position: sticky;
+    left: 0;
+    /* Opaque, or the scrolling columns read straight through it. --ink-850 is
+       the .ft-card surface every one of these tables sits on. */
+    background: var(--ink-850);
+  }
+
+  .tool-view .an-table--cards,
+  .tool-view .an-table--cards tfoot { display: block; width: 100%; }
+
+  /* The header row is the label source for the cells; it has no job once each
+     cell prints its own label. */
+  .tool-view .an-table--cards thead { display: none; }
+
+  .tool-view .an-table--cards tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+  }
+
+  .tool-view .an-table--cards tbody tr {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1.4rem 1.6rem;
+    background: var(--ink-800);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+  }
+
+  .tool-view .an-table--cards td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 0;
+    border: none;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .tool-view .an-table--cards td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-size: var(--fs-2xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    text-align: left;
+  }
+
+  /* A cell with no label is a full-width row of its own — an actions cluster,
+     a meter, a spacer column. */
+  .tool-view .an-table--cards td:not([data-label]) { justify-content: flex-end; }
+  .tool-view .an-table--cards td:not([data-label])::before { content: none; }
+
+  .tool-view .an-table--cards tfoot tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    padding: 1.2rem 0 0;
+    border-top: 1px solid var(--border);
+  }
+  .tool-view .an-table--cards tfoot :is(th, td) {
+    padding: 0;
+    border: none;
+    text-align: left;
+  }
+
+  /* (.an-tables already drops to one column in the ≤640 block above.) */
+  .tool-view .an-meter { width: 48px; }
+
+  /* ── OrgPanel: the tab RAIL becomes a scrolling top row ──────────────────
+     The ≤1024px rule above already turns the rail back into a wrapped chip row.
+     At phone width wrapping is the wrong answer again — nine tabs wrap to four
+     lines — so it becomes one sideways-scrolling row, same as the chip filters. */
+  .tool-view .org-page-body .org-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    gap: 0.8rem;
+    padding-bottom: 1.2rem;
+    margin-inline: -1.5rem;
+    padding-inline: 1.5rem;
+  }
+  .tool-view .org-page-body .org-tabs::-webkit-scrollbar { display: none; }
+
+  .tool-view .org-page-body .org-tab {
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .org-page { gap: 2rem; }
+
+  /* ── Rows: stack, with the control full width underneath ─────────────────
+     Every list row in these views is a flex line of [label][badge][select]
+     [buttons]. At 390px the label truncates to nothing to make room for a
+     select that is still too narrow to read. Stacking gives the identity a full
+     line and the controls a full line of their own. */
+  .tool-view .org-member-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+    padding: 1.4rem;
+  }
+
+  .tool-view .org-member-email { white-space: normal; overflow-wrap: anywhere; }
+
+  .tool-view .org-member-row > :is(.org-role-select, .org-member-remove, .org-role-badge) {
+    align-self: stretch;
+    width: 100%;
+  }
+
+  .tool-view .org-member-head { flex-wrap: wrap; gap: 0.8rem; }
+
+  .tool-view .org-member-detail { margin-left: 0; padding: 1.2rem; }
+  .tool-view .org-member-stats { gap: 0.5rem 1.2rem; }
+
+  /* Invite form: one field per line, action full width. */
+  .tool-view .org-invite-form {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+    padding: 1.5rem;
+  }
+  .tool-view .org-invite-form > * { width: 100%; }
+
+  /* Beta requests and the Users list read as cards: the request/account on its
+     own lines, then its actions as a full-width row of real buttons. */
+  .tool-view :is(.beta-request-row, .fa-user-row, .org-dir-row, .shopify-conn-row) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+    padding: 1.4rem;
+    background: var(--ink-850);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .tool-view :is(.beta-request-actions, .org-confirm-actions, .desc-settings-actions) {
+    flex-wrap: wrap;
+    justify-content: stretch;
+    gap: 0.8rem;
+  }
+  .tool-view :is(.beta-request-actions, .org-confirm-actions) > * { flex: 1 1 auto; }
+
+  .tool-view .beta-request-meta { white-space: normal; overflow-wrap: anywhere; }
+
+  .tool-view :is(.fa-membership-list, .fa-add-row) { padding-left: 0.8rem; }
+  .tool-view .fa-membership-row { flex-wrap: wrap; gap: 0.8rem; }
+  .tool-view .fa-ms-org { flex: 1 1 100%; white-space: normal; }
+  .tool-view .fa-add-row { flex-wrap: wrap; }
+  .tool-view .fa-add-row > * { flex: 1 1 auto; }
+
+  .tool-view .org-dir-emails { white-space: normal; overflow-wrap: anywhere; }
+
+  /* ── CRM: identity on top, controls full width beneath ───────────────────── */
+  .tool-view .crm-head {
+    flex-wrap: wrap;
+    padding: 1.4rem;
+    gap: 1rem;
+  }
+
+  /* The toggle + name take the first line together; stage and follow-up date
+     each take a full line under it. */
+  .tool-view .crm-id { flex: 1 1 auto; min-width: 0; }
+  .tool-view .crm-name { white-space: normal; overflow-wrap: anywhere; }
+  .tool-view .crm-meta { gap: 0.5rem; }
+  .tool-view :is(.crm-stage, .crm-date) { flex: 1 1 100%; width: 100%; }
+
+  .tool-view .crm-detail { padding: 1.5rem; }
+  .tool-view .crm-fields { grid-template-columns: 1fr; gap: 1.2rem; }
+
+  .tool-view .crm-note-add { flex-direction: column; align-items: stretch; gap: 0.8rem; }
+  .tool-view .crm-note-add > .org-invite-btn { width: 100%; }
+  .tool-view .crm-note-meta { flex-wrap: wrap; }
+  .tool-view .crm-danger > * { width: 100%; }
+
+  .tool-view .crm-add { flex-direction: column; align-items: stretch; }
+  .tool-view .crm-add > * { width: 100%; min-width: 0; }
+
+  /* ── Description-format settings ─────────────────────────────────────────── */
+  .tool-view .desc-settings-field--narrow input { width: 100%; }
+  .tool-view .desc-settings-check { min-height: 44px; }
+}

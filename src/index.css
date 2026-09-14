@@ -4,6 +4,15 @@
    --fs-* scale is absolute px and body sets the real text baseline. */
 html {
   font-size: 9px;
+  /* MOBILE: opt OUT of the browser's "font boosting" / text autosizing.
+     Chrome on Android (and Chrome's own mobile emulation) inflates text inside
+     wide blocks when it decides the page is not mobile-friendly — measured here
+     at 14px rendering as 22px. On a 9px root that is catastrophic rather than
+     merely ugly: every --space-* is a rem tuned to that root, so boosted type
+     overflows padding that did not grow with it. Pinning the adjust to 100%
+     makes a phone render exactly the px the --fs-* scale asks for. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -124,6 +133,31 @@ html {
   --shopify-orange:      #a85800;
 
   --error: var(--danger);
+
+  /* ── Safe areas + the phone tab bar ───────────────────────────────────────
+     `env(safe-area-inset-*)` only reports non-zero because index.html asks for
+     `viewport-fit=cover`. Aliased here so a rule can use them inside a calc()
+     without repeating the fallback, and because `env()` in a custom property
+     resolves at USE time — a component can therefore consume --safe-b without
+     knowing whether it is on a notched device.
+
+     --tabbar-h is the single number every bottom-anchored surface subtracts:
+     ToolView's bottom padding, the parked workflow, the support widget and the
+     toast stack. It is 0 HERE and raised only inside `.app-container` at the
+     phone breakpoint, which is exactly where a tab bar exists — so the same
+     calc() is correct at every width AND on the screens that render the support
+     widget without a shell around it (the waitlist gate), where a raised value
+     would float the button 56px above nothing.
+     6.2rem ≈ 56px on the 9px root: a 44px target plus its label. */
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --tabbar-row: 6.2rem;
+  --tabbar-h: 0px;
+  /* The minimum comfortable touch target. A literal px because it is a
+     physical-finger measurement, not a step on the rem spacing grid. */
+  --tap: 44px;
 
   /* ── Spacing (4px base) — unchanged ───────────────────────────────────── */
   --space-1: 0.25rem;
@@ -351,6 +385,61 @@ select option {
   h1 { font-size: var(--fs-xl); }
   h2 { font-size: var(--fs-lg); }
   h3 { font-size: var(--fs-md); }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOBILE FOUNDATIONS
+   The three rules below are the ones every component would otherwise have to
+   remember, so they live here once. Breakpoints: ≤640px phone, ≤1024px tablet.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* 1. TAP HIGHLIGHT. Safari/Chrome paint a translucent grey rectangle over any
+      tapped element, which on rounded chips and cards reads as a rendering
+      glitch. Suppressing it removes the ONLY press feedback touch users get,
+      so the :active states below put a deliberate one back. */
+* { -webkit-tap-highlight-color: transparent; }
+
+/* 2. PRESS FEEDBACK. `hover: none` targets touch devices without also catching
+      a small laptop window. The wash is an inset shadow rather than a
+      background change so it composites over whatever fill the button already
+      has — semantic, accent, outlined or ghost — without knowing which. */
+@media (hover: none) {
+  button:active:not(:disabled),
+  .button:active:not(:disabled) {
+    box-shadow: inset 0 0 0 999px rgba(0, 0, 0, 0.10);
+  }
+  /* The nav is the app's one inverted surface (CLAUDE.md §1): a black wash on
+     a black bar is invisible, so it takes an explicit light one. */
+  .app-header button:active:not(:disabled),
+  .ld-nav button:active:not(:disabled) {
+    box-shadow: inset 0 0 0 999px rgba(255, 255, 255, 0.18);
+  }
+}
+
+@media (max-width: 640px) {
+  /* The tab bar exists only at this width, and only inside the signed-in shell
+     — see the token block above. Everything that needs to clear it is a
+     descendant of .app-container, so scoping it here rather than on :root keeps
+     the shell-less screens (waitlist gate) at 0. */
+  .app-container { --tabbar-h: calc(var(--tabbar-row) + var(--safe-b)); }
+
+  /* 3a. iOS ZOOM. Safari zooms the whole page when a control smaller than 16px
+         takes focus, and never zooms back out. --fs-md IS 16px, so this is the
+         token that buys the behaviour — never a literal, and never 15px. */
+  input, textarea, select { font-size: var(--fs-md); }
+
+  /* 3b. TOUCH TARGETS. Controls sized for a mouse are 31-34px tall here (the
+         app's --space-3 padding against a 9px root). Height only: each
+         component keeps its own padding, fill and radius. Checkable and range
+         inputs are excluded — a 44px checkbox is a layout bug, and their real
+         target is the wrapping label. */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+  select,
+  textarea,
+  button,
+  .button {
+    min-height: var(--tap);
+  }
 }
 
 /* ── Global LazyImg skeleton / shimmer ─────────────────────────────────────── */

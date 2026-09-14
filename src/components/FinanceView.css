@@ -1,0 +1,560 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   Finance — the founder's books as a full page.
+
+   This file only adds what Finance needs on top of the shared founder-tool
+   primitives in OrgPanel.css (.ft-card, .ft-toolbar, .beta-chip, .an-kpis,
+   .an-tile, .an-table, .an-gridline, .an-tooltip, .org-confirm-*), which
+   already have their page-scale `.tool-view …` overrides. Spacing is ToolView's
+   scale against the 9px root — 3rem section gaps, 2rem card padding, 1.5rem
+   grid gaps, 4rem minimum control height — and every colour is a token.
+
+   CHART COLOUR: the two series are black (income) and mid-grey (expenses), not
+   green and red. §1 spends colour almost entirely on black/white/grey and keeps
+   semantics for signalling state — so the red/green here is reserved for the
+   one thing that IS a state: whether profit is positive or negative
+   (.fin-pos / .fin-neg).
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.fin-view {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+  min-width: 0;
+}
+
+/* ── Sub-tabs ────────────────────────────────────────────────────────────── */
+/* Same shape as ToolView's tab strip, but this one lives in the body (the view
+   title block already owns the one above it), so it carries no negative pull. */
+
+.fin-tabs {
+  display: flex;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.fin-tab {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 1.2rem 1.8rem;
+  margin-bottom: -1px;
+  font-size: var(--fs-base);
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.fin-tab:hover { color: var(--text-primary); }
+
+.fin-tab--on {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Range picker ────────────────────────────────────────────────────────── */
+
+.fin-range { margin-bottom: 0; }
+
+.fin-range-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.fin-range-field input {
+  min-height: 4rem;
+  padding: 0 1.2rem;
+  background: var(--ink-800);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--fs-base);
+}
+
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+
+.fin-two-up {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(42rem, 1fr));
+  gap: 3rem;
+  align-items: start;
+}
+
+/* Tables carry their own horizontal scroll so the page never scrolls sideways. */
+.fin-scroll {
+  overflow-x: auto;
+  margin: 0 -0.4rem;
+  padding: 0 0.4rem;
+}
+
+.fin-table { width: 100%; }
+.fin-table tfoot th {
+  border-top: 1px solid var(--border);
+  border-bottom: none;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.fin-pos { color: var(--success); }
+.fin-neg { color: var(--danger); }
+
+/* A quiet second fact on a cell: the occurrence count, a founding marker. */
+.fin-count {
+  display: inline-block;
+  margin-left: 0.8rem;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Grouped column chart ────────────────────────────────────────────────── */
+
+.fin-chart {
+  position: relative;
+  /* Room for money tick labels ("$1.5K"), which are wider than the counts the
+     analytics chart labels its axis with. */
+  padding-left: 6rem;
+  margin-bottom: 2rem;
+}
+
+.fin-legend {
+  display: flex;
+  gap: 2rem;
+  margin-bottom: 1.5rem;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+/* The legend used to live INSIDE .fin-chart and inherited its 6rem left padding
+   (the gutter the money tick labels sit in). It was hoisted out so it cannot
+   scroll away with the bars on a phone, so it re-states that inset here — the
+   desktop rendering is unchanged to the pixel. */
+.fin-chart-wrap > .fin-legend { padding-left: 6rem; }
+
+.fin-legend span { display: inline-flex; align-items: center; gap: 0.7rem; }
+
+.fin-swatch {
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 0.2rem;
+  display: inline-block;
+}
+
+.fin-swatch--income  { background: var(--accent); }
+.fin-swatch--expense { background: var(--text-muted); }
+
+.fin-plot { position: relative; height: 220px; }
+
+.fin-bars { position: absolute; inset: 0; display: flex; align-items: flex-end; }
+
+.fin-slot {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0 0.4rem;
+  outline: none;
+  border-radius: var(--radius-sm);
+}
+
+/* Thin bars, caps rounded at the top and square where they meet the baseline. */
+.fin-bar {
+  width: 100%;
+  max-width: 14px;
+  min-height: 0;
+  border-radius: 4px 4px 0 0;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+
+.fin-bar--income  { background: var(--accent); }
+.fin-bar--expense { background: var(--text-muted); }
+
+.fin-slot--hover .fin-bar { opacity: 0.72; }
+.fin-slot:focus-visible { box-shadow: inset 0 0 0 1px var(--border-control); }
+
+.fin-tooltip { white-space: nowrap; }
+.fin-tooltip span { display: block; }
+
+/* ── Entry form ──────────────────────────────────────────────────────────── */
+
+.fin-form {
+  margin-bottom: 2rem;
+  padding: 2rem;
+  background: var(--ink-900);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.fin-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.fin-form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.fin-form-grid input,
+.fin-form-grid select {
+  min-height: 4rem;
+  padding: 0 1.2rem;
+  background: var(--ink-800);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--fs-base);
+}
+
+.fin-form-grid input:disabled { opacity: 0.45; cursor: default; }
+
+.fin-form-wide { grid-column: 1 / -1; }
+
+.fin-form-actions {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ── Ledger ──────────────────────────────────────────────────────────────── */
+
+.fin-ledger { min-width: 90rem; }
+
+.fin-kind {
+  display: inline-block;
+  padding: 0.2rem 0.8rem;
+  border-radius: 999px;
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* The one semantic colour in the ledger: money coming in. */
+.fin-kind--income  { background: var(--success-dim); color: var(--success); }
+.fin-kind--expense { background: var(--ink-750); color: var(--text-secondary); }
+
+.fin-note {
+  max-width: 34rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.fin-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.fin-actions .org-icon-btn + .org-icon-btn { margin-left: 0.6rem; }
+
+.fin-row--danger td { background: var(--danger-dim); }
+
+.fin-price-input {
+  width: 12rem;
+  min-height: 4rem;
+  padding: 0 1rem;
+  text-align: right;
+  background: var(--ink-800);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Printable statement ─────────────────────────────────────────────────── */
+
+.fin-statement-head { margin-bottom: 2rem; }
+
+.fin-statement-head h3 {
+  margin: 0 0 0.5rem;
+  font-size: var(--fs-xl);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.fin-statement-head p {
+  margin: 0;
+  font-size: var(--fs-base);
+  color: var(--text-secondary);
+}
+
+.fin-statement { margin-bottom: 2rem; }
+
+.fin-statement-foot {
+  margin: 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+/*
+  PRINT: the statement is the page. Rather than enumerating every piece of app
+  chrome to hide (header, storage meter, toasts, support widget, debug toggle —
+  all outside this component and free to change), everything is made invisible
+  and only the statement subtree is painted back. `visibility` keeps the layout
+  box intact, so the statement can be lifted to the top of the sheet.
+*/
+@media print {
+  body * { visibility: hidden; }
+
+  .fin-print,
+  .fin-print * { visibility: visible; }
+
+  .fin-print {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 0;
+    background: var(--ink-950);
+    border: none;
+    border-radius: 0;
+  }
+
+  .fin-noprint { display: none !important; }
+
+  .fin-print .an-table { font-size: 10pt; }
+  .fin-print .an-table th,
+  .fin-print .an-table td { padding: 0.5rem 1rem 0.5rem 0; }
+  .fin-print .an-h { font-size: 11pt; }
+  .fin-print .fin-statement-head h3 { font-size: 16pt; }
+  .fin-print .fin-statement-head p,
+  .fin-print .fin-statement-foot { font-size: 9pt; }
+
+  /* Keep a month table from splitting mid-row across sheets. */
+  .fin-print tr { break-inside: avoid; }
+
+  @page { margin: 18mm; }
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 1024px) {
+  .fin-two-up { grid-template-columns: 1fr; gap: 2rem; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PHONE (≤ 640px)
+   ════════════════════════════════════════════════════════════════════════════
+
+   `@media screen and …` deliberately: the print block above re-styles
+   `.an-table` for the statement, and a narrow page box must not drag the card
+   layouts into a PDF. Print stays on the desktop table rules.
+
+   The shared founder-tool phone layer (touch floors, 16px controls, the
+   scrolling chip row, KPI tiles two-up, the generic table→card treatment) lives
+   in OrgPanel.css, which this file imports. Only Finance-specific work is here. */
+
+@media screen and (max-width: 640px) {
+  .fin-view { gap: 2rem; }
+
+  /* ── Sub-tabs: one scrolling row ─────────────────────────────────────────
+     Four tabs wrap to two lines at 390px and the second line reads as orphaned
+     chrome. One no-wrap scrolling row instead, bled to the page edge so the
+     overflow is legible as "there is more this way". */
+  .fin-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    margin-inline: -1.5rem;
+    padding-inline: 1.5rem;
+  }
+  .fin-tabs::-webkit-scrollbar { display: none; }
+  .fin-tab { flex: 0 0 auto; min-height: 44px; padding: 1.2rem 1.4rem; }
+
+  /* ── Range picker ────────────────────────────────────────────────────────
+     The presets are `.ft-chips`, already a scrolling row from OrgPanel.css. The
+     two custom date fields each take a full line — a date input squeezed to
+     half of 390px shows "mm/dd/…". */
+  .fin-range-field { width: 100%; justify-content: space-between; gap: 1.2rem; }
+  .fin-range-field input { flex: 1; min-width: 0; min-height: 44px; }
+
+  /* ── Monthly chart: legend above, bars scroll ────────────────────────────
+     12–36 months across ~340px is 9px per month-pair; the bars merge into a
+     grey band and the x labels overprint. The plot keeps a readable minimum and
+     the wrapper scrolls. See the .an-chart-scroll note in OrgPanel.css for why
+     the scrollport is a wrapper element and why it needs padding-top (the
+     tooltip is translated ABOVE the plot and `overflow-x: auto` clips the other
+     axis too). */
+  .fin-chart-wrap > .fin-legend {
+    padding-left: 0;
+    margin-bottom: 0;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .fin-chart-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-top: 6rem;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .fin-chart-scroll > .fin-chart {
+    min-width: 56rem;
+    padding-left: 5rem;
+    margin-bottom: 1rem;
+  }
+
+  .fin-plot { height: 180px; }
+
+  /* ── Entry form: one column, full-width controls, sticky Save ────────────── */
+  .fin-form { padding: 1.5rem; }
+  .fin-form-grid { grid-template-columns: 1fr; gap: 1.2rem; margin-bottom: 1.5rem; }
+  .fin-form-grid input,
+  .fin-form-grid select { width: 100%; min-height: 44px; }
+
+  /* The form is ten fields tall on a phone, so Save is otherwise a scroll away
+     from whatever you just typed. `--tabbar-h` (index.css) is the shared bottom offset every bottom-anchored surface uses
+     for the shell's bottom tab bar: it resolves to 0px today and lifts the bar
+     automatically if the shell ever publishes a height. */
+  .fin-form > .fin-form-actions {
+    position: sticky;
+    bottom: var(--tabbar-h, 0px);
+    z-index: 5;
+    gap: 0.8rem;
+    margin: 0 -1.5rem -1.5rem;
+    padding: 1.2rem 1.5rem calc(1.2rem + var(--safe-b));
+    background: var(--ink-900);
+    border-top: 1px solid var(--border);
+  }
+  .fin-form > .fin-form-actions > * { flex: 1 1 auto; min-height: 44px; }
+
+  /* ── Ledger: one card per transaction ────────────────────────────────────
+     Eight columns cannot be squeezed into 390px and cannot usefully be scrolled
+     either — you would lose the amount the moment you went looking for the
+     workspace. The generic `.an-table--cards` machinery in OrgPanel.css hides
+     the header and turns each row into a card; this overrides the label/value
+     line layout with the three-line reading order the founder actually scans:
+
+         AMOUNT                                 [kind]
+         category                              workspace
+         date                                    repeats
+         note (full width, only when there is one)
+         [ Edit ] [ Delete ]
+
+     Placement is by grid-template-areas keyed off `data-col`, not nth-child, so
+     re-ordering a column in the JSX cannot silently scramble the card.
+     Specificity note: `.an-table.fin-ledger` (0,4,1) is deliberately one class
+     above the generic (0,3,1) rules in OrgPanel.css, so this wins regardless of
+     which of the two files a lazy chunk happens to inject first. */
+  .fin-scroll { overflow-x: visible; margin: 0; padding: 0; }
+  .fin-ledger { min-width: 0; }
+
+  .tool-view .an-table.fin-ledger tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "amount   kind"
+      "category workspace"
+      "date     repeats"
+      "note     note"
+      "actions  actions";
+    gap: 0.5rem 1.2rem;
+    align-items: baseline;
+  }
+
+  .tool-view .an-table.fin-ledger td {
+    display: block;
+    padding: 0;
+    border: none;
+    text-align: left;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .tool-view .an-table.fin-ledger td[data-col='amount'] {
+    grid-area: amount;
+    font-size: var(--fs-lg);
+    font-weight: 700;
+    line-height: var(--lh-tight);
+  }
+  .tool-view .an-table.fin-ledger td[data-col='kind']      { grid-area: kind; text-align: right; }
+  .tool-view .an-table.fin-ledger td[data-col='category']  { grid-area: category; font-weight: 600; }
+  .tool-view .an-table.fin-ledger td[data-col='workspace'] { grid-area: workspace; text-align: right; color: var(--text-secondary); font-size: var(--fs-sm); }
+  .tool-view .an-table.fin-ledger td[data-col='date']      { grid-area: date; color: var(--text-muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+  .tool-view .an-table.fin-ledger td[data-col='repeats']   { grid-area: repeats; text-align: right; color: var(--text-muted); font-size: var(--fs-sm); }
+
+  .tool-view .an-table.fin-ledger td[data-col='note'] {
+    grid-area: note;
+    max-width: none;
+    white-space: normal;
+    overflow: visible;
+    color: var(--text-secondary);
+    font-size: var(--fs-sm);
+  }
+  /* No note, no row of empty space. */
+  .tool-view .an-table.fin-ledger td[data-col='note']:empty { display: none; }
+
+  .tool-view .an-table.fin-ledger td[data-col='actions'] {
+    grid-area: actions;
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    white-space: normal;
+    padding-top: 0.8rem;
+    border-top: 1px solid var(--border-subtle);
+  }
+  /* .org-icon-btn is already floored at 44px by OrgPanel.css; the inherited
+     left margin between them is replaced by the flex gap above. */
+  .tool-view .an-table.fin-ledger .fin-actions .org-icon-btn + .org-icon-btn { margin-left: 0; }
+  .tool-view .an-table.fin-ledger .fin-actions .org-confirm-actions { flex: 1; gap: 0.8rem; }
+  .tool-view .an-table.fin-ledger .fin-actions .org-confirm-actions > * { flex: 1; }
+
+  /* The delete-armed tint is applied to <td> backgrounds; the card is the <tr>. */
+  .tool-view .an-table.fin-ledger tbody tr.fin-row--danger {
+    background: var(--danger-dim);
+    border-color: var(--danger);
+  }
+  .tool-view .an-table.fin-ledger tr.fin-row--danger td { background: none; }
+
+  /* ── Customers ───────────────────────────────────────────────────────────
+     The Workspaces table uses the generic labelled-card treatment; only the
+     two plan tables stay tables (four narrow numeric columns each, which read
+     fine in the contained scroll from OrgPanel.css). */
+  .fin-two-up { gap: 2rem; }
+  /* Deliberately NOT `width: 100%`: this input sits in a cell of a table that
+     is sized by its content in the contained-scroll treatment, so a percentage
+     width would resolve against a width the cell is still deriving from it.
+     Its intrinsic 12rem already holds a money value at 16px. */
+  .fin-price-input { min-height: 44px; }
+
+  /* ── Reports: full-width actions ─────────────────────────────────────────
+     Three download/print buttons side by side give three ~100px targets with
+     wrapped two-line labels. Stacked, each is a real button. */
+  /* `> ` is load-bearing: the Reports actions are a direct child of the card,
+     the Transactions Save bar is a child of `.fin-form`. Without the child
+     combinator this rule would un-stick the Save bar three rules above. */
+  .ft-card > .fin-form-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.8rem;
+  }
+  .ft-card > .fin-form-actions > * {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  .fin-statement-head h3 { font-size: var(--fs-lg); }
+  .fin-count { display: block; margin-left: 0; }
+}

@@ -7,7 +7,7 @@ import { log, isDebugEnabled } from '../lib/debugLogger';
 import { buildProductImageRow, stage4ColumnsAvailable } from '../lib/imageRowSync';
 import { publicImageUrl } from '../lib/storageUrls';
 import './ImageUpload.css';
-import { XCircle, RefreshCw, X, Archive, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { XCircle, RefreshCw, X, Archive, CheckCircle2, AlertTriangle, Camera, Images } from 'lucide-react';
 
 // ─── Compression config ───────────────────────────────────────────────────────
 // Set to false to bypass compression and upload originals (for debugging).
@@ -296,6 +296,13 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
 
   const folderInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
+  /* Phone capture paths. Two SEPARATE inputs on purpose: `capture` is a hint the
+   * browser may not honour, and once an input carries it some Android builds stop
+   * offering the gallery at all — so "Take photos" and "Choose from library" each
+   * get their own element rather than one input whose attribute is toggled. Both
+   * feed the SAME processFiles pipeline as the drop zone. */
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const libraryInputRef = useRef<HTMLInputElement>(null);
 
   // The compressed-path registry is now written once per run instead of once per
   // image (F10). Page hide is the backstop for a run that is interrupted — losing
@@ -765,6 +772,9 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     }
   }, [processFiles]);
 
+  /** Shared handler for every plain <input type="file"> path: folder import,
+   *  phone camera capture and phone photo-library pick. All three land in the
+   *  same processFiles pipeline (compress → EXIF → TUS upload) as the drop zone. */
   const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     processFiles(files);
@@ -824,6 +834,27 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
           onChange={handleZipChange}
         />
 
+        {/* Hidden camera-capture input — phones open the camera straight away */}
+        <input
+          ref={cameraInputRef}
+          type="file"
+          style={{ display: 'none' }}
+          accept="image/*"
+          capture="environment"
+          multiple
+          onChange={handleFolderChange}
+        />
+
+        {/* Hidden photo-library input — same as camera minus `capture` */}
+        <input
+          ref={libraryInputRef}
+          type="file"
+          style={{ display: 'none' }}
+          accept="image/*"
+          multiple
+          onChange={handleFolderChange}
+        />
+
         <div 
           {...getRootProps()} 
           className={`dropzone ${isDragActive ? 'active' : ''} ${isUploading || extractingZip ? 'uploading' : ''}`}
@@ -861,8 +892,33 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                   <p>Drop images or a ZIP file here…</p>
                 ) : (
                   <>
-                    <p>Drag & drop clothing images here</p>
+                    <p className="dropzone-title">Drag &amp; drop clothing images here</p>
                     <p className="dropzone-subtext">or click to select files</p>
+                    {/* Phone-only entry points. Hidden above 640px so the desktop
+                        drop zone is byte-for-byte the same interaction as before.
+                        stopPropagation matters: this block sits inside the
+                        dropzone root, whose own onClick would otherwise ALSO open
+                        react-dropzone's generic picker behind the camera sheet. */}
+                    <div className="dropzone-actions">
+                      <p className="dropzone-mobile-copy">Add the photos you just shot</p>
+                      <button
+                        type="button"
+                        className="dz-action dz-action--primary"
+                        onClick={(e) => { e.stopPropagation(); cameraInputRef.current?.click(); }}
+                      >
+                        <Camera size={18} /> Take photos
+                      </button>
+                      <button
+                        type="button"
+                        className="dz-action"
+                        onClick={(e) => { e.stopPropagation(); libraryInputRef.current?.click(); }}
+                      >
+                        <Images size={18} /> Choose from library
+                      </button>
+                      <p className="dropzone-mobile-hint">
+                        JPG, PNG or WEBP. Folder and ZIP import are in the buttons above.
+                      </p>
+                    </div>
                     <p className="dropzone-hint">Supports: JPG, PNG, WEBP · or drop a ZIP file</p>
                   </>
                 )}

@@ -430,6 +430,117 @@
 
 .vocab-page .vocab-builtin-title { margin-top: 3rem; }
 
+/* ── Phone ───────────────────────────────────────────────────────────────────
+   There are no <table>s in this view — every list is already a flex row — so
+   the work here is stacking those rows, giving the controls a real target and
+   stopping the two horizontal strips (tabs, search) from folding into four
+   lines of chrome before any vocabulary appears. */
 @media (max-width: 640px) {
-  .vocab-search { margin-left: 0; min-width: 100%; }
+
+  /* ── Toolbar: search on its own line, tabs scrolling above it ───────────── */
+  .vocab-toolbar {
+    gap: 1.2rem;
+    padding-bottom: 1.5rem;
+  }
+
+  .vocab-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    /* Bled to the page edge so a clipped third tab reads as "scroll me". */
+    margin-inline: -1.5rem;
+    padding-inline: 1.5rem;
+    flex: 1 1 100%;
+  }
+  .vocab-tabs::-webkit-scrollbar { display: none; }
+  .vocab-tab { flex: 0 0 auto; min-height: 44px; }
+
+  .vocab-search {
+    margin-left: 0;
+    min-width: 0;
+    max-width: none;
+    flex: 1 1 100%;
+    min-height: 44px;
+  }
+
+  /* ── Rows stack ──────────────────────────────────────────────────────────
+     A vocab row is [chip/brand][detail][toggle][edit][delete] on one line. At
+     390px the detail — the actual vocabulary — truncates to nothing so three
+     icon buttons can keep their place. Identity first, full width; controls on
+     their own line underneath. */
+  .vocab-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.8rem;
+    padding: 1.2rem;
+  }
+
+  .vocab-row-detail {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    font-size: var(--fs-sm);
+  }
+
+  .vocab-brand-name { white-space: normal; overflow-wrap: anywhere; }
+
+  /* Everything after the identity block lines up as one right-aligned strip. */
+  .vocab-row > .vocab-toggle,
+  .vocab-row > .vocab-icon-btn,
+  .vocab-row > .vocab-confirm,
+  .vocab-row > .vocab-add-btn { align-self: flex-end; }
+
+  .vocab-icon-btn { width: 44px; height: 44px; min-width: 44px; }
+
+  .vocab-toggle,
+  .vocab-confirm-yes,
+  .vocab-confirm-no,
+  .vocab-add-btn,
+  .vocab-coverage-make {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding-inline: 1.4rem;
+  }
+
+  .vocab-toggle input[type='checkbox'] { width: 22px; height: 22px; }
+
+  .vocab-confirm { gap: 0.8rem; }
+  .vocab-confirm > * { flex: 1; }
+
+  /* ── Add form: one field per line ────────────────────────────────────────── */
+  .vocab-add-form { flex-direction: column; align-items: stretch; gap: 0.8rem; }
+  .vocab-add-form input { min-width: 0; width: 100%; }
+  .vocab-add-form .vocab-add-btn { width: 100%; }
+
+  /* ── Model editor: three tracks cannot hold a label at this width ────────── */
+  .vocab-model-form { grid-template-columns: 1fr; gap: 1.2rem; padding: 1.5rem; }
+  .vocab-mf-wide,
+  .vocab-mf-actions { grid-column: span 1; }
+  .vocab-mf-check { justify-content: flex-start; }
+  .vocab-mf-check input { width: 22px; height: 22px; }
+  .vocab-mf-actions { flex-wrap: wrap; gap: 0.8rem; }
+  .vocab-mf-actions > * { flex: 1 1 auto; }
+
+  .vocab-model-row { align-items: stretch; }
+  .vocab-model-meta { font-size: var(--fs-xs); }
+
+  .vocab-edit-input,
+  .vocab-edit-input--wide { min-width: 0; width: 100%; }
+
+  .vocab-coverage-pill { min-height: 44px; padding-inline: 1rem; }
+
+  /* 16px on every control, or iOS zooms the page on focus and stays zoomed.
+     The :not() chain out-specifies ToolView.css's (0,5,1) blanket control rule
+     — see the note in ui/Field.css. */
+  .tool-view .vocab-page input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']) {
+    min-height: 44px;
+    font-size: var(--fs-md);
+  }
+  .tool-view .vocab-page :is(select, textarea) {
+    min-height: 44px;
+    font-size: var(--fs-md);
+  }
 }

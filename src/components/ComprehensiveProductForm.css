@@ -227,3 +227,77 @@ input[type="number"].info-input::-webkit-outer-spin-button {
   letter-spacing: 0.03em;
   vertical-align: middle;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE-FIRST STEP 3 FORM
+   Additive; desktop untouched. ≤640px = phone.
+   Field text size is raised to --fs-md by the step-scoped rule in App.css (iOS
+   zooms any focused input under 16px), so it is deliberately NOT repeated here.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.info-input,
+.comprehensive-product-form .button {
+  touch-action: manipulation;
+}
+
+@media (max-width: 640px) {
+  .comprehensive-product-form {
+    gap: 0.5rem;
+  }
+
+  /* One field per row — two 170px columns of label+input is where this form
+     starts truncating its own labels. */
+  .fields-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .fields-row--span2 {
+    grid-column: span 1;
+  }
+
+  .measurements-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .info-input {
+    min-height: var(--tap, 44px);
+    padding: 0.5rem 0.6rem;
+  }
+
+  select.info-input {
+    /* Keep the caret clear of the wider text. */
+    padding-right: 2.2rem;
+  }
+
+  .info-item label {
+    font-size: var(--fs-xs);
+    margin-bottom: 0.25rem;
+  }
+
+  .form-section-flat {
+    padding: 0.5rem 0.6rem 0.6rem;
+  }
+
+  /* NOT position:sticky — see docs/reviews/10-mobile-workflow.md. A sticky
+     sub-header at top:0 slides under the app's own sticky black nav (z-index
+     100, height owned by another surface) and reads as simply disappearing.
+     Instead the title is a full-bleed tinted strip so it stays an obvious
+     section boundary while scrolling a long form. */
+  .form-section-title {
+    margin: -0.5rem -0.6rem 0.5rem;
+    padding: 0.45rem 0.6rem;
+    background: var(--ink-850);
+    border-bottom: 1px solid var(--border);
+    border-radius: 10px 10px 0 0;
+    font-size: var(--fs-xs);
+  }
+
+  .comprehensive-product-form .button {
+    min-height: var(--tap, 44px);
+    font-size: var(--fs-sm);
+    justify-content: center;
+  }
+}

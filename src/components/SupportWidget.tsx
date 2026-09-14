@@ -1,22 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
+import { useEffect, useMemo, useRef, useState, memo } from 'react';
 import { MessageSquare, X, ChevronLeft, Send, CheckCircle2, RotateCcw, Plus } from 'lucide-react';
 import {
-  fetchThreads, fetchMessages, sendMessage, createThread, markThreadRead, setThreadStatus,
-  subscribeToSupport, isUnread, unreadThreadCount, sortThreads, formatRelative,
-  type SupportThread, type SupportMessage, type SupportRole, type ThreadStatus,
+  isUnread, formatRelative,
+  type SupportMessage, type SupportRole, type ThreadStatus,
 } from '../lib/supportService';
-import { log } from '../lib/debugLogger';
+import { supportActions, useSupportThreads } from '../lib/supportStore';
 import './SupportWidget.css';
 
 interface SupportWidgetProps {
-  userId: string;
   userEmail: string | null;
   orgName: string | null;
   /** Founding Workspace owner/admin → the same button opens the inbox of every conversation. */
   isFounder: boolean;
 }
-
-const POLL_MS = 45_000;
 
 /**
  * The floating "Messages" button (bottom-right) and its panel — first-party
@@ -26,16 +22,17 @@ const POLL_MS = 45_000;
  *   founder  sees every conversation (open / closed), replies as 'founder',
  *            closes and reopens threads
  *
- * Live updates come from Supabase Realtime (postgres_changes on the two
- * tables) with a 45 s poll as the fallback, so it keeps working even when
- * realtime is not enabled for the tables. Hidden entirely when the migration
- * has not been run (fetchThreads → 'unavailable').
+ * The thread list, the Realtime subscription and the 45 s polling fallback all
+ * live in `supportStore` now, because the full-page MessagesView shows the same
+ * conversations: two front ends, ONE channel, ONE timer, ONE list that can
+ * never drift. This component owns only what is genuinely local to the panel —
+ * whether it is open, which thread is showing, and that thread's messages.
+ * Hidden entirely when the migration has not been run (store `available`).
  */
-function SupportWidget({ userId, userEmail, orgName, isFounder }: SupportWidgetProps) {
+function SupportWidget({ userEmail, orgName, isFounder }: SupportWidgetProps) {
   const role: SupportRole = isFounder ? 'founder' : 'user';
-  const [available, setAvailable] = useState<boolean | null>(null);
+  const { threads, sorted, available, unreadCount, revision } = useSupportThreads(role);
   const [open, setOpen] = useState(false);
-  const [threads, setThreads] = useState<SupportThread[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [composingNew, setComposingNew] = useState(false);
   const [messages, setMessages] = useState<SupportMessage[]>([]);
@@ -44,67 +41,31 @@ function SupportWidget({ userId, userEmail, orgName, isFounder }: SupportWidgetP
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<ThreadStatus>('open');
   const listEndRef = useRef<HTMLDivElement | null>(null);
-  const activeIdRef = useRef<string | null>(null);
   const openRef = useRef(false);
 
-  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
   useEffect(() => { openRef.current = open; }, [open]);
 
-  /** Stamp my read marker on a thread that is unread for me (local + DB). */
-  const markReadIfNeeded = useCallback((list: SupportThread[], id: string | null) => {
-    if (!id) return;
-    const t = list.find(x => x.id === id);
-    if (!t || !isUnread(t, role)) return;
-    const stamp = new Date().toISOString();
-    const key = role === 'user' ? 'user_last_read_at' : 'founder_last_read_at';
-    setThreads(prev => prev.map(x => (x.id === id ? { ...x, [key]: stamp } : x)));
-    void markThreadRead(id, role);
-  }, [role]);
-
-  const loadThreads = useCallback(async (): Promise<SupportThread[] | null> => {
-    const r = await fetchThreads();
-    if (r.status === 'unavailable') {
-      setAvailable(false);
-      return null;
-    }
-    setAvailable(true);
-    setThreads(r.threads);
-    return r.threads;
-  }, []);
-
-  const loadMessages = useCallback(async (threadId: string) => {
-    setMessages(await fetchMessages(threadId));
-  }, []);
-
-  // Initial load, live updates, polling fallback.
+  /* The open conversation's messages. `revision` ticks once per completed
+     store refetch (realtime ping or poll), which is exactly when a reply may
+     have arrived — so this one effect covers open, poll and live update. */
   useEffect(() => {
+    if (!activeId) return;
     let cancelled = false;
-    const refresh = async () => {
-      const list = await loadThreads();
-      if (cancelled || !list) return;
-      const id = activeIdRef.current;
-      if (id) {
-        await loadMessages(id);
-        if (openRef.current) markReadIfNeeded(list, id);
-      }
-    };
-    void refresh();
-    const unsub = subscribeToSupport(() => { void refresh(); });
-    const timer = window.setInterval(() => { void refresh(); }, POLL_MS);
-    return () => {
-      cancelled = true;
-      unsub();
-      window.clearInterval(timer);
-    };
-  }, [loadThreads, loadMessages, markReadIfNeeded, userId]);
+    void (async () => {
+      const list = await supportActions.loadMessages(activeId);
+      if (cancelled) return;
+      setMessages(list);
+      // Reading it with the panel open is what clears the unread marker.
+      if (openRef.current) supportActions.markRead(activeId, role);
+    })();
+    return () => { cancelled = true; };
+  }, [activeId, revision, role]);
 
   // Keep the newest message in view.
   useEffect(() => {
     if (open) listEndRef.current?.scrollIntoView({ block: 'end' });
   }, [messages, open, activeId]);
 
-  const sorted = useMemo(() => sortThreads(threads, role), [threads, role]);
-  const unread = useMemo(() => unreadThreadCount(threads, role), [threads, role]);
   const openCount = useMemo(() => threads.filter(t => t.status === 'open').length, [threads]);
   const active = activeId ? threads.find(t => t.id === activeId) ?? null : null;
   const visibleThreads = isFounder ? sorted.filter(t => t.status === filter) : sorted;
@@ -113,9 +74,8 @@ function SupportWidget({ userId, userEmail, orgName, isFounder }: SupportWidgetP
     setActiveId(id);
     setComposingNew(false);
     setError(null);
-    setMessages([]);
-    void loadMessages(id);
-    markReadIfNeeded(threads, id);
+    setMessages([]);   // the effect above loads them
+    supportActions.markRead(id, role);
   };
 
   const backToList = () => {
@@ -141,28 +101,24 @@ function SupportWidget({ userId, userEmail, orgName, isFounder }: SupportWidgetP
     setError(null);
     try {
       if (activeId) {
-        const m = await sendMessage(activeId, body, role);
+        const m = await supportActions.send(activeId, body, role);
         if (!m) {
           setError('Could not send — please try again.');
           return;
         }
         setMessages(prev => [...prev, m]);
         setDraft('');
-        void loadThreads();
       } else {
-        const r = await createThread({ body, userEmail, orgName });
+        const r = await supportActions.startThread({ body, userEmail, orgName });
         if (!r.ok) {
           setError(r.error);
           return;
         }
-        setThreads(prev => [r.thread, ...prev]);
         setActiveId(r.thread.id);
         setComposingNew(false);
         setMessages([r.message]);
         setDraft('');
-        void loadThreads();
       }
-      log.app(`support | message sent as ${role}`);
     } finally {
       setBusy(false);
     }
@@ -171,8 +127,7 @@ function SupportWidget({ userId, userEmail, orgName, isFounder }: SupportWidgetP
   const handleStatus = async (status: ThreadStatus) => {
     if (!activeId || busy) return;
     setBusy(true);
-    const ok = await setThreadStatus(activeId, status);
-    if (ok) setThreads(prev => prev.map(t => (t.id === activeId ? { ...t, status } : t)));
+    await supportActions.setStatus(activeId, status);
     setBusy(false);
   };
 
@@ -311,7 +266,7 @@ function SupportWidget({ userId, userEmail, orgName, isFounder }: SupportWidgetP
       >
         <MessageSquare size={18} />
         <span>{isFounder ? 'Inbox' : 'Messages'}</span>
-        {unread > 0 && <span className="sw-badge">{unread > 99 ? '99+' : unread}</span>}
+        {unreadCount > 0 && <span className="sw-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}
       </button>
     </div>
   );

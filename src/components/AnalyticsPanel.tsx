@@ -116,15 +116,17 @@ function AnalyticsBody({ summary, funnel, days }: { summary: AnalyticsSummary; f
       <div className="an-tables">
         <div>
           <h4 className="an-h">Funnel</h4>
-          <table className="an-table">
+          {/* Cards on a phone: four numbers whose meaning lives entirely in the
+              header, so a squeezed table loses the point of the funnel. */}
+          <table className="an-table an-table--cards">
             <thead><tr><th>Step</th><th>Count</th><th>Of first</th><th>Of previous</th></tr></thead>
             <tbody>
               {funnel.map(s => (
                 <tr key={s.step}>
-                  <td>{s.step}</td>
-                  <td className="an-num">{s.count.toLocaleString()}</td>
-                  <td className="an-num">{pct(s.ofFirst)}</td>
-                  <td className="an-num">{pct(s.ofPrevious)}</td>
+                  <td data-label="Step">{s.step}</td>
+                  <td data-label="Count" className="an-num">{s.count.toLocaleString()}</td>
+                  <td data-label="Of first" className="an-num">{pct(s.ofFirst)}</td>
+                  <td data-label="Of previous" className="an-num">{pct(s.ofPrevious)}</td>
                 </tr>
               ))}
             </tbody>
@@ -134,14 +136,14 @@ function AnalyticsBody({ summary, funnel, days }: { summary: AnalyticsSummary; f
         <div>
           <h4 className="an-h">Events</h4>
           {summary.events.length === 0 ? <p className="ft-help">No custom events yet.</p> : (
-            <table className="an-table">
+            <table className="an-table an-table--cards">
               <thead><tr><th>Event</th><th>Count</th><th>Sessions</th></tr></thead>
               <tbody>
                 {summary.events.map(e => (
                   <tr key={e.event}>
-                    <td>{e.event}</td>
-                    <td className="an-num">{e.count.toLocaleString()}</td>
-                    <td className="an-num">{e.sessions.toLocaleString()}</td>
+                    <td data-label="Event">{e.event}</td>
+                    <td data-label="Count" className="an-num">{e.count.toLocaleString()}</td>
+                    <td data-label="Sessions" className="an-num">{e.sessions.toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -225,6 +227,11 @@ function DailyChart({ daily }: { daily: AnalyticsSummary['daily'] }) {
   const hovered = hover !== null ? daily[hover] : null;
 
   return (
+    /* The wrapper is the phone scrollport (see .an-chart-scroll in OrgPanel.css):
+       90 days of bars in 340px is a grey smear. It wraps the WHOLE chart rather
+       than the plot, because the y-axis tick labels are positioned outside
+       .an-plot and would be clipped by a scrollport drawn any tighter. */
+    <div className="an-chart-scroll">
     <div className="an-chart" onPointerLeave={() => setHover(null)} onBlur={() => setHover(null)}>
       <div className="an-plot">
         {ticks.map(tk => (
@@ -260,6 +267,7 @@ function DailyChart({ daily }: { daily: AnalyticsSummary['daily'] }) {
           )
         ))}
       </div>
+    </div>
     </div>
   );
 }

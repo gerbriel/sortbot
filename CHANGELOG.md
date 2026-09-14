@@ -1,5 +1,97 @@
 # Changelog — Acadia
 
+## 2026-09-14 — Mobile-first pass
+
+The whole app now has phone and tablet layouts. **Nothing about desktop changed** — every layout rule added here lives inside a screen-width query, and the listing, saving and export logic was not touched. No migration to run, no setting to change, no new dependency. End state: **579 tests / 40 files green**, build clean, lint unchanged at 254.
+
+Three screen sizes are used throughout: phone (up to 640px), tablet (641-1024px), and desktop (above 1024px, unchanged). Everything you can tap is at least 44px, and every form field is at least 16px text, which is what stops iPhones from zooming into a field and never zooming back out.
+
+### Getting around
+
+- **On a phone there is a bottom tab bar** — Workflow, Library, Messages, More — with everything else (Categories, Presets, Workspace, and the founder tools) behind **More**, which opens as a sheet from the bottom of the screen. The unread badge stays on the Messages tab, so a new message is never hidden behind a menu.
+- **On a tablet the tools move to a second row** on the black bar that scrolls sideways, instead of wrapping the header into several lines.
+- The header used to wrap into a four-line black slab on a phone before you could look at anything. It is now one line: the name, Messages, and your account menu.
+- The bar always shows where you are, including when you are on a page that lives behind More.
+
+### Uploading (Step 1)
+
+- **Take photos** and **Choose from library** buttons on phones. Take photos opens the camera directly; both feed the same upload as before, so compression, shot-time ordering and resumable uploads are unchanged. Folder and ZIP import are still there, above.
+
+### Grouping and categorizing (Step 2)
+
+- The left sidebar becomes a compact toolbar at the top, with sort, filter, date and auto-group controls folded behind **Sort, filter & group tools** so photos start near the top of the screen instead of a screen-and-a-half down.
+- The photo grid fits **three across** on a phone (two for multi-photo groups). The density slider still works — it just has a phone-sized range, and your desktop setting is remembered, not overwritten.
+- **Categories move to a bar along the bottom** of the screen that scrolls sideways. Select photos, then tap a category — dragging a group onto a category is a mouse gesture that does not exist on a touch screen. The bar grows to show Group / Ungroup / Delete once something is selected.
+- Tapping the toolbar itself no longer clears a selection you just built.
+- Pinch-to-zoom still works over the photo grid, and a long press no longer pops up "Save Image".
+
+### Describing (Step 3)
+
+- **Previous / Next, the listing counter and Download CSV sit in a bar pinned to the bottom** of the screen, and stay there while you scroll through the form — not just while you are looking at the photo.
+- Start Recording is a full-width button; fields stack to one column; measurements sit two across.
+- **The crop tool works with a finger** — drag the box, drag the corners (the grab areas are finger-sized even though the handles still look precise). Pinch-to-zoom inside the crop is not supported.
+- **The magnifier is hidden on touch-only devices**, along with its settings — it followed a mouse pointer and could never follow a finger. A touchscreen laptop with a mouse keeps it.
+
+### Exporting (Step 4)
+
+- The Handle column stays frozen on the left while you scroll the 54-column preview sideways, so a row can still be identified 40 columns in. Panning the table no longer drags the whole page with it.
+- The "a product has no price" warning is bigger — it is the one thing here you have to be able to read and act on.
+
+### Library, Messages and the founder tools
+
+- **Library shows two cards per row** on a phone rather than one full-screen card per batch, and the per-item controls that used to appear only on hover are now always visible (nothing hovers on a phone). Rename opens as a bottom sheet instead of a box wider than the screen.
+- **Messages** puts search and filters on one wrapping line, and the reply box sits on the bottom edge of the conversation.
+- **Analytics, Errors, CRM, Finance and Workspace**: summary tiles sit two across, filter rows scroll sideways instead of wrapping into four ragged lines, and wide tables either become labelled cards (the funnel, events, top issues, the ledger, workspaces) or scroll inside themselves with the first column pinned, so you never lose the row's label. Charts scroll inside their own box with the legend held above.
+- **Category presets**: the ten editor sections are now collapsible on a phone, so you can fold away what you are not editing. They start open, and on desktop they behave exactly as before.
+- **Kanban board**: lanes swipe one at a time instead of shrinking, and a card opens full screen.
+
+### Logged out
+
+- The landing page, sign-in and the waitlist screen all take the same treatment: 44px buttons and links, full-width stacked calls to action, and 16px form fields. Sign In was a 31px target before.
+
+### Two bugs fixed
+
+- **The landing page's preview panels were being clipped at narrow widths.** At 360px the two-column mock panels ran about 30px past their container and the right-hand cells were quietly cut off. Invisible at 390px, which is why it had survived.
+- **Step 3's voice command table pushed the whole page sideways on a phone.** Its five columns demanded 450px on a 390px screen, so the entire page scrolled horizontally. It is now a two-up card list.
+
+### Still owed
+
+Nobody could sign in to the app while this was built, so everything past the logged-out screens was verified from the code and from the real stylesheet at real screen widths, not from a signed-in phone. A pass on an actual iPhone is the next step; the specific list of what that would confirm is in `docs/reviews/10-mobile-pages.md` and `10-mobile-workflow.md`, and all of it is small numeric tuning rather than anything structural.
+
+## 2026-09-14 — Messages page + Finance module
+
+Two additions, neither of which changes anything in the listing workflow. **One migration needs running: `supabase/migrations/finance.sql`.** Until it is, Finance shows a setup step instead of an error, so the button is safe to expose today. End state: **570 tests / 39 files green**, build clean, lint unchanged at 254, no dependency added.
+
+### Messages: a full page beside the floating widget (`docs/reviews/08-messages-view.md`)
+
+- **Every signed-in user now gets a Messages button in the header**, with an unread count badge, alongside the floating button that was already there. The floating widget is unchanged — same badge, same auto-open, same Enter-to-send.
+- **The page is a list beside a conversation**: search across email, workspace, subject and message preview; the thread stays open while you scan the list; Up/Down arrows walk the list from the keyboard; Enter sends and Shift+Enter starts a new line. Starting a conversation now offers an optional **subject** — the database always supported one, nothing had surfaced it.
+- **For founding admins the same page is the Inbox**: every conversation from every workspace, Open / Closed / All filters with live counts, unread conversations first, and close/reopen. The page title says "Inbox" for founders and "Messages" for everyone else.
+- **On a narrow screen** the two columns become one, with an "All conversations" control to get back to the list.
+- **Both views and the badge now share one live connection.** Previously the widget owned its own; adding a second front end would have meant two live connections, two refresh timers and two lists that disagree the moment one of them sends a message. There is now exactly one of each no matter how many messaging views are open, and a sent message appears in the list immediately rather than one round-trip later.
+- **Signing out clears the conversation list**, so the next person on a shared machine never sees a flash of the previous account's messages.
+- Waitlisted users are unaffected: they have no header, and keep the floating widget exactly as before.
+
+### Finance: the founder's books, first-party (`docs/reviews/09-finance.md`)
+
+For founding admins only, behind a new **Finance** button in the header. Like analytics, the CRM and messaging, it is tables in this project's own database — **no payment processor, no accounting service, no bank feed, no external API.**
+
+- **Overview** — income, expenses, profit and margin over any range (with the equal-length previous range for comparison), a monthly profit-and-loss chart, and a breakdown by category. Every charted value is also in a table.
+- **Transactions** — type in what came in and what went out: date, income/expense, category, amount, description, and optionally the customer workspace an income belongs to. Delete is a two-step confirm, never a browser popup.
+- **Recurring entries are entered once.** A monthly or yearly entry is a template with an optional end date; its repeats are worked out when the books are read, not stored. Changing a $20/month bill to $25 corrects the history and the forecast in one edit, and a repeat can never drift — a charge anchored to the 31st lands on Feb 28, then **Mar 31**, then Apr 30, not on the 28th forever. (Consequence worth knowing: the transaction count on Overview counts occurrences in the range; the Transactions tab counts each recurring entry once and says so.)
+- **Customers** — every workspace with its plan, members, what it has paid, and what it is worth per month; totals for workspaces, members, new signups and active workspaces; and projected monthly recurring revenue shown twice, at list price and after the founding discount, so the cost of the founding promise is visible rather than buried.
+- **Founding shops are recognised by a durable rule**, not a flag: a workspace is founding if it is on the beta plan **or** was created on or before the cutoff date. Moving a founding shop onto a paid plan therefore does not quietly revoke the 30%-off-for-life promise on the pricing page.
+- **Plan prices are editable in the app** (Customers → Plan prices) — no migration to change a price. They arrive seeded to match the landing page: Starter $50, Basic $90, Growth $150, Pro $250, Business $350, Scale $700, Enterprise $1,200 per month, with Free and Beta at $0, and founding shops at 70% of list. Re-running the migration never overwrites a price you edited.
+- **Reports** — a ledger CSV, a profit-and-loss CSV, and a printable statement. Both exports go through the same guard as the Shopify export, so a spreadsheet cannot be tricked into running a formula from an exported field.
+- Projected revenue reads $0 today, because no workspace is on a paid plan yet. That is the books being correct, and the Customers tab says so.
+
+### For the operator
+
+- **Run `supabase/migrations/finance.sql`** in the Supabase SQL Editor, after `multi_org_tenancy.sql` and `beta_signups.sql`. It is additive, idempotent, and carries its own rollback at the bottom. It was verified against a throwaway local Postgres — access control, the recurrence and revenue math, a re-run that preserved hand-edited prices, behaviour with the optional analytics table absent, and the rollback — but **no SQL was run against the live database.**
+- Finance data is founding-workspace-only at the database level, and the "who entered this" stamp on a ledger row cannot be edited by anyone, including its author.
+- Nothing else to configure: no keys, no secrets, no environment variables.
+- Still missing on purpose: multiple currencies (the column exists, the interface is USD-only), receipt attachments, and importing from a bank or payment processor.
+
 ## 2026-09-13 — Engineering review: six passes over the whole codebase
 
 Six audits (architecture, latent defects, performance, UI system, security, DevOps) were run against the tree and each was then implemented. Reports and implementation logs are in `docs/reviews/`. End state: **505 tests / 35 files green** (from 305/24), `npm run build` clean, **254 lint problems** (from 311), **no dependency added or removed**, and no `sortbot_*` storage key renamed.

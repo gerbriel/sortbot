@@ -176,11 +176,32 @@
   border-bottom: none;
 }
 
-.form-section h4 {
+/* The ten editor sections are <details>/<summary>, not <div>/<h4>. On a DESKTOP
+   they are indistinguishable from what they replaced: `open` is set in the JSX,
+   the disclosure marker is removed, and the summary is made inert — so it cannot
+   be collapsed and cannot take a caret. The element only starts behaving like a
+   disclosure at phone width (see the phone block at the bottom of this file),
+   where a ~45-field form in one unbroken column is otherwise unnavigable.
+
+   `display: block` on the summary is required to drop the ▶ marker in WebKit,
+   which is why it is set rather than relying on `list-style: none` alone. */
+.form-section > summary {
+  display: block;
   margin-top: 0;
   margin-bottom: 1rem;
   font-size: var(--fs-md);
+  font-weight: 600;
+  line-height: var(--lh-tight);
   color: var(--text-primary);
+  list-style: none;
+}
+
+.form-section > summary::-webkit-details-marker { display: none; }
+.form-section > summary::marker { content: ''; }
+
+/* Inert on desktop: the sections stay open, exactly as the <div>s were. */
+@media (min-width: 641px) {
+  .form-section > summary { pointer-events: none; }
 }
 
 .form-group {
@@ -547,3 +568,160 @@
   color: var(--text-primary);
 }
 
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PHONE (≤ 640px)
+   ════════════════════════════════════════════════════════════════════════════
+
+   The ≤1024px and ≤768px rules above already stack the split, un-stick the
+   editor, put the toolbar in a column and drop `.form-row` to one track. What
+   is left is the touch layer and the accordion.
+
+   SCOPED TO `.presets-page` THROUGHOUT. `.button`, `.button-sm`, `.form-group`,
+   `.form-actions`, `.empty-state` and `.button-close` are global class names
+   this file re-declares on top of App.css and CategoriesManager.css — a known
+   collision (docs/reviews/07-full-views.md §4 flags it). An unscoped touch-size
+   rule here would reach into the workflow steps, which this pass does not own. */
+
+@media (max-width: 640px) {
+
+  /* ── The editor becomes an accordion ─────────────────────────────────────
+     Ten sections and roughly forty-five fields in one column is about eight
+     screens of scrolling with no way to skip. As <details> the summaries
+     collapse into a table of contents you can fold down to the two sections you
+     actually came for.
+
+     SECTIONS START OPEN, NOT CLOSED. Shipping them closed on phones only would
+     mean either a matchMedia-driven `open` prop — synchronous setState in an
+     effect, which react-hooks v7 forbids and the brief calls out — or
+     overriding the UA's closed-<details> behaviour from CSS, which is not
+     guaranteed by the spec and breaks differently in each engine. Collapsible
+     is the honest, portable half of the win; the reader folds what they do not
+     need and it stays folded while they work. */
+  .presets-page .form-section > summary {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 44px;
+    margin-bottom: 0;
+    padding: 0.4rem 0;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  /* A caret drawn from a border pair: no icon import, no emoji, and it rotates
+     with the open state so the affordance is unambiguous. */
+  .presets-page .form-section > summary::after {
+    content: '';
+    flex: 0 0 auto;
+    width: 0.9rem;
+    height: 0.9rem;
+    border-right: 2px solid var(--text-muted);
+    border-bottom: 2px solid var(--text-muted);
+    transform: rotate(45deg) translate(-0.2rem, -0.2rem);
+    transition: transform var(--dur-fast) var(--ease);
+  }
+
+  .presets-page .form-section[open] > summary::after {
+    transform: rotate(-135deg) translate(-0.2rem, -0.2rem);
+  }
+
+  .presets-page .form-section[open] > summary { margin-bottom: 1rem; }
+
+  .presets-page .form-section {
+    margin-bottom: 1.2rem;
+    padding-bottom: 1.2rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .presets-page .form-section > summary::after { transition: none; }
+  }
+
+  /* ── Toolbar ─────────────────────────────────────────────────────────────
+     The gender filter scrolls sideways rather than wrapping, same idiom as
+     every other filter row in the app on a phone. */
+  .presets-page .presets-toolbar { gap: 1.2rem; padding-bottom: 1.5rem; }
+
+  .presets-page .presets-gender-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    margin-inline: -1.5rem;
+    padding-inline: 1.5rem;
+  }
+  .presets-page .presets-gender-tabs::-webkit-scrollbar { display: none; }
+  .presets-page .presets-gender-tabs button { flex: 0 0 auto; min-height: 44px; }
+
+  /* ── Controls ────────────────────────────────────────────────────────────── */
+  .presets-page .button,
+  .presets-page .form-actions button,
+  .presets-page .preset-actions button {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+  }
+
+  /* `.button-sm` ships with !important padding, so the height floor has to be
+     stated separately rather than folded into the rule above. */
+  .presets-page .button-sm { min-height: 44px; padding-inline: 1.2rem !important; }
+
+  .presets-page .btn-icon,
+  .presets-page .button-close { width: 44px; height: 44px; min-width: 44px; }
+
+  .presets-page .form-actions { flex-direction: column; gap: 0.8rem; }
+  .presets-page .form-actions button { width: 100%; }
+
+  .presets-page .preset-actions { flex-wrap: wrap; gap: 0.8rem; }
+
+  .presets-page .preset-card { padding: 1.5rem; }
+  .presets-page .preset-header { flex-wrap: wrap; gap: 0.8rem; }
+
+  /* ── Measurement template checkboxes ─────────────────────────────────────
+     `minmax(150px, 1fr)` leaves two cramped tracks at 390px; one full-width row
+     per measurement gives each a 44px band and its label room to breathe. */
+  .presets-page .measurement-checkboxes { grid-template-columns: 1fr; gap: 0.8rem; }
+  .presets-page .checkbox-label { min-height: 44px; padding: 0.8rem 1.2rem; }
+  .presets-page .checkbox-label input[type="checkbox"] { width: 22px; height: 22px; }
+  .presets-page .checkbox-group label { min-height: 44px; }
+
+  .presets-page .custom-field-row { flex-wrap: wrap; padding: 1rem 1.2rem; }
+  .presets-page .custom-field-actions { margin-left: auto; gap: 0.8rem; }
+
+  /* ── Controls at 16px ────────────────────────────────────────────────────
+     These inputs are --fs-sm (13px) today, which is well under the 16px line at
+     which mobile Safari zooms the page on focus and leaves it zoomed. The
+     :not() chain is what out-specifies ToolView.css's (0,5,1) blanket rule;
+     see the note in ui/Field.css. */
+  .tool-view .presets-page input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']) {
+    min-height: 44px;
+    font-size: var(--fs-md);
+  }
+  .tool-view .presets-page :is(select, textarea) {
+    min-height: 44px;
+    font-size: var(--fs-md);
+  }
+  .tool-view .presets-page textarea { min-height: 9rem; }
+
+  /* ── FieldModal: a bottom sheet, like every other dialog on a phone ───────
+     It stays a real modal (it edits one row OF the editor), but a centred card
+     with a 1rem gutter puts its controls mid-screen. Flush to the bottom edge
+     instead, capped at the DYNAMIC viewport — `vh` on iOS measures the viewport
+     with the toolbars retracted, so a vh-capped sheet hides its own footer
+     behind the browser chrome. */
+  .field-modal-overlay { padding: 0; align-items: flex-end; }
+
+  .field-modal {
+    max-width: none;
+    max-height: 92vh;
+    max-height: 92dvh;
+    overflow-y: auto;
+    padding: 1.5rem 1.5rem calc(1.5rem + var(--safe-b));
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  }
+}

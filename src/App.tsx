@@ -2,7 +2,7 @@ import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMe
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { Tag, Settings, Package, ShoppingBag, Link2, Scissors, X, Trash2, Bug, BookMarked, KanbanSquare,
-         Cloud, AlertTriangle, RefreshCw, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users } from 'lucide-react';
+         Cloud, AlertTriangle, RefreshCw, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users, MessageSquare, Wallet } from 'lucide-react';
 import { log, setDebugEnabled, isDebugEnabled } from './lib/debugLogger';
 import Auth from './components/Auth';
 import ImageUpload, { type ImageUploadHandle } from './components/ImageUpload';
@@ -50,7 +50,9 @@ import { track, trackPageview, setAnalyticsContext, clearAnalyticsContext } from
 import { installErrorReporter, reportError, setErrorContext, clearErrorContext } from './lib/errorReporter';
 import { purgeImageCache } from './lib/swCache';
 import SupportWidget from './components/SupportWidget';
+import { supportStore, useSupportThreads } from './lib/supportStore';
 import ToolView from './components/ToolView';
+import { NavRail, MobileTabBar, type NavTool } from './components/MobileNav';
 import { applyPresetDirectly } from './lib/applyPresetToGroup';
 import type { BrandCategory } from './lib/brandCategorySystem';
 import './App.css';
@@ -136,13 +138,15 @@ const VocabDashboard = React.lazy(() => import('./components/VocabDashboard'));
 const KanbanBoard = React.lazy(() => import('./components/KanbanBoard'));
 const AnalyticsPanel = React.lazy(() => import('./components/AnalyticsPanel'));
 const CrmPanel = React.lazy(() => import('./components/CrmPanel'));
+const FinanceView = React.lazy(() => import('./components/FinanceView'));
 const ErrorsPanel = React.lazy(() => import('./components/ErrorsPanel'));
+const MessagesView = React.lazy(() => import('./components/MessagesView'));
 
 /** Every destination the app can be showing. The four workflow steps are one
  *  view ('workflow'); each header tool is a full page of its own. */
 export type ActiveView =
   | 'workflow' | 'library' | 'categories' | 'presets'
-  | 'vocabulary' | 'analytics' | 'crm' | 'board' | 'workspace';
+  | 'vocabulary' | 'analytics' | 'crm' | 'finance' | 'board' | 'workspace' | 'messages';
 
 /** Fallback shown while a view's chunk is in flight. Reuses the existing
  *  `.loading-screen` + `.spinner` styles, so there is no new CSS. */
@@ -151,6 +155,46 @@ const ViewFallback = () => (
     <div className="spinner" />
   </div>
 );
+
+/**
+ * Header "Messages" / "Inbox" button with its unread badge.
+ *
+ * A component of its own, NOT a branch inside App's header, because mounting
+ * `useSupportThreads` is what starts the shared Realtime channel and the 45 s
+ * poll. App renders this only inside the signed-in header, so a logged-out
+ * visitor on the landing page never queries `support_threads`.
+ */
+function MessagesNavButton(
+  { isFounder, active, onClick }: {
+    isFounder: boolean;
+    active: boolean;
+    onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  },
+) {
+  const { available, unreadCount } = useSupportThreads(isFounder ? 'founder' : 'user');
+  // Same rule as the floating widget: no messaging tables, no messaging UI.
+  if (available === false) return null;
+  return (
+    <button
+      onClick={onClick}
+      /* `nav-msg-btn` is the exemption handle: App.css hides every other
+         .nav-tool-btn below 1024px, and this one stays so the unread badge is
+         visible at every width. */
+      className={`button button-secondary nav-tool-btn nav-msg-btn${active ? ' nav-tool-btn--on' : ''}`}
+      aria-current={active ? 'page' : undefined}
+      title={isFounder
+        ? 'Inbox — every conversation, from every workspace'
+        : 'Messages — talk to the Acadia team'}
+    >
+      <MessageSquare size={18} /> {isFounder ? 'Inbox' : 'Messages'}
+      {unreadCount > 0 && (
+        <span className="nav-badge" aria-label={`${unreadCount} unread`}>
+          {unreadCount > 99 ? '99+' : unreadCount}
+        </span>
+      )}
+    </button>
+  );
+}
 
 /** Strip HTML <br> tags (from Shopify-formatted descriptions) back to plain-text newlines for the dashboard editor. */
 function htmlDescToPlain(html: string): string {
@@ -1356,6 +1400,9 @@ function App() {
     await purgeImageCache();
     clearAnalyticsContext();
     clearErrorContext();
+    // Support threads are per-account: drop them so the next person to sign in
+    // on this machine never sees a flash of the previous one's conversations.
+    supportStore.reset();
     setUser(null);
     setCurrentOrg(null);
     setActiveView('workflow');
@@ -1571,9 +1618,17 @@ function App() {
         <button
           onClick={() => setShowLogin(false)}
           style={{
-            position: 'absolute', top: 16, left: 16, zIndex: 10,
+            position: 'absolute',
+            /* max() against the notch: on a phone this is the only control
+               above the card, and it must not land under the status bar. */
+            top: 'max(16px, env(safe-area-inset-top, 0px))',
+            left: 'max(16px, env(safe-area-inset-left, 0px))',
+            zIndex: 10,
             background: 'var(--ink-800)', border: '1px solid var(--border-control)',
-            borderRadius: 8, padding: '8px 14px', fontSize: 'var(--fs-lg)', fontWeight: 700,
+            borderRadius: 8, padding: '8px 16px', fontSize: 'var(--fs-lg)', fontWeight: 700,
+            /* 8px of padding on an 18px label is a 40px control — under the
+               44px touch floor this pass holds everything to. */
+            minHeight: 44,
             color: 'var(--text-primary)', cursor: 'pointer',
           }}
         >
@@ -1595,7 +1650,7 @@ function App() {
           onRequested={() => setBetaWaitlist('pending')}
         />
         {/* Waitlisted users can still message the founders. */}
-        <SupportWidget userId={user.id} userEmail={user.email ?? null} orgName={null} isFounder={false} />
+        <SupportWidget userEmail={user.email ?? null} orgName={null} isFounder={false} />
       </>
     );
   }
@@ -2601,6 +2656,48 @@ function App() {
 
   const Wordmark = activeView === 'workflow' ? 'h1' : 'p';
 
+  /* ── The navigation's single source of truth ──────────────────────────────
+     Every tool this user is allowed to see, in the order the desktop header
+     renders them. Four surfaces consume this list — the header row, the tablet
+     rail, the phone tab bar and the More sheet — so a tool's label, icon,
+     tooltip and role gate are declared exactly once. `messages` is a member of
+     the list purely to hold its POSITION in the header row; it renders as
+     <MessagesNavButton> there and as its own tab on a phone.
+
+     Not memoized on purpose: it is a handful of object literals rebuilt during
+     a render that is already happening, and the two consumers are not memo'd,
+     so a useMemo here would buy nothing but a dependency array to get wrong. */
+  const isFoundingAdmin = currentOrg?.slug === 'founding' && (orgRole === 'owner' || orgRole === 'admin');
+  const navTools: NavTool[] = [
+    { id: 'categories', label: 'Manage Categories', icon: <Tag size={18} />, title: 'Manage your product categories' },
+    { id: 'presets', label: 'Category Presets', icon: <Settings size={18} />, title: 'Manage category presets for shipping weight, measurements, and default attributes' },
+    { id: 'library', label: 'Library', icon: <Package size={18} />, title: 'View saved workflow batches' },
+    { id: 'messages', label: supportIsFounder ? 'Inbox' : 'Messages', icon: <MessageSquare size={18} />, title: 'Messages' },
+    ...(isFoundingAdmin ? [
+      { id: 'vocabulary', label: 'Vocabulary', icon: <BookMarked size={18} />, title: 'Vocabulary — curate quick keyword chips and brand keywords (all workspaces)' },
+      { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={18} />, title: 'Analytics — first-party pageviews, funnel, referrers, errors (Founding Workspace)' },
+      { id: 'crm', label: 'CRM', icon: <Contact size={18} />, title: 'CRM — every beta request and account as a contact, with stages, follow-ups and notes (Founding Workspace)' },
+      { id: 'finance', label: 'Finance', icon: <Wallet size={18} />, title: 'Finance — income, expenses, profit, customers and reports (Founding Workspace)' },
+    ] : []),
+    ...(currentOrg?.slug === 'founding' ? [
+      { id: 'board', label: 'Board', icon: <KanbanSquare size={18} />, title: 'Board — features and todos for this workspace' },
+    ] : []),
+  ];
+  /* What the tablet rail and the More sheet show. Messages is dropped (it keeps
+     its own header button and its own tab at every width, so the unread badge
+     is never hidden behind "More"), and Workspace is appended — on desktop it
+     lives in the account menu, which stays visible, but it belongs in the
+     sheet's inventory of "every tool you can open". */
+  const mobileTools: NavTool[] = [
+    ...navTools.filter(t => t.id !== 'messages'),
+    ...(currentOrg ? [{ id: 'workspace', label: 'Workspace', icon: <Users size={18} />, title: 'Workspace — members, invites and settings' }] : []),
+  ];
+  /* The mobile surfaces navigate TO a view; they never toggle back off it the
+     way a header button does. Tapping the tab you are already on must be inert,
+     not a trip somewhere else, and the sheet's trigger is unmounted by the time
+     the view opens so there is no element to hand focus back to either. */
+  const navigateToView = (id: string) => setActiveView(id as ActiveView);
+
   return (
     <div className="app-container">
       {/* Real-time collaboration: Show cursors and activity of other users */}
@@ -2622,74 +2719,45 @@ function App() {
             <p className="header-subtitle">Upload, sort, describe, and export to Shopify</p>
           </div>
           <div className="header-actions">
-            {/* Each button navigates to a full view; clicking the one that is
+            {/* ONE list drives four surfaces: this desktop row, the tablet
+                rail, the phone tab bar and the More sheet. Rendering it four
+                times by hand is how role gating and labels drift apart, so
+                `navTools` above is the only place a tool is declared.
+
+                Each button navigates to a full view; clicking the one that is
                 already showing comes back to the workflow. `aria-current` +
                 `.nav-tool-btn--on` mark it — a filled, white-outlined state,
-                since the nav is the app's one inverted surface (CLAUDE.md §1). */}
-            <button
-              onClick={toggleView('categories')}
-              className={`button button-secondary nav-tool-btn${activeView === 'categories' ? ' nav-tool-btn--on' : ''}`}
-              aria-current={activeView === 'categories' ? 'page' : undefined}
-              title="Manage your product categories"
-            >
-              <Tag size={18} /> Manage Categories
-            </button>
-            <button
-              onClick={toggleView('presets')}
-              className={`button button-secondary nav-tool-btn${activeView === 'presets' ? ' nav-tool-btn--on' : ''}`}
-              aria-current={activeView === 'presets' ? 'page' : undefined}
-              title="Manage category presets for shipping weight, measurements, and default attributes"
-            >
-              <Settings size={18} /> Category Presets
-            </button>
-            <button
-              onClick={toggleView('library')}
-              className={`button button-secondary nav-tool-btn${activeView === 'library' ? ' nav-tool-btn--on' : ''}`}
-              aria-current={activeView === 'library' ? 'page' : undefined}
-              title="View saved workflow batches"
-            >
-              <Package size={18} /> Library
-            </button>
-            {currentOrg?.slug === 'founding' && (orgRole === 'owner' || orgRole === 'admin') && (
-              <button
-                onClick={toggleView('vocabulary')}
-                className={`button button-secondary nav-tool-btn${activeView === 'vocabulary' ? ' nav-tool-btn--on' : ''}`}
-                aria-current={activeView === 'vocabulary' ? 'page' : undefined}
-                title="Vocabulary — curate quick keyword chips and brand keywords (all workspaces)"
-              >
-                <BookMarked size={18} /> Vocabulary
-              </button>
-            )}
-            {currentOrg?.slug === 'founding' && (orgRole === 'owner' || orgRole === 'admin') && (
-              <>
-                <button
-                  onClick={toggleView('analytics')}
-                  className={`button button-secondary nav-tool-btn${activeView === 'analytics' ? ' nav-tool-btn--on' : ''}`}
-                  aria-current={activeView === 'analytics' ? 'page' : undefined}
-                  title="Analytics — first-party pageviews, funnel, referrers, errors (Founding Workspace)"
-                >
-                  <BarChart3 size={18} /> Analytics
-                </button>
-                <button
-                  onClick={toggleView('crm')}
-                  className={`button button-secondary nav-tool-btn${activeView === 'crm' ? ' nav-tool-btn--on' : ''}`}
-                  aria-current={activeView === 'crm' ? 'page' : undefined}
-                  title="CRM — every beta request and account as a contact, with stages, follow-ups and notes (Founding Workspace)"
-                >
-                  <Contact size={18} /> CRM
-                </button>
-              </>
-            )}
-            {currentOrg?.slug === 'founding' && (
-              <button
-                onClick={toggleView('board')}
-                className={`button button-secondary nav-tool-btn${activeView === 'board' ? ' nav-tool-btn--on' : ''}`}
-                aria-current={activeView === 'board' ? 'page' : undefined}
-                title="Board — features and todos for this workspace"
-              >
-                <KanbanSquare size={18} /> Board
-              </button>
-            )}
+                since the nav is the app's one inverted surface (CLAUDE.md §1).
+
+                Below 1024px App.css hides every button in here EXCEPT Messages
+                and the account menu; the tools reappear in <NavRail> (tablet)
+                or the tab bar (phone). */}
+            {navTools.map(t => (
+              t.id === 'messages'
+                /* Everyone gets Messages — a user talks to us, a Founding admin
+                   gets the inbox of every conversation. Same page either way.
+                   Its own component, because mounting it is what starts the
+                   shared Realtime channel. */
+                ? (
+                  <MessagesNavButton
+                    key="messages"
+                    isFounder={supportIsFounder}
+                    active={activeView === 'messages'}
+                    onClick={toggleView('messages')}
+                  />
+                )
+                : (
+                  <button
+                    key={t.id}
+                    onClick={toggleView(t.id as Exclude<ActiveView, 'workflow'>)}
+                    className={`button button-secondary nav-tool-btn${activeView === t.id ? ' nav-tool-btn--on' : ''}`}
+                    aria-current={activeView === t.id ? 'page' : undefined}
+                    title={t.title}
+                  >
+                    {t.icon} {t.label}
+                  </button>
+                )
+            ))}
             {/* Consolidated workspace/account control: identity + dashboard +
                 sign out live in the dropdown (replaced email + Sign Out). */}
             <WorkspaceMenu
@@ -2703,6 +2771,10 @@ function App() {
             />
           </div>
         </div>
+        {/* Tablet (641-1024px) second row: the tools that just left the header
+            above, as one horizontally scrolling rail. `display: none` at every
+            other width, so it is not in the a11y tree on desktop or phone. */}
+        <NavRail tools={mobileTools} activeView={activeView} onSelect={navigateToView} />
       </header>
 
       {/* ── Storage usage bar — always visible under the header ────────────── */}
@@ -2729,7 +2801,7 @@ function App() {
                   <span className="storage-meter-nav-text">
                     {gbUsed} GB / {STORAGE_LIMIT_GB} GB
                     <span style={{ color: barColor, fontWeight: 600, marginLeft: '0.3rem' }}>({pctDisplay}%)</span>
-                    <span style={{ color: 'var(--text-muted)', marginLeft: '0.4rem', fontSize: 'var(--fs-2xs)' }}>{storageInfo.fileCount.toLocaleString()} files</span>
+                    <span className="storage-meter-nav-files" style={{ color: 'var(--text-muted)', marginLeft: '0.4rem', fontSize: 'var(--fs-2xs)' }}>{storageInfo.fileCount.toLocaleString()} files</span>
                   </span>
                   {pct > 0.85 && (
                     <span className="storage-meter-nav-warn"><AlertTriangle size={11} style={{ flexShrink: 0 }} /> Almost full</span>
@@ -3196,6 +3268,21 @@ function App() {
         </Suspense>
       )}
 
+      {/* Finance — the founder's books. Same first-party model as Analytics and
+          the CRM: our own tables, one SECURITY DEFINER aggregate, no vendor. */}
+      {activeView === 'finance' && currentOrg?.slug === 'founding' && (orgRole === 'owner' || orgRole === 'admin') && (
+        <Suspense fallback={<ViewFallback />}>
+          <ToolView
+            icon={<Wallet size={26} />}
+            title="Finance"
+            description="Income, expenses and profit over any range, what the customer base is worth, and reports you can download or print."
+            onBack={goToWorkflow}
+          >
+            <FinanceView />
+          </ToolView>
+        </Suspense>
+      )}
+
       {/* Team board (Founding Workspace — EVERY member, not just admins: the
           whole point is that anyone can add and pick up work) */}
       {activeView === 'board' && currentOrg && user && currentOrg.slug === 'founding' && (
@@ -3219,10 +3306,45 @@ function App() {
         </Suspense>
       )}
 
+      {/* Messages — the full-page half of support messaging. The floating
+          widget below is unchanged; both read ONE thread list from
+          supportStore, which owns the single Realtime channel + poll. */}
+      {activeView === 'messages' && (
+        <Suspense fallback={<ViewFallback />}>
+          <ToolView
+            icon={<MessageSquare size={26} />}
+            title={supportIsFounder ? 'Inbox' : 'Messages'}
+            description={supportIsFounder
+              ? 'Every conversation with every workspace. Reply, close what is handled, reopen what is not.'
+              : 'Talk to the Acadia team. Ask anything — we read everything and usually reply within a day.'}
+            onBack={goToWorkflow}
+            wide
+          >
+            <MessagesView
+              userEmail={user.email ?? null}
+              orgName={supportOrgName}
+              isFounder={supportIsFounder}
+            />
+          </ToolView>
+        </Suspense>
+      )}
+
+      {/* ── Phone navigation (≤640px) ───────────────────────────────────────
+          Fixed bottom tab bar + the More sheet. Deliberately OUTSIDE <header>:
+          the header is `position: sticky; z-index: 100`, which makes it a
+          stacking context, and a fixed child of it would be trapped at that
+          level — the sheet would then paint under the support widget. */}
+      <MobileTabBar
+        tools={mobileTools}
+        activeView={activeView}
+        onSelect={navigateToView}
+        onGoWorkflow={goToWorkflow}
+        isFounder={supportIsFounder}
+      />
+
       {/* ── Support messaging (first-party): every signed-in user can message
           the founders; Founding admins get the inbox of every conversation. */}
       <SupportWidget
-        userId={user.id}
         userEmail={user.email ?? null}
         orgName={supportOrgName}
         isFounder={supportIsFounder}

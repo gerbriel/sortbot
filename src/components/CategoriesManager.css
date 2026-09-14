@@ -314,7 +314,89 @@
   .categories-editor { position: static; }
 }
 
+/* ── Phone ───────────────────────────────────────────────────────────────────
+   The ≤1024px rule above already stacks the split, and the EDITOR is first in
+   source order — so on a phone the form comes first and the list it edits
+   follows, which is the reading order the brief asks for. No `order` juggling
+   needed; verified by reading the JSX (CategoriesManager.tsx renders
+   `.categories-editor` before `.categories-list-col`).
+
+   EVERYTHING BELOW IS SCOPED TO `.categories-page` ON PURPOSE. `.button`,
+   `.button-icon`, `.form-group`, `.form-actions`, `.emoji-picker` and
+   `.emoji-option` are GLOBAL class names that App.css and
+   CategoryPresetsManager.css also define (CLAUDE.md's own review notes call this
+   out as a known collision). An unscoped `.button { min-height: 44px }` here
+   would silently resize buttons in the workflow steps, which this pass does not
+   own. The page-root prefix keeps the blast radius at exactly this view. */
 @media (max-width: 640px) {
-  .category-item { flex-direction: column; align-items: stretch; gap: 1.2rem; }
-  .category-actions { justify-content: flex-end; }
+  .category-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1.2rem;
+    min-height: 0;          /* the 8rem desktop floor is dead weight once stacked */
+    padding: 1.4rem;
+  }
+
+  .categories-page .category-info { gap: 1.2rem; min-width: 0; }
+  .categories-page .category-details { min-width: 0; overflow-wrap: anywhere; }
+
+  /* Actions get a line of their own, each button a real target. */
+  .categories-page .category-actions {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+  }
+
+  .categories-page .button-icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .categories-page .button,
+  .categories-page .button-small {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding-inline: 1.6rem;
+  }
+
+  /* ── Icon picker ─────────────────────────────────────────────────────────
+     The ≤768px rule pins 6 fixed tracks. At 390px, minus the page gutter, the
+     card padding and five gaps, each track lands near 46px while the swatch
+     itself is a hard `width: 48px` — so the grid overflows its own card. Tracks
+     that fit the swatch instead, with 44px as the floor for both. */
+  .categories-page .emoji-picker {
+    grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+    gap: 0.8rem;
+    padding: 1.2rem;
+    max-height: 24rem;
+  }
+
+  .categories-page .emoji-option {
+    width: 100%;
+    min-width: 44px;
+    height: 44px;
+  }
+
+  /* The colour swatch is already a full-width 50px input — it only needs to not
+     shrink below the touch floor. */
+  .categories-page .form-group input[type="color"] { height: 50px; }
+
+  .categories-page .form-group { margin-bottom: 1.5rem; }
+
+  /* Stacked actions, each full width. */
+  .categories-page .form-actions { flex-direction: column; gap: 0.8rem; }
+  .categories-page .form-actions .button { width: 100%; }
+
+  /* 16px or iOS zooms the page on focus. The :not() chain is what out-specifies
+     ToolView.css's (0,5,1) blanket control rule — see ui/Field.css. */
+  .tool-view .categories-page input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']) {
+    min-height: 44px;
+    font-size: var(--fs-md);
+  }
+  .tool-view .categories-page :is(select, textarea) {
+    min-height: 44px;
+    font-size: var(--fs-md);
+  }
 }

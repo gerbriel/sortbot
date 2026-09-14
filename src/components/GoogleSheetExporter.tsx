@@ -297,7 +297,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
             </div>
 
             {invalidPricedProducts.length > 0 && (
-              <div style={{
+              <div className="export-price-gate" style={{
                 marginTop: '0.75rem', padding: '0.75rem 1rem', borderRadius: 8,
                 background: 'var(--danger-dim)', border: '1px solid var(--danger)', color: 'var(--danger)',
                 fontSize: 'var(--fs-sm)', fontWeight: 600,

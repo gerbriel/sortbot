@@ -1,0 +1,542 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   MessagesView — the full-page Messages / Inbox.
+
+   Sits inside ToolView, so it inherits that shell's spacing scale against the
+   app's 9px root (2rem = 18px card padding, 1.2rem = 10.8px list rows,
+   1.5rem = 13.5px minimum gap). Nothing here re-invents a scale, and there is
+   no literal hex: this is the white page surface, not the inverted nav.
+
+   Layout: a fixed thread column beside a conversation that fills the viewport
+   height. Each column scrolls inside itself so the page itself never does —
+   reading a long conversation must not push the composer off screen.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.mv {
+  display: grid;
+  grid-template-columns: 34rem 1fr;
+  gap: 2rem;
+  align-items: stretch;
+  /* 34rem of chrome to clear, then the conversation takes the rest of the
+     window: the black header + ToolView's title block (~26rem), ToolView's 6rem
+     page-bottom padding, and 2rem so the composer's Send button never lands
+     under the floating support FAB (fixed, bottom 1.75rem, ~40px tall). The
+     widget is deliberately unchanged, so this page gets out of ITS way. */
+  height: calc(100vh - 34rem);
+  min-height: 48rem;
+}
+
+/* ── Thread list ─────────────────────────────────────────────────────────── */
+
+.mv-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--ink-850);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.mv-list-head {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.mv-search {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0 1.2rem;
+  background: var(--ink-800);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+}
+
+.mv-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--fs-base);
+  color: var(--text-primary);
+}
+
+.mv-search input:focus { outline: none; }
+.mv-search:focus-within { border-color: var(--accent); }
+
+.mv-chips {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.mv-chip {
+  padding: 0.7rem 1.2rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--ink-800);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.mv-chip:hover { background: var(--ink-750); color: var(--text-primary); }
+
+.mv-chip--on {
+  background: var(--accent);
+  border-color: var(--accent);
+  /* Solid accent fill + --ink-950 label: the convention that makes the palette
+     swappable in either direction (CLAUDE.md §1). */
+  color: var(--ink-950);
+}
+
+.mv-threads {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.mv-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 1.2rem 1.3rem;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: left;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.mv-thread:hover { background: var(--ink-750); }
+
+.mv-thread--on {
+  background: var(--ink-800);
+  border-color: var(--border-strong);
+}
+
+.mv-thread-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.mv-thread-who {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+}
+
+.mv-thread-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mv-thread--unread .mv-thread-who { font-weight: 700; }
+
+/* The unread dot. An element rather than a ::before so the row's flex layout
+   keeps the label truncating properly beside it. */
+.mv-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.mv-thread-when {
+  flex: 0 0 auto;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.mv-thread-preview {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mv-thread-closed {
+  align-self: flex-start;
+  padding: 0.15rem 0.7rem;
+  border-radius: 999px;
+  background: var(--ink-750);
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.mv-list-foot {
+  padding: 1.2rem 1.5rem 1.5rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ── Conversation ────────────────────────────────────────────────────────── */
+
+.mv-conv {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--ink-850);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+/* The "nothing selected" panel centres in the column instead of clinging to the top. */
+.mv-conv > .ui-empty {
+  margin: auto;
+}
+
+.mv-conv-head {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.mv-conv-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.mv-conv-who strong {
+  font-size: var(--fs-md);
+  line-height: var(--lh-tight);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mv-conv-meta {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Back to the list — only meaningful once the columns stack. */
+.mv-back {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.8rem 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--ink-800);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.mv-back:hover { background: var(--ink-750); color: var(--text-primary); }
+
+.mv-msgs {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+}
+
+.mv-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  max-width: 68ch;
+}
+
+.mv-msg--mine {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.mv-bubble {
+  padding: 1.2rem 1.5rem;
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) var(--radius-sm);
+  background: var(--ink-800);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-size: var(--fs-base);
+  line-height: var(--lh-normal);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mv-msg--mine .mv-bubble {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--ink-950);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
+}
+
+.mv-stamp {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+/* Closed-thread notice / new-conversation prompt. */
+.mv-note {
+  margin: 0;
+  align-self: center;
+  max-width: 60ch;
+  padding: 1rem 1.5rem;
+  border-radius: var(--radius-md);
+  background: var(--ink-800);
+  border: 1px solid var(--border-subtle);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.mv-error {
+  margin: 0;
+  padding: 1rem 2rem;
+  font-size: var(--fs-sm);
+  color: var(--danger);
+  background: var(--danger-dim);
+}
+
+/* ── Composer ────────────────────────────────────────────────────────────── */
+
+.mv-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem 2rem 2rem;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--ink-800);
+}
+
+.mv-subject,
+.mv-composer textarea {
+  width: 100%;
+  padding: 1rem 1.3rem;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  background: var(--ink-950);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-base);
+  line-height: var(--lh-snug);
+}
+
+.mv-composer textarea { resize: vertical; }
+
+.mv-composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+}
+
+.mv-hint {
+  margin: 0;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.mv-loading {
+  margin: 0;
+  padding: 3rem 0;
+  font-size: var(--fs-base);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+/* Announced, not shown — the dot is the visual half of the same fact. */
+.mv-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+/* One column: the list, and the conversation in its place once one is open.
+   `data-open` is set on every viewport, but only consulted here, so the
+   two-column layout above is untouched. */
+@media (max-width: 1024px) {
+  .mv {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+
+  .mv-list,
+  .mv-conv { max-height: none; }
+
+  .mv-threads { max-height: 60vh; }
+
+  .mv[data-open='true'] .mv-list { display: none; }
+  .mv[data-open='false'] .mv-conv { display: none; }
+
+  .mv-back { display: inline-flex; }
+
+  .mv-msgs {
+    max-height: 55vh;
+    padding: 1.5rem;
+  }
+}
+
+/* ── Phone ───────────────────────────────────────────────────────────────────
+   The ≤1024px rules above already do the structural half of this: one column,
+   the list swapped for the conversation once one is open, and `.mv-back` turned
+   on. VERIFIED by reading them — `data-open` is written on every viewport and
+   only consulted there, so the swap cannot get stuck: `backToList` clears
+   `activeId` AND `composingNew`, which is exactly the condition the attribute
+   is computed from.
+
+   What is left is the touch layer. */
+@media (max-width: 640px) {
+
+  /* ── Filters: a row that wraps, not a stack ──────────────────────────────
+     Search takes the whole first line (it is the control people actually use at
+     this width); the status chips flow onto the next one and wrap among
+     themselves. Stacking them as three separate blocks wasted a third of the
+     screen before a single conversation appeared. */
+  .mv-list-head {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.2rem;
+  }
+
+  .mv-search { flex: 1 1 100%; min-height: 44px; }
+
+  .mv-chips { flex: 1 1 auto; gap: 0.8rem; }
+
+  .mv-chip {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding-inline: 1.6rem;
+    font-size: var(--fs-sm);
+  }
+
+  /* ── Thread rows ─────────────────────────────────────────────────────────
+     56px minimum, which the two-line content (name + time, then preview) very
+     nearly reaches on its own — the floor is what guarantees it for a thread
+     with an empty preview, where the row would otherwise collapse to ~34px.
+     The unread dot and the timestamp both stay: the dot is `flex: 0 0 auto` and
+     only the label between them truncates. */
+  .mv-threads { padding: 0.8rem; gap: 0.6rem; }
+
+  .mv-thread {
+    min-height: 56px;
+    justify-content: center;
+    padding: 1.2rem 1.3rem;
+  }
+
+  /* Bigger dot — 7px is a speck at arm's length on a phone. */
+  .mv-dot { width: 9px; height: 9px; }
+
+  .mv-thread-when { font-size: var(--fs-xs); }
+
+  .mv-threads { max-height: none; }
+
+  /* ── Conversation: composer pinned to the bottom of the card ─────────────
+     `min-height`, not `height`. The card is a flex column whose message list is
+     `flex: 1` + `min-height: 0`, so the composer is the last item and lands at
+     the bottom edge; the minimum makes the card roughly fill the screen so that
+     bottom edge is near the thumb rather than floating halfway up.
+
+     A minimum rather than a fixed height because the subtrahend is an ESTIMATE
+     of chrome above the card (black header + ToolView title block + the shell's
+     page padding) that this component cannot measure — and which the shell owns.
+     If the guess is low the card is merely a little short; if it were `height`
+     and the guess were high, the composer would be pushed off screen.
+
+     `dvh` before the `vh` fallback: iOS measures `vh` against the viewport with
+     the toolbars RETRACTED, so a vh-sized card is taller than the screen while
+     the toolbar is showing — which puts the composer under the browser chrome,
+     the one place it must never be. */
+  .mv[data-open='true'] .mv-conv {
+    min-height: calc(100vh - 24rem);
+    min-height: calc(100dvh - 24rem);
+  }
+
+  .mv-msgs {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    padding: 1.5rem 1.2rem;
+    gap: 1.2rem;
+  }
+
+  .mv-conv-head { padding: 1.2rem; flex-wrap: wrap; gap: 1rem; }
+  .mv-conv-who { flex: 1 1 100%; order: 2; }
+  .mv-conv-who strong { white-space: normal; overflow-wrap: anywhere; }
+
+  .mv-back {
+    min-height: 44px;
+    padding-inline: 1.4rem;
+    order: 1;
+  }
+
+  /* The Close/Reopen and New buttons are ui Buttons and already carry the 44px
+     floor from Button.css; they only need to stop competing for the first line. */
+  .mv-conv-head > .ui-btn { order: 1; margin-left: auto; }
+
+  .mv-msg { max-width: 100%; }
+  .mv-bubble { padding: 1.1rem 1.3rem; }
+
+  .mv-composer { padding: 1.2rem 1.2rem calc(1.2rem + var(--safe-b)); }
+  .mv-composer-row { flex-direction: column; align-items: stretch; gap: 0.8rem; }
+  .mv-composer-row > .ui-btn { width: 100%; }
+
+  /* 16px on every control, or iOS zooms the page on focus and stays zoomed.
+     The :not() chain and the `.tool-view` prefix are needed to out-specify
+     ToolView.css's (0,5,1) control rule — see the note in ui/Field.css. */
+  .tool-view .mv input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']) {
+    font-size: var(--fs-md);
+  }
+  .tool-view .mv-composer textarea,
+  .tool-view .mv-subject { font-size: var(--fs-md); }
+  .tool-view .mv-composer textarea { min-height: 8rem; }
+
+  .mv-note { padding: 1rem 1.2rem; }
+  .mv-error { padding: 1rem 1.2rem; }
+}

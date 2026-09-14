@@ -89,3 +89,28 @@
   cursor: pointer;
   text-decoration: none;
 }
+
+/* ── Phone (≤640px) ─────────────────────────────────────────────────────────
+   Same two rules as every other form in the app: 16px so iOS does not zoom the
+   page on focus, and a real touch target. `.waitlist-form input` is (0,1,1) and
+   outranks the bare `input` rule in index.css, so both have to be restated. */
+@media (max-width: 640px) {
+  .waitlist-form input {
+    font-size: var(--fs-md);
+    min-height: var(--tap);
+  }
+
+  .waitlist-form button { min-height: var(--tap); }
+
+  /* Both are link-buttons; padding gives them a target without making them
+     full-width blocks in the middle of a sentence. */
+  .waitlist-signout { min-height: var(--tap); padding: 0 var(--space-2); }
+
+  .waitlist-gate {
+    padding: var(--space-3);
+    padding-left: max(var(--space-3), var(--safe-l));
+    padding-right: max(var(--space-3), var(--safe-r));
+  }
+
+  .waitlist-card { padding: 1.8rem 1.4rem; }
+}

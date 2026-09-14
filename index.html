@@ -59,7 +59,13 @@
       form-action 'self'">
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover lets the page paint into the iPhone's rounded-corner
+         and home-indicator regions, which is what makes `env(safe-area-inset-*)`
+         report anything other than 0. The fixed bottom tab bar, the support
+         widget and the toast stack all pad themselves with those insets; without
+         this flag they would be flush to the edge AND the insets would be zero,
+         so the home indicator would sit on top of the tab bar's labels. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#000000" />
     <meta name="description" content="Acadia turns a camera roll of vintage clothing photos into Shopify-ready listings." />
     <title>Acadia</title>

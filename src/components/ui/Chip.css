@@ -117,3 +117,30 @@
 .ui-chip__remove:hover:not(:disabled) { background: var(--ink-700); color: var(--danger); }
 .ui-chip__remove:disabled { opacity: 0.45; cursor: not-allowed; }
 .ui-chip__remove:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── Phone ──────────────────────────────────────────────────────────────────
+   Chips are floored at 44px like every other control rather than given an
+   invisible ::after hit target. An overlay hit area was the tempting option —
+   it keeps the pill visually small — but chips sit in rows with ~4px gaps, so
+   two 44px overlays would overlap and the row would start handing taps to the
+   wrong chip. A taller pill is honest: what you can see is what you can press.
+
+   ui-chip-group already wraps, so a row of them reflows instead of overflowing. */
+@media (max-width: 640px) {
+  .ui-chip,
+  .ui-chip--sm { min-height: 44px; padding-inline: var(--space-4); }
+
+  .ui-chip__remove { width: 44px; }
+
+  /* A chip row that is a FILTER, not a form: scrolls sideways inside itself
+     rather than stacking into four ragged lines. Opt-in — the default chip
+     group keeps wrapping. */
+  .ui-chip-group--scroll {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ui-chip-group--scroll::-webkit-scrollbar { display: none; }
+  .ui-chip-group--scroll > * { flex: 0 0 auto; }
+}

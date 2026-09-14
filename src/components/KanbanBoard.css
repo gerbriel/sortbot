@@ -884,7 +884,142 @@
 
 .tool-view .kanban-loading { font-size: var(--fs-base); }
 
+/* ── Phone ───────────────────────────────────────────────────────────────────
+   A board is a horizontal object and stays one — stacking the lanes vertically
+   would throw away the only thing a board is for (seeing where work sits). What
+   changes is that one lane is now the unit of attention rather than four
+   half-lanes: each takes ~85vw and the strip snaps, so a swipe lands on exactly
+   one lane with the next one peeking in to say there is more.
+
+   `.kanban-page` is already `height: auto` here, so the lane strip is bounded by
+   its own max-height rather than by a viewport calculation that cannot account
+   for the shell's chrome. */
 @media (max-width: 640px) {
   .kanban-page { height: auto; min-height: 0; }
-  .tool-view .kanban-lanes { max-height: 70vh; }
+
+  .tool-view .kanban-lanes {
+    max-height: 70vh;
+    max-height: 70dvh;
+    gap: 1.2rem;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    /* Bled to the page edge and padded back, so a snapped lane sits flush with
+       the gutter instead of starting under it. */
+    margin-inline: -1.5rem;
+    padding-inline: 1.5rem;
+    scroll-padding-inline: 1.5rem;
+  }
+
+  .tool-view .kanban-lane {
+    width: 85vw;
+    min-width: 85vw;
+    max-width: 32rem;
+    scroll-snap-align: start;
+    padding: 1.2rem;
+  }
+
+  .tool-view .kanban-lane-head { margin-bottom: 1rem; gap: 0.8rem; }
+  .tool-view .kanban-lane-add { min-height: 44px; padding-inline: 0.8rem; }
+
+  /* Cards are the drag handles AND the tap targets for the detail drawer. */
+  .tool-view .kanban-card { padding: 1.2rem; min-height: 44px; }
+
+  /* ── Header controls ─────────────────────────────────────────────────────── */
+  .tool-view .kanban-header { flex-wrap: wrap; gap: 1rem; margin-bottom: 1.2rem; }
+  .tool-view .kanban-header-actions { flex-wrap: wrap; gap: 0.8rem; }
+
+  .tool-view :is(.kanban-icon-btn, .kanban-close, .kanban-lane-del) {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .tool-view .kanban-add-btn { min-height: 44px; padding-inline: 1.4rem; }
+  .tool-view .kanban-view-btn { min-height: 44px; padding-inline: 1.2rem; }
+
+  .tool-view .kanban-add-inline { flex-wrap: wrap; gap: 0.8rem; }
+  .tool-view .kanban-add-inline input { flex: 1 1 100%; }
+
+  /* ── Card detail: a full-screen sheet ────────────────────────────────────
+     As an absolutely-positioned 92%-wide drawer it covers the board it came
+     from while leaving an 8% strip of it showing — a dead zone that reads as a
+     mis-tap target. Fixed and full-bleed instead, so editing a card is a place
+     you are IN and leave, which is also what the board's own Escape handler
+     already models (it closes the drawer first, `onClose` only when none is open
+     — that behaviour is untouched).
+
+     `position: fixed` resolves against the viewport here because no ancestor
+     creates a containing block (`.kanban-page` is `position: relative` only —
+     no transform, filter or contain). z-index 1000 is the dialog step from the
+     ui/Dialog budget: above the sticky app header (100), below the support
+     widget (5000) and toasts (9000), which must stay reachable. */
+  .kanban-detail {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    z-index: 1000;
+    border-left: none;
+    box-shadow: none;
+    padding: 1.5rem 1.5rem calc(1.5rem + var(--safe-b));
+    overscroll-behavior: contain;
+  }
+
+  .kanban-detail-head { gap: 0.8rem; margin-bottom: 1.2rem; }
+  .kanban-detail-title { font-size: var(--fs-md); min-height: 44px; }
+  .kanban-detail-meta { flex-wrap: wrap; gap: 0.8rem; }
+  .kanban-detail-section { padding-top: 1.2rem; margin-bottom: 1.2rem; }
+
+  /* ── Atlas ───────────────────────────────────────────────────────────────
+     Already a vertical list of sections, so it needs no re-layout — only its
+     two control strips, which wrap into unusable slivers at this width. */
+  .kanban-atlas-controls { gap: 0.8rem; }
+  .kanban-atlas-search { flex: 1 1 100%; min-width: 0; min-height: 44px; padding-inline: 1rem; }
+  .kanban-atlas-showing { margin-left: 0; flex: 1 1 100%; }
+
+  .kanban-atlas-lanechips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    flex: 1 1 100%;
+    margin-inline: -1.5rem;
+    padding-inline: 1.5rem;
+  }
+  .kanban-atlas-lanechips::-webkit-scrollbar { display: none; }
+  .kanban-atlas-lanechip { flex: 0 0 auto; min-height: 44px; padding-inline: 1.2rem; }
+
+  /* The pipeline map is a left-to-right sequence; wrapping it mid-arrow reads
+     as a broken diagram, so it scrolls as one strip instead. */
+  .kanban-atlas-map {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    margin-inline: -1.5rem;
+    padding-inline: 1.5rem;
+  }
+  .kanban-atlas-map::-webkit-scrollbar { display: none; }
+  .kanban-atlas-map-step,
+  .kanban-atlas-map-divider { flex: 0 0 auto; }
+  .kanban-atlas-map-node { min-height: 44px; padding-inline: 1rem; }
+
+  .kanban-atlas-card { padding: 1.2rem; }
+  .kanban-atlas-card-head { flex-wrap: wrap; gap: 0.8rem; }
+  .kanban-atlas-lane-pill { min-height: 44px; padding-inline: 1.2rem; }
+  .kanban-card-progress--atlas { width: 100%; }
+
+  /* 16px, or focusing any board field zooms the page and leaves it zoomed. The
+     :not() chain out-specifies ToolView.css's (0,5,1) blanket control rule —
+     see the note in ui/Field.css. */
+  .tool-view .kanban-page input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']) {
+    min-height: 44px;
+    font-size: var(--fs-md);
+  }
+  .tool-view .kanban-page :is(select, textarea) {
+    min-height: 44px;
+    font-size: var(--fs-md);
+  }
 }

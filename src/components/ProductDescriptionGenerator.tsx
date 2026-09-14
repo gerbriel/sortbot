@@ -2283,7 +2283,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       <div className="product-editor">
         <div className="product-preview">
           {/* Navigation — moved to the TOP of the column (user request): Prev/Next,
-              group slider, and Download CSV are reachable without scrolling. */}
+              group slider, and Download CSV are reachable without scrolling.
+              The dock wrapper is `display: contents` above 640px, so on desktop
+              it generates no box at all and the layout is exactly as before; on a
+              phone it becomes the fixed bottom bar. */}
+          <div className="preview-nav-dock">
           <div className="preview-nav-controls">
             <button
               className="button button-secondary"
@@ -2336,6 +2340,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               <Download size={12} style={{ flexShrink: 0 }} /> Download CSV
             </button>
           )}
+          </div>
 
           {/* Scrollable area — image, thumbnails, magnifier controls. */}
           <div className="preview-scroll-area">

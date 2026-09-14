@@ -216,3 +216,35 @@
     font-size: var(--fs-md);
   }
 }
+
+/* ── Phone (≤640px) ─────────────────────────────────────────────────────────
+   The sign-in card is the first screen a real user meets on a phone, and every
+   control in it was sized for a mouse: 42px fields, a 31px submit button and a
+   17px "Sign Up" link. */
+@media (max-width: 640px) {
+  /* 16px is the exact threshold under which iOS Safari zooms the page on focus
+     and never zooms back. --fs-md IS 16px — the token, never a literal. The
+     global rule in index.css cannot reach here: `.form-group input` (0,1,1)
+     outranks its bare `input` selector. */
+  .form-group input {
+    font-size: var(--fs-md);
+    min-height: var(--tap);
+  }
+
+  .auth-button { min-height: var(--tap); font-size: var(--fs-md); }
+
+  /* An inline link-button inside a sentence, so it gets its target from
+     padding rather than from becoming a block. */
+  .auth-toggle button {
+    min-height: var(--tap);
+    padding: 0 var(--space-2);
+  }
+
+  /* The card is the whole screen at this width; the scrim around it is wasted
+     room, and a notched phone in landscape needs the side insets. */
+  .auth-container {
+    padding: var(--space-3);
+    padding-left: max(var(--space-3), var(--safe-l));
+    padding-right: max(var(--space-3), var(--safe-r));
+  }
+}

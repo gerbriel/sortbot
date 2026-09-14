@@ -799,3 +799,109 @@
   border-radius: 4px;
   padding: 0.2rem 0.5rem;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE-FIRST STEP 1 — phone capture entry points
+   Everything below is additive and lives inside media queries, so the desktop
+   drop zone is unchanged. ≤640px = phone.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* The two phone actions exist in the DOM at every width but only paint on a
+   phone — CSS, not JS, decides, so there is no hydration/resize flicker. */
+.dropzone-actions {
+  display: none;
+}
+
+.dropzone-mobile-copy,
+.dropzone-mobile-hint {
+  margin: 0;
+}
+
+.dz-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  /* 44px floor is the tap-target minimum; 52 gives a thumb real room. */
+  min-height: 52px;
+  padding: 0.75rem 1rem;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--ink-800);
+  color: var(--text-primary);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  cursor: pointer;
+  /* No double-tap-zoom delay on the primary capture action. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dz-action:active {
+  background: var(--ink-750);
+}
+
+.dz-action--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  /* Solid accent fill takes the canvas ink — see CLAUDE.md §1. */
+  color: var(--ink-950);
+}
+
+@media (max-width: 640px) {
+  /* Tall, unmistakable tap target instead of a thin desktop drop strip. */
+  .dropzone {
+    min-height: 260px;
+    padding: var(--space-5) var(--space-4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+  }
+
+  /* Drag copy is meaningless on a touch device. */
+  .dropzone-title,
+  .dropzone-subtext,
+  .dropzone-hint {
+    display: none;
+  }
+
+  .dropzone-content {
+    width: 100%;
+    max-width: none;
+    gap: var(--space-3);
+  }
+
+  .upload-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .dropzone-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    width: 100%;
+  }
+
+  .dropzone-mobile-copy {
+    font-size: var(--fs-md);
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .dropzone-mobile-hint {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    line-height: var(--lh-snug, 1.35);
+  }
+
+  /* Progress / compression / failed-upload panels are block-level children of a
+     width:100% container, so they already stack full-bleed. This only stops a
+     long error filename from pushing the panel wider than the screen. */
+  .image-upload-container > div {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+}

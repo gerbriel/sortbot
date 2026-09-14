@@ -409,3 +409,84 @@
     opacity: 1;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE-FIRST STEP 2 — category assignment on a phone
+   The desktop interaction is "drag a group card onto a zone". HTML5 drag-and-
+   drop does not exist on touch, so the phone path is the OTHER one that already
+   works today: select photos in the grid, then tap a category. This turns the
+   right-hand panel into a horizontally scrolling chip row; the dock positioning
+   itself lives in App.css (it wraps .step2-right-panel, which owns the panel).
+   ≤640px = phone. Additive — desktop is unchanged.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.category-zone,
+.cz-gender-row button {
+  touch-action: manipulation;
+}
+
+@media (max-width: 640px) {
+  .category-zones-container.compact .category-zones {
+    padding: 0.5rem 0.6rem;
+    border-radius: 0;
+    background: none;
+  }
+
+  /* The heading and the free-text search are the first things to go: in a bottom
+     dock a text field summons the keyboard straight over the dock it belongs to,
+     and the chip row is already scrollable. Gender pills stay — they change
+     WHICH categories are listed, so they are navigation, not decoration. */
+  .category-zones-container.compact .cz-heading,
+  .category-zones-container.compact .cz-search {
+    display: none;
+  }
+
+  .cz-gender-row {
+    margin-bottom: 0.4rem !important;
+    gap: 0.35rem !important;
+  }
+
+  .cz-gender-row button {
+    min-height: 40px;
+    padding: 0.3rem 0.9rem !important;
+    font-size: var(--fs-sm) !important;
+  }
+
+  .cz-selection-hint {
+    font-size: var(--fs-sm) !important;
+    color: var(--text-secondary) !important;
+    margin-bottom: 0.35rem !important;
+  }
+
+  /* Vertical list → horizontal chip rail. */
+  .category-zones-container.compact .category-list {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    gap: 0.4rem;
+    padding-bottom: 0.25rem;
+  }
+
+  .category-zones-container.compact .category-zone {
+    flex: 0 0 auto;
+    min-height: var(--tap, 44px);
+    padding: 0.5rem 0.85rem;
+    white-space: nowrap;
+    /* Dashed 3px borders read as "drop target"; there is no dropping here. */
+    border-style: solid;
+    border-width: 2px;
+  }
+
+  .category-zones-container.compact .category-zone .category-name {
+    flex: 0 0 auto;
+    font-size: var(--fs-sm);
+  }
+
+  /* Group list (non-compact) stacks — it is not rendered in Step 2, but the
+     Library/desktop variant shares this stylesheet. */
+  .category-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

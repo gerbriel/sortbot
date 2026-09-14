@@ -3,7 +3,13 @@ import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
 import { Package, Image, ArrowDown, ArrowUp, ArrowUpDown, Check, RotateCcw, CornerUpLeft,
          CornerUpRight, Search, X, Camera, Circle, CircleDot, Crosshair, ClipboardPaste,
-         Trash2, Scissors } from 'lucide-react';
+         Trash2, Scissors, SlidersHorizontal } from 'lucide-react';
+import {
+  PHONE_BREAKPOINT_PX,
+  clampGridColumns,
+  clampGroupGridColumns,
+  gridColumnBounds,
+} from './responsiveGrid';
 import LoadingProgress from './LoadingProgress';
 import { log, isDebugEnabled } from '../lib/debugLogger';
 import { publicImageUrl } from '../lib/storageUrls';
@@ -299,8 +305,38 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // (the rubber-band's own rAF is cancelled by its effect cleanup, which React
   //  runs on unmount as well as on every isSelecting change)
 
-  // Grid columns per row (2–12)
+  // Grid columns per row (2–12 on desktop, 1–3 on a phone — see responsiveGrid.ts)
   const [columnsPerRow, setColumnsPerRow] = useState<number>(8);
+
+  /* Phone layout flag. The grid's column count is applied as an INLINE style, so
+   * a media query can never override it — the clamp has to happen in JS. Nothing
+   * else here is JS-driven: every other phone adaptation is CSS. */
+  const [isPhone, setIsPhone] = useState<boolean>(
+    () => typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia(`(max-width: ${PHONE_BREAKPOINT_PX}px)`).matches
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia(`(max-width: ${PHONE_BREAKPOINT_PX}px)`);
+    const onChange = (e: MediaQueryListEvent) => setIsPhone(e.matches);
+    setIsPhone(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  // Effective grid widths. The stored preference is never mutated, so rotating
+  // back to a wide viewport restores the user's chosen density.
+  const singlesGridColumns = clampGridColumns(columnsPerRow, isPhone);
+  const groupsGridColumns = clampGroupGridColumns(columnsPerRow, isPhone);
+  const columnSliderBounds = gridColumnBounds(isPhone);
+
+  /* Phone-only disclosure for the sort/filter/auto-group controls. On a phone the
+   * sidebar collapses to a top bar (CLAUDE.md §15); showing every control inline
+   * there would push the photo grid a full screen down, so they live behind a
+   * "Tools" toggle. The class is inert above 640px — all the rules that read it
+   * are inside the phone media query. */
+  const [toolsOpen, setToolsOpen] = useState(false);
 
   // Format painter — copy crop/rotation style from one image and paste to others
   const [copiedRotation, setCopiedRotation] = useState<number | null>(null);
@@ -976,7 +1012,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       const isSafeTarget = t.closest(
         '.single-item-card, .product-group-card, .group-header, .toolbar, button, [role="button"],' +
         '.category-zone, .category-zones-container, .category-zones, .category-list,' +
-        '.grouper-actions-sidebar'
+        '.grouper-actions-sidebar, .grouper-header, .photo-toolbar'
+        // .grouper-header / .photo-toolbar: on phones the toolbar is a wide strip directly
+        // above the grid, so a mis-tap on it must not silently wipe the selection (Sept 2026).
       );
       if (!isSafeTarget) {
         if (selectedItems.size > 0) updateSelection(new Set());
@@ -2268,7 +2306,18 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       )}
 
       <div className="image-grouper-container">
-      <div className="grouper-header">
+      <div className={`grouper-header${toolsOpen ? ' grouper-header--tools-open' : ''}`}>
+        {/* Phone-only disclosure. Rendered at every width but display:none above
+            640px, so the desktop sidebar is untouched. */}
+        <button
+          type="button"
+          className="grouper-tools-toggle"
+          aria-expanded={toolsOpen}
+          onClick={() => setToolsOpen(o => !o)}
+        >
+          <SlidersHorizontal size={16} />
+          {toolsOpen ? 'Hide tools' : 'Sort, filter & group tools'}
+        </button>
         <div className="stats">
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Package size={20} /> {multiItemGroups.length} Multi-Image Groups
@@ -2494,12 +2543,12 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
           {/* ── Columns per row slider ──────────────────────────────────────── */}
           <div className="auto-group-control" title="Adjust how many images appear per row">
-            <span className="auto-group-label">⊞ Columns: {columnsPerRow}</span>
+            <span className="auto-group-label">⊞ Columns: {singlesGridColumns}</span>
             <input
               type="range"
-              min={2}
-              max={12}
-              value={columnsPerRow}
+              min={columnSliderBounds.min}
+              max={columnSliderBounds.max}
+              value={Math.min(Math.max(columnsPerRow, columnSliderBounds.min), columnSliderBounds.max)}
               onChange={e => setColumnsPerRow(Number(e.target.value))}
               className="columns-slider"
               title="Drag to change columns per row"
@@ -2738,7 +2787,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           <div 
             ref={singlesContainerRef}
             className="items-grid selection-container"
-            style={{ gridTemplateColumns: `repeat(${columnsPerRow}, 1fr)` }}
+            style={{ gridTemplateColumns: `repeat(${singlesGridColumns}, minmax(0, 1fr))` }}
             onMouseDown={(e) => handleMouseDown(e, singlesContainerRef.current, 'singles')}
           >
             {/* Selection Box Visualization */}
@@ -2868,7 +2917,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           <div 
             ref={groupsContainerRef}
             className="groups-grid selection-container"
-            style={{ gridTemplateColumns: `repeat(${columnsPerRow}, 1fr)` }}
+            style={{ gridTemplateColumns: `repeat(${groupsGridColumns}, minmax(0, 1fr))` }}
             onMouseDown={(e) => handleMouseDown(e, groupsContainerRef.current, 'groups')}
           >
             {/* Selection Box Visualization */}

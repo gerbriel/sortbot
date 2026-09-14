@@ -115,7 +115,10 @@ function ErrorsBody({ summary, days }: { summary: ErrorSummary; days: number }) 
       {summary.groups.length > 0 && (
         <>
           <h4 className="an-h">Top issues</h4>
-          <table className="an-table">
+          {/* Cards on a phone: five columns, two of them free text (the message
+              and where it fired). Scrolled sideways you lose the message, which
+              is the only column that identifies the row. */}
+          <table className="an-table an-table--cards">
             <thead>
               <tr>
                 <th>Issue</th>
@@ -176,11 +179,11 @@ function IssueRow({ group }: { group: ErrorGroup }) {
   const where = [group.component, group.view].filter(Boolean).join(' · ') || group.source;
   return (
     <tr>
-      <td title={group.message}>{shortMessage(group.message)}</td>
-      <td title={`source: ${group.source}${group.app_version ? ` · build ${group.app_version}` : ''}`}>{where}</td>
-      <td className="an-num">{group.count.toLocaleString()}</td>
-      <td className="an-num">{group.sessions.toLocaleString()}</td>
-      <td title={group.last_seen}>{relativeTime(group.last_seen)}</td>
+      <td data-label="Issue" title={group.message}>{shortMessage(group.message)}</td>
+      <td data-label="Where" title={`source: ${group.source}${group.app_version ? ` · build ${group.app_version}` : ''}`}>{where}</td>
+      <td data-label="Count" className="an-num">{group.count.toLocaleString()}</td>
+      <td data-label="Sessions" className="an-num">{group.sessions.toLocaleString()}</td>
+      <td data-label="Last seen" title={group.last_seen}>{relativeTime(group.last_seen)}</td>
     </tr>
   );
 }

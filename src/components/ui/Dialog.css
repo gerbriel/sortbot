@@ -114,11 +114,69 @@
   .ui-dialog-overlay, .ui-dialog { animation: none; }
 }
 
-@media (max-width: 560px) {
-  .ui-dialog-overlay { padding: var(--space-2); align-items: flex-end; }
-  .ui-dialog { width: 100%; max-height: 92vh; }
-  /* Stacked footer: three buttons in a row overflow at phone width. */
-  .ui-dialog__footer { justify-content: stretch; }
-  .ui-dialog__footer > * { flex: 1; }
+/* ── Phone: a dialog becomes a bottom sheet ─────────────────────────────────
+   A centred 420px card with a 16px gutter is a desktop idea. On a phone the
+   same card lands mid-screen, far from the thumb, and its buttons sit where the
+   hand is not. The sheet is the native idiom instead: flush to the bottom edge,
+   full width, rounded only on the top corners, rising from below rather than
+   fading in from the middle.
+
+   Three details that matter more than the shape:
+
+   * `100dvh`/`dvh` units, not `vh`. Mobile Safari's `vh` is measured against the
+     LARGEST viewport (toolbars retracted), so a `92vh` sheet is taller than the
+     screen while the toolbar is showing and its footer sits under the chrome.
+     `dvh` tracks the live viewport. `vh` is kept as the preceding declaration
+     so a browser without `dvh` still gets something sane.
+   * The footer carries `--safe-b`. Without it the primary action sits under the
+     home indicator on a notched phone, which is exactly where a confirm button
+     must not be.
+   * The body keeps `overflow-y: auto` from the base rule, so a long sheet
+     scrolls its content and the footer stays put. */
+@media (max-width: 640px) {
+  .ui-dialog-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .ui-dialog,
+  .ui-dialog--sm,
+  .ui-dialog--md,
+  .ui-dialog--lg,
+  .ui-dialog--xl {
+    width: 100%;
+    max-height: 92vh;
+    max-height: 92dvh;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    animation: ui-sheet-in var(--dur) var(--ease);
+  }
+
+  /* A full-bleed dialog is already edge to edge; it keeps square corners. */
+  .ui-dialog--full {
+    border-radius: 0;
+    max-height: none;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  /* Stacked footer: three buttons in a row overflow at phone width, and each
+     one has to clear the touch floor on its own. */
+  .ui-dialog__footer {
+    justify-content: stretch;
+    padding-bottom: calc(var(--space-4) + var(--safe-b));
+  }
+  .ui-dialog__footer > * { flex: 1; min-height: 44px; }
   .ui-dialog__footer-spacer { margin-right: 0; }
+
+  .ui-dialog__header { padding: var(--space-4); }
+  .ui-dialog__body { padding: var(--space-4); }
+}
+
+@keyframes ui-sheet-in {
+  from { opacity: 0; transform: translateY(100%); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-dialog { animation: none; }
 }

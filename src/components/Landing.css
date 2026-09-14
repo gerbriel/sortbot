@@ -390,10 +390,14 @@
   padding: 7px 10px;
   display: flex;
   flex-direction: column;
+  /* A grid item defaults to `min-width: auto`, i.e. it refuses to shrink below
+     its longest word. At 360px that pushed this two-column mock 30px past the
+     panel, where .ld-shot's overflow:hidden clipped the right-hand cells. */
+  min-width: 0;
 }
 
 .mock-fields label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 700; }
-.mock-fields b { font-size: 14px; color: var(--text-primary); }
+.mock-fields b { font-size: 14px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; }
 
 .mock-desc { margin-top: 12px; display: flex; flex-direction: column; gap: 7px; }
 .mock-desc i { height: 8px; border-radius: 4px; background: var(--ink-750); }
@@ -403,7 +407,7 @@
 .mock-thead { border-bottom: 2px solid var(--border-strong); }
 .mock-thead b { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-muted); }
 .mock-trow { border-bottom: 1px solid var(--border-subtle); }
-.mock-trow span { font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mock-trow span { font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
 .mock-download {
   margin-top: 12px;
@@ -622,6 +626,9 @@
   padding: 8px 10px;
   display: flex;
   flex-direction: column;
+  /* Same as .mock-fields: without this the ellipsis on the <b> below can never
+     engage, because the cell never gets narrower than its text. */
+  min-width: 0;
 }
 
 .mock-preset-rows label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 700; }
@@ -710,3 +717,69 @@
 }
 
 .landing .ld-tier-includes svg { flex: 0 0 auto; margin-top: 2px; color: var(--success); }
+
+/* ── Phone (≤560px) ─────────────────────────────────────────────────────────
+   Landing.css is px-based ON PURPOSE (CLAUDE.md §1): this page renders at the
+   main URL for logged-out visitors and must not inherit the app's 9px root, or
+   the hero collapses. So everything below is px and clamp(px) — the --fs-*
+   tokens are deliberately NOT used here.
+
+   The layout already stacks on its own (every grid is auto-fit with a minmax
+   larger than a phone's content box), so this is about TOUCH, not columns:
+   nothing in the marketing page was built to be tapped with a thumb. */
+@media (max-width: 560px) {
+  /* The two nav actions were 38px and 33px tall. They are the only two things
+     a visitor can do from the top of the page. */
+  .ld-nav-cta,
+  .ld-nav-login {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  /* 4.5vw bottoms out at the 30px floor well before 390px, so the headline
+     never actually scaled on a phone. A vw term that is live at this width
+     lets it come down to 28px and stop fighting the gutters. */
+  .ld-hero h1 { font-size: clamp(28px, 7.6vw, 34px); }
+  .ld-hero p { font-size: 16px; margin: 18px auto 26px; }
+
+  /* Stacked CTAs, each a full-width target rather than two half-width pills. */
+  .ld-hero-ctas { flex-direction: column; align-items: stretch; }
+  .ld-btn-primary,
+  .ld-btn-ghost {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    font-size: 16px;
+  }
+
+  /* Section headings: 28px over a 342px measure wraps to three lines. */
+  .ld-founding h2,
+  .ld-pricing h2,
+  .ld-math h2,
+  .ld-signup h2 { font-size: 23px; }
+
+  /* Comfortable padding on the one-column cards. */
+  .ld-tier { padding: 22px 18px; }
+  .ld-tiers--ladder .ld-tier { padding: 18px 16px; }
+  .ld-signup { padding: 26px 18px 30px; border-radius: 14px; }
+  .ld-signup-photo { margin: -26px -18px 20px; border-radius: 13px 13px 0 0; }
+
+  /* 15px inputs are the iOS zoom trap: Safari zooms the page in on focus and
+     never zooms back out. 16px is the threshold, so this is 16px exactly. */
+  .ld-signup input,
+  .ld-signup select {
+    font-size: 16px;
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .ld-signup button[type="submit"] { min-height: 48px; }
+
+  /* Was a 31px-tall link-button at the very bottom of the form. */
+  .landing .ld-signup-login button {
+    min-height: 44px;
+    padding: 0 8px;
+  }
+}

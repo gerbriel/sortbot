@@ -139,6 +139,79 @@ comments are fine and were deliberately left. The `categories.emoji` column is p
 USER DATA, not chrome — never rewrite it. Global `.lucide { flex-shrink: 0;
 vertical-align: -0.125em }` keeps SVGs on the text baseline where emoji sat for free.
 
+### Mobile-first standards (Sept 2026)
+
+A three-agent pass made the whole app usable on a phone — the shell, the thirteen
+tool views, and the four workflow steps (`docs/reviews/10-mobile-shell.md`,
+`10-mobile-pages.md`, `10-mobile-workflow.md`). These are its standing rules.
+
+**Three breakpoints, the same three everywhere.** `<= 640px` phone, `641-1024px`
+tablet, `> 1024px` desktop. **Desktop is deliberately unchanged** — every layout rule
+the pass added lives inside a media query, so a regression above 1024px is a bug, not
+a trade-off. The 640 boundary also exists in JS as `PHONE_BREAKPOINT_PX`
+(`src/components/responsiveGrid.ts`); keep the two in step.
+
+**The touch floor is `44px`, and it is written as a literal `px`.** Every other length
+in this app is a rem against the 9px root (§16), which is exactly why this one is not:
+`0.2rem 0.55rem` of padding is 1.8px x 5px, so hand-rolled controls landed at 16-20px
+tall — fine with a mouse, unusable with a thumb. A touch target is a *physical*
+constant; a rem value would silently drift off the accessibility floor the next time
+the root is retuned, while `44px` cannot. `--tap: 44px` in `index.css` names it, and
+`index.css` applies it once at `<= 640px` to `input` (except checkbox/radio/range/color),
+`select`, `textarea`, `button` and `.button`. Components restate it only where their
+own specificity outranks that global rule. The reasoning is also written into
+`ui/Button.css` so it is not "corrected" to a rem later.
+
+**Form controls are `var(--fs-md)` (16px) on phones — never 15px, never a literal.**
+Mobile Safari zooms the page when a focused control is under 16px and does not zoom
+back out; that is the single most common reason a form "feels broken" on an iPhone.
+`--fs-md` IS 16px, so the token is what buys the behaviour. Checkboxes are excluded
+(a 44px checkbox is a grey slab — they get 22px square and the wrapping label is the
+real target).
+
+**`--tabbar-h` is the ONE bottom offset.** Defined in `index.css` as `0px` and raised
+at `<= 640px` **on `.app-container`** (not `:root`, so the shell-less waitlist gate keeps
+0 and its support button does not float above a bar that is not there) to
+`calc(var(--tabbar-row) + var(--safe-b))`. Every bottom-anchored surface subtracts it
+and nothing invents its own number: `.app-main`, `.tool-view`, the toast stack, the
+support FAB, Step 2's category dock, Step 3's nav dock, Finance's sticky Save bar. A
+short-lived `--app-tabbar-h` spelling was consolidated onto `--tabbar-h`; there is only
+the one token (§18 #29).
+
+**Safe areas need `viewport-fit=cover`.** `--safe-t/-b/-l/-r` in `index.css` wrap
+`env(safe-area-inset-*)`, which reports `0` unless `index.html`'s viewport meta carries
+`viewport-fit=cover`. Any full-bleed sheet, dock or fixed bar pads with the matching
+token, or its primary action sits under the home indicator.
+
+**`text-size-adjust: 100%` on `html`.** Chrome on Android "font boosts" text inside wide
+blocks. On a 9px root that is not merely ugly: every `--space-*` is a rem tuned to that
+root, so boosted type overflows padding that did not grow with it (14px measured
+rendering as 22px).
+
+**New CSS is written mobile-first; existing desktop-first files are EXTENDED, not
+flipped.** `MobileNav.css` is the one file written the new way — its base rules describe
+the phone and `min-width` queries take things away. Everything older describes the
+desktop first and adds `max-width` blocks, and rewriting one of those files in the other
+direction reflows a layout nobody asked to change. Match the file you are in.
+
+**Never put a token glob, a slash, and another token glob inside a CSS comment.**
+`--ink-*` immediately followed by `/--text-*` contains `*/`, which closes the comment
+early and silently swallows the next rule — it cost a debugging round in `MobileNav.css`
+(the `.nav-rail` rule vanished and the rail rendered at every width). The build does not
+warn about the swallowed rule and it is invisible in the source. Write token names out in
+full in prose (§18 #30).
+
+**Two specificity traps to know before writing a phone rule.**
+1. `ToolView.css` pins every control inside a tool view at (0,5,1) with `--fs-base`
+   (14px). No per-component input rule can reach it, so the 16px restatement is written
+   as `.tool-view :is(<page roots>) input:not(...)` — `:is()` contributes its most
+   specific argument, which buys the extra step without an unreadable selector.
+2. **Inline styles beat every media query.** Step 2's grid writes
+   `grid-template-columns` inline (it is slider-driven), so its phone layout is not
+   expressible in CSS at all — the clamp happens where the value is produced, in
+   `responsiveGrid.ts`. Reach for that pattern, not `!important`, which would turn the
+   slider into a no-op.
+
 ---
 
 ## 2. Tech Stack
@@ -155,7 +228,7 @@ vertical-align: -0.125em }` keeps SVGs on the text baseline where emoji sat for 
 | `jszip` | ^3.10.1 | Extract images from ZIP files in ImageUpload. |
 | `exifr` | ^7.1.3 | JPEG EXIF parsing. Used in `ImageUpload.tsx` to read `DateTimeOriginal` for shot-time sort order. |
 | `tus-js-client` | ^4.3.1 | Resumable uploads to Supabase Storage via the TUS protocol (`src/lib/tusUpload.ts`). 6 MB chunks; survives connection drops mid-file — chosen for large batches (380–1500 images) on slow/rural connections. |
-| `vitest` | ^4.1.9 | Test runner (`npm test`). 505 tests / 35 files. Config in `vitest.config.ts`. |
+| `vitest` | ^4.1.9 | Test runner (`npm test`). 579 tests / 40 files. Config in `vitest.config.ts`. |
 | `happy-dom` | ^20.10.6 | DOM implementation for the tests, incl. the `src/components/ui/` render harness. |
 | `eslint` | ^9.39.1 | Linting. Config in `eslint.config.js`, with `eslint-plugin-react-hooks` ^7 (render-purity rules) and `eslint-plugin-react-refresh`. |
 | `@vitejs/plugin-react` | ^5.1.1 | Vite plugin enabling React JSX transform and Fast Refresh. |
@@ -185,14 +258,15 @@ npm run preview
 
 **Required before first run:** Copy `.env.example` to `.env` and fill in the two Supabase variables. Without them the app throws on load.
 
-**Tests:** Vitest (`npm test` to run once, `npm run test:watch` for watch mode). Config in `vitest.config.ts` (happy-dom environment; dummy Supabase env vars injected because `src/lib/supabase.ts` throws at import without them — tests never hit the network). Test files live next to their sources as `src/**/*.test.ts(x)`. **505 tests across 35 files, all green (Sept 2026)** — up from 305/24 before the engineering review. They are characterization tests: they lock in behavior the workflow depends on, so a failure means "you changed the contract", not "the assertion is picky".
+**Tests:** Vitest (`npm test` to run once, `npm run test:watch` for watch mode). Config in `vitest.config.ts` (happy-dom environment; dummy Supabase env vars injected because `src/lib/supabase.ts` throws at import without them — tests never hit the network). Test files live next to their sources as `src/**/*.test.ts(x)`. **579 tests across 40 files, all green (Sept 2026)** — up from 305/24 before the engineering review. They are characterization tests: they lock in behavior the workflow depends on, so a failure means "you changed the contract", not "the assertion is picky".
 
 Coverage by area:
 - **Listing engine** — `textAIService.test.ts` (34: size normalization incl. fits-like, voice command extraction, ✠ description lines, title length/letter-size/no-compounding rules, golden snapshot of a full description with `Math.random` mocked), `applyPresetToGroup.test.ts` (17: preset priority hierarchy, force-mode, SEO template interpolation, and `resolvePreset`'s four match steps incl. `allowDefaultPrefix`), `csvExport.test.ts` (30: 54-column header/row shape, handle dedup, taxonomy rules, CSV formula-injection guard, golden two-product CSV), `proseService.test.ts` (5), `grouping.test.ts` (7: leader convention, tolerant resolution, the 42-image/11-group reproduction).
 - **Persistence contract** — `slimItems.test.ts` (14: the whitelist field-by-field, `file`/`preview`/`_presetData` proven stripped, the derivable-field rule — `imageUrls`/`thumbnailUrl` omitted when `storagePath` exists — and type-level assertions that both a slim item and a legacy whole `ClothingItem` satisfy `PersistedWorkflowItem`), `workflowBatchService.test.ts` (30: delete tombstones + the 200 cap, `fetchWorkflowBatches` pagination and "never `select(*)`", the chunked lookups, the ordered delete sequence, and `removeItemsFromWorkflowBatch`'s compare-and-set), `productRow.test.ts` (39: both DB-row→item builders and the seven documented divergences between the two restore merges), `productService.test.ts` (25: "0 rows is a failure, not a success", the leader-keyed group write, the batched `product_images` upsert, keepalive flush, price `null` vs `0`), `imageRowSync.test.ts` (14: row shape + the six `mergeProductImageRows` merge rules), `libraryData.test.ts` (12), `libraryService.test.ts` (3: `duplicateBatch` copies `processedItems`), `workflowBackup.test.ts` (12: the 1 s trailing throttle, flush, cancel, quota warning), `workflowStore.test.ts` (8), `storageUrls.test.ts` (6), `chunk.test.ts` (7: the 0/1/99/100/101 boundaries every hand-rolled loop used to re-derive), `orgService.test.ts` (4: per-user in-flight dedupe), `tusUpload.test.ts` (2: a 250 ms race that fails loudly if the promise ever hangs again).
 - **Memory / platform** — `imageTransforms.test.ts` (12: the byte-budgeted LRU image cache), `mailto.test.ts` (8: every `mailto:` header separator rejected), `errorReporter.test.ts` (27: PII scrubbing, fingerprint stability across a redeploy, dedupe + per-load cap, the availability latch, `app_version` from the entry-chunk hash).
-- **Founder tools** — `analytics.test.ts` (9), `crmService.test.ts` (5), `supportService.test.ts` (4), `kanban/*.test.ts` (95 across atlas/dates/format/rank/status/tree).
-- **UI primitives** — `src/components/ui/*.test.tsx` (76: Tabs 13, Dialog 17, ConfirmAction 13, Field 13, controls 20), driven by `ui/testUtils.tsx` (a `createRoot` + `act` harness, not a test file).
+- **Founder tools** — `analytics.test.ts` (9), `crmService.test.ts` (5), `supportService.test.ts` (4), `supportStore.test.ts` (15: the ref-counted ONE channel + ONE poll, `applySentMessage` asserted field-by-field against the `support_after_message` SQL trigger, optimistic-write-then-reconcile for send/markRead/setStatus/startThread, `available: false` NOT stopping the poll, concurrent `refresh()` collapsing to one query, `filterThreads`), `financeService.test.ts` (34: money ↔ cents, ANCHORED month steps, the five range presets, recurrence expansion, P&L totals matching the SQL smoke test row-for-row, both CSV builders incl. the formula guard, validation mirroring every CHECK, summary normalization), `FinanceView.test.tsx` (8: the pre-migration setup hint, the founders-only 42501 message, KPI/chart/table parity, ledger filtering, the recurring-entry preview, both MRR numbers, the CSV download, the printable statement adding up to the server's profit), `kanban/*.test.ts` (95 across atlas/dates/format/rank/status/tree).
+- **UI primitives + shells** — `src/components/ui/*.test.tsx` (76: Tabs 13, Dialog 17, ConfirmAction 13, Field 13, controls 20) and `ToolView.test.tsx` (8: the full-page shell's navigation + a11y contract), all driven by `ui/testUtils.tsx` (a `createRoot` + `act` harness, not a test file). `FinanceView.test.tsx` uses the same harness rather than a testing-library dependency.
+- **Layout helpers** — `responsiveGrid.test.ts` (9: the Step-2 column clamp — phone bounds 1-3 vs desktop 2-12, the tighter group-card cap, and the rule that the stored slider preference is never mutated, so rotating back to a wide viewport restores the user's density).
 
 `src/lib/testing/supabaseMock.ts` (test-only, imported by no app code) is a chainable `supabase` stand-in that records table/op/filters/payload/`range()` per call and exposes `inSizes()` / `callsFor()` helpers — that is how query **order** and **chunk size** are asserted. Snapshots live in `src/lib/__snapshots__/` — update deliberately with `npx vitest run -u` only when output changes on purpose.
 
@@ -257,8 +331,12 @@ sortingapp/
 │   │   ├── ErrorsPanel.tsx         # Analytics view, Errors tab (Sept 2026). Founding admins only. Range chips 7/30/90 (default 7), four KPI tiles, Top-issues table (untruncated message in `title` for copy/paste), Daily + By-screen tables. Deliberately table-only, no chart — an error list is read for its text. Shows a setup hint naming `app_errors.sql` when the table does not exist. Reuses existing OrgPanel.css classes only.
 │   │   ├── VocabDashboard.tsx / .css  # Founding-admin vocabulary CRUD (chips, brand keywords, models). Full-page view, takes no props. Lazy-loaded.
 │   │   ├── KanbanBoard.tsx / .css, KanbanCardDetail.tsx  # Founding-admin feature board (lanes + atlas views). Full-page view; owns Escape itself (closes the card drawer first), so ToolView is given `escapeToBack={false}`. Lazy-loaded.
-│   │   ├── SupportWidget.tsx / .css  # Floating Messages button + panel for every signed-in user; inbox for founding admins. Realtime (INSERT/UPDATE only) + 45 s poll. Exported as `memo(...)`.
+│   │   ├── SupportWidget.tsx / .css  # Floating Messages button + panel for every signed-in user; inbox for founding admins. Since Sept 2026 it owns only PANEL-LOCAL state (open/closed, active thread, that thread's messages, draft, busy, the Open/Closed filter) — the thread list, the Realtime channel and the 45 s poll all moved to `lib/supportStore.ts`, and the `userId` prop is gone. Behaviour unchanged. Exported as `memo(...)`.
+│   │   ├── MessagesView.tsx / .css  # 'messages' view (§6) — the full-page half of messaging: "Messages" for a user, "Inbox" for a founder. Searchable thread list beside a full-height conversation, founder Open/Closed/All chips with live counts, unread-first ordering with a real unread dot element (+ a visually-hidden "(unread)"), Up/Down keyboard walk over the list, Enter-to-send composer with an optional Subject on a new conversation, `EmptyState` for all four empty cases, and a one-column stack with a "All conversations" back control ≤1024px. Reads `supportStore` — it fetches nothing of its own.
+│   │   ├── FinanceView.tsx / .css  # 'finance' view (§6), Founding admins only. Sub-tabs Overview / Transactions / Customers / Reports, held in COMPONENT state so App's diff stays the same shape as the CRM's. Ledger CRUD with the two-step `org-confirm-yes/no` delete (no `confirm()`), a two-series monthly P&L chart in `--accent` + `--text-muted` (semantics reserved for the one real state: profit sign), plan-price editor, projected MRR list vs discounted, two CSV downloads and a printable statement. The Transactions tab lists TEMPLATES (what you edit); everything else shows expanded occurrences. FinanceView.css only adds what Finance needs on top of the `.tool-view` scale, plus the print stylesheet (the `visibility` technique — everything invisible, `.fin-print` painted back, so app chrome outside this component is free to change).
 │   │   ├── ToolView.tsx / .css    # THE full-page shell every header tool opens into (§6). Title row (icon + <h1> + one-line description + optional actions), "Back to workflow" first in tab order, Escape-to-back, optional `tabs` slot, `wide` (Library/Board), `escapeToBack` (Board). Focuses the <h1> and scrolls to top on open. ToolView.css owns THE spacing scale for all tool views — page padding `3rem clamp(2rem,4vw,6rem) 6rem`, 3rem section gaps, 2rem card padding, 4rem controls, 4.5rem table rows, 1400px measure — plus `--tv-sticky-top`, the header-clearance var the sticky editor columns and tab rails share. Per-tool CSS scopes its page overrides under `.tool-view` rather than rewriting 30 KB files. Tested in ToolView.test.tsx (8 tests).
+│   │   ├── MobileNav.tsx / .css   # The <= 1024px navigation (§1, §6). BOTH surfaces live in this one file — `NavRail` (the 641-1024px tablet row, rendered INSIDE <header>) and `MobileTabBar` (the <= 640px fixed bottom tabs Workflow / Library / Messages / More, plus the More bottom sheet, rendered OUTSIDE <header> because .app-header is a stacking context that would trap a fixed child). Exports the `NavTool` type. The sheet is the shared `ui/Dialog`, so focus trap / Escape / scrim dismissal come for free. There is no NavRail.tsx and no MobileTabBar.tsx. MobileNav.css is the one mobile-first stylesheet in the tree (§1).
+│   │   ├── responsiveGrid.ts / .test.ts  # PURE column-clamp helpers for the Step 2 grid (9 tests): PHONE_BREAKPOINT_PX = 640, gridColumnBounds(isPhone) (1-3 phone / 2-12 desktop), clampGridColumns, clampGroupGridColumns (group cards cap at 2). Exists because the grid applies its column count as an INLINE style that no media query can reach (§1); the stored slider preference is clamped for display, never mutated.
 │   │   ├── LazyImg.tsx            # Shared image component: skeleton shimmer, 3× retry with exponential backoff + `?t=` cache-bust (works around ERR_QUIC_PROTOCOL_ERROR). Used by Step 2/3/4 AND Library.
 │   │   ├── LoadingProgress.tsx / .css  # Upload progress bar shown in Step 2.
 │   │   └── ui/                    # PRIMITIVE SYSTEM (Sept 2026) — built, tested, NOT YET ADOPTED (§16). index.ts (components + types only, so react-refresh stays happy), base.css (focus ring, .ui-sr-only), Button, IconButton (accessible `label` REQUIRED at the type level), Chip/ToggleChip/RemovableChip, Badge/CountBadge, Tabs (roving tabindex, manual activation mode), Dialog (focus trap + restore, Escape stack, reference-counted scroll lock, portal-free), ConfirmAction (the `confirm()` replacement, §18 #12), Field/TextField/TextareaField/SelectField, EmptyState, Spinner/Skeleton, Toast/ToastViewport (state-free — App keeps owning the queue), StatTile/StatGrid, testUtils.tsx (mount/click/keyDown harness), *.test.tsx (76 tests). NO hex literal anywhere except one documented scrim in Dialog.css.
@@ -289,6 +367,8 @@ sortingapp/
 │   │   ├── analytics.ts           # FIRST-PARTY analytics: track()/trackPageview(), setAnalyticsContext, fetchAnalyticsSummary, pure helpers (shouldTrack, referrerHost, deviceClass, buildEvent, buildFunnel, compactNumber, percentDelta, niceCeiling). Owns SESSION_KEY / FORCE_KEY. Auto-disables when the table is missing.
 │   │   ├── crmService.ts          # FIRST-PARTY CRM (Founding admins): crm_contacts/crm_notes CRUD + syncCrmContacts(). Pure: filterContacts, sortContacts, stageCounts, followUpStatus, parseTags, todayKey. 'unavailable' pre-migration.
 │   │   ├── supportService.ts      # FIRST-PARTY messaging: support_threads/support_messages reads + writes, subscribeToSupport (postgres_changes on INSERT and UPDATE only — NEVER '*', which would ship a deleted thread's whole OLD row to every subscriber). Pure: isUnread, unreadThreadCount, sortThreads, formatRelative.
+│   │   ├── supportStore.ts        # Dependency-free shared store (useSyncExternalStore, mirrors workflowStore). SOURCE OF TRUTH for the support THREAD LIST + the availability flag, and OWNER of the single Realtime subscription and the single 45 s poll (`SUPPORT_POLL_MS`), ref-counted: started by the first subscriber, stopped by the last. `SupportWidget`, `MessagesView` and the header badge all consume it through `useSupportThreads(role)`. MESSAGES are deliberately NOT in the store (two front ends can read different threads) — a `revision` counter ticks once per completed refetch and each consumer reloads its own conversation on `[activeId, revision]`. Writes are optimistic then reconciled; `applySentMessage` mirrors the `support_after_message` SQL trigger field for field. `refresh()` dedupes concurrent callers into one in-flight promise. `filterThreads` lives here. Tested (15).
+│   │   ├── financeService.ts      # FIRST-PARTY finance (Founding admins): typed CRUD over finance_transactions / finance_plan_prices, `fetchFinanceSummary` (the finance_summary RPC, mapping 42501 → 'forbidden' and a missing table → 'unavailable'), `normalizeSummary`, and the PURE helpers the view, the previews and both CSVs share — money↔cents, `addMonthsAnchored`, the five range presets, `expandOccurrences` (reproduces the SQL recurrence rule EXACTLY), `buildMonthlyPnl`, `summarizeTransactions`, `buildCategoryBreakdown`, the ledger/P&L CSV builders (through csvExport's `escapeCsvValue`, so the formula guard is not reimplemented), category suggestions, `validateTransactionInput` (mirrors every CHECK). Tested (34).
 │   │   ├── kanbanService.ts, kanban/  # Founding-admin feature board: service + pure modules (atlas, dates, format, rank, status, tree, types), 95 tests.
 │   │   ├── orgService.ts          # Multi-org bootstrap (ensureOrganization with legacy fallback), members/invites CRUD, the PRIVATE BETA GATE. The in-flight dedupe promise is keyed BY USER ID (a Map), not module-global.
 │   │   ├── betaService.ts         # Beta waitlist: getMyBetaSignup, requestBetaAccess, fetchBetaSignups/setBetaStatus.
@@ -315,6 +395,7 @@ sortingapp/
 │       ├── org_shopify_connections.sql / org_description_settings.sql  # Per-org Shopify credentials (client-write-only token) + description_settings JSONB.
 │       ├── stage4_slim_fields.sql    # Stage 4 dual-write columns (product_images.captured_at + original_storage_path, products.description_edited). The app feature-detects these via the imageRowSync probe.
 │       ├── analytics_events.sql / crm.sql / support_messaging.sql / kanban_board.sql / vocab_tables.sql / vocab_models.sql  # First-party founder tools. Additive, idempotent, rollback included.
+│       ├── finance.sql               # NEW (Sept 2026), NOT YET RUN: the founder's books. finance_transactions (ledger; a row with a `recurrence` is a TEMPLATE expanded at read time, never stored), finance_plan_prices (plan → list price, seeded to the Landing tiers), finance_settings (founding_discount_pct = 30, founding_cutoff = 2026-12-31) — every policy on all three is `is_beta_admin()`, with column-level UPDATE grants that exclude `created_by`/`created_at` — plus `finance_summary(from, to)` SECURITY DEFINER (totals, the previous equal-length range, a zero-filled monthly series, by_category, by_workspace, customer + MRR stats; `analytics_events` optional via `to_regclass`, so a missing table yields `active_workspaces: null`, not 0). Raises 42501 for a non-founder, 22007 on an inverted range. Run AFTER multi_org_tenancy.sql + beta_signups.sql. Additive, idempotent, rollback at the bottom.
 │       ├── app_errors.sql            # NEW (Sept 2026), NOT YET RUN: app_errors table + RLS (anon+authed INSERT with identity checks, SELECT is_beta_admin(), no client UPDATE/DELETE) + a 20-rows-per-session-per-10-min BEFORE INSERT rate trigger + app_errors_summary(days) / app_errors_prune(keep_days). user_agent_class is a CLOSED VOCABULARY in the CHECK, so the "browser family, never a full UA" privacy promise is enforced by the database. Run AFTER multi_org_tenancy.sql + beta_signups.sql. Verified against a throwaway PG 17 cluster (12 scenarios). Additive, idempotent, rollback at the bottom.
 │       ├── security_invites_hardening.sql  # NEW (Sept 2026), NOT YET RUN: closes invitee → OWNER self-promotion. Column-level UPDATE grant on org_invites (accepted_at only), org_members_insert may never mint an owner from an invite, unique index on (org_id, lower(email)). Run AFTER multi_org_tenancy.sql and BEFORE security_verified_email.sql.
 │       ├── security_verified_email.sql    # NEW (Sept 2026), NOT YET RUN: auth_email_verified() added as an ADDITIONAL condition to all seven email-matching policy sites (the JWT email claim comes from the signup form — it is not proof of mailbox control). PRECONDITION: `select count(*) from auth.users where email_confirmed_at is null;` must be 0. Run after the optional tables it guards + migration above.
@@ -323,7 +404,7 @@ sortingapp/
 ├── scripts/                       # Node one-off maintenance scripts (`node scripts/<name>.mjs`). Not part of the build: cleanup-orphaned-storage, fetch-taxonomy, fetch-metaobject-gids, check-shopify-csv, update-presets.
 ├── public/                        # Static assets. sw.js = the Service Worker image cache (stale-while-revalidate, 7-day TTL, REVALIDATE_AFTER_MS = 1 day, MAX_ENTRIES = 3000 trimmed 50-per-fetch, strips both `t` and `_retry` cache-busters, answers PURGE_IMAGE_CACHE). Also beta.html (redirect to the main URL).
 ├── deploy/                        # OPTIONAL container packaging (Sept 2026): Dockerfile (node:24-alpine build+test → nginx:1.27-alpine serve), nginx.conf (SPA fallback, /healthz, cache headers), docker-compose.yml (:8088), README.md (self-hosted Supabase, BASE_PATH arg, per-environment CSP, why not Kubernetes). GitHub Pages is still production.
-├── docs/reviews/                  # The Sept 2026 engineering review: six audit reports + six implementation logs (01 architecture, 02 debugging, 03 performance, 04 UI system, 05 security, 06 devops). Read the `*-fixes.md` / `*-monitoring.md` logs for the reasoning behind anything in §15's Sept 2026 entries.
+├── docs/reviews/                  # The Sept 2026 engineering review: six audit reports + their implementation logs (01 architecture, 02 debugging, 03 performance, 04 UI system, 05 security, 06 devops), then the feature passes that followed — 07 full-page views, 08 messages view, 09 finance, and the three-agent mobile-first pass (10-mobile-shell, 10-mobile-pages, 10-mobile-workflow). Read the log for the reasoning behind anything in §15's Sept 2026 entries.
 ├── .github/workflows/             # deploy.yml (Pages, push to main) · ci.yml (PR/branch: test, build, dist verification, secret-leak grep, lint ratchet, migration hygiene, deno check) · uptime.yml (15-min probe → GitHub issue).
 ├── dist/                          # Build output. Do not edit.
 ├── .env / .env.example            # Local env vars (NOT committed) / template with the three VITE_ values.
@@ -350,7 +431,7 @@ This app has **no router**. It is a single-page application with no URL routing.
 ```ts
 export type ActiveView =
   | 'workflow' | 'library' | 'categories' | 'presets'
-  | 'vocabulary' | 'analytics' | 'crm' | 'board' | 'workspace';
+  | 'vocabulary' | 'analytics' | 'crm' | 'finance' | 'board' | 'workspace' | 'messages';
 ```
 
 `'workflow'` is the four steps. Every other value renders that tool inside the shared `<ToolView>` shell (title block, "Back to workflow", Escape, one spacing scale) in place of the workflow — **the workflow itself is never unmounted**: `<main className="app-main" hidden={activeView !== 'workflow'}>` parks it so uploads in flight, ImageGrouper's selection and Step 3's debounced saves all survive opening a tool. `.app-main[hidden] { display: none }` in App.css is load-bearing (`display: flex` would otherwise beat the UA `[hidden]` rule).
@@ -372,11 +453,54 @@ export type ActiveView =
 | Vocabulary | `activeView === 'vocabulary'` + founding owner/admin | `<ToolView>` → `<VocabDashboard />` | `React.lazy` |
 | Analytics (+ Errors sub-tab) | `activeView === 'analytics'` + founding owner/admin | `<ToolView tabs>` → `<AnalyticsPanel />` or `<ErrorsPanel />` | `React.lazy` (own chunks) |
 | CRM | `activeView === 'crm'` + founding owner/admin | `<ToolView>` → `<CrmPanel />` | `React.lazy` (own chunk) |
+| Finance | `activeView === 'finance'` + founding owner/admin | `<ToolView>` → `<FinanceView />` | `React.lazy` (own chunk) |
 | Board | `activeView === 'board'` + founding workspace | `<ToolView wide escapeToBack={false}>` → `<KanbanBoard />` | `React.lazy` |
-| Messages widget | any signed-in user (waitlist included) | `<SupportWidget />` floating button — visible in EVERY view | eager |
+| Messages / Inbox | `activeView === 'messages'` — **any signed-in user** | `<ToolView wide>` → `<MessagesView />`; the ToolView title is "Inbox" for a founder and "Messages" for everyone else | `React.lazy` (own chunk) |
+| Messages widget | any signed-in user (waitlist included) | `<SupportWidget />` floating button — visible in EVERY view, including the Messages page | eager |
+
+### Navigation by breakpoint (Sept 2026)
+
+The view list above is the same at every width; only the surface that *reaches* it
+changes. **`navTools` in `App.tsx` is the single declaration** of a tool's id, label,
+icon, tooltip and role gate — the desktop header maps over it (it replaced nine
+hand-written buttons), and `mobileTools` (the same list minus Messages, plus Workspace)
+feeds the rail, the tab bar and the sheet. Four hand-maintained copies of a role-gated
+list is how gates drift apart; add a tool to `navTools` and it appears everywhere.
+
+| Width | Header keeps | Tools live in |
+|---|---|---|
+| `> 1024px` | wordmark + subtitle, **all tools**, Messages, account menu | the header row — **unchanged** |
+| `641-1024px` | wordmark, Messages (badge), account menu | `<NavRail>` — a scroll-snapped second row on the same black bar, rendered INSIDE `<header>` |
+| `<= 640px` | wordmark, Messages (badge), account menu | `<MobileTabBar>` — fixed bottom tabs **Workflow / Library / Messages / More**, everything else behind More in a bottom sheet |
+
+- **CSS decides which nav shows, not `matchMedia`.** Both subtrees are in the DOM and the
+  inactive one is `display: none`, which also drops it from the accessibility tree — no
+  tool is announced twice, there is no flash of the wrong nav on first paint, and there is
+  no resize listener to keep in sync. One rule hides the desktop buttons:
+  `.app-header .nav-tool-btn:not(.nav-msg-btn) { display: none }`. `nav-msg-btn` is the
+  exemption handle on `MessagesNavButton` so the unread badge survives at every width.
+- **Rail and tab bar are two components for a stacking reason, not a styling one.**
+  `.app-header` is `position: sticky; z-index: 100`, i.e. a stacking context, so a
+  `position: fixed` child is trapped at that level. The rail belongs inside the header
+  (it is the header's second row, same black surface); the tab bar and its sheet must
+  render outside it or the More sheet paints under the support widget (z 5000) and the
+  toasts (z 9000).
+- **Workflow / Library / Messages are hard-coded tabs**; the sheet renders
+  `mobileTools` minus those (`TAB_IDS`), so nothing appears twice. The Messages tab hides
+  itself when `supportStore` reports the messaging tables absent, exactly like the header
+  button and the floating widget.
+- **`aria-current="page"` marks the active item on all four surfaces**, and **More reports
+  itself active** whenever the showing view lives behind it — the bar says where you are
+  instead of going blank on, say, CRM.
+- **The mobile surfaces navigate, they never toggle.** `navigateToView` only ever sets
+  `activeView`; tapping the tab you are on is inert. That is deliberately different from a
+  header button, which toggles back to the workflow (the sheet's trigger is unmounted by
+  the time the view opens, so there would be nothing to hand focus back to anyway).
 
 Things that bite if forgotten:
 
+- **The Messages header button is its own component** (`MessagesNavButton`, module scope in App.tsx), not an inline branch, because mounting `useSupportThreads` is what starts the Realtime channel and the poll. Putting that hook in App's body would query `support_threads` from the logged-out landing page and leave `available` false for up to 45 s after sign-in. It hides itself when messaging is unavailable (same rule as the widget) and carries the `.nav-badge` unread count — which sets its own literal `#ffffff` on `var(--danger)` in App.css, because the nav is the app's one inverted surface (§1). **The waitlist branch has no header at all** (`WaitlistGate` + `SupportWidget` only), so waitlisted users still reach messaging through the floating widget exactly as before.
+- **Finance is founding-admin only**, gated exactly like Analytics/CRM/Vocabulary (`currentOrg?.slug === 'founding'` + `orgRole` owner/admin). It is safe to expose before `finance.sql` runs: every read reports `'unavailable'` and the view shows the setup step.
 - **Errors is a sub-tab of Analytics**, not a view of its own and no longer a tab inside OrgPanel. The "Founder tools" tab was removed from `OrgPanel`, which now owns only Members / Settings / Beta program / Users. `AnalyticsPanel`, `CrmPanel` and `ErrorsPanel` therefore `import './OrgPanel.css'` themselves — they use its `org-*` / `ft-*` / `an-*` classes and no longer ride along in OrgPanel's chunk.
 - **`setShowLibrary` is the one surviving flag-shaped setter** (`viewSetter('library')`), because `handleOpenBatch` and the close callback still speak in booleans. The other five tools open from the header via `toggleView(view)` and close through ToolView's Back.
 - **Clicking the header button of the view you are already in returns to the workflow.** The active button carries `aria-current="page"` + `.nav-tool-btn--on` — a solid white chip, because the nav is the app's one inverted surface and the page's black fill cannot read as "active" there.
@@ -467,6 +591,31 @@ The `view` string the analytics pageview and `setErrorContext` record (`landing`
 | `is_default` | BOOL | Whether this preset auto-applies when category is assigned |
 | `is_active` | BOOL | Soft delete |
 
+#### Finance (`supabase/migrations/finance.sql` — Founding admins only, every policy `is_beta_admin()`)
+
+| Table | Column | Type | Notes |
+|---|---|---|---|
+| `finance_transactions` | `id` | UUID | PK. One row per real-world money movement. |
+| | `occurred_on` | DATE | Default `current_date`. For a recurring row this is the series **ANCHOR**, not just its first date. |
+| | `kind` | TEXT | `income` \| `expense`. **Carries the sign** — `amount_cents` is always positive. |
+| | `category` | TEXT | ≤ 60 chars, free text. The form suggests; it does not constrain. |
+| | `amount_cents` | BIGINT | `> 0` and `<= 1e11`. The ceiling stops a fat-fingered amount silently rescaling every chart. |
+| | `currency` | TEXT(3) | Default `USD`. Stored per row; the UI is USD-only today. |
+| | `description` | TEXT | ≤ 500 chars. |
+| | `org_id` | UUID | FK → organizations, **ON DELETE SET NULL** — deleting a workspace must not erase what it paid. |
+| | `recurrence` | TEXT | `monthly` \| `yearly` \| null. A recurring row is a **TEMPLATE**; repeats are expanded at read time, never stored (§9). |
+| | `recurrence_ends_on` | DATE | CHECKed `>= occurred_on`, and CHECKed to require a `recurrence`. |
+| | `created_by` | UUID | Default `auth.uid()`. **Excluded from the UPDATE grant** — it is the audit trail of who typed a number into the books. |
+| | `created_at` / `updated_at` | TIMESTAMPTZ | `updated_at` via a touch trigger; `created_at` also outside the UPDATE grant. |
+| `finance_plan_prices` | `plan` | TEXT | PK. Matches the value in `organizations.plan`, so projected MRR is a JOIN, not a constant in the client. |
+| | `monthly_cents` | BIGINT | List price. **Seeded to the Landing tiers**: free 0, beta 0, starter 5000, basic 9000, growth 15000, pro 25000, business 35000, scale 70000, enterprise 120000 — all `on conflict do nothing`, so a founder's edit survives a re-run. |
+| | `note` / `updated_at` | TEXT / TIMESTAMPTZ | |
+| `finance_settings` | `key` | TEXT | PK. Seeded `founding_discount_pct = 30` and `founding_cutoff = 2026-12-31`. |
+| | `value` | TEXT | Parsed **defensively** by the RPC — a founder typing "thirty" degrades to "no discount", it never breaks the books. |
+| | `note` / `updated_at` | TEXT / TIMESTAMPTZ | |
+
+A third table rather than a magic row in `finance_plan_prices` is deliberate: a discount is not a plan, and a `founding_discount_pct` row sitting in the price table would be summed into MRR by any future query that forgot to exclude it. A separate key/value table cannot be added up by accident.
+
 ### TypeScript Types
 
 #### `ClothingItem` (defined in `src/App.tsx`, exported)
@@ -508,6 +657,8 @@ Most state lives in `App.tsx`. **Exception (July 2026): the four item arrays** (
 | `categoryPresets` | `CategoryPreset[]` | App.tsx | `getCategoryPresets()` on user login + when `showCategoryPresets` closes | Step 2 right sidebar preset picker | Loaded once; refreshed after `CategoryPresetsManager` modal closes so new presets appear immediately. |
 | ~~`processedItems` (local copy)~~ | — | — | — | — | **RETIRED (July 2026, Stage 2b).** PDG reads/writes `workflowStore` directly via `useStoreItemArray('processedItems')` — same list App uses. No local copy, no `isResettingRef`, no prop-sync heuristics. `onProcessed` survives only as an auto-save trigger. |
 
+**Support threads live in a second dependency-free store (Sept 2026):** `src/lib/supportStore.ts` — same `useSyncExternalStore` shape as `workflowStore`. It owns the thread list and the availability flag for **all three** messaging front ends at once (the floating `SupportWidget`, the full-page `MessagesView`, and the header `MessagesNavButton` badge), and it owns the subscription: the first `useSupportThreads` subscriber starts the fetch + the Realtime channel + the 45 s poll, the last unsubscriber stops them. Mount one front end or all three — there is still exactly ONE channel and ONE timer, so no two lists can disagree. **Messages are deliberately not in the store** (the widget and the page may be reading different threads); a `revision` counter ticks once per *completed* refetch and each consumer reloads its own open conversation on `[activeId, revision]`, which covers opening a thread, a Realtime reply, the poll and a send reconciling in one dependency. `handleSignOut` calls `supportStore.reset()` so the next person on the machine never sees a flash of the previous account's conversations.
+
 **Render-cost invariants added Sept 2026 (performance pass) — breaking one is silent:**
 - `ImageGrouper`, `CategoryZones`, `ProductDescriptionGenerator`, `GoogleSheetExporter`, `Library` and `SupportWidget` are all wrapped in `React.memo`. **Props passed to them must stay referentially stable**, or the memo is undone with no test failure to catch it. A new inline arrow or inline array literal in one of those JSX blocks is the whole failure mode.
 - Handler props therefore go through App's `useEventCallback` helper — `useCallback((...a) => ref.current(...a), [])` with the ref assigned in a layout effect. It gives a permanently stable identity while ALWAYS invoking the newest closure, which is deliberately not `useCallback([deps])`: given this codebase's stale-closure history (§14 #14), a wrong dep list freezes state silently, whereas this construction cannot. Do not "fix" it by reading `ref.current` during render — `react-hooks/refs` rejects that, which is how the current shape was arrived at.
@@ -526,7 +677,7 @@ Most state lives in `App.tsx`. **Exception (July 2026): the four item arrays** (
 - **Auth:** Email/password via `supabase.auth.signInWithPassword` / `signUp`.
 - **Database:** Postgres via PostgREST. Tables: `workflow_batches`, `products`, `product_images`, `categories`, `category_presets`.
 - **Storage:** Bucket `product-images`. Path pattern: `{userId}/{productId}/{timestamp}-{random}.{ext}`. Public bucket.
-- **Realtime:** ONE subscription, in `supportService.subscribeToSupport` — `postgres_changes` for `INSERT` on `support_messages`, and `INSERT` + `UPDATE` on `support_threads`. **Never `event: '*'`**: with `replica identity full` and no RLS on DELETE payloads, a founder deleting a thread would ship its whole OLD row (`user_email`, `subject`, `last_message_preview`) to every subscriber. Deletions are picked up by the widget's 45 s poll. The old `workspace-presence` channel is gone with `useUserPresence`/`LiveWorkspaceSelector` (deleted Sept 2026).
+- **Realtime:** ONE subscription, in `supportService.subscribeToSupport` — `postgres_changes` for `INSERT` on `support_messages`, and `INSERT` + `UPDATE` on `support_threads`. **Never `event: '*'`**: with `replica identity full` and no RLS on DELETE payloads, a founder deleting a thread would ship its whole OLD row (`user_email`, `subject`, `last_message_preview`) to every subscriber. Deletions are picked up by the 45 s poll. The old `workspace-presence` channel is gone with `useUserPresence`/`LiveWorkspaceSelector` (deleted Sept 2026). **That subscription is OWNED BY `src/lib/supportStore.ts` and reference-counted**: however many messaging front ends are mounted (the floating widget, the Messages page, the header badge), there is exactly ONE channel and ONE 45 s poll timer, started by the first subscriber and stopped by the last. Do not call `subscribeToSupport` — or start a poll — from a component (§18 #27).
 - **RLS (tenancy pending):** `supabase/migrations/multi_org_tenancy.sql` exists but may not have been run yet. Once run, it REPLACES everything below with org-membership policies (`org_id IN (SELECT user_org_ids())` on all five data tables) — users see and edit only their own workspace's rows. The client auto-detects which state the DB is in (`orgService.ensureOrganization` returns `legacy` mode when the org tables don't exist) so the same build works before and after. The description below is the PRE-tenancy state:
 - **RLS (legacy/current state):** `shared_workspace_rls.sql` opened SELECT to all authenticated users. `collaborative_edit_policies.sql` (June 2026) additionally opens INSERT and UPDATE on `workflow_batches`, `products`, and `product_images` to any authenticated user — this fixed the duplicate-batch fork that happened when a non-owner's auto-save UPDATE was RLS-blocked (0 rows updated → INSERT new batch). **DELETE stays owner-scoped** (`auth.uid() = user_id`); the app works around this by "claiming ownership" (UPDATE `user_id` to the current user, chunked) before deleting another user's batch/listing (commit `308ce2a`). Client code is forward-compatible: it works owner-only if the collab migration hasn't been run. The app does NOT add `.eq('user_id', ...)` filters on reads — it relies entirely on RLS.
 - **Edge Functions:** `shopify-titles` (invoked from `GoogleSheetExporter.tsx`, best-effort with silent fallback if not deployed) and `generate-prose` (invoked from `proseService.ts`). Both are hardened as of Sept 2026 — see "Edge Function hardening" below.
@@ -591,8 +742,12 @@ GitHub Pages cannot send response headers, so a `<meta http-equiv="Content-Secur
 - **THERE IS NO THIRD-PARTY SERVICE BEHIND ANY OF THESE** (user rule: "100% self reliant, not dependent on external APIs"). An earlier same-day pass integrated Twenty CRM / Plausible / Chatwoot (hosted, then self-hosted); it was REPLACED OUTRIGHT by native features and nothing of it ships. Do not reintroduce vendor SDKs, tracking scripts, or external API calls for these capabilities — extend the tables and React instead.
 - **Analytics** — `analytics_events` rows written by the browser via `track()` (anon on the landing page too). Privacy: random per-tab session id (sessionStorage), referrer HOST only, coarse device class, own user/org id when signed in; no cookies/IP/UA; Do Not Track honored; localhost skipped. `pageview` fires from an App.tsx effect on every top-level view change (landing/auth/waitlist/app — the effect sits above the early returns so hook order is stable). Dashboard = `analytics_summary(days)` RPC (Founding admins) → `AnalyticsPanel`. Chart is plain HTML (no chart lib): ≤24 px bars, 4 px rounded caps, hairline grid, sparse x labels, per-bar tooltip; single series so no legend; every value also in a table.
 - **CRM** — `crm_contacts` / `crm_notes`, Founding admins only. `crm_sync_contacts()` runs on panel open, the Sync button, and after beta approve/deny; it inserts from beta_signups + auth.users/org_members and NEVER overwrites hand edits (name/company fill blanks only; stage only moves forward from lead/approved; tags/follow-ups/notes untouched; founding-org members skipped). Client may UPDATE only name/company/stage/tags/next_follow_up (column grant) — email/source/user_id/org_id are sync-owned.
-- **Messaging** — `support_threads` / `support_messages`. One thread = one user; Founding admins see all. `sender_role` is enforced by RLS (a devtools user cannot post as 'founder'). A SECURITY DEFINER trigger maintains last_message_*, reopens closed threads on a new message, and stamps the sender's own read marker. `SupportWidget` (mounted for every signed-in user, including the waitlist gate) subscribes via Realtime and polls every 45 s; unread = last message from the other side newer than my read stamp (`isUnread`). Known soft spot: the column grant lets a user write `founder_last_read_at` on their own thread — only affects the founders' unread badge for that thread.
-- **UI**: Workspace panel → "Founder tools" tab (gated `isBetaAdmin`) with Analytics / CRM sub-tabs; messaging is the floating button. All three hide themselves (`'unavailable'`) until their migration has run, so code ships first.
+- **Messaging** — `support_threads` / `support_messages`. One thread = one user; Founding admins see all. `sender_role` is enforced by RLS (a devtools user cannot post as 'founder'). A SECURITY DEFINER trigger maintains last_message_*, reopens closed threads on a new message, and stamps the sender's own read marker. Since Sept 2026 messaging has **two front ends onto one data source**: the floating `SupportWidget` (mounted for every signed-in user, including the waitlist gate) and the full-page `MessagesView` (`activeView === 'messages'`, reached from a header **Messages/Inbox** button with an unread badge). Both — and the badge — read `lib/supportStore`, which owns the single Realtime subscription and the single 45 s poll and reconciles optimistic writes by mirroring the `support_after_message` trigger. Unread = last message from the other side newer than my read stamp (`isUnread`). Known soft spot: the column grant lets a user write `founder_last_read_at` on their own thread — only affects the founders' unread badge for that thread.
+- **Finance** — `finance_transactions` / `finance_plan_prices` / `finance_settings` + the `finance_summary(p_from, p_to)` RPC (`SECURITY DEFINER`, 42501 for a non-founder, 22007 on an inverted range), the ONLY read `FinanceView` makes. Everything is our own Postgres: **no payment processor, no accounting service, no bank feed, no external API.** Two rules are implemented twice — in `finance.sql` and in `financeService.ts` — and asserted against the same worked example on both sides, so the chart, the ledger CSV, the P&L CSV and the printed statement can never disagree:
+  - **RECURRENCE.** A row with a `recurrence` is a **template expanded at read time**, never a stored repeat, so changing a $20/mo hosting bill to $25 fixes the history and the forecast in one edit and there is no monthly cron to forget. Steps are **ANCHORED** to `occurred_on` (`occurred_on + n × interval`, matching `generate_series`): Jan 31 monthly → Feb 28, **Mar 31**, Apr 30 — it does not drift down to the 28th for good. Consequence: `totals.transaction_count` counts **OCCURRENCES, not ledger rows**, and totals / `by_category` / `by_workspace` all come from the same expansion so every number on the page adds up. The Transactions tab is the one place that shows templates (it is what you edit) and says so in its footer.
+  - **FOUNDING DISCOUNT.** A workspace is a founding shop when `plan = 'beta'` **OR** `created_at <= finance_settings.founding_cutoff`; founding shops get `founding_discount_pct` (30) off list, for life. The cutoff is what makes the promise survive the upgrade it exists to reward — moving a beta workspace onto a paid plan changes `plan` but never `created_at`, so a `plan = 'beta'` test alone would silently revoke it. No flag column was added to `organizations`. The summary returns **both** `projected_mrr_list_cents` (everyone at list) and `projected_mrr_cents` (founding shops discounted), because the gap between them is the cost of the founding promise. Both read $0 today — `organizations.plan` only ever holds `free` or `beta` — which is correct, not a bug, and the Customers tab says so in words.
+  - `analytics_events` is **optional**: it is read through `to_regclass` + `execute format(…)`, so a missing table yields `customers.active_workspaces: null` (never 0) and the rest of the summary still works.
+- **UI**: Analytics (with the Errors sub-tab), CRM and Finance are top-level full-page views gated on the founding workspace (§6); messaging is the floating button **plus** the Messages page every signed-in user gets. All of them hide themselves (`'unavailable'`) until their migration has run, so code ships first.
 
 ---
 
@@ -611,6 +766,19 @@ GitHub Pages cannot send response headers, so a `<meta http-equiv="Content-Secur
 8. `autoSaveWorkflow` is triggered (2s debounce).
 9. **Side effect:** `libraryRefreshTrigger` incremented — Library reloads.
 
+**On a phone (Sept 2026).** The drop zone becomes a 260px tap target and the drag copy
+is replaced by two buttons: **Take photos** (`<input type="file" accept="image/*"
+capture="environment" multiple>`) and **Choose from library** (the same input without
+`capture`). A reseller's photos live on their phone, so this is the most natural mobile
+action in the product. Both inputs feed the **exact same `processFiles` pipeline** —
+compression, EXIF, chunked TUS upload, DB writes are untouched. Two separate inputs
+rather than one with a toggled attribute, deliberately: `capture` is only a *hint*, and
+some Android builds stop offering the gallery entirely on an input that carries it. Both
+buttons `stopPropagation()` on click because they sit inside react-dropzone's root, whose
+own `onClick` would otherwise open the generic picker behind the camera sheet. Folder and
+ZIP import stay in App.tsx's Step 1 header (restacked full-width at 44px), and the phone
+copy points at them.
+
 ### Step 2: Group & Categorize
 **Files:** `ImageGrouper.tsx`, `CategoryZones.tsx`, `App.tsx:handleImagesGrouped`, `App.tsx:handleImagesSorted`
 
@@ -628,6 +796,33 @@ GitHub Pages cannot send response headers, so a `<meta http-equiv="Content-Secur
 - `applyPreset()` helper (inside `CategoryZones`) is called: looks up matching preset from the already-loaded `presets` state (no DB fetch), then calls `applyPresetDirectly()` (sync) to apply default shipping/measurement/SEO fields to items. The old `applyPresetToProductGroup()` (async, fetched DB each call) is no longer used in this path.
 - `onCategorized` fires → App.tsx updates `sortedImages`, `processedItems`.
 
+**On a phone (Sept 2026) — select, then tap. Dragging is desktop-only.**
+- **Drag-to-categorize and drag-to-reorder do not exist on touch** (HTML5 DnD never fires
+  there), so the phone path is the second, already-supported one: select photos, then tap
+  a category. The "drag photos here to make them individual items" strip is hidden as a
+  dead target, and hover-reveal controls are pinned visible since nothing hovers.
+- `.step2-split` becomes `display: block` and `.step2-right-panel` becomes a **sticky
+  bottom dock** (`bottom: var(--tabbar-h, 0px)`), with CategoryZones' vertical list turned
+  into a horizontally scrolling rail of 44px category chips and the Group/Ungroup/Delete
+  actions as a 2-up grid. **Sticky, not fixed**: all four step sections are mounted at once
+  (§6), so two fixed bottom bars — this one and Step 3's — would stack permanently and float
+  over Steps 1 and 4. The dock is capped at 26vh idle and 38vh with a selection, driven by a
+  `has-selection` class read through `:not(:has(...))` so an engine without `:has()` drops
+  the selector and leaves it expanded (the safe failure).
+- **The sidebar becomes a top toolbar with a "Sort, filter & group tools" disclosure**
+  (`toolsOpen`). Stats stay visible as a sideways-scrolling rail; everything else folds
+  away. It is deliberately **not** sticky — the app's own black nav is sticky at `top: 0`,
+  so a second sticky bar there slides underneath it and reads as having vanished.
+- **The grid clamps to 3 columns** (group cards to 2) via `responsiveGrid.ts`, with the
+  slider still live over the phone range; the stored preference is not mutated.
+- `touch-action: pan-y pinch-zoom` on the grids — `pinch-zoom` is kept on purpose (dropping
+  it breaks WCAG 1.4.4 on a screen of small garment photos), and declaring anything but
+  `auto` also kills the 300ms double-tap delay, which is what makes tap-to-select feel
+  instant. Cards get `user-select: none` + `-webkit-touch-callout: none` so a long press
+  during a multi-select does not raise iOS's "Save Image..." sheet.
+- **Rubber-band selection is left mouse-only** and needs no guard: a tap fires one
+  `mousedown`/`mouseup` at the same point and never meets the drag threshold.
+
 ### Step 3: Voice Descriptions & AI Generation
 **Files:** `ProductDescriptionGenerator.tsx` (~3320 lines), `textAIService.ts`, `ComprehensiveProductForm.tsx`
 
@@ -642,6 +837,32 @@ GitHub Pages cannot send response headers, so a `<meta http-equiv="Content-Secur
 - On every change, `onProcessed(processedItems)` fires back to App.tsx (auto-save triggers).
 - **DB side effect:** `syncGroupFieldsToDatabase()` saves changed fields to the `products` table immediately (not just on "Save Batch"). It writes the group **LEADER** row (`id === productGroup`) through the checked `updateProduct`, then mirrors the same patch onto the remaining members in ONE `.in('id', …)` request — 2 requests per group instead of 1, deliberately: every member row ends up holding the group's fields, so no future re-grouping can strand the text on a row the restore path never reads. Legacy fresh-UUID groups with no leader fall back to member[0], as before.
 - **Two independent save timers** (`groupSaveTimerRef` 500 ms store-driven, `directSaveTimerRef` 800 ms direct-write), plus a `pagehide`/`beforeunload` drain that flushes the pending group via `flushProductPatchKeepalive` — a `fetch(..., {keepalive:true})` PATCH straight at PostgREST, because `sendBeacon` cannot send PATCH and PostgREST has no POST-shaped update. The direct path exists because it carries the just-typed value even if the store has not propagated; the cost is that one voice-table edit produces two saves of the same group (and with the leader mirror, up to four requests per edit burst). Known and flagged, not yet collapsed.
+
+**On a phone (Sept 2026) — what was adapted and what was disabled.**
+- **Prev / counter / Next / group slider / Download CSV move into a sticky bottom bar**
+  (`.preview-nav-dock`, `bottom: var(--tabbar-h, 0px)`). Above 640px that wrapper is
+  `display: contents`, so it generates no box and desktop layout is untouched. At phone
+  width `.product-preview` also becomes `display: contents` and the dock / image / form
+  become three `order`ed siblings — that is what lets the dock be sticky across the WHOLE
+  editor rather than being trapped in the preview card, where Prev/Next would disappear the
+  moment you started editing fields. DOM order, and therefore tab order, is unchanged.
+- **The crop tool was ADAPTED, not disabled.** It already ran on Pointer Events with
+  `setPointerCapture`; the only thing missing was a gesture contract. `touch-action: none`
+  on `.crop-fs-stage` (correct there and nowhere else — it *is* the gesture surface, it
+  lives in a full-screen modal, and it has nothing to scroll), plus a 44px invisible hit
+  area on each handle via `::after` while the painted handle stays small, so the rect still
+  looks precise. Pinch is not supported: single-finger drag and handle-drag only.
+- **The magnifier lens was DISABLED on mouse-less devices.** It is driven purely by
+  `mousemove` over the preview, so it can never track a finger. Gated on
+  `@media (hover: none) and (pointer: coarse)` — not on width, so a touchscreen laptop keeps
+  it — and its settings control is removed too, rather than left as a toggle that does
+  nothing.
+- Start/Stop Recording becomes a full-width 56px primary button (it is *the* phone action in
+  this step); fields stack to one column; measurements go 2-up; the voice command table
+  becomes a 2-up card list, which also **fixed a real horizontal-page-scroll bug** — its
+  grid template is set inline as `repeat(N, minmax(90px, 1fr))`, so a 5-column row demanded
+  450px on a 390px screen (`!important` is the only way to beat an inline style).
+- **Form section sub-headers are deliberately NOT sticky** — see §14.
 
 ### Step 4: Save & Export
 **Files:** `App.tsx:handleSaveBatch`, `productService.ts:saveBatchToDatabase`, `GoogleSheetExporter.tsx`
@@ -661,6 +882,12 @@ GitHub Pages cannot send response headers, so a `<meta http-equiv="Content-Secur
 - **Title/handle dedup, three sources:** within the export itself (sequential suffixes " 2", " 3"), against the app's own `products` table (paginated), and against the live Shopify catalog via the `shopify-titles` Edge Function (best-effort; silently skipped if not deployed).
 - Strips unresolved `{token}` placeholders from all fields.
 - Outputs Shopify product import CSV format (63 columns).
+- **On a phone (Sept 2026):** the wide preview keeps its own contained scroll and gains a
+  **frozen first column** (Handle) at `<= 1024px`, with the header cell at `z-index: 3` so it
+  outranks both the inline sticky header row (z 2) and the sticky body cells (z 1);
+  `overscroll-behavior-x: contain` stops a sideways pan chaining into the page. The
+  price-gate banner moves up to `--fs-base` — it is the one thing here a user must be able
+  to read and act on.
 
 ### Library
 **Files:** `Library.tsx` (~2800 lines), `libraryData.ts`, `libraryService.ts`, `workflowBatchService.ts`
@@ -903,6 +1130,44 @@ Every diagnostic goes through `log.*` / `dbg()` from `lib/debugLogger.ts`. `grep
 
 25. **`fetchStorageUsage` issues one sequential Storage `list()` per product folder** — ~2,500 round trips for the largest existing user (perf finding F9, outside the review's scope). It is why the storage meter can take a long time on a large bucket.
 
+### Open after the Sept 2026 mobile-first pass
+
+26. **No signed-in mobile smoke test has been run.** None of the three agents could sign in,
+    so the header, rail, tab bar, More sheet, `ToolView`, the support panel, all thirteen tool
+    views and all four workflow steps were verified from the CSS and the JSX, not from a
+    rendered signed-in app. The shell was photographed by injecting the exact markup `App`
+    renders into the live landing page (which loads the same CSS bundle) at 360/390/820/1280 —
+    that proves the cascade, not the React wiring. **Owed:** Workflow -> Library -> More -> CRM
+    -> Back on a real phone, plus Steps 1-4 end to end. Everything the logs list as unverified
+    is single-number CSS tuning, not structure — the specific list is in
+    `10-mobile-pages.md` §5 and `10-mobile-workflow.md` §10.
+
+27. **No real-iOS pass.** Chrome's device emulator font-boosts some text even with
+    `text-size-adjust: 100%` (a DevTools quirk; real iOS does not), so the screenshots run
+    slightly large — a conservative bias for overflow checks, but it means the 16px input rule
+    was confirmed from the declared CSS rather than the computed value. `--fs-md` was confirmed
+    to resolve to exactly 16px. Also unverified on a real device: `capture="environment"`
+    behaviour on iOS Safari and Chrome Android (including multi-select from the camera roll),
+    crop-on-touch end to end, `:has()` on the founder's actual browser, and whether the Step-2
+    56vh grid scroller plus the 26-38vh category dock still add up on a short phone (iPhone SE).
+
+28. **The preset editor's ten sections start OPEN on phones, not collapsed.** They are real
+    `<details open>` elements (inert on desktop — the summary is `pointer-events: none` above
+    640px, so desktop behaviour is byte-for-byte what it was). Shipping them collapsed at one
+    breakpoint only would need either a `matchMedia`-driven `open` prop — synchronous setState
+    in an effect, which react-hooks v7 forbids — or overriding the UA's closed-`<details>`
+    behaviour from CSS, which is not spec-guaranteed and breaks differently per engine.
+    Collapsible-but-open is the portable half of the win. Deliberate partial.
+
+29. **Step 3's form section sub-headers are deliberately NOT `position: sticky`.** A sticky
+    sub-header at `top: 0` slides under the app's own sticky black nav (z-index 100), whose
+    height is owned by another surface and varies with header wrapping, so it would read as
+    simply disappearing — and any hard-coded `top` offset is a guess that breaks when the nav
+    changes. `.form-section-title` is a full-bleed tinted strip with a bottom rule instead. The
+    reason is repeated in a comment at the rule. Revisit if an `--app-header-h` token ever
+    lands (the Step-2 grid's own 56vh inner scroller, `10-mobile-workflow.md` §8.2, is the
+    other thing waiting on that token).
+
 ## 15. What's Done
 
 - ✅ Email/password auth via Supabase
@@ -1067,9 +1332,9 @@ Every diagnostic goes through `log.*` / `dbg()` from `lib/debugLogger.ts`. `grep
 
 - ✅ **Founder tools built in — first-party analytics, CRM, messaging** (Sept 2026) — three additive migrations (`analytics_events.sql`, `crm.sql`, `support_messaging.sql`), three services (`analytics.ts`, `crmService.ts`, `supportService.ts`, all with pure tested helpers and an `'unavailable'` pre-migration path), three components (`AnalyticsPanel`, `CrmPanel` under the Workspace panel's Founder tools tab; `SupportWidget` floating for every signed-in user, inbox mode for Founding admins). App wiring: `trackPageview` effect above the early returns, `setAnalyticsContext` on workspace resolve / `clearAnalyticsContext` on sign-out, `track()` at Beta Signup / Account Created / Batch Created / CSV Exported, `SupportWidget` mounted in both the main render and the waitlist branch, beta approve/deny → `syncCrmContacts()`. No env vars, no Edge Function, no dependency. Replaced the same-day Twenty/Plausible/Chatwoot integration entirely (user rule: 100% self-reliant). 16 new Vitest tests. **SQL verified against a throwaway local Postgres 14** with a stubbed `auth` schema + tenancy tables: all three migrations apply and re-apply idempotently; 21 smoke checks green — anon/authenticated identity pins on analytics inserts, non-admin summary → 42501, correct 7-day totals/series; CRM sync counts + stage rules + hand-edit preservation + forged-note/email-edit rejection; messaging trigger stamps, sender-role and thread-identity enforcement, cross-user isolation, reopen-on-reply, both tables in the realtime publication
 
-### Sept 2026 — engineering review (six passes, `docs/reviews/`)
+### Sept 2026 — engineering review and the passes that followed (`docs/reviews/`)
 
-Six audits were run against the tree and each was then implemented as its own pass, with the implementation logs kept beside the reports. Nothing was committed by the passes themselves; the numbers below are the measured end state of the working tree (**505 tests / 35 files green · `npm run build` clean · 254 lint problems, down from 311**).
+Six audits were run against the tree and each was then implemented as its own pass, with the implementation logs kept beside the reports; three feature passes (full-page tools, the Messages view, Finance) followed in the same numbering. Nothing was committed by the passes themselves; the numbers below are the measured end state of the working tree (**579 tests / 40 files green · `npm run build` clean · 254 lint problems, down from 311**). The per-bullet counts are the state at the END of that bullet's pass, which is why they climb: 505 → 513 → 528 → 570 → 579.
 
 - ✅ **Architecture review + refactors — 20 dead files deleted, five new seams, 5,819 lines removed** (Sept 2026, `01-architecture-refactors.md`) — net **3,524 insertions / 7,308 deletions** across 56 files, no dependency added, no `sortbot_*` key renamed. (1) **`lib/productRow.ts`** replaced the two byte-identical DB-row→`ClothingItem` builders and the two 45-field restore merges; the two restore paths differ in **seven** ways, not the one the report claimed, and all seven are now explicit `MergeProductRowOptions` rather than an accident — `imageStrategy` in particular MUST stay divergent (`'db-group-wins'` on startup, `'own-image-wins'` in `handleOpenBatch`, because the row is matched at group level and preferring it there made every group member show the same photo: commit `3a70b52`). (2) **`lib/storageUrls.ts`** absorbed all 23 inline `getPublicUrl` expressions across 10 files, so the private-bucket migration is now one function body; `resolveImageUrl` from the report was dropped because it had no consumer and adopting it would have changed a priority order. (3) **`lib/chunk.ts`** (`ID_CHUNK`, `chunked`) replaced 18 hand-rolled loops spelled six different ways, with the concurrency-bounding loops passing an explicit size so the two *reasons* to chunk stay distinguishable. (4) **`lib/presetResolver.ts`** unified the two preset matchers, keeping CategoryZones' 4th `<name>_default` step opt-in. (5) **`SlimItem` deleted** in favour of `PersistedWorkflowItem` + the named `asClothingItems()` widening, which removed real casts from `Library.tsx` and `libraryData.ts`. Also: `fetchWorkflowBatches` paginated and projected (it silently stopped at 1,000 batches), `removeItemsFromWorkflowBatch` made compare-and-set, Library's private 40-line `LazyImg` replaced by the shared retrying one (with `Library.css` retargeted from `.img-skeleton` to `.lazy-skeleton` so it stays visually identical), 76 `console.log`/`debug`/`table` sites routed through the gated logger, and the five deferred wirings from the other passes applied (sign-out cache purge, error reporter, the three `sw.js` cache fixes). Deleted: all six `// UNUSED` components + CSS, `hooks/useUserPresence.ts`, `services/api.ts`, `huggingfaceService.ts`, `brandMatcher.ts`, `constructionDatabase.ts`, `fitConditionDatabase.ts`, `exportLibraryService.ts`, root `huggingface-proxy.cjs`, and `COLOR_RGB_MAP` — **but `hexToRgb()` was KEPT**, because it is the `#MULTI`/`#RAINBOW` filter that keeps pattern names out of `COLOR_WORDS_LIST`.
 - ✅ **Latent-defect pass — 19 confirmed bugs fixed, 40 tests, plus the Supabase test mock** (Sept 2026, `02-debugging-fixes.md`) — the ones that were destroying data: **`updateProduct` treated "0 rows updated" as success** (RLS-blocked or missing row = silent data loss); it now chains `.select('id')` and recovers by upserting **without `batch_id`**, so a recovered row starts unassigned rather than stealing a batch. **`syncGroupFieldsToDatabase` wrote a key the restore path never reads** — it now writes the group LEADER and mirrors the patch onto members in one `.in()`, so no future re-grouping can strand the text. **`registerItemsInDB`'s wipe destroyed group image rows** → `mergeProductImageRows` (§11). **`deleteWorkflowBatch` deleted children before confirming the parent** → new order (read + reference-count → claim → confirmed batch-row delete → `product_images` → `products` → storage), with `safePaths` still computed while the rows exist (§18 #15) and an incomplete lookup now leaving storage untouched rather than guessing. **`batch_id` removed from the two Step-2 `products` upserts** (the theft vector; `user_id` deliberately kept because they must still be able to INSERT). **The ±24 h orphan query** gained `.is('batch_id', null)`, a `user_id` filter and a limit. **`tusUpload`'s `async` Promise executor** swallowed a throw and hung forever → inner IIFE + a 5-minute caller watchdog that falls through to the plain PUT. **Page-teardown saves** now use a `keepalive` PATCH (`sendBeacon` cannot PATCH). **`duplicateBatch` copied no items**, so a duplicate opened empty. **`orgService`'s in-flight dedupe was module-global**, so two users signing in back-to-back shared one resolution → keyed by user id. **`price: 0` was written for "no price"** → `null`, so the restore merge falls through instead of pinning a fake $0. Plus: EXIF auto-save moved out of a state updater, a module-level startup-restore lock (StrictMode), the pageview effect gated on org resolution, the compressed-paths cleanup made functional (TUS resume now actually works), and `buildProductImageRow` used at upload time. **New:** `src/lib/testing/supabaseMock.ts`, a chainable recorder that makes query ORDER and CHUNK SIZE assertable.
@@ -1078,6 +1343,75 @@ Six audits were run against the tree and each was then implemented as its own pa
 - ✅ **UI primitive system in `src/components/ui/` — built and tested, NOT yet adopted** (Sept 2026, `04-ui-system.md`) — 13 primitives (Button/LinkButton, IconButton, Chip/ToggleChip/RemovableChip, Badge/CountBadge, Tabs, Dialog, ConfirmAction, Field + three wrappers, EmptyState, Spinner/Skeleton, Toast/ToastViewport, StatTile/StatGrid) with **76 tests** and zero lint findings; nothing outside that folder was touched. It exists because the app had grown **four conflicting definitions of `.button`** with different colours for the same class name, nine hand-rolled modal overlays with four z-indexes, six copy-pasted confirm pairs, and a tab row with no `role="tablist"` and no arrow keys — and because the accessibility work in those copies had been done zero times. Load-bearing decisions: every colour/size resolves through `index.css` tokens (**no hex literal except one documented scrim in `Dialog.css`**, which is what keeps the palette swappable in a ~45-line `:root` edit); state a screen reader must know lives in an ARIA attribute **and the CSS selects off that attribute**, so the visual and the announced state cannot drift; `IconButton`'s accessible `label` is required at the TYPE level; `Dialog` is portal-free (it is `position: fixed`, so it already escapes every ancestor), stacks Escape so a nested confirm does not close its parent, and reference-counts the scroll lock; `ConfirmAction` is the `confirm()` replacement (§18 #12) and maps 1:1 onto the existing `confirmKey` pattern; `Toast` is state-free so App keeps owning the queue policy; `index.ts` exports components and types ONLY, or `react-refresh` breaks Fast Refresh for every screen importing the barrel. **Every interactive primitive sets an explicit `min-height` in rem** because at a 9 px root, rem padding alone yields unhittable controls. Adoption is an 18-step plan in the log, ordered by payoff ÷ risk, with the rule "delete the replaced CSS in the same commit" — and the standing warning that the nav (`.app-header`, `.ld-nav`) is a deliberately inverted surface where a primitive will draw black-on-black without explicit light overrides.
 - ✅ **DevOps: CI, first-party error tracking, uptime monitoring, container packaging** (Sept 2026, `06-devops-monitoring.md`) — **no Sentry, no Datadog, no third-party uptime service**; the self-reliance rule holds. (1) `.github/workflows/ci.yml` — PR/branch verification with `contents: read` only: tests, type-check + build, `dist/` verification (title + the `/sortbot/` base path §1 forbids changing), a **bundle secret-leak grep** (every `VITE_*` is inlined into the public bundle, so this is the one mistake that cannot be walked back), a **lint ratchet** that fails only if the count grew, **migration hygiene** on changed SQL files (ROLLBACK section + idempotency note required, because these are run by hand and the file is the only place a reviewer learns how to undo it), and a `deno check` job for the Edge Functions. (2) `supabase/migrations/app_errors.sql` + `src/lib/errorReporter.ts` + `src/components/ErrorsPanel.tsx` — first-party crash reporting into this project's own table, with three volume guards, PII scrubbed from message AND stack before it leaves the browser, a **closed-vocabulary CHECK on `user_agent_class`** so the privacy promise is enforced by the database, and fingerprints that survive a redeploy (the Vite content hash and `:line:col` are normalized out — without that, every deploy would split one bug into a new issue). Verified against a throwaway PG 17 cluster: 12 scenarios including forged identity, a 21-row flood, and the rollback block. (3) `.github/workflows/uptime.yml` — 15-minute probe, incidents as a single GitHub issue matched by exact title (not `gh issue list --search`, whose index lags minutes and would duplicate on this cron), with the honest limits written into the file. (4) `deploy/` — optional Docker/nginx packaging for staging, self-hosting, and a rollback artifact independent of CI, plus a written argument for why Kubernetes is the wrong tool for a static SPA + managed Postgres.
 - ✅ **Header tools are full-page views, not modals** (Sept 2026, `07-full-views.md`) — the founder's complaint was that the nine overlay panels felt "crammed … too close … not inviting", which they were: 640–1200 px boxes at 0.35–0.9 rem padding (3–8 px on the 9 px root). All nine — Library, Categories, Category presets, Vocabulary, Analytics, CRM, Board, Workspace, Errors — now render as pages under the header through one new shell, **`components/ToolView.tsx`**, driven by a single `activeView` union in App.tsx (§6) that replaced six `show*` booleans. **The workflow never unmounts**: `<main>` is parked behind the `hidden` attribute, so an upload in flight, ImageGrouper's selection and Step 3's debounced saves all survive a trip to the Library. Each panel lost its overlay, its own close button and its scroll-lock; `ToolView.css` is now THE spacing scale for every tool view (page padding `3rem clamp(2rem,4vw,6rem) 6rem`, 3 rem section gaps, 2 rem cards, 4 rem controls, 4.5 rem table rows) and the per-tool CSS scopes its page overrides under `.tool-view` rather than rewriting `Library.css` (31 KB) and `KanbanBoard.css` (27 KB). Layouts that were stacked in a modal became two columns on the page: Categories = editor left / list right (its form was a modal on top of a modal), Presets = list left / editor right, Workspace = tabs as a left rail, CRM = wide detail card, Analytics = KPI row → chart → two-up tables, Library and Board full-bleed with larger thumbnails. **Errors became a sub-tab of Analytics** and the "Founder tools" tab was deleted from OrgPanel, so nothing is duplicated. Behaviour was preserved deliberately, not incidentally: Library's three grids KEEP `overflow-y: auto` because rubber-band selection measures against the grid's own `scrollTop` and its edge auto-scroll WRITES `scrollTop` — making them `overflow: visible` would have silently killed the auto-scroll; `.tool-view` uses `overflow-x: clip`, not `hidden`, because `hidden` forces the other axis to `auto` and would have turned the page into a scrollport that disables every `position: sticky` inside it; Escape stands down inside editable fields and while any `[data-tv-modal]` is open (the preset editor, `FieldModal`, Library's rename prompt) so a half-written preset cannot be thrown away; and the Board keeps Escape entirely (`escapeToBack={false}`) because it closes its card drawer first. 8 new tests lock the shell's navigation and a11y contract. **505 → 513 tests green · build clean · lint unchanged at 254.**
+- ✅ **Full-page Messages view + one shared support store** (Sept 2026, `08-messages-view.md`) — the founder asked for "a messages view i can access" alongside the floating widget, so messaging became a tenth `activeView`. **`MessagesView.tsx`**: a searchable thread list (email / workspace / subject / preview) beside a full-height conversation, founder Open/Closed/All chips with live counts, unread-first ordering with a real unread-dot element so the flex row still truncates the label (and a visually-hidden "(unread)" for screen readers), Up/Down keyboard walk driven off the focused row's `data-thread-id`, an Enter-to-send composer that finally surfaces the `subject` the API always accepted, `EmptyState` for all four empty cases, and a one-column stack with an "All conversations" back control ≤1024px. ToolView supplies the title, so it reads **Inbox** for a founder and **Messages** for everyone else. Reached from a header button available to **every signed-in user** with a `.nav-badge` unread count. **The interesting part was not the page**: two front ends onto the same conversations must not become two Realtime channels, two poll timers and two lists that disagree the moment one writes — so `src/lib/supportStore.ts` (dependency-free, `useSyncExternalStore`, mirroring `workflowStore`) now holds the thread list and REFERENCE-COUNTS one channel + one 45 s poll across all consumers, with optimistic writes that copy the `support_after_message` trigger field-for-field (that copy is what makes the list settle instantly instead of a round-trip later) and a `revision` counter each consumer reloads its own messages from. Two deliberate calls: `available === false` does **not** stop the poll (a transient network failure reports the same as a missing table, and stopping would hide messaging until a full reload), and `refresh()` dedupes concurrent callers into one in-flight promise so a Realtime burst plus the poll cannot stampede. `SupportWidget` kept its behaviour exactly and lost its data layer (thread state, `loadThreads`/`loadMessages`, the subscription, the timer, the `userId` prop); `handleSignOut` calls `supportStore.reset()`. **15 tests**; `supabaseMock` gained a Realtime stub. Not verified: anything visual, and Realtime beyond the mock.
+- ✅ **Finance — first-party books (Sept 2026, `09-finance.md`)** — the founder asked to "keep track of finances + users + profit and expenses + pull reports", and per §9's self-reliance rule it is three tables, one RPC and React: no payment processor, no accounting vendor, no bank feed. **`supabase/migrations/finance.sql`** (NOT YET RUN, §16): `finance_transactions` / `finance_plan_prices` / `finance_settings`, every policy `is_beta_admin()`, column-level UPDATE grants excluding `created_by`/`created_at` (verified: updating `created_by` raises 42501), + `finance_summary(from, to)` SECURITY DEFINER returning totals, the previous equal-length range, a zero-filled monthly series, category/workspace breakdowns and customer+MRR stats in ONE round-trip, with the current and previous ranges computed from a single expansion split by date so they cannot diverge. **Two rules are implemented twice and asserted against the same worked example in SQL and TypeScript** (§9): recurring rows are TEMPLATES expanded at read time with ANCHORED month steps (Jan 31 → Feb 28, **Mar 31**, Apr 30), and a founding shop is `plan = 'beta' OR created_at <= founding_cutoff` so the 30%-off-for-life promise survives the upgrade it rewards. **`FinanceView.tsx`** (Overview / Transactions / Customers / Reports, founding admins only, inside ToolView) charts in black + grey with `--success`/`--danger` reserved for profit sign, deletes through the two-step confirm pattern, and prints via the `visibility` technique rather than enumerating app chrome. Both CSVs go through `csvExport`'s `escapeCsvValue`, so the formula guard is not reimplemented. Seeded plan prices match the Landing tiers exactly (starter 5000 → enterprise 120000 cents/mo, founding shops at 70% of list) and are `on conflict do nothing`, so a founder's edit in the plan-price editor survives a re-run. **42 tests** (34 + 8); verified end-to-end against a throwaway Postgres 14 — 19 checks covering founders-only access, the recurrence and MRR math, an idempotent re-apply that preserved hand-edited prices, operation with `analytics_events` dropped, and the rollback block. **No SQL was run against Supabase.** Not built: multi-currency UI (the column exists), receipt attachments, any bank or processor import. **513 → 570 tests green · build clean · lint unchanged at 254.**
+
+### Sept 2026 — mobile-first pass (three agents, `docs/reviews/10-mobile-*.md`)
+
+The direction was "think mobile first for user experience". Three agents worked disjoint
+file sets against one shared contract (§1): breakpoints 640/1024, a 44px touch floor, 16px
+controls, and no horizontal PAGE scroll — only tables, charts and the board strip scroll,
+each inside its own container. Nothing committed, no dependency added, desktop unchanged.
+End state: **579 tests / 40 files green, build clean, lint flat at 254**.
+
+- **Shell, chrome and the logged-out screens** (`10-mobile-shell.md`) — the header was a
+  single row of 7-9 tool buttons that wrapped into a four-line black slab at 390px. The tools
+  now leave the header below 1024px: a scroll-snapped `NavRail` on the black bar at
+  641-1024px, and a fixed `MobileTabBar` (Workflow / Library / Messages / More) plus a More
+  bottom sheet at `<= 640px`, all fed by the one `navTools` list (§6). New in `index.css`:
+  `--safe-*`, `--tabbar-row`, `--tabbar-h`, `--tap`, `text-size-adjust: 100%`, a global
+  tap-highlight reset with a deliberate `:active` wash under `@media (hover: none)`, and the
+  `<= 640px` block that raises `--tabbar-h` on `.app-container` and applies the 16px/44px
+  floors. `viewport-fit=cover` added to the viewport meta (the CSP meta is byte-identical).
+  `ToolView`, `SupportWidget` (full-screen `100dvh` sheet with a pinned composer), Landing,
+  Auth and WaitlistGate all got phone blocks. **Two real bugs fixed:** the landing's mock
+  panels could not shrink (grid items default to `min-width: auto`, so at 360px the two-column
+  mocks ran ~30px past their panel and `.ld-shot`'s `overflow: hidden` silently clipped them —
+  fixed with `min-width: 0`), and a CSS comment in `MobileNav.css` whose stray `*/` swallowed
+  the entire `.nav-rail` rule, so the rail rendered at every width (§18 #30). Measured at
+  360/390/820/1280: zero horizontal overflow, zero sub-44px targets except four inline photo
+  credits (WCAG 2.5.8 exempts inline links in a sentence), desktop provably unchanged.
+
+- **The thirteen tool views and the `ui/` primitives** (`10-mobile-pages.md`) — two root
+  causes drove most of the diff: the 9px root makes rem-padded controls 16-20px tall, and
+  `ToolView.css` pins every control in a tool view at (0,5,1) with 14px, under iOS's 16px zoom
+  threshold (§1). One shared `<= 640px` block at the end of `OrgPanel.css` fixes five views at
+  once (OrgPanel, Analytics, Errors, CRM, Finance): touch + 16px floors, **two-up KPI tiles**
+  (`auto-fit minmax(20rem,1fr)` was collapsing a four-tile row into four screens), filter rows
+  that **scroll rather than wrap**, and two table treatments picked per table — either
+  contained scroll with a sticky opaque first column (where `white-space: nowrap` is
+  load-bearing: without it auto table layout squeezes to fit and there is nothing to scroll),
+  or `.an-table--cards`, which hides `<thead>` and prints `attr(data-label)` per cell. Finance's
+  ledger gets a bespoke three-line card via `data-col` + `grid-template-areas` — attribute-keyed,
+  so re-ordering a column in the JSX cannot scramble the card. All six `ui/` primitives
+  (Button, IconButton, Chip, Tabs, Field, Dialog) took the 44px floor, and `Dialog` became a
+  bottom sheet at `<= 640px` using `dvh` with a `vh` fallback and `--safe-b` footer padding.
+  Library drops to **two** columns (not one) with hover-only controls pinned visible; Kanban
+  lanes become one-lane-at-a-time scroll-snap and the card detail a full-screen fixed sheet;
+  the preset editor's ten sections became native `<details open>` (§14 #28). Print output is
+  provably unaffected — every table rule sits inside `@media screen and (...)`.
+
+- **The four workflow steps** (`10-mobile-workflow.md`) — Step 1 gets real phone capture
+  (Take photos / Choose from library, both feeding the unchanged `processFiles` pipeline);
+  Step 2's sidebar becomes a top toolbar with a Tools disclosure, the grid clamps to 3 columns
+  via `responsiveGrid.ts` with the slider still live, and category assignment moves to a
+  sticky bottom chip rail because drag-to-categorize cannot exist on touch; Step 3's
+  Prev/Next/slider/CSV become a sticky bottom dock spanning image *and* form, the crop tool was
+  adapted for touch and the magnifier disabled on mouse-less devices; Step 4 freezes the Handle
+  column in the 54-column preview (§10). **A real bug fixed:** the voice command table's inline
+  `repeat(N, minmax(90px,1fr))` grid demanded 450px and pushed the whole page into horizontal
+  scroll at 390px. Every line of the shared `App.css` edit is inside one fenced block appended
+  at the end of the file; no existing rule was reflowed.
+
+- **Click-outside deselect no longer fires on the Step 2 toolbar chrome** — `.grouper-header`
+  and `.photo-toolbar` were added to `ImageGrouper`'s mousedown safe-selector list. Harmless
+  when the toolbar was a sidebar off to the left; on a phone it is a wide strip directly above
+  the grid, so a mis-tap there silently wiped a selection the user had just built. The workflow
+  log proposed it rather than doing it (it is selection logic, §14 #12 and the nine commits
+  behind it); applied afterwards as a one-selector change. The full list is now:
+  `.single-item-card, .product-group-card, .group-header, .toolbar, button, [role="button"],
+  .category-zone, .category-zones-container, .category-zones, .category-list,
+  .grouper-actions-sidebar, .grouper-header, .photo-toolbar`.
 
 ---
 
@@ -1091,7 +1425,7 @@ Six audits were run against the tree and each was then implemented as its own pa
 | Export library tracking | **Removed (Sept 2026)** | `exportLibraryService.ts` is deleted (no UI ever rendered it). `supabase/migrations/export_library.sql` still exists, so the tables may be live in the database with nothing reading them. |
 | Batch duplication | Wired in Library service | `duplicateBatch()` exists in `libraryService.ts` and button exists in Library UI, but behavior after duplication is not fully tested. |
 | Photo reorder persistence | Missing (half fixed) | Reorder in Step 3 still does not WRITE `product_images.position`. The destroying half is fixed: `mergeProductImageRows` now preserves and renumbers positions instead of letting the wipe flatten them (§11). |
-| Automated tests | **Done** | Vitest, 505 tests / 35 files (§3). `npm test` is step 0 of §17 and runs in CI. |
+| Automated tests | **Done** | Vitest, 579 tests / 40 files (§3). `npm test` is step 0 of §17 and runs in CI. |
 | `SavedProducts` / `TestLlamaVision` components | **Deleted (Sept 2026)** | Along with four other unused components and 14 other dead files. |
 | Error boundaries | Partial | `GrouperErrorBoundary` wraps Step 2 and reports to `app_errors`. Steps 1/3/4 and the modals have none — the lazy modals do at least have `Suspense` boundaries. |
 | Loading state for Library tabs | Partial | `loading` state shown at top level but individual tab switches have no loading indicator. |
@@ -1115,7 +1449,10 @@ Six audits were run against the tree and each was then implemented as its own pa
 | **Edge Function redeploy + token rotation** | **Pending** | `deno check supabase/functions/*/index.ts`, then `supabase functions deploy shopify-titles` and `generate-prose`. **Then rotate `SHOPIFY_ADMIN_TOKEN` and `CF_API_TOKEN`** — assume the catalog and the model quota were reachable by anyone holding the public anon key. |
 | **Library `onItemsDeleted` callback** | **Proposed, not implemented** | The item-level resurrection in §14 #19. The complete edit is in `docs/reviews/01-architecture-refactors.md` B12. It is a deliberate behaviour change (deleting an image in Library while its batch is open would start actually removing it), so it needs the owner's call. |
 | **Deferred proposals from the review** | Recorded, not done | Export preview row cap (§14 #22 — one-line diff in the perf log). `ImageGrouper` off its third item list and `batchRestore.ts` (splitting `handleOpenBatch` + startup restore, ~900 lines) — both need characterization tests first. PDG's `[processedItems]`-keyed save effect (§14 #21). `edge_call_log` + `edge_rate_ok` per-user Edge Function quota, and `organizations` column grants making `slug`/`created_by`/`plan` unwritable (`slug='founding'` is the key `is_beta_admin()` reads — the highest-value remaining migration), both with SQL ready to lift from `docs/reviews/05-security.md`. `F16` (`updateGroupField` mutating live store objects in place) is what blocks per-item memoization. Lowering `LINT_BASELINE` in `ci.yml` from 311 to 254. |
-| Founder tools (analytics / CRM / messaging) | **Built — migrations not yet run** | Run `analytics_events.sql`, `crm.sql`, `support_messaging.sql` in the SQL Editor (after tenancy + beta_signups). Nothing else to configure. Not built yet: email/push notification to founders on a new message (the badge + Realtime is the only signal), analytics retention UI (`analytics_prune()` is SQL-Editor only), CRM CSV export, per-contact activity from analytics (events are joinable by user_id — an easy next step), bulk actions in the inbox. |
+| Founder tools (analytics / CRM / messaging) | **Built — migrations not yet run** | Run `analytics_events.sql`, `crm.sql`, `support_messaging.sql` in the SQL Editor (after tenancy + beta_signups). Nothing else to configure. Messaging now has BOTH front ends — the floating widget and the full-page Messages/Inbox view (§6) — over one `supportStore` (§8). Not built yet: email/push notification to founders on a new message (the badge + Realtime is the only signal), analytics retention UI (`analytics_prune()` is SQL-Editor only), CRM CSV export, per-contact activity from analytics (events are joinable by user_id — an easy next step), bulk actions in the inbox. |
+| **Finance** | **Built — migration `finance.sql` not yet run** | `supabase/migrations/finance.sql` + `src/lib/financeService.ts` + `src/components/FinanceView.tsx`. **Every read reports `'unavailable'` until the SQL is run** and the view shows the setup step instead, so the Finance button is safe to expose immediately. Run it in the SQL Editor after `multi_org_tenancy.sql` + `beta_signups.sql`; additive, idempotent, rollback at the bottom. Seeded plan prices already match the Landing tiers and are editable in **Finance → Customers → Plan prices** without a migration (`on conflict do nothing`, so a re-run never overwrites an edit) — but note the migration header still carries a stale paragraph claiming the seeds predate Landing's tiers; the seeds themselves are current. Not built: multi-currency (the `currency` column exists, the UI is USD-only), receipt attachments, and any bank or payment-processor import. |
+| **Mobile-first pass** | **Built, not yet seen on a device** | The whole app has phone and tablet layouts (§1, §6, §10, §15), but no agent could sign in, so nothing past the logged-out screens was rendered. A signed-in smoke test and a real-iOS pass are the two things owed — §14 #26/#27 list exactly what that leaves unverified. Everything on that list is single-number CSS tuning, not structure. |
+| **Step 2 selection on touch** | Partly done | `.grouper-header` and `.photo-toolbar` were added to the click-outside safe-selector list (§15). Two proposals from `10-mobile-workflow.md` §9 are recorded, NOT done, because both touch the selection handlers §14 #12 and nine prior commits say to leave alone without a smoke test: (a) a native `pointerdown` selection path — today's `onMouseDown` works because a tap fires exactly one synthesized `mousedown`, so the 200 ms per-item debounce cannot swallow it; (b) a "done selecting" affordance in the category dock, since with pick mode off nothing signals that tapping a category consumes the selection (the dock's "N items selected" hint covers it partly). |
 
 ---
 
@@ -1220,3 +1557,13 @@ npm run lint
 25. **Do not add an origin to the CSP without updating the `<meta http-equiv>` in `index.html` — and do not add one you have not proved.** A blocked subresource fails with **no visible error**; uploads simply stop working. Every origin in that policy was verified by grepping `src/` + `public/` and by reading the built bundle, and the rationale comment above it says why each one is there. Keep them in sync, keep `script-src 'self'` (no CDN, no `'unsafe-eval'`), and remember `frame-ancestors` is ignored in a `<meta>` — clickjacking protection needs a real response header, i.e. a host that can send one. If you add a `deploy/` environment, its `nginx.conf` CSP needs the same change.
 
 26. **Do not put a `src/components/ui/` primitive inside `.app-header` or `.ld-nav` without explicit light overrides, and do not restate a primitive's colours in a screen's stylesheet.** The nav is the one deliberately inverted surface (§1), so a primitive dropped there draws black-on-black. And a `.some-screen .ui-btn { background: … }` override reintroduces exactly the four-conflicting-`.button`-definitions drift the system replaces — if a variant is missing, add the variant. Any new primitive must also keep the token rule: no hex literals in `src/components/ui/`.
+
+27. **Do not call `subscribeToSupport`, start a poll, or hold a thread list inside a support UI component.** `src/lib/supportStore.ts` owns all three and reference-counts them, so the floating widget, the Messages page and the header badge share ONE Realtime channel and ONE 45 s timer. A second subscription means two thread lists that drift apart the moment one of them writes, and it makes the optimistic-write reconciliation unobservable. New messaging surfaces consume `useSupportThreads(role)` and write through `supportActions`. Two things in that store look like bugs and are not: `available === false` does **not** stop the poll (a transient network failure is reported identically to a missing table, and stopping would hide messaging until a full page reload), and `refresh()` collapses concurrent callers into one in-flight promise. Keep `applySentMessage` a faithful mirror of the `support_after_message` trigger in `support_messaging.sql` — if that trigger changes, change this with it, or the list settles to something the server will contradict on the next refetch.
+
+28. **Do not materialize recurring finance entries as rows, and do not let the two recurrence implementations drift.** A `finance_transactions` row with a `recurrence` is a TEMPLATE that stands for itself and every repeat until `recurrence_ends_on`; occurrences are expanded at READ time, identically, in `finance.sql` and in `financeService.expandOccurrences`. Writing the repeats would mean a monthly cron to forget, and editing a $20/mo bill to $25 would then fix the forecast but not the history. Steps are ANCHORED to `occurred_on` (Jan 31 monthly → Feb 28, **Mar 31**, Apr 30 — never drifting to the 28th for good); both sides are asserted against the same worked example, so changing one without the other silently makes the chart, the CSVs and the printed statement disagree. Related: `totals.transaction_count` counts occurrences, not rows — do not "fix" it to count rows. And keep the founding-shop test as `plan = 'beta' OR created_at <= founding_cutoff`; narrowing it to the plan alone revokes the landing page's for-life promise the moment a founding shop upgrades.
+
+29. **Do not introduce a second bottom-anchored offset. Everything that clears the phone tab bar reads `var(--tabbar-h)`.** It is defined once in `index.css` (`0px`, raised at `<= 640px` on `.app-container` to `calc(var(--tabbar-row) + var(--safe-b))`, so it already carries the home-indicator inset and is inert above 640px). `.app-main`, `.tool-view`, the toast stack, the support FAB, Step 2's category dock, Step 3's nav dock and Finance's sticky Save bar all subtract that one number — a parallel token (an `--app-tabbar-h` spelling existed briefly and was consolidated away) or a hand-measured `bottom: 57px` guarantees that two surfaces disagree the first time the bar's height changes. Do not use a negative margin to bleed a bottom-anchored surface to the screen edge either: it needs a number sized to ancestor padding the file does not own, and a wrong guess is a horizontal page scroll.
+
+30. **Do not write a token glob, a slash, and another token glob inside a CSS comment** — `--ink-*` followed immediately by `/--text-*` contains `*/`, which closes the comment early and silently eats the next rule. It swallowed the whole `.nav-rail` block in `MobileNav.css` and the rail then rendered at every width; the build does not warn about the missing rule, and it is invisible in the source. Spell token names out in full in prose. (The related build-level symptom is an `Unexpected bad string token` / `Unterminated string token` warning from esbuild — if you ever see one, look for this.)
+
+31. **Do not lower the 44px touch floor, and do not convert it to rem.** `--tap: 44px` and the `min-height: 44px` declarations across the phone blocks are literal `px` on purpose: every other length in this app is a rem against the 9px root (§16), and a rem touch target would silently drift off the accessibility floor the next time the root is retuned. The same goes for the 16px (`var(--fs-md)`) control minimum — mobile Safari zooms a focused control under 16px and never zooms back. A component that genuinely needs to opt out overrides at its own specificity and says why; the global rules in `index.css` stay.

@@ -752,7 +752,264 @@
 
 .app-header .nav-tool-btn--on svg { color: #000000; }
 
-@media (max-width: 640px) {
-  .header-content { flex-wrap: wrap; }
-  .header-actions { width: 100%; }
+/* Unread count on the Messages/Inbox nav button. The nav is the app's one
+   deliberately inverted surface (CLAUDE.md §1), so this sets its own literal
+   foreground instead of inheriting page-black — and it reads the same whether
+   the button is outlined on black or filled white as the active view. Same
+   look as the floating widget's .sw-badge, kept in step by hand because the
+   two live on opposite surfaces. */
+.app-header .nav-badge {
+  min-width: 1.6em;
+  padding: 0.1em 0.45em;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #ffffff;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   MOBILE SHELL — the navigation model below 1024px
+   ════════════════════════════════════════════════════════════════════════════
+
+   > 1024px   unchanged. One header row: wordmark, every tool, account menu.
+   ≤ 1024px   the header keeps ONLY the wordmark, Messages (badge and all) and
+              the account menu. The tools move out — to <NavRail>, a scrolling
+              second row inside this same black bar (MobileNav.css).
+   ≤ 640px    the rail goes too, and the tools live in a fixed bottom tab bar
+              plus its More sheet.
+
+   The tools are hidden rather than conditionally rendered so that the decision
+   is made by the same media query that lays the replacement out — no matchMedia
+   state, no first-paint flash of the wrong nav. `display: none` also drops them
+   from the accessibility tree, so nothing is announced twice. */
+
+@media (max-width: 1024px) {
+  /* Everything except Messages, which carries the unread count and is a
+     primary destination at every width. */
+  .app-header .nav-tool-btn:not(.nav-msg-btn) { display: none; }
+
+  /* The wordmark and the two surviving controls fit one row comfortably now,
+     so the header stops being a wrapping block and becomes a real app bar. */
+  .header-content { flex-wrap: nowrap; }
+  .header-actions { width: auto; gap: var(--space-2); flex-wrap: nowrap; }
+
+  /* `.button { width: 100% }` at ≤768px (below) is meant for the workflow's
+     stacked action buttons; applied to the header it stretches Messages and
+     the account menu across the bar.
+
+     The 44px floor is applied here too, not only at the ≤640px phone
+     breakpoint: a phone in LANDSCAPE is 641-1024px wide (a 14 Pro Max is 932),
+     so it takes the rail rather than the tab bar — and these two controls are
+     then the entire header. They were 33px. */
+  .app-header .button { width: auto; min-height: var(--tap); }
+
+  /* Landscape on a notched phone puts the camera housing over the left edge.
+     `max()` against the band's existing padding, so the inset can only ever
+     ADD room — the desktop and tablet gutters keep their designed values. */
+  .app-header {
+    padding-left: max(var(--space-6), var(--safe-l));
+    padding-right: max(var(--space-6), var(--safe-r));
+  }
+}
+
+/* Same rule one band down, where the base padding steps to --space-4. */
+@media (max-width: 768px) {
+  .app-header {
+    padding-left: max(var(--space-4), var(--safe-l));
+    padding-right: max(var(--space-4), var(--safe-r));
+  }
+  .app-main {
+    padding-left: max(var(--space-4), var(--safe-l));
+    padding-right: max(var(--space-4), var(--safe-r));
+  }
+}
+
+@media (max-width: 640px) {
+  /* The descriptor is a desktop nicety; at 390px it costs the wordmark its
+     room and says nothing the four numbered steps below do not. */
+  .header-subtitle { display: none; }
+
+  /* Was `flex-direction: column` at ≤480px, which stacked Messages above the
+     account menu and made the bar two rows tall. They are one row again. */
+  .header-actions { flex-direction: row; align-items: center; }
+
+  .app-wordmark { font-size: var(--fs-base); }
+
+  /* The account menu's workspace name is the first thing that should give. */
+  .wsmenu-name { max-width: 7rem; }
+
+  /* CLEARANCE FOR THE TAB BAR. Everything that reaches the bottom of the page
+     adds --tabbar-h (index.css), which is 0 above this breakpoint — so these
+     are the only two places that need to know the bar exists. */
+  .app-main { padding-bottom: calc(var(--space-4) + var(--tabbar-h)); }
+
+  /* The debug toggle is a developer affordance pinned to the bottom-left
+     corner — exactly where the tab bar now is. It has no place on a phone. */
+  .button-debug-toggle { display: none; }
+
+  /* The meter is a nowrap row of five items; at 390px it was the one thing in
+     the shell wide enough to give the page a horizontal scrollbar. */
+  .storage-meter-nav { padding: 0.35rem var(--space-4); }
+  .storage-meter-nav-inner { flex-wrap: wrap; row-gap: 0.25rem; }
+  .storage-meter-nav-bar-wrap { max-width: none; }
+  .storage-meter-nav-files { display: none; }
+}
+
+/* Toasts are bottom-right, which on a phone is the tab bar and the support
+   widget's FAB. Lift them clear of both, and off the home indicator. */
+@media (max-width: 640px) {
+  .toast-stack {
+    right: var(--space-3);
+    left: var(--space-3);
+    bottom: calc(var(--space-3) + var(--tabbar-h) + 4.8rem);
+    align-items: stretch;
+  }
+  .toast-item { max-width: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   ▼▼▼ MOBILE WORKFLOW BLOCK — owned by the Steps 1–4 pass ▼▼▼
+   Scope: step-region rules ONLY (.step-section / .step1-* / .step2-* /
+   .batch-actions). Nothing here touches the header, nav, or any tool view.
+   Everything is inside a media query and appended, so no existing rule above is
+   reflowed and desktop rendering is byte-identical.
+   Breakpoints: ≤1024px tablet, ≤640px phone.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Phone (≤640px) ───────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  /* Every field inside a step gets ≥16px text. Below 16px, iOS Safari zooms the
+     page on focus and never zooms back — the single most common "my app feels
+     broken on a phone" bug. Range/checkbox/radio are excluded so the density
+     sliders keep their compact thumb.
+     This does NOT duplicate the global `input, textarea, select` rule in
+     index.css: that one is a bare type selector (0,0,1) and therefore LOSES to
+     every component class that sets its own size (.info-input and .vct-cell at
+     --fs-xs, .filter-select, .description-textarea). The step-scoped selector
+     here outranks them, so the fields users actually type into in Steps 1–4
+     really do land at 16px. */
+  .step-section input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+  .step-section select,
+  .step-section textarea {
+    font-size: var(--fs-md);
+  }
+
+  .step-section {
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+  }
+
+  .step-section h2 {
+    font-size: var(--fs-base);
+    margin-bottom: var(--space-3);
+    padding-bottom: var(--space-3);
+  }
+
+  /* ── Step 1 header: the Folder / ZIP import buttons ─────────────────────
+     The buttons themselves live in App.tsx and are not edited here; they just
+     need to stop sitting on one 12px-tall line beside a wrapping heading. */
+  .step-section .step1-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.6rem;
+    padding-bottom: var(--space-3);
+  }
+
+  .step-section .step1-header-actions {
+    width: 100%;
+  }
+
+  .step-section .step1-import-btn {
+    flex: 1 1 0;
+    min-height: var(--tap, 44px);
+    justify-content: center;
+    font-size: var(--fs-sm);
+  }
+
+  /* ── Step 2: the category panel becomes a bottom action dock ────────────
+     Desktop assigns a category by dragging a group card onto a zone. HTML5
+     drag-and-drop does not fire on touch, so the phone path is the second,
+     already-supported one: select in the grid, then tap a category. Docking the
+     panel keeps that second tap in thumb reach no matter how far the grid has
+     been scrolled. */
+  /* Block, not grid: a sticky-bottom dock needs a containing block that is
+     TALLER than itself to have any travel. As the last child of a block box it
+     pins to the viewport bottom for the whole scroll of the grid above it, then
+     settles into flow at the end — and, unlike position:fixed, it disappears
+     once the user scrolls past Step 2. That last part matters: all four step
+     sections are mounted at once, so two fixed docks (this one and Step 3's)
+     would sit permanently on top of each other. */
+  .step2-split {
+    display: block !important;
+  }
+
+  .step2-split .step-description {
+    display: none;
+  }
+
+  .step2-right-panel {
+    position: sticky;
+    /* --tabbar-h (index.css) is the shared offset every bottom-anchored surface
+       subtracts, and it already carries the home-indicator inset. It is 0px
+       above this breakpoint, so the calc is correct everywhere. */
+    bottom: var(--tabbar-h, 0px);
+    z-index: 80;
+    height: auto;
+    max-height: 38vh;
+    overflow-y: auto;
+    margin-top: var(--space-3);
+    padding: 0.5rem 0.75rem;
+    /* Popover surface — lifted above the grey page, per CLAUDE.md §1 the
+       elevation direction on this light theme is toward white. Rounded top
+       rather than full bleed: bleeding would need a negative margin sized to
+       ancestor padding, and a wrong guess is a horizontal page scroll. */
+    background: var(--ink-800);
+    border: 1px solid var(--border-strong);
+    border-bottom: none;
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.18);
+  }
+
+  .step2-right-panel .grouper-actions-sidebar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+  }
+
+  .step2-right-panel .grouper-actions-sidebar .button {
+    min-height: var(--tap, 44px);
+    font-size: var(--fs-sm);
+    padding: 0.4rem 0.5rem;
+  }
+
+  /* An idle dock is just the chip rail; it grows to carry the assign actions
+     once there is a selection to act on. Written as :not(:has(…)) on purpose:
+     an engine without :has() drops the whole selector as invalid and the dock
+     stays in its expanded state — which is the safe failure (the buttons are
+     disabled at 0 selected, and nothing is hidden that should be visible). */
+  .step2-right-panel:not(:has(.category-zones-container.has-selection)) {
+    max-height: 26vh;
+  }
+
+  .step2-right-panel:not(:has(.category-zones-container.has-selection)) .grouper-actions-sidebar {
+    display: none;
+  }
+
+  /* ── Step 4 ────────────────────────────────────────────────────────────── */
+  .batch-actions {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .batch-actions .button {
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+  }
+}
+/* ▲▲▲ END MOBILE WORKFLOW BLOCK ▲▲▲ */

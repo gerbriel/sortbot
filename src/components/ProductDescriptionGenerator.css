@@ -1322,3 +1322,232 @@
   border-color: var(--gold);
   color: var(--gold);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE-FIRST STEP 3
+   Additive; every layout change is inside a media query. ≤640px = phone.
+   The crop tool is ADAPTED rather than disabled: it already runs on Pointer
+   Events with setPointerCapture, so the only thing missing for touch was a
+   `touch-action` contract and finger-sized handles. Both are added below.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Crop tool: claim the gesture ──────────────────────────────────────────
+   Without this the browser pans/zooms the page as soon as a finger moves, and
+   the pointermove stream the crop rect is built from stops arriving. `none` is
+   correct here and nowhere else: the stage IS the gesture surface, it is inside
+   a full-screen modal, and it has nothing to scroll. */
+.crop-fs-stage {
+  touch-action: none;
+}
+
+.crop-fs-btn,
+.crop-fs-pill,
+.descriptor-chip,
+.preview-nav-controls .button,
+.voice-controls button {
+  touch-action: manipulation;
+}
+
+/* The nav dock is invisible plumbing on desktop — `contents` means it generates
+   no box, so Prev/Next, the slider and the CSV button stay direct flex children
+   of .product-preview exactly as before. */
+.preview-nav-dock {
+  display: contents;
+}
+
+/* ── Touch devices of any width ────────────────────────────────────────────
+   `hover: none and pointer: coarse` = a device with no mouse at all. The
+   magnifier is driven purely by mousemove over the preview, so on such a device
+   the lens can never track a finger — the control is removed rather than left
+   as a toggle that does nothing. */
+@media (hover: none) and (pointer: coarse) {
+  .magnifier-lens {
+    display: none !important;
+  }
+
+  .magnifier-controls {
+    display: none;
+  }
+
+  /* Corner/edge grab handles get a 44px invisible hit area while the painted
+     handle stays the same size, so the crop rect still looks precise. */
+  .crop-fs-handle::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: var(--tap, 44px);
+    height: var(--tap, 44px);
+    transform: translate(-50%, -50%);
+  }
+
+  .crop-fs-btn {
+    min-height: var(--tap, 44px);
+    padding: 0.5rem 0.9rem;
+  }
+
+  .crop-fs-pill {
+    min-height: var(--tap, 44px);
+  }
+}
+
+@media (max-width: 640px) {
+  /* ── Column → single flow, with the nav docked at the bottom ────────────
+     `.product-preview` becomes `display: contents` so the nav dock, the image
+     area and the form are all siblings in ONE flex column. That is what lets
+     the dock be sticky across the whole editor (image AND form) instead of
+     being trapped in the preview card. `order` then puts it last in layout
+     while leaving the DOM order — and therefore tab order on desktop —
+     untouched. The card styling moves onto .preview-scroll-area so nothing is
+     lost visually. */
+  .product-editor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .product-preview {
+    display: contents;
+  }
+
+  .preview-scroll-area {
+    order: 1;
+    flex: 0 0 auto;
+    overflow: visible;
+    background: var(--ink-850);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    padding: var(--space-3);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .product-form {
+    order: 2;
+  }
+
+  .preview-image {
+    width: 100%;
+    max-height: 52vh;
+  }
+
+  /* ── Prev / Next / slider / Download CSV → sticky bottom bar ────────────
+     Bottom rather than top: the app's own black nav already owns the top of the
+     viewport (position: sticky, z-index 100), and stepping through listings is
+     a thumb action. Sticky rather than fixed: every step section is mounted at
+     once, so a fixed bar would still be floating over Steps 1, 2 and 4. */
+  .preview-nav-dock {
+    order: 3;
+    display: block;
+    position: sticky;
+    /* Sits ON TOP of the phone tab bar, never under it. --tabbar-h (index.css)
+       is the shared offset and already includes the home-indicator inset. */
+    bottom: var(--tabbar-h, 0px);
+    z-index: 75;
+    padding: 0.5rem 0.75rem;
+    background: var(--ink-800);
+    /* Rounded floating bar rather than a full-bleed one: bleeding to the screen
+       edge would need a negative margin whose exact value depends on ancestor
+       padding this file does not own, and a wrong guess is a horizontal page
+       scroll — the one thing that must never happen. */
+    border: 1px solid var(--border-strong);
+    border-bottom: none;
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.18);
+  }
+
+  .preview-nav-controls {
+    margin-top: 0;
+    gap: 0.5rem;
+  }
+
+  .preview-nav-controls .button {
+    min-height: 48px;
+    font-size: var(--fs-base);
+    padding: 0.5rem 0.75rem;
+  }
+
+  .preview-nav-counter {
+    font-size: var(--fs-sm);
+    min-width: 4.5em;
+  }
+
+  .group-nav-slider {
+    min-height: 40px;
+    margin-top: 0.25rem;
+  }
+
+  /* ── Voice ─────────────────────────────────────────────────────────────
+     Recording is THE phone action in Step 3 — one wide, unmissable button. */
+  .voice-controls {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .voice-controls button {
+    width: 100%;
+    min-height: 56px;
+    font-size: var(--fs-md);
+    font-weight: 600;
+    justify-content: center;
+  }
+
+  .descriptor-chips {
+    gap: 0.35rem;
+  }
+
+  .descriptor-chip {
+    min-height: var(--tap, 44px);
+    padding: 0.4rem 0.8rem;
+    font-size: var(--fs-sm);
+  }
+
+  .form-section {
+    padding: var(--space-3);
+  }
+
+  .description-textarea {
+    min-height: 160px;
+    padding: var(--space-3);
+  }
+
+  .thumbnail-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .group-thumbnail-wrap,
+  .group-thumbnail {
+    min-height: 56px;
+  }
+
+  /* ── Voice command table → card list ───────────────────────────────────
+     The grid template is set INLINE as `repeat(N, minmax(90px, 1fr))`, so with
+     5 columns the table demanded 450px and pushed the whole PAGE into a
+     horizontal scroll on a 390px screen. !important is the only way to beat an
+     inline style; two columns keeps it scannable without a rail of one-word
+     labels. */
+  .vct-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.4rem;
+  }
+
+  .vct-grid--full {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .vct-row-group {
+    padding: 0.5rem;
+    border-radius: 8px;
+  }
+
+  .vct-row-label {
+    font-size: var(--fs-sm);
+  }
+
+  .vct-cell {
+    min-height: var(--tap, 44px);
+  }
+
+  .vct-header {
+    font-size: var(--fs-xs);
+  }
+}

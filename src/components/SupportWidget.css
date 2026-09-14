@@ -214,8 +214,74 @@
 }
 .sw-send:disabled { opacity: 0.4; cursor: default; }
 
-@media (max-width: 480px) {
-  .sw-root { right: 0.75rem; bottom: 0.75rem; }
-  .sw-fab span { display: none; }
-  .sw-fab { padding: 0.75rem; }
+/* ── Phone (≤640px) ─────────────────────────────────────────────────────────
+   Two changes, both about the bottom edge of a handheld screen.
+
+   1. THE FAB HAS A NEIGHBOUR NOW. The fixed tab bar occupies the bottom strip,
+      so the button lifts by --tabbar-h (which already carries the home-indicator
+      inset). Above this breakpoint --tabbar-h is 0 and the calc collapses to the
+      value it always had.
+   2. A 400 x 560 CARD IS NOT A PHONE UI. The panel becomes a full-screen sheet:
+      edge to edge, 100dvh, its own safe-area padding, composer pinned to the
+      bottom by the flex column it was already in. The FAB hides while it is
+      open — the sheet has a close button, and a floating pill on top of a
+      full-screen surface reads as a bug. */
+@media (max-width: 640px) {
+  .sw-root {
+    right: 0.75rem;
+    left: 0.75rem;
+    bottom: calc(0.75rem + var(--tabbar-h));
+  }
+
+  .sw-fab {
+    /* --tap-tall targets are the rule at this width; the label stays, because
+       "Messages" is what makes the button legible to a first-time user. */
+    min-height: var(--tap);
+    padding: 0.7rem 1.2rem;
+  }
+
+  .sw-fab--open { display: none; }
+
+  .sw-panel {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    /* dvh, not vh: vh measures the LARGEST viewport, so a 100vh sheet hides its
+       own composer behind Safari's toolbar for as long as that toolbar shows. */
+    height: 100dvh;
+    max-height: none;
+    border: none;
+    border-radius: 0;
+  }
+
+  /* Standalone/PWA mode has no browser chrome above the panel. */
+  .sw-head {
+    padding-top: calc(0.7rem + var(--safe-t));
+    padding-left: max(0.75rem, var(--safe-l));
+    padding-right: max(0.75rem, var(--safe-r));
+  }
+
+  .sw-composer {
+    padding-bottom: calc(0.6rem + var(--safe-b));
+    padding-left: max(0.6rem, var(--safe-l));
+    padding-right: max(0.6rem, var(--safe-r));
+  }
+
+  /* The global ≤640 rule sets `textarea { font-size: var(--fs-md) }`, but
+     `.sw-composer textarea` (0,1,1) outranks it — so the 16px that stops iOS
+     zooming the page on focus has to be restated at this specificity. Never a
+     literal: --fs-md IS the 16px. */
+  .sw-composer textarea {
+    font-size: var(--fs-md);
+    min-height: var(--tap);
+  }
+
+  /* Square icon targets. The global rule can only set min-height — a 28px-wide
+     button is still a 28px-wide button. */
+  .sw-icon-btn { width: var(--tap); height: var(--tap); }
+  .sw-send { width: var(--tap); height: var(--tap); }
+
+  /* List rows are the primary target in the panel's default state. */
+  .sw-thread { min-height: var(--tap); padding: 0.7rem 0.75rem; }
+  .sw-new { min-height: var(--tap); }
 }
