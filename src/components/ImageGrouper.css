@@ -94,6 +94,11 @@
 
 .stats--trailing { margin-left: auto; }
 
+/* "Ungroup all" sits at the right end of the idle row, before the trailing
+   selection/undo cluster, only while there is a group to ungroup. */
+.gtb-ungroup-all { margin-left: auto; }
+.gtb-ungroup-all + .stats--trailing { margin-left: 0; }
+
 .grouper-actions {
   display: flex;
   gap: 1rem;
@@ -164,53 +169,11 @@
   font-size: var(--fs-md);
 }
 
-/* Drop Zone Placeholder */
-.drop-zone-placeholder {
-  background: linear-gradient(135deg, var(--ink-850) 0%, var(--ink-800) 100%);
-  /* Full-strength accent, not --accent-line: the dashed edge IS the affordance
-     here, and a translucent line falls under the 3:1 UI-contrast floor. */
-  border: 3px dashed var(--accent);
-  border-radius: 8px;
-  padding: 0.75rem 1rem;
-  text-align: center;
-  transition: all 0.3s ease;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 0.5rem;
-}
 
-.drop-zone-placeholder:hover {
-  background: linear-gradient(135deg, var(--ink-800) 0%, var(--ink-750) 100%);
-  border-color: var(--accent-hover);
-  transform: scale(1.01);
-}
 
-.drop-zone-placeholder.drag-over {
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-press) 100%);
-  border-color: var(--accent);
-  border-style: solid;
-  transform: scale(1.02);
-  box-shadow: 0 8px 24px var(--accent-glow);
-}
 
-.drop-zone-placeholder.drag-over .drop-zone-content {
-  /* Filled with the light violet accent — text flips to the canvas colour. */
-  color: var(--ink-950);
-}
 
-.drop-zone-content {
-  color: var(--accent);
-  transition: all 0.3s ease;
-}
 
-.drop-zone-icon {
-  font-size: var(--fs-xl);
-  display: block;
-  margin-bottom: 0.5rem;
-  animation: bounce 2s infinite;
-}
 
 @keyframes bounce {
   0%, 100% {
@@ -221,11 +184,6 @@
   }
 }
 
-.drop-zone-content p {
-  margin: 0;
-  font-size: var(--fs-base);
-  font-weight: 600;
-}
 
 .groups-grid {
   display: grid !important;
@@ -994,11 +952,6 @@
   color: var(--ink-950);
 }
 
-.drop-zone-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
 
 /* Selection container for drag-to-select */
 .selection-container {
@@ -1999,9 +1952,6 @@
 
   /* Drag-only affordances: HTML5 drag-and-drop does not exist on touch, so the
      "drag photos here" strip is dead weight on a phone. */
-  .drop-zone-placeholder {
-    display: none;
-  }
 
   /* ── Photo toolbar ─────────────────────────────────────────────────────
      Stays sticky (inside the scroll container) and wraps rather than scrolling

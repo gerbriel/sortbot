@@ -987,14 +987,14 @@ copy points at them.
 .grouper-scroll-content            (the scroll box, max-height 75vh)
 └── .grouper-toolbar               ← position: sticky; top: 0; z-index: 60
     ├── .gtb-row.gtb-row--controls  IDLE — always on, ONE line ≥ 1024px:
-    │                               Filter ▾ │ View ▾ │ photos-per-item + Apply + Pick │ Pick photos │ (N selected · Undo · Redo, trailing)
+    │                               Filter ▾ │ View ▾ │ photos-per-item + Apply + Pick │ Pick photos │ Ungroup all (while any group exists) │ (N selected · Undo · Redo, trailing)
     │                               Filter ▾ popover: Show (groups/singles) · Date · Category chips · Clear filters
     │                               View ▾ popover:  Sort (4 options) · Columns slider · Storage (clear ALL originals, only with nothing selected)
     │                               Both panels are children of .grouper-toolbar, NEVER portaled — that
     │                               selector is on the click-outside-deselect safe list, so a portaled
     │                               panel would wipe the selection on every click inside it.
     └── .gtb-row.photo-toolbar      CONTEXTUAL — rendered ONLY when something is selected or a rotation/crop is copied:
-                                    rotate │ copy rot/crop │ paste │ revert │ delete │ clear N selected originals
+                                    group N │ ungroup │ clear (selection only) │ rotate │ copy rot/crop │ paste │ revert │ delete N │ clear N selected originals
 ├── .singles-section
 └── .groups-section
 
@@ -1861,6 +1861,14 @@ deleted with its comment on the next App.css pass.
   and the menu's Messages / Inbox row already open the full page. The bubble is scoped to `.app-container`
   so the waitlist screen (no shell) keeps it — it is a waitlisted user's only way to write. Desktop is
   unchanged, and the Back / Continue row's FAB clearance moved into the ≥641px block accordingly.
+- ✅ **Grouping actions live in the Step 2 toolbar; the ungroup drop strip is gone (15 Sept 2026)** — Group N,
+  Ungroup and Clear lead `.photo-toolbar` (the contextual row) when there is a selection, Delete N was already
+  there, and "Ungroup all" (`.gtb-ungroup-all`, still behind the existing `window.confirm`) sits at the right
+  end of the idle row while `multiItemGroups.length > 0`. The `.grouper-actions-sidebar` block under the
+  category panel and every `.gas-*` rule are deleted from App.tsx/App.css (the phone dock's `:has()` rule now
+  only sizes the dock); `grouperActions` still flows to App for `onCategoryAssigned` and `clearSelection`. The
+  dashed `.drop-zone-placeholder` ("Drag photos here to make them individual items") at the top of the
+  singles section is deleted with its drop handler — ungrouping is the button, the group's ⋯ menu, or ⌘⌫.
 
 ---
 

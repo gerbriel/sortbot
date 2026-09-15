@@ -1,10 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, memo } from 'react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
-import { Package, Image, ArrowDown, ArrowUpDown, Check, RotateCcw, CornerUpLeft,
-         CornerUpRight, X, Camera, Circle, CircleDot, Crosshair, ClipboardPaste,
-         Trash2, Scissors, Columns3, Layers, ChevronsDownUp, Filter,
-         SlidersHorizontal } from 'lucide-react';
+import { Package, Image, ArrowUpDown, Check, RotateCcw, CornerUpLeft, CornerUpRight, X, Camera, Circle, CircleDot, Crosshair, ClipboardPaste, Trash2, Scissors, Columns3, Layers, ChevronsDownUp, Filter, SlidersHorizontal, Link2 } from 'lucide-react';
 import {
   PHONE_BREAKPOINT_PX,
   clampGridColumns,
@@ -1171,7 +1168,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       const isSafeTarget = t.closest(
         '.single-item-card, .product-group-card, .group-header, .toolbar, button, [role="button"],' +
         '.category-zone, .category-zones-container, .category-zones, .category-list,' +
-        '.grouper-actions-sidebar, .grouper-toolbar, .photo-toolbar'
+        '.grouper-toolbar, .photo-toolbar'
         // .grouper-toolbar (which wraps .photo-toolbar) is a wide strip directly above
         // the grid, so a mis-tap anywhere on it — a divider, the padding between two
         // control clusters — must not silently wipe the selection. It replaced
@@ -2846,6 +2843,19 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             block (the groups/singles/listings/photos counts were removed Sept 2026;
             the section headings already carry them). Pinned to the END of the row
             so appearing and disappearing never shifts the controls before it. */}
+        {multiItemGroups.length > 0 && (
+          <button
+            type="button"
+            className="ptb-btn ptb-btn--ghost gtb-ungroup-all"
+            title="Remove every grouping in this batch at once"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (window.confirm('Ungroup ALL images? Every item will become its own listing.')) ungroupAll();
+            }}
+          >
+            <Scissors size={12} style={{ flexShrink: 0 }} /> Ungroup all
+          </button>
+        )}
         {(selectedItems.size > 0 || canUndo || canRedo) && (
           <div className="stats stats--trailing">
             {selectedItems.size > 0 && (
@@ -2873,6 +2883,39 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             exist, so the idle toolbar is a single line. ── */}
       {(selectedItems.size > 0 || copiedRotation !== null || copiedCrop !== undefined) && (
       <div className="gtb-row photo-toolbar">
+        {/* Grouping actions first — they used to be a 2×2 grid in the right
+            sidebar; the founder asked for them in this bar with the photo tools.
+            Delete N further along is the same selection's delete. */}
+        {selectedItems.size > 0 && (
+          <>
+            <button
+              type="button"
+              className="ptb-btn ptb-btn--primary"
+              disabled={selectedItems.size < 2}
+              title={selectedItems.size < 2 ? 'Select at least two photos to group them' : `Group ${selectedItems.size} selected photos into one listing (⌘Enter)`}
+              onClick={(e) => { e.stopPropagation(); createGroupFromSelected(); }}
+            >
+              <Link2 size={12} style={{ flexShrink: 0 }} /> Group {selectedItems.size}
+            </button>
+            <button
+              type="button"
+              className="ptb-btn"
+              title="Remove the selected photos from their groups (⌘⌫)"
+              onClick={(e) => { e.stopPropagation(); ungroupSelected(); }}
+            >
+              <Scissors size={12} style={{ flexShrink: 0 }} /> Ungroup
+            </button>
+            <button
+              type="button"
+              className="ptb-btn"
+              title="Clear the selection (⌘D)"
+              onClick={(e) => { e.stopPropagation(); updateSelection(new Set()); }}
+            >
+              <X size={12} style={{ flexShrink: 0 }} /> Clear
+            </button>
+            <span className="ptb-divider" />
+          </>
+        )}
         <button
           className="ptb-btn"
           disabled={selectedItems.size === 0}
@@ -3014,8 +3057,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           const target = e.target as HTMLElement;
           // Don't interfere with buttons, but handle empty areas
           if (!target.closest('button') && 
-              !target.closest('.delete-image-btn') &&
-              !target.closest('.drop-zone-placeholder')) {
+              !target.closest('.delete-image-btn')) {
             handleMouseDown(e, singlesContainerRef.current, 'singles');
           }
         }}
@@ -3024,36 +3066,6 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           <Image size={20} /> Individual Items ({filteredSingleItems.length}{activeFilterCount > 0 ? ` of ${singleItems.length}` : ''})
         </h3>
         
-        {/* Drop Zone - Always visible */}
-        <div 
-          className={`drop-zone-placeholder ${dragOverGroup === 'individuals' ? 'drag-over' : ''}`}
-          onDragOver={(e) => handleDragOver(e, 'individuals')}
-          onDrop={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            if (!draggedItem) return;
-            
-            // Make the item individual by giving it its own productGroup (its ID)
-            const updated = groupedItems.map(item =>
-              item.id === draggedItem.id
-                ? { ...item, productGroup: item.id }
-                : item
-            );
-            
-            commitUpdate(updated);
-            setDraggedItem(null);
-            setDraggedFromGroup(null);
-            setDragOverGroup(null);
-          }}
-          onDragLeave={handleDragLeave}
-        >
-          <div className="drop-zone-content">
-            <ArrowDown size={24} className="drop-zone-icon" />
-            <p>Drag photos here to make them individual items</p>
-          </div>
-        </div>
-
         {/* Items Grid */}
         {singleItems.length > 0 && (
           <div 

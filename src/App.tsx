@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, Suspense, Component, type ReactNode } from 'react';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
-import { Tag, Settings, Package, Link2, Scissors, X, Trash2, BookMarked, KanbanSquare,
-         AlertTriangle, Keyboard, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users, MessageSquare, Wallet, Printer, ScanLine } from 'lucide-react';
+import { Tag, Settings, Package, Link2, Scissors, X, Trash2, BookMarked, KanbanSquare, AlertTriangle, Keyboard, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users, MessageSquare, Wallet, Printer, ScanLine } from 'lucide-react';
 import { log, setDebugEnabled, isDebugEnabled } from './lib/debugLogger';
 import BrandWordmark from './components/Wordmark';
 import Auth from './components/Auth';
@@ -3286,67 +3285,8 @@ function App() {
                   onCategoryAssigned={onCategoryAssignedStable}
                 />
                 </GrouperErrorBoundary>
-                {/* Selection actions — kept here so they stay visible while the left
-                    panel scrolls. Five full-height rows used to sit here at all times,
-                    three of them disabled; now the four selection actions are a 2×2
-                    grid that exists only while something is selected, and the idle
-                    state is one line of hint text. "Ungroup all" is rare and
-                    destructive, so it is a small link rather than a button. */}
-                {grouperActions && (
-                  <div className={`grouper-actions-sidebar${grouperActions.selectedCount > 0 ? ' has-selection' : ''}`}>
-                    {grouperActions.selectedCount > 0 ? (
-                      <div className="gas-grid">
-                        <button
-                          type="button"
-                          className="button button-primary"
-                          onClick={grouperActions.groupSelected}
-                          disabled={grouperActions.selectedCount < 2}
-                          title={grouperActions.selectedCount < 2 ? 'Select at least two photos to group them' : 'Group the selected photos into one listing (⌘Enter)'}
-                        >
-                          <Link2 size={14} /> Group {grouperActions.selectedCount}
-                        </button>
-                        <button
-                          type="button"
-                          className="button button-secondary"
-                          onClick={grouperActions.ungroupSelected}
-                          title="Remove the selected photos from their groups (⌘⌫)"
-                        >
-                          <Scissors size={14} /> Ungroup
-                        </button>
-                        <button
-                          type="button"
-                          className="button gas-delete"
-                          onClick={grouperActions.deleteSelected}
-                          title="Permanently delete the selected photos"
-                        >
-                          <Trash2 size={14} /> Delete {grouperActions.selectedCount}
-                        </button>
-                        <button
-                          type="button"
-                          className="button button-secondary"
-                          onClick={grouperActions.clearSelection}
-                          title="Clear the selection (⌘D)"
-                        >
-                          <X size={14} /> Clear
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="gas-hint">Select photos to group, ungroup or delete them.</p>
-                    )}
-                    <button
-                      type="button"
-                      className="gas-link"
-                      onClick={() => {
-                        if (window.confirm('Ungroup ALL images? Every item will become its own listing.')) {
-                          grouperActions.ungroupAll();
-                        }
-                      }}
-                      title="Remove every grouping in this batch at once"
-                    >
-                      Ungroup all
-                    </button>
-                  </div>
-                )}
+                {/* The selection actions (Group / Ungroup / Delete / Clear / Ungroup all)
+                    live in ImageGrouper's toolbar now (Sept 15 2026). */}
                 {/* Category Preset picker removed — presets applied via right-click or category drag */}
               </div>
             </div>
