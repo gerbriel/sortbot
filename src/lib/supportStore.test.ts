@@ -10,7 +10,7 @@ import {
   supportStore, supportActions, applyReadStamp, applySentMessage, applyStatus, filterThreads, readStampKey,
   supportPollInterval, SUPPORT_POLL_MS, SUPPORT_POLL_SUBSCRIBED_MS,
 } from './supportStore';
-import { isUnread, unreadThreadCount, type SupportThread } from './supportService';
+import { isUnread, unreadThreadCount, type SupportThread, type ThreadMember } from './supportService';
 import type { MockedSupabaseClient } from './testing/supabaseMock';
 
 const mock = (supabase as unknown as MockedSupabaseClient).__mock;
@@ -28,10 +28,13 @@ const thread = (over: Partial<SupportThread> = {}): SupportThread => ({
   org_id: null,
   org_name: 'Cool Shop',
   subject: null,
+  kind: 'support',
   status: 'open',
   last_message_at: '2026-09-13T10:00:00Z',
   last_message_preview: 'hi',
   last_sender_role: 'user',
+  last_sender_id: 'u1',
+  members: [],
   user_last_read_at: '2026-09-13T10:00:00Z',
   founder_last_read_at: null,
   created_at: '2026-09-13T09:00:00Z',
@@ -327,5 +330,129 @@ describe('supportPollInterval', () => {
         expect(v === null || v > 0).toBe(true);
       }
     }
+  });
+});
+
+/**
+ * Team threads in the shared store. The load-bearing difference is that "read"
+ * is a ROW in the participant list rather than one of two columns, so every
+ * optimistic transition needs my own user id to know which row is mine.
+ */
+const teamMember = (user_id: string, last_read_at: string | null): ThreadMember =>
+  ({ user_id, email: `${user_id}@shop.test`, last_read_at });
+
+const teamThread = (over: Partial<SupportThread> = {}): SupportThread => thread({
+  kind: 'team',
+  user_id: 'ana',
+  user_email: 'ana@shop.test',
+  last_sender_role: 'member',
+  last_sender_id: 'ben',
+  members: [teamMember('ana', '2026-09-13T09:00:00Z'), teamMember('ben', '2026-09-13T10:00:00Z')],
+  ...over,
+});
+
+describe('supportStore — team threads', () => {
+  it('stamps MY participant row, and nobody else’s', () => {
+    const list = [teamThread({ id: 'a' })];
+    const next = applyReadStamp(list, 'a', 'member', '2026-09-13T12:00:00Z', 'ana');
+    expect(next[0].members.find(m => m.user_id === 'ana')?.last_read_at).toBe('2026-09-13T12:00:00Z');
+    expect(next[0].members.find(m => m.user_id === 'ben')?.last_read_at).toBe('2026-09-13T10:00:00Z');
+    // No id, or not a participant: the list is returned untouched rather than guessed at.
+    expect(applyReadStamp(list, 'a', 'member', 'x')).toBe(list);
+    expect(applyReadStamp(list, 'a', 'member', 'x', 'zed')).toBe(list);
+    // The support columns are NOT the team read marker.
+    expect(next[0].user_last_read_at).toBe('2026-09-13T10:00:00Z');
+  });
+
+  it('mirrors the trigger for a member message: last_sender_id, and the sender has read it', () => {
+    const list = [teamThread({ id: 'a', status: 'closed' })];
+    const next = applySentMessage(list, 'a', 'on my way', 'member', '2026-09-13T12:00:00Z', 'ana');
+    expect(next[0]).toMatchObject({
+      last_message_at: '2026-09-13T12:00:00Z',
+      last_message_preview: 'on my way',
+      last_sender_role: 'member',
+      last_sender_id: 'ana',
+      status: 'open',
+    });
+    expect(next[0].members.find(m => m.user_id === 'ana')?.last_read_at).toBe('2026-09-13T12:00:00Z');
+    expect(next[0].members.find(m => m.user_id === 'ben')?.last_read_at).toBe('2026-09-13T10:00:00Z');
+    // …and that is exactly what makes it read for me and unread for them.
+    expect(isUnread(next[0], 'member', 'ana')).toBe(false);
+    expect(isUnread(next[0], 'member', 'ben')).toBe(true);
+  });
+
+  it('a support message still records who sent it without touching any roster', () => {
+    const next = applySentMessage([thread({ id: 'a' })], 'a', 'hi', 'founder', '2026-09-13T12:00:00Z', 'founder-id');
+    expect(next[0]).toMatchObject({ last_sender_id: 'founder-id', founder_last_read_at: '2026-09-13T12:00:00Z' });
+    expect(next[0].members).toEqual([]);
+  });
+
+  it('filters by kind, and searches the people in a conversation', () => {
+    const list = [thread({ id: 's', user_email: 'shop@example.com' }), teamThread({ id: 't' })];
+    expect(filterThreads(list, { kind: 'team' }).map(t => t.id)).toEqual(['t']);
+    expect(filterThreads(list, { kind: 'support' }).map(t => t.id)).toEqual(['s']);
+    expect(filterThreads(list, { kind: 'all' })).toBe(list);          // no filter, same array
+    expect(filterThreads(list, { query: 'ben@shop' }).map(t => t.id)).toEqual(['t']);
+    expect(filterThreads(list, { query: 'shop@example' }).map(t => t.id)).toEqual(['s']);
+  });
+
+  it('marks a team thread read against support_thread_members, not the thread row', async () => {
+    serveThreads([teamThread({ id: 'a' })]);
+    const unsub = supportStore.subscribe(() => {});
+    await vi.waitFor(() => expect(supportStore.getState().threads).toHaveLength(1));
+    mock.calls.length = 0;
+
+    supportActions.markRead('a', 'member', 'ana');
+    await vi.waitFor(() => expect(mock.callsFor('support_thread_members', 'update')).toHaveLength(1));
+    const call = mock.callsFor('support_thread_members', 'update')[0];
+    expect(call.filters).toContainEqual({ kind: 'eq', column: 'thread_id', value: 'a' });
+    expect(call.filters).toContainEqual({ kind: 'eq', column: 'user_id', value: 'ana' });
+    expect(mock.callsFor('support_threads', 'update')).toHaveLength(0);
+
+    // Already read for me → no second write.
+    mock.calls.length = 0;
+    supportActions.markRead('a', 'member', 'ana');
+    expect(mock.callsFor('support_thread_members', 'update')).toHaveLength(0);
+    unsub();
+  });
+
+  it('startTeamThread puts the new conversation at the top at once', async () => {
+    mock.responder = call => {
+      if (call.table === 'support_threads' && call.op === 'select') return { data: [], error: null };
+      if (call.table === 'support_threads' && call.op === 'insert') {
+        return { data: { id: 'new', user_id: 'ana', kind: 'team', status: 'open', last_message_at: '2026-09-13T10:00:00Z' }, error: null };
+      }
+      if (call.table === 'support_thread_members' && call.op === 'insert') return { data: null, error: null };
+      if (call.table === 'support_messages' && call.op === 'insert') {
+        return { data: { id: 'm', thread_id: 'new', sender_id: 'ana', sender_role: 'member', body: 'hi team', created_at: '2026-09-13T10:00:01Z' }, error: null };
+      }
+      return undefined;
+    };
+    const unsub = supportStore.subscribe(() => {});
+    await vi.waitFor(() => expect(supportStore.getState().available).toBe(true));
+
+    const r = await supportActions.startTeamThread({
+      me: { user_id: 'ana', email: 'ana@shop.test' },
+      recipients: [{ user_id: 'ben', email: 'ben@shop.test' }],
+      body: 'hi team',
+      orgName: 'Cool Shop',
+    });
+    expect(r.ok).toBe(true);
+    expect(supportStore.getState().threads.map(t => t.id)).toEqual(['new']);
+    expect(supportStore.getState().threads[0].kind).toBe('team');
+    unsub();
+  });
+
+  it('teamAvailable follows the fetch, so the team surface hides pre-migration', async () => {
+    mock.responder = call => {
+      if (call.table !== 'support_threads' || call.op !== 'select') return undefined;
+      return call.columns?.includes('support_thread_members')
+        ? { data: null, error: { code: '42703', message: 'column support_threads.kind does not exist' } }
+        : { data: [], error: null };
+    };
+    const unsub = supportStore.subscribe(() => {});
+    await vi.waitFor(() => expect(supportStore.getState().available).toBe(true));
+    expect(supportStore.getState().teamAvailable).toBe(false);
+    unsub();
   });
 });

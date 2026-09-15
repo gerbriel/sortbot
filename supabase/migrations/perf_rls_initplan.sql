@@ -82,11 +82,23 @@
 -- Any migration that recreates a policy also un-does this file for that policy.
 -- Re-run THIS FILE LAST, after replaying any of:
 --   multi_org_tenancy.sql · beta_signups.sql · crm.sql · finance.sql ·
---   support_messaging.sql · analytics_events.sql · app_errors.sql ·
---   security_invites_hardening.sql · security_verified_email.sql ·
---   security_storage_policies.sql · brand_aliases.sql · listing_labels.sql ·
---   kanban_board.sql · vocab_tables.sql · vocab_models.sql ·
---   org_shopify_connections.sql · founding_user_admin.sql
+--   support_messaging.sql · team_messaging.sql · analytics_events.sql ·
+--   app_errors.sql · security_invites_hardening.sql ·
+--   security_verified_email.sql · security_storage_policies.sql ·
+--   brand_aliases.sql · listing_labels.sql · kanban_board.sql ·
+--   vocab_tables.sql · vocab_models.sql · org_shopify_connections.sql ·
+--   founding_user_admin.sql
+-- team_messaging.sql is the ONE entry in that list whose order does not matter:
+-- section 8 branches on the schema, so team_messaging → this file and this file
+-- → team_messaging end in the same policy set. Everything else still wants this
+-- file run LAST.
+--
+-- PREREQUISITES THIS FILE DOES NOT GUARD (they are not optional, and the error
+-- is a missing FUNCTION rather than a missing table, so `to_regclass` cannot
+-- see it): section 1 calls public.auth_email_verified() — run
+-- security_verified_email.sql first — and section 11 calls
+-- public.storage_prefix_writable(text) — run security_storage_policies.sql
+-- first. Section 10's first index assumes analytics_events exists.
 -- It is independent of security_function_hardening.sql / security_rpc_wrappers.sql
 -- (those move FUNCTIONS, not policies) but should be run after them so the
 -- policies bind `public.<helper>` — the SECURITY INVOKER wrapper — which is the
@@ -373,23 +385,49 @@ end $$;
 
 -- ── 8. Support messaging ────────────────────────────────────────────────────
 -- Source: support_messaging.sql §RLS + security_verified_email.sql §3
--- (support_threads_insert).
+-- (support_threads_insert) + team_messaging.sql §8.
 -- NOTE the shape of support_messages_select / _insert: `auth.uid()` there sits
 -- inside an `exists (select 1 from support_threads t …)` sub-select, which is
 -- ALREADY only evaluated once per outer row. Wrapping it changes it from one
 -- call per sub-scan to one per statement — still worth it, because the inner
 -- scan runs per candidate message row.
+--
+-- ── WHY THIS SECTION BRANCHES ───────────────────────────────────────────────
+-- team_messaging.sql adds a SECOND kind of conversation on these same two
+-- tables and rewrites four of these five policies to understand it. This file
+-- must therefore not simply restore the pre-team text: re-running it on a
+-- team-enabled database would revoke every participant's access to their own
+-- team threads AND — because the pre-team `support_threads_select` is
+-- `user_id = me or is_beta_admin()` with no `kind` test — hand every
+-- workspace's private colleague-to-colleague messages to the founders' inbox,
+-- which is the one thing team_messaging.sql's header says the product will not
+-- do. Reproduced on the throwaway PG 14 harness before this branch existed.
+--
+-- So the definitions below are chosen by the schema, not by the run order, and
+-- EITHER order (team_messaging → this file, or this file → team_messaging)
+-- ends in the same policy set. The team branch is TEXTUALLY IDENTICAL to
+-- team_messaging.sql §8 — those policies are already InitPlan-wrapped there, so
+-- there is nothing for this file to improve; it only has to stop undoing them.
+-- If you change one, change both.
+--
+-- The guard tests the helper as well as the column because a PARTIALLY applied
+-- team_messaging rollback is a reachable state (its ROLLBACK block drops the
+-- helper and the members table BEFORE narrowing the CHECKs, which fails while
+-- any 'member' row survives). With `kind` present but the helper gone the team
+-- definitions cannot be created at all, so we say so and fall back rather than
+-- abort the whole section.
+--
+-- support_threads_insert is NOT part of the branch: it is owned by
+-- security_verified_email.sql §3, a team thread needs nothing extra from it,
+-- and it is identical either way.
 
 do $$
+declare team_ready boolean;
 begin
 if to_regclass('public.support_threads') is null then
   raise notice 'perf_rls_initplan: support tables absent — skipping section 8';
   return;
 end if;
-
-drop policy if exists support_threads_select on public.support_threads;
-create policy support_threads_select on public.support_threads for select
-  to authenticated using (user_id = (select auth.uid()) or (select public.is_beta_admin()));
 
 drop policy if exists support_threads_insert on public.support_threads;
 create policy support_threads_insert on public.support_threads for insert
@@ -402,32 +440,159 @@ create policy support_threads_insert on public.support_threads for insert
     )
   );
 
-drop policy if exists support_threads_update on public.support_threads;
-create policy support_threads_update on public.support_threads for update
-  to authenticated
-  using (user_id = (select auth.uid()) or (select public.is_beta_admin()))
-  with check (user_id = (select auth.uid()) or (select public.is_beta_admin()));
+team_ready := exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'support_threads'
+      and column_name = 'kind'
+  )
+  and to_regprocedure('public.is_thread_participant(uuid)') is not null;
 
-drop policy if exists support_messages_select on public.support_messages;
-create policy support_messages_select on public.support_messages for select
-  to authenticated using (
-    exists (select 1 from public.support_threads t
-            where t.id = thread_id
-              and (t.user_id = (select auth.uid()) or (select public.is_beta_admin())))
-  );
+if exists (select 1 from information_schema.columns
+           where table_schema = 'public' and table_name = 'support_threads'
+             and column_name = 'kind')
+   and not team_ready then
+  raise notice 'perf_rls_initplan: support_threads.kind exists but public.is_thread_participant(uuid) does not — installing the PRE-TEAM policies. Re-run team_messaging.sql (or finish its rollback) and then re-run this file.';
+end if;
 
-drop policy if exists support_messages_insert on public.support_messages;
-create policy support_messages_insert on public.support_messages for insert
-  to authenticated with check (
-    sender_id = (select auth.uid())
-    and (
-      (sender_role = 'user' and exists (
-         select 1 from public.support_threads t
-         where t.id = thread_id and t.user_id = (select auth.uid())))
-      or
-      (sender_role = 'founder' and (select public.is_beta_admin()))
+if team_ready then
+  -- ── team_messaging.sql has run: the kind-aware set ────────────────────────
+  drop policy if exists support_threads_select on public.support_threads;
+  create policy support_threads_select on public.support_threads for select
+    to authenticated using (
+      user_id = (select auth.uid())
+      or (kind = 'support' and (select public.is_beta_admin()))
+      or (select public.is_thread_participant(id))
+    );
+
+  drop policy if exists support_threads_update on public.support_threads;
+  create policy support_threads_update on public.support_threads for update
+    to authenticated
+    using (
+      user_id = (select auth.uid())
+      or (kind = 'support' and (select public.is_beta_admin()))
+      or (select public.is_thread_participant(id))
     )
-  );
+    with check (
+      user_id = (select auth.uid())
+      or (kind = 'support' and (select public.is_beta_admin()))
+      or (select public.is_thread_participant(id))
+    );
+
+  drop policy if exists support_threads_delete on public.support_threads;
+  create policy support_threads_delete on public.support_threads for delete
+    to authenticated using (kind = 'team' and user_id = (select auth.uid()));
+
+  drop policy if exists support_messages_select on public.support_messages;
+  create policy support_messages_select on public.support_messages for select
+    to authenticated using (
+      exists (
+        select 1 from public.support_threads t
+        where t.id = thread_id
+          and (
+            t.user_id = (select auth.uid())
+            or (t.kind = 'support' and (select public.is_beta_admin()))
+            or (select public.is_thread_participant(t.id))
+          )
+      )
+    );
+
+  drop policy if exists support_messages_insert on public.support_messages;
+  create policy support_messages_insert on public.support_messages for insert
+    to authenticated with check (
+      sender_id = (select auth.uid())
+      and (
+        (sender_role = 'user' and exists (
+           select 1 from public.support_threads t
+           where t.id = thread_id and t.kind = 'support' and t.user_id = (select auth.uid())))
+        or
+        (sender_role = 'founder' and (select public.is_beta_admin()) and exists (
+           select 1 from public.support_threads t
+           where t.id = thread_id and t.kind = 'support'))
+        or
+        (sender_role = 'member' and (select public.is_thread_participant(thread_id)) and exists (
+           select 1 from public.support_threads t
+           where t.id = thread_id and t.kind = 'team'))
+      )
+    );
+
+  if to_regclass('public.support_thread_members') is not null then
+    drop policy if exists support_thread_members_select on public.support_thread_members;
+    create policy support_thread_members_select on public.support_thread_members for select
+      to authenticated using (
+        user_id = (select auth.uid())
+        or (select public.is_thread_participant(thread_id))
+      );
+
+    drop policy if exists support_thread_members_insert on public.support_thread_members;
+    create policy support_thread_members_insert on public.support_thread_members for insert
+      to authenticated with check (
+        exists (
+          select 1 from public.support_threads t
+          where t.id = support_thread_members.thread_id
+            and t.kind = 'team'
+            and t.user_id = (select auth.uid())
+            and exists (
+              select 1 from public.org_members om
+              where om.org_id = t.org_id
+                and om.user_id = support_thread_members.user_id
+                and (
+                  support_thread_members.email is null
+                  or lower(support_thread_members.email) = lower(coalesce(om.email, ''))
+                )
+            )
+        )
+      );
+
+    drop policy if exists support_thread_members_update on public.support_thread_members;
+    create policy support_thread_members_update on public.support_thread_members for update
+      to authenticated
+      using (user_id = (select auth.uid()))
+      with check (user_id = (select auth.uid()));
+
+    drop policy if exists support_thread_members_delete on public.support_thread_members;
+    create policy support_thread_members_delete on public.support_thread_members for delete
+      to authenticated using (
+        user_id = (select auth.uid())
+        or exists (
+          select 1 from public.support_threads t
+          where t.id = support_thread_members.thread_id and t.user_id = (select auth.uid())
+        )
+      );
+  end if;
+
+else
+  -- ── team_messaging.sql has NOT run: support_messaging.sql's set ───────────
+  drop policy if exists support_threads_select on public.support_threads;
+  create policy support_threads_select on public.support_threads for select
+    to authenticated using (user_id = (select auth.uid()) or (select public.is_beta_admin()));
+
+  drop policy if exists support_threads_update on public.support_threads;
+  create policy support_threads_update on public.support_threads for update
+    to authenticated
+    using (user_id = (select auth.uid()) or (select public.is_beta_admin()))
+    with check (user_id = (select auth.uid()) or (select public.is_beta_admin()));
+
+  drop policy if exists support_messages_select on public.support_messages;
+  create policy support_messages_select on public.support_messages for select
+    to authenticated using (
+      exists (select 1 from public.support_threads t
+              where t.id = thread_id
+                and (t.user_id = (select auth.uid()) or (select public.is_beta_admin())))
+    );
+
+  drop policy if exists support_messages_insert on public.support_messages;
+  create policy support_messages_insert on public.support_messages for insert
+    to authenticated with check (
+      sender_id = (select auth.uid())
+      and (
+        (sender_role = 'user' and exists (
+           select 1 from public.support_threads t
+           where t.id = thread_id and t.user_id = (select auth.uid())))
+        or
+        (sender_role = 'founder' and (select public.is_beta_admin()))
+      )
+    );
+end if;
 end $$;
 
 
@@ -916,10 +1081,17 @@ end $$;
 --     to authenticated using (public.is_beta_admin());
 -- end if;
 --
+-- -- SECTION 8 IS CONDITIONAL, AND SO IS ITS ROLLBACK. The un-wrapped text
+-- -- below is support_messaging.sql's PRE-TEAM policy set. On a database where
+-- -- team_messaging.sql has run it is NOT the right thing to restore: it would
+-- -- cut every participant off from their own team threads and, because it has
+-- -- no `kind` test, expose every workspace's private team conversation to the
+-- -- founders' inbox. On such a database roll section 8 back by re-running
+-- -- team_messaging.sql §8 instead (that text is already un-wrapped-equivalent
+-- -- in effect; the wrapping is a planner hint, not a permission), or run
+-- -- team_messaging.sql's own ROLLBACK block first and then this one.
+-- -- support_threads_insert is identical either way.
 -- if to_regclass('public.support_threads') is not null then
---   drop policy if exists support_threads_select on public.support_threads;
---   create policy support_threads_select on public.support_threads for select
---     to authenticated using (user_id = auth.uid() or public.is_beta_admin());
 --   drop policy if exists support_threads_insert on public.support_threads;
 --   create policy support_threads_insert on public.support_threads for insert
 --     to authenticated with check (
@@ -930,28 +1102,37 @@ end $$;
 --             and lower(user_email) = lower(auth.jwt() ->> 'email'))
 --       )
 --     );
---   drop policy if exists support_threads_update on public.support_threads;
---   create policy support_threads_update on public.support_threads for update
---     to authenticated
---     using (user_id = auth.uid() or public.is_beta_admin())
---     with check (user_id = auth.uid() or public.is_beta_admin());
---   drop policy if exists support_messages_select on public.support_messages;
---   create policy support_messages_select on public.support_messages for select
---     to authenticated using (
---       exists (select 1 from public.support_threads t
---               where t.id = thread_id and (t.user_id = auth.uid() or public.is_beta_admin()))
---     );
---   drop policy if exists support_messages_insert on public.support_messages;
---   create policy support_messages_insert on public.support_messages for insert
---     to authenticated with check (
---       sender_id = auth.uid()
---       and (
---         (sender_role = 'user' and exists (
---            select 1 from public.support_threads t where t.id = thread_id and t.user_id = auth.uid()))
---         or
---         (sender_role = 'founder' and public.is_beta_admin())
---       )
---     );
+--   if not exists (select 1 from information_schema.columns
+--                  where table_schema = 'public' and table_name = 'support_threads'
+--                    and column_name = 'kind') then
+--     drop policy if exists support_threads_select on public.support_threads;
+--     create policy support_threads_select on public.support_threads for select
+--       to authenticated using (user_id = auth.uid() or public.is_beta_admin());
+--     drop policy if exists support_threads_update on public.support_threads;
+--     create policy support_threads_update on public.support_threads for update
+--       to authenticated
+--       using (user_id = auth.uid() or public.is_beta_admin())
+--       with check (user_id = auth.uid() or public.is_beta_admin());
+--     drop policy if exists support_messages_select on public.support_messages;
+--     create policy support_messages_select on public.support_messages for select
+--       to authenticated using (
+--         exists (select 1 from public.support_threads t
+--                 where t.id = thread_id and (t.user_id = auth.uid() or public.is_beta_admin()))
+--       );
+--     drop policy if exists support_messages_insert on public.support_messages;
+--     create policy support_messages_insert on public.support_messages for insert
+--       to authenticated with check (
+--         sender_id = auth.uid()
+--         and (
+--           (sender_role = 'user' and exists (
+--              select 1 from public.support_threads t where t.id = thread_id and t.user_id = auth.uid()))
+--           or
+--           (sender_role = 'founder' and public.is_beta_admin())
+--         )
+--       );
+--   else
+--     raise notice 'rollback: support_threads.kind present — leaving team_messaging.sql''s section 8 policies in place. Roll team_messaging.sql back first if you want the pre-team set.';
+--   end if;
 -- end if;
 --
 -- if to_regclass('public.descriptor_chips') is not null then

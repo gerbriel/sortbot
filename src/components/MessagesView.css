@@ -540,3 +540,69 @@
   .mv-note { padding: 1rem 1.2rem; }
   .mv-error { padding: 1rem 1.2rem; }
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   TEAM CONVERSATIONS (team_messaging.sql)
+
+   Appended as one fenced block rather than woven through the file above, so a
+   future revert is a delete. Everything here is additive — no rule above is
+   overridden, which is why base declarations can sit after the media queries.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* The kind mark on a thread row: a life ring for the support desk, people for a
+   team conversation. It only renders once team messaging is migrated — before
+   that every row is the same kind and a badge saying so is noise. */
+.mv-kind {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.mv-thread--on .mv-kind,
+.mv-thread--unread .mv-kind { color: var(--text-secondary); }
+
+/* Chips gained leading icons; keep the glyph and the label on one baseline. */
+.mv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* ── The compose panel ────────────────────────────────────────────────────
+   Deliberately INLINE, at the top of the conversation column, not a modal:
+   ≤1024px this view is already one column that swaps list for conversation,
+   and a dialog on top of that swap would be a third layer to escape from on a
+   phone. It also means the recipient chips and the composer share one scroll. */
+.mv-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: 1.4rem;
+  margin-bottom: 0.4rem;
+  background: var(--ink-800);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.mv-compose-label {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  /* The recipient chips are the one control in this panel, so they take the
+     44px floor like every other tap target (AGENTS.md §1). The `.mv-chip` rule
+     in the phone block above already sets it — restated here only for the ones
+     inside the panel, whose parent is not `.mv-list-head`. */
+  .mv-compose .mv-chip {
+    min-height: 44px;
+    padding-inline: 1.6rem;
+    font-size: var(--fs-sm);
+  }
+
+  .mv-compose { padding: 1.2rem; }
+}

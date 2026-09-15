@@ -27,9 +27,10 @@
  */
 import { useMemo, useSyncExternalStore } from 'react';
 import {
-  createThread, fetchMessages, fetchThreads, markThreadRead, sendMessage, setThreadStatus,
+  createTeamThread, createThread, fetchMessages, fetchThreads, markThreadRead, sendMessage, setThreadStatus,
   subscribeToSupport, isUnread, sortThreads, unreadThreadCount,
-  type NewThreadInput, type SupportMessage, type SupportRole, type SupportThread, type ThreadStatus,
+  type NewTeamThreadInput, type NewThreadInput, type SupportMessage, type SupportRole,
+  type SupportThread, type ThreadKind, type ThreadStatus,
 } from './supportService';
 import { log } from './debugLogger';
 
@@ -66,12 +67,15 @@ export interface SupportStoreState {
   threads: SupportThread[];
   /** null = not checked yet · false = tables missing / unreachable · true = live. */
   available: boolean | null;
+  /** false = team_messaging.sql has not been run. Support messaging still works
+   *  in full; the team surface (the picker, the kind chips) hides itself. */
+  teamAvailable: boolean;
   /** Ticks once per COMPLETED server refetch. Consumers reload their open
    *  conversation's messages off this rather than off the array identity. */
   revision: number;
 }
 
-const emptyState: SupportStoreState = { threads: [], available: null, revision: 0 };
+const emptyState: SupportStoreState = { threads: [], available: null, teamAvailable: false, revision: 0 };
 
 let state: SupportStoreState = emptyState;
 const listeners = new Set<() => void>();
@@ -92,17 +96,24 @@ export function readStampKey(role: SupportRole): 'user_last_read_at' | 'founder_
   return role === 'user' ? 'user_last_read_at' : 'founder_last_read_at';
 }
 
-/** Stamp my read marker on one thread. Returns the SAME array when nothing
+/** Stamp my read marker on one thread — a COLUMN on a support thread, a ROW in
+ *  the participant list on a team one. Returns the SAME array when nothing
  *  changed, so a no-op mark never re-renders anybody. */
 export function applyReadStamp(
-  threads: SupportThread[], threadId: string, role: SupportRole, at: string,
+  threads: SupportThread[], threadId: string, role: SupportRole, at: string, myUserId?: string | null,
 ): SupportThread[] {
-  const key = readStampKey(role);
   let touched = false;
   const next = threads.map(t => {
     if (t.id !== threadId) return t;
+    if (t.kind === 'team') {
+      // Without an id there is no row of mine to stamp; leave the list alone
+      // rather than guess (the same rule isUnread applies).
+      if (!myUserId || !t.members.some(m => m.user_id === myUserId)) return t;
+      touched = true;
+      return { ...t, members: t.members.map(m => (m.user_id === myUserId ? { ...m, last_read_at: at } : m)) };
+    }
     touched = true;
-    return { ...t, [key]: at };
+    return { ...t, [readStampKey(role)]: at };
   });
   return touched ? next : threads;
 }
@@ -115,15 +126,27 @@ export function applyReadStamp(
  */
 export function applySentMessage(
   threads: SupportThread[], threadId: string, body: string, role: SupportRole, at: string,
+  senderId: string | null = null,
 ): SupportThread[] {
-  return threads.map(t => (t.id === threadId ? {
-    ...t,
-    last_message_at: at,
-    last_message_preview: body.slice(0, 140),
-    last_sender_role: role,
-    status: 'open' as ThreadStatus,
-    [readStampKey(role)]: at,
-  } : t));
+  return threads.map(t => {
+    if (t.id !== threadId) return t;
+    const base: SupportThread = {
+      ...t,
+      last_message_at: at,
+      last_message_preview: body.slice(0, 140),
+      last_sender_role: role,
+      last_sender_id: senderId,
+      status: 'open' as ThreadStatus,
+    };
+    // A team thread has no user/founder read columns: the sender's own
+    // participant row is what the trigger stamps.
+    if (role === 'member') {
+      return senderId
+        ? { ...base, members: base.members.map(m => (m.user_id === senderId ? { ...m, last_read_at: at } : m)) }
+        : base;
+    }
+    return { ...base, [readStampKey(role)]: at };
+  });
 }
 
 export function applyStatus(
@@ -140,15 +163,19 @@ export function applyStatus(
  */
 export function filterThreads(
   threads: SupportThread[],
-  opts: { query?: string; status?: ThreadStatus | 'all' } = {},
+  opts: { query?: string; status?: ThreadStatus | 'all'; kind?: ThreadKind | 'all' } = {},
 ): SupportThread[] {
   const q = (opts.query ?? '').trim().toLowerCase();
   const status = opts.status ?? 'all';
-  if (!q && status === 'all') return threads;
+  const kind = opts.kind ?? 'all';
+  if (!q && status === 'all' && kind === 'all') return threads;
   return threads.filter(t => {
     if (status !== 'all' && t.status !== status) return false;
+    if (kind !== 'all' && t.kind !== kind) return false;
     if (!q) return true;
-    return [t.user_email, t.org_name, t.subject, t.last_message_preview]
+    // Participants are searched too — on a team thread the emails ARE the name
+    // of the conversation, and nothing else in the row carries them.
+    return [t.user_email, t.org_name, t.subject, t.last_message_preview, ...t.members.map(m => m.email)]
       .some(v => !!v && v.toLowerCase().includes(q));
   });
 }
@@ -180,7 +207,7 @@ async function runRefresh(): Promise<void> {
     set({ available: false, revision: state.revision + 1 });
     return;
   }
-  set({ threads: r.threads, available: true, revision: state.revision + 1 });
+  set({ threads: r.threads, available: true, teamAvailable: r.teamAvailable, revision: state.revision + 1 });
 }
 
 /** Refetch the thread list. Concurrent callers share one round-trip. */
@@ -282,16 +309,16 @@ export const supportActions = {
 
   /** Stamp my read marker — locally at once, then in the DB. No-op when the
    *  thread is already read for me, so it is safe to call on every poll. */
-  markRead(threadId: string, role: SupportRole): void {
+  markRead(threadId: string, role: SupportRole, myUserId?: string | null): void {
     const t = state.threads.find(x => x.id === threadId);
-    if (!t || !isUnread(t, role)) return;
-    set({ threads: applyReadStamp(state.threads, threadId, role, new Date().toISOString()) });
-    void markThreadRead(threadId, role);
+    if (!t || !isUnread(t, role, myUserId)) return;
+    set({ threads: applyReadStamp(state.threads, threadId, role, new Date().toISOString(), myUserId) });
+    void markThreadRead(t, role, myUserId);
   },
 
   /** Open a conversation: its messages, and my read marker cleared. */
-  async openThread(threadId: string, role: SupportRole): Promise<SupportMessage[]> {
-    supportActions.markRead(threadId, role);
+  async openThread(threadId: string, role: SupportRole, myUserId?: string | null): Promise<SupportMessage[]> {
+    supportActions.markRead(threadId, role, myUserId);
     return fetchMessages(threadId);
   },
 
@@ -304,7 +331,7 @@ export const supportActions = {
   async send(threadId: string, body: string, role: SupportRole): Promise<SupportMessage | null> {
     const m = await sendMessage(threadId, body, role);
     if (!m) return null;
-    set({ threads: applySentMessage(state.threads, threadId, m.body, role, m.created_at) });
+    set({ threads: applySentMessage(state.threads, threadId, m.body, role, m.created_at, m.sender_id) });
     void refresh();
     log.app(`support | message sent as ${role}`);
     return m;
@@ -317,6 +344,17 @@ export const supportActions = {
       set({ threads: [r.thread, ...state.threads.filter(t => t.id !== r.thread.id)] });
       void refresh();
       log.app('support | conversation started');
+    }
+    return r;
+  },
+
+  /** Start a conversation with people in my own workspace (kind 'team'). */
+  async startTeamThread(input: NewTeamThreadInput) {
+    const r = await createTeamThread(input);
+    if (r.ok) {
+      set({ threads: [r.thread, ...state.threads.filter(t => t.id !== r.thread.id)] });
+      void refresh();
+      log.app(`support | team conversation started with ${input.recipients.length}`);
     }
     return r;
   },
@@ -340,28 +378,41 @@ export interface UseSupportThreads {
   /** Ordered for `role`: open before closed, unread before read, newest first. */
   sorted: SupportThread[];
   available: boolean | null;
-  /** How many threads are waiting on `role`. Drives both unread badges. */
+  /** false until team_messaging.sql has been run (support still works). */
+  teamAvailable: boolean;
+  /** Everything waiting on me, support and team. The header trigger and the
+   *  Inbox row count this. */
   unreadCount: number;
+  /** SUPPORT threads only — the floating widget's badge, which never shows
+   *  team conversations (they live on the Messages page). */
+  supportUnreadCount: number;
   /** Ticks per completed refetch — the dependency for "reload my messages". */
   revision: number;
   refresh: () => Promise<void>;
 }
 
 /**
- * Subscribe to the shared thread list from `role`'s point of view.
+ * Subscribe to the shared thread list from `role`'s point of view. `myUserId`
+ * is what makes team unread computable — a team conversation has N sides, so
+ * "is this waiting on me?" is answered by my own participant row, not by a
+ * user/founder column. Omit it and team threads simply never read as unread.
  *
  * Mounting this hook is what starts the Realtime channel and the poll, so call
  * it only from components that are on screen for a signed-in user — a
  * logged-out visitor must not be querying `support_threads`.
  */
-export function useSupportThreads(role: SupportRole): UseSupportThreads {
+export function useSupportThreads(role: SupportRole, myUserId?: string | null): UseSupportThreads {
   const snapshot = useSyncExternalStore(
     supportStore.subscribe,
     supportStore.getState,
     supportStore.getState,
   );
-  const { threads, available, revision } = snapshot;
-  const sorted = useMemo(() => sortThreads(threads, role), [threads, role]);
-  const unreadCount = useMemo(() => unreadThreadCount(threads, role), [threads, role]);
-  return { threads, sorted, available, unreadCount, revision, refresh };
+  const { threads, available, teamAvailable, revision } = snapshot;
+  const sorted = useMemo(() => sortThreads(threads, role, myUserId), [threads, role, myUserId]);
+  const unreadCount = useMemo(() => unreadThreadCount(threads, role, myUserId), [threads, role, myUserId]);
+  const supportUnreadCount = useMemo(
+    () => unreadThreadCount(threads.filter(t => t.kind !== 'team'), role, myUserId),
+    [threads, role, myUserId],
+  );
+  return { threads, sorted, available, teamAvailable, unreadCount, supportUnreadCount, revision, refresh };
 }

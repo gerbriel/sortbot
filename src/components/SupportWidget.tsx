@@ -18,6 +18,11 @@ interface SupportWidgetProps {
  * The floating "Messages" button (bottom-right) and its panel — first-party
  * support messaging on our own Supabase project, no chat vendor.
  *
+ * SUPPORT CONVERSATIONS ONLY, deliberately. Team threads live on the same two
+ * tables and in the same store, but they belong on the full-page Messages view
+ * where there is room for a participant list; a colleague's message appearing
+ * in the "talk to Arcadian" bubble would read as a support reply.
+ *
  *   user     sees their own conversations, starts new ones, posts as 'user'
  *   founder  sees every conversation (open / closed), replies as 'founder',
  *            closes and reopens threads
@@ -31,7 +36,7 @@ interface SupportWidgetProps {
  */
 function SupportWidget({ userEmail, orgName, isFounder }: SupportWidgetProps) {
   const role: SupportRole = isFounder ? 'founder' : 'user';
-  const { threads, sorted, available, unreadCount, revision } = useSupportThreads(role);
+  const { threads, sorted, available, supportUnreadCount, revision } = useSupportThreads(role);
   const [open, setOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [composingNew, setComposingNew] = useState(false);
@@ -66,9 +71,17 @@ function SupportWidget({ userEmail, orgName, isFounder }: SupportWidgetProps) {
     if (open) listEndRef.current?.scrollIntoView({ block: 'end' });
   }, [messages, open, activeId]);
 
-  const openCount = useMemo(() => threads.filter(t => t.status === 'open').length, [threads]);
-  const active = activeId ? threads.find(t => t.id === activeId) ?? null : null;
-  const visibleThreads = isFounder ? sorted.filter(t => t.status === filter) : sorted;
+  /* SUPPORT ONLY. Team conversations (team_messaging.sql) share these tables
+     and this store, but not this panel: the floating button is the line to the
+     Arcadian team, and a colleague's message belongs on the Messages page with
+     room for a participant list. One filter here keeps the two apart —
+     `supportUnreadCount` is the matching badge, so the count can never disagree
+     with the list under it. */
+  const supportThreads = useMemo(() => threads.filter(t => t.kind !== 'team'), [threads]);
+  const supportSorted = useMemo(() => sorted.filter(t => t.kind !== 'team'), [sorted]);
+  const openCount = useMemo(() => supportThreads.filter(t => t.status === 'open').length, [supportThreads]);
+  const active = activeId ? supportThreads.find(t => t.id === activeId) ?? null : null;
+  const visibleThreads = isFounder ? supportSorted.filter(t => t.status === filter) : supportSorted;
 
   const openThread = (id: string) => {
     setActiveId(id);
@@ -89,8 +102,8 @@ function SupportWidget({ userEmail, orgName, isFounder }: SupportWidgetProps) {
     setOpen(true);
     // A user with exactly one conversation lands straight in it.
     if (!isFounder && !activeId && !composingNew) {
-      if (sorted.length === 1) openThread(sorted[0].id);
-      else if (sorted.length === 0) setComposingNew(true);
+      if (supportSorted.length === 1) openThread(supportSorted[0].id);
+      else if (supportSorted.length === 0) setComposingNew(true);
     }
   };
 
@@ -146,7 +159,7 @@ function SupportWidget({ userEmail, orgName, isFounder }: SupportWidgetProps) {
       {open && (
         <div className="sw-panel" role="dialog" aria-label={title}>
           <div className="sw-head">
-            {!showList && (isFounder || threads.length > 0) && (
+            {!showList && (isFounder || supportThreads.length > 0) && (
               <button className="sw-icon-btn" onClick={backToList} aria-label="Back to conversations">
                 <ChevronLeft size={16} />
               </button>
@@ -181,7 +194,7 @@ function SupportWidget({ userEmail, orgName, isFounder }: SupportWidgetProps) {
                     Open {openCount}
                   </button>
                   <button className={`sw-chip ${filter === 'closed' ? 'sw-chip--on' : ''}`} onClick={() => setFilter('closed')}>
-                    Closed {threads.length - openCount}
+                    Closed {supportThreads.length - openCount}
                   </button>
                 </div>
               )}
@@ -266,7 +279,7 @@ function SupportWidget({ userEmail, orgName, isFounder }: SupportWidgetProps) {
       >
         <MessageSquare size={18} />
         <span>{isFounder ? 'Inbox' : 'Messages'}</span>
-        {unreadCount > 0 && <span className="sw-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}
+        {supportUnreadCount > 0 && <span className="sw-badge">{supportUnreadCount > 99 ? '99+' : supportUnreadCount}</span>}
       </button>
     </div>
   );

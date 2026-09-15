@@ -178,8 +178,11 @@ const ViewFallback = () => (
  * simply moved from that button to this trigger and to the Inbox menu row.)
  */
 function AccountNav(
-  { isFounder, items, ...rest }: {
+  { isFounder, userId, items, ...rest }: {
     isFounder: boolean;
+    /** Team conversations have N sides, so "waiting on me" is answered by my own
+     *  participant row rather than a user/founder column — the badge needs the id. */
+    userId: string;
     items: WorkspaceNavItem[];
     orgName: string | null;
     role?: string;
@@ -193,7 +196,7 @@ function AccountNav(
     storage?: WorkspaceStorage | null;
   },
 ) {
-  const { available, unreadCount } = useSupportThreads(isFounder ? 'founder' : 'user');
+  const { available, unreadCount } = useSupportThreads(isFounder ? 'founder' : 'user', userId);
   // Same rule as the floating widget: no messaging tables, no messaging UI —
   // the row disappears from the menu rather than opening a broken view.
   const resolved = available === false
@@ -3110,6 +3113,7 @@ function App() {
                 a menu to be opened is still on the bar. */}
             <AccountNav
               isFounder={supportIsFounder}
+              userId={user.id}
               items={navItems}
               orgName={currentOrg?.name ?? null}
               role={currentOrg ? orgRole : undefined}
@@ -3641,14 +3645,19 @@ function App() {
             icon={<MessageSquare size={26} />}
             title={supportIsFounder ? 'Inbox' : 'Messages'}
             description={supportIsFounder
-              ? 'Every conversation with every workspace. Reply, close what is handled, reopen what is not.'
-              : 'Talk to the Arcadian team. Ask anything — we read everything and usually reply within a day.'}
+              ? 'Every support conversation with every workspace, plus your own workspace’s team threads. Reply, close what is handled, reopen what is not.'
+              : 'Talk to the Arcadian team, or message people in your workspace. Ask anything — we read everything and usually reply within a day.'}
             onBack={goToWorkflow}
             wide
           >
             <MessagesView
               userEmail={user.email ?? null}
               orgName={supportOrgName}
+              userId={user.id}
+              /* Only my OWN workspace's members can be added to a team thread —
+                 org_members' SELECT policy already scopes this to what I may
+                 read, and the INSERT policy proves it again server-side. */
+              orgId={currentOrg?.id ?? null}
               isFounder={supportIsFounder}
             />
           </ToolView>
