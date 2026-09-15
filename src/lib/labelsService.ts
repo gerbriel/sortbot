@@ -247,6 +247,70 @@ export async function unassignLabel(
   return { ok: true };
 }
 
+/**
+ * How many LISTINGS each label is on.
+ *
+ * Listings, not photos: a listing's photos are separate `products` rows (§7),
+ * so counting `product_labels` rows would tell a founder that a four-photo
+ * jacket used a label four times. The embed pulls each assignment's product
+ * group and the distinct groups are counted, which is the number the picker and
+ * the Manage-labels list actually mean.
+ *
+ * PAGINATED. PostgREST truncates at 1,000 rows with no error (§18 #23), and a
+ * workspace that labels everything crosses that in one season — an undercount
+ * here would quietly turn "used on 1,400 listings" into a delete that looked
+ * safe. MAX_PAGES bounds the walk; `complete` says whether it finished, so the
+ * UI can decline to claim a number it did not finish counting.
+ */
+const USAGE_PAGE = 1000;
+const USAGE_MAX_PAGES = 30;
+
+export type LabelUsageResult =
+  | { status: 'ok'; counts: Record<string, number>; complete: boolean }
+  | { status: 'unavailable' };
+
+export async function countLabelUsage(): Promise<LabelUsageResult> {
+  const groupsByLabel = new Map<string, Set<string>>();
+  try {
+    let page = 0;
+    let complete = true;
+    for (; page < USAGE_MAX_PAGES; page++) {
+      const from = page * USAGE_PAGE;
+      const { data, error } = await supabase
+        .from('product_labels')
+        .select('label_id, products ( id, product_group )')
+        .range(from, from + USAGE_PAGE - 1);
+      if (error) {
+        log.service(`countLabelUsage | unavailable (${error.code ?? ''} ${error.message})`);
+        return { status: 'unavailable' };
+      }
+      const rows = (data ?? []) as Array<{
+        label_id: string;
+        products: { id?: string; product_group?: string | null } | Array<{ id?: string; product_group?: string | null }> | null;
+      }>;
+      for (const row of rows) {
+        // PostgREST returns a to-one embed as an object; some versions return a
+        // one-element array. Tolerate both, as fetchLabelsForProducts does.
+        const rel = row.products;
+        const product = Array.isArray(rel) ? rel[0] : rel;
+        const key = (product?.product_group || product?.id || '').trim();
+        if (!key) continue;
+        let set = groupsByLabel.get(row.label_id);
+        if (!set) { set = new Set(); groupsByLabel.set(row.label_id, set); }
+        set.add(key);
+      }
+      if (rows.length < USAGE_PAGE) break;
+      if (page === USAGE_MAX_PAGES - 1) complete = false;
+    }
+    const counts: Record<string, number> = {};
+    for (const [labelId, set] of groupsByLabel) counts[labelId] = set.size;
+    return { status: 'ok', counts, complete };
+  } catch (err) {
+    log.error(`countLabelUsage | unexpected: ${String(err)}`);
+    return { status: 'unavailable' };
+  }
+}
+
 // ── SKUs ────────────────────────────────────────────────────────────────────
 
 /** How many fresh codes to try before giving up on a collision. At 32⁶ codes
@@ -318,6 +382,47 @@ export async function ensureSkus(productIds: readonly string[]): Promise<SkuAssi
   }
 
   return { status: 'ok', skus };
+}
+
+export type CodeWriteResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Write a listing's SKU and/or free-text barcode.
+ *
+ * A DEDICATED FUNCTION rather than productService.updateProduct, for one
+ * reason: updateProduct swallows the Postgres error and returns `false`, which
+ * is exactly right for a field edit and exactly wrong here. `products_org_sku_uidx`
+ * makes a duplicate SKU a 23505, and "That SKU is already used" is the only
+ * message that tells the user what to do about it — a bare "could not save"
+ * would leave them retyping the same code.
+ *
+ * Writes the row the scanner and the printed label read (the group LEADER); the
+ * caller passes that id. Sending `null` clears the column, which is how a
+ * manufacturer barcode is removed — and an empty SKU is normalised to null so a
+ * blank string cannot occupy the unique index's `where sku is not null` slot.
+ */
+export async function setProductCodes(
+  productId: string,
+  patch: { sku?: string | null; barcode?: string | null },
+): Promise<CodeWriteResult> {
+  const body: Record<string, unknown> = {};
+  if (patch.sku !== undefined) body.sku = (patch.sku ?? '').trim() || null;
+  if (patch.barcode !== undefined) body.barcode = (patch.barcode ?? '').trim() || null;
+  if (Object.keys(body).length === 0) return { ok: true };
+
+  const { data, error } = await supabase
+    .from('products').update(body).eq('id', productId).select('id');
+  if (error) {
+    if (error.code === '23505') {
+      return { ok: false, error: 'That SKU is already used by another listing in this workspace.' };
+    }
+    if (isMissingSchema(error)) return { ok: false, error: 'The labels migration has not been run yet.' };
+    log.error(`setProductCodes | ${error.message}`);
+    return { ok: false, error: error.message };
+  }
+  // 0 rows is RLS or a missing row — never a success (the lesson of updateProduct).
+  if (!data || data.length === 0) return { ok: false, error: 'That listing is not in this workspace.' };
+  return { ok: true };
 }
 
 export interface ScannedProduct {

@@ -2,6 +2,10 @@
 
 ## 2026-09-14 — Rename to Arcadian
 
+### Products
+- **Find any listing, from anywhere.** A new **Products** page (workspace menu → Work, available to everyone) searches every listing in the workspace by title, SKU, barcode, brand or category — across every batch, not just the one you have open — and filters by whether a listing has a SKU or by label. Pick one and you get its photos, its title/brand/size/colour/price/condition/category (saved to every photo in the listing, exactly as Step 3 saves), its **SKU and barcode** with a Generate button, a live barcode preview and a one-label print sheet on any of the three label stocks, and its **labels** — including a Manage labels panel to rename, recolour and delete them, with how many listings each is used on. **Open in workflow** takes you straight to that listing in Step 3, opening its batch first if it is a different one; **scanning a barcode now does the same**, instead of telling you to go and find the batch in the Library. A duplicate SKU says so in words rather than failing quietly.
+
+
 ### Brand
 - **Outfit is the UI typeface** — self-hosted (SIL OFL, `src/assets/fonts/`, variable 300–700, latin), declared once in `index.css` as `--font-sans`; no font CDN, so the CSP stays `font-src 'self'`. **The logo is now the wordmark**: `Arcadian` set in Outfit 500 with tight tracking, no icon, everywhere the brand appears (header, landing nav, sign-in, waitlist); new geometric "A" favicon.
 - **Acadia → Arcadian** across every user-visible surface (landing, auth, waitlist gate, header wordmark, tool-view copy, support widget and Messages, invite and approval emails, browser title and meta description, the beta.html redirect, CI and uptime title assertions, deploy configs, README, AGENTS.md). Structural identifiers unchanged: the `/sortbot/` base path, every `sortbot_*` key, the `ACD-` SKU prefix and the `acadia-app` container names.

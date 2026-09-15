@@ -24,6 +24,12 @@ import './BarcodeScannerView.css';
  * when option 2 already covers them with hardware they own. When the API is
  * missing we say so plainly and point at the other two inputs.
  *
+ * A HIT OPENS THE LISTING WHEREVER IT LIVES. `ScannedProduct` carries the
+ * listing's `batch_id`, which is handed to App with the product id — so a code
+ * scanned off a rack whose batch was closed weeks ago opens that batch and lands
+ * on the listing, instead of the "find it in the Library first" toast this view
+ * used to raise.
+ *
  * CAMERA LIFECYCLE is the part that bites: a `getUserMedia` stream that is not
  * stopped keeps the phone's camera light on after navigation. Every exit path
  * — stop button, unmount, an error mid-stream — goes through `stopCamera`, and
@@ -52,9 +58,16 @@ type Status =
   | { kind: 'error'; message: string };
 
 export interface BarcodeScannerViewProps {
-  /** Open this listing in Step 3. Supplied by App; without it the result card
-   *  is informational only. */
-  onOpenListing?: (productId: string) => void;
+  /**
+   * Open this listing in Step 3. Supplied by App; without it the result card is
+   * informational only.
+   *
+   * The batch id rides along because a scanned label is very often NOT from the
+   * batch on screen — that is the whole point of a stock room. App opens that
+   * batch first and lands on the listing (AGENTS.md §14 #45, now closed); it
+   * used to raise a toast telling the user to go and find it in the Library.
+   */
+  onOpenListing?: (productId: string, batchId: string | null) => void;
 }
 
 export default function BarcodeScannerView({ onOpenListing }: BarcodeScannerViewProps) {
@@ -322,7 +335,7 @@ export default function BarcodeScannerView({ onOpenListing }: BarcodeScannerView
                 <button
                   type="button"
                   className="bsv-btn bsv-btn--primary bsv-card-open"
-                  onClick={() => onOpenListing(product.id)}
+                  onClick={() => onOpenListing(product.id, product.batch_id)}
                 >
                   Open in Step 3
                 </button>

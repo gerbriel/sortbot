@@ -253,7 +253,7 @@ function HomeDashboard({
      not where they belong, and they have no view to open. */
   const quickActions = useMemo(() => {
     const ORDER = [
-      'labels', 'scan', 'library', 'categories', 'presets', 'workspace',
+      'products', 'labels', 'scan', 'library', 'categories', 'presets', 'workspace',
       'vocabulary', 'analytics', 'crm', 'finance', 'board',
     ];
     const byId = new Map(navItems.filter(i => !i.phoneOnly).map(i => [i.id, i]));

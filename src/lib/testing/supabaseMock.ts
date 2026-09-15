@@ -13,7 +13,11 @@
 export type QueryResult = { data: unknown; error: unknown };
 
 export interface MockFilter {
-  kind: 'eq' | 'neq' | 'is' | 'in' | 'gte' | 'lte' | 'not';
+  /** `or` is the one filter with no column of its own — PostgREST takes the
+   *  whole `or=(...)` argument as a single string, so it is recorded verbatim
+   *  under the column name 'or'. That raw string is exactly what a search test
+   *  needs to assert about escaping and column coverage. */
+  kind: 'eq' | 'neq' | 'is' | 'in' | 'gte' | 'lte' | 'not' | 'or';
   column: string;
   value: unknown;
 }
@@ -45,6 +49,7 @@ interface Builder extends PromiseLike<QueryResult> {
   gte(column: string, value: unknown): Builder;
   lte(column: string, value: unknown): Builder;
   not(column: string, op: string, value: unknown): Builder;
+  or(filter: string): Builder;
   order(column: string, options?: unknown): Builder;
   limit(count: number): Builder;
   range(from: number, to: number): Builder;
@@ -151,6 +156,7 @@ export function createSupabaseMock(): MockedSupabaseClient {
       gte(c, v) { return filter('gte', c, v); },
       lte(c, v) { return filter('lte', c, v); },
       not(c, _op, v) { return filter('not', c, v); },
+      or(f) { return filter('or', 'or', f); },
       order() { return builder; },
       limit(count) { call.limit = count; return builder; },
       range(from, to) { call.range = { from, to }; return builder; },

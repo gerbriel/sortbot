@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, Suspense, Component, type ReactNode } from 'react';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
-import { Tag, Settings, Package, Link2, Scissors, X, Trash2, BookMarked, KanbanSquare, AlertTriangle, Keyboard, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users, MessageSquare, Wallet, Printer, ScanLine, LayoutDashboard } from 'lucide-react';
+import { Tag, Settings, Package, Boxes, Link2, Scissors, X, Trash2, BookMarked, KanbanSquare, AlertTriangle, Keyboard, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users, MessageSquare, Wallet, Printer, ScanLine, LayoutDashboard } from 'lucide-react';
 import { log, isDebugEnabled } from './lib/debugLogger';
 import BrandWordmark from './components/Wordmark';
 import Auth from './components/Auth';
@@ -22,7 +22,7 @@ import {
   productRowToClothingItem, mergeProductRowIntoItem,
   STARTUP_MERGE_OPTIONS, OPEN_BATCH_MERGE_OPTIONS, type ProductRowLite,
 } from './lib/productRow';
-import { autoSaveWorkflowBatchDetailed, autoSaveSucceeded, markBatchConfirmed, type WorkflowBatch } from './lib/workflowBatchService';
+import { autoSaveWorkflowBatchDetailed, autoSaveSucceeded, markBatchConfirmed, getWorkflowBatch, type WorkflowBatch } from './lib/workflowBatchService';
 import { ensureOrganization, type Organization, type OrgRole } from './lib/orgService';
 import { getOrgDescriptionSettings, type DescriptionSettings } from './lib/descriptionSettings';
 import { slimForWorkflowState, ultraSlimForBackup, asClothingItems } from './lib/slimItems';
@@ -151,13 +151,14 @@ const ErrorsPanel = React.lazy(() => import('./components/ErrorsPanel'));
 const MessagesView = React.lazy(() => import('./components/MessagesView'));
 const LabelPrintView = React.lazy(() => import('./components/LabelPrintView'));
 const BarcodeScannerView = React.lazy(() => import('./components/BarcodeScannerView'));
+const ProductsView = React.lazy(() => import('./components/ProductsView'));
 
 /** Every destination the app can be showing. The four workflow steps are one
  *  view ('workflow'); each header tool is a full page of its own. */
 export type ActiveView =
   | 'home' | 'workflow' | 'library' | 'categories' | 'presets'
   | 'vocabulary' | 'analytics' | 'crm' | 'finance' | 'board' | 'workspace' | 'messages'
-  | 'labels' | 'scan';
+  | 'labels' | 'scan' | 'products';
 
 /** Fallback shown while a view's chunk is in flight. Reuses the existing
  *  `.loading-screen` + `.spinner` styles, so there is no new CSS. */
@@ -1872,24 +1873,89 @@ function App() {
      batch, scrolling to Step 3 would park the user on an unrelated listing and
      look like a successful jump — so we say where it actually is instead. The
      live store view is read (never the render-captured array) per §14. */
-  const openListingInStep3 = useEventCallback((productId: string) => {
+  const openListingInStep3 = useEventCallback((productId: string, batchId?: string | null) => {
     const items = processedItemsRef.current;
     const inOpenBatch = items.some(i => i.id === productId || i.productGroup === productId);
-    if (!inOpenBatch) {
-      addToast('That listing is not in the batch you have open — find it in the Library and open its batch first.');
+    if (inOpenBatch) {
+      setActiveView('workflow');
+      setFocusListingId(productId);
+      // Deferred: the workflow is parked behind `hidden` until this render
+      // commits, and scrolling to a hidden element is a no-op.
+      requestAnimationFrame(() => {
+        document.getElementById('step-3')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // PDG's focus effect has already run for this commit; release the id so the
+        // next scan is a fresh transition (see the note on the state above).
+        setFocusListingId(null);
+      });
       return;
     }
+    /* Not in the open batch. When the caller knows which batch it IS in — the
+       Products view reads it off the row, the scanner off the matched product —
+       open that batch and land on the listing. This is what §14 #45 used to
+       refuse to do; refusing was right only while the batch was unknown, because
+       jumping to Step 3 anyway parks the user on an unrelated listing. */
+    if (batchId) { void openProductInWorkflow(batchId, productId); return; }
+    addToast('That listing is not in a batch yet, so there is nothing to open — it will appear once its batch is saved.');
+  });
+
+  /**
+   * Open another batch and land on one listing inside it.
+   *
+   * Sequenced, not fired-and-forgotten: `handleOpenBatch` repopulates the four
+   * store arrays, and PDG is keyed on `currentBatchId`, so the focus id is only
+   * meaningful once that has happened. It is released on a timer rather than the
+   * next frame because the remount plus the group rebuild take more than one —
+   * and PDG's focus effect re-runs on `groupArray`, so leaving the id set for a
+   * moment lets a late hydration land on the right listing instead of listing 1.
+   */
+  const openProductInWorkflow = useEventCallback(async (batchId: string, productId: string) => {
+    if (batchId === currentBatchIdRef.current) { openListingInStep3(productId); return; }
     setActiveView('workflow');
+    const batch = await getWorkflowBatch(batchId);
+    if (!batch) {
+      addToast('That batch could not be opened — it may have been deleted.');
+      return;
+    }
+    await handleOpenBatch(batch);
     setFocusListingId(productId);
-    // Deferred: the workflow is parked behind `hidden` until this render
-    // commits, and scrolling to a hidden element is a no-op.
     requestAnimationFrame(() => {
       document.getElementById('step-3')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      // PDG's focus effect has already run for this commit; release the id so the
-      // next scan is a fresh transition (see the note on the state above).
-      setFocusListingId(null);
     });
+    window.setTimeout(() => setFocusListingId(null), 1200);
   });
+
+  /**
+   * A Products-view save landed in the database; mirror it into memory.
+   *
+   * ONLY when that listing's batch is the one open — otherwise there is nothing
+   * in the store to correct, and patching by group id alone could touch a
+   * same-id row from another batch. The Products view never writes the store
+   * itself (it would be a third writer racing Step 3's two debounced saves); it
+   * writes `products` through the same syncGroupFieldsToDatabase Step 3 uses and
+   * then tells App, which is the one place that owns these arrays.
+   *
+   * No auto-save is triggered: the fields patched here are all DB-recoverable and
+   * none of them is in the slimForWorkflowState whitelist, so `workflow_state`
+   * has nothing to say about them.
+   */
+  const handleListingEdited = useEventCallback(
+    (batchId: string | null, groupId: string, patch: Partial<ClothingItem>) => {
+      if (!batchId || batchId !== currentBatchIdRef.current) return;
+      const apply = (list: ClothingItem[]) => {
+        let touched = false;
+        const next = list.map(item => {
+          if ((item.productGroup || item.id) !== groupId) return item;
+          touched = true;
+          return { ...item, ...patch };
+        });
+        return touched ? next : list;
+      };
+      setUploadedImages(apply);
+      setGroupedImages(apply);
+      setSortedImages(apply);
+      setProcessedItems(apply);
+    },
+  );
 
   // Step 2's list: both branches are store arrays whose identity is already stable
   // between store updates, so naming it is enough — no new array per render.
@@ -3114,6 +3180,7 @@ function App() {
        admins, which is why they sit beside Library rather than under Setup. */
     { id: 'home', label: 'Home', icon: <LayoutDashboard size={16} />, title: 'Home — your batches, tools and messages in one place', group: 'work' },
     { id: 'library', label: 'Library', icon: <Package size={16} />, title: 'View saved workflow batches', group: 'work' },
+    { id: 'products', label: 'Products', icon: <Boxes size={16} />, title: 'Products — find any listing across every batch, and edit its fields, barcode and labels', group: 'work' },
     { id: 'labels', label: 'Labels', icon: <Printer size={16} />, title: 'Labels — print shelf labels with barcodes for the open batch', group: 'work' },
     { id: 'scan', label: 'Scan', icon: <ScanLine size={16} />, title: 'Scan — find a listing by its barcode or SKU', group: 'work' },
     { id: 'messages', label: supportIsFounder ? 'Inbox' : 'Messages', icon: <MessageSquare size={16} />,
@@ -3561,6 +3628,29 @@ function App() {
               onBatchDeleted={onBatchDeletedStable}
               refreshTrigger={libraryRefreshTrigger}
               currentBatchId={currentBatchId}
+            />
+          </ToolView>
+        </Suspense>
+      )}
+
+      {/* Products — the one surface that is not batch-shaped: search every
+          listing in the workspace, correct its fields, give it a SKU and a
+          barcode, put labels on it, print its label, or take it back into the
+          workflow. `wide` because it is two columns of list and detail. */}
+      {activeView === 'products' && user && (
+        <Suspense fallback={<ViewFallback />}>
+          <ToolView
+            icon={<Boxes size={26} />}
+            title="Products"
+            description="Find any listing across every batch — then edit its fields, its barcode and its labels without leaving this page."
+            onBack={goToWorkflow}
+            wide
+          >
+            <ProductsView
+              userId={user.id}
+              currentBatchId={currentBatchId}
+              onOpenInWorkflow={openListingInStep3}
+              onListingEdited={handleListingEdited}
             />
           </ToolView>
         </Suspense>
