@@ -296,3 +296,23 @@ and added none.
    should, on first open. `setBatchTargets` can express it; who calls it, and whether an
    explicit empty set must survive a reopen, is a Step 4 decision — today `'{}'` means
    "none chosen yet" and nothing distinguishes it from "none, deliberately".
+
+## 8. Global vocabulary seed — resolved (15 Sept 2026)
+
+§7.1 asked who seeds the global rows. Answer: a generator, not a migration and not a hand list.
+`scripts/seed-marketplace-vocab.ts` reads the adapters' own `spec.color.values` and
+`spec.condition.map` plus `COLOR_DNA`, and writes `supabase/seeds/marketplace_vocab.sql`
+(`npm run seed:vocab`). It is bundled for Node by `scripts/vite.seed.config.ts`, which aliases the
+debug logger (touches `window` at import) and the Supabase client (throws without env) to
+`scripts/stubs/` — both are reached through `vocabService.ts` and neither is used by the seed.
+
+What it writes (859 rows): for the two marketplaces with a fixed colour list, every colour name and
+alias in the app's colour database mapped to the closest list word through one ordered candidate
+table (`forest green → Green`, `olive → Khaki` on Vinted, `charcoal → Gray`, `tie dye → Multi`),
+skipping identity rows because the adapter already matches the list itself; and for all ten, the
+loose condition phrasings the normaliser does not read (`beat up`, `barely worn`, `sealed`,
+`well loved`…) mapped through each adapter's condition map. Brands are deliberately not seeded.
+
+Verified on a throwaway Postgres 14: applied after `marketplaces.sql` with no errors, applied a second
+time as a no-op (`on conflict` against the expression index resolves), 859 rows both times.
+

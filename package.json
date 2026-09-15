@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "seed:vocab": "vite build --config scripts/vite.seed.config.ts --logLevel warn && node scripts/.seed-build/seed-marketplace-vocab.js > supabase/seeds/marketplace_vocab.sql",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
