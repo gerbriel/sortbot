@@ -33,7 +33,7 @@ These deliberately still say `sortbot`, and renaming them is a breaking change:
 | `sortbot_analytics_session` (sessionStorage), `sortbot_analytics_force` (localStorage) | `analytics.ts` (`SESSION_KEY` / `FORCE_KEY`) | Per-tab analytics session id (losing it just starts a new session) + the dev-only "track on localhost" override. `errorReporter.ts` imports both, so an error row and an analytics row share one session id and the same localhost override. |
 | `sortbot_magnifier_settings` | `ProductDescriptionGenerator.tsx` | Step 3 magnifier lens size/zoom preference. Cosmetic — losing it resets to the defaults. |
 | `sortbot_kanban_view` | `KanbanBoard.tsx` | Last-used board view (`lanes` / `atlas`). Cosmetic. |
-| `sortbot_step2_card_labels` | `ImageGrouper.tsx` (`CARD_LABELS_KEY`) | Whether the file name + capture time show under each Step 2 photo (`'1'` / `'0'`, the View panel's "File names & dates" toggle). Cosmetic — absent means on. |
+| `sortbot_step2_card_labels` | `ImageGrouper.tsx` (`CARD_LABELS_KEY`) | Whether the file name + capture time show under each Step 2 photo (`'1'` / `'0'`, the View panel's "File names & dates" toggle). Cosmetic — absent means OFF (default flipped 15 Sept 2026). |
 
 If any of these ever *do* get renamed, ship a migration that reads the old key,
 writes the new one, and deletes the old — do not just rename the string.
@@ -1952,7 +1952,7 @@ deleted with its comment on the next App.css pass.
   `sortbot_debug_enabled`, or `window.__SORTBOT_DEBUG__`), never from product UI.
 - ✅ **View ▾ → Labels: "File names & dates" toggle (15 Sept 2026)** — the file name and capture time under each
   Step 2 single card can be switched off; `showCardLabels` in ImageGrouper, persisted as
-  `sortbot_step2_card_labels` (§1 table), default on. Rendered as a `role="switch"` row in the View panel using
+  `sortbot_step2_card_labels` (§1 table), default OFF since 15 Sept 2026 (it shipped default-on for a day). Rendered as a `role="switch"` row in the View panel using
   the same `.gtb-opt` list style as the sort choices. Piles never carried the labels, so nothing changes there.
 - ✅ **Multi-marketplace phase 1 — the data and the workspace half (15 Sept 2026, `docs/marketplaces/02-data.md`)** —
   the four tables the ten-marketplace plan (`docs/marketplaces/00-plan.md` §2b, §2c, §4) rests on, plus the service

@@ -344,11 +344,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
   // Grid columns per row (2–12 on desktop, 1–3 on a phone — see responsiveGrid.ts)
   const [columnsPerRow, setColumnsPerRow] = useState<number>(8);
-  /* "File names & dates" under each single card — a View-panel toggle. A
-     cosmetic preference, so it lives in localStorage (AGENTS.md §1 key table);
-     losing it just turns the labels back on. */
+  /* "File names & dates" under each single card — a View-panel toggle, OFF by
+     default (15 Sept 2026). A cosmetic preference, so it lives in localStorage
+     (AGENTS.md §1 key table); losing it just turns the labels back off. */
   const [showCardLabels, setShowCardLabels] = useState<boolean>(() => {
-    try { return localStorage.getItem(CARD_LABELS_KEY) !== '0'; } catch { return true; }
+    try { return localStorage.getItem(CARD_LABELS_KEY) === '1'; } catch { return false; }
   });
   const toggleCardLabels = () => {
     setShowCardLabels(v => {
