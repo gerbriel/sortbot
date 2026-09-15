@@ -23,6 +23,9 @@ export interface WorkspaceNavItem {
   group: NavGroup;
   /** Resolved unread count. Rendered as a badge when > 0. */
   badge?: number;
+  /** Rendered only at phone width (≤640px) — for controls that replace a
+   *  floating button the phone does not have room for. */
+  phoneOnly?: boolean;
 }
 
 /**
@@ -225,7 +228,7 @@ export default function WorkspaceMenu({
         type="button"
         role="menuitem"
         tabIndex={-1}
-        className={`wsmenu-item${on ? ' wsmenu-item--on' : ''}`}
+        className={`wsmenu-item${on ? ' wsmenu-item--on' : ''}${item.phoneOnly ? ' wsmenu-item--phone' : ''}`}
         aria-current={on ? 'page' : undefined}
         title={item.title}
         onClick={() => choose(item.id)}

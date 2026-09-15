@@ -151,8 +151,9 @@
      ~51px tall at the bottom of the viewport, at every width. This row is the
      last thing in a step, so without the room below it, scrolling to the end
      parked Back under the gear and Continue under Inbox. */
-  /* = the buttons' 1.75rem offset + their 44px + breathing room. */
-  padding-bottom: calc(1.75rem + 44px + var(--space-4));
+  /* On a phone the corner buttons are gone (the menu has their rows) and
+     .app-main already clears the tab bar; the clearance below is desktop's. */
+  padding-bottom: 0;
 }
 
 .psc-btn {
@@ -238,6 +239,11 @@
   }
 
   .psc-btn { min-height: 40px; }
+
+  /* Clearance for the two fixed corner buttons (shortcuts gear bottom-left,
+     Inbox bottom-right): their 1.75rem offset + 44px + breathing room, so the
+     end of a step never scrolls under them. */
+  .phone-step-continue { padding-bottom: calc(1.75rem + 44px + var(--space-4)); }
 
   .psc-next {
     flex: 0 0 auto;

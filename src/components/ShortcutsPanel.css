@@ -227,12 +227,10 @@
     bottom: calc(0.75rem + var(--tabbar-h) + var(--dock-h, 0px));
   }
 
-  .ks-fab {
-    width: var(--tap);
-    height: var(--tap);
-  }
-
-  .ks-fab--open { display: none; }
+  /* No floating gear on a phone: the workspace menu's "Shortcuts & debug" row
+     opens this panel instead (App passes `open`), so the corner is free. The
+     panel itself is the full-screen sheet below. */
+  .ks-fab { display: none; }
 
   .ks-panel {
     position: fixed;

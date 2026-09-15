@@ -2,7 +2,7 @@ import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMe
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { Tag, Settings, Package, Link2, Scissors, X, Trash2, BookMarked, KanbanSquare,
-         AlertTriangle, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users, MessageSquare, Wallet, Printer, ScanLine } from 'lucide-react';
+         AlertTriangle, Keyboard, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users, MessageSquare, Wallet, Printer, ScanLine } from 'lucide-react';
 import { log, setDebugEnabled, isDebugEnabled } from './lib/debugLogger';
 import BrandWordmark from './components/Wordmark';
 import Auth from './components/Auth';
@@ -509,9 +509,13 @@ function App() {
   /** A pick from the workspace menu. `opener` is the control the menu was opened
    *  from (the header trigger, or More); parking it in `viewTriggerRef` is what
    *  lets ToolView's Back and Escape return focus to where the trip started. */
+  /** The shortcuts panel's open state, lifted so the workspace menu can open it on phones. */
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const handleNavSelect = (id: string, opener: HTMLElement | null) => {
     viewTriggerRef.current = opener instanceof HTMLButtonElement ? opener : null;
     if (id === 'workflow') { goToWorkflow(); return; }
+    // Not a view: the phone-only menu row that stands in for the shortcuts gear.
+    if (id === 'shortcuts') { setShortcutsOpen(true); return; }
     setActiveView(id as ActiveView);
   };
   /** `useState`-shaped setter over activeView, so existing `setShowX(false)`
@@ -3073,6 +3077,8 @@ function App() {
     { id: 'categories', label: 'Manage Categories', icon: <Tag size={16} />, title: 'Manage your product categories', group: 'setup' },
     { id: 'presets', label: 'Category Presets', icon: <Settings size={16} />, title: 'Manage category presets for shipping weight, measurements, and default attributes', group: 'setup' },
     ...(currentOrg ? [{ id: 'workspace', label: 'Workspace dashboard', icon: <Users size={16} />, title: 'Workspace — members, invites and settings', group: 'setup' as const }] : []),
+    // Phone only: stands in for the bottom-left gear, which is hidden below 640px.
+    { id: 'shortcuts', label: 'Shortcuts & debug', icon: <Keyboard size={16} />, title: 'Keyboard shortcuts and the debug-logging switch', group: 'setup', phoneOnly: true },
     /* FOUNDER — Founding Workspace only, and all but Board admin-only. */
     ...(isFoundingAdmin ? [
       { id: 'vocabulary', label: 'Vocabulary', icon: <BookMarked size={16} />, title: 'Vocabulary — curate quick keyword chips and brand keywords (all workspaces)', group: 'founder' as const },
@@ -3715,7 +3721,7 @@ function App() {
       {/* ── Bottom-left corner: keyboard shortcuts + the debug-logging switch.
           One control where the floating debug button used to be, mirroring the
           support FAB in the opposite corner. */}
-      <ShortcutsPanel debugEnabled={debugEnabled} onToggleDebug={toggleDebug} />
+      <ShortcutsPanel debugEnabled={debugEnabled} onToggleDebug={toggleDebug} open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
 
       {/* ── Support messaging (first-party): every signed-in user can message
           the founders; Founding admins get the inbox of every conversation. */}

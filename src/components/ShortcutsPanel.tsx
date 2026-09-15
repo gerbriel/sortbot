@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, memo } from 'react';
+import { useCallback, useEffect, useRef, useState, memo } from 'react';
 import { Settings, X, Bug } from 'lucide-react';
 import {
   groupedShortcuts,
@@ -21,6 +21,10 @@ interface ShortcutsPanelProps {
   debugEnabled: boolean;
   /** App's existing toggleDebug handler, moved in here unchanged. */
   onToggleDebug: () => void;
+  /** Optional controlled open state. On phones the gear FAB is hidden and the
+   *  workspace menu's "Shortcuts & debug" row opens this panel through App. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -39,8 +43,14 @@ interface ShortcutsPanelProps {
  * The shortcut rows are DATA, from lib/keyboardShortcuts.ts — this component
  * renders whatever is in that list and knows nothing about what any key does.
  */
-function ShortcutsPanel({ debugEnabled, onToggleDebug }: ShortcutsPanelProps) {
-  const [open, setOpen] = useState(false);
+function ShortcutsPanel({ debugEnabled, onToggleDebug, open: openProp, onOpenChange }: ShortcutsPanelProps) {
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const setOpen = useCallback((next: boolean | ((prev: boolean) => boolean)) => {
+    const value = typeof next === 'function' ? next(open) : next;
+    setOpenState(value);
+    onOpenChange?.(value);
+  }, [open, onOpenChange]);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const fabRef = useRef<HTMLButtonElement | null>(null);
@@ -66,7 +76,7 @@ function ShortcutsPanel({ debugEnabled, onToggleDebug }: ShortcutsPanelProps) {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('mousedown', onDown);
     };
-  }, [open]);
+  }, [open, setOpen]);
 
   /* Move focus into the panel on open so the next Tab walks its contents. */
   useEffect(() => {

@@ -303,6 +303,12 @@
   .wsmenu-item { min-height: var(--tap); }
 }
 
+/* Rows that stand in for a floating button the phone does not have room for
+   (the shortcuts gear). Above 640px the button is back and the row is gone. */
+@media (min-width: 641px) {
+  .wsmenu-item--phone { display: none; }
+}
+
 /* ── Phone (≤640px): the same menu as a bottom sheet ────────────────────────
    Flush to the bottom edge, full width, rounded only on top, rising from
    below — the native idiom, and the thumb is already down there because the

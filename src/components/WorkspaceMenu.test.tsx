@@ -44,6 +44,18 @@ const focused = () => document.activeElement?.textContent ?? '';
 const settle = () => act(async () => { await new Promise(r => setTimeout(r, 25)); });
 
 describe('WorkspaceMenu', () => {
+  it('a phoneOnly item carries the class the ≥641px rule hides', () => {
+    const phoneItems: WorkspaceNavItem[] = [...items, { id: 'shortcuts', label: 'Shortcuts & debug', icon: null, title: 's', group: 'setup', phoneOnly: true }];
+    function H() {
+      const [open, setOpen] = useState(true);
+      return <WorkspaceMenu orgName="W" items={phoneItems} activeView="workflow" showBackToWorkflow={false} onSelect={() => {}} onSignOut={() => {}} open={open} onOpenChange={setOpen} />;
+    }
+    mount(<H />);
+    const row = menuitems().find(m => m.textContent?.includes('Shortcuts & debug'))!;
+    expect(row.className).toContain('wsmenu-item--phone');
+    expect(menuitems().find(m => m.textContent?.includes('Library'))!.className).not.toContain('wsmenu-item--phone');
+  });
+
   it('trigger carries menu semantics and the unread badge', () => {
     const { container } = mount(<Harness />);
     const t = one(container, '.wsmenu-trigger');

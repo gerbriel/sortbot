@@ -227,6 +227,12 @@
       open — the sheet has a close button, and a floating pill on top of a
       full-screen surface reads as a bug. */
 @media (max-width: 640px) {
+  /* No floating Messages bubble inside the app shell on a phone: the tab bar's
+     Messages tab and the workspace menu's Messages / Inbox row open the full
+     page. Scoped to .app-container so the waitlist screen (no shell, no tab
+     bar) keeps its bubble — it is the only way a waitlisted user can write. */
+  .app-container .sw-root { display: none; }
+
   .sw-root {
     right: 0.75rem;
     left: 0.75rem;
