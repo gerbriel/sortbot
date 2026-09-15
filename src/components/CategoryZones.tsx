@@ -8,39 +8,7 @@ import { applyPresetDirectly } from '../lib/applyPresetToGroup';
 import { resolvePreset } from '../lib/presetResolver';
 import LazyImg from './LazyImg';
 import { log } from '../lib/debugLogger';
-import { 
-  Shirt, 
-  Wind, 
-  User, 
-  Package, 
-  Box,
-  ShoppingBag,
-  Footprints,
-  Glasses,
-  Watch,
-  Headphones,
-  Briefcase,
-  Heart,
-  Star,
-  Zap,
-  GripVertical,
-  X,
-  Users,
-  UserRound,
-  Baby,
-  Crown,
-  Layers,
-  Columns2,
-  Dumbbell,
-  Gem,
-  Medal,
-  PersonStanding,
-  Ribbon,
-  Sparkles,
-  Tag,
-  Menu,
-  Check,
-} from 'lucide-react';
+import { Shirt, Wind, User, Package, Box, ShoppingBag, Footprints, Glasses, Watch, Headphones, Briefcase, Heart, Star, Zap, GripVertical, X, Users, UserRound, Baby, Crown, Layers, Columns2, Dumbbell, Gem, Medal, PersonStanding, Ribbon, Sparkles, Menu, Check } from 'lucide-react';
 import './CategoryZones.css';
 
 // Map icon names or category names to icon components
@@ -664,39 +632,6 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     <div className={`category-zones-container${compactMode ? ' compact' : ''}${hasSelection ? ' has-selection' : ''}`}>
       {/* Category Zones */}
       <div className="category-zones">
-        {/* Gender filter toggles */}
-        <div className="cz-gender-row" style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', justifyContent: 'center' }}>
-          {([
-            { key: 'Men',   label: 'Men',   Icon: Users },
-            { key: 'Women', label: 'Women', Icon: UserRound },
-            { key: 'Kids',  label: 'Kids',  Icon: Baby },
-          ] as const).map(({ key: g, label, Icon }) => (
-            <button
-              key={g}
-              onClick={() => setZoneGender(g)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                padding: '0.3rem 1rem',
-                borderRadius: '999px',
-                border: '2px solid',
-                // Solid --accent needs a dark label (--text-primary on it is 2.46:1).
-                borderColor: genderFilter === g ? 'var(--accent)' : 'var(--border-control)',
-                background: genderFilter === g ? 'var(--accent)' : 'var(--ink-850)',
-                color: genderFilter === g ? 'var(--ink-950)' : 'var(--text-secondary)',
-                fontWeight: 600,
-                fontSize: 'var(--fs-xs)',
-                cursor: 'pointer',
-                transition: 'all 0.15s',
-              }}
-            >
-              <Icon size={14} />
-              {label}
-            </button>
-          ))}
-        </div>
-
         {/* Category search */}
         <div className="cz-search" style={{ position: 'relative', marginBottom: '0.5rem' }}>
           <input
@@ -740,7 +675,39 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
           )}
         </div>
 
-        <h3 className="cz-heading"><Tag size={13} style={{ flexShrink: 0 }} /> {compactMode ? 'Drop Here to Categorize' : 'Drag Groups Here to Categorize'}</h3>
+        {/* Gender filter toggles */}
+        <div className="cz-gender-row" style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', justifyContent: 'center' }}>
+          {([
+            { key: 'Men',   label: 'Men',   Icon: Users },
+            { key: 'Women', label: 'Women', Icon: UserRound },
+            { key: 'Kids',  label: 'Kids',  Icon: Baby },
+          ] as const).map(({ key: g, label, Icon }) => (
+            <button
+              key={g}
+              onClick={() => setZoneGender(g)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                padding: '0.3rem 1rem',
+                borderRadius: '999px',
+                border: '2px solid',
+                // Solid --accent needs a dark label (--text-primary on it is 2.46:1).
+                borderColor: genderFilter === g ? 'var(--accent)' : 'var(--border-control)',
+                background: genderFilter === g ? 'var(--accent)' : 'var(--ink-850)',
+                color: genderFilter === g ? 'var(--ink-950)' : 'var(--text-secondary)',
+                fontWeight: 600,
+                fontSize: 'var(--fs-xs)',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              <Icon size={14} />
+              {label}
+            </button>
+          ))}
+        </div>
+
         {compactMode && selectedItemIds && selectedItemIds.size > 0 && (
           <p className="cz-selection-hint" style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', margin: '0 0 0.5rem', textAlign: 'center' }}>
             {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} selected — click a category to assign

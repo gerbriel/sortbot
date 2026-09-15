@@ -1608,6 +1608,13 @@
   pointer-events: none;
 }
 
+/* The peeking layers carry NO image — they are the backs of the photos
+   underneath, a slightly darker card so the sliver still reads as "more
+   behind". One fetch per closed pile instead of three. */
+.gs-layer--back {
+  background: linear-gradient(135deg, var(--ink-800), var(--ink-750));
+}
+
 .group-stack:hover .gs-layer--top {
   box-shadow: 0 4px 12px var(--accent-glow);
 }

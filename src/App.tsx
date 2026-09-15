@@ -3223,60 +3223,64 @@ function App() {
                   onCategoryAssigned={onCategoryAssignedStable}
                 />
                 </GrouperErrorBoundary>
-                {/* Selection action buttons — rendered here so they stay visible while scrolling left panel */}
+                {/* Selection actions — kept here so they stay visible while the left
+                    panel scrolls. Five full-height rows used to sit here at all times,
+                    three of them disabled; now the four selection actions are a 2×2
+                    grid that exists only while something is selected, and the idle
+                    state is one line of hint text. "Ungroup all" is rare and
+                    destructive, so it is a small link rather than a button. */}
                 {grouperActions && (
-                  <div className="grouper-actions-sidebar">
+                  <div className={`grouper-actions-sidebar${grouperActions.selectedCount > 0 ? ' has-selection' : ''}`}>
+                    {grouperActions.selectedCount > 0 ? (
+                      <div className="gas-grid">
+                        <button
+                          type="button"
+                          className="button button-primary"
+                          onClick={grouperActions.groupSelected}
+                          disabled={grouperActions.selectedCount < 2}
+                          title={grouperActions.selectedCount < 2 ? 'Select at least two photos to group them' : 'Group the selected photos into one listing (⌘Enter)'}
+                        >
+                          <Link2 size={14} /> Group {grouperActions.selectedCount}
+                        </button>
+                        <button
+                          type="button"
+                          className="button button-secondary"
+                          onClick={grouperActions.ungroupSelected}
+                          title="Remove the selected photos from their groups (⌘⌫)"
+                        >
+                          <Scissors size={14} /> Ungroup
+                        </button>
+                        <button
+                          type="button"
+                          className="button gas-delete"
+                          onClick={grouperActions.deleteSelected}
+                          title="Permanently delete the selected photos"
+                        >
+                          <Trash2 size={14} /> Delete {grouperActions.selectedCount}
+                        </button>
+                        <button
+                          type="button"
+                          className="button button-secondary"
+                          onClick={grouperActions.clearSelection}
+                          title="Clear the selection (⌘D)"
+                        >
+                          <X size={14} /> Clear
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="gas-hint">Select photos to group, ungroup or delete them.</p>
+                    )}
                     <button
-                      className="button button-primary"
-                      onClick={grouperActions.groupSelected}
-                      disabled={grouperActions.selectedCount < 2}
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                    >
-                      <Link2 size={16} /> Group Selected ({grouperActions.selectedCount})
-                    </button>
-                    <button
-                      className="button button-secondary"
-                      onClick={grouperActions.ungroupSelected}
-                      disabled={grouperActions.selectedCount === 0}
-                      title="Remove selected images from their groups"
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                    >
-                      <Scissors size={16} /> Ungroup Selected
-                    </button>
-                    <button
-                      className="button button-secondary"
+                      type="button"
+                      className="gas-link"
                       onClick={() => {
                         if (window.confirm('Ungroup ALL images? Every item will become its own listing.')) {
                           grouperActions.ungroupAll();
                         }
                       }}
-                      title="Remove all groupings at once"
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                      title="Remove every grouping in this batch at once"
                     >
-                      <Scissors size={16} /> Ungroup All
-                    </button>
-                    <button
-                      className="button button-secondary"
-                      onClick={grouperActions.clearSelection}
-                      disabled={grouperActions.selectedCount === 0}
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                    >
-                      <X size={16} /> Clear Selection
-                    </button>
-                    <button
-                      className="button"
-                      onClick={grouperActions.deleteSelected}
-                      disabled={grouperActions.selectedCount === 0}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '0.5rem',
-                        background: grouperActions.selectedCount > 0 ? 'var(--danger)' : undefined,
-                        // Dark label on the solid danger fill (light text on --danger is ~2:1).
-                        color: grouperActions.selectedCount > 0 ? 'var(--ink-950)' : undefined,
-                        border: 'none',
-                      }}
-                      title="Permanently delete all selected images"
-                    >
-                      <Trash2 size={16} /> Delete Selected ({grouperActions.selectedCount})
+                      Ungroup all
                     </button>
                   </div>
                 )}

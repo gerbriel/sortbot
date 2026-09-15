@@ -1707,6 +1707,15 @@ deleted with its comment on the next App.css pass.
   phone (`.button-debug-toggle` / `.button-debug-on` deleted from App.css). The shortcut list was
   corrected against the handlers: Enter is Step 3's record toggle (was missing), the lightbox arrows
   are global (Step 2 binds them too), and `.` / `⌘A` / `⌘⇧A` carry their conditions.
+- ✅ **Step 2 piles (Sept 2026)** — a multi-photo group renders as `.group-stack`: the leader at full
+  card size on top, up to two layers peeking behind it (7px / 2.6° steps, scaled 0.7 on phones), a
+  `+N` badge for the rest; geometry is pure and tested in `lib/stackLayout.ts`. Click / Enter / Space
+  fans the pile open in place (`expandedGroupId`, one open at a time, Escape collapses); the fan is the
+  old group card with drag-reorder and remove-from-group. **A closed pile loads exactly ONE image**: only
+  the top layer carries an `<img>` (`loading="lazy"`), the peeking layers are `.gs-layer--back` — blank
+  card faces, because they show a 7px sliver at most and a full thumbnail apiece was three fetches and
+  three decodes per pile for pixels nobody can see. The other members' images load when the pile is
+  opened. Step 3 and the export read the workflow store, not this render, so they see every photo.
 - ✅ **Step 2 count chips removed; storage meter moved into the workspace menu (Sept 2026)** — the four
   toolbar chips (groups / singles / listings / photos) are gone at the user's request; the section
   headings ("Individual Items (287)", "Product Groups (21)") already carry those numbers. What is left of

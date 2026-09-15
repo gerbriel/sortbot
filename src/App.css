@@ -373,22 +373,63 @@
   to { transform: rotate(360deg); }
 }
 
-/* Grouping action buttons rendered in right sidebar (Step 2) */
+/* Grouping actions in the Step 2 right sidebar: a 2×2 grid while something is
+   selected, one line of hint text otherwise, and "Ungroup all" as a link. */
 .grouper-actions-sidebar {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   margin-top: 1rem;
-  padding-top: 1rem;
+  padding-top: 0.75rem;
   border-top: 1px solid var(--border);
 }
 
-.grouper-actions-sidebar .button {
+.gas-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.gas-grid .button {
   width: 100%;
   justify-content: center;
+  gap: 0.4rem;
   font-size: var(--fs-xs);
-  padding: 0.45rem 0.75rem;
+  padding: 0.45rem 0.5rem;
+  white-space: nowrap;
 }
+
+/* Solid danger fill with the dark label (light text on --danger is ~2:1);
+   restated on hover so the generic .button hover cannot wash it out. */
+.gas-grid .gas-delete,
+.gas-grid .gas-delete:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--ink-950);
+}
+
+.gas-hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: var(--lh-snug);
+}
+
+.gas-link {
+  align-self: center;
+  background: none;
+  border: none;
+  padding: 0.2rem 0.5rem;
+  font: inherit;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.gas-link:hover { color: var(--text-primary); background: var(--ink-750); }
 
 /* Step 2 right panel — category zones + action buttons */
 .step2-right-panel {
@@ -501,9 +542,9 @@
   }
 
   /* Action buttons in step2 right panel: smaller text on tiny screens */
-  .grouper-actions-sidebar .button {
+  .gas-grid .button {
     font-size: var(--fs-xs);
-    padding: 0.4rem 0.6rem;
+    padding: 0.4rem 0.5rem;
   }
 }
 
@@ -843,18 +884,18 @@
   }
 
   .step2-right-panel .grouper-actions-sidebar {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.4rem;
+    gap: 0.3rem;
     margin-top: 0.5rem;
     padding-top: 0.5rem;
   }
 
-  .step2-right-panel .grouper-actions-sidebar .button {
+  .step2-right-panel .gas-grid .button {
     min-height: var(--tap, 44px);
     font-size: var(--fs-sm);
     padding: 0.4rem 0.5rem;
   }
+
+  .step2-right-panel .gas-link { min-height: 32px; }
 
   /* An idle dock is just the chip rail; it grows to carry the assign actions
      once there is a selection to act on. Written as :not(:has(…)) on purpose:

@@ -432,11 +432,10 @@
     background: none;
   }
 
-  /* The heading and the free-text search are the first things to go: in a bottom
-     dock a text field summons the keyboard straight over the dock it belongs to,
-     and the chip row is already scrollable. Gender pills stay — they change
-     WHICH categories are listed, so they are navigation, not decoration. */
-  .category-zones-container.compact .cz-heading,
+  /* The free-text search is the first thing to go: in a bottom dock a text
+     field summons the keyboard straight over the dock it belongs to, and the
+     chip row is already scrollable. Gender pills stay — they change WHICH
+     categories are listed, so they are navigation, not decoration. */
   .category-zones-container.compact .cz-search {
     display: none;
   }

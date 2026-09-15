@@ -3452,23 +3452,32 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       }
                     }}
                   >
+                    {/* Only the TOP layer carries an <img>. The peeking layers are
+                        blank card edges: they show a 7px sliver at most, so loading
+                        a full thumbnail for each was 3 fetches + 3 decodes per pile
+                        for pixels nobody can see. A closed pile costs one image;
+                        the other members load when the pile is opened. Step 3 and
+                        the export read the store, not this render, so they are
+                        unaffected. */}
                     {stackLayers(items.length, { compact: isPhone }).map((layer) => {
                       const item = items[layer.index];
-                      const url = item.thumbnailUrl || item.preview || item.imageUrls?.[0];
+                      const isTop = layer.index === 0;
+                      const url = isTop ? (item.thumbnailUrl || item.preview || item.imageUrls?.[0]) : undefined;
                       return (
                         <div
                           key={item.id}
                           data-item-id={item.id}
-                          className={`gs-layer${layer.index === 0 ? ' gs-layer--top' : ''}${layer.index === 0 && photoSelectMode && selectedItems.has(item.id) ? ' photo-picked' : ''}`}
+                          className={`gs-layer${isTop ? ' gs-layer--top' : ' gs-layer--back'}${isTop && photoSelectMode && selectedItems.has(item.id) ? ' photo-picked' : ''}`}
                           style={{
                             transform: `translate(${layer.x}px, ${layer.y}px) rotate(${layer.rotate}deg)`,
                             zIndex: layer.z,
                           }}
+                          aria-hidden={isTop ? undefined : true}
                         >
-                          {url ? (
+                          {!isTop ? null : url ? (
                             <img
                               src={url}
-                              alt={layer.index === 0 ? 'Product' : ''}
+                              alt="Product"
                               draggable={false}
                               loading="lazy"
                               decoding="async"
