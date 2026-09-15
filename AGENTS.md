@@ -2075,3 +2075,14 @@ npm run lint
     only by CSS. No `matchMedia`, no resize listener and no width check in JS belongs in this feature, and a
     second copy of the reachability rule will drift from `App.tsx`'s render conditions the first time one of
     them changes.
+
+49. **Do not let `is_beta_admin()` reach a `kind = 'team'` thread, its members or its messages.** Support
+    threads are the founders' shared inbox and the founder branch of every messaging policy is gated on
+    `kind = 'support'` for that reason; a team thread is a private conversation between colleagues in ONE
+    workspace, and a founder reaches one only as a participant of their own workspace. Extending the
+    cross-tenant power to team threads would make every workspace's internal chat readable by us. The
+    same gate lives in `team_messaging.sql` AND in `perf_rls_initplan.sql` §8 (which re-creates these
+    policies and falls back to the pre-team definitions where the column is absent) — change both or
+    neither, and keep `app_private.is_thread_participant()` behind its public invoker wrapper (#43/#45).
+    Rollback of `team_messaging.sql` has a documented PRE-STEP: run without it, the block stops half way
+    with the pre-team policies restored and every team conversation readable from the founders' inbox.
