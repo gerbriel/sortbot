@@ -146,6 +146,13 @@
      The padding is breathing room, not clearance. */
   padding-top: var(--space-2);
   border-top: 1px solid var(--border-subtle);
+  /* Clearance for the two fixed corner buttons (the shortcuts gear at the
+     bottom-left, the Inbox button at the bottom-right): both sit in a band
+     ~51px tall at the bottom of the viewport, at every width. This row is the
+     last thing in a step, so without the room below it, scrolling to the end
+     parked Back under the gear and Continue under Inbox. */
+  /* = the buttons' 1.75rem offset + their 44px + breathing room. */
+  padding-bottom: calc(1.75rem + 44px + var(--space-4));
 }
 
 .psc-btn {
