@@ -603,6 +603,40 @@
   margin: 0;
 }
 
+/* The mark is the way home, the way a masthead is. It is a real <button>
+   (there is no router, so there is no URL for an anchor to point at and a
+   hrefless <a> is not focusable), stripped back to look like text.
+
+   THE NAV IS THE INVERTED SURFACE (AGENTS.md §1): it sets a literal light
+   foreground, never an --ink- or --text- token, which would resolve to
+   page-black and vanish. Same reason the focus ring is restated white —
+   --accent is BLACK and would be invisible here. */
+.app-header .app-wordmark-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  color: #ffffff;
+  /* Links in this app are weight and colour, never a rule. */
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+
+.app-header .app-wordmark-link:hover { opacity: 0.72; }
+
+.app-header .app-wordmark-link:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 0.4rem;
+}
+
+/* Already home: the mark stays legible but stops advertising a trip. */
+.app-header .app-wordmark-link[aria-current='page'] { cursor: default; }
+.app-header .app-wordmark-link[aria-current='page']:hover { opacity: 1; }
+
 /* The workflow is parked behind `hidden`, never unmounted, so uploads in
    flight and debounced saves survive. `.app-main` sets `display: flex`, which
    beats the UA's `[hidden] { display: none }` — pin it off explicitly. */
@@ -691,6 +725,12 @@
   .header-actions { flex-direction: row; align-items: center; }
 
   .app-wordmark { font-size: var(--fs-base); }
+
+  /* The touch floor is a LITERAL px: every other length here is a rem against
+     the 9px root, and a rem target silently drifts off the accessibility floor
+     the next time that root is retuned (AGENTS.md §18 #31). The bar does not
+     grow — the workspace trigger beside it is already 44px at pointer:coarse. */
+  .app-header .app-wordmark-link { min-height: 44px; padding-right: var(--space-2); }
 
   /* The workspace name is still the first thing that gives, but it has more
      room to give from: the trigger used to share this bar with a Messages

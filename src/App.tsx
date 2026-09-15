@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, Suspense, Component, type ReactNode } from 'react';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
-import { Tag, Settings, Package, Link2, Scissors, X, Trash2, BookMarked, KanbanSquare, AlertTriangle, Keyboard, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users, MessageSquare, Wallet, Printer, ScanLine } from 'lucide-react';
+import { Tag, Settings, Package, Link2, Scissors, X, Trash2, BookMarked, KanbanSquare, AlertTriangle, Keyboard, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users, MessageSquare, Wallet, Printer, ScanLine, LayoutDashboard } from 'lucide-react';
 import { log, isDebugEnabled } from './lib/debugLogger';
 import BrandWordmark from './components/Wordmark';
 import Auth from './components/Auth';
@@ -137,6 +137,7 @@ async function readAllPages<Row>(
  * Analytics / CRM / Errors are their own chunks now that they are top-level
  * views rather than tabs inside OrgPanel. Landing / Auth / WaitlistGate are
  * deliberately NOT lazy: they ARE the first paint. */
+const HomeDashboard = React.lazy(() => import('./components/HomeDashboard'));
 const Library = React.lazy(() => import('./components/Library').then(m => ({ default: m.Library })));
 const CategoriesManager = React.lazy(() => import('./components/CategoriesManager'));
 const CategoryPresetsManager = React.lazy(() => import('./components/CategoryPresetsManager'));
@@ -154,7 +155,7 @@ const BarcodeScannerView = React.lazy(() => import('./components/BarcodeScannerV
 /** Every destination the app can be showing. The four workflow steps are one
  *  view ('workflow'); each header tool is a full page of its own. */
 export type ActiveView =
-  | 'workflow' | 'library' | 'categories' | 'presets'
+  | 'home' | 'workflow' | 'library' | 'categories' | 'presets'
   | 'vocabulary' | 'analytics' | 'crm' | 'finance' | 'board' | 'workspace' | 'messages'
   | 'labels' | 'scan';
 
@@ -489,7 +490,7 @@ function App() {
      unmounted; it is parked behind the `hidden` attribute on <main>, so an
      upload in flight, the grouper's selection, and Step 3's debounced saves
      all survive opening a tool and coming back. */
-  const [activeView, setActiveView] = useState<ActiveView>('workflow');
+  const [activeView, setActiveView] = useState<ActiveView>('home');
   /** Which tab the Workspace dashboard opens on. Only Step 4's marketplaces
    *  panel sets it (its "Manage marketplaces" link), and it is cleared on the
    *  way back so the dashboard's own default returns next time. */
@@ -1528,7 +1529,7 @@ function App() {
   // hasn't been run, ensureOrganization returns legacy mode and currentOrg
   // stays null — no org UI renders and the app behaves exactly as before.
   useEffect(() => {
-    if (!user) { setCurrentOrg(null); setActiveView('workflow'); setBetaWaitlist(null); clearAnalyticsContext(); clearErrorContext(); return; }
+    if (!user) { setCurrentOrg(null); setActiveView('home'); setBetaWaitlist(null); clearAnalyticsContext(); clearErrorContext(); return; }
     let cancelled = false;
     ensureOrganization(user).then(res => {
       if (cancelled) return;
@@ -1600,7 +1601,7 @@ function App() {
     saveStatus.reset();
     setUser(null);
     setCurrentOrg(null);
-    setActiveView('workflow');
+    setActiveView('home');
     // Reset all data
     setUploadedImages([]);
     setSortedImages([]);
@@ -1700,35 +1701,50 @@ function App() {
     }
   };
 
+  /**
+   * PUT THE BATCH DOWN. Clears the four store arrays, detaches the session from
+   * its batch id and cancels every pending debounced write — WITHOUT a
+   * `window.confirm`, so a caller that has already asked (the home dashboard's
+   * two-step ConfirmAction) does not ask twice, and Do Not #12 is respected on
+   * the new surface. The batch ROW survives; only this session detaches, which
+   * is why the pending auto-save is FLUSHED rather than dropped.
+   *
+   * `handleClearBatch` below is this plus the Step-4 button's own confirm.
+   */
+  const startNewBatch = () => {
+    log.app(`startNewBatch | items=${uploadedImages.length} batchId=${currentBatchId}`);
+    setProcessedItems([]);
+    setGroupedImages([]);
+    setSortedImages([]);
+    setUploadedImages([]);
+    setPhoneStep(1);
+    setSaveMessage(null);
+    // Clear persisted batch so reload starts fresh
+    currentBatchIdRef.current = null;
+    setCurrentBatchId(null);
+    setCurrentBatchNumber(`batch-${Date.now()}`);
+    localStorage.removeItem('sortbot_current_batch_id');
+    localStorage.removeItem('sortbot_current_batch_number');
+    // Reset upload-session state so the next file drop gets a fresh batch row
+    batchRowInsertedRef.current = false;
+    isUploadingRef.current = false;
+    pendingChunkRef.current = [];
+    if (chunkTimerRef.current) { clearTimeout(chunkTimerRef.current); chunkTimerRef.current = null; }
+    // Same reason handleOpenBatch drops it: this timer's callback prunes
+    // products rows for whatever batch is current when it FIRES.
+    if (groupUpsertTimerRef.current) { clearTimeout(groupUpsertTimerRef.current); groupUpsertTimerRef.current = null; }
+    // The batch ROW survives a clear (only the session detaches), so the last
+    // few seconds of edits are still worth writing — flush, don't drop.
+    flushPendingAutoSave();
+    if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null; }
+    // No batch left to save — don't leave a stale 'saved'/'error' on the indicator.
+    saveStatus.reset();
+  };
+
+  /** The Step-4 "Clear Batch" button: the same teardown, behind its own confirm. */
   const handleClearBatch = () => {
-    log.app(`handleClearBatch | items=${uploadedImages.length} batchId=${currentBatchId}`);
     if (confirm('Are you sure you want to clear this batch? Unsaved products will be lost.')) {
-      setProcessedItems([]);
-      setGroupedImages([]);
-      setSortedImages([]);
-      setUploadedImages([]);
-      setPhoneStep(1);
-      setSaveMessage(null);
-      // Clear persisted batch so reload starts fresh
-      currentBatchIdRef.current = null;
-      setCurrentBatchId(null);
-      setCurrentBatchNumber(`batch-${Date.now()}`);
-      localStorage.removeItem('sortbot_current_batch_id');
-      localStorage.removeItem('sortbot_current_batch_number');
-      // Reset upload-session state so the next file drop gets a fresh batch row
-      batchRowInsertedRef.current = false;
-      isUploadingRef.current = false;
-      pendingChunkRef.current = [];
-      if (chunkTimerRef.current) { clearTimeout(chunkTimerRef.current); chunkTimerRef.current = null; }
-      // Same reason handleOpenBatch drops it: this timer's callback prunes
-      // products rows for whatever batch is current when it FIRES.
-      if (groupUpsertTimerRef.current) { clearTimeout(groupUpsertTimerRef.current); groupUpsertTimerRef.current = null; }
-      // The batch ROW survives a clear (only the session detaches), so the last
-      // few seconds of edits are still worth writing — flush, don't drop.
-      flushPendingAutoSave();
-      if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null; }
-      // No batch left to save — don't leave a stale 'saved'/'error' on the indicator.
-      saveStatus.reset();
+      startNewBatch();
     }
   };
 
@@ -1804,6 +1820,28 @@ function App() {
   const onOpenBatchStable       = useEventCallback((batch: WorkflowBatch) => handleOpenBatch(batch));
   const onBatchDeletedStable    = useEventCallback((batchId: string) => handleBatchDeleted(batchId));
   const onToastStable           = useEventCallback((msg: string) => addToast(msg));
+  /* ── Home dashboard ──────────────────────────────────────────────────────
+     Resume is a REVEAL, not a re-open: the workflow has been mounted the whole
+     time behind `hidden`, so this only decides which step the phone shows and
+     un-parks <main>. Nothing is fetched and nothing is rebuilt. */
+  const onHomeResumeStable = useEventCallback((step: WorkflowStep) => {
+    goToPhoneStep(step);
+    setActiveView('workflow');
+  });
+  /* The home widget has already asked, with a two-step ConfirmAction — so this
+     goes to the confirm-free half of the teardown, not to handleClearBatch. */
+  const onStartNewBatchStable = useEventCallback(() => startNewBatch());
+  const onHomeNavigateStable  = useEventCallback((id: string) => setActiveView(id as ActiveView));
+  /* Opening a batch from Home must also LEAVE Home. `handleOpenBatch` ends in
+     `setShowLibrary(false)`, which only returns to the workflow when the
+     Library is the view actually showing — from here it is a no-op, and the
+     user would sit on the dashboard watching nothing happen. Switched first so
+     the workflow is on screen while the (async) open runs; handleOpenBatch
+     sets the step itself, from `resumeStep`. */
+  const onHomeOpenBatchStable = useEventCallback((batch: WorkflowBatch) => {
+    setActiveView('workflow');
+    void handleOpenBatch(batch);
+  });
   /* Step 4's marketplaces panel → the Workspace dashboard, on its Marketplaces
      tab. Stable, because the panel is memo'd (§18 #24). */
   const onOpenWorkspaceMarketplaces = useEventCallback(() => {
@@ -3069,6 +3107,7 @@ function App() {
     /* WORK — the things you do to a batch. Labels and Scan are the physical
        half of the workflow and belong to EVERY workspace, not just founding
        admins, which is why they sit beside Library rather than under Setup. */
+    { id: 'home', label: 'Home', icon: <LayoutDashboard size={16} />, title: 'Home — your batches, tools and messages in one place', group: 'work' },
     { id: 'library', label: 'Library', icon: <Package size={16} />, title: 'View saved workflow batches', group: 'work' },
     { id: 'labels', label: 'Labels', icon: <Printer size={16} />, title: 'Labels — print shelf labels with barcodes for the open batch', group: 'work' },
     { id: 'scan', label: 'Scan', icon: <ScanLine size={16} />, title: 'Scan — find a listing by its barcode or SKU', group: 'work' },
@@ -3111,7 +3150,18 @@ function App() {
                 ToolView's title takes that role, so the mark steps down to a
                 <p> and every view keeps exactly one h1. */}
             <Wordmark className="app-wordmark" style={{ display: 'flex', alignItems: 'center', marginBottom: '0.2rem' }}>
-              <BrandWordmark />
+              {/* The mark is the way home, the way a masthead is on any site.
+                  A <button>, not an <a>: there is no router and no URL to point
+                  at, and a hrefless anchor is not focusable. */}
+              <button
+                type="button"
+                className="app-wordmark-link"
+                onClick={() => setActiveView('home')}
+                aria-current={activeView === 'home' ? 'page' : undefined}
+                title="Home"
+              >
+                <BrandWordmark />
+              </button>
             </Wordmark>
             <p className="header-subtitle">Upload, sort, describe, and export to Shopify</p>
           </div>
@@ -3431,6 +3481,38 @@ function App() {
           page under the header, inside the shared ToolView shell (title block,
           Back to workflow, Escape, one calm spacing scale). Every component
           keeps its `onClose` prop — Back is what calls it. */}
+
+      {/* ── Home ────────────────────────────────────────────────────────────
+          The landing page after sign-in. NOT inside <ToolView>: every tool view
+          leads with "Back to workflow", and there is nothing to go back from on
+          the page you arrive at. The workflow is parked behind <main hidden>
+          exactly as it is behind every tool, so "exit batch" costs nothing and
+          Resume is a re-reveal. */}
+      {activeView === 'home' && user && (
+        <Suspense fallback={<ViewFallback />}>
+          <HomeDashboard
+            userEmail={user.email ?? null}
+            userId={user.id}
+            orgName={currentOrg?.name ?? null}
+            orgId={currentOrg?.id ?? null}
+            isFounder={supportIsFounder}
+            navItems={navItems}
+            activeBatchId={currentBatchId}
+            activeBatchNumber={currentBatchNumber}
+            items={processedItems}
+            refreshTrigger={libraryRefreshTrigger}
+            storage={storageInfo ? {
+              ...storageInfo,
+              limitGb: parseFloat(import.meta.env.VITE_STORAGE_LIMIT_GB || '100'),
+            } : null}
+            onResume={onHomeResumeStable}
+            onStartNewBatch={onStartNewBatchStable}
+            onOpenBatch={onHomeOpenBatchStable}
+            onNavigate={onHomeNavigateStable}
+            onOpenMarketplaces={onOpenWorkspaceMarketplaces}
+          />
+        </Suspense>
+      )}
 
       {activeView === 'categories' && (
         <Suspense fallback={<ViewFallback />}>

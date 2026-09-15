@@ -1,4 +1,4 @@
-import { LayoutGrid, Package, MessageSquare, MoreHorizontal } from 'lucide-react';
+import { LayoutDashboard, LayoutGrid, MessageSquare, MoreHorizontal } from 'lucide-react';
 import { useSupportThreads } from '../lib/supportStore';
 import './MobileNav.css';
 
@@ -32,8 +32,16 @@ import './MobileNav.css';
    rule below it. That cost a debugging round here already.)
    ════════════════════════════════════════════════════════════════════════════ */
 
-/** The views that have a tab of their own. Anything else is behind "More". */
-const TAB_IDS = new Set(['workflow', 'library', 'messages']);
+/**
+ * The views that have a tab of their own. Anything else is behind "More".
+ *
+ * Library used to hold the second slot and lost it to Home (Sept 2026): a
+ * phone has four, Home is where a session now starts and ends, and the Library
+ * is one tap away from it as both a widget and a menu row — whereas Home would
+ * otherwise be reachable only through "More", which is the one destination that
+ * must not be.
+ */
+const TAB_IDS = new Set(['home', 'workflow', 'messages']);
 
 export function MobileTabBar(
   { activeView, onSelect, onGoWorkflow, isFounder, onOpenMore, moreOpen }: {
@@ -61,22 +69,22 @@ export function MobileTabBar(
     <nav className="tabbar" aria-label="Primary">
       <button
         type="button"
+        className={`tabbar-btn${activeView === 'home' ? ' tabbar-btn--on' : ''}`}
+        aria-current={activeView === 'home' ? 'page' : undefined}
+        onClick={() => onSelect('home')}
+      >
+        <LayoutDashboard size={20} />
+        <span>Home</span>
+      </button>
+
+      <button
+        type="button"
         className={`tabbar-btn${activeView === 'workflow' ? ' tabbar-btn--on' : ''}`}
         aria-current={activeView === 'workflow' ? 'page' : undefined}
         onClick={onGoWorkflow}
       >
         <LayoutGrid size={20} />
         <span>Workflow</span>
-      </button>
-
-      <button
-        type="button"
-        className={`tabbar-btn${activeView === 'library' ? ' tabbar-btn--on' : ''}`}
-        aria-current={activeView === 'library' ? 'page' : undefined}
-        onClick={() => onSelect('library')}
-      >
-        <Package size={20} />
-        <span>Library</span>
       </button>
 
       {showMessages && (

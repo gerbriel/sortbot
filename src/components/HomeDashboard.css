@@ -1,0 +1,378 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   HomeDashboard — the landing page for a signed-in member.
+
+   IT DELIBERATELY DOES NOT USE .tool-view. Every tool view leads with "Back to
+   workflow"; there is nothing to go back from on the page you arrive at, so
+   wrapping this in that shell would render a control that lies. What it DOES
+   borrow is ToolView's spacing scale, restated here so the two pages read as
+   one app — the numbers below are the same ones, for the same reasons:
+
+     3rem   = 27px   page top padding / grid gap
+     6rem   = 54px   page bottom padding
+     2rem   = 18px   card padding
+     1.5rem = 13.5px phone gutters
+
+   Against the 9px root (AGENTS.md §16), which is why a card's minimum column
+   is 34rem (306px) and not the ~20rem a 16px-root instinct would reach for.
+   Type comes from the --fs- px ramp; spacing and radii stay rem. No hex
+   anywhere: this is the white page, not the inverted nav.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.home-view {
+  padding: 3rem clamp(2rem, 4vw, 6rem) 6rem;
+  background: var(--ink-950);
+  min-height: calc(100vh - 10rem);
+  color: var(--text-primary);
+  line-height: var(--lh-normal);
+  /* `clip`, never `hidden`: `overflow-x: hidden` forces the other axis to
+     `auto`, which turns this into a scroll container and silently kills any
+     `position: sticky` inside it. Same call ToolView makes. */
+  overflow-x: clip;
+}
+
+.home-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+}
+
+/* ── Greeting ─────────────────────────────────────────────────────────────── */
+
+.home-head { display: flex; flex-direction: column; gap: 0.6rem; }
+
+.home-title {
+  margin: 0;
+  font-size: var(--fs-2xl);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.025em;
+  font-weight: 650;
+  color: var(--text-primary);
+  /* An email local-part can be long and has no spaces to break at. */
+  overflow-wrap: anywhere;
+}
+
+.home-sub {
+  margin: 0;
+  font-size: var(--fs-base);
+  color: var(--text-secondary);
+}
+
+/* ── The widget grid ──────────────────────────────────────────────────────── */
+
+.home-grid {
+  display: grid;
+  /* 34rem = 306px on the 9px root: three columns on a 1280 monitor, two on a
+     tablet, and it never demands more than a 390px phone has (the query below
+     drops the minimum entirely, so a 320px screen cannot overflow either). */
+  grid-template-columns: repeat(auto-fit, minmax(34rem, 1fr));
+  gap: 3rem;
+  align-items: start;
+}
+
+/* The two widgets that are about the batch in hand get the full row when there
+   is room. `span 2` inside auto-fit is safe: a one-column grid ignores it. */
+.home-card--wide { grid-column: span 2; }
+
+.home-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+  min-width: 0;
+  padding: 2rem;
+  background: var(--ink-850);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.home-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.home-card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin: 0;
+  min-width: 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.home-card-icon { display: inline-flex; color: var(--text-muted); }
+
+/* ── The open batch ───────────────────────────────────────────────────────── */
+
+.home-batch-name {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.home-batch-step {
+  margin: -0.8rem 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+/* The tiles sit on --ink-850, so they are the `quiet` flavour — a second white
+   box on a card reads as a stacking error.
+
+   The minimum track is narrowed from the primitive's 130px to 10rem (90px):
+   every stat row on this page is exactly THREE tiles, and at 130px a card in
+   the narrow column fits only two, so the third dropped to a second row and
+   left a hole beside it. `auto-fit` collapses the tracks it does not fill, so
+   three tiles share the row whatever the card is wide. */
+.home-stats {
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 1.2rem;
+}
+
+.home-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* ── Lists (recent batches, threads) ──────────────────────────────────────── */
+
+.home-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.home-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  /* 4.4rem ≈ 40px: the tool-view table-row height. The phone block below
+     raises it to the 44px literal floor. */
+  min-height: 4.4rem;
+  padding: 1rem 1.2rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font: inherit;
+  text-align: left;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+
+.home-row:hover:not(:disabled) { background: var(--ink-800); border-color: var(--border-subtle); }
+.home-row:disabled { cursor: default; opacity: 0.6; }
+
+.home-row-icon { display: inline-flex; flex-shrink: 0; color: var(--text-muted); }
+
+.home-row-main { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; flex: 1 1 auto; }
+
+.home-row-name {
+  font-size: var(--fs-base);
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-row-meta {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-row-go {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+/* ── "All batches" / "Manage" affordances ─────────────────────────────────── */
+
+.home-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  padding: 0.5rem 0.8rem;
+  margin: -0.5rem -0.8rem;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  /* Never underlined — the app's links are weight + colour, not a rule. */
+  text-decoration: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.home-link:hover { color: var(--text-primary); }
+
+/* ── Tool tiles ───────────────────────────────────────────────────────────── */
+
+.home-tiles {
+  display: grid;
+  /* 13rem = 117px: five or six across a wide card, two on a phone. */
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: var(--space-3);
+}
+
+.home-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.6rem;
+  min-height: 7.5rem;
+  min-width: 0;
+  padding: 1.2rem;
+  background: var(--ink-800);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font: inherit;
+  text-align: left;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+
+.home-tile:hover { background: var(--ink-750); border-color: var(--border); }
+
+.home-tile-icon { display: inline-flex; color: var(--text-secondary); }
+
+.home-tile-label {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  /* `width`, not `max-width`: the tile is `align-items: flex-start`, so the
+     label sizes to its own max-content and never wraps — the clamp below then
+     cuts "Manage Categories" off mid-word instead of running it onto a second
+     line. Taking the full tile width is what gives it something to wrap in. */
+  width: 100%;
+  /* It WRAPS. These labels come from the nav list, where three of them are two
+     words long ("Manage Categories", "Category Presets", "Workspace dashboard")
+     and do not fit a 13rem tile on one line; truncated to "Manage Cate…" a tile
+     stops naming its own destination, which is its only job.
+
+     Deliberately NOT `-webkit-line-clamp`: `display: -webkit-box` turns the
+     label into an old-spec flexbox whose anonymous text child sizes to
+     max-content, so the text renders on one line and is clipped mid-word
+     instead of wrapping. Plain wrapping needs no vendor property at all. */
+  /* `normal` is load-bearing and is the whole reason the label was clipping:
+     index.css pins `white-space: nowrap` on every `button`, and this label is
+     inside one, so it inherited it and could not wrap at all. */
+  white-space: normal;
+  overflow-wrap: break-word;
+  line-height: var(--lh-snug);
+}
+
+/* ── Storage meter ────────────────────────────────────────────────────────── */
+
+.home-meter {
+  height: 0.8rem;
+  background: var(--ink-700);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.home-meter-bar {
+  height: 100%;
+  min-width: 0.4rem;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width var(--dur) var(--ease);
+}
+
+/* Semantics are spent only on the one real state: a bucket about to fill up. */
+.home-meter-bar--warn { background: var(--warning); }
+
+.home-note {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+/* ── Chips (enabled marketplaces) ─────────────────────────────────────────── */
+
+.home-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+/* ── Loading ──────────────────────────────────────────────────────────────── */
+
+.home-skeleton { display: flex; flex-direction: column; gap: 0.8rem; }
+
+/* ── Tablet ───────────────────────────────────────────────────────────────── */
+
+@media (max-width: 1024px) {
+  /* Two columns of 306px plus a 27px gap needs 639px of content box; below
+     that a spanned card would be the only thing on its row anyway. */
+  .home-card--wide { grid-column: span 1; }
+}
+
+/* ── Phone (≤640px) ───────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .home-view {
+    padding: 1.5rem;
+    /* Clears BOTH the fixed tab bar and the home indicator: --tabbar-h carries
+       the safe-area inset and is 0 at every wider breakpoint, so this one calc
+       is correct everywhere and nothing has to undo it (AGENTS.md §18 #29). */
+    padding-bottom: calc(4rem + var(--tabbar-h));
+    /* max() so a landscape notch can only add room, never take it. */
+    padding-left: max(1.5rem, var(--safe-l));
+    padding-right: max(1.5rem, var(--safe-r));
+    /* dvh tracks Safari's collapsing toolbar. */
+    min-height: calc(100dvh - 10rem);
+  }
+
+  .home-inner { gap: 2rem; }
+  .home-title { font-size: var(--fs-xl); }
+
+  /* One column, and the minimum track is dropped entirely — a 34rem minimum on
+     a 320px screen is a horizontal page scroll. */
+  .home-grid { grid-template-columns: 1fr; gap: 2rem; }
+
+  .home-card { padding: 1.5rem; gap: 1.2rem; }
+
+  /* The touch floor is a LITERAL px on purpose: every other length here is a
+     rem against the 9px root, and a rem target would drift off the
+     accessibility floor the next time that root is retuned (AGENTS.md §18 #31). */
+  .home-row,
+  .home-tile,
+  .home-link {
+    min-height: 44px;
+  }
+
+  .home-link { padding: 0 0.8rem; margin: 0 -0.8rem; }
+
+  /* Two tiles across at 390px rather than one very wide one. */
+  .home-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .home-tile { min-height: 60px; }
+
+  /* Stacked, full-width: side by side each action gets half of 390px, which is
+     not enough for "Start a new batch" and its armed confirm pair. */
+  .home-actions { flex-direction: column; align-items: stretch; }
+  .home-actions > * { width: 100%; }
+}
