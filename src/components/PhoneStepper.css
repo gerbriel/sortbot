@@ -1,0 +1,203 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   PhoneStepper — the ≤640px "one step at a time" chrome.
+
+   Written mobile-first, the way MobileNav.css is: the base rules describe the
+   phone and one `min-width` query takes the whole thing away. Everything here
+   is phone-only, so nothing above 640px changes.
+
+   Colours are tokens (AGENTS.md §1) — this sits on the white page, NOT in the
+   inverted black nav, so the normal text and surface tokens apply. The active
+   disc is the solid accent fill with the --ink-950 label, the convention that
+   makes the palette swappable in either direction.
+
+   Touch targets are a literal 44px. Every other length in this app is a rem
+   against the 9px root, which is exactly why this one is not (AGENTS.md §1).
+
+   (Write token names out in full in these comments. A glob such as --ink-
+   followed by a slash and another glob puts a comment terminator in the middle
+   of the sentence, which ends the comment early and silently eats the rule
+   below it.)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.phone-stepper {
+  /* NOT sticky: the black header already is, at z-index 100, and a second
+     sticky bar slides under it (AGENTS.md §14 #29). Step navigation scrolls the
+     page to the top instead, which puts this back under the header anyway. */
+  margin: 0;
+  padding: 0;
+}
+
+.phone-stepper-list {
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.phone-stepper-item {
+  flex: 1 1 0;
+  /* Grid/flex items default to min-width:auto, which refuses to shrink below
+     the label's intrinsic width and pushes the row past 390px. */
+  min-width: 0;
+}
+
+.phone-stepper-btn {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.35rem;
+  border: 1px solid var(--border-control);
+  border-radius: 999px;
+  /* The stepper sits on the page canvas (--ink-950, white), so a chip filled
+     with --ink-800 (also white, because elevation on this light theme moves
+     TOWARD white) would be a border and nothing else. The grey section tone
+     gives "not here" a body; the active chip takes the white. */
+  background: var(--ink-850);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  cursor: pointer;
+  /* The label is the first thing that gives at 360px; the disc never shrinks. */
+  overflow: hidden;
+}
+
+.phone-stepper-disc {
+  flex: 0 0 auto;
+  width: 1.6em;
+  height: 1.6em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--ink-700);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+
+.phone-stepper-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The active step: solid accent disc, and the chip itself outlined so the row
+   still reads as four equal chips rather than one black slab. */
+.phone-stepper-btn--on {
+  border-color: var(--accent);
+  color: var(--text-primary);
+  background: var(--ink-950);
+}
+
+.phone-stepper-btn--on .phone-stepper-disc {
+  background: var(--accent);
+  /* Solid accent fill always carries the --ink-950 label — that convention is
+     what makes black-on-white and white-on-black both fall out for free. */
+  color: var(--ink-950);
+}
+
+.phone-stepper-btn--done .phone-stepper-disc {
+  background: var(--success-dim);
+  color: var(--success);
+}
+
+.phone-stepper-btn:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.phone-stepper-btn:not(:disabled):active {
+  background: var(--ink-750);
+}
+
+/* Visually hidden, still announced. There is no global sr-only class in this
+   app's CSS (the ui/ primitives own one, and that system is not adopted yet). */
+.phone-stepper-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── The Back / Continue row at the end of each step ───────────────────────── */
+
+.phone-step-continue {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  /* Step 2 and Step 3 both end in a sticky bottom dock. A sticky element stops
+     sticking once its containing block scrolls past, and both docks are the last
+     child of a container that ends ABOVE this row — so by the time this row is
+     on screen the dock has settled into flow above it and cannot cover it.
+     The padding is breathing room, not clearance. */
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.psc-btn {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  cursor: pointer;
+}
+
+.psc-back {
+  flex: 0 0 auto;
+  border: 1px solid var(--border-control);
+  background: var(--ink-800);
+  color: var(--text-primary);
+}
+
+.psc-back:active { background: var(--ink-750); }
+
+.psc-next {
+  /* Continue takes the rest of the row — it is the forward action. */
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--ink-950);
+}
+
+.psc-next:active { opacity: 0.85; }
+
+.psc-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+}
+
+/* ── Desktop and tablet: none of this exists ────────────────────────────────
+   Above 640px every step section is visible at once (App.css hides nothing),
+   so a stepper would navigate to a page that is already all on screen. */
+@media (min-width: 641px) {
+  .phone-stepper,
+  .phone-step-continue {
+    display: none;
+  }
+}

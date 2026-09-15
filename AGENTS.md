@@ -523,6 +523,46 @@ one trigger at every width.
 
 - **Labels and Scan are NOT founder-gated** — declared in `navItems` beside Library; they act on the open batch and render `&& user` only. Labels takes `wide`.
 
+### On a phone: one step at a time (Sept 2026)
+
+Below 640px the four workflow steps are shown **one at a time**, with a stepper above them.
+Nothing unmounts — the same guarantee `hidden` gives the whole workflow (§6 above). All four
+`<section>`s render exactly as on a desktop; App stamps `data-phone-step={shownStep}` on
+`<main>` and each section carries `data-step="1|2|3|4"`, and ONE appended block in `App.css`
+hides the rest with `display: none` **inside a `max-width: 640px` query**. Above 640px those
+rules do not exist, so desktop and tablet are byte-identical and this whole feature is inert
+there — no `matchMedia`, no resize listener, no width in JS.
+
+`src/lib/phoneSteps.ts` is the pure half (24 tests). `reachableSteps(counts)` **mirrors the
+render conditions by hand** — 1 always, 2 iff `uploadedImages.length > 0`, 3 iff
+`sortedImages.length > 0`, 4 iff `processedItems.length > 0` — so change it when one of those
+changes; it is deliberately a filter, not a ramp, and every other helper walks the list it
+returns rather than doing arithmetic on step numbers, so a non-contiguous set degrades into
+"never jump the user forward" instead of a step with no section.
+
+- **`shownStep` is DERIVED, not corrected.** `phoneStep` state is what the user asked for;
+  `const shownStep = clampStep(phoneStep, counts)` at render is what is on screen. It cannot
+  be stale for a frame, and every path that empties the batch (sign-out, Clear Batch, the 3 s
+  auto-clear after Save) is covered with no teardown code of its own. `clampStep` falls
+  DOWNWARD, so losing Step 4 lands on Step 3, never on Step 1.
+- **The only auto-advance is 1 → 2**, in `handleImagesUploaded`. NOT 2 → 3 or 3 → 4: Step 3
+  becomes reachable the moment the first category is assigned, and pulling the user out of the
+  grid mid-grouping is the wrong move — those are the Continue tap.
+- **Restore and `handleOpenBatch` set `resumeStep(items)`** — NOT `furthestStep`: every restore
+  path fills all four arrays from one list, so the furthest reachable step is always Export.
+  `resumeStep` reads the work instead (no items → 1, none categorized → 2, any categorized → 3)
+  and never returns 4, because the slim state cannot say whether the descriptions are finished and
+  Export is one Continue tap away. Read through the `liveArrayRef` view (fresh the instant a store
+  setter returns), never the render-captured arrays.
+- **`PhoneStepper` and `PhoneStepNav` (`components/PhoneStepper.tsx`) go both ways** — any
+  reachable step is tappable in either direction, and the bottom row is Back + Continue
+  (Step 1 has no Back, Step 4 no Continue; a hint replaces Continue when the next step is not
+  reachable yet). Neither is sticky (§14 #29); a step change scrolls the page to the top.
+- **The Continue row is the last child of its section, after the sticky dock's containing
+  block** — that, not a magic `padding-bottom`, is why Step 2's category dock and Step 3's nav
+  dock cannot cover it.
+- **Step 3's autogrow effect must never measure a hidden textarea** (§18 #48).
+
 ---
 
 ## 7. Data Models & Schema
@@ -1681,6 +1721,29 @@ Two migrations are written and NOT run (§16), and one one-off data repair is ow
 
 - ✅ **Navigation consolidated into the workspace menu (Sept 2026)** — the header's ELEVEN tool buttons (which wrapped onto a second line), the tablet `NavRail` and the phone More sheet are all gone; the header is a wordmark plus the workspace trigger at every width, and every destination is a row in `WorkspaceMenu`: identity, "Back to workflow" (only inside a tool view), then Work (Library/Labels/Scan/Inbox) · Setup (Categories/Presets/Workspace dashboard) · Founder (Vocabulary/Analytics/CRM/Finance/Board), then Sign out. ONE `navItems` list in App.tsx feeds it, so a role gate is declared once. Full menu semantics: `aria-haspopup="menu"`/`aria-expanded` trigger, `role="menu"`/`menuitem`/`separator`, roving Arrow/Home/End with wrap, Escape restores focus to the opener, Tab and outside-press dismiss, keyboard opens focus the first row and pointer opens do not. The unread count rides the trigger AND the Inbox row. THREE THINGS ARE LOAD-BEARING: it is portaled to `<body>` (the header is a `z-index:100` stacking context, so an in-place bottom sheet would paint under the tab bar — the portal also removes the need for the old `.app-header .wsmenu-menu` colour opt-outs); its desktop anchor is passed as `--wsmenu-top`/`--wsmenu-right` custom properties, never inline `top`/`right`, or it would outrank the ≤640px sheet rules; and it carries `data-tv-modal` so ToolView's document-level Escape-to-workflow stays parked while the menu is open. The phone tab bar keeps Workflow/Library/Messages and its More tab opens this same component (`navMenuOpen` lifted into App) — one component, one list. `toggleView`, `MessagesNavButton`, `NavRail`, `NavTool`, `mobileTools`, `.nav-tool-btn*`, `.nav-rail*` and `.nav-sheet*` were all deleted. Verified by injecting the rendered markup into the live landing page at 1280/820/390/360 and by a 7-case keyboard suite on the in-house test harness (docs/reviews/14-nav-menu.md).
 
+- ✅ **One step at a time on a phone (Sept 2026)** — at ≤640px the four workflow steps stop being one ~4,000px
+  scroll with two sticky docks competing for the bottom of the screen: a stepper (Upload / Group / Describe /
+  Export) sits above them and only the active step is on screen. **Nothing unmounts** — the sections all render
+  exactly as they do on a desktop and the others are hidden by `display: none` from one appended
+  `max-width: 640px` block keyed on `data-phone-step`, so an upload in flight, the grouper's selection and
+  Step 3's debounced saves survive a step change, and above 640px the rules do not exist (desktop is
+  byte-identical, verified at 641/1280). Navigation goes **both ways**: any reachable step's chip is tappable
+  forward or back, and each section ends in a Back + "Continue to …" row (a muted hint replaces Continue until
+  the next step unlocks). Reachability, the furthest-step restore and the clamp are a pure tested module
+  (`lib/phoneSteps.ts`, 24 tests) that mirrors App's render conditions; `shownStep` is derived at render rather
+  than corrected in an effect, so clearing a batch needs no teardown. The only auto-advance is 1 → 2 on upload.
+  **Two traps were the real work.** (a) Step 3's `js-autogrow` effect has no dependency array and PDG re-renders
+  while parked, so it would have measured `scrollHeight: 0` inside a `display: none` section and written
+  `height: 0px` permanently (PDG is memoised — no later render to undo it); it now refuses to measure an
+  unlaid-out box (`offsetParent === null`) and re-runs from a `ResizeObserver`, whose callback defers to rAF so
+  a height write inside the delivery loop cannot raise Chrome's "loop completed" error into `app_errors`.
+  Measured in real Chrome: hidden reads 0/0/0, the RO fires `[39, 0, 78]` across a hide/show cycle. (b)
+  ImageGrouper was NOT touched and proven safe instead — every rect and `scrollTop` read in it is gesture-scoped
+  (mousedown, the drag rAF loop, the crop modal), nothing measures on mount, its `matchMedia` phone flag is a
+  viewport query, and Chrome preserves a scroll container's `scrollTop` across a hide/show cycle (measured: 800
+  → 800). PDG's `--dock-h` observer was verified to publish 0 while Step 3 is parked — `IntersectionObserver`
+  fires on both transitions — so the corner buttons do not lift for a dock that is not on screen
+  (`docs/reviews/18-phone-steps.md`).
 
 `.grouper-header` no longer exists in the DOM, so it is inert — but it should be
 deleted with its comment on the next App.css pass.
@@ -1966,3 +2029,16 @@ npm run lint
     between the two halves after any edit.
 
 47. **Never call an RLS helper bare inside a policy.** Write `(select auth.uid())`, `(select public.is_beta_admin())`, `(select public.auth_email_verified())` etc. so Postgres evaluates it once per statement (InitPlan) instead of once per row — the bare form cost 94.5 ms vs 1.9 ms on a 300-row founder query. Correlated helpers (`is_org_admin(org_id)`) stay SubPlans by nature. Any migration that recreates a policy must be followed by re-running `perf_rls_initplan.sql`.
+
+48. **Do not measure a DOM box that may be inside a hidden step, and do not add a second way of deciding
+    which phone step is showing.** Below 640px the three inactive workflow sections are `display: none`, and
+    everything inside one measures 0 — `scrollHeight`, `offsetHeight`, `clientHeight` and every rect. Step 3's
+    `js-autogrow` effect has no dependency array and PDG re-renders while parked (it reads `processedItems`,
+    which Step 2 writes), so an unguarded measurement writes `height: 0px` and it STAYS written: PDG is
+    memoised, and a step change alone never re-renders it. Guard on `offsetParent === null` and re-run from a
+    `ResizeObserver` (its callback must defer the write to rAF, or a height set inside the delivery loop raises
+    Chrome's "ResizeObserver loop completed" error into `app_errors`). Equally: the active step is decided in
+    exactly one place — `clampStep(phoneStep, counts)` derived at render, stamped as `data-phone-step` and read
+    only by CSS. No `matchMedia`, no resize listener and no width check in JS belongs in this feature, and a
+    second copy of the reachability rule will drift from `App.tsx`'s render conditions the first time one of
+    them changes.

@@ -928,3 +928,31 @@
    sized up for the header and pinned to a literal light foreground because
    the nav never takes --text-* tokens (AGENTS.md §1). */
 .app-header .wordmark { font-size: var(--fs-xl); color: #ffffff; }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   ▼▼▼ PHONE STEPS — one step on screen at a time (≤640px) ▼▼▼
+
+   Steps 1-4 stay mounted and rendered exactly as they are on a desktop; below
+   640px the ones that are not the active step are hidden with CSS alone. Nothing
+   unmounts, so an upload in flight, the grouper's selection and Step 3's
+   debounced saves all survive a step change — the same guarantee the tool views
+   get from `hidden` on this element (AGENTS.md §6).
+
+   `data-phone-step` is stamped on .app-main at every width; these rules are the
+   only thing that reads it, and they exist only inside the media query, so
+   desktop and tablet rendering is byte-identical to before.
+
+   Specificity: .app-main[data-phone-step="N"] > section[data-step] plus the
+   :not() is (0,4,1), far above .step-section's (0,1,0), and no step section
+   carries an inline display — so `display: none` lands.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  .app-main[data-phone-step="1"] > section[data-step]:not([data-step="1"]),
+  .app-main[data-phone-step="2"] > section[data-step]:not([data-step="2"]),
+  .app-main[data-phone-step="3"] > section[data-step]:not([data-step="3"]),
+  .app-main[data-phone-step="4"] > section[data-step]:not([data-step="4"]) {
+    display: none;
+  }
+}
+/* ▲▲▲ END PHONE STEPS BLOCK ▲▲▲ */

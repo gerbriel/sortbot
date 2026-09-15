@@ -2387,17 +2387,58 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // popover, and a re-measure is only ever correct AFTER the DOM React just
   // produced. Three elements, one forced reflow each — cheaper than the render
   // that scheduled it.
+  //
+  // A HIDDEN TEXTAREA MEASURES ZERO, AND WRITING THAT ZERO IS PERMANENT. Below
+  // 640px only one workflow step is on screen: App parks the others behind
+  // `display: none` (App.css, the phone-steps block). This effect has no
+  // dependency array, so it also runs on renders that happen while Step 3 is
+  // parked — a Step 2 grouping action writes processedItems, which re-renders
+  // this component — and every measurement inside a display:none subtree is 0.
+  // `height: 0px` would then be committed and STAY committed, because the
+  // component is memoised and a step change alone does not re-render it: the
+  // user would come back to three collapsed boxes. So: never measure a box that
+  // is not laid out, and re-run when one comes back.
   useEffect(() => {
     const root = step3RootRef.current;
     if (!root) return;
-    root.querySelectorAll<HTMLTextAreaElement>('textarea.js-autogrow').forEach((el) => {
+
+    const fit = (el: HTMLTextAreaElement) => {
+      // offsetParent is null for an element inside a display:none subtree (and
+      // for the element itself when hidden). These textareas are in normal flow,
+      // so the position:fixed exception to that rule cannot apply here.
+      if (el.offsetParent === null) return;
       el.style.height = 'auto';
       // scrollHeight measures the CONTENT box. `box-sizing: border-box` is global
       // here, so the height property must also carry the borders — without the
       // offsetHeight/clientHeight difference every textarea clips its last 2px
       // (measured: a 320px description rendered into a 318px content box).
-      el.style.height = `${el.scrollHeight + (el.offsetHeight - el.clientHeight)}px`;
+      const h = el.scrollHeight + (el.offsetHeight - el.clientHeight);
+      // Belt and braces for the same failure: 0 can only mean "not laid out".
+      // Leaving height:auto is the pre-2026 behaviour, i.e. harmless.
+      if (!(h > 0)) return;
+      const next = `${h}px`;
+      if (el.style.height !== next) el.style.height = next;
+    };
+
+    const els = Array.from(root.querySelectorAll<HTMLTextAreaElement>('textarea.js-autogrow'));
+    els.forEach(fit);
+
+    // The re-run. display:none → block changes each box from 0x0 to a real size,
+    // which is a resize, and a ResizeObserver reports it — no matchMedia, no
+    // resize listener, and nothing that has to know the phone stepper exists.
+    // (It also covers the font-boost and orientation cases for free.)
+    if (typeof ResizeObserver === 'undefined') return;
+    let raf = 0;
+    // The work is deferred out of the observer callback on purpose: writing a
+    // height from inside the delivery loop is what produces Chrome's
+    // "ResizeObserver loop completed with undelivered notifications" error, and
+    // installErrorReporter() listens for window 'error'.
+    const ro = new ResizeObserver(() => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => { raf = 0; els.forEach(fit); });
     });
+    els.forEach(el => ro.observe(el));
+    return () => { ro.disconnect(); if (raf) cancelAnimationFrame(raf); };
   });
 
   // ── --dock-h: the screen the sticky phone nav bar is occupying ───────────

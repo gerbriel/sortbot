@@ -58,6 +58,8 @@ import ShortcutsPanel from './components/ShortcutsPanel';
 import { supportStore, useSupportThreads } from './lib/supportStore';
 import ToolView from './components/ToolView';
 import { MobileTabBar } from './components/MobileNav';
+import PhoneStepper, { PhoneStepNav } from './components/PhoneStepper';
+import { clampStep, reachableSteps, resumeStep, type StepCounts, type WorkflowStep } from './lib/phoneSteps';
 import { applyPresetDirectly } from './lib/applyPresetToGroup';
 import type { BrandCategory } from './lib/brandCategorySystem';
 import './App.css';
@@ -543,6 +545,34 @@ function App() {
   const [sortedImages, setSortedImages] = useStoreItemArray('sortedImages');
   const [groupedImages, setGroupedImages] = useStoreItemArray('groupedImages');
   const [processedItems, setProcessedItems] = useStoreItemArray('processedItems');
+  /* ── ONE STEP AT A TIME ON A PHONE (≤640px) ──────────────────────────────
+     The four step sections all stay mounted and rendered — this only decides
+     which one is VISIBLE, and only below 640px, where App.css hides the others
+     off `data-phone-step`. Above that breakpoint those rules do not exist, so
+     this state is inert: nothing here is behind a matchMedia or a resize
+     listener, and nothing unmounts (AGENTS.md §6).
+
+     The stored value is what the user last asked for; `shownStep` is what is
+     actually on screen. Deriving the clamp at render rather than correcting the
+     state in an effect means it can never be stale for a frame, and a batch
+     cleared out from under the user (sign-out, Clear Batch, the 3s auto-clear
+     after Save) needs no teardown code of its own. */
+  const [phoneStep, setPhoneStep] = useState<WorkflowStep>(1);
+  const stepCounts: StepCounts = {
+    uploaded: uploadedImages.length,
+    sorted: sortedImages.length,
+    processed: processedItems.length,
+  };
+  const phoneReachable = reachableSteps(stepCounts);
+  const shownStep = clampStep(phoneStep, stepCounts);
+  /** Every user-driven step change. Phone-only by construction — both controls
+   *  that call it are `display: none` above 640px. */
+  const goToPhoneStep = (step: WorkflowStep) => {
+    setPhoneStep(step);
+    // The sections swap in place, so the page would otherwise keep the offset
+    // the previous step was scrolled to and open the next one part-way down.
+    window.scrollTo({ top: 0 });
+  };
   const [selectedGroupItems, setSelectedGroupItems] = useState<Set<string>>(new Set());
   const [grouperActions, setGrouperActions] = useState<GrouperActions | null>(null);
   // Ref mirror so onCategoryAssigned closures always call the current clearSelection
@@ -1279,6 +1309,10 @@ function App() {
                 setGroupedImages(hydratedItems);
                 setSortedImages(hydratedItems);
                 setProcessedItems(hydratedItems);
+                // Phone: open on the step that has work left (never Export — see
+                // resumeStep). Read through the liveArrayRef view, which is fresh
+                // the instant a store setter returns.
+                setPhoneStep(resumeStep(processedItemsRef.current));
                 // Pass session.user explicitly — React `user` state hasn't been set yet at this point
                 // (setUser(session.user) queues a re-render but doesn't run synchronously)
                 // NOTE: registerItemsInDB is called ONLY if products are missing from DB
@@ -1456,6 +1490,7 @@ function App() {
                   setGroupedImages(backupItems);
                   setSortedImages(backupItems);
                   setProcessedItems(backupItems);
+                  setPhoneStep(resumeStep(processedItemsRef.current));
                   registerItemsInDB(backupItems, savedBatchId, session.user);
                 }
               }
@@ -1669,6 +1704,7 @@ function App() {
       setGroupedImages([]);
       setSortedImages([]);
       setUploadedImages([]);
+      setPhoneStep(1);
       setSaveMessage(null);
       // Clear persisted batch so reload starts fresh
       currentBatchIdRef.current = null;
@@ -1734,6 +1770,7 @@ function App() {
     setGroupedImages([]);
     setSortedImages([]);
     setProcessedItems([]);
+    setPhoneStep(1);
   };
 
   /* ── Stable props for the memoized workflow children (perf finding F2) ──────
@@ -1886,6 +1923,12 @@ function App() {
     const brandNew = items.filter(i => !existingIds.has(i.id));
     const newImages = [...uploadedImagesRef.current, ...brandNew];
     setUploadedImages(newImages);
+    // Phone: the one auto-advance. Step 2 has just become reachable and there is
+    // nothing left to do in Step 1, so carry the user across. Deliberately NOT
+    // done for 2 → 3 or 3 → 4: Step 3 becomes reachable the moment the first
+    // category is assigned, and yanking someone out of the grid mid-grouping is
+    // exactly the wrong move. Those are the Continue tap.
+    setPhoneStep(s => (s === 1 ? 2 : s));
 
     // Ensure we have a batch ID. handleChunkReady mints it on the first chunk so that
     // ImageGrouper's batchId prop is stable during the upload and no group-wipe fires.
@@ -2903,6 +2946,11 @@ function App() {
       setProcessedItems(workflowItems);
     }
 
+    // Phone: open the batch on the step that has work left (never Export —
+    // see resumeStep). Both branches above (and the DB-reconstruction path
+    // inside the try) have settled by now, and the ref reads the store.
+    setPhoneStep(resumeStep(processedItemsRef.current));
+
     // Fire registerItemsInDB in the background — don't await it.
     // The UI is already showing images at this point (set above). registerItemsInDB
     // only matters for Library consistency, which is non-blocking from the user's perspective.
@@ -3090,7 +3138,12 @@ function App() {
           while a tool view is open. `hidden` (not an inline display:none) so
           it is removed from the a11y tree too — App.css pins the flex
           display off, since `display:flex` would otherwise beat the UA rule. */}
-      <main className="app-main" hidden={activeView !== 'workflow'}>
+      <main className="app-main" hidden={activeView !== 'workflow'} data-phone-step={shownStep}>
+        {/* ≤640px only: the four sections become one step at a time. Above that
+            breakpoint this renders nothing (PhoneStepper.css) and the
+            data-phone-step rules in App.css do not exist. */}
+        <PhoneStepper step={shownStep} reachable={phoneReachable} onSelect={goToPhoneStep} />
+
         {/* Save Message */}
         {saveMessage && (
           <div className={`save-message ${saveMessage.type}`}>
@@ -3099,7 +3152,7 @@ function App() {
         )}
 
         {/* Step 1: Upload Images */}
-        <section className="step-section">
+        <section className="step-section" data-step="1">
           <div className="step1-header">
             <div>
               <h2>Step 1: Upload Images</h2>
@@ -3132,11 +3185,12 @@ function App() {
           </div>
           <ImageUpload ref={uploadRef} onImagesUploaded={handleImagesUploaded} userId={user.id} existingItems={uploadedImages} onCapturedAtUpdated={handleCapturedAtUpdated} onToast={addToast} onChunkReady={handleChunkReady} onUploadCancelled={handleUploadCancelled} onUploadStart={handleUploadStart} getBatchId={() => currentBatchIdRef.current} />
           {/* "N images uploaded" moved to toast — see handleImagesUploaded */}
+          <PhoneStepNav step={1} reachable={phoneReachable} onSelect={goToPhoneStep} />
         </section>
 
         {/* Steps 2 & 3 Combined: Group Images + Drag to Categories */}
         {uploadedImages.length > 0 && (
-          <section className="step-section">
+          <section className="step-section" data-step="2">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <h2>Step 2: Group & Categorize</h2>
               <button 
@@ -3287,13 +3341,17 @@ function App() {
                 {/* Category Preset picker removed — presets applied via right-click or category drag */}
               </div>
             </div>
+            {/* After .step2-split, so the sticky category dock (whose containing
+                block is that div) has already settled into flow by the time this
+                row is on screen and can never cover it. */}
+            <PhoneStepNav step={2} reachable={phoneReachable} onSelect={goToPhoneStep} />
           </section>
         )}
 
         {/* Step 3: Add Descriptions */}
         {sortedImages.length > 0 && (
           /* id is the scroll target for openListingInStep3 (a scanned label). */
-          <section className="step-section" id="step-3">
+          <section className="step-section" id="step-3" data-step="3">
             <h2>Step 3: Add Voice Descriptions & Generate Product Info</h2>
             {(() => {
               // Always compute from processedItems — same source PDG uses for navigation.
@@ -3345,12 +3403,13 @@ function App() {
               descriptionSettings={orgDescSettings}
               focusProductId={focusListingId}
             />
+            <PhoneStepNav step={3} reachable={phoneReachable} onSelect={goToPhoneStep} />
           </section>
         )}
 
         {/* Step 4: Save & Export */}
         {processedItems.length > 0 && (
-          <section className="step-section">
+          <section className="step-section" data-step="4">
             <details>
               <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 'var(--fs-md)', userSelect: 'none', padding: '0.25rem 0' }}>
                 Step 4: Review &amp; Export ▾
@@ -3389,6 +3448,7 @@ function App() {
                 </div>
               </div>
             </details>
+            <PhoneStepNav step={4} reachable={phoneReachable} onSelect={goToPhoneStep} />
           </section>
         )}
       </main>
