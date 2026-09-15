@@ -2625,20 +2625,16 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   return (
     <div className="product-description-container" ref={step3RootRef}>
       <div className="progress-bar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <span>Product Group {currentGroupIndex + 1} of {groupArray.length}</span>
-          {/* Badges — image count + category — top-left */}
-          <span className="group-info-badge">
-            {currentGroup.length} {currentGroup.length === 1 ? 'image' : 'images'}
-          </span>
-          {currentItem.category && (
-            <span className="category-badge">{currentItem.category}</span>
-          )}
-        </div>
-        {/* Checkbox — top-right — selects this group for bulk preset apply */}
+        {/* Just the position — the image count and category chips that used to
+            sit here were noise on a progress bar (the photos are right below,
+            and the category is in the form). */}
+        <span>Product Group {currentGroupIndex + 1} of {groupArray.length}</span>
+        {/* Checkbox — top-right — marks this listing for a BULK action: tick
+            listings while paging through, then "Apply preset" or "Paste crop"
+            acts on every ticked listing instead of only the one on screen. */}
         <label
           style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: 'var(--fs-sm)', color: 'var(--text-secondary)', userSelect: 'none', marginLeft: 'auto' }}
-          title="Select group for bulk preset apply"
+          title="Tick listings as you page through, then Apply preset or Paste crop acts on all of them at once"
         >
           <input
             type="checkbox"
@@ -2654,7 +2650,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             }}
             style={{ width: '1rem', height: '1rem', cursor: 'pointer', accentColor: 'var(--accent)' }}
           />
-          <span>Select</span>
+          <span>
+            {selectedGroupIds.size > 0
+              ? `Selected for bulk apply (${selectedGroupIds.size})`
+              : 'Select for bulk apply'}
+          </span>
         </label>
         <div className="progress-fill" style={{ width: `${((currentGroupIndex + 1) / groupArray.length) * 100}%` }} />
       </div>
