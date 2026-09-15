@@ -1869,6 +1869,11 @@ deleted with its comment on the next App.css pass.
   only sizes the dock); `grouperActions` still flows to App for `onCategoryAssigned` and `clearSelection`. The
   dashed `.drop-zone-placeholder` ("Drag photos here to make them individual items") at the top of the
   singles section is deleted with its drop handler — ungrouping is the button, the group's ⋯ menu, or ⌘⌫.
+- ✅ **The debug-logging switch is gone from `ShortcutsPanel` (15 Sept 2026)** — the founder asked for it out. The
+  panel lists shortcuts only; its props are now just the optional controlled `open` / `onOpenChange`; App's
+  `debugEnabled` state and `toggleDebug` are deleted, and the phone-only menu row reads "Keyboard shortcuts".
+  `lib/debugLogger.ts` is unchanged: a developer enables it from the console (`localStorage` key
+  `sortbot_debug_enabled`, or `window.__SORTBOT_DEBUG__`), never from product UI.
 
 ---
 

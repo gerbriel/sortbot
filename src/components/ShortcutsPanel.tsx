@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, memo } from 'react';
-import { Settings, X, Bug } from 'lucide-react';
+import { Settings, X } from 'lucide-react';
 import {
   groupedShortcuts,
   platformKeys,
@@ -17,12 +17,8 @@ const IS_MAC =
   detectIsMac(navigator.platform || navigator.userAgent || '');
 
 interface ShortcutsPanelProps {
-  /** Current state of the debug logger (App owns it — this is a view of it). */
-  debugEnabled: boolean;
-  /** App's existing toggleDebug handler, moved in here unchanged. */
-  onToggleDebug: () => void;
   /** Optional controlled open state. On phones the gear FAB is hidden and the
-   *  workspace menu's "Shortcuts & debug" row opens this panel through App. */
+   *  workspace menu's "Keyboard shortcuts" row opens this panel through App. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
@@ -35,15 +31,14 @@ interface ShortcutsPanelProps {
  * size, same shadow, same `--tabbar-h` lift on phones — so the two bottom
  * corners read as one system rather than two accidents.
  *
- * The debug-logging switch lives at the bottom of the panel. It used to be its
- * own floating button in this corner, which meant a developer affordance was
- * permanently occupying prime screen real estate (and was simply hidden on
- * phones, where the tab bar wanted the same pixels). One corner, one control.
+ * There is no debug switch here (removed 15 Sept 2026): the logger is a
+ * developer tool and is turned on from the console — `localStorage` key
+ * `sortbot_debug_enabled`, see lib/debugLogger.ts — not from product UI.
  *
  * The shortcut rows are DATA, from lib/keyboardShortcuts.ts — this component
  * renders whatever is in that list and knows nothing about what any key does.
  */
-function ShortcutsPanel({ debugEnabled, onToggleDebug, open: openProp, onOpenChange }: ShortcutsPanelProps) {
+function ShortcutsPanel({ open: openProp, onOpenChange }: ShortcutsPanelProps) {
   const [openState, setOpenState] = useState(false);
   const open = openProp ?? openState;
   const setOpen = useCallback((next: boolean | ((prev: boolean) => boolean)) => {
@@ -130,26 +125,6 @@ function ShortcutsPanel({ debugEnabled, onToggleDebug, open: openProp, onOpenCha
             ))}
             <p className="ks-footnote">{SHORTCUT_FOOTNOTE}</p>
           </div>
-
-          {/* Developer row — the old floating debug button, rehoused. */}
-          <div className="ks-foot">
-            <span className="ks-foot-label">
-              <Bug size={13} /> Debug logging
-            </span>
-            <button
-              className={`ks-switch${debugEnabled ? ' ks-switch--on' : ''}`}
-              role="switch"
-              aria-checked={debugEnabled}
-              onClick={onToggleDebug}
-              title={
-                debugEnabled
-                  ? 'Debug logging ON — click to disable'
-                  : 'Debug logging OFF — click to enable'
-              }
-            >
-              <span className="ks-switch-knob" />
-            </button>
-          </div>
         </div>
       )}
 
@@ -166,7 +141,8 @@ function ShortcutsPanel({ debugEnabled, onToggleDebug, open: openProp, onOpenCha
   );
 }
 
-/* App re-renders on every store and UI change; both props here are primitives
-   and `onToggleDebug` is stable, so the shallow compare bails out on everything
-   that is not an actual debug-state change. Same reasoning as SupportWidget. */
+/* App re-renders on every store and UI change; the only props here are the
+   optional `open` boolean and App's stable state setter, so the shallow compare
+   bails out on everything that is not an actual open-state change. Same
+   reasoning as SupportWidget. */
 export default memo(ShortcutsPanel);

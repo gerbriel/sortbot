@@ -2,7 +2,7 @@ import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMe
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { Tag, Settings, Package, Link2, Scissors, X, Trash2, BookMarked, KanbanSquare, AlertTriangle, Keyboard, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users, MessageSquare, Wallet, Printer, ScanLine } from 'lucide-react';
-import { log, setDebugEnabled, isDebugEnabled } from './lib/debugLogger';
+import { log, isDebugEnabled } from './lib/debugLogger';
 import BrandWordmark from './components/Wordmark';
 import Auth from './components/Auth';
 import ImageUpload, { type ImageUploadHandle } from './components/ImageUpload';
@@ -590,16 +590,6 @@ function App() {
   const [saving, setSaving] = useState(false);
   const [libraryRefreshTrigger, setLibraryRefreshTrigger] = useState(0);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [debugEnabled, setDebugEnabledState] = useState(isDebugEnabled);
-
-  /* Lives in the ShortcutsPanel (bottom-left) since the floating debug button
-     was retired. Stable identity so the memoized panel does not re-render on
-     every App render — same reasoning as the SupportWidget props below. */
-  const toggleDebug = useEventCallback(() => {
-    const next = !debugEnabled;
-    setDebugEnabledState(next);
-    setDebugEnabled(next);
-  });
 
   // ── Storage usage meter (lifted from ImageUpload) ─────────────────────────
   const [storageInfo, setStorageInfo] = useState<{
@@ -3077,7 +3067,7 @@ function App() {
     { id: 'presets', label: 'Category Presets', icon: <Settings size={16} />, title: 'Manage category presets for shipping weight, measurements, and default attributes', group: 'setup' },
     ...(currentOrg ? [{ id: 'workspace', label: 'Workspace dashboard', icon: <Users size={16} />, title: 'Workspace — members, invites and settings', group: 'setup' as const }] : []),
     // Phone only: stands in for the bottom-left gear, which is hidden below 640px.
-    { id: 'shortcuts', label: 'Shortcuts & debug', icon: <Keyboard size={16} />, title: 'Keyboard shortcuts and the debug-logging switch', group: 'setup', phoneOnly: true },
+    { id: 'shortcuts', label: 'Keyboard shortcuts', icon: <Keyboard size={16} />, title: 'Every keyboard shortcut, by screen', group: 'setup', phoneOnly: true },
     /* FOUNDER — Founding Workspace only, and all but Board admin-only. */
     ...(isFoundingAdmin ? [
       { id: 'vocabulary', label: 'Vocabulary', icon: <BookMarked size={16} />, title: 'Vocabulary — curate quick keyword chips and brand keywords (all workspaces)', group: 'founder' as const },
@@ -3661,7 +3651,7 @@ function App() {
       {/* ── Bottom-left corner: keyboard shortcuts + the debug-logging switch.
           One control where the floating debug button used to be, mirroring the
           support FAB in the opposite corner. */}
-      <ShortcutsPanel debugEnabled={debugEnabled} onToggleDebug={toggleDebug} open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <ShortcutsPanel open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
 
       {/* ── Support messaging (first-party): every signed-in user can message
           the founders; Founding admins get the inbox of every conversation. */}

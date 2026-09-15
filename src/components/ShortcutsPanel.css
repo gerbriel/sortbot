@@ -155,57 +155,6 @@
   color: var(--text-muted);
 }
 
-/* ── Debug row ────────────────────────────────────────────────────────────── */
-.ks-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.55rem 0.75rem;
-  border-top: 1px solid var(--border-subtle);
-  background: var(--ink-850);
-}
-
-.ks-foot-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.ks-switch {
-  position: relative;
-  width: 34px;
-  height: 20px;
-  flex-shrink: 0;
-  padding: 0;
-  border-radius: 999px;
-  border: 1px solid var(--border-control);
-  background: var(--ink-700);
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-/* Centred by transform rather than a hand-computed `top`, so the phone rule
-   below only has to change three numbers and the knob stays on the axis. */
-.ks-switch-knob {
-  position: absolute;
-  top: 50%;
-  left: 2px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--text-muted);
-  transform: translateY(-50%);
-  transition: transform 0.15s, background 0.15s;
-}
-
-/* On = amber, the same "debug is live" signal the old floating button used. */
-.ks-switch--on { background: var(--warning-dim); border-color: var(--warning); }
-.ks-switch--on .ks-switch-knob { transform: translate(14px, -50%); background: var(--warning); }
-
 /* ── Phone (≤640px) ───────────────────────────────────────────────────────────
    Same two problems SupportWidget solves on the other side of the screen: the
    fixed tab bar owns the bottom strip, so the FAB lifts by --tabbar-h (which
@@ -227,7 +176,7 @@
     bottom: calc(0.75rem + var(--tabbar-h) + var(--dock-h, 0px));
   }
 
-  /* No floating gear on a phone: the workspace menu's "Shortcuts & debug" row
+  /* No floating gear on a phone: the workspace menu's "Keyboard shortcuts" row
      opens this panel instead (App passes `open`), so the corner is free. The
      panel itself is the full-screen sheet below. */
   .ks-fab { display: none; }
@@ -251,18 +200,9 @@
     padding-right: max(0.75rem, var(--safe-r));
   }
 
-  .ks-foot {
-    padding-bottom: calc(0.55rem + var(--safe-b));
-    padding-left: max(0.75rem, var(--safe-l));
-    padding-right: max(0.75rem, var(--safe-r));
-  }
-
   /* The global ≤640 rule can only set min-height; a 28px-wide button is still
-     28px wide. Square the icon and switch targets. */
+     28px wide. Square the icon target. */
   .ks-icon-btn { width: var(--tap); height: var(--tap); }
-  .ks-switch { width: 48px; height: 28px; }
-  .ks-switch-knob { width: 20px; height: 20px; }
-  .ks-switch--on .ks-switch-knob { transform: translate(24px, -50%); }
 
   /* Rows are the content here — give them phone-legible type. */
   .ks-action { font-size: var(--fs-sm); }
