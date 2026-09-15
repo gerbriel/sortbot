@@ -66,6 +66,51 @@ Shared vocab the canonical model needs, mapped once per adapter:
 - **category** — canonical category (the workspace's own) → each marketplace's taxonomy, the way
   `SHOPIFY_CATEGORY_MAP` does it today; unmapped = a readiness issue, never a silent blank.
 
+## 2b. Who lists where — workspace opt-in, then per-batch targets
+
+Two levels, both chosen by the seller, never inferred:
+
+1. **Workspace level — `org_marketplaces`.** In the Workspace dashboard the org turns on the
+   marketplaces it sells on (one row per enabled marketplace, org-scoped RLS on the existing
+   membership helper) and sets that marketplace's defaults: the price rule (from `platformPricing`),
+   the default condition mapping, the shipping profile, and — for API marketplaces — the connection.
+   Nothing about a marketplace the workspace has not enabled ever appears in the workflow.
+2. **Batch level — `workflow_batches.target_marketplaces`** (a text[] of marketplace keys, chosen
+   from the workspace's enabled set). Picked in Step 4 — a row of toggles at the top, defaulting to
+   all enabled marketplaces — and remembered on the batch, so reopening it shows the same targets.
+   Step 4's matrix, readiness checklist, feeds, packs and publish buttons are all computed for the
+   batch's targets only. A target can be added or removed later; `listing_publications` rows for a
+   removed target are kept (they record what actually happened), just no longer offered.
+
+## 2c. Marketplace vocabularies — brands, colours, conditions that must match THEIR list
+
+Several marketplaces do not take free text for brand or colour: Poshmark, Depop, Grailed, Vinted and
+Mercari have brand pickers; Poshmark, Vinted and Facebook have fixed colour lists; eBay item specifics
+and Etsy attributes have recommended values that improve search when matched. If the app sends
+"Ecko Unltd" where the picker knows "Ecko Unlimited", or "Forest green" where the list only has
+"Green", the marketplace either rejects the field or silently defaults it — which is the "things
+default to some prebuilt brand or colour" problem.
+
+So every adapter resolves free text against **first-party vocabulary tables, editable by the
+workspace**, and reports what it could not resolve instead of letting the marketplace pick:
+
+- `marketplace_vocab (marketplace, kind, canonical, marketplace_value, is_default, org_id?)` — `kind`
+  is `brand` / `color` / `condition` / `size` / `category`. Global rows (org_id null, founder-edited in
+  the Vocabulary dashboard, seeded from the marketplaces' public lists where they are public — colour
+  and condition lists are small; brand lists are seeded from the built-in 917-brand library by
+  normalised match) plus per-workspace overrides (a shop's own corrections, exactly like
+  `brand_aliases`). Workspace rows win.
+- Resolution order in `format()`: exact → normalised (`normalizeBrand`) → the fuzzy matcher already in
+  `brandSpelling.ts` above its threshold → **no match**. A no-match never guesses: the field goes out
+  as the marketplace's own documented fallback (`Other`, `Unbranded`, `Multi`) AND `validate()` raises a
+  readiness warning naming the value and the marketplace, with a one-tap "remember this mapping" that
+  writes a workspace row — the same UX as the Step 3 brand-spelling notices.
+- Colour: the canonical colour database already carries aliases; each marketplace's list maps from
+  the canonical name, and a colour with no entry falls to the marketplace's "Multi" / "Other" with the
+  same warning.
+- These tables are the reason the readiness checklist exists: a listing is "ready for Poshmark" only
+  when every controlled field resolved.
+
 ## 3. Delivery channels
 
 **A. File feed** — the seller downloads and uploads. Shopify exists. Facebook Commerce Manager
@@ -98,8 +143,11 @@ action later, and the founder's analytics a per-marketplace export count.
 
 1. **Framework + packs (no external dependency).** Adapter interface and spec table; Shopify
    moved onto it (golden unchanged); canonical condition + size-system fields with voice and form
-   support; `validate()` readiness checklist in Step 4; listing packs for every marketplace; the
-   `listing_publications` table and the matrix. This alone covers all ten at the copy/export level.
+   support; `org_marketplaces` (workspace opt-in + defaults) and per-batch `target_marketplaces`;
+   `marketplace_vocab` with the seeded colour/condition lists and brand seeding, plus the
+   remember-this-mapping notice; `validate()` readiness checklist in Step 4; listing packs for every
+   marketplace; the `listing_publications` table and the matrix. This alone covers all ten at the
+   copy/export level.
 2. **Feeds.** Facebook catalog, Whatnot and Depop CSVs, each golden-tested.
 3. **Connectors.** eBay, then Etsy, then Shopify write — one Edge Function + connection table each,
    OAuth in the Workspace dashboard, publish button in the matrix.
