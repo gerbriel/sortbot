@@ -1125,6 +1125,51 @@ copy points at them.
   price-gate banner moves up to `--fs-base` — it is the one thing here a user must be able
   to read and act on.
 
+**Marketplaces (Sept 2026) — `MarketplaceExport.tsx`, ABOVE the exporter's `<details>`.**
+The other nine marketplaces live in their own panel at the top of Step 4: the batch's
+targets, a readiness grid, a feed CSV per feed marketplace, a copy-ready pack per pack
+marketplace, an inline vocabulary fix, and a record of what has been posted. It reads
+`org_marketplaces` / `marketplace_vocab` / `workflow_batches.target_marketplaces` /
+`listing_publications` through `lib/marketplaceService.ts`, formats through
+`lib/marketplaces/*`, and does its arithmetic in the pure `lib/marketplaces/matrix.ts`.
+**Pre-migration it is one setup line naming `marketplaces.sql` and Step 4 is unchanged.**
+Full write-up: `docs/marketplaces/03-step4.md`.
+
+- **An empty `target_marketplaces` means EVERY ENABLED marketplace, not none.** The column
+  defaults to `'{}'` and nothing in it distinguishes "not chosen yet" from "chosen none"
+  (`docs/marketplaces/02-data.md` §7.3); Step 4 answers it in `effectiveTargets`, and
+  `nextTargets` writes the explicit list the first time a chip is toggled — so the ambiguous
+  state can be read but is never created. **The last remaining target cannot be turned off**
+  (a batch with zero targets renders no columns, and storing `[]` would silently re-select
+  everything on the next open). A target the workspace has since DISABLED is dropped, and if
+  that empties the list the batch falls back to "all enabled". Columns and chips are both in
+  `MARKETPLACE_KEYS` order — two orderings of one set read as two different lists.
+- **SHOPIFY IS A READINESS COLUMN HERE, NEVER A SECOND DOWNLOAD.** `GoogleSheetExporter`
+  below keeps that file: it dedups titles/handles against the app's `products` table AND the
+  live Shopify catalog, threads per-store metaobject GIDs into the builder, and runs the
+  price gate — none of which `shopify.serialize` can do (`01-adapters.md` §4.1). The Shopify
+  column's header says "Download below" and offers no button. Do not add one (§18 #48).
+- **A feed download is blocked by an `error`, exactly like the $0 price gate** — same source
+  of truth, since `validate()` IS `format().issues`. A `warning` never blocks. After a
+  download every listing is upserted as `exported`, serially (375 concurrent PATCHes against
+  one table is how a workspace rate-limits itself mid-export).
+- **A fix row writes a WORKSPACE vocabulary row with no admin gate** — `upsertVocab`, the
+  same reasoning as `brand_aliases`: the person who hits it is whoever is listing. The
+  vocabulary is refetched and the matrix re-resolves, so the warning clears on every listing
+  that shared the value. Two unresolved VALUES stay two rows; one value in two cases folds
+  into one with a count. `spec.verified` is still false everywhere, said once per marketplace.
+- **Packs**: every `buildListingPack` field with a Copy button (clipboard API with a hidden-
+  textarea `execCommand` fallback — outside a secure context the API is simply absent, and a
+  silent no-op is the whole feature failing quietly; the toast says which path ran), Copy all,
+  the photos as a lazy-`import('jszip')` zip named `01.jpg`…, and Mark posted → Mark sold.
+  The field cards are CSS **multi-column, not grid**: one paragraph-long description beside a
+  dozen one-word fields makes every grid row as tall as the description.
+- `format()` runs once per (listing × marketplace) inside a `useMemo`; the panel is `memo`'d
+  and App feeds it `useEventCallback` handlers and `step4ExportItems` (§18 #24).
+- **On a phone:** the grid scrolls in its own box with the listing column frozen (header cell
+  `z-index: 3` over the sticky header row's 2 and the body cells' 1), cards go one column, and
+  the fix row keeps its input and Save side by side under a full-width label.
+
 ### Labels and Scan (Sept 14 2026, feature 25)
 **Files:** `LabelPrintView.tsx`, `BarcodeScannerView.tsx`, `ListingLabelsPicker.tsx`, `lib/barcode.ts`, `lib/labelsService.ts`, `lib/labelTemplates.ts`, `supabase/migrations/listing_labels.sql`
 
@@ -1928,6 +1973,8 @@ deleted with its comment on the next App.css pass.
   upgrade path from an earlier version of the file, the collision-refusal message, and rollback → re-apply. No SQL
   was run against Supabase.
 
+- ✅ **Step 4 does the thing — targets, a readiness matrix, feeds, packs, publications (Sept 2026, `docs/marketplaces/03-step4.md`)** — the third and last phase-1+2 pass wires the adapters and the data layer into one panel at the top of Step 4 (`MarketplaceExport.tsx` + `.css`, `lib/marketplaces/matrix.ts`, one additive `fetchBatchTargets` on the service, and the App mount). A seller picks which marketplaces THIS batch goes to, reads a grid of listings × marketplaces, downloads the feed CSV for a feed marketplace, opens a copy-ready pack for a pack marketplace, fixes a vocabulary gap in place, and marks what has been posted — **with no API key anywhere**. The decisions worth knowing are in §10's "Marketplaces" block: an empty `target_marketplaces` means every ENABLED marketplace (the ambiguity `marketplaces.sql` left open), the explicit list is written on the first toggle and the last target cannot be turned off, **Shopify is a readiness column and never a second download** (the exporter below owns that file because it dedups against the live store and runs the price gate), an `error` blocks a feed exactly as $0 blocks the CSV, and a fix row writes a workspace vocabulary row any member may write. Two things the screenshots changed rather than the code review: the target chips were in row order while the columns were in key order, and both card grids stretched every card to the tallest sibling. **42 new tests (1530 → 1572, 71 → 73 files)**, build clean, lint flat at 252. Measured at 390px: page `scrollWidth === clientWidth`, zero sub-44px controls in the panel, inputs at 16px. Still unverified: anything in a signed-in browser, and anything against real rows — `marketplaces.sql` remains unrun, so what ships today is the one-line setup hint.
+
 ---
 
 ## 16. What's In Progress or Missing
@@ -1975,7 +2022,7 @@ deleted with its comment on the next App.css pass.
 | **Mobile-first pass** | **Built, not yet seen on a device** | The whole app has phone and tablet layouts (§1, §6, §10, §15), but no agent could sign in, so nothing past the logged-out screens was rendered. A signed-in smoke test and a real-iOS pass are the two things owed — §14 #26/#27 list exactly what that leaves unverified. Everything on that list is single-number CSS tuning, not structure. |
 | **Step 2 selection on touch** | Partly done | `.grouper-header` and `.photo-toolbar` were added to the click-outside safe-selector list (§15). Two proposals from `10-mobile-workflow.md` §9 are recorded, NOT done, because both touch the selection handlers §14 #12 and nine prior commits say to leave alone without a smoke test: (a) a native `pointerdown` selection path — today's `onMouseDown` works because a tap fires exactly one synthesized `mousedown`, so the 200 ms per-item debounce cannot swallow it; (b) a "done selecting" affordance in the category dock, since with pick mode off nothing signals that tapping a category consumes the selection (the dock's "N items selected" hint covers it partly). |
 
-| **Multi-marketplace publishing** | **Planned — `docs/marketplaces/00-plan.md`** | One canonical listing, one adapter per marketplace (spec as data, validate, format, serialize), three delivery channels (file feed / official API via Edge Function + per-workspace OAuth / copy-ready listing pack for the marketplaces that forbid automation), and a `listing_publications` matrix. Reuses `csvExport.ts` (becomes the Shopify adapter, golden unchanged), `platformPricing.ts`, the `org_shopify_connections` credential pattern. Phase 1 needs no external dependency; phase 3 (eBay / Etsy / Shopify write APIs) needs the founder's explicit yes — see the plan's §6. |
+| **Multi-marketplace publishing** | **Phases 1+2 BUILT (migration not run); API connectors not started** | Plan: `docs/marketplaces/00-plan.md`. Built and shipped behind the unrun migration: the ten adapters (`01-adapters.md`), the data layer and the Workspace dashboard's Marketplaces tab (`02-data.md`), and Step 4's panel — targets, readiness matrix, feed CSVs, copy-ready packs, inline vocabulary fixes, publications (`03-step4.md`). **None of it needs an API key.** Run `marketplaces.sql` and it turns on; until then every read is `'unavailable'` and both surfaces show a setup hint. **Phase 3 — eBay, Etsy and Shopify WRITE — is not started and needs the founder's explicit yes on external APIs (plan §6.1).** Also not built: status sync-back and "sold on X → mark the rest" (phase 4), the seeded global vocabulary (`02-data.md` §7.1 — a `scripts/` one-off, not a migration), and the still-unverified `spec` numbers (`01-adapters.md` §3, every `verified` flag false). |
 | DB CPU reduction (Sept 2026) | **Built — two migrations not yet run** | Run `perf_storage_usage.sql`, then `perf_rls_initplan.sql` LAST (it recreates every policy with helper calls wrapped as `(select …)` so they evaluate once per statement, and adds 6 missing indexes incl. `products(batch_id)`, `product_images(product_id)`); re-run `perf_rls_initplan.sql` after ANY migration that recreates a policy. Measured 94.5 ms → 1.9 ms on a founder query. Client changes need no migration. Diagnostics playbook (pg_stat_statements) in docs/reviews/15-db-cpu.md; a t4g.nano may still need the next tier once the app's share is small. |
 | Function-privilege hardening (linter 0011/0028/0029) | **File 1 run in production (14 Sept 2026); file 2 `security_rpc_wrappers.sql` written, not yet run** | `security_function_hardening.sql` (helpers → `app_private` behind invoker wrappers; EXECUTE revoked from PUBLIC/anon everywhere, and from `authenticated` too on the 15 trigger/guard/maintenance functions; `search_path` pinned on the two touch triggers) then `security_rpc_wrappers.sql` (the nine client RPCs split into an `app_private` definer body + an identical-signature `public` invoker wrapper). Linter: 0011, 0028 and 0029 all clear. No client code changed. `app_errors.sql` is **not applied in production** — its function is handled but inert. Both files are idempotent; re-run them in that order after replaying any migration. |
 ---
@@ -2163,3 +2210,23 @@ npm run lint
     neither, and keep `app_private.is_thread_participant()` behind its public invoker wrapper (#43/#45).
     Rollback of `team_messaging.sql` has a documented PRE-STEP: run without it, the block stops half way
     with the pre-team policies restored and every team conversation readable from the founders' inbox.
+
+50. **Do not add a second Shopify CSV button, and do not let Step 4's marketplaces panel serialize
+    Shopify.** `GoogleSheetExporter` owns that file and is the only thing that can: it dedups titles and
+    handles against the app's own `products` table AND the live Shopify catalog (the `shopify-titles`
+    Edge Function), threads the per-store metaobject GIDs into `buildShopifyCsv`, and runs the $0 price
+    gate. `shopify.serialize` can do none of it — `SerializeOptions` has no field for the overrides, and
+    coupling `marketplaces/types.ts` to `csvExport` to give it one is the wrong trade (`01-adapters.md`
+    §4.1). `MarketplaceExport` therefore shows Shopify as a READINESS column whose header reads "Download
+    below". Two buttons producing two different Shopify CSVs, one of them silently missing the dedup the
+    shop's whole import depends on, is the failure this avoids. The Shopify adapter's `format()` still
+    exists so Shopify appears in the matrix beside the other nine — that is all it is for.
+
+51. **Do not store an empty `target_marketplaces` from the UI, and do not let the last target be turned
+    off.** The column defaults to `'{}'` and nothing in it distinguishes "not chosen yet" from "chosen
+    none", so `effectiveTargets` reads empty as EVERY ENABLED marketplace — a batch nobody has configured
+    shows every column, which is the only reading that says anything. `nextTargets` writes the explicit
+    list on the first toggle and returns `null` rather than emptying it: a zero-target batch renders no
+    columns, no readiness, no feeds and no packs, and storing `[]` would then silently re-select
+    everything on the next open, which reads as the app undoing the click. Both rules live in
+    `lib/marketplaces/matrix.ts` with tests; do not re-derive either one in a component.

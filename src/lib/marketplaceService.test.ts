@@ -11,7 +11,7 @@ import {
   normalizeMarketplaceSettings, canonicalizeVocabValue,
   fetchOrgMarketplaces, setMarketplaceEnabled, updateMarketplaceSettings,
   fetchVocab, upsertVocab, updateVocab, deleteVocab, buildVocabResolver,
-  readBatchTargets, setBatchTargets,
+  readBatchTargets, setBatchTargets, fetchBatchTargets,
   fetchPublications, upsertPublication, markPublicationStatus, publicationMatrix,
   VOCAB_KINDS, PUBLICATION_STATUSES,
   type VocabRow, type PublicationRow,
@@ -419,6 +419,31 @@ describe('readBatchTargets', () => {
   it('keeps order, drops unknown keys and de-duplicates', () => {
     expect(readBatchTargets({ target_marketplaces: ['depop', 'tiktok', 'ebay', 'depop'] }))
       .toEqual(['depop', 'ebay']);
+  });
+});
+
+describe('fetchBatchTargets', () => {
+  it('reads one column of one batch and runs it through readBatchTargets', async () => {
+    mock.responder = () => ({ data: { target_marketplaces: ['depop', 'tiktok', 'ebay'] }, error: null });
+    expect(await fetchBatchTargets('b1')).toEqual({ status: 'ok', targets: ['depop', 'ebay'] });
+    const call = mock.callsFor('workflow_batches', 'select')[0];
+    expect(call.columns).toBe('target_marketplaces');
+    expect(call.filters).toEqual([{ kind: 'eq', column: 'id', value: 'b1' }]);
+  });
+
+  it('a batch with no targets is ok-and-empty, not unavailable', async () => {
+    mock.responder = () => ({ data: { target_marketplaces: [] }, error: null });
+    expect(await fetchBatchTargets('b1')).toEqual({ status: 'ok', targets: [] });
+  });
+
+  it('a missing column is unavailable, so Step 4 hides its panel instead of showing nothing', async () => {
+    mock.responder = () => ({ data: null, error: { code: '42703', message: 'no column' } });
+    expect(await fetchBatchTargets('b1')).toEqual({ status: 'unavailable' });
+  });
+
+  it('no batch id asks nothing', async () => {
+    expect(await fetchBatchTargets('')).toEqual({ status: 'ok', targets: [] });
+    expect(mock.calls.length).toBe(0);
   });
 });
 

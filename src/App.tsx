@@ -11,6 +11,7 @@ import type { GrouperActions } from './components/ImageGrouper';
 import CategoryZones from './components/CategoryZones';
 import ProductDescriptionGenerator from './components/ProductDescriptionGenerator';
 import GoogleSheetExporter from './components/GoogleSheetExporter';
+import MarketplaceExport from './components/MarketplaceExport';
 import type { GoogleSheetExporterHandle } from './components/GoogleSheetExporter';
 
 import { saveBatchToDatabase } from './lib/productService';
@@ -489,6 +490,10 @@ function App() {
      upload in flight, the grouper's selection, and Step 3's debounced saves
      all survive opening a tool and coming back. */
   const [activeView, setActiveView] = useState<ActiveView>('workflow');
+  /** Which tab the Workspace dashboard opens on. Only Step 4's marketplaces
+   *  panel sets it (its "Manage marketplaces" link), and it is cleared on the
+   *  way back so the dashboard's own default returns next time. */
+  const [workspaceTab, setWorkspaceTab] = useState<'members' | 'marketplaces'>('members');
   // The header button that opened the current view. Focus returns to it on Back
   // so a keyboard user is put back exactly where they left off.
   const viewTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -496,6 +501,9 @@ function App() {
   // new function every render would re-register the listener every render.
   const goToWorkflow = useCallback(() => {
     setActiveView('workflow');
+    // Clear the one-shot Workspace tab hint (Step 4 → Marketplaces), so the
+    // dashboard opens on its own default the next time it is reached normally.
+    setWorkspaceTab('members');
     const trigger = viewTriggerRef.current;
     viewTriggerRef.current = null;
     // Deferred: the view is still mounted this tick, and focusing a node that is
@@ -1795,6 +1803,13 @@ function App() {
   const onLibraryCloseStable    = useEventCallback(() => setShowLibrary(false));
   const onOpenBatchStable       = useEventCallback((batch: WorkflowBatch) => handleOpenBatch(batch));
   const onBatchDeletedStable    = useEventCallback((batchId: string) => handleBatchDeleted(batchId));
+  const onToastStable           = useEventCallback((msg: string) => addToast(msg));
+  /* Step 4's marketplaces panel → the Workspace dashboard, on its Marketplaces
+     tab. Stable, because the panel is memo'd (§18 #24). */
+  const onOpenWorkspaceMarketplaces = useEventCallback(() => {
+    setWorkspaceTab('marketplaces');
+    setActiveView('workspace');
+  });
 
   /* The listing a scan asked for, handed to PDG for one render and then cleared.
      It has to be cleared: PDG focuses on a CHANGE of the prop, so if the id stuck
@@ -3349,6 +3364,25 @@ function App() {
         {/* Step 4: Save & Export */}
         {processedItems.length > 0 && (
           <section className="step-section" data-step="4">
+            {/* Multi-marketplace: which marketplaces this batch goes to, a
+                readiness grid, a feed CSV per feed marketplace and a copy-ready
+                pack per pack marketplace. Hides itself entirely until
+                marketplaces.sql has been run, so Step 4 is unchanged until then.
+                SHOPIFY'S CSV STAYS BELOW — GoogleSheetExporter dedups titles
+                against the live store and runs the price gate, which the
+                adapter's serialize() cannot (docs/marketplaces/03-step4.md). */}
+            {user && (
+              <MarketplaceExport
+                orgId={currentOrg?.id ?? null}
+                batchId={currentBatchId}
+                items={step4ExportItems}
+                vendorName={resolvedVendorName}
+                descriptionSettings={orgDescSettings}
+                isOrgAdmin={orgRole === 'owner' || orgRole === 'admin'}
+                onToast={onToastStable}
+                onOpenWorkspaceMarketplaces={onOpenWorkspaceMarketplaces}
+              />
+            )}
             <details>
               <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 'var(--fs-md)', userSelect: 'none', padding: '0.25rem 0' }}>
                 Step 4: Review &amp; Export ▾
@@ -3457,6 +3491,7 @@ function App() {
               org={currentOrg}
               myRole={orgRole}
               myUserId={user.id}
+              initialTab={workspaceTab}
               onClose={goToWorkflow}
               onOrgUpdated={(org) => setCurrentOrg(org)}
               onMyRoleChanged={(role) => setOrgRole(role)}

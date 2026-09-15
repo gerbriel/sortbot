@@ -521,6 +521,42 @@ export function readBatchTargets(
   return out;
 }
 
+export type BatchTargetsResult =
+  | { status: 'ok'; targets: MarketplaceKey[] }
+  | { status: 'unavailable' };
+
+/**
+ * One batch's targets, read on their own.
+ *
+ * Step 4 exists inside the OPEN batch, whose row App already holds — but the
+ * column is `target_marketplaces`, which only exists after the migration, and
+ * an in-memory batch object can be older than the last write (the targets row
+ * is a separate write from the auto-save, and another member may have changed
+ * it). A single-column select is one cheap round trip that is always current.
+ *
+ * A missing column reads as `unavailable` the same way every other pre-migration
+ * read does, so Step 4's panel hides itself rather than showing a batch with no
+ * targets it cannot explain. A batch that simply has none is `{ ok, [] }`.
+ */
+export async function fetchBatchTargets(batchId: string): Promise<BatchTargetsResult> {
+  if (!batchId) return { status: 'ok', targets: [] };
+  try {
+    const { data, error } = await supabase
+      .from('workflow_batches')
+      .select('target_marketplaces')
+      .eq('id', batchId)
+      .maybeSingle();
+    if (error) {
+      log.service(`fetchBatchTargets | unavailable (${error.code ?? ''} ${error.message})`);
+      return { status: 'unavailable' };
+    }
+    return { status: 'ok', targets: readBatchTargets(data as { target_marketplaces?: string[] | null } | null) };
+  } catch (err) {
+    log.error(`fetchBatchTargets | unexpected: ${String(err)}`);
+    return { status: 'unavailable' };
+  }
+}
+
 /**
  * Store which marketplaces a batch is aimed at.
  *
