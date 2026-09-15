@@ -120,7 +120,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const [presetSearchQuery, setPresetSearchQuery] = useState('');
   const [presetSearchOpen, setPresetSearchOpen] = useState(false);
   const [appliedPresetLabel, setAppliedPresetLabel] = useState('');
-  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   // ── Brand spelling memory (report 14) ────────────────────────────────────
@@ -1033,16 +1032,14 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // Apply manual preset override
   const handleApplyPreset = async (presetId: string) => {
     if (!presetId) return;
-    log.pdg(`handleApplyPreset | presetId=${presetId} selectedGroups=${selectedGroupIds.size}`);
+    log.pdg(`handleApplyPreset | presetId=${presetId}`);
     
     try {
       const preset = availablePresets.find(p => p.id === presetId);
       if (!preset) return;
 
-      // Determine which groups to apply to: selected set OR just current group
-      const targetGroupLeaderIds = selectedGroupIds.size > 0
-        ? selectedGroupIds
-        : new Set([currentItem.productGroup || currentItem.id]);
+      // The preset applies to the listing on screen.
+      const targetGroupLeaderIds = new Set([currentItem.productGroup || currentItem.id]);
 
       // Collect all items belonging to those groups
       const groupsToUpdate = groupArray.filter(g => {
@@ -1080,7 +1077,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       });
       setSelectedPresetId(presetId);
       setAppliedPresetLabel(preset.display_name);
-      if (selectedGroupIds.size > 0) setSelectedGroupIds(new Set());
     } catch (error) {
       alert('Failed to apply preset. Please try again.');
     }
@@ -2559,19 +2555,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   };
 
   // ── Bulk crop paste ──────────────────────────────────────────────────────────
-  // Applies copiedCrop to every item across all selected groups (or all groups if
-  // none selected), batched 4 at a time so Supabase isn't overwhelmed.
+  // Applies copiedCrop to every item across ALL groups, batched 4 at a time so
+  // Supabase isn't overwhelmed.
   const handlePasteCrop = async (crop: { x: number; y: number; w: number; h: number }) => {
     if (cropPasteRunningRef.current) { console.warn('[paste] a paste batch is already running — ignoring this one'); return; }
     const groupArray = buildGroupArray(processedItems);
-    // Determine target groups
-    let targetGroups: typeof groupArray;
-    if (selectedGroupIds.size > 0) {
-      targetGroups = groupArray.filter(g => g[0] && selectedGroupIds.has(g[0].id));
-    } else {
-      targetGroups = groupArray;
-    }
-    const targetItems = targetGroups.flat();
+    const targetItems = groupArray.flat();
     if (targetItems.length === 0) return;
 
     // First: instantly set crop coordinates on all target items in state so
@@ -2618,7 +2607,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     } else {
       setCropPasteProgress(null);
     }
-    if (selectedGroupIds.size > 0) setSelectedGroupIds(new Set());
   };
 
 
@@ -2629,33 +2617,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             sit here were noise on a progress bar (the photos are right below,
             and the category is in the form). */}
         <span>Product Group {currentGroupIndex + 1} of {groupArray.length}</span>
-        {/* Checkbox — top-right — marks this listing for a BULK action: tick
-            listings while paging through, then "Apply preset" or "Paste crop"
-            acts on every ticked listing instead of only the one on screen. */}
-        <label
-          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: 'var(--fs-sm)', color: 'var(--text-secondary)', userSelect: 'none', marginLeft: 'auto' }}
-          title="Tick listings as you page through, then Apply preset or Paste crop acts on all of them at once"
-        >
-          <input
-            type="checkbox"
-            checked={selectedGroupIds.has(currentItem.productGroup || currentItem.id)}
-            onChange={(e) => {
-              const groupId = currentItem.productGroup || currentItem.id;
-              setSelectedGroupIds(prev => {
-                const next = new Set(prev);
-                if (e.target.checked) next.add(groupId);
-                else next.delete(groupId);
-                return next;
-              });
-            }}
-            style={{ width: '1rem', height: '1rem', cursor: 'pointer', accentColor: 'var(--accent)' }}
-          />
-          <span>
-            {selectedGroupIds.size > 0
-              ? `Selected for bulk apply (${selectedGroupIds.size})`
-              : 'Select for bulk apply'}
-          </span>
-        </label>
         <div className="progress-fill" style={{ width: `${((currentGroupIndex + 1) / groupArray.length) * 100}%` }} />
       </div>
 
@@ -2957,13 +2918,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     <>
                       <button
                         className="button"
-                        title={selectedGroupIds.size > 0
-                          ? `Paste crop to ${selectedGroupIds.size} selected group(s)`
-                          : 'Paste crop to ALL groups — select groups first to limit scope'}
+                        title="Paste this crop to every photo in every listing"
                         onClick={() => handlePasteCrop(copiedCrop)}
                         style={{ fontSize: 'var(--fs-xs)', padding: '0.3rem 0.6rem', background: 'var(--info)' }}
                       >
-                        <Crop size={12} style={{ flexShrink: 0 }} /> Paste Crop{selectedGroupIds.size > 0 ? ` (${selectedGroupIds.size})` : ' (All)'}
+                        <Crop size={12} style={{ flexShrink: 0 }} /> Paste Crop to All
                       </button>
                       <button
                         title="Clear copied crop"
@@ -3453,9 +3412,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               <div style={{
                 marginBottom: '1.5rem',
                 padding: '1rem',
-                /* Selected state keeps its "highlighted" read as an accent tint. */
-                background: selectedGroupIds.size > 0 ? 'var(--accent-dim)' : 'var(--ink-800)',
-                border: selectedGroupIds.size > 0 ? '1px solid var(--accent)' : '1px solid var(--border)',
+                background: 'var(--ink-800)',
+                border: '1px solid var(--border)',
                 borderRadius: '8px'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
@@ -3465,16 +3423,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   }}>
                     <Palette size={11} style={{ flexShrink: 0 }} /> Override Preset (Optional):
                   </label>
-                  {selectedGroupIds.size > 0 && (
-                    <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--accent)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      <Sparkles size={10} style={{ flexShrink: 0 }} /> {selectedGroupIds.size} group{selectedGroupIds.size > 1 ? 's' : ''} selected — will apply to all
-                      <button
-                        onClick={() => setSelectedGroupIds(new Set())}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 'var(--fs-sm)', padding: '0 0.2rem' }}
-                        title="Clear selection"
-                      ><X size={12} /></button>
-                    </span>
-                  )}
                 </div>
                 {/* Searchable preset combobox */}
                 <div style={{ position: 'relative' }}>
