@@ -9,7 +9,10 @@
 
 .grouper-scroll-content {
   min-width: 0;
-  max-height: 75vh;
+  /* Step 2 is a dedicated view (App.css WORKFLOW STEPS), so the grid takes the
+     viewport minus the chrome above it; the phone block below still sets its
+     own 60vh. */
+  max-height: calc(100vh - 180px);
   overflow-y: auto;
   /* Recessed well: sits BELOW the cards (--ink-850) so they read as raised. */
   background: linear-gradient(135deg, var(--ink-900) 0%, var(--ink-950) 100%);

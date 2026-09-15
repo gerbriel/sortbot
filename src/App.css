@@ -435,7 +435,10 @@
 .step2-right-panel {
   position: sticky;
   top: 1rem;
-  height: 75vh;
+  /* Step 2 is a dedicated view now (see the WORKFLOW STEPS block), so the
+     panel and the grid beside it take the viewport minus the chrome above
+     them, not the 75vh they had when four sections shared the page. */
+  height: calc(100vh - 180px);
   overflow-y: auto;
 }
 
@@ -930,29 +933,28 @@
 .app-header .wordmark { font-size: var(--fs-xl); color: #ffffff; }
 
 /* ══════════════════════════════════════════════════════════════════════════════
-   ▼▼▼ PHONE STEPS — one step on screen at a time (≤640px) ▼▼▼
+   ▼▼▼ WORKFLOW STEPS — one step on screen at a time, at EVERY width ▼▼▼
 
-   Steps 1-4 stay mounted and rendered exactly as they are on a desktop; below
-   640px the ones that are not the active step are hidden with CSS alone. Nothing
-   unmounts, so an upload in flight, the grouper's selection and Step 3's
-   debounced saves all survive a step change — the same guarantee the tool views
-   get from `hidden` on this element (AGENTS.md §6).
+   Steps 1-4 stay mounted and rendered; the ones that are not the active step
+   are hidden with CSS alone. Nothing unmounts, so an upload in flight, the
+   grouper's selection and Step 3's debounced saves all survive a step change —
+   the same guarantee the tool views get from `hidden` on this element
+   (AGENTS.md §6).
 
-   `data-phone-step` is stamped on .app-main at every width; these rules are the
-   only thing that reads it, and they exist only inside the media query, so
-   desktop and tablet rendering is byte-identical to before.
+   History: this shipped for phones only (≤640px) on 14 Sept 2026 and was lifted
+   to every width the next day at the founder's request — the desktop used to
+   stack all four sections on one ~4,000px page. The `phone-` prefix in the
+   attribute, the state and the component names is that history, not a scope.
 
    Specificity: .app-main[data-phone-step="N"] > section[data-step] plus the
    :not() is (0,4,1), far above .step-section's (0,1,0), and no step section
    carries an inline display — so `display: none` lands.
    ══════════════════════════════════════════════════════════════════════════════ */
 
-@media (max-width: 640px) {
-  .app-main[data-phone-step="1"] > section[data-step]:not([data-step="1"]),
-  .app-main[data-phone-step="2"] > section[data-step]:not([data-step="2"]),
-  .app-main[data-phone-step="3"] > section[data-step]:not([data-step="3"]),
-  .app-main[data-phone-step="4"] > section[data-step]:not([data-step="4"]) {
-    display: none;
-  }
+.app-main[data-phone-step="1"] > section[data-step]:not([data-step="1"]),
+.app-main[data-phone-step="2"] > section[data-step]:not([data-step="2"]),
+.app-main[data-phone-step="3"] > section[data-step]:not([data-step="3"]),
+.app-main[data-phone-step="4"] > section[data-step]:not([data-step="4"]) {
+  display: none;
 }
-/* ▲▲▲ END PHONE STEPS BLOCK ▲▲▲ */
+/* ▲▲▲ END WORKFLOW STEPS BLOCK ▲▲▲ */

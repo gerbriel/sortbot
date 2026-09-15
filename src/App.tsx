@@ -565,8 +565,7 @@ function App() {
   };
   const phoneReachable = reachableSteps(stepCounts);
   const shownStep = clampStep(phoneStep, stepCounts);
-  /** Every user-driven step change. Phone-only by construction — both controls
-   *  that call it are `display: none` above 640px. */
+  /** Every user-driven step change (the stepper chips and the Back / Continue rows). */
   const goToPhoneStep = (step: WorkflowStep) => {
     setPhoneStep(step);
     // The sections swap in place, so the page would otherwise keep the offset
@@ -3139,9 +3138,9 @@ function App() {
           it is removed from the a11y tree too — App.css pins the flex
           display off, since `display:flex` would otherwise beat the UA rule. */}
       <main className="app-main" hidden={activeView !== 'workflow'} data-phone-step={shownStep}>
-        {/* ≤640px only: the four sections become one step at a time. Above that
-            breakpoint this renders nothing (PhoneStepper.css) and the
-            data-phone-step rules in App.css do not exist. */}
+        {/* The four sections are one step at a time at every width: this
+            stepper picks the step, and the data-phone-step rules in App.css
+            hide the other three (they stay mounted). */}
         <PhoneStepper step={shownStep} reachable={phoneReachable} onSelect={goToPhoneStep} />
 
         {/* Save Message */}

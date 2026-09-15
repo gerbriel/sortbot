@@ -165,7 +165,8 @@ tool views, and the four workflow steps (`docs/reviews/10-mobile-shell.md`,
 **Three breakpoints, the same three everywhere.** `<= 640px` phone, `641-1024px`
 tablet, `> 1024px` desktop. **Desktop is deliberately unchanged** — every layout rule
 the pass added lives inside a media query, so a regression above 1024px is a bug, not
-a trade-off. The 640 boundary also exists in JS as `PHONE_BREAKPOINT_PX`
+a trade-off. (One deliberate exception since 15 Sept 2026: the one-step-at-a-time workflow
+and its stepper apply at every width — §6.) The 640 boundary also exists in JS as `PHONE_BREAKPOINT_PX`
 (`src/components/responsiveGrid.ts`); keep the two in step.
 
 **The touch floor is `44px`, and it is written as a literal `px`.** Every other length
@@ -523,15 +524,21 @@ one trigger at every width.
 
 - **Labels and Scan are NOT founder-gated** — declared in `navItems` beside Library; they act on the open batch and render `&& user` only. Labels takes `wide`.
 
-### On a phone: one step at a time (Sept 2026)
+### One step at a time — at every width (Sept 2026)
 
-Below 640px the four workflow steps are shown **one at a time**, with a stepper above them.
-Nothing unmounts — the same guarantee `hidden` gives the whole workflow (§6 above). All four
-`<section>`s render exactly as on a desktop; App stamps `data-phone-step={shownStep}` on
-`<main>` and each section carries `data-step="1|2|3|4"`, and ONE appended block in `App.css`
-hides the rest with `display: none` **inside a `max-width: 640px` query**. Above 640px those
-rules do not exist, so desktop and tablet are byte-identical and this whole feature is inert
-there — no `matchMedia`, no resize listener, no width in JS.
+The four workflow steps are shown **one at a time**, with a stepper above them, on phones, tablets
+and desktops alike. Nothing unmounts — the same guarantee `hidden` gives the whole workflow (§6
+above). All four `<section>`s render; App stamps `data-phone-step={shownStep}` on `<main>` and each
+section carries `data-step="1|2|3|4"`, and ONE block in `App.css` ("WORKFLOW STEPS") hides the rest
+with `display: none`. There is no `matchMedia`, no resize listener and no width in JS anywhere in
+this feature. **History and the `phone` prefix:** it shipped for ≤640px only on 14 Sept 2026 and was
+lifted to every width on 15 Sept at the founder's request ("each step as a staged view … go previous
+or next without losing progress"); the state, attribute, module and component names kept the
+`phone`/`Phone` prefix rather than churn ~40 call sites — read it as history, not scope. The one
+trade-off, accepted: adding photos to an active batch on a desktop now means stepping back to Upload
+(the drop zone used to be on screen beside the grid). With the steps staged, Step 2's grid and its
+category panel take `calc(100vh - 180px)` instead of the 75vh they had when four sections shared
+the page; the phone block keeps its own 60vh.
 
 `src/lib/phoneSteps.ts` is the pure half (24 tests). `reachableSteps(counts)` **mirrors the
 render conditions by hand** — 1 always, 2 iff `uploadedImages.length > 0`, 3 iff
@@ -1732,6 +1739,10 @@ Two migrations are written and NOT run (§16), and one one-off data repair is ow
   the next step unlocks). Reachability, the furthest-step restore and the clamp are a pure tested module
   (`lib/phoneSteps.ts`, 24 tests) that mirrors App's render conditions; `shownStep` is derived at render rather
   than corrected in an effect, so clearing a batch needs no teardown. The only auto-advance is 1 → 2 on upload.
+  **Lifted to every width on 15 Sept 2026** (§6): the hiding rules left the media query, the stepper gained a
+  wide layout with the long labels and hover states, the Back / Continue row became Back-left / Continue-right,
+  and Step 2's grid and category panel grew from 75vh to `calc(100vh - 180px)`. Restore now uses `resumeStep`
+  (never Export) rather than the furthest step. Names kept their `phone` prefix — history, not scope.
   **Two traps were the real work.** (a) Step 3's `js-autogrow` effect has no dependency array and PDG re-renders
   while parked, so it would have measured `scrollHeight: 0` inside a `display: none` section and written
   `height: 0px` permanently (PDG is memoised — no later render to undo it); it now refuses to measure an

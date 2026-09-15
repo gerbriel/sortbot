@@ -1,9 +1,9 @@
 /* ════════════════════════════════════════════════════════════════════════════
-   PhoneStepper — the ≤640px "one step at a time" chrome.
+   PhoneStepper — the "one step at a time" chrome, at every width.
 
    Written mobile-first, the way MobileNav.css is: the base rules describe the
-   phone and one `min-width` query takes the whole thing away. Everything here
-   is phone-only, so nothing above 640px changes.
+   phone and one `min-width` query widens things for tablet and desktop. (It
+   shipped phone-only on 14 Sept 2026; the name is that history.)
 
    Colours are tokens (AGENTS.md §1) — this sits on the white page, NOT in the
    inverted black nav, so the normal text and surface tokens apply. The active
@@ -192,12 +192,61 @@
   line-height: var(--lh-snug);
 }
 
-/* ── Desktop and tablet: none of this exists ────────────────────────────────
-   Above 640px every step section is visible at once (App.css hides nothing),
-   so a stepper would navigate to a page that is already all on screen. */
+/* ── Labels: short on a phone, the long form once there is room ─────────── */
+.phone-stepper-label--long { display: none; }
+
+/* ── Tablet and desktop ─────────────────────────────────────────────────────
+   The same controls, given room: the stepper is a centred row of four wide
+   chips with the long labels, and the Back / Continue row stops stretching
+   Continue across the whole page — it is a button at the right, Back at the
+   left, like every other wizard the user has met. */
 @media (min-width: 641px) {
-  .phone-stepper,
-  .phone-step-continue {
-    display: none;
+  .phone-stepper { margin: 0 auto var(--space-4); }
+
+  /* Chips size to their label and the row centres — four equal-width chips
+     forced the long labels into an ellipsis at 1280px. */
+  .phone-stepper-list {
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
   }
+
+  .phone-stepper-item { flex: 0 1 auto; }
+
+  .phone-stepper-btn {
+    width: auto;
+    min-height: 40px;
+    padding: 0.35rem 1.1rem;
+    font-size: var(--fs-base);
+  }
+
+  .phone-stepper-label { overflow: visible; text-overflow: clip; }
+
+  .phone-stepper-btn:not(:disabled):hover { background: var(--ink-750); }
+  .phone-stepper-btn--on:not(:disabled):hover { background: var(--ink-950); }
+
+  .phone-step-continue {
+    justify-content: space-between;
+    margin-top: var(--space-5);
+  }
+
+  .psc-btn { min-height: 40px; }
+
+  .psc-next {
+    flex: 0 0 auto;
+    min-width: 18rem;
+    margin-left: auto;
+  }
+
+  .psc-next:hover { opacity: 0.9; }
+  .psc-back:hover { background: var(--ink-750); }
+
+  .psc-hint { text-align: right; }
+}
+
+/* The long labels need ~700px of row; below that the tablet keeps the short
+   ones, which still read correctly beside the numbered discs. */
+@media (min-width: 901px) {
+  .phone-stepper-label--short { display: none; }
+  .phone-stepper-label--long { display: inline; }
 }
