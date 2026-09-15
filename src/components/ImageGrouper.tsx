@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, memo } from 'react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
-import { Package, Image, ArrowUpDown, Check, RotateCcw, CornerUpLeft, CornerUpRight, X, Camera, Circle, CircleDot, Crosshair, ClipboardPaste, Trash2, Scissors, Columns3, Layers, ChevronsDownUp, Filter, SlidersHorizontal, Link2 } from 'lucide-react';
+import { Package, Image, ArrowUpDown, Check, RotateCcw, CornerUpLeft, CornerUpRight, X, Camera, Circle, CircleDot, Crosshair, ClipboardPaste, Trash2, Scissors, Columns3, Layers, ChevronsDownUp, Filter, SlidersHorizontal, Link2, Tag } from 'lucide-react';
 import {
   PHONE_BREAKPOINT_PX,
   clampGridColumns,
@@ -57,6 +57,9 @@ const NAME_COLLATOR   = new Intl.Collator(undefined, { numeric: true, sensitivit
  * The View popover renders these as a radio-style list, so the four sort buttons
  * that used to sit in the toolbar exist once here instead of four times in JSX.
  * `as const` keeps each `value` a literal, so it stays assignable to SortOrder. */
+/** localStorage key for the Step 2 "file names & dates" card-label toggle ('1' | '0'). */
+const CARD_LABELS_KEY = 'sortbot_step2_card_labels';
+
 const SORT_OPTIONS = [
   { value: 'date-asc'  as const, label: 'Date \u00b7 oldest first', title: 'Oldest first (capture date)' },
   { value: 'date-desc' as const, label: 'Date \u00b7 newest first', title: 'Newest first (capture date)' },
@@ -341,6 +344,19 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
   // Grid columns per row (2–12 on desktop, 1–3 on a phone — see responsiveGrid.ts)
   const [columnsPerRow, setColumnsPerRow] = useState<number>(8);
+  /* "File names & dates" under each single card — a View-panel toggle. A
+     cosmetic preference, so it lives in localStorage (AGENTS.md §1 key table);
+     losing it just turns the labels back on. */
+  const [showCardLabels, setShowCardLabels] = useState<boolean>(() => {
+    try { return localStorage.getItem(CARD_LABELS_KEY) !== '0'; } catch { return true; }
+  });
+  const toggleCardLabels = () => {
+    setShowCardLabels(v => {
+      const next = !v;
+      try { localStorage.setItem(CARD_LABELS_KEY, next ? '1' : '0'); } catch { /* private mode — the toggle still works for this session */ }
+      return next;
+    });
+  };
 
   /* Phone layout flag. The grid's column count is applied as an INLINE style, so
    * a media query can never override it — the clamp has to happen in JS. Nothing
@@ -2727,6 +2743,23 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               </div>
 
               <div className="gtb-panel-section">
+                <span className="gtb-label"><Tag size={12} /> Labels</span>
+                <div className="gtb-panel-opts">
+                  <button
+                    type="button"
+                    className={`gtb-opt${showCardLabels ? ' active' : ''}`}
+                    role="switch"
+                    aria-checked={showCardLabels}
+                    onClick={toggleCardLabels}
+                    title={showCardLabels ? 'Hide the file name and capture time under each photo' : 'Show the file name and capture time under each photo'}
+                  >
+                    <span className="gtb-opt-mark">{showCardLabels ? <Check size={13} /> : null}</span>
+                    File names &amp; dates
+                  </button>
+                </div>
+              </div>
+
+              <div className="gtb-panel-section">
                 <span className="gtb-label"><Columns3 size={12} /> Columns {singlesGridColumns}</span>
                 <input
                   type="range"
@@ -3170,7 +3203,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       <span className="category-badge">{item.category}</span>
                     </div>
                   )}
-                  {(item.originalName || item.capturedAt) ? (
+                  {showCardLabels && (item.originalName || item.capturedAt) ? (
                     <div className="capture-date-label">
                       {item.originalName && (
                         <div className="original-name-label">{item.originalName}</div>

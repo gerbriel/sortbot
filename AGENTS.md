@@ -33,6 +33,7 @@ These deliberately still say `sortbot`, and renaming them is a breaking change:
 | `sortbot_analytics_session` (sessionStorage), `sortbot_analytics_force` (localStorage) | `analytics.ts` (`SESSION_KEY` / `FORCE_KEY`) | Per-tab analytics session id (losing it just starts a new session) + the dev-only "track on localhost" override. `errorReporter.ts` imports both, so an error row and an analytics row share one session id and the same localhost override. |
 | `sortbot_magnifier_settings` | `ProductDescriptionGenerator.tsx` | Step 3 magnifier lens size/zoom preference. Cosmetic — losing it resets to the defaults. |
 | `sortbot_kanban_view` | `KanbanBoard.tsx` | Last-used board view (`lanes` / `atlas`). Cosmetic. |
+| `sortbot_step2_card_labels` | `ImageGrouper.tsx` (`CARD_LABELS_KEY`) | Whether the file name + capture time show under each Step 2 photo (`'1'` / `'0'`, the View panel's "File names & dates" toggle). Cosmetic — absent means on. |
 
 If any of these ever *do* get renamed, ship a migration that reads the old key,
 writes the new one, and deletes the old — do not just rename the string.
@@ -989,7 +990,7 @@ copy points at them.
     ├── .gtb-row.gtb-row--controls  IDLE — always on, ONE line ≥ 1024px:
     │                               Filter ▾ │ View ▾ │ photos-per-item + Apply + Pick │ Pick photos │ Ungroup all (while any group exists) │ (N selected · Undo · Redo, trailing)
     │                               Filter ▾ popover: Show (groups/singles) · Date · Category chips · Clear filters
-    │                               View ▾ popover:  Sort (4 options) · Columns slider · Storage (clear ALL originals, only with nothing selected)
+    │                               View ▾ popover:  Sort (4 options) · Labels (file names & dates toggle) · Columns slider · Storage (clear ALL originals, only with nothing selected)
     │                               Both panels are children of .grouper-toolbar, NEVER portaled — that
     │                               selector is on the click-outside-deselect safe list, so a portaled
     │                               panel would wipe the selection on every click inside it.
@@ -1874,6 +1875,10 @@ deleted with its comment on the next App.css pass.
   `debugEnabled` state and `toggleDebug` are deleted, and the phone-only menu row reads "Keyboard shortcuts".
   `lib/debugLogger.ts` is unchanged: a developer enables it from the console (`localStorage` key
   `sortbot_debug_enabled`, or `window.__SORTBOT_DEBUG__`), never from product UI.
+- ✅ **View ▾ → Labels: "File names & dates" toggle (15 Sept 2026)** — the file name and capture time under each
+  Step 2 single card can be switched off; `showCardLabels` in ImageGrouper, persisted as
+  `sortbot_step2_card_labels` (§1 table), default on. Rendered as a `role="switch"` row in the View panel using
+  the same `.gtb-opt` list style as the sort choices. Piles never carried the labels, so nothing changes there.
 
 ---
 
