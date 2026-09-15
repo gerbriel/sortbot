@@ -520,6 +520,7 @@ function App() {
   /** The shortcuts panel's open state, lifted so the workspace menu can open it on phones. */
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const handleNavSelect = (id: string, opener: HTMLElement | null) => {
+    if (id !== 'shortcuts') setShortcutsOpen(false);
     viewTriggerRef.current = opener instanceof HTMLButtonElement ? opener : null;
     if (id === 'workflow') { goToWorkflow(); return; }
     // Not a view: the phone-only menu row that stands in for the shortcuts gear.
@@ -580,8 +581,12 @@ function App() {
   };
   const phoneReachable = reachableSteps(stepCounts);
   const shownStep = clampStep(phoneStep, stepCounts);
+  /** The shortcuts control (gear on desktop, menu row on phones) exists only where
+   *  the shortcuts apply: Step 2 and Step 3 of the workflow. */
+  const showShortcuts = activeView === 'workflow' && (shownStep === 2 || shownStep === 3);
   /** Every user-driven step change (the stepper chips and the Back / Continue rows). */
   const goToPhoneStep = (step: WorkflowStep) => {
+    setShortcutsOpen(false);
     setPhoneStep(step);
     // The sections swap in place, so the page would otherwise keep the offset
     // the previous step was scrolled to and open the next one part-way down.
@@ -3121,7 +3126,7 @@ function App() {
     { id: 'presets', label: 'Category Presets', icon: <Settings size={16} />, title: 'Manage category presets for shipping weight, measurements, and default attributes', group: 'setup' },
     ...(currentOrg ? [{ id: 'workspace', label: 'Workspace dashboard', icon: <Users size={16} />, title: 'Workspace — members, invites and settings', group: 'setup' as const }] : []),
     // Phone only: stands in for the bottom-left gear, which is hidden below 640px.
-    { id: 'shortcuts', label: 'Keyboard shortcuts', icon: <Keyboard size={16} />, title: 'Every keyboard shortcut, by screen', group: 'setup', phoneOnly: true },
+    ...(showShortcuts ? [{ id: 'shortcuts', label: 'Keyboard shortcuts', icon: <Keyboard size={16} />, title: 'Every keyboard shortcut, by screen', group: 'setup' as const, phoneOnly: true }] : []),
     /* FOUNDER — Founding Workspace only, and all but Board admin-only. */
     ...(isFoundingAdmin ? [
       { id: 'vocabulary', label: 'Vocabulary', icon: <BookMarked size={16} />, title: 'Vocabulary — curate quick keyword chips and brand keywords (all workspaces)', group: 'founder' as const },
@@ -3768,7 +3773,7 @@ function App() {
       {/* ── Bottom-left corner: keyboard shortcuts + the debug-logging switch.
           One control where the floating debug button used to be, mirroring the
           support FAB in the opposite corner. */}
-      <ShortcutsPanel open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      {showShortcuts && <ShortcutsPanel open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
 
       {/* ── Support messaging (first-party): every signed-in user can message
           the founders; Founding admins get the inbox of every conversation. */}
