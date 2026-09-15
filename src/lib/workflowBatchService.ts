@@ -49,6 +49,17 @@ export interface WorkflowBatch {
   // Surfaced from workflow_state JSONB for the Library list (collaborative edit note).
   lastEditedBy?: string;
   lastEditedAt?: string;
+  /**
+   * MarketplaceKey[] — the marketplaces this batch is being listed on, chosen
+   * in Step 4 from the workspace's enabled set (marketplaces.sql).
+   *
+   * OPTIONAL, and it must stay optional: the column does not exist until that
+   * migration is run, and every batch created before it defaults to `{}`.
+   * Read it through readBatchTargets() in marketplaceService, which filters
+   * unknown keys — the database CHECK guards new writes, but a key could have
+   * been retired between the write and the read.
+   */
+  target_marketplaces?: string[];
 }
 
 // ── Deleted-batch tombstones ─────────────────────────────────────────────────
@@ -203,6 +214,12 @@ const WORKFLOW_BATCH_RESTORE_COLUMNS = [
   'id', 'user_id', 'batch_name', 'batch_number', 'current_step', 'is_completed',
   'total_images', 'product_groups_count', 'categorized_count', 'processed_count',
   'saved_products_count', 'created_at', 'updated_at', 'last_opened_at', 'workflow_state',
+  // Which marketplaces this batch is being listed on (marketplaces.sql). Read
+  // here rather than in a second query because Step 4 needs it the moment a
+  // batch opens; PostgREST simply omits an unknown column from the projection
+  // it cannot find, so a pre-migration database errors rather than silently
+  // half-reading — which is why readBatchTargets() treats it as optional.
+  'target_marketplaces',
 ].join(', ');
 
 export async function fetchWorkflowBatches(): Promise<WorkflowBatch[]> {

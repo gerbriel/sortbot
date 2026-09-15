@@ -143,6 +143,80 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['categories']['Row'], 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Database['public']['Tables']['categories']['Insert']>;
       };
+      // ── Marketplaces (supabase/migrations/marketplaces.sql) ───────────────
+      // The workspace's opt-in, the per-marketplace vocabulary, and the record
+      // of what has actually been published where. `marketplace` is
+      // MarketplaceKey from src/lib/marketplaces/types.ts in all three; it is
+      // typed `string` here because this file is the DB shape, and the DB's
+      // authority on that is the CHECK constraint.
+      org_marketplaces: {
+        Row: {
+          org_id: string;
+          marketplace: string;
+          enabled: boolean;
+          /** { pricingRuleId?, defaultCondition?, shippingProfile?, notes? } —
+           *  free-form; normalizeMarketplaceSettings() runs on every read.
+           *  Typed as an object rather than `any` (which the older JSONB
+           *  columns above use) because a CHECK constrains it to
+           *  `jsonb_typeof = 'object'`, so the narrower type is the true one. */
+          settings: Record<string, unknown>;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        // org_id IS part of the insert, unlike every other org-scoped table:
+        // it is half the primary key, so an upsert needs it as the conflict
+        // target. is_org_admin(org_id) in the policy is what keeps it honest.
+        Insert: Omit<Database['public']['Tables']['org_marketplaces']['Row'], 'created_by' | 'created_at' | 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['org_marketplaces']['Insert']>;
+      };
+      marketplace_vocab: {
+        Row: {
+          id: string;
+          /** null = a GLOBAL row every workspace reads; set = one workspace's
+           *  override, which wins. */
+          org_id: string | null;
+          marketplace: string;
+          /** VocabKind: brand | color | condition | size | category. */
+          kind: string;
+          /** What the app holds, trimmed (a CHECK enforces it). */
+          canonical: string;
+          /** What the marketplace's own picker calls it. */
+          marketplace_value: string;
+          created_by: string | null;
+          created_by_email: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['marketplace_vocab']['Row'], 'id' | 'created_by' | 'created_at' | 'updated_at'>;
+        // org_id is outside the UPDATE grant — scope changes by delete and
+        // re-insert, never by an edit.
+        Update: Partial<Omit<Database['public']['Tables']['marketplace_vocab']['Insert'], 'org_id'>>;
+      };
+      listing_publications: {
+        Row: {
+          id: string;
+          org_id: string;
+          batch_id: string | null;
+          /** The group leader's id — deliberately not a FK (§11 leader convention). */
+          product_group_id: string;
+          sku: string | null;
+          marketplace: string;
+          /** draft | exported | posted | live | sold | removed. */
+          status: string;
+          external_id: string | null;
+          url: string | null;
+          price_cents: number | null;
+          posted_at: string | null;
+          sold_at: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        // org_id is omitted: the column DEFAULT default_org_id() places the row.
+        Insert: Omit<Database['public']['Tables']['listing_publications']['Row'], 'id' | 'org_id' | 'created_by' | 'created_at' | 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['listing_publications']['Insert']>;
+      };
     };
   };
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Users, X, Pencil, Check, Copy, LogOut, Trash2, RotateCcw, Mail, Search, ChevronRight, ChevronDown, Building2, ShoppingBag, UserCog, History, Tags, ArrowUp, ArrowDown, Plus } from 'lucide-react';
+import { Users, X, Pencil, Check, Copy, LogOut, Trash2, RotateCcw, Mail, Search, ChevronRight, ChevronDown, Building2, ShoppingBag, UserCog, History, Tags, ArrowUp, ArrowDown, Plus, Store, Globe } from 'lucide-react';
 import {
   fetchOrgMembers, fetchOrgInvites, inviteToOrg, revokeInvite, removeMember,
   renameOrganization, updateMemberRole, fetchMemberActivity,
@@ -23,9 +23,20 @@ import {
 } from '../lib/descriptionSettings';
 import {
   PLATFORM_PRESETS, ADJUSTMENT_TYPES, ROUNDING_MODES, MAX_PERCENT, MAX_FIXED,
-  platformSlug, pricingExample, describePlatformRule,
+  platformSlug, pricingExample, describePlatformRule, selectablePlatforms,
   type PlatformPricingRule, type PriceAdjustmentType, type PriceRounding,
 } from '../lib/platformPricing';
+import {
+  fetchOrgMarketplaces, setMarketplaceEnabled, updateMarketplaceSettings,
+  fetchVocab, upsertVocab, updateVocab, deleteVocab,
+  marketplaceName, normalizeMarketplaceSettings,
+  VOCAB_KINDS, VOCAB_KIND_LABELS,
+  type OrgMarketplaceRow, type VocabRow, type MarketplaceSettings,
+} from '../lib/marketplaceService';
+import {
+  MARKETPLACE_KEYS, CONDITION_GRADES,
+  type MarketplaceKey, type VocabKind,
+} from '../lib/marketplaces/types';
 import { syncCrmContacts } from '../lib/crmService';
 import { safeMailto } from '../lib/mailto';
 import './OrgPanel.css';
@@ -43,7 +54,7 @@ interface OrgPanelProps {
   onLeftWorkspace?: () => void;
   /** Tab to open on. Analytics / CRM / Errors are top-level views of their
    *  own now, so they are no longer a tab in here. */
-  initialTab?: 'members' | 'settings' | 'beta' | 'users';
+  initialTab?: 'members' | 'settings' | 'marketplaces' | 'beta' | 'users';
   /** Fired after description format settings are saved so App can refresh
    *  what it passes to Step 3's generator. */
   onDescriptionSettingsChanged?: (settings: DescriptionSettings) => void;
@@ -69,7 +80,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   const [busy, setBusy] = useState(false);
   // Dashboard tabs — Members (everyone), Settings (org admins),
   // Beta program + Users (Founding admins)
-  const [panelTab, setPanelTab] = useState<'members' | 'settings' | 'beta' | 'users'>(initialTab ?? 'members');
+  const [panelTab, setPanelTab] = useState<'members' | 'settings' | 'marketplaces' | 'beta' | 'users'>(initialTab ?? 'members');
   // Inline two-step confirm (no native confirm() — Do Not #12). Holds a key
   // like `remove:<userId>`, `leave`, or `beta-delete:<id>`; second click acts.
   const [confirmKey, setConfirmKey] = useState<string | null>(null);
@@ -133,10 +144,30 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   // half-apply.
   const [descPlatforms, setDescPlatforms] = useState<PlatformPricingRule[]>([]);
 
+  // ── Marketplaces (marketplaces.sql) ───────────────────────────────────────
+  // Which marketplaces this workspace sells on, and what each one calls a
+  // brand / colour / condition / size / category. Members READ both; admins
+  // edit the opt-in row, any member edits the workspace vocabulary (the same
+  // split brand_aliases.sql uses, and for the same reason), and founding
+  // admins additionally edit the GLOBAL rows every tenant consumes.
+  const [mktStatus, setMktStatus] = useState<'loading' | 'ok' | 'unavailable'>('loading');
+  const [mktRows, setMktRows] = useState<OrgMarketplaceRow[]>([]);
+  const [vocabRows, setVocabRows] = useState<VocabRow[]>([]);
+  const [vocabFilter, setVocabFilter] = useState<'all' | MarketplaceKey>('all');
+  const [vocabEditId, setVocabEditId] = useState<string | null>(null);
+  const [vocabEditDraft, setVocabEditDraft] = useState({ canonical: '', value: '' });
+  const [vocabAdd, setVocabAdd] = useState<{
+    marketplace: MarketplaceKey; kind: VocabKind; canonical: string; value: string; global: boolean;
+  }>({ marketplace: 'poshmark', kind: 'brand', canonical: '', value: '', global: false });
+
   useEffect(() => {
-    if (!isAdmin) return;
+    // Loaded for EVERY member, not just admins: the Marketplaces tab shows each
+    // marketplace's price rule by name, and those names live in this JSONB.
+    // organizations SELECT has always been membership-scoped, so this reads
+    // nothing a member could not already read.
     let cancelled = false;
     getOrgDescriptionSettings(org.id).then(s => {
+      if (cancelled) return;
       if (cancelled) return;
       setDescSymbol(s.measurementPrefix);
       setDescWashing(s.washingLine);
@@ -150,7 +181,6 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
       setDescLoaded(true);
     });
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [org.id]);
 
   const handleSaveDescSettings = async () => {
@@ -240,6 +270,141 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
       [next[i], next[j]] = [next[j], next[i]];
       return next;
     });
+
+  /* ── Marketplaces (phase 1, docs/marketplaces/00-plan.md sections 2b + 2c) ──
+     Two levels, both chosen by the seller and never inferred: the workspace
+     turns a marketplace ON here, and Step 4 then picks which of those a given
+     batch is aimed at. Nothing about a marketplace the workspace has not
+     enabled ever appears in the workflow.
+
+     Every write is optimistic-then-reconciled the way the rest of this panel
+     is: the switch flips, the row is re-read, and a refusal puts the old value
+     back with a notice — an admin-only write attempted by a member must not
+     leave the UI lying about what is stored. */
+
+  const loadMarketplaces = async () => {
+    const [mk, vc] = await Promise.all([fetchOrgMarketplaces(org.id), fetchVocab(org.id)]);
+    if (mk.status === 'unavailable') { setMktStatus('unavailable'); return; }
+    setMktRows(mk.rows);
+    // The vocabulary lives in the same migration, so one 'unavailable' is
+    // enough to hide the whole tab; a vocab-only failure just leaves the list
+    // empty rather than claiming the feature is missing.
+    setVocabRows(vc.status === 'ok' ? vc.rows : []);
+    setMktStatus('ok');
+  };
+
+  // Same shape as the reload() effect above: one fetch per workspace, no cancel
+  // flag, because both reads are idempotent and StrictMode's second invocation
+  // simply re-reads the same rows.
+  useEffect(() => {
+    loadMarketplaces();
+    // loadMarketplaces is re-created every render and re-reads the same two
+    // tables; listing it would refetch on every keystroke in this panel.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [org.id]);
+
+  /** The stored row for a marketplace, or the "not enabled" shape. */
+  const marketplaceRow = (key: MarketplaceKey): OrgMarketplaceRow =>
+    mktRows.find(r => r.marketplace === key)
+      ?? { org_id: org.id, marketplace: key, enabled: false, settings: {} };
+
+  const handleToggleMarketplace = async (key: MarketplaceKey, enabled: boolean) => {
+    if (busy) return;
+    setBusy(true);
+    setNotice(null);
+    const res = await setMarketplaceEnabled(org.id, key, enabled);
+    if (res.ok) {
+      await loadMarketplaces();
+      setNotice(enabled
+        ? `${marketplaceName(key)} is on — pick it per batch in Step 4.`
+        : `${marketplaceName(key)} is off. Anything already published there is kept.`);
+    } else {
+      setNotice(res.error);
+    }
+    setBusy(false);
+  };
+
+  const handleMarketplaceSetting = async (key: MarketplaceKey, patch: Partial<MarketplaceSettings>) => {
+    if (busy) return;
+    setBusy(true);
+    setNotice(null);
+    const next = normalizeMarketplaceSettings({ ...marketplaceRow(key).settings, ...patch });
+    const res = await updateMarketplaceSettings(org.id, key, next);
+    if (res.ok) await loadMarketplaces(); else setNotice(res.error);
+    setBusy(false);
+  };
+
+  // ── Marketplace vocabulary ────────────────────────────────────────────────
+
+  const visibleVocab = useMemo(() => {
+    const rows = vocabRows.filter(r => (r.org_id === null ? isBetaAdmin : true));
+    const filtered = vocabFilter === 'all' ? rows : rows.filter(r => r.marketplace === vocabFilter);
+    // Workspace rows first — those are the ones a shop maintains and looks for;
+    // the global rows below are reference. Then marketplace, kind, canonical,
+    // so the list never reshuffles between renders.
+    return [...filtered].sort((a, b) =>
+      (a.org_id === null ? 1 : 0) - (b.org_id === null ? 1 : 0)
+      || a.marketplace.localeCompare(b.marketplace)
+      || a.kind.localeCompare(b.kind)
+      || a.canonical.localeCompare(b.canonical, undefined, { numeric: true }));
+  }, [vocabRows, vocabFilter, isBetaAdmin]);
+
+  const enabledMarketplaceCount = useMemo(
+    () => mktRows.filter(r => r.enabled).length, [mktRows]);
+
+  /** The price rules Step 4 would offer, by id — the identity rule is always
+   *  first, so "No adjustment" is a real choice and not an empty select. */
+  const priceRules = useMemo(() => selectablePlatforms(descPlatforms), [descPlatforms]);
+
+  const handleAddVocab = async () => {
+    if (busy) return;
+    setBusy(true);
+    setNotice(null);
+    const res = await upsertVocab({
+      // A global row is founder-only and RLS says so; the checkbox is only
+      // rendered for a founding admin, so this can never be a silent 42501.
+      orgId: vocabAdd.global && isBetaAdmin ? null : org.id,
+      marketplace: vocabAdd.marketplace,
+      kind: vocabAdd.kind,
+      canonical: vocabAdd.canonical,
+      marketplaceValue: vocabAdd.value,
+    });
+    if (res.ok) {
+      setVocabAdd(v => ({ ...v, canonical: '', value: '' }));
+      await loadMarketplaces();
+      setNotice('Mapping saved.');
+    } else {
+      setNotice(res.error);
+    }
+    setBusy(false);
+  };
+
+  const handleSaveVocabEdit = async (row: VocabRow) => {
+    if (busy) return;
+    setBusy(true);
+    setNotice(null);
+    // updateVocab, not upsertVocab: this edit is addressed BY ROW ID. Keyed on
+    // the canonical value instead, renaming one would find nothing under the
+    // new spelling and insert a second row beside the old one.
+    const res = await updateVocab(row.id, vocabEditDraft.canonical, vocabEditDraft.value);
+    if (res.ok) {
+      setVocabEditId(null);
+      await loadMarketplaces();
+    } else {
+      setNotice(res.error);
+    }
+    setBusy(false);
+  };
+
+  const handleDeleteVocab = async (id: string) => {
+    if (busy) return;
+    setBusy(true);
+    setNotice(null);
+    const res = await deleteVocab(id);
+    setConfirmKey(null);
+    if (res.ok) await loadMarketplaces(); else setNotice(res.error);
+    setBusy(false);
+  };
 
   const toggleMember = (userId: string) => {
     const next = expandedMemberId === userId ? null : userId;
@@ -599,6 +764,9 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
               Settings
             </button>
           )}
+          <button className={`org-tab ${panelTab === 'marketplaces' ? 'org-tab--on' : ''}`} onClick={() => setPanelTab('marketplaces')}>
+            Marketplaces{mktStatus === 'ok' && enabledMarketplaceCount > 0 ? ` (${enabledMarketplaceCount})` : ''}
+          </button>
           {isBetaAdmin && (
             <button className={`org-tab ${panelTab === 'beta' ? 'org-tab--on' : ''}`} onClick={() => setPanelTab('beta')}>
               Beta program{betaCounts.pending > 0 ? ` (${betaCounts.pending})` : ''}
@@ -1014,6 +1182,231 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
               <button className="org-invite-btn" disabled={busy} onClick={handleSaveDescSettings}>
                 Save marketplaces
               </button>
+            </div>
+          </>
+        )}
+
+        {/* ── Marketplaces ────────────────────────────────────────────────
+            Where this workspace sells (admins), and what each marketplace
+            calls a brand / colour / condition / size / category (any member —
+            plus the global rows, for founding admins). */}
+        {panelTab === 'marketplaces' && mktStatus === 'loading' && (
+          <p className="org-panel-loading">Loading marketplaces…</p>
+        )}
+
+        {panelTab === 'marketplaces' && mktStatus === 'unavailable' && (
+          <p className="ft-setup">
+            Marketplaces are not set up yet — run <code>supabase/migrations/marketplaces.sql</code> in
+            the SQL Editor. Until then nothing changes: Step 4 exports the Shopify CSV exactly as it
+            does today. Once the tables exist, this is where you choose which marketplaces you sell
+            on and teach the app what each one calls your brands, colours and sizes.
+          </p>
+        )}
+
+        {panelTab === 'marketplaces' && mktStatus === 'ok' && (
+          <>
+            <h3 className="org-section-title"><Store size={15} aria-hidden="true" /> Where you sell</h3>
+            <p className="shopify-conn-help">
+              Turn on the marketplaces this shop actually lists on. Only these are offered when you
+              pick a batch's targets in Step 4 — nothing you have not turned on ever appears in the
+              workflow. Turning one off later keeps every record of what you already published there.
+              {!isAdmin && ' Only a workspace admin can change these.'}
+            </p>
+
+            <div className="plat-list">
+              {MARKETPLACE_KEYS.map(key => {
+                const row = marketplaceRow(key);
+                return (
+                  <div className={`plat-row${row.enabled ? '' : ' plat-row--off'}`} key={key}>
+                    <div className="mkt-row-head">
+                      <label className="plat-check mkt-switch">
+                        <input
+                          type="checkbox"
+                          checked={row.enabled}
+                          disabled={busy || !isAdmin}
+                          onChange={(e) => handleToggleMarketplace(key, e.target.checked)}
+                        />
+                        <span className="mkt-name">{marketplaceName(key)}</span>
+                      </label>
+                      {row.enabled && <span className="mkt-on-badge">On</span>}
+                    </div>
+
+                    {row.enabled && (
+                      <div className="plat-row-main">
+                        <label className="plat-field">
+                          <span>Price rule</span>
+                          <select
+                            value={row.settings.pricingRuleId ?? ''}
+                            disabled={busy || !isAdmin}
+                            onChange={(e) => handleMarketplaceSetting(key, { pricingRuleId: e.target.value })}
+                          >
+                            <option value="">No adjustment — list price</option>
+                            {priceRules.map(r => (
+                              <option key={r.id} value={r.id}>{r.name}</option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="plat-field">
+                          <span>Default condition</span>
+                          <select
+                            value={row.settings.defaultCondition ?? ''}
+                            disabled={busy || !isAdmin}
+                            onChange={(e) => handleMarketplaceSetting(key, { defaultCondition: e.target.value })}
+                          >
+                            <option value="">None — ask per listing</option>
+                            {CONDITION_GRADES.map(g => (
+                              <option key={g} value={g}>{g.replace(/_/g, ' ')}</option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    )}
+
+                    {row.enabled && row.settings.pricingRuleId
+                      && !priceRules.some(r => r.id === row.settings.pricingRuleId) && (
+                      /* The rule was renamed or removed in Settings. Say so
+                         rather than silently applying no adjustment — that is
+                         the export price, and a quiet fallback is how a listing
+                         goes out at the wrong number. */
+                      <p className="plat-summary mkt-warn">
+                        This marketplace points at a price rule that no longer exists
+                        (<code>{row.settings.pricingRuleId}</code>) — it will export at the list
+                        price until you pick another.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* ── Marketplace vocabulary ──────────────────────────────────── */}
+            <h3 className="org-section-title"><Tags size={15} aria-hidden="true" /> Marketplace vocabulary</h3>
+            <p className="shopify-conn-help">
+              Poshmark, Depop, Grailed, Vinted and Mercari pick a brand and a colour from their own
+              list. If we send a spelling they do not know, they either reject the field or quietly
+              choose one for you. Teach them here once and every listing goes out right.
+              {isBetaAdmin
+                ? ' You can edit the shared rows every workspace sees, as well as this shop’s own.'
+                : ' Anyone on the team can add one.'}
+            </p>
+
+            <div className="mkt-vocab-filter">
+              <label className="plat-field plat-field--narrow">
+                <span>Marketplace</span>
+                <select value={vocabFilter} onChange={(e) => setVocabFilter(e.target.value as 'all' | MarketplaceKey)}>
+                  <option value="all">All marketplaces</option>
+                  {MARKETPLACE_KEYS.map(k => <option key={k} value={k}>{marketplaceName(k)}</option>)}
+                </select>
+              </label>
+              <span className="plat-summary">{visibleVocab.length} mapping{visibleVocab.length === 1 ? '' : 's'}</span>
+            </div>
+
+            {visibleVocab.length === 0 ? (
+              <p className="org-panel-loading">
+                No mappings yet{vocabFilter === 'all' ? '' : ` for ${marketplaceName(vocabFilter)}`}. Add one below.
+              </p>
+            ) : (
+              <ul className="mkt-vocab-list">
+                {visibleVocab.map(row => (
+                  <li className="mkt-vocab-row" key={row.id}>
+                    <div className="mkt-vocab-meta">
+                      <span className="mkt-vocab-where">{marketplaceName(row.marketplace)}</span>
+                      <span className="mkt-vocab-kind">{VOCAB_KIND_LABELS[row.kind]}</span>
+                      <span className={`mkt-scope${row.org_id === null ? ' mkt-scope--global' : ''}`}>
+                        {row.org_id === null
+                          ? <><Globe size={11} aria-hidden="true" /> all workspaces</>
+                          : 'this workspace only'}
+                      </span>
+                    </div>
+
+                    {vocabEditId === row.id ? (
+                      <div className="mkt-vocab-edit">
+                        <input
+                          value={vocabEditDraft.canonical}
+                          aria-label="What the app holds"
+                          onChange={(e) => setVocabEditDraft(d => ({ ...d, canonical: e.target.value }))}
+                        />
+                        <span className="mkt-arrow" aria-hidden="true">→</span>
+                        <input
+                          value={vocabEditDraft.value}
+                          aria-label={`What ${marketplaceName(row.marketplace)} calls it`}
+                          onChange={(e) => setVocabEditDraft(d => ({ ...d, value: e.target.value }))}
+                        />
+                        <button className="org-icon-btn" title="Save mapping" disabled={busy}
+                          onClick={() => handleSaveVocabEdit(row)}><Check size={13} /></button>
+                        <button className="org-icon-btn" title="Cancel" disabled={busy}
+                          onClick={() => setVocabEditId(null)}><X size={13} /></button>
+                      </div>
+                    ) : (
+                      <div className="mkt-vocab-pair">
+                        <span className="mkt-vocab-canonical">{row.canonical}</span>
+                        <span className="mkt-arrow" aria-hidden="true">→</span>
+                        <span className="mkt-vocab-value">{row.marketplace_value}</span>
+                        <span className="mkt-vocab-actions">
+                          <button className="org-icon-btn" title="Edit mapping" disabled={busy}
+                            onClick={() => {
+                              setVocabEditId(row.id);
+                              setVocabEditDraft({ canonical: row.canonical, value: row.marketplace_value });
+                            }}><Pencil size={13} /></button>
+                          {confirmKey === `mkt-vocab:${row.id}` ? (
+                            <span className="org-confirm-actions">
+                              <button className="org-confirm-yes" disabled={busy}
+                                onClick={() => handleDeleteVocab(row.id)}>Delete</button>
+                              <button className="org-confirm-no" disabled={busy}
+                                onClick={() => setConfirmKey(null)}>Cancel</button>
+                            </span>
+                          ) : (
+                            <button className="org-icon-btn org-icon-danger" title="Delete mapping" disabled={busy}
+                              onClick={() => setConfirmKey(`mkt-vocab:${row.id}`)}><Trash2 size={13} /></button>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div className="plat-add">
+              <span className="plat-add-label"><Plus size={13} aria-hidden="true" /> Add a mapping</span>
+              <div className="mkt-vocab-add">
+                <label className="plat-field plat-field--narrow">
+                  <span>Marketplace</span>
+                  <select value={vocabAdd.marketplace}
+                    onChange={(e) => setVocabAdd(v => ({ ...v, marketplace: e.target.value as MarketplaceKey }))}>
+                    {MARKETPLACE_KEYS.map(k => <option key={k} value={k}>{marketplaceName(k)}</option>)}
+                  </select>
+                </label>
+                <label className="plat-field plat-field--narrow">
+                  <span>Field</span>
+                  <select value={vocabAdd.kind}
+                    onChange={(e) => setVocabAdd(v => ({ ...v, kind: e.target.value as VocabKind }))}>
+                    {VOCAB_KINDS.map(k => <option key={k} value={k}>{VOCAB_KIND_LABELS[k]}</option>)}
+                  </select>
+                </label>
+                <label className="plat-field">
+                  <span>What we hold</span>
+                  <input value={vocabAdd.canonical} maxLength={120} placeholder="Ecko Unltd"
+                    onChange={(e) => setVocabAdd(v => ({ ...v, canonical: e.target.value }))} />
+                </label>
+                <label className="plat-field">
+                  <span>What {marketplaceName(vocabAdd.marketplace)} calls it</span>
+                  <input value={vocabAdd.value} maxLength={120} placeholder="Ecko Unlimited"
+                    onChange={(e) => setVocabAdd(v => ({ ...v, value: e.target.value }))} />
+                </label>
+              </div>
+              {isBetaAdmin && (
+                <label className="plat-check">
+                  <input type="checkbox" checked={vocabAdd.global}
+                    onChange={(e) => setVocabAdd(v => ({ ...v, global: e.target.checked }))} />
+                  Shared with every workspace (a founder row — a shop can still override it)
+                </label>
+              )}
+              <div className="desc-settings-actions">
+                <button className="org-invite-btn" disabled={busy || !vocabAdd.canonical.trim() || !vocabAdd.value.trim()}
+                  onClick={handleAddVocab}>Save mapping</button>
+              </div>
             </div>
           </>
         )}

@@ -1,0 +1,238 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildListingPack > golden — the Poshmark pack for a full listing 1`] = `
+{
+  "fields": [
+    {
+      "copyAs": "text",
+      "label": "Title",
+      "value": "Vintage 90s Nike Grey Embroidered Swoosh Crewneck Sweatshirt",
+    },
+    {
+      "copyAs": "text",
+      "label": "Description",
+      "value": "Vintage 90s Nike grey crewneck sweatshirt. Heavyweight brushed fleece with an embroidered swoosh on the chest and a boxy, cropped fit that sits right on the waist.
+
+✠ CHEST- 22 in
+
+✠ LENGTH- 27 in
+
+✠ SLEEVE- 24 in
+
+Every Garment goes through a thorough washing process before being photographed.
+
+Condition: excellent, with a small mark on the left cuff.
+
+BUNDLE AND SAVE!!!!!!",
+    },
+    {
+      "copyAs": "text",
+      "label": "Brand",
+      "value": "Nike",
+    },
+    {
+      "copyAs": "text",
+      "label": "Size",
+      "value": "L",
+    },
+    {
+      "copyAs": "text",
+      "label": "Color",
+      "value": "Gray",
+    },
+    {
+      "copyAs": "text",
+      "label": "Condition",
+      "value": "Pre-owned",
+    },
+    {
+      "copyAs": "text",
+      "label": "Category",
+      "value": "sweatshirts",
+    },
+    {
+      "copyAs": "text",
+      "label": "Price",
+      "value": "45.00",
+    },
+    {
+      "copyAs": "text",
+      "label": "Department",
+      "value": "Men",
+    },
+    {
+      "copyAs": "text",
+      "label": "Original price",
+      "value": "60.00",
+    },
+    {
+      "copyAs": "text",
+      "label": "Style tags",
+      "value": "vintage, nike, crewneck",
+    },
+  ],
+  "issues": [
+    {
+      "field": "brand",
+      "fixKind": "brand",
+      "level": "warning",
+      "marketplace": "poshmark",
+      "message": "Brand "Nike" is not confirmed for Poshmark — map it once so every listing matches their picker.",
+      "value": "Nike",
+    },
+  ],
+  "marketplace": "poshmark",
+  "photos": [
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/a.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/b.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/c.jpg",
+  ],
+}
+`;
+
+exports[`buildListingPack > golden — the eBay pack, item specifics included 1`] = `
+{
+  "fields": [
+    {
+      "copyAs": "text",
+      "label": "Title",
+      "value": "Vintage 90s Nike Grey Embroidered Swoosh Crewneck Sweatshirt",
+    },
+    {
+      "copyAs": "text",
+      "label": "Description",
+      "value": "Vintage 90s Nike grey crewneck sweatshirt. Heavyweight brushed fleece with an embroidered swoosh on the chest and a boxy, cropped fit that sits right on the waist.<br><br>✠ CHEST- 22 in<br><br>✠ LENGTH- 27 in<br><br>✠ SLEEVE- 24 in<br><br>Every Garment goes through a thorough washing process before being photographed.<br><br>Condition: excellent, with a small mark on the left cuff.<br><br>BUNDLE AND SAVE!!!!!!",
+    },
+    {
+      "copyAs": "text",
+      "label": "Brand",
+      "value": "Nike",
+    },
+    {
+      "copyAs": "text",
+      "label": "Size",
+      "value": "L",
+    },
+    {
+      "copyAs": "text",
+      "label": "Color",
+      "value": "Grey",
+    },
+    {
+      "copyAs": "text",
+      "label": "Condition",
+      "value": "Pre-owned",
+    },
+    {
+      "copyAs": "text",
+      "label": "Category",
+      "value": "sweatshirts",
+    },
+    {
+      "copyAs": "text",
+      "label": "Price",
+      "value": "45.00",
+    },
+    {
+      "copyAs": "text",
+      "label": "Department",
+      "value": "Men",
+    },
+    {
+      "copyAs": "text",
+      "label": "Size Type",
+      "value": "Regular",
+    },
+    {
+      "copyAs": "text",
+      "label": "Style",
+      "value": "Vintage",
+    },
+    {
+      "copyAs": "text",
+      "label": "Type",
+      "value": "Sweatshirt",
+    },
+    {
+      "copyAs": "text",
+      "label": "Material",
+      "value": "80% cotton, 20% polyester",
+    },
+    {
+      "copyAs": "text",
+      "label": "Decade",
+      "value": "1990s",
+    },
+    {
+      "copyAs": "text",
+      "label": "Vintage",
+      "value": "Yes",
+    },
+  ],
+  "issues": [
+    {
+      "field": "category",
+      "fixKind": "category",
+      "level": "warning",
+      "marketplace": "ebay",
+      "message": "Category "sweatshirts" is not on eBay's list — it will go out as "sweatshirts".",
+      "value": "sweatshirts",
+    },
+  ],
+  "marketplace": "ebay",
+  "photos": [
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/a.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/b.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/c.jpg",
+  ],
+}
+`;
+
+exports[`packToText > golden — the copy-all block 1`] = `
+"Title
+Vintage 90s Nike Grey Embroidered Swoosh
+
+Description
+Vintage 90s Nike grey crewneck sweatshirt. Heavyweight brushed fleece with an embroidered swoosh on the chest and a boxy, cropped fit that sits right on the waist.
+
+✠ CHEST- 22 in
+
+✠ LENGTH- 27 in
+
+✠ SLEEVE- 24 in
+
+Every Garment goes through a thorough washing process before being photographed.
+
+Condition: excellent, with a small mark on the left cuff.
+
+BUNDLE AND SAVE!!!!!!
+
+#vintage #nike #crewneck
+
+Brand
+Nike
+
+Size
+L
+
+Color
+Grey
+
+Condition
+Like new
+
+Category
+sweatshirts
+
+Price
+45.00
+
+Material
+80% cotton, 20% polyester
+
+Weight (g)
+600
+
+Package size
+Medium"
+`;

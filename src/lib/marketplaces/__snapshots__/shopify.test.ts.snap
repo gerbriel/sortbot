@@ -1,0 +1,99 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`shopify format > golden — a fully populated listing 1`] = `
+{
+  "attributes": {
+    "productCategory": "Apparel & Accessories > Clothing > Clothing Tops > Sweatshirts",
+    "productType": "Sweatshirts",
+    "vendor": "C&D Vintage",
+  },
+  "brand": "Nike",
+  "category": "Apparel & Accessories > Clothing > Clothing Tops > Sweatshirts",
+  "color": "Grey",
+  "compareAtPrice": 60,
+  "condition": "Excellent",
+  "description": "Vintage 90s Nike grey crewneck sweatshirt. Heavyweight brushed fleece with an embroidered swoosh on the chest and a boxy, cropped fit that sits right on the waist.<br><br>✠ CHEST- 22 in<br><br>✠ LENGTH- 27 in<br><br>✠ SLEEVE- 24 in<br><br>Every Garment goes through a thorough washing process before being photographed.<br><br>Condition: excellent, with a small mark on the left cuff.<br><br>BUNDLE AND SAVE!!!!!!",
+  "issues": [],
+  "marketplace": "shopify",
+  "photos": [
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/a.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/b.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/c.jpg",
+  ],
+  "price": 45,
+  "productGroupId": "grp-1",
+  "size": "L",
+  "sku": "ACD-7K2M9Q",
+  "tags": [
+    "vintage",
+    "nike",
+    "crewneck",
+    "90s streetwear",
+    "single stitch",
+    "oversized fit",
+    "grey sweatshirt",
+    "made in usa",
+    "y2k",
+    "skater",
+    "surf",
+    "embroidered swoosh",
+    "gift for him",
+    "vintage nike crewneck sweatshirt",
+  ],
+  "title": "Vintage 90s Nike Grey Embroidered Swoosh Crewneck Sweatshirt",
+}
+`;
+
+exports[`shopify format > golden — a sparse listing (no price, no brand, one photo, unreadable condition) 1`] = `
+{
+  "attributes": {
+    "productCategory": "Apparel & Accessories > Clothing > Clothing Tops > T-Shirts",
+    "productType": "Clothing",
+    "vendor": "C&D Vintage",
+  },
+  "brand": null,
+  "category": "Apparel & Accessories > Clothing > Clothing Tops > T-Shirts",
+  "color": "Forest Green",
+  "compareAtPrice": null,
+  "condition": null,
+  "description": "Soft faded single stitch tee.",
+  "issues": [
+    {
+      "field": "price",
+      "level": "error",
+      "marketplace": "shopify",
+      "message": "No price set — Shopify needs one.",
+    },
+    {
+      "field": "condition",
+      "fixKind": "condition",
+      "level": "warning",
+      "marketplace": "shopify",
+      "message": "Condition "kinda beat up" is not one of Shopify's grades (New with tags / New without tags / Excellent / Good / Fair / Poor) — map it once.",
+      "value": "kinda beat up",
+    },
+  ],
+  "marketplace": "shopify",
+  "photos": [
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/sparse-1/a.jpg",
+  ],
+  "price": null,
+  "productGroupId": "sparse-1",
+  "size": "M",
+  "sku": null,
+  "tags": [],
+  "title": "Faded Single Stitch Tee",
+}
+`;
+
+exports[`shopify serialize > golden — the full CSV for one listing 1`] = `
+{
+  "body": "Handle,Title,Body (HTML),Vendor,Product Category,Type,Tags,Published,Option1 Name,Option1 Value,Option1 Linked To,Option2 Name,Option2 Value,Option2 Linked To,Option3 Name,Option3 Value,Option3 Linked To,Variant SKU,Variant Grams,Variant Inventory Tracker,Variant Inventory Qty,Variant Inventory Policy,Variant Fulfillment Service,Variant Price,Variant Compare At Price,Variant Requires Shipping,Variant Taxable,Unit Price Total Measure,Unit Price Total Measure Unit,Unit Price Base Measure,Unit Price Base Measure Unit,Variant Barcode,Image Src,Image Position,Image Alt Text,Gift Card,SEO Title,SEO Description,Color (product.metafields.shopify.color-pattern),Fabric (product.metafields.shopify.fabric),Target gender (product.metafields.shopify.target-gender),Complementary products (product.metafields.shopify--discovery--product_recommendation.complementary_products),Related products (product.metafields.shopify--discovery--product_recommendation.related_products),Related products settings (product.metafields.shopify--discovery--product_recommendation.related_products_display),Search product boosts (product.metafields.shopify--discovery--product_search_boost.queries),Variant Image,Variant Weight Unit,Variant Tax Code,Cost per item,Status,Size (product.metafields.custom.size),Condition (product.metafields.custom.condition),Parcel Size (product.metafields.custom.parcel_size),Package Dimensions (product.metafields.custom.package_dimensions)
+vintage-90s-nike-grey-embroidered-swoosh-crewneck-sweatshirt,Vintage 90s Nike Grey Embroidered Swoosh Crewneck Sweatshirt,"Vintage 90s Nike grey crewneck sweatshirt. Heavyweight brushed fleece with an embroidered swoosh on the chest and a boxy, cropped fit that sits right on the waist.<br><br>✠ CHEST- 22 in<br><br>✠ LENGTH- 27 in<br><br>✠ SLEEVE- 24 in<br><br>Every Garment goes through a thorough washing process before being photographed.<br><br>Condition: excellent, with a small mark on the left cuff.<br><br>BUNDLE AND SAVE!!!!!!",C&D Vintage,Apparel & Accessories > Clothing > Clothing Tops > Sweatshirts,Sweatshirts,"vintage, nike, crewneck, 90s streetwear, single stitch, oversized fit, grey sweatshirt, made in usa, y2k, skater, surf, embroidered swoosh, gift for him, vintage nike crewneck sweatshirt",true,Title,Default Title,,,,,,,,ACD-7K2M9Q,600,shopify,1,deny,manual,45.00,60.00,true,true,,,,,ACD-7K2M9Q,https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/a.jpg,1,Vintage 90s Nike Grey Embroidered Swoosh Crewneck Sweatshirt - L,false,Vintage 90s Nike Grey Embroidered Swoosh Crewneck Sweatshirt,"Vintage 90s Nike grey crewneck sweatshirt, size L.",gid://shopify/Metaobject/166878085305,,gid://shopify/Metaobject/128362447033,,,,,,g,,12,active,L,Excellent,Medium,12 in - 10 in - 3 in
+vintage-90s-nike-grey-embroidered-swoosh-crewneck-sweatshirt,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/b.jpg,2,Vintage 90s Nike Grey Embroidered Swoosh Crewneck Sweatshirt - L,,,,,,,,,,,,,,,active,,,,
+vintage-90s-nike-grey-embroidered-swoosh-crewneck-sweatshirt,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/c.jpg,3,Vintage 90s Nike Grey Embroidered Swoosh Crewneck Sweatshirt - L,,,,,,,,,,,,,,,active,,,,",
+  "count": 1,
+  "filename": "shopify-products-2026-09-15.csv",
+  "mime": "text/csv;charset=utf-8",
+}
+`;

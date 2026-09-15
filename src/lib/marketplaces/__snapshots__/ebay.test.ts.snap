@@ -1,0 +1,102 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ebay format > golden — a fully populated listing 1`] = `
+{
+  "attributes": {
+    "Brand": "Nike",
+    "Color": "Grey",
+    "Decade": "1990s",
+    "Department": "Men",
+    "Material": "80% cotton, 20% polyester",
+    "Size": "L",
+    "Size Type": "Regular",
+    "Style": "Vintage",
+    "Type": "Sweatshirt",
+    "Vintage": "Yes",
+  },
+  "brand": "Nike",
+  "category": "sweatshirts",
+  "color": "Grey",
+  "compareAtPrice": 60,
+  "condition": "Pre-owned",
+  "description": "Vintage 90s Nike grey crewneck sweatshirt. Heavyweight brushed fleece with an embroidered swoosh on the chest and a boxy, cropped fit that sits right on the waist.<br><br>✠ CHEST- 22 in<br><br>✠ LENGTH- 27 in<br><br>✠ SLEEVE- 24 in<br><br>Every Garment goes through a thorough washing process before being photographed.<br><br>Condition: excellent, with a small mark on the left cuff.<br><br>BUNDLE AND SAVE!!!!!!",
+  "issues": [
+    {
+      "field": "category",
+      "fixKind": "category",
+      "level": "warning",
+      "marketplace": "ebay",
+      "message": "Category "sweatshirts" is not on eBay's list — it will go out as "sweatshirts".",
+      "value": "sweatshirts",
+    },
+  ],
+  "marketplace": "ebay",
+  "photos": [
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/a.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/b.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/c.jpg",
+  ],
+  "price": 45,
+  "productGroupId": "grp-1",
+  "size": "L",
+  "sku": "ACD-7K2M9Q",
+  "tags": [],
+  "title": "Vintage 90s Nike Grey Embroidered Swoosh Crewneck Sweatshirt",
+}
+`;
+
+exports[`ebay format > golden — a sparse listing 1`] = `
+{
+  "attributes": {
+    "Brand": "Unbranded",
+    "Color": "Forest Green",
+    "Size": "M",
+  },
+  "brand": "Unbranded",
+  "category": "tees",
+  "color": "Forest Green",
+  "compareAtPrice": null,
+  "condition": null,
+  "description": "Soft faded single stitch tee.",
+  "issues": [
+    {
+      "field": "price",
+      "level": "error",
+      "marketplace": "ebay",
+      "message": "No price set — eBay needs one.",
+    },
+    {
+      "field": "brand",
+      "level": "warning",
+      "marketplace": "ebay",
+      "message": "No brand set — eBay will list it as "Unbranded".",
+    },
+    {
+      "field": "condition",
+      "fixKind": "condition",
+      "level": "warning",
+      "marketplace": "ebay",
+      "message": "Condition "kinda beat up" is not one of eBay's grades (New with tags / New without tags / New with defects / Pre-owned) — map it once.",
+      "value": "kinda beat up",
+    },
+    {
+      "field": "category",
+      "fixKind": "category",
+      "level": "warning",
+      "marketplace": "ebay",
+      "message": "Category "tees" is not on eBay's list — it will go out as "tees".",
+      "value": "tees",
+    },
+  ],
+  "marketplace": "ebay",
+  "photos": [
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/sparse-1/a.jpg",
+  ],
+  "price": null,
+  "productGroupId": "sparse-1",
+  "size": "M",
+  "sku": null,
+  "tags": [],
+  "title": "Faded Single Stitch Tee",
+}
+`;

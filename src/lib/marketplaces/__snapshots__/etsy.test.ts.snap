@@ -1,0 +1,124 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`etsy format > golden — a fully populated listing 1`] = `
+{
+  "attributes": {
+    "is_supply": "false",
+    "item_type": "Sweatshirt",
+    "materials": "80% cotton, 20% polyester",
+    "when_made": "1990s",
+    "who_made": "someone_else",
+  },
+  "brand": "Nike",
+  "category": "sweatshirts",
+  "color": "Grey",
+  "compareAtPrice": 60,
+  "condition": "Vintage",
+  "description": "Vintage 90s Nike grey crewneck sweatshirt. Heavyweight brushed fleece with an embroidered swoosh on the chest and a boxy, cropped fit that sits right on the waist.
+
+✠ CHEST- 22 in
+
+✠ LENGTH- 27 in
+
+✠ SLEEVE- 24 in
+
+Every Garment goes through a thorough washing process before being photographed.
+
+Condition: excellent, with a small mark on the left cuff.
+
+BUNDLE AND SAVE!!!!!!",
+  "issues": [
+    {
+      "field": "category",
+      "fixKind": "category",
+      "level": "warning",
+      "marketplace": "etsy",
+      "message": "Category "sweatshirts" is not on Etsy's list — it will go out as "sweatshirts".",
+      "value": "sweatshirts",
+    },
+  ],
+  "marketplace": "etsy",
+  "photos": [
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/a.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/b.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/c.jpg",
+  ],
+  "price": 45,
+  "productGroupId": "grp-1",
+  "size": "L",
+  "sku": "ACD-7K2M9Q",
+  "tags": [
+    "vintage",
+    "nike",
+    "crewneck",
+    "90s streetwear",
+    "single stitch",
+    "oversized fit",
+    "grey sweatshirt",
+    "made in usa",
+    "y2k",
+    "skater",
+    "surf",
+    "embroidered swoosh",
+    "gift for him",
+  ],
+  "title": "Vintage 90s Nike Grey Embroidered Swoosh Crewneck Sweatshirt",
+}
+`;
+
+exports[`etsy format > golden — a sparse listing 1`] = `
+{
+  "attributes": {
+    "is_supply": "false",
+    "item_type": "tees",
+    "who_made": "someone_else",
+  },
+  "brand": null,
+  "category": "tees",
+  "color": "Forest Green",
+  "compareAtPrice": null,
+  "condition": null,
+  "description": "Soft faded single stitch tee.",
+  "issues": [
+    {
+      "field": "price",
+      "level": "error",
+      "marketplace": "etsy",
+      "message": "No price set — Etsy needs one.",
+    },
+    {
+      "field": "condition",
+      "fixKind": "condition",
+      "level": "warning",
+      "marketplace": "etsy",
+      "message": "Condition "kinda beat up" is not one of Etsy's grades (New / Vintage / Handmade) — map it once.",
+      "value": "kinda beat up",
+    },
+    {
+      "field": "category",
+      "fixKind": "category",
+      "level": "warning",
+      "marketplace": "etsy",
+      "message": "Category "tees" is not on Etsy's list — it will go out as "tees".",
+      "value": "tees",
+    },
+    {
+      "field": "era",
+      "level": "warning",
+      "marketplace": "etsy",
+      "message": "Etsy needs a "when made" decade — set the era so the listing can be filed as vintage.",
+      "value": "",
+    },
+  ],
+  "marketplace": "etsy",
+  "photos": [
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/sparse-1/a.jpg",
+  ],
+  "price": null,
+  "productGroupId": "sparse-1",
+  "size": "M",
+  "sku": null,
+  "tags": [],
+  "title": "Faded Single Stitch Tee",
+}
+`;

@@ -1,0 +1,148 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`depop format > golden — a fully populated listing 1`] = `
+{
+  "attributes": {
+    "age": "1990s",
+    "currency": "USD",
+    "source": "Vintage",
+    "style": "Vintage",
+    "subcategory": "Sweatshirt",
+  },
+  "brand": "Nike",
+  "category": "sweatshirts",
+  "color": "Grey",
+  "compareAtPrice": 60,
+  "condition": "Used - excellent",
+  "description": "Vintage 90s Nike grey crewneck sweatshirt. Heavyweight brushed fleece with an embroidered swoosh on the chest and a boxy, cropped fit that sits right on the waist.
+
+✠ CHEST- 22 in
+
+✠ LENGTH- 27 in
+
+✠ SLEEVE- 24 in
+
+Every Garment goes through a thorough washing process before being photographed.
+
+Condition: excellent, with a small mark on the left cuff.
+
+BUNDLE AND SAVE!!!!!!
+
+#vintage #nike #crewneck #90sstreetwear #singlestitch",
+  "issues": [
+    {
+      "field": "brand",
+      "fixKind": "brand",
+      "level": "warning",
+      "marketplace": "depop",
+      "message": "Brand "Nike" is not confirmed for Depop — map it once so every listing matches their picker.",
+      "value": "Nike",
+    },
+    {
+      "field": "category",
+      "fixKind": "category",
+      "level": "warning",
+      "marketplace": "depop",
+      "message": "Category "sweatshirts" is not on Depop's list — it will go out as "sweatshirts".",
+      "value": "sweatshirts",
+    },
+  ],
+  "marketplace": "depop",
+  "photos": [
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/a.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/b.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/c.jpg",
+  ],
+  "price": 45,
+  "productGroupId": "grp-1",
+  "size": "L",
+  "sku": "ACD-7K2M9Q",
+  "tags": [
+    "#vintage",
+    "#nike",
+    "#crewneck",
+    "#90sstreetwear",
+    "#singlestitch",
+  ],
+  "title": "Vintage 90s Nike Grey Embroidered Swoosh Crewneck Sweatshirt",
+}
+`;
+
+exports[`depop format > golden — a sparse listing 1`] = `
+{
+  "attributes": {
+    "currency": "USD",
+  },
+  "brand": null,
+  "category": "tees",
+  "color": "Forest Green",
+  "compareAtPrice": null,
+  "condition": null,
+  "description": "Soft faded single stitch tee.",
+  "issues": [
+    {
+      "field": "price",
+      "level": "error",
+      "marketplace": "depop",
+      "message": "No price set — Depop needs one.",
+    },
+    {
+      "field": "brand",
+      "level": "warning",
+      "marketplace": "depop",
+      "message": "No brand set — Depop needs one.",
+    },
+    {
+      "field": "condition",
+      "fixKind": "condition",
+      "level": "warning",
+      "marketplace": "depop",
+      "message": "Condition "kinda beat up" is not one of Depop's grades (Brand new / Like new / Used - excellent / Used - good / Used - fair) — map it once.",
+      "value": "kinda beat up",
+    },
+    {
+      "field": "category",
+      "fixKind": "category",
+      "level": "warning",
+      "marketplace": "depop",
+      "message": "Category "tees" is not on Depop's list — it will go out as "tees".",
+      "value": "tees",
+    },
+  ],
+  "marketplace": "depop",
+  "photos": [
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/sparse-1/a.jpg",
+  ],
+  "price": null,
+  "productGroupId": "sparse-1",
+  "size": "M",
+  "sku": null,
+  "tags": [],
+  "title": "Faded Single Stitch Tee",
+}
+`;
+
+exports[`depop serialize > golden — the bulk CSV 1`] = `
+{
+  "body": "sku,title,description,hashtags,category,subcategory,brand,colour,condition,size,style,source,age,price,currency,photo_1,photo_2,photo_3,photo_4,photo_5,photo_6,photo_7,photo_8
+ACD-7K2M9Q,Vintage 90s Nike Grey Embroidered Swoosh Crewneck Sweatshirt,"Vintage 90s Nike grey crewneck sweatshirt. Heavyweight brushed fleece with an embroidered swoosh on the chest and a boxy, cropped fit that sits right on the waist.
+
+✠ CHEST- 22 in
+
+✠ LENGTH- 27 in
+
+✠ SLEEVE- 24 in
+
+Every Garment goes through a thorough washing process before being photographed.
+
+Condition: excellent, with a small mark on the left cuff.
+
+BUNDLE AND SAVE!!!!!!
+
+#vintage #nike #crewneck #90sstreetwear #singlestitch",#vintage #nike #crewneck #90sstreetwear #singlestitch,sweatshirts,Sweatshirt,Nike,Grey,Used - excellent,L,Vintage,Vintage,1990s,45.00,USD,https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/a.jpg,https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/b.jpg,https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/c.jpg,,,,,
+,Faded Single Stitch Tee,Soft faded single stitch tee.,,tees,,,Forest Green,,M,,,,,USD,https://cdn.example.com/storage/v1/object/public/product-images/user/sparse-1/a.jpg,,,,,,,",
+  "count": 2,
+  "filename": "depop-listings-2026-09-15.csv",
+  "mime": "text/csv;charset=utf-8",
+}
+`;

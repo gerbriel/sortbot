@@ -1,0 +1,117 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`mercari format > golden — a fully populated listing 1`] = `
+{
+  "attributes": {
+    "Material": "80% cotton, 20% polyester",
+    "Package size": "Medium",
+    "Weight (g)": "600",
+  },
+  "brand": "Nike",
+  "category": "sweatshirts",
+  "color": "Grey",
+  "compareAtPrice": 60,
+  "condition": "Like new",
+  "description": "Vintage 90s Nike grey crewneck sweatshirt. Heavyweight brushed fleece with an embroidered swoosh on the chest and a boxy, cropped fit that sits right on the waist.
+
+✠ CHEST- 22 in
+
+✠ LENGTH- 27 in
+
+✠ SLEEVE- 24 in
+
+Every Garment goes through a thorough washing process before being photographed.
+
+Condition: excellent, with a small mark on the left cuff.
+
+BUNDLE AND SAVE!!!!!!
+
+#vintage #nike #crewneck",
+  "issues": [
+    {
+      "field": "brand",
+      "fixKind": "brand",
+      "level": "warning",
+      "marketplace": "mercari",
+      "message": "Brand "Nike" is not confirmed for Mercari — map it once so every listing matches their picker.",
+      "value": "Nike",
+    },
+    {
+      "field": "category",
+      "fixKind": "category",
+      "level": "warning",
+      "marketplace": "mercari",
+      "message": "Category "sweatshirts" is not on Mercari's list — it will go out as "sweatshirts".",
+      "value": "sweatshirts",
+    },
+  ],
+  "marketplace": "mercari",
+  "photos": [
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/a.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/b.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/c.jpg",
+  ],
+  "price": 45,
+  "productGroupId": "grp-1",
+  "size": "L",
+  "sku": "ACD-7K2M9Q",
+  "tags": [
+    "#vintage",
+    "#nike",
+    "#crewneck",
+  ],
+  "title": "Vintage 90s Nike Grey Embroidered Swoosh",
+}
+`;
+
+exports[`mercari format > golden — a sparse listing 1`] = `
+{
+  "attributes": {},
+  "brand": null,
+  "category": "tees",
+  "color": "Forest Green",
+  "compareAtPrice": null,
+  "condition": null,
+  "description": "Soft faded single stitch tee.",
+  "issues": [
+    {
+      "field": "price",
+      "level": "error",
+      "marketplace": "mercari",
+      "message": "No price set — Mercari needs one.",
+    },
+    {
+      "field": "brand",
+      "level": "warning",
+      "marketplace": "mercari",
+      "message": "No brand set — Mercari needs one.",
+    },
+    {
+      "field": "condition",
+      "fixKind": "condition",
+      "level": "warning",
+      "marketplace": "mercari",
+      "message": "Condition "kinda beat up" is not one of Mercari's grades (New / Like new / Good / Fair / Poor) — map it once.",
+      "value": "kinda beat up",
+    },
+    {
+      "field": "category",
+      "fixKind": "category",
+      "level": "warning",
+      "marketplace": "mercari",
+      "message": "Category "tees" is not on Mercari's list — it will go out as "tees".",
+      "value": "tees",
+    },
+  ],
+  "marketplace": "mercari",
+  "photos": [
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/sparse-1/a.jpg",
+  ],
+  "price": null,
+  "productGroupId": "sparse-1",
+  "size": "M",
+  "sku": null,
+  "tags": [],
+  "title": "Faded Single Stitch Tee",
+}
+`;

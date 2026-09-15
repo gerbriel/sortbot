@@ -1539,3 +1539,177 @@
   .plat-row-actions { margin-left: 0; width: 100%; justify-content: flex-end; }
   .plat-example { width: 100%; text-align: center; }
 }
+
+/* ── Marketplaces (docs/marketplaces/00-plan.md sections 2b + 2c) ────────────
+   Two lists on one tab. The first is the workspace's opt-in: one card per
+   marketplace, reusing .plat-row so a marketplace card and a price-rule card
+   read as the same object at a glance. The second is the vocabulary — a
+   canonical value, an arrow, and what that marketplace calls it, which is the
+   whole idea in one line.
+
+   Everything resolves through tokens (AGENTS.md section 1); the only literal
+   lengths are the 44px touch floor and the 16px control minimum, both of which
+   are physical constants and deliberately not rem (section 18 #31). */
+
+.mkt-row-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* The whole label is the hit area — .plat-check already gives it 44px. */
+.mkt-switch { flex: 1 1 auto; min-width: 0; }
+
+.mkt-name {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mkt-on-badge {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: var(--success-dim);
+  color: var(--success);
+}
+
+/* A price rule that no longer resolves is a money problem, not a cosmetic one. */
+.mkt-warn { color: var(--warning); }
+.mkt-warn code {
+  font-size: var(--fs-2xs);
+  background: var(--ink-750);
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+}
+
+.mkt-vocab-filter {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.mkt-vocab-filter .plat-summary { margin: 0 0 0.9rem; }
+
+.mkt-vocab-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.mkt-vocab-row {
+  padding: 0.6rem 0.8rem;
+  background: var(--ink-850);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.mkt-vocab-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+}
+
+.mkt-vocab-where {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.mkt-vocab-kind {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.mkt-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: var(--fs-2xs);
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* A founder row every tenant consumes reads differently from one shop's own. */
+.mkt-scope--global {
+  border-color: var(--info);
+  color: var(--info);
+}
+
+.mkt-vocab-pair,
+.mkt-vocab-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.mkt-vocab-canonical,
+.mkt-vocab-value {
+  font-size: var(--fs-base);
+  color: var(--text-primary);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mkt-vocab-value { font-weight: 600; }
+
+.mkt-arrow {
+  color: var(--text-faint);
+  flex: 0 0 auto;
+}
+
+.mkt-vocab-actions {
+  display: flex;
+  gap: 0.3rem;
+  margin-left: auto;
+}
+
+.mkt-vocab-edit input {
+  flex: 1 1 10rem;
+  min-width: 0;
+  /* 16px: below it, mobile Safari zooms on focus and does not zoom back. */
+  font-size: var(--fs-md);
+  min-height: 44px;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--ink-800);
+  color: var(--text-primary);
+}
+
+.mkt-vocab-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 0.9rem;
+  align-items: flex-end;
+  margin: 0.5rem 0;
+}
+
+@media (max-width: 640px) {
+  /* One column: four side-by-side fields at 390px give every one of them a
+     ~4ch input, and the arrow row wraps into nonsense. */
+  .mkt-vocab-add .plat-field,
+  .mkt-vocab-add .plat-field--narrow { flex: 1 1 100%; }
+  .mkt-vocab-filter { flex-direction: column; align-items: stretch; }
+  .mkt-vocab-filter .plat-field--narrow { flex: 1 1 100%; }
+  .mkt-scope { margin-left: 0; }
+  .mkt-vocab-actions { margin-left: 0; width: 100%; justify-content: flex-end; }
+  .mkt-vocab-edit input { flex: 1 1 100%; }
+  /* The arrow between two stacked inputs is noise, not information. */
+  .mkt-vocab-edit .mkt-arrow { display: none; }
+}

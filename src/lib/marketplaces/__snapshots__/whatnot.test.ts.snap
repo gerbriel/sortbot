@@ -1,0 +1,128 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`whatnot format > golden — a fully populated listing 1`] = `
+{
+  "attributes": {
+    "Cost Per Item": "12",
+    "Hazmat": "Not Hazmat",
+    "Offerable": "FALSE",
+    "Quantity": "1",
+    "Sub Category": "Sweatshirt",
+    "Type": "Buy it Now",
+  },
+  "brand": "Nike",
+  "category": "sweatshirts",
+  "color": "Grey",
+  "compareAtPrice": 60,
+  "condition": "Excellent",
+  "description": "Vintage 90s Nike grey crewneck sweatshirt. Heavyweight brushed fleece with an embroidered swoosh on the chest and a boxy, cropped fit that sits right on the waist.
+
+✠ CHEST- 22 in
+
+✠ LENGTH- 27 in
+
+✠ SLEEVE- 24 in
+
+Every Garment goes through a thorough washing process before being photographed.
+
+Condition: excellent, with a small mark on the left cuff.
+
+BUNDLE AND SAVE!!!!!!",
+  "issues": [
+    {
+      "field": "category",
+      "fixKind": "category",
+      "level": "warning",
+      "marketplace": "whatnot",
+      "message": "Category "sweatshirts" is not on Whatnot's list — it will go out as "sweatshirts".",
+      "value": "sweatshirts",
+    },
+  ],
+  "marketplace": "whatnot",
+  "photos": [
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/a.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/b.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/c.jpg",
+  ],
+  "price": 45,
+  "productGroupId": "grp-1",
+  "size": "L",
+  "sku": "ACD-7K2M9Q",
+  "tags": [],
+  "title": "Vintage 90s Nike Grey Embroidered Swoosh Crewneck Sweatshirt",
+}
+`;
+
+exports[`whatnot format > golden — a sparse listing 1`] = `
+{
+  "attributes": {
+    "Hazmat": "Not Hazmat",
+    "Offerable": "FALSE",
+    "Quantity": "1",
+    "Type": "Buy it Now",
+  },
+  "brand": null,
+  "category": "tees",
+  "color": "Forest Green",
+  "compareAtPrice": null,
+  "condition": null,
+  "description": "Soft faded single stitch tee.",
+  "issues": [
+    {
+      "field": "price",
+      "level": "error",
+      "marketplace": "whatnot",
+      "message": "No price set — Whatnot needs one.",
+    },
+    {
+      "field": "condition",
+      "fixKind": "condition",
+      "level": "warning",
+      "marketplace": "whatnot",
+      "message": "Condition "kinda beat up" is not one of Whatnot's grades (New with tags / New without tags / Excellent / Good / Fair / Poor) — map it once.",
+      "value": "kinda beat up",
+    },
+    {
+      "field": "category",
+      "fixKind": "category",
+      "level": "warning",
+      "marketplace": "whatnot",
+      "message": "Category "tees" is not on Whatnot's list — it will go out as "tees".",
+      "value": "tees",
+    },
+  ],
+  "marketplace": "whatnot",
+  "photos": [
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/sparse-1/a.jpg",
+  ],
+  "price": null,
+  "productGroupId": "sparse-1",
+  "size": "M",
+  "sku": null,
+  "tags": [],
+  "title": "Faded Single Stitch Tee",
+}
+`;
+
+exports[`whatnot serialize > golden — the bulk CSV 1`] = `
+{
+  "body": "Category,Sub Category,Title,Description,Quantity,Type,Price,Shipping Profile,Offerable,Hazmat,Condition,Cost Per Item,SKU,Image URL 1,Image URL 2,Image URL 3,Image URL 4,Image URL 5,Image URL 6,Image URL 7,Image URL 8,Image URL 9,Image URL 10,Image URL 11,Image URL 12
+sweatshirts,Sweatshirt,Vintage 90s Nike Grey Embroidered Swoosh Crewneck Sweatshirt,"Vintage 90s Nike grey crewneck sweatshirt. Heavyweight brushed fleece with an embroidered swoosh on the chest and a boxy, cropped fit that sits right on the waist.
+
+✠ CHEST- 22 in
+
+✠ LENGTH- 27 in
+
+✠ SLEEVE- 24 in
+
+Every Garment goes through a thorough washing process before being photographed.
+
+Condition: excellent, with a small mark on the left cuff.
+
+BUNDLE AND SAVE!!!!!!",1,Buy it Now,45.00,,FALSE,Not Hazmat,Excellent,12,ACD-7K2M9Q,https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/a.jpg,https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/b.jpg,https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/c.jpg,,,,,,,,,
+tees,,Faded Single Stitch Tee,Soft faded single stitch tee.,1,Buy it Now,,,FALSE,Not Hazmat,,,,https://cdn.example.com/storage/v1/object/public/product-images/user/sparse-1/a.jpg,,,,,,,,,,,",
+  "count": 2,
+  "filename": "whatnot-listings-2026-09-15.csv",
+  "mime": "text/csv;charset=utf-8",
+}
+`;

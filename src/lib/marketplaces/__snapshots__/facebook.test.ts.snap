@@ -1,0 +1,135 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`facebook format > golden — a fully populated listing 1`] = `
+{
+  "attributes": {
+    "age_group": "adult",
+    "availability": "in stock",
+    "gender": "male",
+    "google_product_category": "Apparel & Accessories > Clothing",
+    "id": "ACD-7K2M9Q",
+    "product_type": "Sweatshirt",
+  },
+  "brand": "Nike",
+  "category": "Apparel & Accessories > Clothing",
+  "color": "Grey",
+  "compareAtPrice": 60,
+  "condition": "used",
+  "description": "Vintage 90s Nike grey crewneck sweatshirt. Heavyweight brushed fleece with an embroidered swoosh on the chest and a boxy, cropped fit that sits right on the waist.
+
+✠ CHEST- 22 in
+
+✠ LENGTH- 27 in
+
+✠ SLEEVE- 24 in
+
+Every Garment goes through a thorough washing process before being photographed.
+
+Condition: excellent, with a small mark on the left cuff.
+
+BUNDLE AND SAVE!!!!!!",
+  "issues": [
+    {
+      "field": "category",
+      "fixKind": "category",
+      "level": "warning",
+      "marketplace": "facebook",
+      "message": "Category "sweatshirts" is not on Facebook's list — it will go out as "Apparel & Accessories > Clothing".",
+      "value": "sweatshirts",
+    },
+  ],
+  "marketplace": "facebook",
+  "photos": [
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/a.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/b.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/c.jpg",
+  ],
+  "price": 45,
+  "productGroupId": "grp-1",
+  "size": "L",
+  "sku": "ACD-7K2M9Q",
+  "tags": [],
+  "title": "Vintage 90s Nike Grey Embroidered Swoosh Crewneck Sweatshirt",
+}
+`;
+
+exports[`facebook format > golden — a sparse listing 1`] = `
+{
+  "attributes": {
+    "age_group": "adult",
+    "availability": "in stock",
+    "google_product_category": "Apparel & Accessories > Clothing",
+    "id": "sparse-1",
+    "product_type": "tees",
+  },
+  "brand": "Unbranded",
+  "category": "Apparel & Accessories > Clothing",
+  "color": "Forest Green",
+  "compareAtPrice": null,
+  "condition": null,
+  "description": "Soft faded single stitch tee.",
+  "issues": [
+    {
+      "field": "price",
+      "level": "error",
+      "marketplace": "facebook",
+      "message": "No price set — Facebook needs one.",
+    },
+    {
+      "field": "brand",
+      "level": "warning",
+      "marketplace": "facebook",
+      "message": "No brand set — Facebook will list it as "Unbranded".",
+    },
+    {
+      "field": "condition",
+      "fixKind": "condition",
+      "level": "error",
+      "marketplace": "facebook",
+      "message": "Condition "kinda beat up" is not one of new / refurbished / used — Facebook rejects the catalog row.",
+      "value": "kinda beat up",
+    },
+    {
+      "field": "category",
+      "fixKind": "category",
+      "level": "warning",
+      "marketplace": "facebook",
+      "message": "Category "tees" is not on Facebook's list — it will go out as "Apparel & Accessories > Clothing".",
+      "value": "tees",
+    },
+  ],
+  "marketplace": "facebook",
+  "photos": [
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/sparse-1/a.jpg",
+  ],
+  "price": null,
+  "productGroupId": "sparse-1",
+  "size": "M",
+  "sku": null,
+  "tags": [],
+  "title": "Faded Single Stitch Tee",
+}
+`;
+
+exports[`facebook serialize > golden — the catalog CSV 1`] = `
+{
+  "body": "id,title,description,availability,condition,price,link,image_link,brand,additional_image_link,google_product_category,color,size,gender,age_group,product_type
+ACD-7K2M9Q,Vintage 90s Nike Grey Embroidered Swoosh Crewneck Sweatshirt,"Vintage 90s Nike grey crewneck sweatshirt. Heavyweight brushed fleece with an embroidered swoosh on the chest and a boxy, cropped fit that sits right on the waist.
+
+✠ CHEST- 22 in
+
+✠ LENGTH- 27 in
+
+✠ SLEEVE- 24 in
+
+Every Garment goes through a thorough washing process before being photographed.
+
+Condition: excellent, with a small mark on the left cuff.
+
+BUNDLE AND SAVE!!!!!!",in stock,used,45.00 USD,,https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/a.jpg,Nike,"https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/b.jpg,https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/c.jpg",Apparel & Accessories > Clothing,Grey,L,male,adult,Sweatshirt
+sparse-1,Faded Single Stitch Tee,Soft faded single stitch tee.,in stock,,,,https://cdn.example.com/storage/v1/object/public/product-images/user/sparse-1/a.jpg,Unbranded,,Apparel & Accessories > Clothing,Forest Green,M,,adult,tees",
+  "count": 2,
+  "filename": "facebook-catalog-2026-09-15.csv",
+  "mime": "text/csv;charset=utf-8",
+}
+`;

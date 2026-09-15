@@ -1,0 +1,112 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`grailed format > golden — a fully populated listing 1`] = `
+{
+  "attributes": {
+    "Department": "Menswear",
+    "Designer": "Nike",
+    "Era": "90s",
+    "Material": "80% cotton, 20% polyester",
+  },
+  "brand": "Nike",
+  "category": "sweatshirts",
+  "color": "Grey",
+  "compareAtPrice": 60,
+  "condition": "Gently used",
+  "description": "Vintage 90s Nike grey crewneck sweatshirt. Heavyweight brushed fleece with an embroidered swoosh on the chest and a boxy, cropped fit that sits right on the waist.
+
+✠ CHEST- 22 in
+
+✠ LENGTH- 27 in
+
+✠ SLEEVE- 24 in
+
+Every Garment goes through a thorough washing process before being photographed.
+
+Condition: excellent, with a small mark on the left cuff.
+
+BUNDLE AND SAVE!!!!!!",
+  "issues": [
+    {
+      "field": "brand",
+      "fixKind": "brand",
+      "level": "warning",
+      "marketplace": "grailed",
+      "message": "Brand "Nike" is not confirmed for Grailed — map it once so every listing matches their picker.",
+      "value": "Nike",
+    },
+    {
+      "field": "category",
+      "fixKind": "category",
+      "level": "warning",
+      "marketplace": "grailed",
+      "message": "Category "sweatshirts" is not on Grailed's list — it will go out as "sweatshirts".",
+      "value": "sweatshirts",
+    },
+  ],
+  "marketplace": "grailed",
+  "photos": [
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/a.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/b.jpg",
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/grp-1/c.jpg",
+  ],
+  "price": 45,
+  "productGroupId": "grp-1",
+  "size": "L",
+  "sku": "ACD-7K2M9Q",
+  "tags": [],
+  "title": "Vintage 90s Nike Grey Embroidered Swoosh Crewneck Sweatshirt",
+}
+`;
+
+exports[`grailed format > golden — a sparse listing 1`] = `
+{
+  "attributes": {},
+  "brand": null,
+  "category": "tees",
+  "color": "Forest Green",
+  "compareAtPrice": null,
+  "condition": null,
+  "description": "Soft faded single stitch tee.",
+  "issues": [
+    {
+      "field": "price",
+      "level": "error",
+      "marketplace": "grailed",
+      "message": "No price set — Grailed needs one.",
+    },
+    {
+      "field": "brand",
+      "level": "warning",
+      "marketplace": "grailed",
+      "message": "No brand set — Grailed needs one.",
+    },
+    {
+      "field": "condition",
+      "fixKind": "condition",
+      "level": "warning",
+      "marketplace": "grailed",
+      "message": "Condition "kinda beat up" is not one of Grailed's grades (New / Gently used / Used / Very worn) — map it once.",
+      "value": "kinda beat up",
+    },
+    {
+      "field": "category",
+      "fixKind": "category",
+      "level": "warning",
+      "marketplace": "grailed",
+      "message": "Category "tees" is not on Grailed's list — it will go out as "tees".",
+      "value": "tees",
+    },
+  ],
+  "marketplace": "grailed",
+  "photos": [
+    "https://cdn.example.com/storage/v1/object/public/product-images/user/sparse-1/a.jpg",
+  ],
+  "price": null,
+  "productGroupId": "sparse-1",
+  "size": "M",
+  "sku": null,
+  "tags": [],
+  "title": "Faded Single Stitch Tee",
+}
+`;
