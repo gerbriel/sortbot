@@ -1,0 +1,273 @@
+/* ── Shortcuts panel ──────────────────────────────────────────────────────────
+   The bottom-LEFT floating control, deliberately the mirror of SupportWidget
+   (bottom-right): same FAB geometry, same shadow, same z-layer, same
+   --tabbar-h lift on phones. Toasts stack top-right; these two own the bottom
+   corners and nothing else does.
+
+   z 5000 matches the support widget — above every modal (1000–3000) so the
+   shortcut list is reachable from any screen. It replaces the old
+   .button-debug-toggle, which sat at 9999 for no reason anyone recorded.
+
+   Every colour is a token. The panel is a lifted white surface like the app's
+   other popovers (§1: on this light theme, elevation moves TOWARD white). */
+
+.ks-root {
+  position: fixed;
+  left: 1.75rem;
+  bottom: 1.75rem;
+  z-index: 5000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  pointer-events: none;
+}
+.ks-root > * { pointer-events: auto; }
+
+/* ── The gear ─────────────────────────────────────────────────────────────── */
+.ks-fab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: var(--ink-950);
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  transition: transform var(--ease, 0.15s), box-shadow 0.15s;
+}
+.ks-fab:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22); }
+.ks-fab--open { background: var(--ink-700); color: var(--text-primary); box-shadow: none; }
+/* The gear should look like it turned the panel open. */
+.ks-fab--open .lucide { transform: rotate(45deg); transition: transform 0.15s; }
+
+/* ── The panel ────────────────────────────────────────────────────────────── */
+.ks-panel {
+  width: min(360px, calc(100vw - 2rem));
+  max-height: min(560px, calc(100vh - 8rem));
+  display: flex;
+  flex-direction: column;
+  background: var(--ink-800);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+.ks-panel:focus { outline: none; }
+
+.ks-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.7rem 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--ink-850);
+}
+.ks-head strong { font-size: var(--fs-md); color: var(--text-primary); }
+
+.ks-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.ks-icon-btn:hover { background: var(--ink-750); color: var(--text-primary); }
+
+/* KEPT scroller (report 36): a floating popover is not part of the page flow,
+   and the list outgrows a phone. `contain` stops a flick inside the list from
+   chaining into the page behind it. */
+.ks-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.5rem 0.75rem 0.25rem;
+}
+
+.ks-group { margin-bottom: 0.65rem; }
+.ks-group:last-of-type { margin-bottom: 0.25rem; }
+
+.ks-group-title {
+  margin: 0 0 0.35rem;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.ks-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.22rem 0;
+}
+
+.ks-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex-shrink: 0;
+  min-width: 6.5em;
+}
+
+.ks-keys kbd {
+  display: inline-block;
+  padding: 0.1rem 0.35rem;
+  border-radius: 5px;
+  border: 1px solid var(--border-control);
+  border-bottom-width: 2px;
+  background: var(--ink-850);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  line-height: var(--lh-tight, 1.2);
+  white-space: nowrap;
+  /* Single-glyph keys — "." and "0" especially — otherwise render as a chip
+     barely wider than its border and stop reading as a key at all. */
+  min-width: 1.5em;
+  text-align: center;
+}
+
+.ks-action {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug, 1.35);
+  color: var(--text-secondary);
+}
+
+.ks-when { color: var(--text-muted); font-style: italic; }
+
+.ks-footnote {
+  margin: 0.35rem 0 0;
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-snug, 1.35);
+  color: var(--text-muted);
+}
+
+/* ── Debug row ────────────────────────────────────────────────────────────── */
+.ks-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--ink-850);
+}
+
+.ks-foot-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.ks-switch {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--border-control);
+  background: var(--ink-700);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+/* Centred by transform rather than a hand-computed `top`, so the phone rule
+   below only has to change three numbers and the knob stays on the axis. */
+.ks-switch-knob {
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transform: translateY(-50%);
+  transition: transform 0.15s, background 0.15s;
+}
+
+/* On = amber, the same "debug is live" signal the old floating button used. */
+.ks-switch--on { background: var(--warning-dim); border-color: var(--warning); }
+.ks-switch--on .ks-switch-knob { transform: translate(14px, -50%); background: var(--warning); }
+
+/* ── Phone (≤640px) ───────────────────────────────────────────────────────────
+   Same two problems SupportWidget solves on the other side of the screen: the
+   fixed tab bar owns the bottom strip, so the FAB lifts by --tabbar-h (which
+   already carries the home-indicator inset), and a floating card is not a phone
+   UI — the panel becomes a full-screen sheet with the FAB hidden behind it.
+
+   Unlike the debug button this replaces, the gear is NOT hidden at this width:
+   the shortcut list is the only place the app explains itself, and the debug
+   switch now lives inside it. */
+@media (max-width: 640px) {
+  .ks-root {
+    left: 0.75rem;
+    right: 0.75rem;
+    /* --dock-h is Step 3's sticky nav bar (published on .app-container by
+       ProductDescriptionGenerator.tsx, 0 whenever that bar is not on screen).
+       Without it this button lands on top of Prev / Next / Save, which share
+       the same strip of a phone screen. Same additive contract as --tabbar-h:
+       this rule does not need to know which surface is below it. */
+    bottom: calc(0.75rem + var(--tabbar-h) + var(--dock-h, 0px));
+  }
+
+  .ks-fab {
+    width: var(--tap);
+    height: var(--tap);
+  }
+
+  .ks-fab--open { display: none; }
+
+  .ks-panel {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    /* dvh, not vh: vh measures the LARGEST viewport, so a 100vh sheet hides its
+       own footer behind Safari's toolbar for as long as that toolbar shows. */
+    height: 100dvh;
+    max-height: none;
+    border: none;
+    border-radius: 0;
+  }
+
+  /* Standalone/PWA mode has no browser chrome above the sheet. */
+  .ks-head {
+    padding-top: calc(0.7rem + var(--safe-t));
+    padding-left: max(0.75rem, var(--safe-l));
+    padding-right: max(0.75rem, var(--safe-r));
+  }
+
+  .ks-foot {
+    padding-bottom: calc(0.55rem + var(--safe-b));
+    padding-left: max(0.75rem, var(--safe-l));
+    padding-right: max(0.75rem, var(--safe-r));
+  }
+
+  /* The global ≤640 rule can only set min-height; a 28px-wide button is still
+     28px wide. Square the icon and switch targets. */
+  .ks-icon-btn { width: var(--tap); height: var(--tap); }
+  .ks-switch { width: 48px; height: 28px; }
+  .ks-switch-knob { width: 20px; height: 20px; }
+  .ks-switch--on .ks-switch-knob { transform: translate(24px, -50%); }
+
+  /* Rows are the content here — give them phone-legible type. */
+  .ks-action { font-size: var(--fs-sm); }
+  .ks-keys kbd { font-size: var(--fs-xs); }
+  .ks-body { padding-left: max(0.75rem, var(--safe-l)); padding-right: max(0.75rem, var(--safe-r)); }
+}

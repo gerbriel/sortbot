@@ -129,7 +129,12 @@ const VoiceCommandTable: React.FC<VoiceCommandTableProps> = ({
       {ROWS.map((cols, rowIdx) => (
         <div key={rowIdx} className="vct-row-group">
           <div className="vct-row-label">{ROW_LABELS[rowIdx]}</div>
-          <div className="vct-grid" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(90px, 1fr))` }}>
+          {/* minmax(0, …) not minmax(90px, …): a 90px floor made five columns
+              demand 450px, which the grid answered with its own horizontal
+              scrollbar — and an overflow-x box is an overflow-y box too, so the
+              table quietly became a scroller inside the page scroller (report
+              36). Equal shrinking columns keep the page the only scroller. */}
+          <div className="vct-grid" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))` }}>
             {cols.map(col => {
               const isActive = activeField === col.key;
               const rawValue = col.getValue(currentItem);

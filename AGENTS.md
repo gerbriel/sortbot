@@ -305,7 +305,7 @@ Coverage by area:
 |---|---|---|---|
 | `VITE_SUPABASE_URL` | **Required** | `src/lib/supabase.ts` line 3 | Supabase project URL. Throws hard error on load if missing. |
 | `VITE_SUPABASE_ANON_KEY` | **Required** | `src/lib/supabase.ts` line 4 | Supabase anon/public API key. Throws hard error on load if missing. |
-| `VITE_STORAGE_LIMIT_GB` | Optional | `src/App.tsx` (storage meter) | Denominator for the storage usage meter. Defaults to `100` (Pro plan) if unset. Set to `1` for free tier. |
+| `VITE_STORAGE_LIMIT_GB` | Optional | `src/App.tsx` (passed to the workspace menu's Storage row) | Denominator for the storage usage meter. Defaults to `100` (Pro plan) if unset. Set to `1` for free tier. |
 
 **THOSE THREE ARE THE ONLY VARIABLES.** `.env.example` lists exactly them. `VITE_OPENAI_API_KEY`, `VITE_GOOGLE_VISION_API_KEY`, `VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_API_KEY`, `VITE_APP_PASSWORD` and `VITE_DISABLE_AUTH` are **gone** — the Sept 2026 dead-code deletion removed the last files that read any of them (`src/services/api.ts`, `src/components/AISettings.tsx`), and they were dropped from `.env.example`. **There is no third-party API key anywhere in this app**, which is also why `script-src 'self'` in the CSP (§9) is provable: no remote script, no vendor SDK. Do not re-add one without reading §18 #18.
 
@@ -918,6 +918,20 @@ copy points at them.
 - **Rubber-band selection is left mouse-only** and needs no guard: a tap fires one
   `mousedown`/`mouseup` at the same point and never meets the drag threshold.
 
+.grouper-scroll-content            (the scroll box, max-height 75vh)
+└── .grouper-toolbar               ← position: sticky; top: 0; z-index: 60
+    ├── .gtb-row.gtb-row--controls  IDLE — always on, ONE line ≥ 1024px:
+    │                               Filter ▾ │ View ▾ │ photos-per-item + Apply + Pick │ Pick photos │ (N selected · Undo · Redo, trailing)
+    │                               Filter ▾ popover: Show (groups/singles) · Date · Category chips · Clear filters
+    │                               View ▾ popover:  Sort (4 options) · Columns slider · Storage (clear ALL originals, only with nothing selected)
+    │                               Both panels are children of .grouper-toolbar, NEVER portaled — that
+    │                               selector is on the click-outside-deselect safe list, so a portaled
+    │                               panel would wipe the selection on every click inside it.
+    └── .gtb-row.photo-toolbar      CONTEXTUAL — rendered ONLY when something is selected or a rotation/crop is copied:
+                                    rotate │ copy rot/crop │ paste │ revert │ delete │ clear N selected originals
+├── .singles-section
+└── .groups-section
+
 ### Step 3: Voice Descriptions & AI Generation
 **Files:** `ProductDescriptionGenerator.tsx` (~3675 lines), `lib/voiceGrammar.ts`, `textAIService.ts`, `ComprehensiveProductForm.tsx`
 
@@ -978,6 +992,21 @@ copy points at them.
   grid template is set inline as `repeat(N, minmax(90px, 1fr))`, so a 5-column row demanded
   450px on a 390px screen (`!important` is the only way to beat an inline style).
 - **Form section sub-headers are deliberately NOT sticky** — see §14.
+
+- **Step 3 has exactly one scroller: the page.** `.product-preview` is a transparent
+  content-height column (the card chrome lives on `.preview-scroll-area`), `.preview-nav-dock` is
+  the sticky element that keeps Prev/Next on screen, and the three big textareas
+  (dictation, generated description, SEO description) carry `js-autogrow` — an effect in
+  `ProductDescriptionGenerator.tsx` sets each one's height to `scrollHeight + (offsetHeight -
+  clientHeight)` after every render. Do NOT add `overflow-y: auto`, a `max-height`, or a `rows`-sized
+  textarea to anything inside `.product-description-container`: a nested scroller captures the
+  wheel and latches, which is the bug report #36 fixed. And remember `overflow-x: auto` makes a box
+  scrollable on BOTH axes — pin the other axis explicitly. The only scrollers that may stay are
+  ones that are not in page flow (the crop modal's ratio rail, the preset listbox, the shortcuts
+  panel body), and each must carry `overscroll-behavior: contain`.
+- **Keyboard shortcuts are DATA, in `src/lib/keyboardShortcuts.ts`.** Any handler that binds a key
+  must add its row there or the shortcut is invisible to users — `ShortcutsPanel` is the only place
+  the app lists them. Keys are written with `⌘`; `platformKeys()` substitutes `Ctrl`.
 
 ### Step 4: Save & Export
 **Files:** `App.tsx:handleSaveBatch`, `productService.ts:saveBatchToDatabase`, `GoogleSheetExporter.tsx`
@@ -1651,6 +1680,74 @@ Two migrations are written and NOT run (§16), and one one-off data repair is ow
 - **One save indicator for the whole app** (`src/lib/saveStatusStore.ts`) — the third dependency-free `useSyncExternalStore` store, written by one pass and consumed by another so the two could not drift. Ref-counted, errors sticky until the next success, `reset()` on sign-out / batch delete / clear batch. App's `workflow_state` auto-save, the `products.product_group` mirror upsert, Save Batch (a **partial** save reports as an error), Step 3's two debounced writes, its unmount flush, its keepalive unload flush and the Save button all report into it; the three teardown paths are disjoint by construction so nothing double-reports (§8).
 
 - ✅ **Navigation consolidated into the workspace menu (Sept 2026)** — the header's ELEVEN tool buttons (which wrapped onto a second line), the tablet `NavRail` and the phone More sheet are all gone; the header is a wordmark plus the workspace trigger at every width, and every destination is a row in `WorkspaceMenu`: identity, "Back to workflow" (only inside a tool view), then Work (Library/Labels/Scan/Inbox) · Setup (Categories/Presets/Workspace dashboard) · Founder (Vocabulary/Analytics/CRM/Finance/Board), then Sign out. ONE `navItems` list in App.tsx feeds it, so a role gate is declared once. Full menu semantics: `aria-haspopup="menu"`/`aria-expanded` trigger, `role="menu"`/`menuitem`/`separator`, roving Arrow/Home/End with wrap, Escape restores focus to the opener, Tab and outside-press dismiss, keyboard opens focus the first row and pointer opens do not. The unread count rides the trigger AND the Inbox row. THREE THINGS ARE LOAD-BEARING: it is portaled to `<body>` (the header is a `z-index:100` stacking context, so an in-place bottom sheet would paint under the tab bar — the portal also removes the need for the old `.app-header .wsmenu-menu` colour opt-outs); its desktop anchor is passed as `--wsmenu-top`/`--wsmenu-right` custom properties, never inline `top`/`right`, or it would outrank the ≤640px sheet rules; and it carries `data-tv-modal` so ToolView's document-level Escape-to-workflow stays parked while the menu is open. The phone tab bar keeps Workflow/Library/Messages and its More tab opens this same component (`navMenuOpen` lifted into App) — one component, one list. `toggleView`, `MessagesNavButton`, `NavRail`, `NavTool`, `mobileTools`, `.nav-tool-btn*`, `.nav-rail*` and `.nav-sheet*` were all deleted. Verified by injecting the rendered markup into the live landing page at 1280/820/390/360 and by a 7-case keyboard suite on the in-house test harness (docs/reviews/14-nav-menu.md).
+
+
+`.grouper-header` no longer exists in the DOM, so it is inert — but it should be
+deleted with its comment on the next App.css pass.
+
+---
+
+## 5. Paste-ready AGENTS.md lines
+
+### §10 — Step 2: Group & Categorize → replace the "Multi-image groups display as a card" bullet and its neighbours
+- ✅ **Step 3 nested scrollers removed (report 36)** — the left preview column's
+  `height: calc(100vh - 160px)` + `overflow-y: auto` card, `.vct-grid`'s `overflow-x: auto` (which
+  silently made it a VERTICAL scroll container too), and the three `rows`-sized textareas are gone;
+  the page is the only scroller in Step 3. `.preview-nav-dock` became the sticky element and, because
+  its parent column stretches to the grid row, now pins Prev/Next for the whole form instead of one
+  viewport. Kept, each with `overscroll-behavior: contain`: the crop modal's horizontal ratio rail,
+  the preset listbox, the shortcuts panel body. Voice-table columns are `minmax(0, 1fr)`; verified no
+  scroll container and no horizontal page overflow at 390/950/1024/1280.
+- ✅ **ShortcutsPanel — bottom-left gear FAB** (`components/ShortcutsPanel.tsx`) — mirrors
+  SupportWidget's FAB on the opposite corner (44px, same shadow, `--tabbar-h` lift, full-screen
+  sheet ≤640px) and expands a panel listing `lib/keyboardShortcuts.ts` grouped by scope, with
+  `Ctrl` substituted for `⌘` off Apple platforms. Escape / outside-click close, `aria-expanded`,
+  focus returns to the FAB. **The floating debug toggle is gone** — it is a switch at the bottom of
+  this panel running the same handler, so the corner holds one control and the switch works on a
+  phone (`.button-debug-toggle` / `.button-debug-on` deleted from App.css). The shortcut list was
+  corrected against the handlers: Enter is Step 3's record toggle (was missing), the lightbox arrows
+  are global (Step 2 binds them too), and `.` / `⌘A` / `⌘⇧A` carry their conditions.
+- ✅ **Step 2 count chips removed; storage meter moved into the workspace menu (Sept 2026)** — the four
+  toolbar chips (groups / singles / listings / photos) are gone at the user's request; the section
+  headings ("Individual Items (287)", "Product Groups (21)") already carry those numbers. What is left of
+  the `.stats` block — the "N selected" chip and Undo/Redo — now sits at the END of the controls row
+  (`.stats--trailing`, `margin-left: auto`) so it can appear and vanish without shifting the sort and
+  filter controls. The always-on storage bar under the header is gone too: the same figures (used /
+  limit, %, file count, "Almost full") are ONE row at the top of `WorkspaceMenu` (`WorkspaceStorage`
+  prop, `.wsmenu-storage*`), and the whole row is the Refresh action — `role="menuitem"`, so it is in
+  the arrow-key order; the figures are `aria-hidden` and restated in the row's accessible name. The
+  menu stays open on refresh so the update is seen. `fetchStorageUsage` still runs on sign-in, after an
+  upload and after a batch delete, exactly as before — only the surface moved. The pre-2026 Step-1
+  meter styles in `ImageUpload.css` (dead since `c7c6538`) and the `.storage-meter-nav*` rules in
+  `App.css` were deleted with it.
+- ✅ **Step 2 toolbar condensed to ONE idle line (Sept 2026)** — the founder's report was that it
+  "is too cluttered". It was: ~20 always-visible controls over two rows, measuring **131px** at 1280
+  (the sort quartet, the view toggles, the date select, one chip per category, a duplicate
+  photos-per-item slider, the columns slider, and the whole photo-tools row whether or not anything
+  was selected). It is now **34px** — one line, zero wrapping, inside the 873px left column of
+  `.step2-split` at 1280, which is the narrowest desktop case and exactly where the old bar wrapped.
+  Two things bought it. **(1) Two popovers**: `Filter ▾` (Show / Date / Category chips / Clear
+  filters, with the active-filter count on the trigger) and `View ▾` (the four sort choices as a
+  radio list with a `Check` on the active one, the columns slider, and a Storage footer holding the
+  clear-ALL-originals action, shown only when nothing is selected). One `openPanel` state, closed by
+  outside `mousedown` and by Escape (which returns focus to its trigger); toggling a chip does NOT
+  close the panel, because people toggle several. **(2) The photo-tools row is CONTEXTUAL** — not
+  rendered at all unless `selectedItems.size > 0` or a rotation/crop is copied, so the idle toolbar
+  has no second row to wrap. `Pick photos` moved up into the idle row, since it is the gate that
+  produces a selection. Only the duplicate photos-per-item range slider was actually DELETED (the
+  number input is the only setter now; ⌘ 1–9 / ⌘ 0 still write it); everything else moved.
+  **THE PANELS ARE NOT PORTALED, DELIBERATELY** — `.grouper-toolbar` is on the click-outside-deselect
+  safe list in `ImageGrouper.tsx`, so a portaled panel would sit outside it and wipe the user's
+  selection on every click inside the panel. On a phone the wrap goes `position: static` so the panel
+  anchors to `.grouper-toolbar` and spans it, which is also how it escapes the row's own horizontal
+  scroller (an absolutely positioned box whose containing block is OUTSIDE an overflow ancestor is not
+  clipped by it); the row's edge-fade `mask-image` would still clip it — a mask groups every
+  descendant — so `.gtb-row--panel-open` drops the mask while a panel is open. No handler, state
+  name, enable rule, keyboard shortcut, pick-mode or auto-group semantic changed. Measured: 34px at
+  1280-split (one line, `scrollWidth === clientWidth`), 44px at 700/768/1024, 52px at 390 where it is
+  still the sideways scroll-snap strip with every target ≥ 44px, every form control at 16px and
+  `documentElement.scrollWidth === clientWidth`. Screenshots and the full accounting are in
+  `docs/reviews/17-step2-toolbar-condensed.md`.
 
 ---
 

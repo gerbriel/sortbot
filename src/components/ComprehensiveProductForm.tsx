@@ -307,7 +307,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
         <div className="fields-row">
           <div className="info-item fields-row--span2">
             <label>SEO Description:</label>
-            <textarea value={currentItem.seoDescription || ''} onChange={(e) => updateGroupField('seoDescription', e.target.value)} placeholder="Meta description for search engines" className={`info-input${req(currentItem.seoDescription)}`} rows={2} />
+            <textarea value={currentItem.seoDescription || ''} onChange={(e) => updateGroupField('seoDescription', e.target.value)} placeholder="Meta description for search engines" className={`info-input js-autogrow${req(currentItem.seoDescription)}`} rows={2} />
           </div>
           <div className="info-item">
             <label>Size Type: <PresetBadge show={isFromPreset('sizeType')} /></label>

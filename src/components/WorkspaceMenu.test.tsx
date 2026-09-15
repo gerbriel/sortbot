@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { act, useState } from 'react';
 import { mount, cleanup, keyDown, one, all } from './ui/testUtils';
-import WorkspaceMenu, { type WorkspaceNavItem } from './WorkspaceMenu';
+import WorkspaceMenu, { type WorkspaceNavItem, type WorkspaceStorage } from './WorkspaceMenu';
 
 afterEach(cleanup);
 
@@ -12,7 +12,12 @@ const items: WorkspaceNavItem[] = [
   { id: 'crm', label: 'CRM', icon: null, title: 'x', group: 'founder' },
 ];
 
-function Harness(p: { activeView?: string; onSelect?: (id: string, o: HTMLElement | null) => void; back?: boolean }) {
+function Harness(p: {
+  activeView?: string;
+  onSelect?: (id: string, o: HTMLElement | null) => void;
+  back?: boolean;
+  storage?: WorkspaceStorage | null;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <WorkspaceMenu
@@ -21,6 +26,7 @@ function Harness(p: { activeView?: string; onSelect?: (id: string, o: HTMLElemen
       unreadCount={3} showBackToWorkflow={p.back ?? false}
       onSelect={p.onSelect ?? (() => {})} onSignOut={() => {}}
       open={open} onOpenChange={setOpen}
+      storage={p.storage ?? null}
     />
   );
 }
@@ -129,5 +135,72 @@ describe('WorkspaceMenu', () => {
     press(t, 1);
     keyDown('Tab', document.body);
     expect(pop()).toBeNull();
+  });
+
+  /* The storage meter used to be a bar under the header; it is a row here now.
+     The whole row is the Refresh action, it is FIRST in the roving order, and
+     its accessible name says everything the aria-hidden figures show. */
+  describe('storage row', () => {
+    const GB = 1024 ** 3;
+    const base: WorkspaceStorage = {
+      usedBytes: 3.23 * GB, fileCount: 8546, loading: false, limitGb: 100, onRefresh: () => {},
+    };
+
+    it('is absent without the prop and first in the menu with it', () => {
+      const a = mount(<Harness back />);
+      press(one(a.container, '.wsmenu-trigger'), 1);
+      expect(document.querySelector('.wsmenu-storage')).toBeNull();
+      a.unmount();
+
+      const b = mount(<Harness back storage={base} />);
+      press(one(b.container, '.wsmenu-trigger'), 1);
+      const row = one(document, '.wsmenu-storage');
+      expect(menuitems()[0]).toBe(row);
+      expect(menuitems()[1].textContent).toContain('Back to workflow');
+      expect(row.getAttribute('aria-label')).toBe('Storage: 3.23 GB of 100 GB used (3%), 8,546 files. Refresh');
+      expect(row.className).toContain('wsmenu-storage--success');
+      expect(one(row, '.wsmenu-storage-fill').getAttribute('style')).toContain('width: 3.2%');
+      expect(row.textContent).toContain('8,546 files');
+      expect(row.textContent).not.toContain('Almost full');
+    });
+
+    it('clicking refreshes and keeps the menu open; a read in flight is not re-fired', () => {
+      const onRefresh = vi.fn();
+      const a = mount(<Harness storage={{ ...base, onRefresh }} />);
+      press(one(a.container, '.wsmenu-trigger'), 1);
+      press(one(document, '.wsmenu-storage'), 1);
+      expect(onRefresh).toHaveBeenCalledTimes(1);
+      expect(pop()).toBeTruthy();
+      a.unmount();
+
+      const again = vi.fn();
+      const b = mount(<Harness storage={{ ...base, loading: true, onRefresh: again }} />);
+      press(one(b.container, '.wsmenu-trigger'), 1);
+      const row = one(document, '.wsmenu-storage');
+      expect(row.getAttribute('aria-busy')).toBe('true');
+      expect(row.className).toContain('wsmenu-storage--busy');
+      // Figures are kept while it re-reads — no "Calculating…" flash.
+      expect(row.getAttribute('aria-label')).toContain('3.23 GB of 100 GB');
+      press(row, 1);
+      expect(again).not.toHaveBeenCalled();
+    });
+
+    it('states calculating on the first read and flags almost-full past 85%', () => {
+      const a = mount(<Harness storage={{ ...base, usedBytes: 0, fileCount: 0, loading: true }} />);
+      press(one(a.container, '.wsmenu-trigger'), 1);
+      let row = one(document, '.wsmenu-storage');
+      expect(row.getAttribute('aria-label')).toBe('Storage: calculating. Refresh');
+      expect(row.textContent).toContain('Calculating…');
+      expect(row.textContent).not.toContain('files');
+      a.unmount();
+
+      const b = mount(<Harness storage={{ ...base, usedBytes: 91 * GB }} />);
+      press(one(b.container, '.wsmenu-trigger'), 1);
+      row = one(document, '.wsmenu-storage');
+      expect(row.className).toContain('wsmenu-storage--danger');
+      expect(row.textContent).toContain('Almost full');
+      expect(row.getAttribute('aria-label')).toContain('(91%), 8,546 files, almost full');
+      expect(one(row, '.wsmenu-storage-fill').getAttribute('style')).toContain('width: 91.0%');
+    });
   });
 });

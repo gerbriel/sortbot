@@ -275,6 +275,15 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // One paste batch at a time — the button stays reachable while a run drains.
   const cropPasteRunningRef = useRef(false);
 
+  /** Step 3's root element — the search scope for the auto-growing textareas. */
+  const step3RootRef = useRef<HTMLDivElement | null>(null);
+
+  /* The sticky phone nav bar. A state-backed ref callback rather than a useRef,
+     because the effect that measures it has to re-run when it mounts — and it
+     mounts AFTER the `!currentItem` early return below, so a plain ref would
+     still be null the one time the effect ran. */
+  const [navDockEl, setNavDockEl] = useState<HTMLDivElement | null>(null);
+
   // Magnifier state — cursor-following zoom lens on main preview image
   const [magnifier, setMagnifier] = useState<{ src: string; x: number; y: number; bgX: number; bgY: number } | null>(null);
   const mainPreviewRef = useRef<HTMLDivElement | null>(null);
@@ -2366,6 +2375,73 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     return () => clearTimeout(t);
   }, [currentItem?.seoTitle, currentItem?.id]);
 
+  // ── Auto-growing textareas (report 36) ───────────────────────────────────
+  // A <textarea> with a `rows` height is a scroll container: the dictation box
+  // held 8 rows and scrolled inside itself, so a wheel gesture that landed on it
+  // moved the transcript instead of the page — the "hard time scrolling in the
+  // dictation area" report. Every textarea marked `js-autogrow` is resized to
+  // its own content instead, which leaves the page as Step 3's only scroller.
+  //
+  // No dependency array on purpose: the values live in store-derived props, the
+  // elements mount and unmount with the recording mode toggle and the preset
+  // popover, and a re-measure is only ever correct AFTER the DOM React just
+  // produced. Three elements, one forced reflow each — cheaper than the render
+  // that scheduled it.
+  useEffect(() => {
+    const root = step3RootRef.current;
+    if (!root) return;
+    root.querySelectorAll<HTMLTextAreaElement>('textarea.js-autogrow').forEach((el) => {
+      el.style.height = 'auto';
+      // scrollHeight measures the CONTENT box. `box-sizing: border-box` is global
+      // here, so the height property must also carry the borders — without the
+      // offsetHeight/clientHeight difference every textarea clips its last 2px
+      // (measured: a 320px description rendered into a 318px content box).
+      el.style.height = `${el.scrollHeight + (el.offsetHeight - el.clientHeight)}px`;
+    });
+  });
+
+  // ── --dock-h: the screen the sticky phone nav bar is occupying ───────────
+  // Phones pin a floating button in each bottom corner — the shortcuts gear on
+  // the left, the support pill on the right — and this dock spans the full
+  // width between them at the same height, so without this they sit on top of
+  // Prev / Next / Save. Published exactly the way `--tabbar-h` is (index.css):
+  // ONE number on .app-container that every bottom-anchored surface adds, so
+  // neither FAB has to know what a dock is.
+  //
+  // Reserving horizontal room in the dock instead was the other option, and it
+  // does not survive the measurements: the support FAB is a 105px labelled pill
+  // (the label is a deliberate call in SupportWidget.css) against the gear's
+  // 44px, so the two lanes would take 137px of the dock's 356px inner width,
+  // asymmetrically, and leave Prev/Next at ~76px.
+  //
+  // IntersectionObserver, not just a height read: every step is mounted at once,
+  // so the dock exists in the DOM while the user is up in Step 1 or 2 — but a
+  // `position: sticky` bar is only PAINTED while its containing block is on
+  // screen. Lifting the buttons over a bar that isn't there would be its own
+  // bug. Above 640px the dock is `display: contents` and has no box, so
+  // offsetHeight is 0 and the whole thing is inert.
+  useEffect(() => {
+    const host = document.querySelector<HTMLElement>('.app-container');
+    if (!navDockEl || !host) return;
+    const publish = (onScreen: boolean) => {
+      const h = onScreen ? navDockEl.offsetHeight : 0;
+      host.style.setProperty('--dock-h', `${h}px`);
+    };
+    const io = new IntersectionObserver(([entry]) => publish(entry.isIntersecting), { threshold: 0 });
+    io.observe(navDockEl);
+    // Orientation change / keyboard open resizes the bar without moving it.
+    const onResize = () => {
+      const r = navDockEl.getBoundingClientRect();
+      publish(r.bottom > 0 && r.top < window.innerHeight);
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      io.disconnect();
+      window.removeEventListener('resize', onResize);
+      host.style.removeProperty('--dock-h');
+    };
+  }, [navDockEl]);
+
   // Guard: no items ready yet (nothing categorized)
   // NOTE: This must come AFTER all hook declarations above (React rules of hooks)
   if (!currentItem) {
@@ -2506,7 +2582,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
 
   return (
-    <div className="product-description-container">
+    <div className="product-description-container" ref={step3RootRef}>
       <div className="progress-bar">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           <span>Product Group {currentGroupIndex + 1} of {groupArray.length}</span>
@@ -2549,7 +2625,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               The dock wrapper is `display: contents` above 640px, so on desktop
               it generates no box at all and the layout is exactly as before; on a
               phone it becomes the fixed bottom bar. */}
-          <div className="preview-nav-dock">
+          <div className="preview-nav-dock" ref={setNavDockEl}>
           <div className="preview-nav-controls">
             <button
               className="button button-secondary"
@@ -3133,7 +3209,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     }}
                     placeholder={"Start Recording and speak...\n\nNo 'period' needed — the next field name ends the one before it:\n  brand Nike size large price forty\n  chest 38 waist 32 sleeve 25\n\nFor a free-form description, say 'period' (or press .) when you're done:\n  description super soft faded boxy fit period"}
                     rows={8}
-                    className="description-textarea"
+                    className="description-textarea js-autogrow"
                     style={{ flex: 1, minWidth: 0 }}
                     onKeyDown={(e) => e.stopPropagation()}
                   />
@@ -3221,7 +3297,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   });
                   setProcessedItems(updated);
                 }}
-                className="info-textarea"
+                className="info-textarea js-autogrow"
                 rows={6}
                 style={{ width: '100%' }}
                 onKeyDown={(e) => e.stopPropagation()}
@@ -3417,7 +3493,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                         position: 'absolute', top: 'calc(100% + 2px)', left: 0, right: 0,
                         background: 'var(--ink-800)', border: '1px solid var(--border)', borderRadius: '6px',
                         boxShadow: 'var(--shadow-lg)', zIndex: 200,
-                        maxHeight: '240px', overflowY: 'auto',
+                        /* KEPT scroller (report 36): a floating listbox, not part
+                           of the page flow — uncapped it would cover the form
+                           with every preset in the workspace. `contain` stops a
+                           flick inside it from scrolling the page underneath. */
+                        maxHeight: '240px', overflowY: 'auto', overscrollBehavior: 'contain',
                       }}>
                         {filtered.length === 0 && (
                           <div style={{ padding: '0.6rem 0.9rem', color: 'var(--text-muted)', fontSize: 'var(--fs-sm)' }}>No presets match</div>

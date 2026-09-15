@@ -73,30 +73,39 @@
   margin-bottom: var(--space-6);
 }
 
-/* Product Preview Card */
+/* ── Left preview column (report 36: THE PAGE IS STEP 3's ONLY SCROLLER) ─────
+   This used to be `height: calc(100vh - 160px)` with an `overflow-y: auto`
+   child, i.e. a scroller inside the page scroller. A wheel or touch gesture
+   that landed on the image or the thumbnail grid was captured by that inner box
+   and the page underneath would not move until the inner box hit its end — the
+   "can't scroll past the scroll area" report.
+
+   It is now a transparent, content-height column: the card chrome moved onto
+   .preview-scroll-area (which no longer scrolls) and the nav dock below became
+   the sticky element. The column itself keeps the grid's default
+   `align-self: stretch`, so it spans the full editor row and the sticky dock
+   has that whole height to travel — Prev/Next stay on screen for the entire
+   form, which the fixed-height card could only do for one viewport. */
 .product-preview {
-  position: sticky;
-  top: calc(var(--space-8) + 60px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* The preview card. Not a scroller any more — it grows to its content
+   (image, thumbnails, magnifier controls) and the page scrolls past it. */
+.preview-scroll-area {
+  flex: 0 0 auto;
+  min-width: 0;
   background: var(--ink-850);
   border: 1px solid var(--gray-200);
   border-radius: var(--radius-lg);
   padding: var(--space-5);
-  /* Fixed height so nav buttons never shift position */
-  height: calc(100vh - 160px);
-  display: flex;
-  flex-direction: column;
   box-shadow: var(--shadow-sm);
 }
 
-/* Scrollable area inside preview card — image, thumbnails, magnifier controls */
-.preview-scroll-area {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-/* Prev / Next buttons inside the left preview column — always pinned at bottom */
+/* Prev / Next buttons inside the left preview column */
 .preview-nav-controls {
   display: flex;
   align-items: center;
@@ -238,6 +247,25 @@
 .description-textarea::placeholder {
   color: var(--text-faint);
   font-style: italic;
+}
+
+/* ── Auto-growing textareas (report 36) ──────────────────────────────────────
+   Pairs with the effect in ProductDescriptionGenerator.tsx, which writes an
+   inline height equal to scrollHeight after every render. A textarea sized by
+   `rows` is a scroll container, and three of them (dictation, generated
+   description, SEO description) sat in the middle of the page scroller.
+
+   `overflow-y: hidden` stops a scrollbar flashing between the measurement and
+   the resize; `resize: none` is honest rather than restrictive — a manual drag
+   would be overwritten by the next keystroke anyway, and there is nothing left
+   to reveal by dragging.
+
+   Scoped through the Step 3 root so it outranks `textarea.info-input`'s
+   `resize: vertical` (same specificity, different file — import order must not
+   be allowed to decide this). */
+.product-description-container textarea.js-autogrow {
+  overflow-y: hidden;
+  resize: none;
 }
 
 /* Voice Description Display */
@@ -455,12 +483,13 @@
     grid-template-columns: 1fr;
   }
   
+  /* Stacked layout: the preview is a centred card above the form. Nothing to
+     pin here (the fixed-height card is gone — report 36), so the dock releases
+     with the column it sits in. */
   .product-preview {
-    position: relative;
-    top: 0;
     max-width: 500px;
     margin: 0 auto;
-    height: auto;
+    width: 100%;
   }
 }
 
@@ -739,7 +768,14 @@
   padding: 14px 16px;
   background: var(--ink-900);
   flex-shrink: 0;
+  /* KEPT scroller (report 36): a genuinely horizontal rail of ratio pills that
+     cannot fit a phone. It lives inside a full-screen modal, so it is never
+     competing with the page scroller — but `contain` still stops a fast swipe
+     from chaining out of it, and the y axis is pinned so it can never become an
+     accidental vertical scroll container. */
   overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
 }
 .crop-fs-pill {
   background: var(--ink-750); color: var(--text-secondary);
@@ -1127,13 +1163,17 @@
   border-bottom: 1px solid var(--border);
 }
 
+/* REMOVED scroller (report 36): this carried `overflow-x: auto`, which makes the
+   browser compute `overflow-y` to `auto` as well — a silent vertical scroll
+   container sitting right in the middle of Step 3's form. The columns are now
+   `minmax(0, 1fr)` (VoiceCommandTable.tsx) so the table shrinks to whatever the
+   form column gives it instead of overflowing, and nothing needs to scroll. */
 .vct-grid {
   display: grid;
-  overflow-x: auto;
 }
 
 .vct-grid--full {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .vct-row-group--title .vct-col {
@@ -1163,6 +1203,10 @@
   flex-direction: column;
   border-right: 1px solid var(--border);
   transition: background 0.15s;
+  /* Lets the grid track actually shrink below the input's intrinsic width —
+     without it `minmax(0, 1fr)` is overruled by the <input>'s default size and
+     the table overflows again. */
+  min-width: 0;
 }
 .vct-col:last-child {
   border-right: none;
@@ -1350,11 +1394,30 @@
   touch-action: manipulation;
 }
 
-/* The nav dock is invisible plumbing on desktop — `contents` means it generates
-   no box, so Prev/Next, the slider and the CSV button stay direct flex children
-   of .product-preview exactly as before. */
+/* ── Nav dock ───────────────────────────────────────────────────────────────
+   Was `display: contents` on desktop, because the fixed-height preview card
+   pinned Prev/Next for it. With that card gone (report 36) the dock is the
+   sticky element itself: a real box that sticks to the top of the viewport for
+   the full height of the editor row, so Prev / Next / the group slider / Save /
+   Download CSV are reachable at any scroll position — including deep in the
+   form column, which the old card never managed. `top` matches the offset the
+   card used to hold. */
 .preview-nav-dock {
-  display: contents;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: calc(var(--space-8) + 60px);
+  z-index: 5;
+  padding: var(--space-3);
+  background: var(--ink-850);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* First child of the padded dock — its own top margin would double the gap. */
+.preview-nav-dock .preview-nav-controls {
+  margin-top: 0;
 }
 
 /* ── Touch devices of any width ────────────────────────────────────────────
@@ -1400,8 +1463,8 @@
      the dock be sticky across the whole editor (image AND form) instead of
      being trapped in the preview card. `order` then puts it last in layout
      while leaving the DOM order — and therefore tab order on desktop —
-     untouched. The card styling moves onto .preview-scroll-area so nothing is
-     lost visually. */
+     untouched. The card chrome already lives on .preview-scroll-area (see the
+     base rule), so `contents` costs nothing visually. */
   .product-editor {
     display: flex;
     flex-direction: column;
@@ -1414,13 +1477,7 @@
 
   .preview-scroll-area {
     order: 1;
-    flex: 0 0 auto;
-    overflow: visible;
-    background: var(--ink-850);
-    border: 1px solid var(--gray-200);
-    border-radius: var(--radius-lg);
     padding: var(--space-3);
-    box-shadow: var(--shadow-sm);
   }
 
   .product-form {
@@ -1441,6 +1498,10 @@
     order: 3;
     display: block;
     position: sticky;
+    /* The desktop rule sticks this to the TOP. Both offsets set at once would
+       let it re-stick to the top edge on the way down, so the top offset is
+       explicitly released before the bottom one is claimed. */
+    top: auto;
     /* Sits ON TOP of the phone tab bar, never under it. --tabbar-h (index.css)
        is the shared offset and already includes the home-indicator inset. */
     bottom: var(--tabbar-h, 0px);

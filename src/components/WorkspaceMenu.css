@@ -214,6 +214,91 @@
   text-align: center;
 }
 
+/* ── Storage row ────────────────────────────────────────────────────────────
+   The usage meter used to be a full-width bar under the header on every page.
+   It is account status, so it sits with the identity block now: one row that
+   is also the Refresh action (so it is in the arrow-key order like any other
+   item), carrying the label, the figures, a track and the file count. The
+   tone token drives the percentage AND the fill, so both read the same state
+   — the semantic hues are the darkened light-canvas values (§1), legible as
+   text on the white popover. */
+.wsmenu-storage { align-items: flex-start; }
+.wsmenu-storage .wsmenu-item-icon { margin-top: 0.1rem; }
+
+.wsmenu-storage-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.wsmenu-storage-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.wsmenu-storage-figures {
+  flex-shrink: 0;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.wsmenu-storage-figures b { font-weight: 700; color: var(--wsmenu-storage-tone); }
+
+.wsmenu-storage-track {
+  display: block;
+  height: 6px;
+  border-radius: 99px;
+  /* Unfilled track — a raised neutral so the tone fill stays legible. */
+  background: var(--ink-700);
+  overflow: hidden;
+}
+
+.wsmenu-storage-fill {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--wsmenu-storage-tone);
+  transition: width 0.4s ease, background 0.4s ease;
+}
+
+.wsmenu-storage-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 1em;
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.wsmenu-storage-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.wsmenu-storage-refresh {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+  color: var(--text-secondary);
+}
+
+.wsmenu-storage:hover .wsmenu-storage-refresh { color: var(--text-primary); }
+
+.wsmenu-storage--success { --wsmenu-storage-tone: var(--success); }
+.wsmenu-storage--warning { --wsmenu-storage-tone: var(--warning); }
+.wsmenu-storage--danger  { --wsmenu-storage-tone: var(--danger); }
+
+.wsmenu-storage--busy .wsmenu-storage-refresh { animation: wsmenu-spin 1s linear infinite; }
+@keyframes wsmenu-spin { to { transform: rotate(360deg); } }
+
 @media (pointer: coarse) {
   .wsmenu-item { min-height: var(--tap); }
 }
@@ -258,4 +343,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .wsmenu-scrim, .wsmenu-pop { animation: none; }
+  .wsmenu-storage--busy .wsmenu-storage-refresh { animation: none; opacity: 0.5; }
 }

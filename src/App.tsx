@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, Suspense, Component, type ReactNode } from 'react';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
-import { Tag, Settings, Package, Link2, Scissors, X, Trash2, Bug, BookMarked, KanbanSquare,
-         Cloud, AlertTriangle, RefreshCw, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users, MessageSquare, Wallet, Printer, ScanLine } from 'lucide-react';
+import { Tag, Settings, Package, Link2, Scissors, X, Trash2, BookMarked, KanbanSquare,
+         AlertTriangle, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users, MessageSquare, Wallet, Printer, ScanLine } from 'lucide-react';
 import { log, setDebugEnabled, isDebugEnabled } from './lib/debugLogger';
 import BrandWordmark from './components/Wordmark';
 import Auth from './components/Auth';
@@ -46,7 +46,7 @@ const uploadedImagesRef  = liveArrayRef('uploadedImages');
  *  happens and reuses the module afterwards. (ImageUpload defers it the same way.) */
 let exifrModulePromise: Promise<typeof import('exifr')> | null = null;
 const loadExifr = () => (exifrModulePromise ??= import('exifr'));
-import WorkspaceMenu, { type WorkspaceNavItem } from './components/WorkspaceMenu';
+import WorkspaceMenu, { type WorkspaceNavItem, type WorkspaceStorage } from './components/WorkspaceMenu';
 import WaitlistGate from './components/WaitlistGate';
 import Landing from './components/Landing';
 import { getCategoryPresets } from './lib/categoryPresetsService';
@@ -54,6 +54,7 @@ import { track, trackPageview, setAnalyticsContext, clearAnalyticsContext } from
 import { installErrorReporter, reportError, setErrorContext, clearErrorContext } from './lib/errorReporter';
 import { purgeImageCache } from './lib/swCache';
 import SupportWidget from './components/SupportWidget';
+import ShortcutsPanel from './components/ShortcutsPanel';
 import { supportStore, useSupportThreads } from './lib/supportStore';
 import ToolView from './components/ToolView';
 import { MobileTabBar } from './components/MobileNav';
@@ -187,6 +188,7 @@ function AccountNav(
     onSignOut: () => void;
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    storage?: WorkspaceStorage | null;
   },
 ) {
   const { available, unreadCount } = useSupportThreads(isFounder ? 'founder' : 'user');
@@ -555,11 +557,14 @@ function App() {
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [debugEnabled, setDebugEnabledState] = useState(isDebugEnabled);
 
-  const toggleDebug = () => {
+  /* Lives in the ShortcutsPanel (bottom-left) since the floating debug button
+     was retired. Stable identity so the memoized panel does not re-render on
+     every App render — same reasoning as the SupportWidget props below. */
+  const toggleDebug = useEventCallback(() => {
     const next = !debugEnabled;
     setDebugEnabledState(next);
     setDebugEnabled(next);
-  };
+  });
 
   // ── Storage usage meter (lifted from ImageUpload) ─────────────────────────
   const [storageInfo, setStorageInfo] = useState<{
@@ -3068,65 +3073,17 @@ function App() {
               onSignOut={handleSignOut}
               open={navMenuOpen}
               onOpenChange={setNavMenuOpen}
+              /* The storage meter (was a bar under the header) is a row in the
+                 menu now. Clicking the row forces a re-read — one RPC. */
+              storage={storageInfo && user ? {
+                ...storageInfo,
+                limitGb: parseFloat(import.meta.env.VITE_STORAGE_LIMIT_GB || '100'),
+                onRefresh: () => { void fetchStorageUsage(user.id, true); },
+              } : null}
             />
           </div>
         </div>
       </header>
-
-      {/* ── Storage usage bar — always visible under the header ────────────── */}
-      {storageInfo !== null && user && (
-        <div className="storage-meter-nav">
-          <div className="storage-meter-nav-inner">
-            <span className="storage-meter-nav-label"><Cloud size={11} style={{ flexShrink: 0 }} /> Storage</span>
-            {storageInfo.loading && storageInfo.usedBytes === 0 ? (
-              <span className="storage-meter-nav-calculating">Calculating…</span>
-            ) : (() => {
-              const STORAGE_LIMIT_GB = parseFloat(import.meta.env.VITE_STORAGE_LIMIT_GB || '100');
-              const LIMIT = STORAGE_LIMIT_GB * 1024 * 1024 * 1024;
-              const pct = storageInfo.usedBytes / LIMIT;
-              // Drives BOTH the bar fill and the percentage label, so it has to be a
-              // token that reads on the dark canvas as text and as a solid fill.
-              const barColor = pct > 0.85 ? 'var(--danger)' : pct > 0.6 ? 'var(--warning)' : 'var(--success)';
-              const gbUsed = (storageInfo.usedBytes / (1024 ** 3)).toFixed(2);
-              const pctDisplay = (pct * 100).toFixed(0);
-              return (
-                <>
-                  <div className="storage-meter-nav-bar-wrap">
-                    <div className="storage-meter-nav-bar" style={{ width: `${Math.min(100, pct * 100).toFixed(1)}%`, background: barColor }} />
-                  </div>
-                  <span className="storage-meter-nav-text">
-                    {gbUsed} GB / {STORAGE_LIMIT_GB} GB
-                    <span style={{ color: barColor, fontWeight: 600, marginLeft: '0.3rem' }}>({pctDisplay}%)</span>
-                    <span className="storage-meter-nav-files" style={{ color: 'var(--text-muted)', marginLeft: '0.4rem', fontSize: 'var(--fs-2xs)' }}>{storageInfo.fileCount.toLocaleString()} files</span>
-                  </span>
-                  {pct > 0.85 && (
-                    <span className="storage-meter-nav-warn"><AlertTriangle size={11} style={{ flexShrink: 0 }} /> Almost full</span>
-                  )}
-                </>
-              );
-            })()}
-            <button
-              className="storage-refresh-btn"
-              onClick={() => fetchStorageUsage(user.id, true)}
-              disabled={storageInfo.loading}
-              title="Refresh storage usage"
-              style={{ marginLeft: 'auto' }}
-            >
-              {storageInfo.loading ? '…' : <RefreshCw size={11} />}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Debug toggle — fixed bottom-left corner */}
-      <button
-        onClick={toggleDebug}
-        className={`button-debug-toggle${debugEnabled ? ' button-debug-on' : ''}`}
-        title={debugEnabled ? 'Debug logging ON — click to disable' : 'Debug logging OFF — click to enable'}
-      >
-        <Bug size={13} />
-        {debugEnabled ? 'Debug: ON' : 'Debug: OFF'}
-      </button>
 
       {/* The workflow is PARKED, never unmounted: an upload in flight, the
           grouper's selection, and Step 3's debounced saves all keep running
@@ -3682,6 +3639,11 @@ function App() {
         onOpenMore={() => setNavMenuOpen(true)}
         moreOpen={navMenuOpen}
       />
+
+      {/* ── Bottom-left corner: keyboard shortcuts + the debug-logging switch.
+          One control where the floating debug button used to be, mirroring the
+          support FAB in the opposite corner. */}
+      <ShortcutsPanel debugEnabled={debugEnabled} onToggleDebug={toggleDebug} />
 
       {/* ── Support messaging (first-party): every signed-in user can message
           the founders; Founding admins get the inbox of every conversation. */}

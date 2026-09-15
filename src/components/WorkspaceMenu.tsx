@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Users, ChevronDown, LogOut, ArrowLeft, Check } from 'lucide-react';
+import { Users, ChevronDown, LogOut, ArrowLeft, Check, Cloud, RefreshCw, AlertTriangle } from 'lucide-react';
 import './WorkspaceMenu.css';
 
 /** The three bands the menu is divided into, in render order. */
@@ -23,6 +23,21 @@ export interface WorkspaceNavItem {
   group: NavGroup;
   /** Resolved unread count. Rendered as a badge when > 0. */
   badge?: number;
+}
+
+/**
+ * The storage meter's inputs. It used to be a full-width bar under the header
+ * on every page; it is account status, so it is a row in this menu now. The
+ * whole row is the Refresh action, which is how it joins the arrow-key order.
+ */
+export interface WorkspaceStorage {
+  usedBytes: number;
+  fileCount: number;
+  /** A re-read is in flight — the row keeps its last figures and spins. */
+  loading: boolean;
+  /** The denominator (VITE_STORAGE_LIMIT_GB). */
+  limitGb: number;
+  onRefresh: () => void;
 }
 
 interface WorkspaceMenuProps {
@@ -48,6 +63,8 @@ interface WorkspaceMenuProps {
   /** Controlled: the phone tab bar's "More" opens this same menu. */
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The storage meter row; null until the first read has been requested. */
+  storage?: WorkspaceStorage | null;
 }
 
 /**
@@ -77,7 +94,7 @@ interface WorkspaceMenuProps {
  */
 export default function WorkspaceMenu({
   orgName, role, email, items, activeView, unreadCount = 0,
-  showBackToWorkflow, onSelect, onSignOut, open, onOpenChange,
+  showBackToWorkflow, onSelect, onSignOut, open, onOpenChange, storage = null,
 }: WorkspaceMenuProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -229,6 +246,60 @@ export default function WorkspaceMenu({
     .map(g => ({ group: g, list: items.filter(i => i.group === g) }))
     .filter(g => g.list.length > 0);
 
+  /* The storage meter as ONE menu row. Label + figures, a track, the file
+     count and the almost-full flag; clicking the row re-reads the number
+     (one RPC — perf_storage_usage.sql) and the menu stays open so the update
+     is seen. The visual figures are aria-hidden and restated in the row's
+     accessible name so a screen reader hears one sentence, not five spans. */
+  const renderStorage = () => {
+    if (!storage) return null;
+    const limitBytes = storage.limitGb * 1024 ** 3;
+    const calculating = storage.loading && storage.usedBytes === 0;
+    const pct = limitBytes > 0 ? storage.usedBytes / limitBytes : 0;
+    const tone = pct > 0.85 ? 'danger' : pct > 0.6 ? 'warning' : 'success';
+    const gb = (storage.usedBytes / 1024 ** 3).toFixed(2);
+    const pctText = `${(pct * 100).toFixed(0)}%`;
+    const files = storage.fileCount.toLocaleString();
+    const spoken = calculating
+      ? 'calculating'
+      : `${gb} GB of ${storage.limitGb} GB used (${pctText}), ${files} files${pct > 0.85 ? ', almost full' : ''}`;
+    return (
+      <>
+        <button
+          type="button"
+          role="menuitem"
+          tabIndex={-1}
+          className={`wsmenu-item wsmenu-storage wsmenu-storage--${tone}${storage.loading ? ' wsmenu-storage--busy' : ''}`}
+          aria-label={`Storage: ${spoken}. Refresh`}
+          aria-busy={storage.loading || undefined}
+          title="Refresh storage usage"
+          onClick={() => { if (!storage.loading) storage.onRefresh(); }}
+        >
+          <span className="wsmenu-item-icon"><Cloud size={16} /></span>
+          <span className="wsmenu-storage-body" aria-hidden="true">
+            <span className="wsmenu-storage-line">
+              <span className="wsmenu-item-label">Storage</span>
+              <span className="wsmenu-storage-figures">
+                {calculating ? 'Calculating…' : <>{gb} / {storage.limitGb} GB <b>{pctText}</b></>}
+              </span>
+            </span>
+            <span className="wsmenu-storage-track">
+              <span className="wsmenu-storage-fill" style={{ width: `${Math.min(100, pct * 100).toFixed(1)}%` }} />
+            </span>
+            <span className="wsmenu-storage-meta">
+              {!calculating && <span>{files} files</span>}
+              {pct > 0.85 && (
+                <span className="wsmenu-storage-warn"><AlertTriangle size={11} /> Almost full</span>
+              )}
+            </span>
+          </span>
+          <RefreshCw size={14} className="wsmenu-storage-refresh" aria-hidden="true" />
+        </button>
+        <div role="separator" className="wsmenu-sep" />
+      </>
+    );
+  };
+
   return (
     <div className="wsmenu-wrap" ref={wrapRef}>
       <button
@@ -282,6 +353,7 @@ export default function WorkspaceMenu({
             </div>
 
             <div className="wsmenu-list" id={menuId} role="menu" aria-label="Navigation">
+              {renderStorage()}
               {showBackToWorkflow && (
                 <>
                   <button

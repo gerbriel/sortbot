@@ -1,9 +1,10 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, memo } from 'react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
-import { Package, Image, ArrowDown, ArrowUp, ArrowUpDown, Check, RotateCcw, CornerUpLeft,
-         CornerUpRight, Search, X, Camera, Circle, CircleDot, Crosshair, ClipboardPaste,
-         Trash2, Scissors, SlidersHorizontal } from 'lucide-react';
+import { Package, Image, ArrowDown, ArrowUpDown, Check, RotateCcw, CornerUpLeft,
+         CornerUpRight, X, Camera, Circle, CircleDot, Crosshair, ClipboardPaste,
+         Trash2, Scissors, Columns3, Layers, ChevronsDownUp, Filter,
+         SlidersHorizontal } from 'lucide-react';
 import {
   PHONE_BREAKPOINT_PX,
   clampGridColumns,
@@ -16,6 +17,7 @@ import { publicImageUrl } from '../lib/storageUrls';
 import './ImageGrouper.css';
 import { createTransformQueue } from '../lib/imageTransforms';
 import { isRepeatToggle as isRepeatToggleAt, isSelectionModeActive } from '../lib/selectionGesture';
+import { stackLayers, stackReserve, stackOverflowBadge } from '../lib/stackLayout';
 import './ProductDescriptionGenerator.css'; // crop-fs-* styles shared with PDG
 
 /** Retry a failed image load up to 3 times with exponential backoff + cache-bust.
@@ -53,6 +55,17 @@ const CARD_TIME_FMT   = new Intl.DateTimeFormat(undefined, { hour: 'numeric', mi
 const FILTER_DATE_FMT = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 const EN_CA_DATE_FMT  = new Intl.DateTimeFormat('en-CA');   // YYYY-MM-DD filter keys
 const NAME_COLLATOR   = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+/* ── Sort choices as DATA ─────────────────────────────────────────────────────
+ * The View popover renders these as a radio-style list, so the four sort buttons
+ * that used to sit in the toolbar exist once here instead of four times in JSX.
+ * `as const` keeps each `value` a literal, so it stays assignable to SortOrder. */
+const SORT_OPTIONS = [
+  { value: 'date-asc'  as const, label: 'Date \u00b7 oldest first', title: 'Oldest first (capture date)' },
+  { value: 'date-desc' as const, label: 'Date \u00b7 newest first', title: 'Newest first (capture date)' },
+  { value: 'name-asc'  as const, label: 'Name \u00b7 A \u2192 Z',  title: 'Sort by filename A \u2192 Z' },
+  { value: 'name-desc' as const, label: 'Name \u00b7 Z \u2192 A',  title: 'Sort by filename Z \u2192 A' },
+];
 
 /** "Mar 12, 2026 3:41 PM" for a capturedAt, memoized by timestamp so a re-render is a
  *  Map lookup instead of two Intl formats. Keyed by the raw number, so the cache is
@@ -270,6 +283,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const setFilter = <K extends keyof Filters>(key: K, val: Filters[K]) =>
     setFilters(prev => ({ ...prev, [key]: val }));
 
+  // ── Filter / View popovers ───────────────────────────────────────────────
+  // ONE at a time. They hold what used to be ~14 always-visible toolbar
+  // controls (four sort buttons, the two view toggles, the date select, one
+  // chip per category, the columns slider, the clear-originals action), so the
+  // idle toolbar is a single line.
+  const [openPanel, setOpenPanel] = useState<'filter' | 'view' | null>(null);
+  const filterTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const viewTriggerRef   = useRef<HTMLButtonElement | null>(null);
+
   // Auto-group state — number of photos per product
   const [autoGroupN, setAutoGroupN] = useState<string>('4');
   // Pick-mode — auto-selects next N singletons after each manual group action
@@ -346,12 +368,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const groupsGridColumns = clampGroupGridColumns(columnsPerRow, isPhone);
   const columnSliderBounds = gridColumnBounds(isPhone);
 
-  /* Phone-only disclosure for the sort/filter/auto-group controls. On a phone the
-   * sidebar collapses to a top bar (AGENTS.md §15); showing every control inline
-   * there would push the photo grid a full screen down, so they live behind a
-   * "Tools" toggle. The class is inert above 640px — all the rules that read it
-   * are inside the phone media query. */
-  const [toolsOpen, setToolsOpen] = useState(false);
+  /* Which pile is fanned open. ONE at a time by default — a screen of expanded
+   * groups is the old all-thumbnails grid this replaced. Keyed by group id, so
+   * it survives a re-sort/re-filter; a group that stops existing simply stops
+   * matching (no cleanup effect, nothing to go stale). */
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
 
   // Format painter — copy crop/rotation style from one image and paste to others
   const [copiedRotation, setCopiedRotation] = useState<number | null>(null);
@@ -1150,9 +1171,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       const isSafeTarget = t.closest(
         '.single-item-card, .product-group-card, .group-header, .toolbar, button, [role="button"],' +
         '.category-zone, .category-zones-container, .category-zones, .category-list,' +
-        '.grouper-actions-sidebar, .grouper-header, .photo-toolbar'
-        // .grouper-header / .photo-toolbar: on phones the toolbar is a wide strip directly
-        // above the grid, so a mis-tap on it must not silently wipe the selection (Sept 2026).
+        '.grouper-actions-sidebar, .grouper-toolbar, .photo-toolbar'
+        // .grouper-toolbar (which wraps .photo-toolbar) is a wide strip directly above
+        // the grid, so a mis-tap anywhere on it — a divider, the padding between two
+        // control clusters — must not silently wipe the selection. It replaced
+        // .grouper-header when the sidebar became this toolbar (Sept 2026).
       );
       if (!isSafeTarget) {
         if (selectedItems.size > 0) updateSelection(new Set());
@@ -1718,6 +1741,44 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     }
   };
 
+  /* Escape closes an open pile. Registered only while one IS open, so it never
+     competes with the lightbox / crop-tool Escape handlers when no pile is
+     fanned out. `capture: false` + the early return means the lightbox (which
+     mounts its own handler on the overlay) still wins while it is up. */
+  useEffect(() => {
+    if (!expandedGroupId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (lightboxSrc || cropModalRef.current.open) return;
+      setExpandedGroupId(null);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [expandedGroupId, lightboxSrc]);
+
+  /* Close the Filter / View popover on an outside mousedown or Escape — the same
+     shape as the ⋯ group menu below, with Escape additionally returning focus to
+     the trigger that opened the panel. A click INSIDE the panel is left alone so
+     several filter chips can be toggled in one visit. */
+  useEffect(() => {
+    if (!openPanel) return;
+    const closeOnDown = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('.gtb-panel-wrap')) setOpenPanel(null);
+    };
+    const closeOnKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const trigger = openPanel === 'filter' ? filterTriggerRef.current : viewTriggerRef.current;
+      setOpenPanel(null);
+      trigger?.focus();
+    };
+    document.addEventListener('mousedown', closeOnDown);
+    document.addEventListener('keydown', closeOnKey);
+    return () => {
+      document.removeEventListener('mousedown', closeOnDown);
+      document.removeEventListener('keydown', closeOnKey);
+    };
+  }, [openPanel]);
+
   // Close the ⋯ group menu when clicking anywhere outside it
   useEffect(() => {
     if (!openMenuGroupId) return;
@@ -1727,6 +1788,31 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   }, [openMenuGroupId]);
+
+  /**
+   * Open / close one pile. ONE at a time: opening a pile closes whatever was
+   * open, so the grid never degrades back into the wall of thumbnails this
+   * replaced.
+   *
+   * The 200 ms repeat guard is the same one the selection surfaces use (report
+   * 30, lib/selectionGesture): a hardware double-click emits two clicks, and
+   * without the guard the pile would open and immediately close again before
+   * the `dblclick` handler ran. Keyed `pile:<id>` rather than `<id>` so it
+   * cannot eat a select-bar toggle on the same group, or vice versa.
+   */
+  const togglePile = (groupId: string) => {
+    const key = `pile:${groupId}`;
+    if (isRepeatToggle(key)) return;
+    lastToggleTimeRef.current.set(key, Date.now());
+    setExpandedGroupId(prev => (prev === groupId ? null : groupId));
+  };
+
+  /** ↩ on a photo in an open pile: it leaves the group and becomes its own
+   *  item. Same operation as dropping it on the "individual items" zone. */
+  const removeFromGroup = (itemId: string) => {
+    log.grouper(`removeFromGroup | item=${itemId}`);
+    commitUpdate(groupedItemsRef.current.map(i => (i.id === itemId ? { ...i, productGroup: i.id } : i)));
+  };
 
   // Ungroup ONE group (⋯ menu action) — same semantics as selecting the group
   // and clicking "Ungroup Selected": members become singles, category cleared.
@@ -2478,281 +2564,268 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       )}
 
       <div className="image-grouper-container">
-      <div className={`grouper-header${toolsOpen ? ' grouper-header--tools-open' : ''}`}>
-        {/* Phone-only disclosure. Rendered at every width but display:none above
-            640px, so the desktop sidebar is untouched. */}
-        <button
-          type="button"
-          className="grouper-tools-toggle"
-          aria-expanded={toolsOpen}
-          onClick={() => setToolsOpen(o => !o)}
-        >
-          <SlidersHorizontal size={16} />
-          {toolsOpen ? 'Hide tools' : 'Sort, filter & group tools'}
-        </button>
-        <div className="stats">
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Package size={20} /> {multiItemGroups.length} Multi-Image Groups
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Image size={20} /> {singleItems.length} Single Items
-          </span>
-          {/* Solid accent fill — .stats inherits near-white text, which is only
-              2.46:1 on --accent, so this chip carries its own dark label. */}
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--accent)', color: 'var(--ink-950)' }}>
-            <Package size={20} /> {multiItemGroups.length + singleItems.length} Total Listings
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Image size={20} /> {groupedItems.length} Total Images
-          </span>
-          {selectedItems.size > 0 && (
-            <span style={{ background: 'var(--success)', color: 'var(--ink-950)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Check size={16} /> {selectedItems.size} Selected
-            </span>
-          )}
-          {canUndo && (
-            <span
-              onClick={handleUndo}
-              title="Undo last grouping action (⌘Z)"
-              style={{
-                background: 'var(--ink-700)', cursor: 'pointer', display: 'flex',
-                alignItems: 'center', gap: '0.4rem', userSelect: 'none',
-              }}
-            >
-              <CornerUpLeft size={12} /> Undo
-            </span>
-          )}
-          {canRedo && (
-            <span
-              onClick={handleRedo}
-              title="Redo last undone action (⌘Shift+Z)"
-              style={{
-                background: 'var(--ink-700)', cursor: 'pointer', display: 'flex',
-                alignItems: 'center', gap: '0.4rem', userSelect: 'none',
-              }}
-            >
-              <CornerUpRight size={12} /> Redo
-            </span>
-          )}
-        </div>
-        {/* Sort control */}
-        <div className="sort-control">
-          <ArrowUpDown size={15} style={{ flexShrink: 0 }} />
-          <span>Sort:</span>
-          <button
-            className={`sort-btn${sortOrder === 'date-asc' ? ' active' : ''}`}
-            onClick={() => setSortOrder('date-asc')}
-            title="Oldest first (capture date)"
-          >
-            <ArrowUp size={13} /> Date
-          </button>
-          <button
-            className={`sort-btn${sortOrder === 'date-desc' ? ' active' : ''}`}
-            onClick={() => setSortOrder('date-desc')}
-            title="Newest first (capture date)"
-          >
-            <ArrowDown size={13} /> Date
-          </button>
-          <button
-            className={`sort-btn${sortOrder === 'name-asc' ? ' active' : ''}`}
-            onClick={() => setSortOrder('name-asc')}
-            title="Sort by filename A → Z"
-          >
-            <ArrowUp size={13} /> Name
-          </button>
-          <button
-            className={`sort-btn${sortOrder === 'name-desc' ? ' active' : ''}`}
-            onClick={() => setSortOrder('name-desc')}
-            title="Sort by filename Z → A"
-          >
-            <ArrowDown size={13} /> Name
-          </button>
-        </div>
-        {/* Filter bar — view type, date, category (all combinable, all toggle buttons) */}
-        <div className="filter-bar">
-          <span className="filter-bar-label">
-            <Search size={12} style={{ flexShrink: 0 }} /> Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}:
-          </span>
-
-          {/* View type toggle buttons */}
-          <div className="filter-btn-group">
-            <button
-              className={`sort-btn${filters.view === 'groups' ? ' active' : ''}`}
-              onClick={() => setFilter('view', filters.view === 'groups' ? 'all' : 'groups')}
-              title="Show only multi-image groups"
-            >
-              Groups
-            </button>
-            <button
-              className={`sort-btn${filters.view === 'singles' ? ' active' : ''}`}
-              onClick={() => setFilter('view', filters.view === 'singles' ? 'all' : 'singles')}
-              title="Show only single items"
-            >
-              Singles
-            </button>
-          </div>
-
-          {/* Date dropdown */}
-          {uniqueFilterDates.length > 0 && (
-            <select
-              className="filter-select"
-              value={filters.date}
-              onChange={e => setFilter('date', e.target.value)}
-              title="Filter by capture date"
-            >
-              <option value="">All dates</option>
-              {uniqueFilterDates.map(d => (
-                <option key={d} value={d}>
-                  {FILTER_DATE_FMT.format(new Date(d + 'T00:00:00'))}
-                </option>
-              ))}
-            </select>
-          )}
-
-          {/* Category toggle buttons */}
-          {(uniqueFilterCategories.length > 0 || groupedItems.some(i => !i.category)) && (
-            <div className="filter-btn-group">
-              {groupedItems.some(i => !i.category) && (
-                <button
-                  className={`sort-btn${filters.category === 'uncategorized' ? ' active' : ''}`}
-                  onClick={() => setFilter('category', filters.category === 'uncategorized' ? '' : 'uncategorized')}
-                  title="Show only uncategorized items"
-                >
-                  Uncategorized
-                </button>
-              )}
-              {uniqueFilterCategories.map(c => (
-                <button
-                  key={c}
-                  className={`sort-btn${filters.category === c ? ' active' : ''}`}
-                  onClick={() => setFilter('category', filters.category === c ? '' : c)}
-                  title={`Filter by category: ${c}`}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {activeFilterCount > 0 && (
-            <button
-              className="sort-btn filter-clear-btn"
-              onClick={() => setFilters({ date: '', view: 'all', category: '' })}
-              title="Clear all filters"
-            >
-              <X size={11} /> Clear
-            </button>
-          )}
-
-          {/* ── Auto-group by N ─────────────────────────────────────────────── */}
-          <div className="auto-group-control" title="Auto-group images by sequential filename order. Set how many photos you took per item, then click Apply.">
-            <span className="auto-group-label"><Camera size={12} style={{ flexShrink: 0 }} /> Photos/item:</span>
-            <input
-              type="number"
-              min={1}
-              max={50}
-              value={autoGroupN}
-              onChange={e => setAutoGroupN(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  const n = parseInt(autoGroupN, 10);
-                  if (!isNaN(n) && n >= 1 && n <= 50) applyAutoGrouping(n);
-                }
-              }}
-              className="auto-group-input"
-              title="Number of photos per product"
-            />
-            <button
-              className="sort-btn auto-group-btn"
-              onClick={() => {
-                const n = parseInt(autoGroupN, 10);
-                if (isNaN(n) || n < 1 || n > 50) {
-                  alert('Enter a number between 1 and 50');
-                  return;
-                }
-                if (!confirm(`Auto-group all ${groupedItems.length} images into sets of ${n}?\n\nThis will replace all current grouping. You can undo with ⌘Z.`)) return;
-                applyAutoGrouping(n);
-              }}
-              title={`Group all images into sets of ${autoGroupN} by filename order`}
-            >
-              Apply
-            </button>
-            <button
-              className={`sort-btn pick-mode-btn${pickMode ? ' pick-mode-active' : ''}`}
-              onClick={() => {
-                const next = !pickMode;
-                log.grouper(`[PICK] toggle | ${pickMode ? 'ON→OFF' : 'OFF→ON'} n=${autoGroupN}`);
-                setPickMode(next);
-                pickModeRef.current = next;
-                if (next) {
-                  // Turning on: start from beginning of ungrouped list
-                  pickCursorRef.current = 0;
-                  advancePickSelectionRef.current(groupedItemsRef.current);
-                } else {
-                  // Turning off: clear selection and reset cursor
-                  pickCursorRef.current = 0;
-                  updateSelection(new Set());
-                }
-              }}
-              title={pickMode
-                ? `Pick mode ON — selecting ${autoGroupN} at a time. Click to turn off.`
-                : `Pick mode: auto-select next ${autoGroupN} ungrouped images for manual grouping`}
-            >
-              {pickMode ? <><CircleDot size={12} /> Pick</> : <><Circle size={12} /> Pick</>}
-            </button>
-            {/* Quick-pick slider: 1–10 */}
-            <input
-              type="range"
-              min={1}
-              max={10}
-              step={1}
-              value={Math.min(Math.max(parseInt(autoGroupN, 10) || 1, 1), 10)}
-              onChange={e => setAutoGroupN(e.target.value)}
-              className="auto-group-slider"
-              title="Quick-set photos per item (1–10)"
-            />
-          </div>
-
-          {/* ── Columns per row slider ──────────────────────────────────────── */}
-          <div className="auto-group-control" title="Adjust how many images appear per row">
-            <span className="auto-group-label">⊞ Columns: {singlesGridColumns}</span>
-            <input
-              type="range"
-              min={columnSliderBounds.min}
-              max={columnSliderBounds.max}
-              value={Math.min(Math.max(columnsPerRow, columnSliderBounds.min), columnSliderBounds.max)}
-              onChange={e => setColumnsPerRow(Number(e.target.value))}
-              className="columns-slider"
-              title="Drag to change columns per row"
-            />
-          </div>
-
-          {/* Photo tools moved to the .photo-toolbar pinned above the image grid. */}
-        </div>
-
-        {/* Delete / Revert / Clear-originals moved to the .photo-toolbar. */}
-
-        {/* ── Keyboard shortcuts cheat sheet ── */}
-        <div className="keyboard-cheatsheet">
-          <div className="cheatsheet-title">⌨ Shortcuts</div>
-          <div className="cheatsheet-row"><kbd>⌘ Enter</kbd><span>Group selected</span></div>
-          <div className="cheatsheet-row"><kbd>⌘ ⌫</kbd><span>Ungroup selected</span></div>
-          <div className="cheatsheet-row"><kbd>⌘ 1–9</kbd><span>Set photos/item</span></div>
-          <div className="cheatsheet-row"><kbd>⌘ 0</kbd><span>Set photos/item 10</span></div>
-          <div className="cheatsheet-row"><kbd>⌘A</kbd><span>Select singles</span></div>
-          <div className="cheatsheet-row"><kbd>⌘ Shift A</kbd><span>Select groups</span></div>
-          <div className="cheatsheet-row"><kbd>⌘D</kbd><span>Deselect all</span></div>
-          <div className="cheatsheet-row"><kbd>⌘Z</kbd><span>Undo</span></div>
-          <div className="cheatsheet-row"><kbd>⌘ Shift Z</kbd><span>Redo</span></div>
-        </div>
-      </div>
-
-      {/* ── Image grid — scrollable content to the right of the sidebar ── */}
       <div className="grouper-scroll-content" ref={scrollContentRef}>
 
-      {/* ── Photo tools toolbar — ONE place for all photo actions, pinned above
-            the photo grid (sticky while scrolling). Pick photos → act on them. ── */}
-      <div className="photo-toolbar">
+      {/* ══ ONE sticky toolbar block ═══════════════════════════════════════════
+          Sept 2026, condensed: the IDLE row is one line at ≥1024px. Filter ▾ and
+          View ▾ are popover triggers holding the ~14 controls that used to sit
+          out in the open (four sort buttons, the two view toggles, the date
+          select, one chip per category, the columns slider, the clear-originals
+          action). Only what is touched on every pass stays visible: Photos/item
+          + Apply + Pick, Pick photos, and the trailing selection/undo cluster.
+
+          The photo-tools row below is CONTEXTUAL — it is not rendered at all
+          unless something is selected or a rotation/crop is copied, which is
+          what buys the single idle line. It keeps the class name `photo-toolbar`
+          because the handlers and the click-outside safe list read it.
+
+          The block sticks to the top of THIS scroll box, which is a position the
+          black app nav can never cover (the reason the old phone toolbar could
+          not be sticky). ≤640px the row scrolls sideways with scroll-snap
+          instead of stacking into a wall of rows.
+
+          THE PANELS ARE RENDERED INSIDE .grouper-toolbar, NEVER PORTALED:
+          that selector is on the click-outside-deselect safe list, so a portaled
+          panel would wipe the user's selection on every click inside it. ── */}
+      <div className="grouper-toolbar">
+      <div className={`gtb-row gtb-row--controls${openPanel ? ' gtb-row--panel-open' : ''}`}>
+
+        {/* ── Filter ▾ — show / date / category, all combinable, all toggles ── */}
+        <div className="gtb-panel-wrap">
+          <button
+            type="button"
+            ref={filterTriggerRef}
+            className={`sort-btn gtb-trigger${openPanel === 'filter' ? ' active' : ''}`}
+            aria-haspopup="true"
+            aria-expanded={openPanel === 'filter'}
+            aria-controls="gtb-panel-filter"
+            onClick={() => setOpenPanel(p => (p === 'filter' ? null : 'filter'))}
+            title="Filter which photos are shown"
+          >
+            <Filter size={13} /> Filter
+            {activeFilterCount > 0 && <span className="gtb-count">{activeFilterCount}</span>}
+          </button>
+
+          {openPanel === 'filter' && (
+            <div className="gtb-panel" id="gtb-panel-filter" role="group" aria-label="Filter photos">
+              <div className="gtb-panel-section">
+                <span className="gtb-label">Show</span>
+                <div className="gtb-panel-chips">
+                  <button
+                    type="button"
+                    className={`sort-btn${filters.view === 'groups' ? ' active' : ''}`}
+                    onClick={() => setFilter('view', filters.view === 'groups' ? 'all' : 'groups')}
+                    title="Show only multi-image groups"
+                  >
+                    Groups
+                  </button>
+                  <button
+                    type="button"
+                    className={`sort-btn${filters.view === 'singles' ? ' active' : ''}`}
+                    onClick={() => setFilter('view', filters.view === 'singles' ? 'all' : 'singles')}
+                    title="Show only single items"
+                  >
+                    Singles
+                  </button>
+                </div>
+              </div>
+
+              {uniqueFilterDates.length > 0 && (
+                <div className="gtb-panel-section">
+                  <span className="gtb-label">Date</span>
+                  <select
+                    className="filter-select gtb-panel-select"
+                    value={filters.date}
+                    onChange={e => setFilter('date', e.target.value)}
+                    title="Filter by capture date"
+                  >
+                    <option value="">All dates</option>
+                    {uniqueFilterDates.map(d => (
+                      <option key={d} value={d}>
+                        {FILTER_DATE_FMT.format(new Date(d + 'T00:00:00'))}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {(uniqueFilterCategories.length > 0 || groupedItems.some(i => !i.category)) && (
+                <div className="gtb-panel-section">
+                  <span className="gtb-label">Category</span>
+                  <div className="gtb-panel-chips">
+                    {groupedItems.some(i => !i.category) && (
+                      <button
+                        type="button"
+                        className={`sort-btn${filters.category === 'uncategorized' ? ' active' : ''}`}
+                        onClick={() => setFilter('category', filters.category === 'uncategorized' ? '' : 'uncategorized')}
+                        title="Show only uncategorized items"
+                      >
+                        Uncategorized
+                      </button>
+                    )}
+                    {uniqueFilterCategories.map(c => (
+                      <button
+                        key={c}
+                        type="button"
+                        className={`sort-btn${filters.category === c ? ' active' : ''}`}
+                        onClick={() => setFilter('category', filters.category === c ? '' : c)}
+                        title={`Filter by category: ${c}`}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {activeFilterCount > 0 && (
+                <div className="gtb-panel-foot">
+                  <button
+                    type="button"
+                    className="sort-btn filter-clear-btn"
+                    onClick={() => setFilters({ date: '', view: 'all', category: '' })}
+                    title="Clear all filters"
+                  >
+                    <X size={11} /> Clear filters
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── View ▾ — sort order, grid density, cached-originals storage ── */}
+        <div className="gtb-panel-wrap">
+          <button
+            type="button"
+            ref={viewTriggerRef}
+            className={`sort-btn gtb-trigger${openPanel === 'view' ? ' active' : ''}`}
+            aria-haspopup="true"
+            aria-expanded={openPanel === 'view'}
+            aria-controls="gtb-panel-view"
+            onClick={() => setOpenPanel(p => (p === 'view' ? null : 'view'))}
+            title="Sort order and grid density"
+          >
+            <SlidersHorizontal size={13} /> View
+          </button>
+
+          {openPanel === 'view' && (
+            <div className="gtb-panel" id="gtb-panel-view" role="group" aria-label="View options">
+              <div className="gtb-panel-section">
+                <span className="gtb-label"><ArrowUpDown size={12} /> Sort</span>
+                <div className="gtb-panel-opts">
+                  {SORT_OPTIONS.map(o => (
+                    <button
+                      key={o.value}
+                      type="button"
+                      className={`gtb-opt${sortOrder === o.value ? ' active' : ''}`}
+                      onClick={() => setSortOrder(o.value)}
+                      title={o.title}
+                    >
+                      <span className="gtb-opt-mark">{sortOrder === o.value ? <Check size={13} /> : null}</span>
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="gtb-panel-section">
+                <span className="gtb-label"><Columns3 size={12} /> Columns {singlesGridColumns}</span>
+                <input
+                  type="range"
+                  min={columnSliderBounds.min}
+                  max={columnSliderBounds.max}
+                  value={Math.min(Math.max(columnsPerRow, columnSliderBounds.min), columnSliderBounds.max)}
+                  onChange={e => setColumnsPerRow(Number(e.target.value))}
+                  className="columns-slider"
+                  title="Drag to change columns per row"
+                />
+              </div>
+
+              {/* Cached originals — the clear-ALL variant. The selected-only
+                  variant lives in the contextual row, where a selection exists. */}
+              {selectedItems.size === 0 && groupedItems.some(i => i.originalStoragePath) && (
+                <div className="gtb-panel-foot">
+                  <span className="gtb-label">Storage</span>
+                  <button
+                    type="button"
+                    className="ptb-btn ptb-btn--ghost"
+                    title="Free up storage by permanently deleting cached original images. Revert will no longer be possible."
+                    onClick={() => clearOriginalsCache('all')}
+                  >
+                    Clear {groupedItems.filter(i => i.originalStoragePath).length} originals
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <span className="gtb-divider" />
+
+        {/* Auto-group by N + pick mode */}
+        <div className="gtb-group auto-group-control" title="Auto-group images by sequential filename order. Set how many photos you took per item, then click Apply.">
+          <span className="gtb-label"><Camera size={13} /> Photos/item</span>
+          <input
+            type="number"
+            min={1}
+            max={50}
+            value={autoGroupN}
+            onChange={e => setAutoGroupN(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                const n = parseInt(autoGroupN, 10);
+                if (!isNaN(n) && n >= 1 && n <= 50) applyAutoGrouping(n);
+              }
+            }}
+            className="auto-group-input"
+            title="Number of photos per product"
+          />
+          <button
+            type="button"
+            className="sort-btn auto-group-btn"
+            onClick={() => {
+              const n = parseInt(autoGroupN, 10);
+              if (isNaN(n) || n < 1 || n > 50) {
+                alert('Enter a number between 1 and 50');
+                return;
+              }
+              if (!confirm(`Auto-group all ${groupedItems.length} images into sets of ${n}?\n\nThis will replace all current grouping. You can undo with ⌘Z.`)) return;
+              applyAutoGrouping(n);
+            }}
+            title={`Group all images into sets of ${autoGroupN} by filename order`}
+          >
+            Apply
+          </button>
+          <button
+            type="button"
+            className={`sort-btn pick-mode-btn${pickMode ? ' pick-mode-active' : ''}`}
+            onClick={() => {
+              const next = !pickMode;
+              log.grouper(`[PICK] toggle | ${pickMode ? 'ON→OFF' : 'OFF→ON'} n=${autoGroupN}`);
+              setPickMode(next);
+              pickModeRef.current = next;
+              if (next) {
+                // Turning on: start from beginning of ungrouped list
+                pickCursorRef.current = 0;
+                advancePickSelectionRef.current(groupedItemsRef.current);
+              } else {
+                // Turning off: clear selection and reset cursor
+                pickCursorRef.current = 0;
+                updateSelection(new Set());
+              }
+            }}
+            title={pickMode
+              ? `Pick mode ON — selecting ${autoGroupN} at a time. Click to turn off.`
+              : `Pick mode: auto-select next ${autoGroupN} ungrouped images for manual grouping`}
+          >
+            {pickMode ? <><CircleDot size={12} /> Pick</> : <><Circle size={12} /> Pick</>}
+          </button>
+        </div>
+
+        <span className="gtb-divider" />
+
+        {/* Pick photos — the gate for the contextual photo-tools row below */}
         <button
           className={`ptb-btn photo-pick-toggle${photoSelectMode ? ' photo-pick-toggle--on' : ''}`}
           title={photoSelectMode
@@ -2769,8 +2842,37 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           {photoSelectMode ? <><Crosshair size={12} /> Picking… (stop)</> : <><Crosshair size={12} /> Pick photos</>}
         </button>
 
-        <span className="ptb-divider" />
+        {/* Selection readout + Undo/Redo — the only chips left from the old stats
+            block (the groups/singles/listings/photos counts were removed Sept 2026;
+            the section headings already carry them). Pinned to the END of the row
+            so appearing and disappearing never shifts the controls before it. */}
+        {(selectedItems.size > 0 || canUndo || canRedo) && (
+          <div className="stats stats--trailing">
+            {selectedItems.size > 0 && (
+              <span className="stat--selected" title="Photos currently selected">
+                <Check size={14} /> {selectedItems.size} <em>selected</em>
+              </span>
+            )}
+            {canUndo && (
+              <button type="button" className="sort-btn" onClick={handleUndo} title="Undo last grouping action (⌘Z)">
+                <CornerUpLeft size={12} /> Undo
+              </button>
+            )}
+            {canRedo && (
+              <button type="button" className="sort-btn" onClick={handleRedo} title="Redo last undone action (⌘Shift+Z)">
+                <CornerUpRight size={12} /> Redo
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
+      {/* ── Contextual row: photo tools. Rendered ONLY while there is something
+            to act on — a selection, or a copied rotation/crop waiting for
+            targets. With nothing selected and nothing copied the row does not
+            exist, so the idle toolbar is a single line. ── */}
+      {(selectedItems.size > 0 || copiedRotation !== null || copiedCrop !== undefined) && (
+      <div className="gtb-row photo-toolbar">
         <button
           className="ptb-btn"
           disabled={selectedItems.size === 0}
@@ -2890,21 +2992,19 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           </button>
         )}
 
-        {groupedItems.some(i => i.originalStoragePath) && (
+        {selectedItems.size > 0 && groupedItems.some(i => selectedItems.has(i.id) && i.originalStoragePath) && (
           <button
             className="ptb-btn ptb-btn--ghost"
             style={{ marginLeft: 'auto' }}
             title="Free up storage by permanently deleting cached original images. Revert will no longer be possible."
-            onClick={() => clearOriginalsCache(selectedItems.size > 0 && groupedItems.some(i => selectedItems.has(i.id) && i.originalStoragePath) ? 'selected' : 'all')}
+            onClick={() => clearOriginalsCache('selected')}
           >
-            Clear {
-              selectedItems.size > 0 && groupedItems.some(i => selectedItems.has(i.id) && i.originalStoragePath)
-                ? `${groupedItems.filter(i => selectedItems.has(i.id) && i.originalStoragePath).length} selected`
-                : `${groupedItems.filter(i => i.originalStoragePath).length} all`
-            } originals
+            Clear {groupedItems.filter(i => selectedItems.has(i.id) && i.originalStoragePath).length} selected originals
           </button>
         )}
       </div>
+      )}
+      </div>{/* /grouper-toolbar */}
 
       {/* Individual Items Section - Always Visible Drop Zone */}
       <div 
@@ -3144,7 +3244,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   // Selection target = the select bar + card padding ONLY. Photos are
                   // for drag-reorder / double-click lightbox, and buttons/menu do their
                   // own thing — clicking those must never toggle the group selection.
-                  if (t.closest('button') || t.closest('.group-images') || t.closest('.group-menu-wrap')) return;
+                  if (t.closest('button') || t.closest('.group-images') || t.closest('.group-stack') || t.closest('.group-menu-wrap')) return;
                   // Report 30: a double-click on the select bar used to fire two
                   // mousedowns and toggle the whole group twice — i.e. do nothing,
                   // visibly. One gesture, one toggle, keyed on the group id.
@@ -3172,10 +3272,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   <span className="group-select-check" aria-hidden="true">
                     {items.every(i => selectedItems.has(i.id)) ? <Check size={13} /> : items.some(i => selectedItems.has(i.id)) ? '–' : ''}
                   </span>
-                  <span className="group-badge">
-                    {items.length} images
+                  <span className="group-badge" title={`${items.length} photos in this group`}>
+                    <Layers size={11} /> {items.length}
                   </span>
-                  {items[0].category && (
+                  {/* Collapsed, the category chip lives ON the pile (the select bar
+                      is only ~90px wide at the default 8 columns and clipped it to
+                      one letter). Open, the pile is gone and the bar has the room. */}
+                  {items[0].category && expandedGroupId === groupId && (
                     <span className="category-badge">{items[0].category}</span>
                   )}
                   <div className="group-menu-wrap" onMouseDown={(e) => e.stopPropagation()}>
@@ -3251,6 +3354,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     )}
                   </div>
                 </div>
+                {expandedGroupId === groupId ? (
+                  /* ── Expanded: the fan. Every photo, drag-to-reorder,
+                       double-click lightbox, ↩ remove-from-group. ── */
+                  <>
                 <div className="group-images">
                   {items.map((item) => (
                     <div
@@ -3268,7 +3375,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       onClick={(e) => {
                         e.stopPropagation(); // don't bubble to group-level toggle
                         // Pick mode: clicking a photo inside a group selects it for
-                        // the sidebar Photo tools (rotate/crop/revert/delete).
+                        // the photo toolbar (rotate/crop/revert/delete).
                         if (photoSelectModeRef.current) togglePhotoPick(item.id);
                       }}
                     >
@@ -3287,9 +3394,102 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       ) : (
                         <div className="lazy-skeleton lazy-skeleton--error" aria-hidden="true" />
                       )}
+                      <button
+                        type="button"
+                        className="remove-from-group-btn"
+                        title="Take this photo out of the group (it becomes its own item)"
+                        aria-label="Remove photo from group"
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => { e.stopPropagation(); removeFromGroup(item.id); }}
+                      >
+                        ↩
+                      </button>
                     </div>
                   ))}
                 </div>
+                <button
+                  type="button"
+                  className="gs-collapse"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); setExpandedGroupId(null); }}
+                  title="Close this pile (Esc)"
+                >
+                  <ChevronsDownUp size={13} /> Collapse
+                </button>
+                  </>
+                ) : (
+                  /* ── Collapsed: the pile. Leader on top at full card size, the
+                       rest peeking behind it; geometry from lib/stackLayout. ── */
+                  <div
+                    className="group-stack"
+                    style={{
+                      paddingRight: `${stackReserve(items.length, { compact: isPhone }).right}px`,
+                      paddingBottom: `${stackReserve(items.length, { compact: isPhone }).bottom}px`,
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={false}
+                    aria-label={`Pile of ${items.length} photos — open`}
+                    title={`${items.length} photos — click to open this pile`}
+                    onMouseDown={(e) => { e.stopPropagation(); noteGestureStart(items[0].id); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Photo pick mode: a tap on the TOP photo picks it, exactly as
+                      // it would in the fan. The peeking layers are inert — open the
+                      // pile to reach them (the founder's rule for stacks).
+                      if (photoSelectModeRef.current && (e.target as HTMLElement).closest('.gs-layer--top')) {
+                        togglePhotoPick(items[0].id);
+                        return;
+                      }
+                      togglePile(groupId);
+                    }}
+                    onDoubleClick={(e) => { e.stopPropagation(); openLightboxFromDoubleClick(items[0].id); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        togglePile(groupId);
+                      }
+                    }}
+                  >
+                    {stackLayers(items.length, { compact: isPhone }).map((layer) => {
+                      const item = items[layer.index];
+                      const url = item.thumbnailUrl || item.preview || item.imageUrls?.[0];
+                      return (
+                        <div
+                          key={item.id}
+                          data-item-id={item.id}
+                          className={`gs-layer${layer.index === 0 ? ' gs-layer--top' : ''}${layer.index === 0 && photoSelectMode && selectedItems.has(item.id) ? ' photo-picked' : ''}`}
+                          style={{
+                            transform: `translate(${layer.x}px, ${layer.y}px) rotate(${layer.rotate}deg)`,
+                            zIndex: layer.z,
+                          }}
+                        >
+                          {url ? (
+                            <img
+                              src={url}
+                              alt={layer.index === 0 ? 'Product' : ''}
+                              draggable={false}
+                              loading="lazy"
+                              decoding="async"
+                              onError={retryImg}
+                              style={{ transform: `rotate(${item.imageRotation || 0}deg)` }}
+                            />
+                          ) : (
+                            <div className="lazy-skeleton lazy-skeleton--error" aria-hidden="true" />
+                          )}
+                        </div>
+                      );
+                    })}
+                    {items[0].category && (
+                      <span className="category-badge gs-cat">{items[0].category}</span>
+                    )}
+                    {stackOverflowBadge(items.length) && (
+                      <span className="gs-count" aria-hidden="true">{stackOverflowBadge(items.length)}</span>
+                    )}
+                    <span className="gs-hint" aria-hidden="true"><Layers size={12} /> Open</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>

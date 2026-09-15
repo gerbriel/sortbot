@@ -230,7 +230,12 @@
   .sw-root {
     right: 0.75rem;
     left: 0.75rem;
-    bottom: calc(0.75rem + var(--tabbar-h));
+    /* --dock-h joined --tabbar-h here: Step 3's sticky nav bar (Prev / Next /
+       slider / Save) occupies this same strip, and this FAB is a 105px pill, so
+       it was covering the right end of it. The value is published on
+       .app-container by ProductDescriptionGenerator.tsx and is 0 whenever that
+       bar is not on screen — including every width above 640px. */
+    bottom: calc(0.75rem + var(--tabbar-h) + var(--dock-h, 0px));
   }
 
   .sw-fab {

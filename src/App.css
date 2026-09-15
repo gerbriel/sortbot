@@ -286,47 +286,11 @@
   background: var(--shopify-red-dark);
 }
 
-/* Debug toggle button — fixed bottom-left corner */
-.button-debug-toggle {
-  position: fixed;
-  bottom: 12px;
-  left: 12px;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: var(--fs-2xs);
-  padding: 0.25rem 0.55rem;
-  /* Fallback literals kept in step with the repointed dark ramp, so the button
-     still reads correctly if the token layer ever fails to load. */
-  background: var(--gray-100, #141418);
-  color: var(--gray-400, #7a7a87);
-  border: 1px solid var(--gray-300, #2c2c36);
-  border-radius: var(--radius-md, 6px);
-  cursor: pointer;
-  transition: all 0.15s;
-  white-space: nowrap;
-  font-family: inherit;
-  opacity: 0.6;
-}
-
-.button-debug-toggle:hover {
-  opacity: 1;
-  background: var(--gray-200, #1e1e25);
-}
-
-.button-debug-on {
-  background: var(--warning-dim);
-  color: var(--warning);
-  border-color: var(--warning);
-  opacity: 1;
-}
-
-/* Gold is the only warmer/brighter translucent fill in the token set — it
-   gives the "on" state a visible hover step without a new colour. */
-.button-debug-on:hover {
-  background: var(--gold-dim);
-}
+/* The floating debug toggle used to live here (.button-debug-toggle /
+   .button-debug-on). It is now a switch at the bottom of the ShortcutsPanel —
+   see components/ShortcutsPanel.css — so the bottom-left corner holds ONE
+   control instead of a permanently-pinned developer affordance, and it is
+   finally reachable on a phone. */
 
 /* Batch Actions */
 .batch-actions {
@@ -458,13 +422,7 @@
 }
 
 /* Tablet: sidebar inside ImageGrouper shrinks to 160px */
-@media (max-width: 1024px) and (min-width: 769px) {
-  .grouper-header {
-    width: 160px !important;
-    padding: 0.9rem 0.7rem !important;
-    font-size: var(--fs-xs);
-  }
-}
+
 
 @media (max-width: 768px) {
   .app-header {
@@ -595,68 +553,6 @@
   border: 1px solid var(--success);
   margin-top: var(--space-4);
   font-size: var(--fs-base);
-}
-
-/* ── Navbar storage meter ──────────────────────────────────────────────────── */
-.storage-meter-nav {
-  background: var(--ink-900);
-  border-bottom: 1px solid var(--border);
-  padding: 0.35rem 1.5rem;
-}
-
-.storage-meter-nav-inner {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  max-width: 1600px;
-  margin: 0 auto;
-  font-size: var(--fs-xs);
-}
-
-.storage-meter-nav-label {
-  font-weight: 700;
-  color: var(--accent);
-  white-space: nowrap;
-}
-
-.storage-meter-nav-calculating {
-  font-size: var(--fs-xs);
-  color: var(--text-muted);
-  font-style: italic;
-}
-
-.storage-meter-nav-bar-wrap {
-  flex: 1;
-  max-width: 180px;
-  /* Unfilled track — a raised neutral so the JS-set fill colour stays legible. */
-  background: var(--ink-700);
-  border-radius: 99px;
-  height: 6px;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-.storage-meter-nav-bar {
-  height: 100%;
-  border-radius: 99px;
-  transition: width 0.4s ease, background 0.4s ease;
-}
-
-.storage-meter-nav-text {
-  color: var(--text-primary);
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.storage-meter-nav-warn {
-  font-size: var(--fs-2xs);
-  font-weight: 600;
-  color: var(--danger);
-  background: var(--danger-dim);
-  border: 1px solid var(--danger);
-  border-radius: 4px;
-  padding: 1px 6px;
-  white-space: nowrap;
 }
 
 /* ── Toast notifications ───────────────────────────────────────────────────── */
@@ -825,16 +721,10 @@
      are the only two places that need to know the bar exists. */
   .app-main { padding-bottom: calc(var(--space-4) + var(--tabbar-h)); }
 
-  /* The debug toggle is a developer affordance pinned to the bottom-left
-     corner — exactly where the tab bar now is. It has no place on a phone. */
-  .button-debug-toggle { display: none; }
+  /* The bottom-left corner is now the ShortcutsPanel gear, which lifts itself
+     clear of the tab bar with --tabbar-h (ShortcutsPanel.css) instead of being
+     hidden the way the old debug button was. Nothing to do here. */
 
-  /* The meter is a nowrap row of five items; at 390px it was the one thing in
-     the shell wide enough to give the page a horizontal scrollbar. */
-  .storage-meter-nav { padding: 0.35rem var(--space-4); }
-  .storage-meter-nav-inner { flex-wrap: wrap; row-gap: 0.25rem; }
-  .storage-meter-nav-bar-wrap { max-width: none; }
-  .storage-meter-nav-files { display: none; }
 }
 
 /* Toasts are bottom-right, which on a phone is the tab bar and the support
@@ -843,7 +733,7 @@
   .toast-stack {
     right: var(--space-3);
     left: var(--space-3);
-    bottom: calc(var(--space-3) + var(--tabbar-h) + 4.8rem);
+    bottom: calc(var(--space-3) + var(--tabbar-h) + var(--dock-h, 0px) + 4.8rem);
     align-items: stretch;
   }
   .toast-item { max-width: none; }
