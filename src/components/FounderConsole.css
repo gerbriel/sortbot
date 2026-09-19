@@ -1,0 +1,202 @@
+/* ── Founder console ─────────────────────────────────────────────────────────
+   Only what the console ADDS on top of OrgPanel.css, which it imports for the
+   member/beta/directory row styling it inherited when those sections moved here
+   (the same arrangement AnalyticsPanel, CrmPanel and ErrorsPanel already use —
+   the `.an-*` / `.crm-*` / `.ft-*` rules live in OrgPanel.css too).
+
+   Every length is a rem against the 9px root except the touch floor, which is a
+   literal 44px on purpose (AGENTS.md §1): a physical constant must not drift
+   the next time the root is retuned. Colour is tokens only — no hex here.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.fc-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* The one line shown when founder_console.sql has not been run. Warning, not
+   danger: nothing is broken, five capabilities are simply not installed. */
+.fc-setup {
+  margin: 0;
+  padding: 1rem 1.2rem;
+  border-radius: 8px;
+  background: var(--warning-dim);
+  border: 1px solid var(--warning);
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+}
+
+.fc-setup code {
+  font-size: var(--fs-xs);
+  background: var(--ink-850);
+  border-radius: 4px;
+  padding: 0.1rem 0.3rem;
+}
+
+/* A reading measure for the console's prose. `wide` drops ToolView's 1400px
+   limit for the grids, which left the explanatory paragraphs running the full
+   1780px of a desktop window — unreadable, and the reason to cap them here
+   rather than to stop using `wide`. */
+.fc-view .shopify-conn-help,
+.fc-view .fc-setup { max-width: 90rem; }
+
+.fc-stats { margin-bottom: 1rem; }
+
+.fc-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* ── Workspaces: an expandable row ─────────────────────────────────────────
+   The row itself is the <li>; the HEAD is the button, so the whole summary
+   block is one target and the chevron is decoration rather than a second
+   control to find. */
+
+.fc-org-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+}
+
+.fc-org-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.7rem 0.3rem;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.fc-org-head:hover { background: var(--ink-900); }
+
+.fc-org-chev {
+  display: inline-flex;
+  align-items: center;
+  padding-top: 0.15rem;
+  color: var(--text-muted);
+}
+
+.fc-org-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.2rem 0.3rem 1rem 2rem;
+  border-left: 2px solid var(--border-subtle);
+  margin-left: 0.6rem;
+  /* A measure, even inside `wide`. The member rows are label + role + Remove;
+     stretched across a 1400px page the control pair ends up an inch from the
+     name it belongs to. */
+  max-width: 120rem;
+}
+
+.fc-org-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.fc-inline-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fc-inline-field select {
+  background: var(--ink-850);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+  padding: 0.35rem 0.5rem;
+  min-height: 3.4rem;
+  cursor: pointer;
+}
+
+.fc-inline-field select:disabled { opacity: 0.5; cursor: default; }
+
+.fc-sub {
+  margin: 0.4rem 0 0;
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.fc-invite-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.4rem;
+}
+
+.fc-invite-row > *:first-child { flex: 1 1 22rem; min-width: 0; }
+
+.fc-markets {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+/* ── Onboard form ─────────────────────────────────────────────────────────
+   A narrow measure on purpose: three fields read as a form, not as a page. */
+
+.fc-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  max-width: 52rem;
+}
+
+.fc-form-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.2rem;
+}
+
+/* ── Phone ────────────────────────────────────────────────────────────────
+   Below 640px the controls stack and every target clears the 44px floor. The
+   16px (var(--fs-md)) restatement is what stops mobile Safari zooming into a
+   focused control and never zooming back out. */
+
+@media (max-width: 640px) {
+  .fc-view { gap: 1.2rem; }
+
+  .fc-org-body {
+    padding-left: 1rem;
+    margin-left: 0.3rem;
+  }
+
+  .fc-org-controls { align-items: stretch; flex-direction: column; }
+  .fc-inline-field { justify-content: space-between; }
+  .fc-inline-field select { flex: 1; min-height: 44px; font-size: var(--fs-md); }
+
+  .fc-invite-row { flex-direction: column; align-items: stretch; }
+  .fc-invite-row > *:first-child { flex: none; }
+
+  .fc-form { max-width: none; }
+  .fc-form-actions > * { flex: 1; }
+
+  .fc-setup { font-size: var(--fs-base); }
+  .fc-view .shopify-conn-help,
+  .fc-view .fc-setup { max-width: none; }
+}

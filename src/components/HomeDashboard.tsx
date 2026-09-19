@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   ArrowRight, BarChart3, Boxes, FolderOpen, Images, Inbox, LayoutGrid, LifeBuoy,
-  MessageSquare, Package, Play, Store, Upload, Users,
+  MessageSquare, Package, Play, ShieldCheck, Store, Upload, Users,
 } from 'lucide-react';
 import {
   Badge, Button, ConfirmAction, EmptyState, Skeleton, StatGrid, StatTile,
@@ -20,6 +20,7 @@ import {
 } from '../lib/marketplaceService';
 import type { MarketplaceKey } from '../lib/marketplaces/types';
 import { fetchAnalyticsSummary } from '../lib/analytics';
+import { fetchBetaSignups, fetchBetaOrgDirectory } from '../lib/betaService';
 import type { AnalyticsSummary } from '../lib/analytics';
 import { useSupportThreads } from '../lib/supportStore';
 import { formatRelative } from '../lib/supportService';
@@ -157,6 +158,10 @@ function HomeDashboard({
   const [activeName, setActiveName] = useState<string | null>(null);
   const [markets, setMarkets] = useState<Loadable<MarketplacesData>>(LOADING);
   const [pulse, setPulse] = useState<Loadable<AnalyticsSummary>>(LOADING);
+  /** Founder-only counts for the pulse widget's beta line. Zero is the honest
+   *  answer when a read fails — this widget is not where a founder learns that
+   *  a migration is missing. */
+  const [beta, setBeta] = useState<{ pending: number; workspaces: number }>({ pending: 0, workspaces: 0 });
   /** The row whose full batch row is being fetched, so it can say so. */
   const [openingId, setOpeningId] = useState<string | null>(null);
 
@@ -222,6 +227,14 @@ function HomeDashboard({
         if (cancelled) return;
         setPulse(res.status === 'ok' ? { status: 'ok', data: res.summary } : HIDDEN);
       })();
+      void (async () => {
+        const [signups, dirs] = await Promise.all([fetchBetaSignups(), fetchBetaOrgDirectory()]);
+        if (cancelled) return;
+        setBeta({
+          pending: signups.filter(r => r.status === 'pending').length,
+          workspaces: dirs.length,
+        });
+      })();
     }
 
     return () => { cancelled = true; };
@@ -254,7 +267,7 @@ function HomeDashboard({
   const quickActions = useMemo(() => {
     const ORDER = [
       'products', 'labels', 'scan', 'library', 'categories', 'presets', 'workspace',
-      'vocabulary', 'analytics', 'crm', 'finance', 'board',
+      'founder', 'vocabulary', 'analytics', 'crm', 'finance', 'board',
     ];
     const byId = new Map(navItems.filter(i => !i.phoneOnly).map(i => [i.id, i]));
     const tiles: Array<{ id: string; label: string; icon: ReactNode; title: string; run: () => void }> = [];
@@ -538,7 +551,16 @@ function HomeDashboard({
                     <StatTile quiet compact label="Sessions" value={pulse.data.totals.sessions} />
                     <StatTile quiet compact label="Beta signups" value={pulse.data.totals.beta_signups} />
                   </StatGrid>
+                  {/* The two numbers a founder actually opens the app for. Both
+                      fail quiet: a missing migration reads as 0, never an error. */}
+                  <p className="home-note">
+                    {beta.pending} pending request{beta.pending === 1 ? '' : 's'} · {beta.workspaces} workspace{beta.workspaces === 1 ? '' : 's'}
+                  </p>
                   <div className="home-actions">
+                    <Button variant="primary" icon={<ShieldCheck size={14} />}
+                      onClick={() => onNavigate('founder')}>
+                      Open Founder console
+                    </Button>
                     <Button onClick={() => onNavigate('analytics')}>Open analytics</Button>
                   </div>
                 </>

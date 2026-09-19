@@ -49,14 +49,43 @@ export type OrgBootstrapResult =
   // dashboard. Never applies to existing members or invited teammates.
   | { mode: 'waitlist'; betaStatus: 'none' | 'pending' | 'denied' };
 
+/* ── Seeding an EMPTY workspace ──────────────────────────────────────────────
+   A workspace the founder created from the Founder console
+   (supabase/migrations/founder_console.sql) exists before its owner has ever
+   signed in, so it has no categories: Step 2 would open with nothing to drag
+   onto and the preset buttons would do nothing. The seed therefore runs on
+   every branch that RESOLVES a workspace, not only on the branch that creates
+   one — which also heals any workspace that ended up empty for another reason.
+
+   `initializeDefaultCategories()` IS the cheap check: it reads ONE category row
+   (RLS-scoped, so "none" means "none in MY workspace") and returns immediately
+   when the workspace already has some. The Set keeps that to at most one read
+   per workspace per session. The default list lives in categoriesService and
+   must never grow a second copy here. */
+const seedChecked = new Set<string>();
+
+/** Exported for the test — the call sites below all go through it. */
+export async function seedWorkspaceIfEmpty(orgId: string | null | undefined): Promise<void> {
+  if (!orgId || seedChecked.has(orgId)) return;
+  seedChecked.add(orgId);
+  try {
+    await initializeDefaultCategories();
+  } catch (err) {
+    // Best-effort, exactly like the create branch it came from: a workspace
+    // with no categories is still usable (you can add your own); a sign-in
+    // blocked on a repair is not.
+    log.error(`seedWorkspaceIfEmpty | ${String(err)}`);
+  }
+}
+
 /**
  * Resolve the signed-in user's workspace, in order:
  *   1. Existing membership → use it (existing users land in the Founding
  *      Workspace they were backfilled into — nothing changes for them).
  *   2. Pending invite for their email → accept it and join that org.
  *   3. An org they created earlier whose membership insert failed → self-repair.
- *   4. Otherwise → create a fresh personal workspace (isolated, empty) and
- *      seed the default categories.
+ *   4. Otherwise → create a fresh personal workspace (isolated, empty).
+ * Whichever branch wins, seedWorkspaceIfEmpty runs on the resolved workspace.
  * Any unexpected error → { mode: 'legacy' } so tenancy can never brick the app.
  */
 // Dedupe concurrent calls (React StrictMode double-invokes effects in dev;
@@ -95,6 +124,9 @@ async function ensureOrganizationInner(user: User): Promise<OrgBootstrapResult> 
       const org = Array.isArray(m.organizations) ? m.organizations[0] : m.organizations;
       if (org) {
         log.auth(`ensureOrganization | member of "${org.name}" as ${m.role}`);
+        // Not awaited: for every workspace that already has categories this is
+        // a single no-op read, and sign-in must not wait behind it.
+        void seedWorkspaceIfEmpty(org.id);
         return { mode: 'org', org, role: m.role };
       }
     }
@@ -122,6 +154,10 @@ async function ensureOrganizationInner(user: User): Promise<OrgBootstrapResult> 
           .from('organizations').select('*').eq('id', inv.org_id).maybeSingle();
         if (org) {
           log.auth(`ensureOrganization | joined "${(org as Organization).name}" via invite as ${inv.role}`);
+          // The founder-console path lands HERE, not on the membership branch
+          // above: an unknown email is given an admin invite, so the first time
+          // that workspace is ever opened is the first time it is seeded.
+          void seedWorkspaceIfEmpty((org as Organization).id);
           return { mode: 'org', org: org as Organization, role: inv.role };
         }
       } else {
@@ -143,6 +179,7 @@ async function ensureOrganizationInner(user: User): Promise<OrgBootstrapResult> 
       });
       if (!repairErr) {
         log.auth(`ensureOrganization | repaired membership in "${org.name}"`);
+        void seedWorkspaceIfEmpty(org.id);
         return { mode: 'org', org, role: 'owner' };
       }
     }
@@ -180,7 +217,9 @@ async function ensureOrganizationInner(user: User): Promise<OrgBootstrapResult> 
       return { mode: 'legacy' };
     }
     // Seed default categories so Step 2 isn't empty in a brand-new workspace.
-    try { await initializeDefaultCategories(); } catch { /* best-effort */ }
+    // Awaited here, as it always was — this is the one branch where the
+    // workspace is provably empty and the user is about to be dropped into it.
+    await seedWorkspaceIfEmpty((org as Organization).id);
     log.auth(`ensureOrganization | created personal workspace "${name}"`);
     return { mode: 'org', org: org as Organization, role: 'owner' };
   } catch (err) {

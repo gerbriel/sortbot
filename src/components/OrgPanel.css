@@ -134,6 +134,21 @@
   color: var(--text-muted);
 }
 
+/* One link out to the Founder console, where the three cross-workspace
+   sections that used to be tabs in this panel now live (Sept 2026). */
+.org-founder-link {
+  margin-top: 1rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ── Beta requests + workspace directory + cross-workspace users ────────────
+   These rule sets are now used by FounderConsole.tsx / FoundingUsersTab.tsx,
+   which import this stylesheet exactly as AnalyticsPanel, CrmPanel and
+   ErrorsPanel do. They stay HERE rather than moving with the markup because the
+   `.tool-view`-scoped page-scale overrides further down key off the same class
+   names, and because OrgPanel still renders `.beta-status-*` on a member's own
+   application in the member-detail expand. */
 /* ── Beta requests (Founding Workspace admins) ─────────────────────────── */
 .beta-request-row { align-items: flex-start; }
 
@@ -1023,24 +1038,29 @@
 
 @media screen and (max-width: 640px) {
 
+  /* `.fc-view` (the Founder console) is in the root list for the same reason
+     the other three are: it renders `.beta-*`, `.fa-*` and `.org-*` rows from
+     this stylesheet, and without it the bare selects in `.fa-add-row` stay at
+     --fs-2xs (11px) — measured, and exactly the zoom trigger below. */
+
   /* ── 16px controls: a zoom trigger, not a style choice ───────────────────
      Mobile Safari zooms the page when a control under 16px takes focus and
      leaves it zoomed. --fs-md IS 16px; --fs-base (14px) is below the line. */
-  .tool-view :is(.org-page, .fin-view, .ft-card) input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']) {
+  .tool-view :is(.org-page, .fin-view, .ft-card, .fc-view) input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']) {
     min-height: 44px;
     font-size: var(--fs-md);
   }
 
-  .tool-view :is(.org-page, .fin-view, .ft-card) :is(select, textarea) {
+  .tool-view :is(.org-page, .fin-view, .ft-card, .fc-view) :is(select, textarea) {
     min-height: 44px;
     font-size: var(--fs-md);
   }
 
-  .tool-view :is(.org-page, .fin-view, .ft-card) textarea { min-height: 9rem; }
+  .tool-view :is(.org-page, .fin-view, .ft-card, .fc-view) textarea { min-height: 9rem; }
 
   /* Checkboxes are excluded above (a 44px checkbox is a grey slab), so they get
      a real target from size instead. */
-  .tool-view :is(.org-page, .fin-view, .ft-card) input[type='checkbox'] {
+  .tool-view :is(.org-page, .fin-view, .ft-card, .fc-view) input[type='checkbox'] {
     width: 22px;
     height: 22px;
   }

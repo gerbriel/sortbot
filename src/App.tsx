@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, Suspense, Component, type ReactNode } from 'react';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
-import { Tag, Settings, Package, Boxes, Link2, Scissors, X, Trash2, BookMarked, KanbanSquare, AlertTriangle, Keyboard, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users, MessageSquare, Wallet, Printer, ScanLine, LayoutDashboard } from 'lucide-react';
+import { Tag, Settings, Package, Boxes, Link2, Scissors, X, Trash2, BookMarked, KanbanSquare, AlertTriangle, Keyboard, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users, MessageSquare, Wallet, Printer, ScanLine, LayoutDashboard, ShieldCheck } from 'lucide-react';
 import { log, isDebugEnabled } from './lib/debugLogger';
 import BrandWordmark from './components/Wordmark';
 import Auth from './components/Auth';
@@ -147,6 +147,7 @@ const KanbanBoard = React.lazy(() => import('./components/KanbanBoard'));
 const AnalyticsPanel = React.lazy(() => import('./components/AnalyticsPanel'));
 const CrmPanel = React.lazy(() => import('./components/CrmPanel'));
 const FinanceView = React.lazy(() => import('./components/FinanceView'));
+const FounderConsole = React.lazy(() => import('./components/FounderConsole'));
 const ErrorsPanel = React.lazy(() => import('./components/ErrorsPanel'));
 const MessagesView = React.lazy(() => import('./components/MessagesView'));
 const LabelPrintView = React.lazy(() => import('./components/LabelPrintView'));
@@ -158,7 +159,7 @@ const ProductsView = React.lazy(() => import('./components/ProductsView'));
 export type ActiveView =
   | 'home' | 'workflow' | 'library' | 'categories' | 'presets'
   | 'vocabulary' | 'analytics' | 'crm' | 'finance' | 'board' | 'workspace' | 'messages'
-  | 'labels' | 'scan' | 'products';
+  | 'labels' | 'scan' | 'products' | 'founder';
 
 /** Fallback shown while a view's chunk is in flight. Reuses the existing
  *  `.loading-screen` + `.spinner` styles, so there is no new CSS. */
@@ -1848,6 +1849,9 @@ function App() {
     setActiveView('workflow');
     void handleOpenBatch(batch);
   });
+  /* The Workspace dashboard's one link out to the founder half, and Home's
+     founder widget. Stable for the same reason as everything else here. */
+  const onOpenFounderStable = useEventCallback(() => setActiveView('founder'));
   /* Step 4's marketplaces panel → the Workspace dashboard, on its Marketplaces
      tab. Stable, because the panel is memo'd (§18 #24). */
   const onOpenWorkspaceMarketplaces = useEventCallback(() => {
@@ -3196,6 +3200,7 @@ function App() {
     ...(showShortcuts ? [{ id: 'shortcuts', label: 'Keyboard shortcuts', icon: <Keyboard size={16} />, title: 'Every keyboard shortcut, by screen', group: 'setup' as const, phoneOnly: true }] : []),
     /* FOUNDER — Founding Workspace only, and all but Board admin-only. */
     ...(isFoundingAdmin ? [
+      { id: 'founder', label: 'Founder console', icon: <ShieldCheck size={16} />, title: 'Founder console — beta requests, every workspace, plans and accounts (Founding Workspace)', group: 'founder' as const },
       { id: 'vocabulary', label: 'Vocabulary', icon: <BookMarked size={16} />, title: 'Vocabulary — curate quick keyword chips and brand keywords (all workspaces)', group: 'founder' as const },
       { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={16} />, title: 'Analytics — first-party pageviews, funnel, referrers, errors (Founding Workspace)', group: 'founder' as const },
       { id: 'crm', label: 'CRM', icon: <Contact size={16} />, title: 'CRM — every beta request and account as a contact, with stages, follow-ups and notes (Founding Workspace)', group: 'founder' as const },
@@ -3679,6 +3684,29 @@ function App() {
                 window.location.reload();
               }}
               onDescriptionSettingsChanged={(s) => setOrgDescSettings(s)}
+              onOpenFounder={isFoundingAdmin ? onOpenFounderStable : undefined}
+            />
+          </ToolView>
+        </Suspense>
+      )}
+
+      {/* Founder console (founding admins only) — running the BETA, as opposed
+          to running a workspace: requests, every workspace, plans, invites and
+          every account. The three sections it consolidated used to be tabs
+          inside the Workspace dashboard above. */}
+      {activeView === 'founder' && user && currentOrg?.slug === 'founding' && (orgRole === 'owner' || orgRole === 'admin') && (
+        <Suspense fallback={<ViewFallback />}>
+          <ToolView
+            wide
+            icon={<ShieldCheck size={26} />}
+            title="Founder console"
+            description="Approve shops, onboard a workspace before its owner signs in, set plans, and manage every account across every workspace."
+            onBack={goToWorkflow}
+          >
+            <FounderConsole
+              myUserId={user.id}
+              myOrgId={currentOrg.id}
+              onMyRoleChanged={(role) => setOrgRole(role)}
             />
           </ToolView>
         </Suspense>
