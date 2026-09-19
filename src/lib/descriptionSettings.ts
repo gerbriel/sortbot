@@ -25,8 +25,8 @@ export interface DescriptionSettings {
   /** Closing disclaimer lines, one per array entry. Empty array = omitted. */
   disclaimerLines: string[];
   /** The shop/reseller name written to the Shopify CSV Vendor column.
-   *  Empty → App falls back to the workspace name ("C&D Vintage" for the
-   *  Founding Workspace). This is the SELLER, not the garment's brand. */
+   *  Empty → App falls back to the workspace name. This is the SELLER, not
+   *  the garment's brand. */
   vendorName: string;
   /** Generate a model-written selling paragraph on Regenerate (generate-prose
    *  Edge Function). Off by default — output is unchanged until enabled. */

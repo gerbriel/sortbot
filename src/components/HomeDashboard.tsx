@@ -7,8 +7,11 @@ import {
 import {
   Badge, Button, ConfirmAction, EmptyState, Skeleton, StatGrid, StatTile,
 } from './ui';
+import OnboardingChecklist from './OnboardingChecklist';
 import type { WorkspaceNavItem } from './WorkspaceMenu';
 import type { ClothingItem } from '../App';
+import type { OrgRole } from '../lib/orgService';
+import type { DescriptionSettings } from '../lib/descriptionSettings';
 import {
   batchSummary, publicationCounts, recentBatchRows, storageReadout,
   type PublicationCounts, type RecentBatchRow,
@@ -71,6 +74,14 @@ export interface HomeDashboardProps {
   orgId: string | null;
   /** Founding-workspace owner/admin: drives the inbox role and the pulse widget. */
   isFounder: boolean;
+  /** `organizations.plan` — the setup checklist badges the founding cohort. */
+  orgPlan: string | null;
+  /** This user's role HERE. Null in legacy mode, where there is no workspace. */
+  orgRole: OrgRole | null;
+  /** App already holds these; the checklist only needs to know whether the
+   *  shop has named itself, and reading it as a prop means saving the name
+   *  ticks that step without a refetch. */
+  descriptionSettings: DescriptionSettings | null;
   /** App's ONE nav list. Quick actions are filtered from it, so role gates are
    *  declared exactly once (AGENTS.md §6). */
   navItems: WorkspaceNavItem[];
@@ -149,8 +160,8 @@ interface MarketplacesData {
 }
 
 function HomeDashboard({
-  userEmail, userId, orgName, orgId, isFounder, navItems,
-  activeBatchId, activeBatchNumber, items, refreshTrigger, storage,
+  userEmail, userId, orgName, orgId, isFounder, orgPlan, orgRole, descriptionSettings,
+  navItems, activeBatchId, activeBatchNumber, items, refreshTrigger, storage,
   onResume, onStartNewBatch, onOpenBatch, onNavigate, onOpenMarketplaces,
 }: HomeDashboardProps) {
   const [recent, setRecent] = useState<Settling<RecentBatchRow[]>>(LOADING);
@@ -304,6 +315,25 @@ function HomeDashboard({
         </header>
 
         <div className="home-grid">
+          {/* ── 0. Get set up. FIRST while it is showing, and gone for good the
+                 moment every required step is done — it returns null itself,
+                 so there is no flash and nothing here to un-wire later. */}
+          <OnboardingChecklist
+            orgId={orgId}
+            orgName={orgName}
+            plan={orgPlan}
+            role={orgRole ?? 'member'}
+            canInvite={orgRole === 'owner' || orgRole === 'admin'}
+            hasVendorName={!!descriptionSettings?.vendorName?.trim()}
+            refreshTrigger={refreshTrigger}
+            onNavigate={onNavigate}
+            onOpenMarketplaces={onOpenMarketplaces}
+            /* Already stable (App builds it with useEventCallback) and the
+               signature is the same `(step) => reveal` — so Upload photos and
+               Go to export land exactly where Resume does. */
+            onStartWorkflow={onResume}
+          />
+
           {/* ── 1. The open batch ─────────────────────────────────────────── */}
           <HomeCard title="Current batch" icon={<Images size={16} />} span>
             {hasBatch ? (

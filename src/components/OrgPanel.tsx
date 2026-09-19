@@ -797,7 +797,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
             <div className="desc-settings-form">
               <label className="desc-settings-field">
                 <span>Vendor name (Shopify CSV Vendor column — your shop, not the garment brand)</span>
-                <input value={descVendor} placeholder={org.slug === 'founding' ? 'C&D Vintage' : org.name}
+                <input value={descVendor} placeholder={org.name}
                   onChange={(e) => setDescVendor(e.target.value)} />
               </label>
               <label className="desc-settings-field desc-settings-field--narrow">

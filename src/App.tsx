@@ -25,6 +25,7 @@ import {
 import { autoSaveWorkflowBatchDetailed, autoSaveSucceeded, markBatchConfirmed, getWorkflowBatch, type WorkflowBatch } from './lib/workflowBatchService';
 import { ensureOrganization, type Organization, type OrgRole } from './lib/orgService';
 import { getOrgDescriptionSettings, type DescriptionSettings } from './lib/descriptionSettings';
+import { writeOnboardingLocal } from './lib/onboarding';
 import { slimForWorkflowState, ultraSlimForBackup, asClothingItems } from './lib/slimItems';
 import { scheduleWorkflowBackup, flushWorkflowBackup, cancelWorkflowBackup, WORKFLOW_BACKUP_KEY } from './lib/workflowBackup';
 import { readWorkflowBackup, resolveRestoreItems, workflowStateCapturedAt } from './lib/restoreSource';
@@ -543,12 +544,18 @@ function App() {
   const [analyticsTab, setAnalyticsTab] = useState<'overview' | 'errors'>('overview');
   // Per-workspace description format — fetched with the org, passed to Step 3
   const [orgDescSettings, setOrgDescSettings] = useState<DescriptionSettings | null>(null);
-  // CSV Vendor column = the SELLER: explicit setting → founding default
-  // "C&D Vintage" → workspace name. Undefined (legacy mode) → exporter falls
-  // back to the garment brand, the pre-tenancy behavior.
+  // CSV Vendor column = the SELLER: explicit setting → workspace name.
+  // Undefined (legacy mode) → exporter falls back to the garment brand, the
+  // pre-tenancy behavior.
+  //
+  // The Founding Workspace used to fall back to a literal shop name instead of
+  // its own. It is a demo and testing workspace now — that shop is becoming its
+  // own tenant — so it resolves exactly like every other workspace, and a shop
+  // that wants a Vendor different from its workspace name types one into
+  // Workspace → Settings, which is what that field is for.
   const resolvedVendorName =
     orgDescSettings?.vendorName?.trim()
-    || (currentOrg?.slug === 'founding' ? 'C&D Vintage' : currentOrg?.name)
+    || currentOrg?.name
     || undefined;
   // Private beta: non-null → signed in but not approved yet; the waitlist
   // screen replaces the dashboard (RLS already hides all data regardless).
@@ -1590,6 +1597,21 @@ function App() {
     setErrorContext({ view });
     trackPageview(view);
   }, [loading, signedInUserId, orgResolvedFor, showLogin, betaWaitlist]);
+
+  /* The setup checklist's one un-observable fact: whether this person has
+     LOOKED at their categories or presets. It is recorded HERE rather than on
+     the checklist's own buttons because the workspace menu, the Tools grid and
+     a keyboard walk all reach those pages too, and a step that only ticks when
+     you arrive by one particular door is a step that never ticks.
+
+     Per workspace, cosmetic, localStorage-backed and wrapped — losing it just
+     shows the checklist again (AGENTS.md §1). */
+  const resolvedOrgId = currentOrg?.id ?? null;
+  useEffect(() => {
+    if (!resolvedOrgId) return;
+    if (activeView === 'categories') writeOnboardingLocal(resolvedOrgId, { visitedCategories: true });
+    else if (activeView === 'presets') writeOnboardingLocal(resolvedOrgId, { visitedPresets: true });
+  }, [activeView, resolvedOrgId]);
 
   const handleSignOut = async () => {
     log.auth('handleSignOut');
@@ -3573,6 +3595,9 @@ function App() {
             orgName={currentOrg?.name ?? null}
             orgId={currentOrg?.id ?? null}
             isFounder={supportIsFounder}
+            orgPlan={currentOrg?.plan ?? null}
+            orgRole={currentOrg ? orgRole : null}
+            descriptionSettings={orgDescSettings}
             navItems={navItems}
             activeBatchId={currentBatchId}
             activeBatchNumber={currentBatchNumber}

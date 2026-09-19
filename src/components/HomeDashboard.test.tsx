@@ -11,6 +11,10 @@ import type { WorkflowBatch } from '../lib/workflowBatchService';
 import { fetchOrgMarketplaces, fetchPublications } from '../lib/marketplaceService';
 import { fetchAnalyticsSummary } from '../lib/analytics';
 import { useSupportThreads } from '../lib/supportStore';
+import { getCategories } from '../lib/categoriesService';
+import { getCategoryPresets } from '../lib/categoryPresetsService';
+import { getShopifyConnection } from '../lib/shopifyConnectionService';
+import { fetchOrgMembers } from '../lib/orgService';
 
 /**
  * The home dashboard is the first thing a signed-in user sees and the only
@@ -43,6 +47,29 @@ vi.mock('../lib/analytics', async (importOriginal) => {
 vi.mock('../lib/supportStore', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/supportStore')>();
   return { ...actual, useSupportThreads: vi.fn() };
+});
+
+/* The "Get set up" checklist is a real child of this page — it is mounted, not
+   stubbed — so its four extra reads are mocked here the same way as the rest.
+   Nothing in this file may touch the network. */
+vi.mock('../lib/categoriesService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/categoriesService')>();
+  return { ...actual, getCategories: vi.fn() };
+});
+
+vi.mock('../lib/categoryPresetsService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/categoryPresetsService')>();
+  return { ...actual, getCategoryPresets: vi.fn() };
+});
+
+vi.mock('../lib/shopifyConnectionService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/shopifyConnectionService')>();
+  return { ...actual, getShopifyConnection: vi.fn() };
+});
+
+vi.mock('../lib/orgService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/orgService')>();
+  return { ...actual, fetchOrgMembers: vi.fn() };
 });
 
 const item = (id: string, o: Partial<ClothingItem> = {}): ClothingItem =>
@@ -82,6 +109,9 @@ function props(over: Partial<HomeDashboardProps> = {}): HomeDashboardProps {
     orgName: 'Rack City',
     orgId: 'org-1',
     isFounder: false,
+    orgPlan: 'beta',
+    orgRole: 'owner',
+    descriptionSettings: null,
     navItems: NAV,
     activeBatchId: null,
     activeBatchNumber: null,
@@ -112,6 +142,10 @@ beforeEach(() => {
   vi.mocked(fetchOrgMarketplaces).mockResolvedValue({ status: 'unavailable' });
   vi.mocked(fetchPublications).mockResolvedValue({ status: 'ok', rows: [] });
   vi.mocked(fetchAnalyticsSummary).mockResolvedValue({ status: 'unavailable' });
+  vi.mocked(getCategories).mockResolvedValue([]);
+  vi.mocked(getCategoryPresets).mockResolvedValue([]);
+  vi.mocked(getShopifyConnection).mockResolvedValue({ status: 'unavailable' });
+  vi.mocked(fetchOrgMembers).mockResolvedValue([]);
   vi.mocked(useSupportThreads).mockReturnValue({
     threads: [], sorted: [], available: false, teamAvailable: false,
     unreadCount: 0, supportUnreadCount: 0, revision: 0, refresh: async () => {},
@@ -270,7 +304,11 @@ describe('HomeDashboard — widgets that hide themselves', () => {
   });
 
   it('shows threads and an unread badge when messaging is available', async () => {
-    vi.mocked(useSupportThreads).mockReturnValue({
+    vi.mocked(getCategories).mockResolvedValue([]);
+  vi.mocked(getCategoryPresets).mockResolvedValue([]);
+  vi.mocked(getShopifyConnection).mockResolvedValue({ status: 'unavailable' });
+  vi.mocked(fetchOrgMembers).mockResolvedValue([]);
+  vi.mocked(useSupportThreads).mockReturnValue({
       threads: [], available: true, teamAvailable: false, unreadCount: 2,
       supportUnreadCount: 2, revision: 1, refresh: async () => {},
       sorted: [{

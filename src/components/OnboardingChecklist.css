@@ -1,0 +1,166 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   OnboardingChecklist — "Get set up", the first widget on Home.
+
+   IT BORROWS HOME'S CARD CHROME. The outer element carries `.home-card` and
+   `.home-card--wide` from HomeDashboard.css and the head row carries
+   `.home-card-head` / `.home-card-title` / `.home-card-icon`, because this IS
+   one of Home's widgets and a second definition of a card would be a second
+   thing to keep in step (§18 #26, the same argument the primitive system
+   makes). Everything below is only what a checklist needs on top of that.
+
+   Same scale as the rest of Home, against the 9px root (AGENTS.md §16):
+   2rem = 18px card padding, 1.2rem = 11px row gap. Type comes from the --fs-
+   px ramp; spacing and radii stay rem. No hex — this is the white page.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.onb-head {
+  /* The heading can be a whole workspace name ("Welcome to Arcadian, …") and
+     the right-hand side is a plan badge plus a count, so both halves need to be
+     allowed to wrap rather than squeezing each other. */
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.onb-heading-text { overflow-wrap: anywhere; }
+
+.onb-head-right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.onb-count {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.onb-intro {
+  margin: -0.6rem 0 0;
+  max-width: 68ch;
+  font-size: var(--fs-base);
+  color: var(--text-secondary);
+}
+
+/* ── The steps ────────────────────────────────────────────────────────────── */
+
+.onb-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.onb-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.2rem;
+  min-width: 0;
+  padding: 1.2rem;
+  border-radius: var(--radius-md);
+  /* A hairline between rows rather than a box per row: seven boxed rows inside
+     a boxed card is three levels of nesting for a list of sentences. */
+  border-top: 1px solid var(--border-subtle);
+}
+
+.onb-step:first-child { border-top: none; }
+
+.onb-mark {
+  display: inline-flex;
+  flex-shrink: 0;
+  /* Optically centred on the title's first line rather than the flex line. */
+  margin-top: 0.15rem;
+  color: var(--text-faint);
+}
+
+/* The one place semantics are spent here: done is a state, and it is the only
+   thing on this card a glance needs to resolve. */
+.onb-step--done .onb-mark { color: var(--success); }
+.onb-step--done .onb-step-title { color: var(--text-secondary); }
+/* A done row is its title alone (the component drops the sentence), so it is
+   one line tall and needs less room than a row still asking for something. */
+.onb-step--done { padding-block: 0.9rem; }
+
+.onb-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+  /* `flex-basis: 0`, NOT `auto`. With `auto` the basis is the sentence's own
+     max-content width, which on a phone — where the row is allowed to wrap —
+     is wider than what is left beside the tick, so the body dropped to a
+     second line and left the tick orphaned on a line of its own. A zero basis
+     makes it take the free space instead. Identical on desktop, where the row
+     does not wrap and it shrank to the same width either way. */
+  flex: 1 1 0;
+}
+
+.onb-step-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin: 0;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.onb-optional {
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.onb-why {
+  margin: 0;
+  max-width: 78ch;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  color: var(--text-secondary);
+}
+
+.onb-action { flex-shrink: 0; }
+
+/* ── Footer ───────────────────────────────────────────────────────────────── */
+
+.onb-foot {
+  display: flex;
+  justify-content: flex-start;
+  padding-top: 0.4rem;
+}
+
+/* ── Phone (≤640px) ───────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .onb-head-right { width: 100%; }
+
+  .onb-step {
+    /* The button drops under the sentence it belongs to — side by side it gets
+       whatever is left of 390px after a two-line title, which is not enough for
+       "Open workspace settings". */
+    flex-wrap: wrap;
+    gap: 0.9rem 1.2rem;
+    padding: 1.2rem 0;
+  }
+
+  /* Aligned under the text, not under the check mark: the mark is 18px plus a
+     1.2rem gap, and `calc` keeps the two in step if either changes. */
+  .onb-action {
+    width: 100%;
+    padding-left: calc(18px + 1.2rem);
+  }
+
+  /* No touch-target override here: `ui/Button.css` already floors every size at
+     the 44px literal below 640px, and restating it would be a second place to
+     keep in step (§18 #26). Measured at 390: zero sub-44px targets on this card. */
+
+  .onb-foot { flex-wrap: wrap; }
+}
