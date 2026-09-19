@@ -139,6 +139,7 @@ declare
   v_actor       uuid;
   v_created     boolean := false;
   v_old_role    text;
+  v_ap_type     text;
   v_settings    jsonb;
   v_cols        text;
   n             bigint;
@@ -296,14 +297,17 @@ begin
       v_cols) using v_new, v_user, v_founding;
     get diagnostics n = row_count;
 
+    -- applied_preset_id is TEXT in production (ADD_APPLIED_PRESET_ID.sql) and
+    -- uuid in some test stubs: compare as text, assign in the column's own type.
     n2 := 0;
-    if exists (select 1 from information_schema.columns
-               where table_schema = 'public' and table_name = 'products'
-                 and column_name = 'applied_preset_id') then
-      execute 'update public.products p set applied_preset_id = m.new_id
-               from preset_map m
-               where p.applied_preset_id = m.old_id
-                 and p.id in (select id from mv_products)';
+    select udt_name into v_ap_type from information_schema.columns
+    where table_schema = 'public' and table_name = 'products' and column_name = 'applied_preset_id';
+    if v_ap_type is not null then
+      execute format(
+        'update public.products p set applied_preset_id = m.new_id::%I
+         from preset_map m
+         where p.applied_preset_id::text = m.old_id::text
+           and p.id in (select id from mv_products)', v_ap_type);
       get diagnostics n2 = row_count;
     end if;
     raise notice '[1.10] presets copied: %; applied_preset_id remapped on % products', n, n2;
@@ -478,7 +482,7 @@ declare
   v_owner_email  text := 'thecreatendestroy@gmail.com';
   v_new_slug     text := 'cd-vintage';
   v_restore_role text := 'admin';   -- what section 1.5 printed as "(was: …)"
-  v_founding uuid; v_new uuid; v_user uuid; n bigint;
+  v_founding uuid; v_new uuid; v_user uuid; n bigint; v_ap_type text;
 begin
   select id into v_founding from public.organizations where slug = 'founding';
   select id into v_new      from public.organizations where slug = v_new_slug;
@@ -486,15 +490,17 @@ begin
   if v_new is null then raise notice 'nothing to roll back'; return; end if;
 
   -- presets: re-point moved products at the founding twin, then drop the copies
-  if exists (select 1 from information_schema.columns where table_schema='public'
-             and table_name='products' and column_name='applied_preset_id') then
-    execute 'update public.products p set applied_preset_id = f.id
-             from public.category_presets c
-             join public.category_presets f
-               on f.org_id = $1
-              and f.category_name is not distinct from c.category_name
-              and f.product_type  is not distinct from c.product_type
-             where c.org_id = $2 and p.applied_preset_id = c.id and p.org_id = $2'
+  select udt_name into v_ap_type from information_schema.columns
+  where table_schema='public' and table_name='products' and column_name='applied_preset_id';
+  if v_ap_type is not null then
+    execute format(
+      'update public.products p set applied_preset_id = f.id::%I
+       from public.category_presets c
+       join public.category_presets f
+         on f.org_id = $1
+        and f.category_name is not distinct from c.category_name
+        and f.product_type  is not distinct from c.product_type
+       where c.org_id = $2 and p.applied_preset_id::text = c.id::text and p.org_id = $2', v_ap_type)
       using v_founding, v_new;
   end if;
   delete from public.category_presets where org_id = v_new;

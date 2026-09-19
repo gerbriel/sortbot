@@ -267,6 +267,16 @@ Then, in order:
   `NOT restored` notices and leaves no global constraint behind; after undoing the split
   the rollback does restore them; re-apply → split → 22/22.
 
+- **Production run 1 failed at step 1.10** with `operator does not exist: text = uuid`:
+  `products.applied_preset_id` is a **`text`** column in production
+  (`ADD_APPLIED_PRESET_ID.sql`), while the throwaway stub had it as `uuid`. The DO block is
+  one transaction, so that run changed nothing. The remap (and its mirror in the rollback)
+  now compares both sides as text and assigns in the column's own type, read from
+  `information_schema.columns.udt_name`. Re-verified with the column as `text` (the failing
+  statement reproduced first, then the fixed script: moved products point at the new
+  workspace's presets, 22/22, rollback restores the founding preset id, forward again 22/22)
+  and again with the column as `uuid` (22/22).
+
 Harness: `scratchpad/cds/{run.sh,fixture.sql,checks.sql,uniq.sh}` (not committed).
 
 ---
