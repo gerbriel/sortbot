@@ -57,8 +57,7 @@ export const MASK_STATUSES: readonly MaskStatus[] =
  * The service emits short machine flags; a person reviewing 400 photos needs a
  * sentence. Unknown flags (a newer service than this build) fall through to the
  * raw string rather than being dropped — a warning nobody can read still beats
- * a warning nobody is shown. `error:<reason>` carries its reason after the
- * colon and is rendered as such.
+ * a warning nobody is shown.
  */
 export const MASK_FLAG_LABELS: Readonly<Record<string, string>> = {
   coverage: 'Garment fills too much or too little of the frame',
@@ -68,13 +67,62 @@ export const MASK_FLAG_LABELS: Readonly<Record<string, string>> = {
   contrast: 'Low contrast with the backdrop',
 };
 
+/** The prefix the service writes a failure under. */
+const ERROR_FLAG = 'error:';
+
+/**
+ * THE REASON A PHOTO FAILED, in the service's own words.
+ *
+ * This exists because of the first real run: every row came back `failed` with
+ * `mask_flags = ["error:RuntimeError: replicate create failed (429)"]` — a
+ * billing gate on the matting backend — and the app said only "1 could not be
+ * processed". A count with no reason is a dead end: nothing on screen told the
+ * founder that the fix was to add credit, so the answer had to be dug out of
+ * the database by hand.
+ *
+ * So the text is passed THROUGH, with two narrow tidies and nothing else:
+ *
+ *   • a bare machine token (no spaces — `fetch_failed`, `no-mask`) becomes
+ *     words, because that is the shape the older flags took;
+ *   • a leading Python exception class (`RuntimeError: `, `HTTPError: `) is
+ *     dropped, because it is the one part of the string a reseller can neither
+ *     read nor act on, and the sentence after it is the whole message.
+ *
+ * Everything else — status codes, vendor names, punctuation, an em dash the
+ * upstream put there — survives verbatim. A message we do not understand is
+ * exactly the message worth showing whole.
+ */
+export function maskFailureReason(flag: string): string {
+  if (!flag.startsWith(ERROR_FLAG)) return '';
+  let reason = flag.slice(ERROR_FLAG.length).trim();
+  reason = reason.replace(/^[A-Z][A-Za-z0-9_]*(?:Error|Exception|Failure):\s*/, '').trim();
+  if (!reason) return '';
+  return /\s/.test(reason) ? reason : reason.replace(/[_-]+/g, ' ');
+}
+
 export function maskFlagLabel(flag: string): string {
   if (MASK_FLAG_LABELS[flag]) return MASK_FLAG_LABELS[flag];
-  if (flag.startsWith('error:')) {
-    const reason = flag.slice('error:'.length).replace(/[_-]+/g, ' ').trim();
-    return reason ? `Could not be processed — ${reason}` : 'Could not be processed';
+  if (flag.startsWith(ERROR_FLAG)) {
+    const reason = maskFailureReason(flag);
+    // A colon, not the em dash the other labels use: the reason frequently
+    // CONTAINS an em dash (upstream messages are written that way), and two in
+    // one line reads as a sentence that lost its verb.
+    return reason ? `Could not be processed: ${reason}` : 'Could not be processed';
   }
   return flag;
+}
+
+/**
+ * The failure hint. Nothing generic: the ONE actionable case is the one the
+ * first run hit, where the reason names credit or billing and the fix is
+ * entirely outside this app.
+ */
+export const BACKGROUND_BILLING_HINT =
+  'Add credit to the Replicate account, then Process again.';
+
+export function backgroundFailureHint(reason: string | null | undefined): string | null {
+  if (!reason) return null;
+  return /credit|billing/i.test(reason) ? BACKGROUND_BILLING_HINT : null;
 }
 
 // ── Row shape ───────────────────────────────────────────────────────────────
@@ -193,6 +241,80 @@ export function summarizeMaskStatuses(
     }
   }
   return out;
+}
+
+/**
+ * Anything carrying a mask status and its flags — a row, or a `ClothingItem`.
+ * Both spellings again, for the same reason `CatalogPathSource` takes both.
+ */
+export interface MaskFlagSource {
+  maskStatus?: string | null;
+  mask_status?: string | null;
+  maskFlags?: readonly string[] | null;
+  mask_flags?: readonly string[] | null;
+}
+
+const flagsOf = (source: MaskFlagSource | null | undefined): readonly string[] =>
+  source?.maskFlags ?? source?.mask_flags ?? [];
+
+/** PURE. The reason THIS photo failed, in words, or '' when it did not fail or
+ *  said nothing. What the card badge's tooltip and the lightbox print. */
+export function failureReasonFor(source: MaskFlagSource | null | undefined): string {
+  for (const flag of flagsOf(source)) {
+    const reason = maskFailureReason(flag);
+    if (reason) return reason;
+  }
+  return '';
+}
+
+/**
+ * PURE. The ONE reason, when every failed photo in the batch failed the same
+ * way — which is the normal case, because the causes are shared (no credit, the
+ * service down, the backend rate-limiting). Null when the failures disagree, or
+ * when none of them said anything: the popover then keeps its bare count rather
+ * than picking one photo's story to tell for all of them.
+ */
+export function sharedFailureReason(
+  rows: readonly MaskFlagSource[] | null | undefined,
+): string | null {
+  let shared: string | null = null;
+  for (const row of rows ?? []) {
+    const status = pick(row.maskStatus, row.mask_status);
+    if (status !== 'failed') continue;
+    const reason = failureReasonFor(row);
+    if (!reason) return null;
+    if (shared === null) shared = reason;
+    else if (shared !== reason) return null;
+  }
+  return shared;
+}
+
+/**
+ * PURE. Would a "Process photos" press submit a photo in this state?
+ *
+ * Extracted because `ImageGrouper` has no component harness (the same reason
+ * `selectionGesture` and `stackLayout` are their own modules) and because this
+ * one rule is what strands a photo when it is wrong.
+ *
+ *   null      never processed → yes, that is the whole point of the button
+ *   failed    yes: pressing again IS the retry, and the service never skips a
+ *             failed row
+ *   queued    yes, UNLESS this session is watching a job — a queued row is
+ *             either one the live job is working on (leave it alone) or one a
+ *             previous run abandoned when the service's machine stopped, which
+ *             nothing else in the UI can ever pick up again. The service
+ *             re-accepts a queued row on submit, so offering it is safe.
+ *   auto / review / approved / original → no. Three are settled and `review`
+ *             wants a person, not another pass.
+ */
+export function isProcessableStatus(
+  status: string | null | undefined,
+  jobRunning: boolean,
+): boolean {
+  if (!status) return true;
+  if (status === 'failed') return true;
+  if (status === 'queued') return !jobRunning;
+  return false;
 }
 
 // ── Availability ────────────────────────────────────────────────────────────
@@ -448,6 +570,21 @@ export function submitBackgroundJob(
 export function pollBackgroundJob(jobId: string): Promise<ServiceResult<JobProgress>> {
   if (!jobId) return Promise.resolve({ ok: false, error: 'No job id.' });
   return callService<JobProgress>(`/v1/jobs/${encodeURIComponent(jobId)}`, { method: 'GET' });
+}
+
+/**
+ * THE JOB IS GONE. Job state is in memory on the service (the contract says so
+ * out loud: "the rows are the truth; this is a progress bar"), and the host it
+ * runs on stops an idle machine after a few minutes. So a poll answering 404 is
+ * not an error condition to report as one — it means the counter was lost,
+ * while the rows it was counting are still sitting at `queued` and can be
+ * resubmitted. Saying that in words is the difference between a stuck-looking
+ * progress bar and a button the seller knows to press.
+ */
+export const JOB_GONE_MESSAGE = 'The service restarted — press Process again to continue.';
+
+export function isJobGone(result: ServiceResult<unknown>): boolean {
+  return !result.ok && result.status === 404;
 }
 
 /** The two resolutions the re-run offers. 2K is the "try harder" pass a

@@ -36,14 +36,164 @@ import { normalizePlatformRules, type PlatformPricingRule } from './platformPric
 
 export type BackgroundAnchor = 'center' | 'top';
 
+/**
+ * A PHOTO backdrop: a linen sheet, a studio wall, a wooden floor. The cut-out
+ * is pasted onto this image instead of onto `color`.
+ *
+ * It is a STORAGE PATH, not a URL — the same rule as everywhere else in this
+ * app (§11): a URL is derived from a path through `lib/storageUrls`, and the
+ * service reads the file with its own credentials. Paths live under the
+ * uploader's own uid prefix (`<uuid>/backdrops/<file>`) so the existing storage
+ * policies cover them with nothing new to write.
+ *
+ * `fit` is spelled out rather than assumed so the service never has to guess,
+ * and so a second mode is one value away. It is NOT part of the preset hash
+ * (see `backgroundPresetCanonical`) because there is only one mode today; the
+ * day a `contain` arrives, the canonical string has to gain it — a composite
+ * built the other way round genuinely looks different.
+ */
+export interface BackgroundBackdrop {
+  /** `<uuid>/backdrops/<file>` in the product-images bucket. */
+  storagePath: string;
+  /** Cover-crop the backdrop to the square canvas. Letterboxing it would show
+   *  the flat colour the backdrop was chosen to replace. */
+  fit: 'cover';
+}
+
+/**
+ * One backdrop in the WORKSPACE'S LIBRARY (`description_settings.backdrops`).
+ *
+ * The library and the preset are deliberately separate: the preset names ONE
+ * backdrop (that is the recipe), the library is the few a shop has uploaded and
+ * switches between. Storing the pixels' dimensions here means the Settings list
+ * can say `2048 × 1365` without loading eight full-size photos to measure them.
+ */
+export interface WorkspaceBackdrop {
+  /** Stable key for React and for Remove. The storage path when none was stored. */
+  id: string;
+  storagePath: string;
+  /** What the seller calls it. Falls back to the file name. */
+  name: string;
+  /** Pixel size at upload time. 0 when unknown (an older row) — the UI omits it. */
+  width: number;
+  height: number;
+  /** ISO timestamp. '' when unknown. */
+  addedAt: string;
+}
+
+/** How many backdrops a workspace may keep. Small on purpose: this is a
+ *  shop's two or three surfaces, not an asset manager. */
+export const BACKDROPS_MAX = 8;
+/** A backdrop source file over this is rejected with a sentence rather than
+ *  silently downscaled — a 20 MB upload on a rural connection is worth asking
+ *  about, and the downscale below turns anything reasonable into ~500 KB. */
+export const BACKDROP_MAX_BYTES = 4 * 1024 * 1024;
+/** The long side a backdrop is downscaled to before upload, and its JPEG
+ *  quality. 2048 is the canvas ceiling anyone picks, so a larger file is bytes
+ *  the service would throw away. */
+export const BACKDROP_MAX_PX = 2048;
+export const BACKDROP_QUALITY = 0.9;
+
+/** `<uuid>/backdrops/<file>` — the uploader's own uid prefix, which is what
+ *  makes the existing storage policies cover these files (§16). */
+const BACKDROP_PATH_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/backdrops\/[^/]+$/i;
+
+export function isBackdropStoragePath(raw: unknown): boolean {
+  return typeof raw === 'string' && BACKDROP_PATH_RE.test(raw);
+}
+
+/**
+ * Coerce a stored backdrop, or drop it.
+ *
+ * A path that is not one of ours is DROPPED rather than repaired: this string
+ * is handed to a service that fetches it with the service role, so anything but
+ * the shape we write ourselves is not something to guess at. Dropping it falls
+ * back to the flat colour, which is the one safe backdrop.
+ */
+export function normalizeBackgroundBackdrop(raw: unknown): BackgroundBackdrop | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const e = raw as Record<string, unknown>;
+  const storagePath = typeof e.storagePath === 'string' ? e.storagePath.trim() : '';
+  if (!isBackdropStoragePath(storagePath)) return null;
+  return { storagePath, fit: 'cover' };
+}
+
+/**
+ * WHERE a backdrop file goes: `{userId}/backdrops/{timestamp}-{slug}.jpg`.
+ *
+ * The uid prefix is not decoration — `security_storage_policies.sql` scopes
+ * writes by the leading path segment, so a backdrop under the uploader's own uid
+ * needs no new policy. The timestamp makes the name unique without a lookup, and
+ * the slug keeps it recognisable in a bucket listing. Always `.jpg`, because the
+ * upload is always re-encoded as one.
+ */
+export function backdropStoragePath(userId: string, fileName: string): string {
+  const slug = fileName
+    .replace(/\.[^.]+$/, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'backdrop';
+  return `${userId}/backdrops/${Date.now()}-${slug}.jpg`;
+}
+
+/** The file name out of a storage path, used as a backdrop's fallback name. */
+function backdropFileName(storagePath: string): string {
+  const last = storagePath.split('/').pop() ?? '';
+  return last.replace(/\.[^.]+$/, '') || 'Backdrop';
+}
+
+/**
+ * Coerce the workspace's backdrop library. Same contract as
+ * `normalizePlatformRules`: junk is dropped, not defended against at each use.
+ *
+ * Entries with an unusable path go, duplicates collapse (two rows for one file
+ * are two chips that do the same thing), and the list is capped at
+ * `BACKDROPS_MAX` keeping the FIRST — the array is append-ordered, so the
+ * oldest are the ones a preset is most likely to be pointing at.
+ */
+export function normalizeBackdropLibrary(raw: unknown): WorkspaceBackdrop[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: WorkspaceBackdrop[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const e = entry as Record<string, unknown>;
+    const storagePath = typeof e.storagePath === 'string' ? e.storagePath.trim() : '';
+    if (!isBackdropStoragePath(storagePath) || seen.has(storagePath)) continue;
+    seen.add(storagePath);
+    const name = typeof e.name === 'string' && e.name.trim()
+      ? e.name.trim().slice(0, 60)
+      : backdropFileName(storagePath);
+    out.push({
+      id: typeof e.id === 'string' && e.id.trim() ? e.id.trim().slice(0, 60) : storagePath,
+      storagePath,
+      name,
+      width: Math.max(0, Math.round(clampNumber(e.width, 0, 65535, 0))),
+      height: Math.max(0, Math.round(clampNumber(e.height, 0, 65535, 0))),
+      addedAt: typeof e.addedAt === 'string' && !Number.isNaN(Date.parse(e.addedAt))
+        ? e.addedAt
+        : '',
+    });
+    if (out.length >= BACKDROPS_MAX) break;
+  }
+  return out;
+}
+
 export interface BackgroundPreset {
   /** Stable key for React and for "which recipe is this". Not part of the hash —
    *  renaming a preset must not invalidate every composite ever made with it. */
   id: string;
   /** Output square, in pixels. Shopify wants >= 2048 on the long edge. */
   canvas: number;
-  /** The backdrop, `#RRGGBB`. Stored upper-case by the hash, any case by the form. */
+  /** The backdrop, `#RRGGBB`. Stored upper-case by the hash, any case by the form.
+   *  Used when `backdrop` is null — the flat-colour default. */
   color: string;
+  /** A PHOTO backdrop instead of the flat colour, or null for the colour.
+   *  Null by default: a plain light field is what Google Shopping asks for, and
+   *  a photo backdrop is a deliberate choice for a shop's own store. */
+  backdrop: BackgroundBackdrop | null;
   /** Margin around the garment, as a FRACTION of the canvas (0.10 = 10% each side). */
   padding: number;
   /** Where the garment sits when it does not fill the frame. 'top' is right for
@@ -60,6 +210,7 @@ export const DEFAULT_BACKGROUND_PRESET: BackgroundPreset = {
   id: 'white-2048',
   canvas: 2048,
   color: '#FFFFFF',
+  backdrop: null,
   padding: 0.10,
   anchor: 'center',
   shadow: false,
@@ -116,6 +267,7 @@ export function normalizeBackgroundPreset(raw: unknown): BackgroundPreset {
     // Canvas is rounded to an integer: a fractional pixel size is not a size.
     canvas: Math.round(clampNumber(e.canvas, BACKGROUND_CANVAS_MIN, BACKGROUND_CANVAS_MAX, DEFAULT_BACKGROUND_PRESET.canvas)),
     color: normalizeBackgroundColor(e.color),
+    backdrop: normalizeBackgroundBackdrop(e.backdrop),
     padding: clampNumber(e.padding, 0, BACKGROUND_PADDING_MAX, DEFAULT_BACKGROUND_PRESET.padding),
     anchor: e.anchor === 'top' ? 'top' : 'center',
     shadow: e.shadow === true,
@@ -129,17 +281,31 @@ export function normalizeBackgroundPreset(raw: unknown): BackgroundPreset {
  * the thing to diff is a string a human can read — not two digests.
  *
  * Rules, and they are the contract (AGENTS.md §9):
- *   • exactly six keys, in this order: anchor, canvas, color, padding, quality, shadow;
+ *   • exactly seven keys, ALPHABETICALLY: anchor, backdrop, canvas, color,
+ *     padding, quality, shadow;
  *   • no whitespace anywhere;
  *   • colour upper-cased;
+ *   • `backdrop` is the storage PATH as a plain string, `""` when there is no
+ *     photo backdrop — a string rather than the object so the canonical form
+ *     cannot drift when the object gains a field, and `""` rather than `null`
+ *     so the key is always the same shape on both sides. `fit` is excluded
+ *     because there is one mode; adding a second one MUST add it here, since
+ *     the two composites would look different;
  *   • padding as a JSON number with AT MOST 3 decimals, so 0.1 and 0.100 —
  *     which a form and a JSON round-trip produce interchangeably — are one
  *     preset and not two;
  *   • `id` is deliberately absent (see the type).
+ *
+ * The seventh key CHANGED EVERY HASH once, deliberately and exactly once: the
+ * three vectors below are the post-backdrop ones, and the pre-backdrop values
+ * (`7abc910f` / `c7e0869c`) are retired. Nothing had been processed under them
+ * — the migration was not run and no service was deployed — so no stored
+ * composite was invalidated.
  */
 export function backgroundPresetCanonical(preset: BackgroundPreset): string {
   return JSON.stringify({
     anchor: preset.anchor,
+    backdrop: preset.backdrop?.storagePath ?? '',
     canvas: preset.canvas,
     color: normalizeBackgroundColor(preset.color),
     padding: Number(Number(preset.padding).toFixed(3)),
@@ -211,6 +377,11 @@ export interface DescriptionSettings {
    *  `bg_preset` hash they were made with, which is how Step 2 can say a
    *  composite is stale rather than silently re-running a whole batch. */
   background: BackgroundPreset;
+  /** The workspace's uploaded photo backdrops, at most BACKDROPS_MAX. The
+   *  preset points at ONE of them by storage path; this is the shelf it is
+   *  chosen from, and it is what lets the UI name a backdrop rather than print
+   *  a uuid path at the seller. */
+  backdrops: WorkspaceBackdrop[];
 }
 
 export const DEFAULT_DESCRIPTION_SETTINGS: DescriptionSettings = {
@@ -223,6 +394,7 @@ export const DEFAULT_DESCRIPTION_SETTINGS: DescriptionSettings = {
   proseStyle: '',
   platformPricing: [],
   background: { ...DEFAULT_BACKGROUND_PRESET },
+  backdrops: [],
   disclaimerLines: [
     '* We note major imperfections—minor signs of age or wear may not be listed, adding to the vintage character.',
     '* High-quality piece, perfect for streetwear.',
@@ -242,6 +414,7 @@ export function resolveDescriptionSettings(partial?: Partial<DescriptionSettings
     ...merged,
     platformPricing: normalizePlatformRules(merged.platformPricing),
     background: normalizeBackgroundPreset(merged.background),
+    backdrops: normalizeBackdropLibrary(merged.backdrops),
   };
 }
 

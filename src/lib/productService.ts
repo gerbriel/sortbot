@@ -78,6 +78,28 @@ export const uploadFileToPath = async (
 };
 
 /**
+ * Delete files from the image bucket.
+ *
+ * A named seam beside the uploaders rather than a raw `supabase.storage` call in
+ * a component, for the same reason `storageUrls` owns every path → URL: the
+ * private-bucket migration is then one function body, and a reader can find
+ * every place this app removes a file. **It does not reference-count** — the
+ * caller must already have passed its paths through
+ * `filterUnreferencedStoragePaths` (§18 #15), which is a decision only the
+ * caller can make.
+ */
+export const deleteStorageFiles = async (paths: string[]): Promise<boolean> => {
+  const list = [...new Set(paths.filter(Boolean))];
+  if (list.length === 0) return true;
+  const { error } = await supabase.storage.from('product-images').remove(list);
+  if (error) {
+    log.service(`deleteStorageFiles | ${error.message}`);
+    return false;
+  }
+  return true;
+};
+
+/**
  * Upload a transformed image to a generated path under the user's folder.
  */
 export const uploadTransformedImage = async (

@@ -11,12 +11,22 @@ composites as a black rectangle.
 
 from __future__ import annotations
 
+import dataclasses
+
 import httpx
 import numpy as np
 import pytest
 
-from app.backends.base import guided_filter, refine_alpha
-from app.backends.replicate import ReplicateMatter, _first_url
+from app.backends.base import MattingFailure, guided_filter, refine_alpha
+from app.backends.replicate import (
+    RETRYABLE_STATUS,
+    ReplicateError,
+    ReplicateMatter,
+    _error_message,
+    _first_url,
+    _scrub,
+)
+from app.pipeline import error_flag
 from tests.conftest import flat_rgb, gray_png_bytes, png_bytes, solid_alpha
 
 PREDICTION_ID = "pred-1"
@@ -395,3 +405,359 @@ def test_the_guided_filter_is_deterministic():
     guide = rng.random((64, 64)).astype(np.float32)
     src = rng.random((64, 64)).astype(np.float32)
     assert np.array_equal(guided_filter(guide, src), guided_filter(guide, src))
+
+
+# ── What the first production run taught this file ──────────────────────────
+#
+# Three photos, three failed rows, one flag: "error:RuntimeError: replicate
+# create failed (429)". The status was a lie of omission — by hand Replicate
+# answered 402 "Insufficient credit". These tests are the statement that the flag
+# now names the cause, and that a billing gate is not retried as though it were
+# load.
+
+CREDIT_BODY = {
+    "title": "Insufficient credit",
+    "detail": (
+        "You have insufficient credit to run this model. "
+        "Go to https://replicate.com/account/billing to add credit."
+    ),
+    "status": 402,
+}
+
+
+def status_transport(status: int, body: object, calls: list[httpx.Request] | None = None):
+    """Every Replicate call answers `status`. Used for the create path."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if calls is not None:
+            calls.append(request)
+        if "/models/" in str(request.url):
+            return httpx.Response(200, json={"latest_version": {"id": "f" * 64}})
+        if isinstance(body, (dict, list)):
+            return httpx.Response(status, json=body)
+        return httpx.Response(status, text=str(body))
+
+    return httpx.MockTransport(handler)
+
+
+async def test_a_402_says_insufficient_credit_in_the_flag(settings):
+    """THE ONE THIS ROUND EXISTS FOR. The exact string a reviewer reads."""
+    async with httpx.AsyncClient(transport=status_transport(402, CREDIT_BODY)) as client:
+        matter = ReplicateMatter(settings, client)
+        with pytest.raises(ReplicateError) as exc:
+            await matter.mat_url("https://cdn/source.jpg", flat_rgb(64, 64), 1024)
+
+    flag = error_flag(str(exc.value))
+    assert flag == (
+        "error:replicate 402 Insufficient credit — You have insufficient credit to run "
+        "this model. Go to https://replicate.com/account/billing to add credit."
+    )
+    assert len(flag) <= 200
+
+
+async def test_the_flag_has_no_exception_class_name_in_front_of_it(settings):
+    """`error:RuntimeError: replicate create failed (429)` is what this replaces.
+    A MattingFailure's message IS the reason, so pipeline renders it verbatim."""
+    async with httpx.AsyncClient(transport=status_transport(402, CREDIT_BODY)) as client:
+        with pytest.raises(MattingFailure) as exc:
+            await ReplicateMatter(settings, client).mat_url(
+                "https://cdn/source.jpg", flat_rgb(64, 64), 1024
+            )
+    assert error_flag(str(exc.value)).startswith("error:replicate 402")
+    assert "RuntimeError" not in error_flag(str(exc.value))
+
+
+async def test_a_402_is_not_retried_because_credit_does_not_arrive_in_seconds(settings):
+    """The asymmetry is the whole policy. Retrying a billing gate would have made
+    the founder's three-photo run eighteen requests with the same ending."""
+    calls: list[httpx.Request] = []
+    async with httpx.AsyncClient(transport=status_transport(402, CREDIT_BODY, calls)) as client:
+        with pytest.raises(ReplicateError):
+            await ReplicateMatter(settings, client).mat_url(
+                "https://cdn/source.jpg", flat_rgb(64, 64), 1024
+            )
+    assert len([c for c in calls if c.method == "POST"]) == 1
+
+
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 422])
+async def test_no_other_4xx_is_retried_either(settings, status):
+    calls: list[httpx.Request] = []
+    async with httpx.AsyncClient(transport=status_transport(status, {"detail": "nope"}, calls)) as client:
+        with pytest.raises(ReplicateError):
+            await ReplicateMatter(settings, client).mat_url(
+                "https://cdn/source.jpg", flat_rgb(64, 64), 1024
+            )
+    assert len([c for c in calls if c.method == "POST"]) == 1
+
+
+async def test_the_retry_ladder_is_2_4_8_16_32_with_jitter(settings, monkeypatch):
+    """The documented backoff, recorded through a fake clock — no test in this
+    suite is allowed to actually wait, and none of them may reach the network."""
+    delays: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        delays.append(seconds)
+
+    monkeypatch.setattr("app.backends.replicate._backoff_sleep", fake_sleep)
+    real = dataclasses.replace(settings, replicate_retry_base_seconds=2.0, replicate_retry_attempts=5)
+
+    calls: list[httpx.Request] = []
+    async with httpx.AsyncClient(transport=status_transport(429, {"detail": "slow down"}, calls)) as client:
+        with pytest.raises(ReplicateError):
+            await ReplicateMatter(real, client).mat_url(
+                "https://cdn/source.jpg", flat_rgb(64, 64), 1024
+            )
+
+    # 5 retries after the first try -> 6 requests, 5 sleeps.
+    assert len([c for c in calls if c.method == "POST"]) == 6
+    assert len(delays) == 5
+    for nominal, actual in zip([2, 4, 8, 16, 32], delays, strict=True):
+        assert nominal * 0.8 <= actual <= nominal * 1.2
+
+
+async def test_the_jitter_is_not_always_the_same_delay(settings, monkeypatch):
+    """±20% proportional jitter exists so that CONCURRENCY images that were
+    throttled together do not all come back at the same instant and throttle
+    themselves again."""
+    seen: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        seen.append(seconds)
+
+    monkeypatch.setattr("app.backends.replicate._backoff_sleep", fake_sleep)
+    real = dataclasses.replace(settings, replicate_retry_base_seconds=2.0, replicate_retry_attempts=5)
+
+    for _ in range(4):
+        async with httpx.AsyncClient(transport=status_transport(503, "unavailable")) as client:
+            with pytest.raises(ReplicateError):
+                await ReplicateMatter(real, client).mat_url(
+                    "https://cdn/source.jpg", flat_rgb(64, 64), 1024
+                )
+
+    firsts = seen[0::5]
+    assert len(set(firsts)) > 1
+
+
+async def test_a_429_that_clears_succeeds_without_failing_the_image(settings, monkeypatch):
+    """A rate limit is load, and load passes. This is why it is retried at all."""
+
+    async def fake_sleep(seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr("app.backends.replicate._backoff_sleep", fake_sleep)
+    state = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            state["n"] += 1
+            if state["n"] <= 2:
+                return httpx.Response(429, json={"detail": "rate limited"})
+            return httpx.Response(201, json={"id": "p", "status": "succeeded", "output": OUTPUT_URL})
+        return httpx.Response(200, content=rgba_cutout())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        alpha = await ReplicateMatter(settings, client).mat_url(
+            "https://cdn/source.jpg", flat_rgb(64, 64), 1024
+        )
+    assert alpha.shape == (64, 64)
+    assert state["n"] == 3
+
+
+async def test_retries_can_be_turned_off(settings, monkeypatch):
+    """REPLICATE_RETRY_ATTEMPTS=0 means one request, which is what you want while
+    bisecting a failure by hand."""
+    calls: list[httpx.Request] = []
+    none = dataclasses.replace(settings, replicate_retry_attempts=0)
+    async with httpx.AsyncClient(transport=status_transport(429, {"detail": "x"}, calls)) as client:
+        with pytest.raises(ReplicateError):
+            await ReplicateMatter(none, client).mat_url(
+                "https://cdn/source.jpg", flat_rgb(64, 64), 1024
+            )
+    assert len([c for c in calls if c.method == "POST"]) == 1
+
+
+async def test_a_transport_error_is_retried_and_then_reported(settings, monkeypatch):
+    """A connection reset is the same class of problem as a 502 — and it must not
+    surface as a bare `ConnectError` with no context."""
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr("app.backends.replicate._backoff_sleep", fake_sleep)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection reset")
+
+    two = dataclasses.replace(settings, replicate_retry_attempts=2)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(ReplicateError) as exc:
+            await ReplicateMatter(two, client).mat_url(
+                "https://cdn/source.jpg", flat_rgb(64, 64), 1024
+            )
+    assert len(sleeps) == 2
+    assert "transport error" in str(exc.value)
+    assert "ConnectError" in str(exc.value)
+
+
+async def test_a_poll_429_is_retried_rather_than_left_to_the_deadline(settings, monkeypatch):
+    """Swallowing it meant a throttled poll reported "did not finish within 180s"
+    when the truth was "we were being throttled"."""
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr("app.backends.replicate._backoff_sleep", fake_sleep)
+    state = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if request.method == "POST":
+            return httpx.Response(
+                201,
+                json={
+                    "id": PREDICTION_ID,
+                    "status": "starting",
+                    "urls": {"get": f"https://api.replicate.com/v1/predictions/{PREDICTION_ID}"},
+                },
+            )
+        if f"/predictions/{PREDICTION_ID}" in url:
+            state["n"] += 1
+            if state["n"] == 1:
+                return httpx.Response(429, json={"detail": "rate limited"})
+            return httpx.Response(200, json={"status": "succeeded", "output": OUTPUT_URL})
+        return httpx.Response(200, content=rgba_cutout())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        alpha = await ReplicateMatter(settings, client).mat_url(
+            "https://cdn/source.jpg", flat_rgb(64, 64), 1024
+        )
+    assert alpha.shape == (64, 64)
+    assert len(sleeps) == 1
+
+
+async def test_a_poll_402_fails_the_image_immediately(settings):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(
+                201,
+                json={
+                    "id": PREDICTION_ID,
+                    "status": "starting",
+                    "urls": {"get": f"https://api.replicate.com/v1/predictions/{PREDICTION_ID}"},
+                },
+            )
+        return httpx.Response(402, json=CREDIT_BODY)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(ReplicateError) as exc:
+            await ReplicateMatter(settings, client).mat_url(
+                "https://cdn/source.jpg", flat_rgb(64, 64), 1024
+            )
+    assert "Insufficient credit" in str(exc.value)
+
+
+async def test_a_model_error_reaches_the_flag(settings):
+    """`failed` with `error: CUDA out of memory` is the most useful sentence the
+    review queue can carry for that photo, so it is not thrown away."""
+    transport = build_transport(statuses=["starting", "failed"], output_bytes=rgba_cutout())
+    async with httpx.AsyncClient(transport=transport) as client:
+        with pytest.raises(ReplicateError) as exc:
+            await ReplicateMatter(settings, client).mat_url(
+                OUTPUT_URL, flat_rgb(64, 64), 1024
+            )
+    assert "CUDA out of memory" in str(exc.value)
+    assert error_flag(str(exc.value)).startswith("error:replicate prediction failed")
+
+
+# ── nothing secret reaches a database column ────────────────────────────────
+
+
+async def test_the_image_url_is_not_echoed_into_the_flag(settings):
+    """The create endpoint DOES echo the input URL in a 422, and once the bucket
+    is private that URL is a signed link. mask_flags is read in the review UI."""
+    signed = "https://project.supabase.co/storage/v1/object/sign/x.jpg?token=SECRETSIGNATURE"
+    body = {"title": "Invalid input", "detail": f"image: could not fetch {signed}"}
+    async with httpx.AsyncClient(transport=status_transport(422, body)) as client:
+        with pytest.raises(ReplicateError) as exc:
+            await ReplicateMatter(settings, client).mat_url(signed, flat_rgb(64, 64), 1024)
+    message = str(exc.value)
+    assert signed not in message
+    assert "SECRETSIGNATURE" not in message
+    assert "<redacted>" in message
+
+
+async def test_the_api_token_is_not_echoed_into_the_flag(settings):
+    real = dataclasses.replace(settings, replicate_token="r8_livetokenvalue1234567890")
+    body = {"title": "Unauthenticated", "detail": f"bad token {real.replicate_token}"}
+    async with httpx.AsyncClient(transport=status_transport(401, body)) as client:
+        with pytest.raises(ReplicateError) as exc:
+            await ReplicateMatter(real, client).mat_url("https://cdn/s.jpg", flat_rgb(64, 64), 1024)
+    assert real.replicate_token not in str(exc.value)
+
+
+async def test_a_data_uri_is_never_pasted_into_the_flag(settings):
+    """The private-bucket fallback sends megabytes of base64. Truncating that INTO
+    the flag would fill the column with noise and hide the reason."""
+    async with httpx.AsyncClient(transport=status_transport(422, {"detail": "bad input"})) as client:
+        with pytest.raises(ReplicateError) as exc:
+            await ReplicateMatter(settings, client).mat_data_uri(
+                b"\xff\xd8\xff\xe0" + b"jpegbytes" * 400, flat_rgb(64, 64), 1024, "image/jpeg"
+            )
+    assert "base64" not in str(exc.value)
+    assert len(error_flag(str(exc.value))) <= 200
+
+
+def test_the_output_download_sends_no_credential(settings):
+    """It lives on replicate.delivery, which needs none — so it does not get one."""
+    import inspect
+
+    from app.backends import replicate as mod
+
+    source = inspect.getsource(mod.ReplicateMatter.mat_url)
+    assert "auth=False" in source
+
+
+# ── the message builder, as a unit ──────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "status,body,expected",
+    [
+        (402, '{"title":"Insufficient credit","detail":"Add credit."}',
+         "replicate 402 Insufficient credit — Add credit."),
+        # No title: the context fills the slot, so the sentence never starts with
+        # a dash hanging off a bare number.
+        (422, '{"detail":"image is required"}', "replicate 422 create failed — image is required"),
+        # A proxy's shapes.
+        (500, '{"error":"boom"}', "replicate 500 create failed — boom"),
+        (500, '{"message":"boom"}', "replicate 500 create failed — boom"),
+        # Not JSON at all (an HTML error page): the status IS the reason.
+        (502, "<html>bad gateway</html>", "replicate 502 create failed"),
+        ("", "", None),
+    ],
+)
+def test_error_message_shapes(status, body, expected):
+    if expected is None:
+        return
+    assert _error_message(status, body, "create failed", ()) == expected
+
+
+def test_error_message_collapses_whitespace_so_a_flag_is_one_line():
+    out = _error_message(500, '{"detail":"line one\\nline  two"}', "create failed", ())
+    assert "\n" not in out
+    assert "line one line two" in out
+
+
+def test_scrub_ignores_a_short_secret_so_it_cannot_eat_the_message():
+    """A redaction list is only useful for values long enough to be secrets — a
+    two-character 'token' would replace half the sentence."""
+    assert _scrub("the quick brown fox", ("x",)) == "the quick brown fox"
+
+
+def test_the_retryable_set_is_the_documented_one():
+    """A guard on the policy itself: 402 must never be in it."""
+    assert 429 in RETRYABLE_STATUS
+    assert 402 not in RETRYABLE_STATUS
+    assert all(s >= 500 or s in (408, 429) for s in RETRYABLE_STATUS)

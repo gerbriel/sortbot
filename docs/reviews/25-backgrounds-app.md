@@ -276,3 +276,186 @@ form control at 16px.
   per workspace), a background in Step 3's preview (Step 2 owns the review), and
   any automatic re-run on a preset change — "Re-apply to N" is always a
   deliberate press.
+
+---
+
+# Round 2 — what the first real run taught us
+
+Sept 2026. The founder processed photos in production and three things came back
+at once: every row `failed` with `mask_flags =
+["error:RuntimeError: replicate create failed (429)"]` and a UI that said only
+*"1 could not be processed"*; rows left `queued` for ever when the host stopped
+an idle machine mid-run, with no press left anywhere that could pick them up;
+and a request — *"want to be able to upload a few photo backdrops to replace
+background as well, not just colours."*
+
+**Gates.** 1,949 tests / 83 files green (1,898 / 83 at the start of this round —
+**+51**, no file added). `npm run build` clean; the "chunks larger than 500 kB"
+warning is pre-existing. `npx eslint .` **252** — the recorded baseline,
+unchanged.
+
+---
+
+## R1. Show the reason
+
+The reason was in the database the whole time. Three places now read it, from one
+pure helper each:
+
+| Where | What it shows |
+|---|---|
+| card badge `title` | `Could not be processed: <reason> — this photo exports untouched` |
+| lightbox review strip | the reason on its own line, plus the hint, plus any heuristic flags as bullets |
+| `Backgrounds ▾` panel | the reason **once**, under the counts, when every failure agrees |
+
+**`maskFailureReason` passes the text through, and that is the point.** It does
+exactly two things to it: a bare machine token with no spaces (`fetch_failed`,
+`no-mask`) becomes words, because that is the shape the older flags took; and a
+leading Python exception class (`RuntimeError: `, `HTTPError: `) is dropped,
+because it is the one part of the string a reseller can neither read nor act on.
+Status codes, vendor names, brackets and an em dash the upstream put there all
+survive verbatim — **a message we do not understand is exactly the message worth
+showing whole.** The label's separator is a colon rather than the em dash the
+other flags use, because these messages frequently contain an em dash of their
+own and two in one line reads as a sentence that lost its verb.
+
+**`sharedFailureReason` returns null unless every failed photo agrees.** The
+normal case is that they do — the causes are shared (no credit, service down,
+backend rate-limiting) — and one line is then worth more than forty identical
+ones. When they disagree, or when any failure said nothing, the panel keeps its
+bare count rather than picking one photo's story to tell for all of them.
+
+**`backgroundFailureHint` names one fix and only one.** If the reason matches
+`/credit|billing/i`, the panel adds *"Add credit to the Replicate account, then
+Process again."* There is deliberately no generic "try again later" — a hint that
+fires on everything is chrome, and the reason line already says what happened.
+
+Two supporting changes were needed for any of this to reach the screen:
+
+- **`App.refreshBackgroundRows` compares `mask_flags` by CONTENT.** Its
+  "unchanged, keep the identity so memo'd children bail out" test read four
+  fields and not the flags. Identity would have been wrong (two equal arrays from
+  two reads are never `===`, so every refresh would rebuild every item and defeat
+  the memo); leaving it out meant a **re-run that returns the same status with a
+  different reason never re-renders**, which is precisely what the new line
+  depends on. A joined-string compare is both cheap and correct.
+- **A `failed` photo now reaches the lightbox review strip.** It has neither a
+  composite nor a cut-out, so `lbReviewable` excluded it and the one surface big
+  enough to read a sentence said nothing at all about the photos that most needed
+  explaining. Approve and Keep original are hidden there — there is nothing to
+  approve, and "keep the original" is already what a failed photo does — leaving
+  **Re-run at 2K** as the only offered action, which is the only move there is.
+
+## R2. Never strand a photo
+
+The service's job state is in memory, on a host that stops an idle machine after
+a few minutes. Two independent failures followed from that, and both are now
+closed by rules that are pure functions:
+
+**`isProcessableStatus(status, jobRunning)`.** `queued` is processable *unless
+this session is watching a job* — either it is a row the live job is working on
+(leave it alone) or it is one a previous run abandoned, which nothing else in the
+UI could ever pick up. The service re-accepts a `queued` row on submit, so
+offering it is safe. The button's line names them: *"Including 2 left in flight
+by an earlier run."* A test asserts this agrees with `summarizeMaskStatuses`'s
+`processable` count when idle — that count has included `queued` since the
+beginning, and the two disagreeing by exactly the stranded rows is how this bug
+hid in plain sight.
+
+**`isJobGone(result)` — a 404 is not an error.** It means the counter was lost
+while the rows it was counting are still sitting there. The poll ends with *"The
+service restarted — press Process again to continue."*, refreshes the rows, and
+**stops** — a lost job never comes back, and retrying for ever is how the bar sat
+at 0/12 with nothing to show for it. A network failure carries no status and is
+deliberately NOT treated as gone, so it keeps its own message.
+
+## R3. Photo backdrops
+
+`BackgroundPreset.backdrop: { storagePath, fit: 'cover' } | null`, default null.
+The workspace's library is `description_settings.backdrops` (≤ 8). Full shape and
+reasoning in AGENTS §7; the decisions worth repeating here:
+
+- **The preset names one backdrop; the library is the shelf.** Separate because a
+  path is not a name — without the library, Step 2 and Settings could only print
+  a uuid at the seller.
+- **`<uuid>/backdrops/<file>`, or dropped.** The string is fetched by a service
+  holding the service role, so a shape we did not write is not something to guess
+  at, and the uid prefix means the existing storage policies already cover these
+  files. Files go through the crop tool's own `uploadFileToPath` after a canvas
+  downscale to 2048px at JPEG 0.9; a source over 4 MB is refused in a sentence
+  rather than quietly resized.
+- **Add and Remove save the JSONB immediately**, unlike the text fields beside
+  them. The file write has already happened, so the library is the record of a
+  side effect — leaving it pending would mean a chip that vanishes on reload with
+  an orphan file behind it. It is the same one write the Save buttons make, with
+  the same object, so nothing can half-apply. (`handleSaveDescSettings` was split
+  into `buildDescSettings` + `persistDescSettings(override, message)` for this;
+  the three existing Save buttons are unchanged.)
+- **Remove deletes the ROW first, then the file** — an orphan file is
+  recoverable, a library row pointing at a deleted file is not — and the file goes
+  through `filterUnreferencedStoragePaths` even though a backdrop can never be a
+  product image, because that is the one storage-delete path in this app and it
+  fails safe (§18 #15). The raw `supabase.storage.remove` became
+  `productService.deleteStorageFiles`, a named seam beside the uploaders.
+- **Removing the backdrop the preset uses resets the preset to the flat colour
+  and says so.** A dangling path must not survive: §18 #52's spirit says a
+  missing backdrop fails loudly at the service, and that is correct behaviour for
+  a missing file — but it is the wrong way to *change a setting*.
+- **The hash gained a seventh key** and every vector moved, once:
+  `6300e6dc` / `a4c629a4` / `6218c54a`, with `7abc910f` and `c7e0869c` retired.
+  Nothing had been processed under them. `fit` is excluded from the canonical
+  string because there is one mode; a second one must add it, since two
+  differently-fitted composites do not look the same.
+
+## R4. What the screenshots showed
+
+Two fixtures at 1280 and 390, injected into the live dev page — and for the
+Settings section, `OrgPanel.css` + `ToolView.css` injected with them, which is
+what Round 1 could not do (`OrgPanel` is `React.lazy`, so its CSS is not on the
+landing page). `docs/reviews/img-25/bg-settings-{1280,390}.png`,
+`bg-fail-{1280,390}.png`.
+
+Three real defects, all fixed, all only visible rendered:
+
+1. **The backdrop rows ran 1,500px wide with their content floating mid-row.**
+   Two causes at once: `index.css` centres the content of *every* `button`, so
+   `.bd-pick`'s thumbnail and name sat in the middle of the row; and
+   `.bg-controls` is `flex: 1 1 26rem`, which on a 1600px page stretched a
+   3.6rem thumbnail and a Remove button to opposite ends of the screen.
+   `justify-content: flex-start` and `max-width: 34rem` (matching the
+   `22rem` cap the sliders above already use).
+2. **The in-use tick floated between the name and Remove.** `.bd-meta` now
+   grows, so the tick lands at the end of the row where a status belongs.
+3. **`.bgp-swatch` hung between two lines** in the Step-2 panel: naming the
+   backdrop pushed that line to two, and a 12px square centred against a
+   two-line block lines up with nothing. `align-items: flex-start` plus a 2px
+   optical offset puts it on the first line.
+
+**Measured.** `documentElement.scrollWidth === clientWidth` on all four
+fixtures. At 390: zero sub-44px targets except the range sliders and the
+checkbox (excluded from the floor by `index.css`, §1), and every form control at
+16px. `.bgp-fail` resolves to `rgb(179, 0, 27)` — `--danger`, not a literal.
+
+## R5. Owed / not done
+
+- **Still nothing seen signed in, and nothing run against real rows.** These are
+  fixtures with the real stylesheets, which proves the cascade and not the React
+  wiring. The first real run is still the test — and this round exists because
+  that run found three things a code read did not.
+- **The backdrop is not applied in the SERVICE yet** in this repo's app half:
+  the contract is written (`backdrop` in the preset, in the canonical string, in
+  the three vectors) and the parallel pass owns `services/matting/**`. Until both
+  halves ship, choosing a backdrop changes the hash — which correctly makes
+  existing composites stale — and the composite itself is whatever the deployed
+  service builds.
+- **`BACKDROP_MAX_BYTES` is checked on the SOURCE file, not the encoded result.**
+  Deliberate: the downscale turns anything reasonable into a few hundred KB, so a
+  file over the limit is a sign the wrong thing was picked, and saying so beats
+  quietly resizing a 20 MB raw export on a rural connection.
+- **A backdrop uploaded and then never saved cannot happen**, but a workspace
+  that removes a backdrop while offline will keep the file: the row goes first
+  and the storage delete is best-effort. That is the right order and the leftover
+  is a few hundred KB.
+- **The billing hint names Replicate**, which is the backend the service runs
+  today. If that ever changes, this string and the service's error text change
+  together — the hint is keyed on the word "credit" or "billing" in the reason,
+  not on the vendor.

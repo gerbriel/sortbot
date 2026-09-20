@@ -16,6 +16,7 @@ from app.compose import (
     ComposeError,
     alpha_bbox,
     compose,
+    cover_crop,
     decode_image_rgb,
     decode_image_rgba,
     encode_cutout_webp,
@@ -23,7 +24,7 @@ from app.compose import (
     plan_placement,
 )
 from app.preset import BackgroundPreset
-from tests.conftest import flat_rgb, png_bytes, solid_alpha
+from tests.conftest import flat_rgb, gradient_rgb, png_bytes, solid_alpha
 
 
 def test_bbox_is_tight_and_exclusive():
@@ -280,3 +281,153 @@ def test_decode_rgba_reports_no_alpha_for_an_opaque_source():
     rgb, alpha = decode_image_rgba(png_bytes(flat_rgb(20, 20, (1, 2, 3))))
     assert alpha is None
     assert rgb.shape == (20, 20, 3)
+
+
+# ── Photo backdrops ─────────────────────────────────────────────────────────
+#
+# The property that matters is that a backdrop changes the FILL and nothing else.
+# A seller who switches from white to linen is changing the look of a catalogue,
+# not re-cropping it, and a subject that shifted by a few pixels at the same time
+# would make the two halves of a grid look mismatched in a way nobody can name.
+
+
+def test_the_subject_lands_in_exactly_the_same_place_on_a_backdrop():
+    """THE BACKDROP INVARIANT, asserted against the flat path rather than against
+    a number this file made up."""
+    src = flat_rgb(300, 220, (40, 90, 140))
+    alpha = solid_alpha(300, 220, (20, 30, 200, 260))
+    flat = BackgroundPreset.parse({"canvas": 512})
+    photo = BackgroundPreset.parse({"canvas": 512, "backdrop": "u/backdrops/linen.jpg"})
+
+    _, flat_place = compose(src, alpha, flat)
+    _, photo_place = compose(src, alpha, photo, cover_crop(gradient_rgb(700, 400), 512))
+
+    assert photo_place == flat_place
+
+
+def test_the_backdrop_pixels_are_the_canvas_and_the_colour_fills_nothing():
+    src = flat_rgb(100, 100, (10, 20, 30))
+    alpha = solid_alpha(100, 100, (30, 30, 70, 70))
+    # A colour that could not be confused with the gradient, so "the fill lost"
+    # is provable rather than plausible.
+    preset = BackgroundPreset.parse(
+        {"canvas": 256, "color": "#FF00FF", "backdrop": "u/backdrops/linen.jpg"}
+    )
+    backdrop = cover_crop(gradient_rgb(256, 256), 256)
+
+    img, place = compose(src, alpha, preset, backdrop)
+    px = np.asarray(img)
+
+    assert np.array_equal(px[0, 0], backdrop[0, 0])
+    assert np.array_equal(px[-1, -1], backdrop[-1, -1])
+    assert not np.array_equal(px[0, 0], np.array([255, 0, 255], dtype=np.uint8))
+    # …and the subject is still the subject.
+    assert tuple(px[place.y + place.height // 2, place.x + place.width // 2]) == (10, 20, 30)
+
+
+def test_a_preset_naming_a_backdrop_with_none_supplied_is_an_error_not_a_flat_fill():
+    """The silent fallback this refuses is the one that puts half a catalogue on
+    linen and half on white, discovered by a buyer rather than by a test."""
+    preset = BackgroundPreset.parse({"canvas": 256, "backdrop": "u/backdrops/linen.jpg"})
+    with pytest.raises(ComposeError):
+        compose(flat_rgb(100, 100), solid_alpha(100, 100, (30, 30, 70, 70)), preset)
+
+
+def test_a_backdrop_of_the_wrong_size_is_refused():
+    """Cover-cropping is load-bearing, so an uncropped backdrop must not be
+    silently stretched, tiled or ignored."""
+    preset = BackgroundPreset.parse({"canvas": 256, "backdrop": "u/backdrops/linen.jpg"})
+    with pytest.raises(ComposeError):
+        compose(
+            flat_rgb(100, 100),
+            solid_alpha(100, 100, (30, 30, 70, 70)),
+            preset,
+            gradient_rgb(300, 200),
+        )
+
+
+def test_the_shadow_darkens_the_backdrop_rather_than_painting_grey_on_it():
+    """`_draw_shadow` multiplies, which is why it works on any backdrop. Painting
+    a grey smudge would assume white and look like a sticker on linen."""
+    src = flat_rgb(200, 200, (10, 20, 30))
+    alpha = solid_alpha(200, 200, (50, 50, 150, 150))
+    backdrop = cover_crop(gradient_rgb(384, 384), 384)
+    on, place = compose(
+        src, alpha, BackgroundPreset.parse({"canvas": 384, "backdrop": "u/b/l.jpg", "shadow": True}), backdrop
+    )
+    off, _ = compose(
+        src, alpha, BackgroundPreset.parse({"canvas": 384, "backdrop": "u/b/l.jpg"}), backdrop
+    )
+    on_px, off_px = np.asarray(on).astype(int), np.asarray(off).astype(int)
+
+    below = place.y + place.height + 4
+    col = place.x + place.width // 2
+    assert on_px[below, col].mean() < off_px[below, col].mean()
+    # Far from the subject the backdrop is untouched — not flattened to grey.
+    assert np.array_equal(on_px[0, 0], off_px[0, 0])
+
+
+def test_compose_on_a_backdrop_is_deterministic():
+    src = flat_rgb(300, 220, (40, 90, 140))
+    alpha = solid_alpha(300, 220, (20, 30, 200, 260))
+    preset = BackgroundPreset.parse({"canvas": 512, "backdrop": "u/b/l.jpg", "shadow": True})
+    backdrop = cover_crop(gradient_rgb(700, 400), 512)
+    a, _ = compose(src, alpha, preset, backdrop)
+    b, _ = compose(src, alpha, preset, backdrop)
+    assert np.array_equal(np.asarray(a), np.asarray(b))
+
+
+# ── cover_crop ──────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("h,w", [(400, 200), (200, 400), (512, 512), (100, 100), (1, 300), (300, 1)])
+def test_cover_crop_always_fills_the_square(h, w):
+    """"Cover" means no uncovered pixel, at any input aspect — including the
+    degenerate one-pixel-tall backdrop, where ceil() is what saves it."""
+    out = cover_crop(gradient_rgb(h, w), 256)
+    assert out.shape == (256, 256, 3)
+    assert out.dtype == np.uint8
+
+
+def test_cover_crop_takes_the_middle_of_a_wide_backdrop():
+    """A 400x200 backdrop into a 100 square: scale = max(100/400, 100/200) = 0.5,
+    so the resize is 200x100 and the crop is x = (200-100)//2 = 50 — the middle
+    horizontal half, with nothing taken off the top or bottom."""
+    src = gradient_rgb(200, 400)
+    out = cover_crop(src, 100)
+    full = np.asarray(
+        Image.fromarray(src, mode="RGB").resize((200, 100), resample=Image.Resampling.LANCZOS)
+    )
+    assert np.array_equal(out, full[0:100, 50:150])
+
+
+def test_cover_crop_takes_the_middle_of_a_tall_backdrop():
+    src = gradient_rgb(400, 200)
+    out = cover_crop(src, 100)
+    full = np.asarray(
+        Image.fromarray(src, mode="RGB").resize((100, 200), resample=Image.Resampling.LANCZOS)
+    )
+    assert np.array_equal(out, full[50:150, 0:100])
+
+
+def test_cover_crop_of_an_already_square_backdrop_is_a_plain_resize():
+    src = gradient_rgb(300, 300)
+    out = cover_crop(src, 150)
+    expect = np.asarray(
+        Image.fromarray(src, mode="RGB").resize((150, 150), resample=Image.Resampling.LANCZOS)
+    )
+    assert np.array_equal(out, expect)
+
+
+def test_cover_crop_is_deterministic():
+    src = gradient_rgb(431, 277)
+    assert np.array_equal(cover_crop(src, 256), cover_crop(src, 256))
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [np.zeros((10, 10), dtype=np.uint8), np.zeros((10, 10, 4), dtype=np.uint8)],
+)
+def test_cover_crop_refuses_anything_that_is_not_rgb(bad):
+    with pytest.raises(ComposeError):
+        cover_crop(bad, 64)

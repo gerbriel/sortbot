@@ -154,3 +154,32 @@ def refine_alpha(
 
 class BackendUnavailable(RuntimeError):
     """The configured backend cannot run (missing extra, missing token)."""
+
+
+class MattingFailure(RuntimeError):
+    """A failure whose MESSAGE IS ALREADY THE REASON a human should read.
+
+    This exists because of one production morning. The founder mats three photos;
+    all three land as `mask_status = 'failed'` with
+
+        mask_flags = ["error:RuntimeError: replicate create failed (429)"]
+
+    which names the exception class, the function that raised, and a status code —
+    and does not name the actual cause, which was a BILLING GATE. (Replicate
+    answered 402 `{"title":"Insufficient credit", …}` when asked by hand; the 429
+    was the same gate under load.) Nothing in that flag tells the person reading
+    it to go and add a card, so the flag cost a debugging session to decode.
+
+    `pipeline._reason()` renders one of these WITHOUT the `RuntimeError:` prefix,
+    so a subclass is free to make the flag read as a sentence the founder can act
+    on: `error:replicate 402 Insufficient credit — You have insufficient credit
+    to run this model. Go to https://replicate.com/account/billing…`.
+
+    The rule for a subclass, therefore: the message is USER-FACING. It must name
+    the cause, and it must never carry the API token or the image URL — see
+    `_scrub` in the replicate backend.
+    """
+
+    @property
+    def reason(self) -> str:
+        return str(self)

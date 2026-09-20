@@ -1880,6 +1880,166 @@
 
 .bg-note { margin: 0; }
 
+/* ── Backdrops (the workspace's photo surfaces) ─────────────────────────────
+   A LIST, not a chip row: each entry carries a name, its pixel size, whether it
+   is in use, and a two-step Remove — four things that do not fit in a 2.6rem
+   swatch. The thumbnail is the swatch. */
+
+/* Capped, like the sliders above it (`max-width: 22rem`): `.bg-controls` is
+   `flex: 1 1 26rem` and grows to fill a 1600px page, which left a 3.6rem
+   thumbnail and a Remove button at opposite ends of a 1,500px row with nothing
+   between them. */
+.bd-list {
+  list-style: none;
+  margin: 0 0 0.45rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-width: 34rem;
+}
+
+.bd-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--ink-900);
+}
+
+.bd-item--on {
+  border-color: var(--accent);
+  background: var(--ink-850);
+}
+
+.bd-pick {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  /* index.css centres the content of EVERY `button`; this one is a row that
+     reads left to right, and without this its thumbnail floats mid-row. */
+  justify-content: flex-start;
+  gap: 0.5rem;
+  padding: 0.1rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
+.bd-thumb {
+  width: 3.6rem;
+  height: 3.6rem;
+  flex: 0 0 auto;
+  object-fit: cover;          /* the same fit the composite uses */
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--ink-850);
+}
+
+/* Grows, so the in-use tick lands at the END of the row rather than floating
+   in whatever space the name left behind. */
+.bd-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.bd-name {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-primary);
+  /* `white-space: nowrap` is inherited from index.css's button rule, so a long
+     name would never wrap (§15 — the Home tiles hit exactly this). */
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.bd-dims {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.bd-tick { flex: 0 0 auto; color: var(--accent); }
+
+/* The file input itself is hidden and its LABEL is the control: a bare
+   `<input type=file>` cannot be styled, cannot be given a 44px target, and
+   renders its own vendor-specific button text. It is `opacity: 0` and still in
+   the layout rather than `display: none`, so it keeps a focus ring of its own
+   for keyboard users. */
+.bd-add {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.bd-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.bd-add-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.8rem;
+  padding: 0 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--ink-800);
+  color: var(--text-primary);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bd-add-label:hover { background: var(--ink-750); }
+.bd-file:focus-visible + .bd-add-label { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bd-file:disabled + .bd-add-label { opacity: 0.5; cursor: not-allowed; }
+
+.bd-add-hint {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.bd-error {
+  margin: 0.35rem 0 0;
+  font-size: var(--fs-xs);
+  color: var(--danger);
+}
+
+/* Flat colour / photo backdrop — the way back from a chosen backdrop. */
+.bd-mode {
+  min-height: 2.6rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--ink-800);
+  color: var(--text-primary);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bd-mode--on {
+  background: var(--accent);
+  color: var(--ink-950);
+  border-color: var(--accent);
+}
+
+.bd-note { max-width: 32rem; }
+
 /* Phones: the preview and its controls stack, and every target clears the
    44px floor (§1). The preview keeps its 200px — shrinking it defeats it. */
 @media (max-width: 640px) {
@@ -1888,4 +2048,11 @@
   .bg-swatch { width: 44px; height: 44px; min-width: 44px; }
   .bg-hex { min-height: 44px; font-size: var(--fs-md); }
   .bg-inline select { min-height: 44px; font-size: var(--fs-md); }
+  /* The whole row is the tap target for choosing, so it gets the floor rather
+     than the thumbnail alone. */
+  .bd-pick { min-height: 44px; }
+  .bd-thumb { width: 44px; height: 44px; }
+  .bd-add-label { min-height: 44px; font-size: var(--fs-md); }
+  .bd-mode { min-height: 44px; font-size: var(--fs-md); }
+  .bd-add-hint { flex-basis: 100%; }
 }

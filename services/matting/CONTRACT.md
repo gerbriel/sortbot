@@ -5,8 +5,10 @@ not against the Python. If the two ever disagree, this file is the bug report
 and `app/` is the bug.
 
 Everything below is verified by `tests/` — the preset vectors in §4 by
-`test_preset_hash.py`, the auth rules in §2 by `test_auth.py`, the skip rules in
-§5 by `test_pipeline.py`.
+`test_preset_hash.py`, the backdrop rules in §4.3 by `test_compose.py` and
+`test_jobs.py`, the auth rules in §2 by `test_auth.py`, the skip rules in §5 by
+`test_pipeline.py`, the shutdown and timeout behaviour in §5 by `test_jobs.py`,
+and the failure flags and retry policy in §8.1 by `test_backend_replicate.py`.
 
 ---
 
@@ -84,6 +86,7 @@ type BackgroundPreset = {
   anchor: "center" | "top";  // default "center"
   shadow: boolean;     // default false
   quality: number;     // default 90, 60-95, integer
+  backdrop: { storagePath: string; fit: "cover" } | null;   // default null
 };
 ```
 
@@ -100,8 +103,8 @@ forever and the app re-mats the whole catalog.**
 
 Algorithm:
 
-1. Build a JSON object with **exactly these six keys, sorted alphabetically**:
-   `anchor`, `canvas`, `color`, `padding`, `quality`, `shadow`.
+1. Build a JSON object with **exactly these seven keys, sorted alphabetically**:
+   `anchor`, `backdrop`, `canvas`, `color`, `padding`, `quality`, `shadow`.
    `id` is **not** included — the hash identifies a *look*, not a preset row, so
    renaming a preset must not invalidate 4,800 composites.
 2. No whitespace anywhere. Strings double-quoted.
@@ -113,13 +116,20 @@ Algorithm:
    In TypeScript that is `String(Number(padding.toFixed(3)))`.
    *(Not the language's float repr: a slider emitting `0.10000000000000003`
    would otherwise mint a second hash for a look nobody can distinguish.)*
-7. `presetHash` = **first 8 lowercase hex characters of `sha1(canonicalJson)`**.
+7. `backdrop` is written as a **bare string**: its `storagePath`, or `""` when
+   there is no backdrop. **`backdrop.fit` is NOT hashed** — `"cover"` is its only
+   legal value, so it cannot describe two looks. The day a second fit exists it
+   must enter the canonical form, and that is a breaking change to ship as a new
+   preset, not as a new hash for an old one.
+8. `presetHash` = **first 8 lowercase hex characters of `sha1(canonicalJson)`**.
 
 ```ts
 function presetHash(p: BackgroundPreset): string {
   const pad = String(Number(p.padding.toFixed(3)));
   const json =
-    `{"anchor":${JSON.stringify(p.anchor)},"canvas":${p.canvas},` +
+    `{"anchor":${JSON.stringify(p.anchor)},` +
+    `"backdrop":${JSON.stringify(p.backdrop?.storagePath ?? "")},` +
+    `"canvas":${p.canvas},` +
     `"color":${JSON.stringify(p.color.toUpperCase())},"padding":${pad},` +
     `"quality":${p.quality},"shadow":${p.shadow}}`;
   return sha1Hex(json).slice(0, 8);
@@ -130,12 +140,49 @@ function presetHash(p: BackgroundPreset): string {
 
 | # | Preset | Canonical JSON | Hash |
 |---|---|---|---|
-| 1 | all defaults (or `{}`, or omitted) | `{"anchor":"center","canvas":2048,"color":"#FFFFFF","padding":0.1,"quality":90,"shadow":false}` | `7abc910f` |
-| 2 | `{canvas:1536,color:"#f4f4f4",padding:0.08,anchor:"top",shadow:true,quality:85}` | `{"anchor":"top","canvas":1536,"color":"#F4F4F4","padding":0.08,"quality":85,"shadow":true}` | `c7e0869c` |
-| 3 | `{padding:0.100}` | identical to vector 1 | `7abc910f` |
+| 1 | all defaults (or `{}`, or omitted) | `{"anchor":"center","backdrop":"","canvas":2048,"color":"#FFFFFF","padding":0.1,"quality":90,"shadow":false}` | `6300e6dc` |
+| 2 | `{canvas:1536,color:"#f4f4f4",padding:0.08,anchor:"top",shadow:true,quality:85}` | `{"anchor":"top","backdrop":"","canvas":1536,"color":"#F4F4F4","padding":0.08,"quality":85,"shadow":true}` | `a4c629a4` |
+| 3 | defaults + `backdrop.storagePath = "u1/backdrops/1700000000000-linen.jpg"` | `{"anchor":"center","backdrop":"u1/backdrops/1700000000000-linen.jpg","canvas":2048,"color":"#FFFFFF","padding":0.1,"quality":90,"shadow":false}` | `6218c54a` |
+| 4 | `{padding:0.100}` | identical to vector 1 | `6300e6dc` |
 
-Vector 3 is the float-formatting rule. Vector 2 exercises every field at a
-non-default value and the colour upper-casing.
+Vector 2 exercises every scalar field at a non-default value and the colour
+upper-casing. Vector 3 is the backdrop. Vector 4 is the float-formatting rule.
+
+> **`7abc910f` and `c7e0869c` are RETIRED.** They were vectors 1 and 2 before
+> `backdrop` entered the canonical form on **20 Sept 2026**. Nothing had ever been
+> processed under them — the first production run failed all three of its photos
+> on Replicate's billing gate — so no stored composite carries an old hash and
+> there is nothing to migrate. Had one catalogue been matted first, the field
+> would have had to ship as a second preset instead. If either string turns up
+> anywhere, it is pre-backdrop code, not data.
+
+### 4.3 Photo backdrops
+
+`backdrop` replaces the flat `color` fill with a photo. Everything else about the
+composite is **identical** — same padding, same anchor, same shadow, same
+placement arithmetic — so switching a catalogue from white to linen changes what
+is behind the garment and not where the garment is.
+
+- **Where the files live:** `{uploaderUserId}/backdrops/{unix_ms}-{slug}.jpg` in
+  the same bucket, uploaded by the app at **≤ 2048 px**. The service accepts any
+  bucket-relative path (the bucket is public, so reading another prefix is not a
+  new exposure) but refuses an absolute path, a `..` segment, a scheme, a
+  backslash, a `?`/`#`, a control character, and anything over 300 characters.
+- **`fit: "cover"`** is the only fit: the backdrop is scaled to cover
+  `canvas × canvas` and **centre-cropped**, LANCZOS. Cover rather than contain
+  because a backdrop that does not reach the edges is not a backdrop.
+- **It is fetched and decoded ONCE PER JOB**, not once per image.
+- **`color` fills nothing when a backdrop is set.** It still has an effect through
+  the shadow, which multiplies darkness into whatever is underneath — so a contact
+  shadow darkens the linen rather than painting grey on it.
+- **A missing or undecodable backdrop fails the row** with
+  `mask_flags = ['error:backdrop missing']`. It **never** falls back to the flat
+  colour: half a catalogue on linen and half on white, because one fetch failed on
+  a Tuesday, is invisible until a buyer sees the grid, and is the exact failure the
+  deterministic compositor exists to prevent.
+- **Also accepted:** `backdrop` as a bare path string (and `""` for none), because
+  the canonical JSON writes it that way and a caller round-tripping its own
+  canonical form should not get a 422.
 
 ---
 
@@ -169,10 +216,26 @@ The only unauthenticated endpoint.
 derived paths **and** `mask_model` equals the current backend tag **and**
 `bg_preset` equals this preset's hash. That is the whole idempotency key:
 
-- `mask_status` is **not** part of it. `approved` and `original` are a human's
-  judgement, and a background refresh must never quietly re-cut them.
+- `mask_status` is **not** part of it, with two exceptions below. `approved` and
+  `original` are a human's judgement, and a background refresh must never quietly
+  re-cut them.
 - `mask_status = 'failed'` is **never** skipped — pressing the button again is
   the retry.
+- **`mask_status = 'queued'` is never skipped either.** A queued row is normally a
+  row **nobody is working on**: the status is written before any work starts, so a
+  machine that died mid-batch leaves its remaining photos queued with nothing
+  behind them, and the service's own host stops a machine after five minutes on
+  its current plan — so that is the ordinary case, not an exotic one. The trap is
+  that re-queueing touches only `mask_status`, so a queued row can still carry the
+  *previous* run's `mask_model` and `bg_preset`; the idempotency key would match
+  and the photo would be skipped **for good**, permanently "in flight" behind a
+  process that no longer exists.
+- **The one thing skipped even under `force`:** a row the service is working on
+  *right now*. That is in-process knowledge, not a column. The reason is money, not
+  correctness — jobs are serialised per workspace, so a duplicate would run
+  *afterwards* and simply mat (and bill for) every photo twice, because its
+  accepted list was decided before the first job wrote a row. `force` means
+  "ignore what the row says", never "do it twice".
 - A new preset is not skipped, but it costs nothing: the composite is
   re-derived from the stored alpha master with no matting call.
 
@@ -183,6 +246,12 @@ the first poll already shows the queue.
 render it as such, not as an error.
 
 Duplicate ids in the request are collapsed.
+
+**On shutdown, nothing is left half-done.** `SIGTERM` and `SIGINT` both drain the
+images in flight, and whatever did not finish is written back to
+`mask_status = 'queued'` with a log line naming the ids. Resubmitting the same ids
+then picks them straight back up, per the rule above. **So the recovery from an
+interrupted batch is: press the button again.**
 
 ### `GET /v1/jobs/{jobId}` → `200`
 
@@ -211,6 +280,11 @@ are retained for one hour after finishing).
 A single-image job, **always forced**. `2048` asks the backend for its
 high-resolution variant where it has one.
 
+Unlike `POST /v1/jobs`, this is **not** filtered against the images in flight: the
+caller has explicitly asked for this one photo to be redone, and honouring that is
+worth more than saving one matting call. Jobs are serialised per workspace, so it
+runs after whatever is in progress rather than alongside it.
+
 ---
 
 ## 6. What the service writes
@@ -228,8 +302,8 @@ Per image, on success, **one `PATCH` to `product_images`**:
 | `mask_status` | `auto` (clean) or `review` (a non-advisory flag fired) |
 | `matted_at` | `now()` |
 
-On failure: `mask_status = 'failed'`, `mask_flags = ['error:<short reason>']`,
-and the job continues with the next image.
+On failure: `mask_status = 'failed'`, a single `mask_flags` entry of the form
+`error:<reason>` (**§8.1**), and the job continues with the next image.
 
 **It never touches `storage_path`, `image_url` or `position`.** Derived files
 are always NEW paths beside the source, so the per-`storage_path` immutability
@@ -293,3 +367,33 @@ Every non-2xx is `{ "error": "<sentence>" }`.
 Upstream bodies and exception strings are **never** echoed — they are logged
 server-side and the caller gets a generic sentence (same rule as the Edge
 Functions, AGENTS.md §9).
+
+### 8.1 `mask_flags` failure entries — the shape to render
+
+A failed row carries **exactly one** flag, always `error:` followed by a reason,
+and **the whole flag is capped at 200 characters**. Render it as text; do not
+parse it. The reasons you will actually see:
+
+| Flag | Means | What to do |
+|---|---|---|
+| `error:replicate <status> <title> — <detail>` | The matting API refused. `title`/`detail` are **its own words**. | Read them. `402 Insufficient credit` means the account needs a card. |
+| `error:replicate prediction failed — <model error>` | The model ran and failed (CUDA OOM, an input it could not fetch). | Usually re-run; a repeat means the photo. |
+| `error:backdrop missing` | The preset's backdrop could not be fetched or decoded (§4.3). | Fix the backdrop, then re-run. It did **not** render on the flat colour. |
+| `error:timeout after 180s` | The whole image exceeded `IMAGE_TIMEOUT_S`. | Re-run. A repeat means a very large source or a wedged upstream. |
+| `error:<ExceptionClass>: <message>` | Anything unexpected. | The class name is the lead. |
+
+> **Why the upstream *status text* is in a database column here when §8 forbids
+> echoing upstream bodies in a RESPONSE.** These are two different boundaries. §8
+> is about what a browser is told over HTTP; this is the founder's own review queue,
+> and the whole point of it is to say why a photo failed. The first production run
+> wrote `error:RuntimeError: replicate create failed (429)` three times, which named
+> an exception class and a status and **not** the cause — a billing gate. The API
+> token, the image URL and any inline `data:` image are scrubbed out before the flag
+> is written, and the flag is one collapsed line.
+
+**Retry policy, so a flag means what it says.** `429`, `5xx` and transport errors
+are retried **5 times** with backoff **2, 4, 8, 16, 32 s** (±20% jitter) before the
+row fails — they are load, and load passes. **`402` and every other `4xx` fail on
+the first response**: insufficient credit does not appear within a minute, and
+retrying turns one legible failure into six identical ones and a minute of dead
+capacity per photo. The count is `REPLICATE_RETRY_ATTEMPTS` (`0` disables it).

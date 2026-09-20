@@ -1953,11 +1953,20 @@ function App() {
         const rows = byProduct.get(item.id);
         if (!rows || rows.length === 0) return item;
         const row = (item.storagePath && rows.find(r => r.storage_path === item.storagePath)) || rows[0];
+        /* `mask_flags` is compared by CONTENT, not identity: two equal arrays
+           from two reads are never `===`, so identity would rebuild every item
+           on every refresh and defeat the memo — while leaving it out entirely
+           means a re-run that returns the same status with a DIFFERENT reason
+           never reaches the screen, which is exactly what the failure line now
+           depends on. */
+        const sameFlags =
+          (item.maskFlags ?? []).join('\u0001') === (row.mask_flags ?? []).join('\u0001');
         if (
           item.productImageId === row.id &&
           item.maskStatus === (row.mask_status ?? undefined) &&
           item.compositeStoragePath === (row.composite_storage_path ?? undefined) &&
-          item.maskScore === (row.mask_score ?? undefined)
+          item.maskScore === (row.mask_score ?? undefined) &&
+          sameFlags
         ) return item;   // unchanged — keep the identity so memo'd children bail out
         return {
           ...item,
@@ -3543,6 +3552,7 @@ function App() {
                      `{...preset}` here would defeat ImageGrouper's memo on every
                      App render (§18 #24). */
                   backgroundPreset={orgDescSettings?.background}
+                  backgroundBackdrops={orgDescSettings?.backdrops}
                   orgRole={currentOrg ? orgRole : undefined}
                   onBackgroundsChanged={onBackgroundsChangedStable}
                 />

@@ -2071,6 +2071,25 @@
   color: var(--text-muted);
 }
 
+/* The failure REASON. `--danger` because it is the state, and readable size
+   rather than the 11px meta the counts use: this is the one line in the panel a
+   seller has to read and act on, and the first real run proved that a count
+   with no reason sends them to the database instead. `word-break` because the
+   text comes from a server and can be a long unbroken token in a ~280px panel. */
+.bgp-fail {
+  margin: 0.3rem 0 0;
+  font-size: var(--fs-xs);
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.bgp-fail-hint {
+  margin: 0.2rem 0 0;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
 .bgp-wide { width: 100%; justify-content: center; }
 
 /* Stacked and full-width, not a wrapping row: the panel is ~280px, the two
@@ -2094,12 +2113,16 @@
   gap: 0.4rem 0.6rem;
 }
 
+/* `flex-start`, not `center`: naming the backdrop pushed this line to two, and
+   a swatch centred against a two-line block floats between them with nothing to
+   line up against. It now sits on the first line, where the reading starts. */
 .bgp-preset {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.35rem;
   font-size: var(--fs-2xs);
   color: var(--text-secondary);
+  min-width: 0;
 }
 
 .bgp-swatch {
@@ -2108,6 +2131,8 @@
   border-radius: 3px;
   border: 1px solid var(--border);
   display: inline-block;
+  flex: 0 0 auto;
+  margin-top: 2px;            /* optical centre of the first line */
 }
 
 .bgp-notice {
@@ -2186,6 +2211,23 @@
   padding-left: 1.05rem;
   font-size: var(--fs-2xs);
   color: #d6d6d6;
+}
+
+/* Same literal-light reasoning as the rest of this strip: it sits on the dark
+   overlay, not on the page canvas, so `--danger` (tuned for white) would be
+   unreadable here and the tint is written out. */
+.lb-fail {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: #ffb3b3;
+  overflow-wrap: anywhere;
+}
+
+.lb-fail-hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: #f2f2f2;
 }
 
 .lb-review-actions {

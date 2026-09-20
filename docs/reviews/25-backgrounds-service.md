@@ -490,3 +490,219 @@ transformers/timm (Apache-2.0).
 - Not yet done: `image_backgrounds.sql` in the SQL Editor (production SQL is not reachable from this
   session), the DNS records, and the first real photo.
 
+
+---
+
+## Round 2 (Sept 20 2026) — what the first real run showed, and what changed
+
+The founder processed three photos through the deployed service. All three came
+back `mask_status = 'failed'`, and all three carried the same flag:
+
+```
+mask_flags = ["error:RuntimeError: replicate create failed (429)"]
+```
+
+**Everything in that string is true and none of it is the reason.** Asked by hand,
+Replicate answers **402**:
+
+```json
+{"title":"Insufficient credit",
+ "detail":"You have insufficient credit to run this model. Go to https://replicate.com/account/billing…",
+ "status":402}
+```
+
+A billing gate. The 429 was the same gate under concurrency — the account cannot
+run the model, and the rate limiter is what a caller sees first when several
+requests arrive at once. So the run did not reveal a bug in the matting pipeline;
+it revealed that **the pipeline could not tell the founder what was wrong**, which
+cost a debugging session to decode a sentence Replicate had already written.
+
+The same conversation turned up the second problem: the Fly account is on a trial,
+and a trial **stops every machine after five minutes**. A batch of any size is
+therefore killed mid-flight as a matter of routine, not as an incident.
+
+Both are about failure legibility and recovery rather than about matting, and this
+round is entirely about those. Nothing in the compositor, the scorer, the auth
+boundary or the storage layout changed.
+
+### 1. The flag says what Replicate said
+
+`error:<reason>`, where a backend is free to make the reason a sentence:
+
+```
+error:replicate 402 Insufficient credit — You have insufficient credit to run this
+model. Go to https://replicate.com/account/billing to add credit.
+```
+
+Three decisions inside that.
+
+**A `MattingFailure` renders without its class name.** `_reason()` in the pipeline
+used to build `f"{ClassName}: {message}"` for everything, which is right for an
+unexpected exception (the class is the informative half) and wrong for a failure
+whose message *is* the explanation. `MattingFailure` in `app/backends/base.py` is
+the marker for the second kind, and the rule for a subclass is written there: the
+message is user-facing.
+
+**The cap moved from 60 characters to 200, for the whole flag.** 60 truncated
+Replicate's sentence to nothing, which is how the useful half got lost even where
+it was available.
+
+**The token, the image URL and any inline `data:` image are scrubbed out first**
+(`_scrub`). This matters more than it looks: the create endpoint **does** echo the
+input URL in a 422, and once the bucket goes private that URL is a signed link —
+and `mask_flags` is read in the review UI. There is a test per leak.
+
+That is a deliberate exception to "never echo an upstream body", and the two are
+not in conflict: §8 of the contract is about what an HTTP **response** tells a
+browser; this is the founder's own review queue, whose entire job is to say why a
+photo failed. `CONTRACT.md` §8.1 now states both halves side by side.
+
+### 2. Retry what recovers, and only that
+
+| Response | Policy |
+|---|---|
+| `429`, `5xx`, transport error | 5 retries, backoff **2, 4, 8, 16, 32 s**, ±20% jitter |
+| `402` and every other `4xx` | **fail on the first response** |
+
+The asymmetry is the point. A 429 is the service asking us to slow down and
+slowing down works. A 402 is the service saying the account cannot run the model;
+no amount of waiting changes that, and retrying it would have turned the founder's
+three-photo run into eighteen requests, a minute of dead worker time per photo,
+and the same flag at the end. `REPLICATE_RETRY_ATTEMPTS` configures the count
+(`0` disables); jitter is proportional so that `CONCURRENCY` images throttled
+together do not come back in lockstep and throttle themselves again.
+
+The poll loop was folded into the same path. It used to swallow a non-200 and
+`continue` until the deadline, so a throttled poll reported *"did not finish
+within 180s"* when the truth was *"we were being rate limited"*.
+
+Tests use a fake clock — `_backoff_sleep` is a named module-level seam precisely
+so the ladder can be asserted as 2/4/8/16/32 without the suite waiting 62 seconds
+or the stdlib being monkeypatched.
+
+### 3. Never strand a photo as "in flight"
+
+Three changes, and the interesting one is the first.
+
+**A `queued` row is re-accepted by the next submit.** `mask_status = 'queued'` is
+written *before* any work starts, so a machine that dies mid-batch leaves its
+remaining photos queued with nothing behind them — and on this Fly plan that is
+the ordinary case. The trap: `mark_queued` touches only `mask_status`, so a
+re-queued row still carries the *previous* run's `mask_model` and `bg_preset`. The
+idempotency key therefore **matched**, and the photo was skipped for good —
+permanently "in flight" behind a process that no longer existed. `already_done`
+now refuses `queued` exactly as it already refused `failed`.
+
+**Except the rows this process is holding**, which `JobRegistry.inflight_ids()`
+answers and which `accepted_rows()` excludes **even under `force`**. That one is
+about money rather than correctness: jobs are serialised per workspace, so a
+duplicate submit would run *afterwards* and simply mat every photo a second time,
+because its accepted list was decided before the first job wrote a row —
+`already_done` cannot catch it retrospectively. `force` means "ignore what the row
+says", never "do it twice". `/rerun` is deliberately *not* filtered: the user asked
+for that one photo, and honouring an explicit request beats saving one call.
+
+**Shutdown writes the unfinished rows back to `queued`**, with a log line naming
+the ids, after the drain and before the client closes (uvicorn turns both SIGTERM
+and SIGINT into a lifespan shutdown, which is what makes it reachable on the
+trial's five-minute stop). On a clean exit this is a no-op, because the rows are
+queued already — it is there to make that a *guarantee* rather than a coincidence,
+and to produce the line that says what to resubmit. The subtlety is where the id
+is discarded: **after `process_image` returns**, never in a `finally`, because a
+cancelled image is precisely the one that must stay in the set.
+
+**And a per-image deadline, `IMAGE_TIMEOUT_S` (180 s)** → `error:timeout after
+180s`. Every inner call already had its own timeout; a photo can still wedge
+*between* them, holding one of `CONCURRENCY` slots while its row says `queued`. It
+is implemented with `asyncio.timeout` and keyed on **`expired()`**, not on the
+exception type, because the Replicate poll deadline also raises `TimeoutError` and
+reporting that as "timeout after 180s" would hide which clock ran out.
+Cancellation is deliberately *not* converted into a failure — that would hand the
+founder a review queue full of photos nobody ever attempted.
+
+### 4. Photo backdrops
+
+The founder asked to "upload a few photo backdrops to replace background as well,
+not just colours". `BackgroundPreset` gains
+`backdrop: { storagePath, fit: "cover" } | null`.
+
+**The contract change is in the hash**, which is the part both sides have to agree
+on. The canonical JSON gains `"backdrop"` as a **bare string** — the storage path,
+or `""` — keeping the keys alphabetical:
+
+```
+{"anchor":…,"backdrop":…,"canvas":…,"color":…,"padding":…,"quality":…,"shadow":…}
+```
+
+| Preset | Hash |
+|---|---|
+| all defaults | `6300e6dc` |
+| `{canvas:1536,color:"#f4f4f4",padding:0.08,anchor:"top",shadow:true,quality:85}` | `a4c629a4` |
+| defaults + `backdrop.storagePath = "u1/backdrops/1700000000000-linen.jpg"` | `6218c54a` |
+
+`fit` is **not** hashed, because `"cover"` is its only legal value and so it cannot
+describe two looks; the day a second fit exists it must enter the canonical form,
+and that is a breaking change to ship as a new preset. Written at the rule in both
+`preset.py` and `CONTRACT.md` §4.1 so it is not discovered later.
+
+**`7abc910f` and `c7e0869c` are retired.** They were vectors 1 and 2. Moving a
+published hash is normally forbidden — it invalidates every stored composite — and
+it was safe here for exactly one reason: **nothing had ever been processed under
+them**, because the first production run failed all three of its photos on the
+billing gate. Had a single catalogue been matted first, the field would have had to
+ship as a second preset. A test asserts neither string can be produced again.
+
+**The compositing is the same code with a different fill.** The backdrop is
+fetched like any source (public URL, then service role), decoded, cover-cropped to
+`canvas × canvas` (scale to cover, centre crop, LANCZOS — PIL's, which scales its
+filter support on a downsample where cv2's fixed kernel aliases a woven texture),
+and handed to `compose()` as a plain array. Geometry, anchor, shadow and the
+premultiplied blend are untouched — asserted not against numbers this pass made up
+but against the flat path itself: `photo_place == flat_place`.
+
+**It is fetched once per job, not once per image.** A 2048px backdrop is a
+download, a JPEG decode and a resample; 400 of those for one batch would cost more
+than the compositing they feed. `load_backdrop` is called in `JobRegistry._run`
+before the gather, which makes "one decode per job" structural rather than a
+convention — `process_image` cannot fetch a backdrop even by accident.
+
+**A missing or undecodable backdrop fails the row** with `error:backdrop missing`,
+and `compose()` refuses a backdrop preset with no array as a second lock on the
+same door. There is no fall back to the flat colour, ever: half a catalogue on
+linen and half on white — because one fetch failed on a Tuesday — is invisible
+until a buyer sees the grid, and preventing exactly that is what the deterministic
+compositor is for. `color` fills nothing while a backdrop is set, but still shows
+through the shadow, which multiplies rather than painting grey (so a contact shadow
+darkens the linen instead of looking like a sticker on it).
+
+The CLI takes `--backdrop <file>`, cover-cropping a local image identically. It
+hashes the file's **name**, so two backdrops write two output files — and it says,
+when it runs, that this hash will not match the service's for the same picture.
+A preset that names a bucket path with no `--backdrop` is refused rather than
+rendered flat, for the same reason as above.
+
+### 5. Files and gates
+
+| File | Change |
+|---|---|
+| `app/backends/base.py` | `MattingFailure` — a failure whose message is the reason |
+| `app/backends/replicate.py` | `ReplicateError`, `_error_message`, `_scrub`, `_request` (the retry ladder); poll and output download routed through it; the output download still sends no credential |
+| `app/pipeline.py` | `error_flag` (200-char cap), `accepted_rows`, `load_backdrop`, `BackdropMissing`, the `asyncio.timeout` wrapper + `_fail`, `already_done` refuses `queued` |
+| `app/jobs.py` | `inflight_ids()`, `requeue_inflight()`, per-job backdrop load, per-image in-flight discard |
+| `app/compose.py` | `cover_crop`, `compose(..., backdrop)` |
+| `app/preset.py` | `Backdrop`, path validation, `backdrop` in the canonical form, `with_backdrop_path` |
+| `app/config.py` | `IMAGE_TIMEOUT_S`, `REPLICATE_RETRY_ATTEMPTS`, `REPLICATE_RETRY_BASE_SECONDS` |
+| `app/main.py` | `accepted_rows` at the endpoint, `requeue_inflight` in the lifespan |
+| `app/cli.py` | `--backdrop`; the preset line prints before the input scan |
+| `tests/` | **157 → 247**, incl. new `test_jobs.py` (13) and `test_cli.py` (4) |
+
+`python -m pytest -q` → **247 passed**, no network. `ruff check` clean. Nothing
+was committed and nothing was deployed.
+
+**Still unverified:** every one of these paths is exercised against
+`httpx.MockTransport`, so the retry ladder, the 402 flag, the shutdown requeue and
+the backdrop composite have not been seen against the real Replicate API, real
+Supabase rows or a real SIGINT from Fly. The first two need credit on the Replicate
+account; the third needs `image_backgrounds.sql` to have been run. The backdrop
+feature also needs the app half to upload a backdrop and send its path — the same
+three hash vectors are the agreement point.

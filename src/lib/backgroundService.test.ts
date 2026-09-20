@@ -9,13 +9,21 @@ import { supabase } from './supabase';
 import type { MockedSupabaseClient } from './testing/supabaseMock';
 import { DEFAULT_BACKGROUND_PRESET } from './descriptionSettings';
 import {
+  BACKGROUND_BILLING_HINT,
   BACKGROUND_ROW_COLUMNS,
+  JOB_GONE_MESSAGE,
   __resetBackgroundProbeForTests,
+  backgroundFailureHint,
   backgroundsAvailable,
   backgroundsKnownAvailable,
+  failureReasonFor,
   fetchImageRowsForProducts,
   isBackgroundBlocking,
+  isJobGone,
+  isProcessableStatus,
+  maskFailureReason,
   maskFlagLabel,
+  sharedFailureReason,
   mattingBaseUrl,
   pollBackgroundJob,
   rerunImage,
@@ -177,6 +185,52 @@ describe('summarizeMaskStatuses', () => {
   });
 });
 
+/**
+ * NEVER STRAND A PHOTO. Fly stops an idle machine after a few minutes, so the
+ * first real run left rows sitting at `queued` with the job that owned them
+ * gone from memory — and while this rule excluded `queued`, there was no press
+ * left anywhere in the UI that could pick them up.
+ */
+describe('isProcessableStatus', () => {
+  it('processes a photo that has never been looked at', () => {
+    expect(isProcessableStatus(null, false)).toBe(true);
+    expect(isProcessableStatus(undefined, false)).toBe(true);
+    expect(isProcessableStatus('', false)).toBe(true);
+  });
+
+  it('retries a failure — pressing Process again IS the retry', () => {
+    expect(isProcessableStatus('failed', false)).toBe(true);
+  });
+
+  it('picks up a STRANDED queued row when no job is running here', () => {
+    expect(isProcessableStatus('queued', false)).toBe(true);
+  });
+
+  it('leaves a queued row alone while this session is watching a job', () => {
+    expect(isProcessableStatus('queued', true)).toBe(false);
+  });
+
+  it('never re-processes a settled photo, or one waiting on a person', () => {
+    for (const status of ['auto', 'approved', 'original', 'review']) {
+      expect(isProcessableStatus(status, false)).toBe(false);
+      expect(isProcessableStatus(status, true)).toBe(false);
+    }
+  });
+
+  it('agrees with summarizeMaskStatuses about what is processable when idle', () => {
+    // `processable` has counted queued since the beginning; the two must not
+    // disagree, or the panel's count and its button's count differ by the
+    // stranded rows.
+    const rows = [
+      { mask_status: null }, { mask_status: 'failed' }, { mask_status: 'queued' },
+      { mask_status: 'auto' }, { mask_status: 'review' }, { mask_status: 'approved' },
+      { mask_status: 'original' },
+    ];
+    const byRule = rows.filter(r => isProcessableStatus(r.mask_status, false)).length;
+    expect(byRule).toBe(summarizeMaskStatuses(rows).processable);
+  });
+});
+
 describe('maskFlagLabel', () => {
   it('renders each known flag as a sentence', () => {
     expect(maskFlagLabel('edge')).toBe('Cut off at an edge of the photo');
@@ -184,13 +238,136 @@ describe('maskFlagLabel', () => {
     expect(maskFlagLabel('soft')).toBe('Soft edges');
   });
 
-  it('unwraps error:<reason>', () => {
-    expect(maskFlagLabel('error:fetch_failed')).toBe('Could not be processed — fetch failed');
+  it('unwraps error:<reason> with a COLON, not an em dash', () => {
+    // The reason frequently contains an em dash of its own (upstream messages
+    // are written that way), and two in one line reads as a broken sentence.
+    expect(maskFlagLabel('error:fetch_failed')).toBe('Could not be processed: fetch failed');
     expect(maskFlagLabel('error:')).toBe('Could not be processed');
   });
 
   it('passes an unknown flag through — a newer service must not lose its warning', () => {
     expect(maskFlagLabel('halo')).toBe('halo');
+  });
+});
+
+/**
+ * THE FIRST REAL RUN. Every row came back `failed` carrying
+ * `error:RuntimeError: replicate create failed (429)` — a billing gate on the
+ * matting backend — and the only thing on screen was "1 could not be processed".
+ * The reason had to be read out of the database by hand. These are the rules
+ * that make it readable, and the one thing they must not do is paraphrase a
+ * message nobody has seen before.
+ */
+describe('maskFailureReason', () => {
+  it('passes a real sentence through verbatim, em dash and all', () => {
+    const msg = 'replicate 402 Insufficient credit — You have insufficient credit to run this model';
+    expect(maskFailureReason(`error:${msg}`)).toBe(msg);
+    expect(maskFlagLabel(`error:${msg}`)).toBe(`Could not be processed: ${msg}`);
+  });
+
+  it('keeps status codes, brackets and vendor names — the parts that identify the fault', () => {
+    expect(maskFailureReason('error:replicate create failed (429)'))
+      .toBe('replicate create failed (429)');
+  });
+
+  it('drops a leading Python exception class, which a reseller can neither read nor act on', () => {
+    expect(maskFailureReason('error:RuntimeError: replicate create failed (429)'))
+      .toBe('replicate create failed (429)');
+    expect(maskFailureReason('error:HTTPError: 402 Payment Required')).toBe('402 Payment Required');
+    expect(maskFailureReason('error:ValueError: mask was empty')).toBe('mask was empty');
+  });
+
+  it('does NOT drop a colon that is part of the message', () => {
+    expect(maskFailureReason('error:upstream said: try later')).toBe('upstream said: try later');
+    expect(maskFailureReason('error:model: birefnet unavailable')).toBe('model: birefnet unavailable');
+  });
+
+  it('turns a bare machine token into words — the shape the older flags took', () => {
+    expect(maskFailureReason('error:fetch_failed')).toBe('fetch failed');
+    expect(maskFailureReason('error:no-mask')).toBe('no mask');
+  });
+
+  it('is empty for a non-error flag and for an empty reason', () => {
+    expect(maskFailureReason('coverage')).toBe('');
+    expect(maskFailureReason('error:')).toBe('');
+    expect(maskFailureReason('error:   ')).toBe('');
+  });
+});
+
+describe('failureReasonFor', () => {
+  it('reads the first error flag, in either spelling', () => {
+    expect(failureReasonFor({ mask_flags: ['coverage', 'error:fetch_failed'] })).toBe('fetch failed');
+    expect(failureReasonFor({ maskFlags: ['error:no credit'] })).toBe('no credit');
+  });
+
+  it('is empty when nothing said why', () => {
+    expect(failureReasonFor({ mask_flags: ['coverage'] })).toBe('');
+    expect(failureReasonFor({ mask_flags: [] })).toBe('');
+    expect(failureReasonFor({})).toBe('');
+    expect(failureReasonFor(null)).toBe('');
+  });
+});
+
+describe('sharedFailureReason', () => {
+  const failed = (reason?: string) => ({
+    mask_status: 'failed',
+    mask_flags: reason ? [`error:${reason}`] : [],
+  });
+
+  it('is the one reason when every failure agrees — the normal case', () => {
+    expect(sharedFailureReason([
+      failed('replicate 402 Insufficient credit'),
+      failed('replicate 402 Insufficient credit'),
+      { mask_status: 'auto' },
+    ])).toBe('replicate 402 Insufficient credit');
+  });
+
+  it('is null when the failures DISAGREE — one photo\u2019s story is not all of them', () => {
+    expect(sharedFailureReason([failed('no credit'), failed('fetch failed')])).toBeNull();
+  });
+
+  it('is null when any failure said nothing, so the panel keeps its bare count', () => {
+    expect(sharedFailureReason([failed('no credit'), failed()])).toBeNull();
+  });
+
+  it('ignores every status but failed — a review flag is not a failure reason', () => {
+    expect(sharedFailureReason([
+      { mask_status: 'review', mask_flags: ['error:ignored'] },
+      failed('no credit'),
+    ])).toBe('no credit');
+  });
+
+  it('is null for an empty, absent or all-clean batch', () => {
+    expect(sharedFailureReason([])).toBeNull();
+    expect(sharedFailureReason(null)).toBeNull();
+    expect(sharedFailureReason([{ mask_status: 'auto' }])).toBeNull();
+  });
+});
+
+describe('backgroundFailureHint', () => {
+  it('names the one fix that lives outside this app', () => {
+    expect(backgroundFailureHint('replicate 402 Insufficient credit')).toBe(BACKGROUND_BILLING_HINT);
+    expect(backgroundFailureHint('BILLING disabled for this account')).toBe(BACKGROUND_BILLING_HINT);
+  });
+
+  it('says nothing for a fault the seller cannot act on, or no reason at all', () => {
+    expect(backgroundFailureHint('replicate create failed (429)')).toBeNull();
+    expect(backgroundFailureHint('')).toBeNull();
+    expect(backgroundFailureHint(null)).toBeNull();
+  });
+});
+
+describe('isJobGone', () => {
+  it('is true only for a 404 — the job the service forgot', () => {
+    expect(isJobGone({ ok: false, error: 'x', status: 404 })).toBe(true);
+    expect(isJobGone({ ok: false, error: 'x', status: 500 })).toBe(false);
+    expect(isJobGone({ ok: false, error: 'x', status: 401 })).toBe(false);
+    expect(isJobGone({ ok: false, error: 'could not reach it' })).toBe(false);
+    expect(isJobGone({ ok: true, value: 1 })).toBe(false);
+  });
+
+  it('says what to do about it — the rows are still queued and Process re-accepts them', () => {
+    expect(JOB_GONE_MESSAGE).toContain('Process again');
   });
 });
 
@@ -431,6 +608,23 @@ describe('pollBackgroundJob', () => {
     const calls = stubFetch([{ body: {} }]);
     expect((await pollBackgroundJob('')).ok).toBe(false);
     expect(calls).toHaveLength(0);
+  });
+
+  /* The 404 half of the stranded-photo fix: the caller ENDS the poll on a lost
+     job and says "press Process again", instead of counting to 0/12 for ever.
+     `isJobGone` can only answer that if the status survives the call. */
+  it('carries a 404 through as a status, which is how a lost job is recognised', async () => {
+    stubFetch([{ ok: false, status: 404, body: {} }]);
+    const res = await pollBackgroundJob('job-gone');
+    expect(res.ok).toBe(false);
+    expect(isJobGone(res)).toBe(true);
+  });
+
+  it('a network failure is NOT a lost job — it has no status and must keep its own message', async () => {
+    stubFetch([new Error('offline')]);
+    const res = await pollBackgroundJob('job-1');
+    expect(res.ok).toBe(false);
+    expect(isJobGone(res)).toBe(false);
   });
 });
 

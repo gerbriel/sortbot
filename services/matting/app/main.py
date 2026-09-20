@@ -19,7 +19,7 @@ from .auth import AuthError, ForbiddenError, authorize, bearer_token
 from .backends import BackendUnavailable, build_matter
 from .config import get_settings
 from .jobs import JobRegistry
-from .pipeline import already_done
+from .pipeline import accepted_rows
 from .preset import BackgroundPreset, PresetError
 from .storage import mark_queued
 
@@ -84,7 +84,13 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        # Uvicorn turns SIGTERM *and* SIGINT into a lifespan shutdown, which is
+        # what makes this reachable on Fly's trial — it stops a machine with a
+        # SIGINT after five minutes, so an interrupted batch is the normal case.
+        # Drain first (let an image finish if it can), then leave whatever did not
+        # finish as 'queued' so pressing the button again picks it up.
         await app.state.jobs.drain()
+        await app.state.jobs.requeue_inflight(client, settings)
         await client.aclose()
 
 
@@ -174,10 +180,15 @@ async def create_job(body: JobRequest, authorization: str | None = Header(defaul
     _, org_id, rows = await authorize(app.state.client, settings, token, ids)
 
     matter = app.state.matter
-    if body.force:
-        accepted = rows
-    else:
-        accepted = [r for r in rows if not already_done(r, matter.tag, preset.hash)]
+    # The rule — including why a row this process is holding is skipped even under
+    # `force` — is in pipeline.accepted_rows, next to `already_done`.
+    accepted = accepted_rows(
+        rows,
+        matter_tag=matter.tag,
+        preset_hash=preset.hash,
+        force=body.force,
+        inflight=app.state.jobs.inflight_ids(),
+    )
     skipped = len(rows) - len(accepted)
 
     if not accepted:

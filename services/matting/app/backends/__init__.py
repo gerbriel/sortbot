@@ -5,9 +5,15 @@ from __future__ import annotations
 import httpx
 
 from ..config import Settings
-from .base import BackendUnavailable, Matter, refine_alpha
+from .base import BackendUnavailable, Matter, MattingFailure, refine_alpha
 
-__all__ = ["BackendUnavailable", "Matter", "build_matter", "refine_alpha"]
+__all__ = [
+    "BackendUnavailable",
+    "Matter",
+    "MattingFailure",
+    "build_matter",
+    "refine_alpha",
+]
 
 
 def build_matter(settings: Settings, client: httpx.AsyncClient) -> Matter:

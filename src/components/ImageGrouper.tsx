@@ -16,11 +16,15 @@ import { createTransformQueue } from '../lib/imageTransforms';
 import { isRepeatToggle as isRepeatToggleAt, isSelectionModeActive } from '../lib/selectionGesture';
 import { stackLayers, stackReserve, stackOverflowBadge } from '../lib/stackLayout';
 import {
-  backgroundsAvailable, maskFlagLabel, pollBackgroundJob,
+  backgroundFailureHint, backgroundsAvailable, failureReasonFor, isJobGone,
+  isProcessableStatus, JOB_GONE_MESSAGE, maskFailureReason, maskFlagLabel, pollBackgroundJob,
   rerunImage, resolveCatalogPath, setMaskStatus, setMaskStatusMany,
-  submitBackgroundJob, summarizeMaskStatuses,
+  sharedFailureReason, submitBackgroundJob, summarizeMaskStatuses,
 } from '../lib/backgroundService';
-import { DEFAULT_BACKGROUND_PRESET, presetHash, type BackgroundPreset } from '../lib/descriptionSettings';
+import {
+  DEFAULT_BACKGROUND_PRESET, presetHash,
+  type BackgroundPreset, type WorkspaceBackdrop,
+} from '../lib/descriptionSettings';
 import { ConfirmAction } from './ui';
 import './ProductDescriptionGenerator.css'; // crop-fs-* styles shared with PDG
 
@@ -142,6 +146,9 @@ interface ImageGrouperProps {
      role. Both come from App as STABLE props — an inline object literal here
      would defeat this component's memo (§18 #24). */
   backgroundPreset?: BackgroundPreset;
+  /** The workspace's backdrop library — needed only to turn the preset's
+   *  storage path into the name the seller gave it. Stable, like the preset. */
+  backgroundBackdrops?: WorkspaceBackdrop[];
   orgRole?: string;
   /** Ask App to re-read product_images and re-join the mask columns onto the
    *  items. App owns that join because Step 4's export gate reads it too; this
@@ -149,7 +156,7 @@ interface ImageGrouperProps {
   onBackgroundsChanged?: () => void;
 }
 
-const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsChange, userId, batchId, onImageDeleted, onSelectionChange, onActionsReady, backgroundPreset, orgRole, onBackgroundsChanged }) => {
+const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsChange, userId, batchId, onImageDeleted, onSelectionChange, onActionsReady, backgroundPreset, backgroundBackdrops, orgRole, onBackgroundsChanged }) => {
   const [groupedItems, setGroupedItems] = useState<ClothingItem[]>([]);
   // Ref mirror so the initializeItems effect always reads the live groupedItems value
   // without capturing a stale closure (the effect only depends on [items]).
@@ -489,7 +496,18 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       return <span className="bg-badge bg-badge--review" title="The cut-out needs a look — double-click to review"><AlertTriangle size={11} /></span>;
     }
     if (item.maskStatus === 'failed') {
-      return <span className="bg-badge bg-badge--failed" title="The background could not be removed — this photo exports untouched"><Ban size={11} /></span>;
+      /* The reason goes in the tooltip, not just "it failed". The first real
+         run failed on a billing gate, and a badge that only said so much sent
+         the founder to the database to find out why. */
+      const why = failureReasonFor(item);
+      return (
+        <span
+          className="bg-badge bg-badge--failed"
+          title={why
+            ? `Could not be processed: ${why} — this photo exports untouched`
+            : 'The background could not be removed — this photo exports untouched'}
+        ><Ban size={11} /></span>
+      );
     }
     if (item.maskStatus === 'queued') {
       return <span className="bg-badge bg-badge--queued" title="Processing…"><Loader size={11} className="bgp-spin" /></span>;
@@ -2565,13 +2583,43 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   /** The photos a "Process" press would act on: the SELECTION when there is
    *  one, the whole batch otherwise — and only ever the ones that have a
    *  product_images row to name (a just-uploaded photo has none until
-   *  registerItemsInDB has run). */
+   *  registerItemsInDB has run).
+   *
+   *  `queued` IS INCLUDED whenever no job is running in this session, and that
+   *  is the whole fix for a stranded photo. A job lives in the service's memory
+   *  on a host that stops an idle machine; when that happens mid-run the rows
+   *  stay `queued` for ever, and while this list excluded them there was no
+   *  press left in the UI that could pick them up again. The service re-accepts
+   *  a `queued` row on submit, so offering them is safe — and it is gated on
+   *  `!bgJob` so a seller watching a live run is never invited to submit the
+   *  photos it is already working on. */
   const bgProcessTargets = useMemo(() => {
     const pool = selectedItems.size > 0
       ? groupedItems.filter(i => selectedItems.has(i.id))
       : groupedItems;
-    return pool.filter(i => i.productImageId && (!i.maskStatus || i.maskStatus === 'failed'));
-  }, [groupedItems, selectedItems]);
+    return pool.filter(i => i.productImageId && isProcessableStatus(i.maskStatus, !!bgJob));
+  }, [groupedItems, selectedItems, bgJob]);
+
+  /** How many of those targets are rows left in flight by a previous session.
+   *  Named in the button's line, because "Process 12 photos" on a batch the
+   *  seller already pressed Process on needs to say why it is offering again. */
+  const bgStrandedCount = useMemo(
+    () => (bgJob ? 0 : bgProcessTargets.filter(i => i.maskStatus === 'queued').length),
+    [bgProcessTargets, bgJob],
+  );
+
+  /** The reason the failures failed, when they all agree — which they usually
+   *  do, because the causes are shared. Null keeps the bare count. */
+  const bgFailureReason = useMemo(() => sharedFailureReason(groupedItems), [groupedItems]);
+  const bgFailureHint = backgroundFailureHint(bgFailureReason);
+
+  /** The preset's photo backdrop, as the seller named it. A path is not a name;
+   *  an unmatched path (uploaded then removed) shows nothing rather than a uuid. */
+  const bgBackdropName = useMemo(() => {
+    const path = bgPreset.backdrop?.storagePath;
+    if (!path) return '';
+    return (backgroundBackdrops ?? []).find(b => b.storagePath === path)?.name ?? '';
+  }, [bgPreset, backgroundBackdrops]);
 
   /**
    * Photos built with a DIFFERENT background recipe than the workspace's
@@ -2597,17 +2645,27 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     const tick = async () => {
       const res = await pollBackgroundJob(jobId);
       if (!res.ok) {
+        /* 404 = the service forgot this job (a restart, or an hour). The rows
+           are still `queued` and Process will pick them up, so this ends the
+           poll with an instruction rather than an error nobody can act on. It
+           must also stop polling — a lost job never comes back, and retrying
+           for ever is how the bar sat at 0/12 with nothing to show for it. */
         setBgJob(null);
-        setBgNotice(res.error);
+        setBgNotice(isJobGone(res) ? JOB_GONE_MESSAGE : res.error);
+        if (isJobGone(res)) onBackgroundsChanged?.();
         return;
       }
       const p = res.value;
       setBgJob({ id: jobId, done: p.done, total: p.total });
       if (p.status === 'done') {
         setBgJob(null);
+        /* The reason is re-read from the ROWS, not from the job: the job counts
+           failures, the rows say why. `onBackgroundsChanged` below refreshes
+           them, so the panel's own line fills in a beat later — this sentence
+           only has to stop being the last word on the subject. */
         setBgNotice(
           `Backgrounds done — ${p.auto} ready, ${p.review} need a look` +
-          (p.failed ? `, ${p.failed} could not be processed` : '') + '.',
+          (p.failed ? `, ${p.failed} could not be processed (see below)` : '') + '.',
         );
         onBackgroundsChanged?.();
         return;
@@ -3116,8 +3174,22 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 <p className="bgp-counts">
                   {bgSummary.auto + bgSummary.approved} ready · {bgSummary.review} need a look
                   {bgSummary.failed > 0 && <> · {bgSummary.failed} failed</>}
+                  {bgSummary.queued > 0 && <> · {bgSummary.queued} in flight</>}
                   {bgSummary.unprocessed > 0 && <> · {bgSummary.unprocessed} not processed</>}
                 </p>
+                {/* THE REASON, not just the count. Shown once when every failure
+                    agrees, which is the normal case — the causes are shared. The
+                    first real run failed on the matting backend's billing gate
+                    and the panel said only "1 could not be processed", which is
+                    a dead end: the fix was outside this app and nothing on
+                    screen pointed at it. */}
+                {bgSummary.failed > 0 && bgFailureReason && (
+                  <p className="bgp-fail" role="status">
+                    {bgSummary.failed === 1 ? 'It ' : 'They all '}
+                    could not be processed: {bgFailureReason}
+                  </p>
+                )}
+                {bgFailureHint && <p className="bgp-fail-hint">{bgFailureHint}</p>}
               </div>
 
               <div className="gtb-panel-section">
@@ -3137,6 +3209,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                           {selectedItems.size > 0 ? ' (selected)' : ''}</>}
                   </button>
                 </div>
+                {bgStrandedCount > 0 && (
+                  <p className="bgp-hint">
+                    Including {bgStrandedCount} left in flight by an earlier run.
+                  </p>
+                )}
                 {bgProcessTargets.length === 0 && !bgJob && (
                   <p className="bgp-hint">
                     {bgSummary.total === 0
@@ -3205,6 +3282,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 <span className="bgp-preset" title="The workspace's background recipe">
                   <span className="bgp-swatch" style={{ background: bgPreset.color }} aria-hidden="true" />
                   {bgPreset.canvas}px · {Math.round(bgPreset.padding * 100)}% margin
+                  {bgPreset.backdrop && <> · backdrop: {bgBackdropName || 'photo'}</>}
                 </span>
                 {orgRole === 'owner' || orgRole === 'admin'
                   ? <span className="bgp-hint">Change it in Workspace › Settings.</span>
@@ -4004,7 +4082,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         const lbComposite = lbItem ? compositeUrl(lbItem) : '';
         const lbReviewable = !!(bgAvailable && lbItem?.productImageId && (lbComposite || lbItem?.cutoutStoragePath));
         const lbSrc = (lbReviewable && !lightboxBefore && lbComposite) ? lbComposite : lightboxSrc;
-        const lbFlags = lbItem?.maskFlags ?? [];
+        /* A FAILED photo has neither a composite nor a cut-out, so it fell
+           outside `lbReviewable` and the one place big enough to read a reason
+           said nothing at all about it. There is nothing to approve, but there
+           is something to understand and something to retry. */
+        const lbFailed = !!(bgAvailable && lbItem?.productImageId && lbItem?.maskStatus === 'failed');
+        const lbFailReason = lbFailed ? failureReasonFor(lbItem) : '';
+        const lbFailHint = backgroundFailureHint(lbFailReason);
+        /* The error flag becomes the sentence below, so it is not also a bullet. */
+        const lbFlags = (lbItem?.maskFlags ?? []).filter(f => !maskFailureReason(f));
         const lbBusy = bgBusy === `item:${lbItem?.id}`;
         return (
           <div
@@ -4090,7 +4176,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               {/* The review strip. Only on a photo that HAS a cut-out — there is
                   nothing to approve otherwise, and an always-present row of
                   disabled buttons teaches nothing. */}
-              {lbReviewable && lbItem && (
+              {(lbReviewable || lbFailed) && lbItem && (
                 <div className="lb-review" onClick={(e) => e.stopPropagation()}>
                   <div className="lb-review-left">
                     <span className={`lb-status lb-status--${lbItem.maskStatus ?? 'none'}`}>
@@ -4101,6 +4187,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                         : lbItem.maskStatus === 'failed' ? 'Could not be processed'
                         : 'Processing…'}
                     </span>
+                    {lbFailReason && (
+                      <p className="lb-fail">{lbFailReason}</p>
+                    )}
+                    {lbFailHint && <p className="lb-fail-hint">{lbFailHint}</p>}
                     {lbFlags.length > 0 && (
                       <ul className="lb-flags">
                         {lbFlags.map(f => <li key={f}>{maskFlagLabel(f)}</li>)}
@@ -4108,6 +4198,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     )}
                   </div>
                   <div className="lb-review-actions">
+                    {/* A failed photo has no cut-out, so there is nothing to
+                        approve and "keep original" is already what it does.
+                        Re-run is the only move, and it is the one offered. */}
+                    {lbReviewable && <>
                     <button
                       type="button"
                       className="ptb-btn ptb-btn--primary"
@@ -4122,6 +4216,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       onClick={() => void handleItemVerdict(lbItem, 'original')}
                       title="Export the untouched photo instead"
                     ><Image size={12} /> Keep original</button>
+                    </>}
                     <button
                       type="button"
                       className="ptb-btn"

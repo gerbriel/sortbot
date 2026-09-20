@@ -9,7 +9,7 @@ bill for a rounding bug. CONTRACT.md §4 states the algorithm and three fixed
 vectors; tests/test_preset_hash.py asserts them here, and the TypeScript side
 asserts the same three strings.
 
-Two decisions inside the canonical form:
+Three decisions inside the canonical form:
 
   * `id` and `name` are NOT hashed. The hash identifies a LOOK, not a preset
     row. Renaming "White 2048" to "Default white" must not invalidate 4,800
@@ -22,6 +22,13 @@ Two decisions inside the canonical form:
     not agree with anything, and a slider that emits 0.10000000000000003 would
     mint a second hash for a look the user cannot distinguish. Three decimals
     is ~2 px of padding at a 2048 canvas: below the resolution of the decision.
+
+  * `backdrop` is hashed as a BARE STRING — its storage path, or "" for none —
+    and `backdrop.fit` is NOT hashed. That is safe today for exactly one reason:
+    "cover" is fit's only legal value, so it cannot describe two looks. THE DAY A
+    SECOND FIT IS ADDED, it must enter the canonical form, and that is a breaking
+    change to be shipped as such (a new preset, not a new hash for an old one) —
+    otherwise two visibly different backdrops share one composite.
 """
 
 from __future__ import annotations
@@ -32,6 +39,13 @@ import re
 from dataclasses import dataclass
 
 HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+# A storage path becomes part of a URL under our own bucket, so the things that
+# would make it mean something else are refused: traversal, an absolute path, a
+# scheme, and the query/fragment/backslash characters that would let a path
+# rewrite the URL it is pasted into. Control characters go too — they would
+# otherwise reach a log line.
+BACKDROP_PATH_MAX = 300
+BACKDROP_FITS = ("cover",)
 
 DEFAULT_CANVAS = 2048
 DEFAULT_COLOR = "#FFFFFF"
@@ -60,6 +74,43 @@ def _format_padding(value: float) -> str:
     return s or "0"
 
 
+def _clean_backdrop_path(raw: object) -> str:
+    """Validate a bucket-relative backdrop path, loudly."""
+    if not isinstance(raw, str):
+        raise PresetError("preset.backdrop.storagePath must be a string")
+    path = raw.strip()
+    if not path:
+        raise PresetError("preset.backdrop.storagePath must not be empty")
+    if len(path) > BACKDROP_PATH_MAX:
+        raise PresetError(f"preset.backdrop.storagePath must be <= {BACKDROP_PATH_MAX} characters")
+    if path.startswith("/") or "://" in path or "\\" in path:
+        raise PresetError("preset.backdrop.storagePath must be a path inside the bucket")
+    if ".." in path.split("/"):
+        raise PresetError("preset.backdrop.storagePath must not contain '..'")
+    if any(ch in path for ch in ("?", "#")) or any(ord(ch) < 0x20 for ch in path):
+        raise PresetError("preset.backdrop.storagePath contains an illegal character")
+    return path
+
+
+@dataclass(frozen=True)
+class Backdrop:
+    """A photo backdrop, in place of the flat colour.
+
+    It is deliberately NOT constrained to the `{uid}/backdrops/…` layout the app
+    uploads into. The bucket is public, so reading another prefix is not a new
+    exposure — the service already downloads whatever `storage_path` a row names
+    — and a founder who put a backdrop somewhere else should get their photo, not
+    a 422 they cannot act on. `_clean_backdrop_path` refuses the things that
+    would make the path mean something OTHER than an object in this bucket.
+    """
+
+    storage_path: str
+    fit: str = "cover"
+
+    def to_dict(self) -> dict[str, object]:
+        return {"storagePath": self.storage_path, "fit": self.fit}
+
+
 @dataclass(frozen=True)
 class BackgroundPreset:
     id: str = "default"
@@ -69,6 +120,7 @@ class BackgroundPreset:
     anchor: str = DEFAULT_ANCHOR
     shadow: bool = DEFAULT_SHADOW
     quality: int = DEFAULT_QUALITY
+    backdrop: Backdrop | None = None
 
     # ── Construction ────────────────────────────────────────────────────────
 
@@ -130,7 +182,37 @@ class BackgroundPreset:
             anchor=anchor,
             shadow=shadow,
             quality=quality,
+            backdrop=cls._parse_backdrop(raw.get("backdrop")),
         )
+
+    @staticmethod
+    def _parse_backdrop(raw: object) -> Backdrop | None:
+        """`{storagePath, fit}` | null — and a bare path string, on purpose.
+
+        The object form is what CONTRACT.md types and what the app sends. The
+        string form is accepted because the CANONICAL JSON writes the backdrop as
+        a bare path, so a caller that round-trips its own canonical form should
+        get its backdrop rather than a 422 it cannot act on. Both are documented;
+        anything else is refused.
+        """
+        if raw is None:
+            return None
+        if isinstance(raw, str):
+            # "" is how the canonical form spells "no backdrop".
+            return Backdrop(storage_path=_clean_backdrop_path(raw)) if raw.strip() else None
+        if not isinstance(raw, dict):
+            raise PresetError("preset.backdrop must be an object, a path string, or null")
+
+        fit = raw.get("fit", "cover")
+        if fit not in BACKDROP_FITS:
+            raise PresetError(f"preset.backdrop.fit must be one of {BACKDROP_FITS}")
+        return Backdrop(storage_path=_clean_backdrop_path(raw.get("storagePath")), fit=fit)
+
+    def with_backdrop_path(self, storage_path: str) -> BackgroundPreset:
+        """Same look, a different backdrop. Used by the CLI's --backdrop."""
+        import dataclasses
+
+        return dataclasses.replace(self, backdrop=Backdrop(storage_path=storage_path))
 
     # ── The contract ────────────────────────────────────────────────────────
 
@@ -138,6 +220,7 @@ class BackgroundPreset:
         """The exact bytes that are hashed. Keys sorted, no spaces, no `id`."""
         parts = (
             ("anchor", json.dumps(self.anchor)),
+            ("backdrop", json.dumps(self.backdrop.storage_path if self.backdrop else "")),
             ("canvas", str(int(self.canvas))),
             ("color", json.dumps(self.color.upper())),
             ("padding", _format_padding(self.padding)),
@@ -170,5 +253,6 @@ class BackgroundPreset:
             "anchor": self.anchor,
             "shadow": self.shadow,
             "quality": self.quality,
+            "backdrop": self.backdrop.to_dict() if self.backdrop else None,
             "presetHash": self.hash,
         }

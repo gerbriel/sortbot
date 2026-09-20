@@ -19,9 +19,15 @@ import {
   DEFAULT_DESCRIPTION_SETTINGS, DEFAULT_BACKGROUND_PRESET,
   BACKGROUND_COLORS, BACKGROUND_PADDING_MAX,
   BACKGROUND_QUALITY_MIN, BACKGROUND_QUALITY_MAX,
+  BACKDROPS_MAX, BACKDROP_MAX_BYTES, BACKDROP_MAX_PX, BACKDROP_QUALITY,
+  backdropStoragePath,
   normalizeBackgroundColor, presetHash,
   type DescriptionSettings, type BackgroundPreset, type BackgroundAnchor,
+  type WorkspaceBackdrop,
 } from '../lib/descriptionSettings';
+import { publicImageUrl } from '../lib/storageUrls';
+import { filterUnreferencedStoragePaths } from '../lib/storageSafety';
+import { ConfirmAction } from './ui';
 import {
   PLATFORM_PRESETS, ADJUSTMENT_TYPES, ROUNDING_MODES, MAX_PERCENT, MAX_FIXED,
   platformSlug, pricingExample, describePlatformRule, selectablePlatforms,
@@ -58,7 +64,28 @@ const BG_PREVIEW_PX = 200;
 /** A hanging garment is taller than it is wide; 3:4 is the common camera-roll shape. */
 const BG_SUBJECT_ASPECT = 3 / 4;
 
-function drawBackgroundPreview(canvas: HTMLCanvasElement, preset: BackgroundPreset): void {
+/**
+ * `fit: 'cover'` — scale to fill the square and centre the overflow off both
+ * edges. THE SERVICE MUST DO THE SAME ARITHMETIC; if the two disagree, this is
+ * the one that is wrong (the composite is what ships), exactly as for the
+ * garment fit below.
+ */
+function drawCoverImage(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  size: number,
+): void {
+  const scale = Math.max(size / img.naturalWidth, size / img.naturalHeight);
+  const w = img.naturalWidth * scale;
+  const h = img.naturalHeight * scale;
+  ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+}
+
+function drawBackgroundPreview(
+  canvas: HTMLCanvasElement,
+  preset: BackgroundPreset,
+  backdropImg?: HTMLImageElement | null,
+): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -67,9 +94,17 @@ function drawBackgroundPreview(canvas: HTMLCanvasElement, preset: BackgroundPres
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, BG_PREVIEW_PX, BG_PREVIEW_PX);
 
-  // 1. the backdrop
-  ctx.fillStyle = normalizeBackgroundColor(preset.color);
-  ctx.fillRect(0, 0, BG_PREVIEW_PX, BG_PREVIEW_PX);
+  // 1. the backdrop — the photo when one is chosen AND has loaded, the flat
+  //    colour otherwise. A backdrop that failed to load falls back to the
+  //    colour rather than leaving a blank square: the preview must never look
+  //    broken when the setting is fine, and it must never imply a photo
+  //    backdrop is in force when we could not even fetch it.
+  if (backdropImg && backdropImg.naturalWidth > 0 && preset.backdrop) {
+    drawCoverImage(ctx, backdropImg, BG_PREVIEW_PX);
+  } else {
+    ctx.fillStyle = normalizeBackgroundColor(preset.color);
+    ctx.fillRect(0, 0, BG_PREVIEW_PX, BG_PREVIEW_PX);
+  }
 
   // 2. the inner box the subject must fit inside
   const pad = BG_PREVIEW_PX * Math.max(0, Math.min(BACKGROUND_PADDING_MAX, preset.padding));
@@ -116,6 +151,55 @@ function drawBackgroundPreview(canvas: HTMLCanvasElement, preset: BackgroundPres
   ctx.ellipse(x + w / 2, y, w * 0.16, h * 0.06, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalCompositeOperation = 'source-over';
+}
+
+/**
+ * Downscale a chosen backdrop and re-encode it as JPEG.
+ *
+ * A sibling of `ImageUpload`'s `compressImage` and deliberately NOT shared with
+ * it: that one preserves `lastModified` (because `capturedAt` falls back to it),
+ * logs per-file savings for a 1,500-photo run, and is tuned for garment photos.
+ * This is one file, once, at different constants. Sharing them would couple the
+ * upload pipeline to a settings form for eight lines of canvas.
+ *
+ * Returns the pixel size too, so the library row can print `2048 × 1365` without
+ * re-loading eight full photos to measure them later.
+ */
+async function downscaleBackdrop(
+  file: File,
+): Promise<{ file: File; width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new window.Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, BACKDROP_MAX_PX / Math.max(img.width, img.height));
+      const width = Math.max(1, Math.round(img.width * scale));
+      const height = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('No 2d context')); return; }
+      // A backdrop is pasted UNDER a cut-out, so a transparent PNG would
+      // composite as black. White is the one safe matte (§18 #51's reasoning,
+      // one level down).
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(blob => {
+        if (!blob) { reject(new Error('toBlob failed')); return; }
+        const base = file.name.replace(/\.[^.]+$/, '') || 'backdrop';
+        resolve({
+          file: new File([blob], `${base}.jpg`, { type: 'image/jpeg' }),
+          width,
+          height,
+        });
+      }, 'image/jpeg', BACKDROP_QUALITY);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('That file could not be read as an image.')); };
+    img.src = url;
+  });
 }
 
 interface OrgPanelProps {
@@ -211,6 +295,15 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   const [descBackground, setDescBackground] = useState<BackgroundPreset>({ ...DEFAULT_BACKGROUND_PRESET });
   const [bgHash, setBgHash] = useState('');
   const bgCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  /* The workspace's backdrop LIBRARY (description_settings.backdrops), separate
+     from the preset: the preset names one backdrop, this is the shelf. */
+  const [descBackdrops, setDescBackdrops] = useState<WorkspaceBackdrop[]>([]);
+  const [bgUploading, setBgUploading] = useState(false);
+  const [bgUploadError, setBgUploadError] = useState<string | null>(null);
+  /* The chosen backdrop, decoded, for the preview. Null while it loads or when
+     it cannot be fetched — the preview then shows the flat colour. */
+  const [bgBackdropImg, setBgBackdropImg] = useState<HTMLImageElement | null>(null);
+  const bgFileRef = useRef<HTMLInputElement | null>(null);
 
   // ── Marketplaces (marketplaces.sql) ───────────────────────────────────────
   // Which marketplaces this workspace sells on, and what each one calls a
@@ -247,6 +340,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
       setDescProseStyle(s.proseStyle);
       setDescPlatforms(s.platformPricing);
       setDescBackground(s.background);
+      setDescBackdrops(s.backdrops);
       setDescLoaded(true);
     });
     return () => { cancelled = true; };
@@ -256,8 +350,26 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
      the ref is null elsewhere and the effect is a no-op. */
   useEffect(() => {
     const canvas = bgCanvasRef.current;
-    if (canvas) drawBackgroundPreview(canvas, descBackground);
-  }, [descBackground, panelTab, descLoaded]);
+    if (canvas) drawBackgroundPreview(canvas, descBackground, bgBackdropImg);
+  }, [descBackground, bgBackdropImg, panelTab, descLoaded]);
+
+  /* Decode the chosen backdrop for the preview.
+     `crossOrigin` is set because the bucket is public and sends
+     `Access-Control-Allow-Origin: *` — it costs nothing here and keeps the
+     canvas untainted, so a future `toBlob` on this preview is not blocked by a
+     decision made today. A failure clears the image rather than reporting: the
+     SETTING is fine, only the thumbnail is missing. */
+  useEffect(() => {
+    const path = descBackground.backdrop?.storagePath;
+    if (!path) { setBgBackdropImg(null); return; }
+    let cancelled = false;
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => { if (!cancelled) setBgBackdropImg(img); };
+    img.onerror = () => { if (!cancelled) setBgBackdropImg(null); };
+    img.src = publicImageUrl(path);
+    return () => { cancelled = true; };
+  }, [descBackground.backdrop?.storagePath]);
 
   /* The preset hash, shown as meta. Async (crypto.subtle), so it is state; the
      cancel flag stops a slow digest from overwriting a newer one. */
@@ -270,31 +382,152 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   const patchBackground = (patch: Partial<BackgroundPreset>) =>
     setDescBackground(prev => ({ ...prev, ...patch }));
 
-  const handleSaveDescSettings = async () => {
-    if (busy) return;
+  /** The chosen backdrop's name, or '' — a uuid path is not a name. */
+  const bgBackdropName = descBackground.backdrop
+    ? (descBackdrops.find(b => b.storagePath === descBackground.backdrop?.storagePath)?.name ?? '')
+    : '';
+
+  /** The whole JSONB from the form, with an optional override for the fields a
+   *  caller has just computed synchronously (a setState is not readable yet). */
+  const buildDescSettings = (override?: Partial<DescriptionSettings>): DescriptionSettings => ({
+    measurementPrefix: descSymbol.trim() || DEFAULT_DESCRIPTION_SETTINGS.measurementPrefix,
+    washingLine: descWashing.trim(),
+    closingLine: descClosing.trim(),
+    includeHashtags: descHashtags,
+    vendorName: descVendor.trim(),
+    proseEnabled: descProseEnabled,
+    proseStyle: descProseStyle.trim(),
+    platformPricing: descPlatforms,
+    background: descBackground,
+    backdrops: descBackdrops,
+    disclaimerLines: descDisclaimers.split('\n').map(l => l.trim()).filter(Boolean),
+    ...override,
+  });
+
+  const persistDescSettings = async (
+    override: Partial<DescriptionSettings> | undefined,
+    okMessage: string,
+  ): Promise<boolean> => {
+    if (busy) return false;
     setBusy(true);
     setNotice(null);
-    const settings: DescriptionSettings = {
-      measurementPrefix: descSymbol.trim() || DEFAULT_DESCRIPTION_SETTINGS.measurementPrefix,
-      washingLine: descWashing.trim(),
-      closingLine: descClosing.trim(),
-      includeHashtags: descHashtags,
-      vendorName: descVendor.trim(),
-      proseEnabled: descProseEnabled,
-      proseStyle: descProseStyle.trim(),
-      platformPricing: descPlatforms,
-      background: descBackground,
-      disclaimerLines: descDisclaimers.split('\n').map(l => l.trim()).filter(Boolean),
-    };
+    const settings = buildDescSettings(override);
     const res = await saveOrgDescriptionSettings(org.id, settings);
     if (res.ok) {
-      setNotice('Description format saved — it applies to every listing this workspace generates from now on.');
+      setNotice(okMessage);
       onDescriptionSettingsChanged?.(settings);
     } else {
       setNotice(`Save failed: ${res.error}`);
     }
     setBusy(false);
+    return res.ok;
   };
+
+  const handleSaveDescSettings = () => {
+    void persistDescSettings(
+      undefined,
+      'Description format saved — it applies to every listing this workspace generates from now on.',
+    );
+  };
+
+  /* ── Backdrops ────────────────────────────────────────────────────────────
+     Adding or removing a backdrop SAVES IMMEDIATELY, unlike the text fields
+     above. The file has already been written to (or is about to be deleted
+     from) storage, so the library is the RECORD of a side effect that has
+     happened — leaving it pending would mean a chip that vanishes on reload
+     with an orphan file behind it. It is the same one write the Save buttons
+     make, with the same object, so nothing can half-apply. */
+
+  const handleAddBackdrop = async (file: File | null) => {
+    if (!file || bgUploading || busy) return;
+    setBgUploadError(null);
+    if (descBackdrops.length >= BACKDROPS_MAX) {
+      setBgUploadError(`That is the limit — remove one of the ${BACKDROPS_MAX} backdrops first.`);
+      return;
+    }
+    if (!/^image\/(jpeg|png|webp)$/i.test(file.type)) {
+      setBgUploadError('Backdrops must be a JPEG, PNG or WebP image.');
+      return;
+    }
+    // Checked on the SOURCE, before any canvas work: the downscale turns
+    // anything reasonable into a few hundred KB, so a file over the limit is a
+    // sign the wrong thing was picked, and saying so beats quietly resizing it.
+    if (file.size > BACKDROP_MAX_BYTES) {
+      setBgUploadError(
+        `That file is ${(file.size / 1024 / 1024).toFixed(1)} MB — backdrops must be under ` +
+        `${Math.round(BACKDROP_MAX_BYTES / 1024 / 1024)} MB.`,
+      );
+      return;
+    }
+    setBgUploading(true);
+    try {
+      const shrunk = await downscaleBackdrop(file);
+      const path = backdropStoragePath(myUserId, file.name);
+      // The SAME uploader the crop tool uses — a second one would be a second
+      // set of assumptions about the bucket (§18 #20's reasoning for URLs).
+      const { uploadFileToPath } = await import('../lib/productService');   // the crop tool's uploader
+      const up = await uploadFileToPath(shrunk.file, path, false);
+      if (!up) {
+        setBgUploadError('That backdrop could not be uploaded. Check your connection and try again.');
+        return;
+      }
+      const entry: WorkspaceBackdrop = {
+        id: up.path,
+        storagePath: up.path,
+        name: (file.name.replace(/\.[^.]+$/, '') || 'Backdrop').slice(0, 60),
+        width: shrunk.width,
+        height: shrunk.height,
+        addedAt: new Date().toISOString(),
+      };
+      const next = [...descBackdrops, entry];
+      setDescBackdrops(next);
+      await persistDescSettings({ backdrops: next }, `“${entry.name}” added. Choose it below to use it.`);
+    } catch (err) {
+      setBgUploadError(err instanceof Error ? err.message : 'That backdrop could not be prepared.');
+    } finally {
+      setBgUploading(false);
+      if (bgFileRef.current) bgFileRef.current.value = '';   // so the same file can be re-picked
+    }
+  };
+
+  const handleRemoveBackdrop = async (entry: WorkspaceBackdrop) => {
+    if (bgUploading || busy) return;
+    setBgUploadError(null);
+    const next = descBackdrops.filter(b => b.storagePath !== entry.storagePath);
+    /* Removing the backdrop the preset is USING resets the preset to its flat
+       colour, and says so. The alternative is a preset pointing at a file that
+       is gone — and §18 #52's spirit says a missing backdrop must fail loudly at
+       the service, so leaving it dangling would turn every later Process into an
+       error instead of a setting nobody changed on purpose. */
+    const wasInUse = descBackground.backdrop?.storagePath === entry.storagePath;
+    const nextBackground = wasInUse ? { ...descBackground, backdrop: null } : descBackground;
+    setDescBackdrops(next);
+    if (wasInUse) setDescBackground(nextBackground);
+    const saved = await persistDescSettings(
+      { backdrops: next, background: nextBackground },
+      wasInUse
+        ? `“${entry.name}” removed — the background is back to the flat colour.`
+        : `“${entry.name}” removed.`,
+    );
+    if (!saved) return;
+    /* The FILE, last and only once the record is gone: an orphan file is
+       recoverable, a library row pointing at a deleted file is not. Guarded by
+       the reference counter even though a backdrop can never be a product
+       image — it is the one storage-delete path in this app and it fails safe
+       (§18 #15). */
+    try {
+      const safe = await filterUnreferencedStoragePaths([entry.storagePath], []);
+      if (safe.length > 0) {
+        const { deleteStorageFiles } = await import('../lib/productService');
+        await deleteStorageFiles(safe);
+      }
+    } catch {
+      // The row is already gone; a leftover file is not worth a second notice.
+    }
+  };
+
+  const chooseBackdrop = (entry: WorkspaceBackdrop | null) =>
+    patchBackground({ backdrop: entry ? { storagePath: entry.storagePath, fit: 'cover' } : null });
 
   const handleResetDescSettings = () => {
     setDescSymbol(DEFAULT_DESCRIPTION_SETTINGS.measurementPrefix);
@@ -1136,17 +1369,118 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
                   width={BG_PREVIEW_PX}
                   height={BG_PREVIEW_PX}
                   role="img"
-                  aria-label={`Preview: ${descBackground.canvas}px square, ${normalizeBackgroundColor(descBackground.color)} backdrop, ${Math.round(descBackground.padding * 100)}% margin, ${descBackground.anchor === 'top' ? 'hanging from the top' : 'centered'}${descBackground.shadow ? ', with a shadow' : ''}`}
+                  aria-label={`Preview: ${descBackground.canvas}px square, ${
+                    descBackground.backdrop
+                      ? `photo backdrop${bgBackdropName ? ` “${bgBackdropName}”` : ''}`
+                      : `${normalizeBackgroundColor(descBackground.color)} backdrop`
+                  }, ${Math.round(descBackground.padding * 100)}% margin, ${descBackground.anchor === 'top' ? 'hanging from the top' : 'centered'}${descBackground.shadow ? ', with a shadow' : ''}`}
                 />
                 <p className="bg-preview-meta">
                   {descBackground.canvas} × {descBackground.canvas} px · JPEG {descBackground.quality}
+                  {descBackground.backdrop && <> · {bgBackdropName || 'photo backdrop'}</>}
                   {bgHash && <> · preset <code>{bgHash}</code></>}
                 </p>
               </div>
 
               <div className="bg-controls">
+                {/* ── The workspace's backdrops ───────────────────────────
+                    A shop's own surfaces — a linen sheet, a wood floor — as an
+                    alternative to the flat colour. The library is a shelf of at
+                    most BACKDROPS_MAX; the preset names ONE of them. */}
                 <div className="bg-field">
-                  <span className="bg-label">Backdrop</span>
+                  <span className="bg-label">Backdrops</span>
+                  {descBackdrops.length > 0 && (
+                    <ul className="bd-list">
+                      {descBackdrops.map(b => {
+                        const on = descBackground.backdrop?.storagePath === b.storagePath;
+                        return (
+                          <li key={b.id} className={`bd-item${on ? ' bd-item--on' : ''}`}>
+                            <button
+                              type="button"
+                              className="bd-pick"
+                              aria-pressed={on}
+                              title={on ? `${b.name} — in use` : `Use ${b.name}`}
+                              onClick={() => chooseBackdrop(on ? null : b)}
+                            >
+                              <img
+                                className="bd-thumb"
+                                src={publicImageUrl(b.storagePath)}
+                                alt=""
+                                loading="lazy"
+                                decoding="async"
+                              />
+                              <span className="bd-meta">
+                                <span className="bd-name">{b.name}</span>
+                                <span className="bd-dims">
+                                  {b.width > 0 && b.height > 0 ? `${b.width} × ${b.height}` : 'photo'}
+                                  {on ? ' · in use' : ''}
+                                </span>
+                              </span>
+                              {on && <Check size={13} aria-hidden="true" className="bd-tick" />}
+                            </button>
+                            <ConfirmAction
+                              label="Remove"
+                              confirmLabel="Remove"
+                              prompt={on
+                                ? 'Remove it? The background goes back to the flat colour.'
+                                : 'Remove this backdrop?'}
+                              tone="danger"
+                              size="sm"
+                              disabled={busy || bgUploading}
+                              onConfirm={() => void handleRemoveBackdrop(b)}
+                            />
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  <div className="bd-add">
+                    <input
+                      ref={bgFileRef}
+                      id="bd-file"
+                      className="bd-file"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      disabled={bgUploading || busy || descBackdrops.length >= BACKDROPS_MAX}
+                      onChange={(e) => void handleAddBackdrop(e.target.files?.[0] ?? null)}
+                    />
+                    <label htmlFor="bd-file" className="bd-add-label">
+                      {bgUploading ? 'Adding…' : 'Add backdrop'}
+                    </label>
+                    <span className="bd-add-hint">
+                      {descBackdrops.length}/{BACKDROPS_MAX} · JPEG, PNG or WebP, under{' '}
+                      {Math.round(BACKDROP_MAX_BYTES / 1024 / 1024)} MB. Saved at{' '}
+                      {BACKDROP_MAX_PX}px.
+                    </span>
+                  </div>
+                  {bgUploadError && <p className="bd-error" role="status">{bgUploadError}</p>}
+                </div>
+
+                <div className="bg-field">
+                  <span className="bg-label">
+                    Background — {descBackground.backdrop ? 'photo backdrop' : 'flat colour'}
+                  </span>
+                  <div className="bg-swatches">
+                    {/* Flat colour is a CHOICE here, not an absence: with a
+                        backdrop in force the colour chips still show what would
+                        be used, so this is the way back. */}
+                    <button
+                      type="button"
+                      className={`bd-mode${descBackground.backdrop ? '' : ' bd-mode--on'}`}
+                      aria-pressed={!descBackground.backdrop}
+                      onClick={() => chooseBackdrop(null)}
+                    >Flat colour</button>
+                  </div>
+                  {descBackground.backdrop && (
+                    <p className="bg-preview-meta bd-note">
+                      Google Shopping prefers a plain white or light background for ads; a photo
+                      backdrop is fine for your own store and marketplace listings.
+                    </p>
+                  )}
+                </div>
+
+                <div className="bg-field">
+                  <span className="bg-label">Flat colour</span>
                   <div className="bg-swatches">
                     {BACKGROUND_COLORS.map(c => {
                       const on = normalizeBackgroundColor(descBackground.color) === c.hex;

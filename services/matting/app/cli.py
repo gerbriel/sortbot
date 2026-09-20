@@ -1,6 +1,7 @@
 """Offline CLI — the same pipeline against a folder, with no Supabase at all.
 
     python -m app.cli --backend local --preset preset.json --in ./photos --out ./out
+    python -m app.cli --backend local --backdrop linen.jpg --in ./photos --out ./out
 
 WHY THIS EXISTS. The service is one process on one host; the founder's work is
 not allowed to stop because it is down, because a card expired, or because
@@ -26,10 +27,11 @@ import sys
 from pathlib import Path
 
 import httpx
+import numpy as np
 
 from .backends import build_matter
 from .backends.replicate import ReplicateMatter
-from .compose import compose, decode_image_rgb, encode_cutout_webp, encode_jpeg
+from .compose import compose, cover_crop, decode_image_rgb, encode_cutout_webp, encode_jpeg
 from .config import Settings, get_settings
 from .preset import BackgroundPreset
 from .score import score_mask
@@ -45,6 +47,21 @@ def _load_preset(path: str | None) -> BackgroundPreset:
     return BackgroundPreset.parse(json.loads(Path(path).read_text(encoding="utf-8")))
 
 
+def _load_backdrop(path: str, preset: BackgroundPreset) -> tuple[BackgroundPreset, np.ndarray]:
+    """`--backdrop <file>`: a LOCAL image, cover-cropped like the service does.
+
+    The preset's `backdrop` is rewritten to the file's BASENAME so the output
+    filename's hash changes when the backdrop changes. That hash will not match
+    what the service computes for the same picture — the service hashes the
+    bucket path — and that is fine and said out loud below: offline output is for
+    looking at and for tuning thresholds, not for uploading.
+    """
+    file = Path(path)
+    data = file.read_bytes()
+    backdrop = cover_crop(decode_image_rgb(data), preset.canvas)
+    return preset.with_backdrop_path(file.name), backdrop
+
+
 async def _run(args: argparse.Namespace) -> int:
     settings = get_settings(refresh=True)
     # The CLI overrides the backend without needing the env var set, and it
@@ -55,12 +72,32 @@ async def _run(args: argparse.Namespace) -> int:
     in_dir, out_dir = Path(args.input), Path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    backdrop: np.ndarray | None = None
+    if args.backdrop:
+        preset, backdrop = _load_backdrop(args.backdrop, preset)
+    elif preset.backdrop:
+        # The preset names a bucket path and there is no Supabase here. Refusing
+        # is the point: a flat-colour render under a backdrop preset's hash would
+        # be a file that lies about what it is (compose.py refuses too).
+        print(
+            f"preset {preset.id} names backdrop {preset.backdrop.storage_path!r}; "
+            "pass --backdrop <file> to supply it locally",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"preset {preset.id} -> hash {preset.hash}  ({preset.canonical_json()})")
+    if backdrop is not None:
+        print(
+            f"backdrop {args.backdrop} cover-cropped to {preset.canvas}x{preset.canvas} "
+            "(the hash uses the FILE NAME, so it will not match the service's)"
+        )
+
     files = sorted(p for p in in_dir.iterdir() if p.suffix.lower() in IMAGE_SUFFIXES)
     if not files:
         print(f"no images in {in_dir}", file=sys.stderr)
         return 1
 
-    print(f"preset {preset.id} -> hash {preset.hash}  ({preset.canonical_json()})")
     print(f"{len(files)} image(s), backend={args.backend}\n")
 
     failed = 0
@@ -82,7 +119,7 @@ async def _run(args: argparse.Namespace) -> int:
 
                     stem = path.stem
                     (out_dir / f"cut-{stem}.webp").write_bytes(encode_cutout_webp(rgb, alpha))
-                    image, place = compose(rgb, alpha, preset)
+                    image, place = compose(rgb, alpha, preset, backdrop)
                     (out_dir / f"bg-{preset.hash}-{stem}.jpg").write_bytes(
                         encode_jpeg(image, preset.quality)
                     )
@@ -109,6 +146,11 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="python -m app.cli", description=__doc__)
     p.add_argument("--backend", choices=("local", "replicate"), default="local")
     p.add_argument("--preset", help="path to a preset JSON file (defaults to the default preset)")
+    p.add_argument(
+        "--backdrop",
+        help="a local image to composite onto instead of the flat colour "
+        "(cover-cropped to the preset canvas, exactly as the service does)",
+    )
     p.add_argument("--in", dest="input", required=True, help="directory of source images")
     p.add_argument("--out", dest="output", required=True, help="directory to write into")
     p.add_argument("--resolution", type=int, default=1024, choices=(1024, 2048))

@@ -32,8 +32,29 @@ def settings() -> Settings:
         replicate_version="f74986db0355b58403ed20963af156525e2891ea3c2d499bfbfb2a28cd87c5d7",
         replicate_poll_seconds=0.001,
         replicate_timeout_seconds=2.0,
+        # The retry ladder is 2, 4, 8, 16, 32 s in production. A suite that
+        # actually waited that out would take minutes, so the BASE is tiny here
+        # and the tests that assert the real ladder raise it themselves and record
+        # the delays through a fake `_backoff_sleep` (test_backend_replicate.py).
+        replicate_retry_base_seconds=0.001,
         env="dev",
     )
+
+
+def gradient_rgb(h: int, w: int) -> np.ndarray:
+    """A backdrop with a distinguishable value at every position.
+
+    A flat colour would make "was the backdrop cropped from the middle?" and "did
+    the backdrop reach the canvas at all?" unanswerable — every pixel would match
+    every other one.
+    """
+    ys = np.linspace(0, 255, h, dtype=np.float32)[:, None]
+    xs = np.linspace(0, 255, w, dtype=np.float32)[None, :]
+    img = np.empty((h, w, 3), dtype=np.uint8)
+    img[..., 0] = xs.astype(np.uint8)
+    img[..., 1] = ys.astype(np.uint8)
+    img[..., 2] = 128
+    return img
 
 
 def solid_alpha(h: int, w: int, box: tuple[int, int, int, int], value: float = 1.0) -> np.ndarray:

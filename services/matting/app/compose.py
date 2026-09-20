@@ -21,6 +21,18 @@ GEOMETRY, stated once so it can be tested:
 against a wall has its hook at the very top of the frame; centring it leaves an
 odd gap above and makes a rail of listings jump around vertically. Pinning the
 top edge lines the shoulders up across a whole batch.
+
+A PHOTO BACKDROP CHANGES ONE LINE OF THIS, AND ONLY ONE. When `preset.backdrop`
+is set, the canvas starts as that photo cover-cropped to canvas x canvas instead
+of as a flat fill; the geometry above, the shadow and the premultiplied composite
+are byte-for-byte the same code. That is what makes "the subject lands in the same
+place on a linen backdrop as on white" a property rather than a coincidence, and
+it is asserted as one in tests/test_compose.py.
+
+`preset.color` then fills NOTHING — the backdrop replaces it entirely. It still
+has an effect through the shadow, which multiplies darkness into whatever is
+underneath rather than painting grey over an assumed white, so a contact shadow
+on a linen backdrop darkens the linen.
 """
 
 from __future__ import annotations
@@ -98,6 +110,47 @@ def plan_placement(alpha: np.ndarray, preset: BackgroundPreset) -> Placement:
     return Placement(x=x, y=y, width=nw, height=nh, scale=scale, bbox=(x0, y0, x1, y1))
 
 
+def cover_crop(rgb: np.ndarray, size: int) -> np.ndarray:
+    """Scale-to-cover then centre-crop to `size` x `size`, LANCZOS.
+
+    The `fit: "cover"` of the backdrop contract, and the only fit there is. Cover
+    rather than contain because a backdrop that does not reach the edges is not a
+    backdrop — it is a picture with a border of whatever is behind it, which is
+    the flat colour this replaces.
+
+    PIL's LANCZOS rather than cv2's INTER_LANCZOS4 because a backdrop is almost
+    always being made SMALLER (the app uploads up to 2048 px, the canvas is often
+    1536), and PIL scales the filter's support with the ratio — proper area-aware
+    downsampling — where cv2's fixed 8x8 kernel aliases a woven texture into
+    moire. Both are deterministic, which is the property that actually matters
+    here (see the module docstring).
+
+    `ceil` on both sides, not `round`: rounding down by one pixel on either axis
+    would leave a one-pixel strip of uninitialised canvas at an edge, which on a
+    white fill is invisible in review and very visible in a marketplace listing.
+    """
+    if rgb.ndim != 3 or rgb.shape[2] != 3:
+        raise ComposeError("backdrop must be RGB uint8 [H, W, 3]")
+    if size < 1:
+        raise ComposeError("backdrop target size must be positive")
+
+    import math
+
+    h, w = rgb.shape[:2]
+    if h < 1 or w < 1:
+        raise ComposeError("backdrop is empty")
+
+    scale = max(size / w, size / h)
+    nw, nh = max(size, math.ceil(w * scale)), max(size, math.ceil(h * scale))
+    resized = np.asarray(
+        Image.fromarray(rgb, mode="RGB").resize((nw, nh), resample=Image.Resampling.LANCZOS),
+        dtype=np.uint8,
+    )
+    x = (nw - size) // 2
+    y = (nh - size) // 2
+    return np.ascontiguousarray(resized[y : y + size, x : x + size])
+
+
 def _resize_rgb(rgb: np.ndarray, w: int, h: int) -> np.ndarray:
     # INTER_AREA when shrinking (it averages, so it does not alias a pinstripe
     # into moire), INTER_CUBIC when growing.
@@ -109,16 +162,32 @@ def compose(
     source_rgb: np.ndarray,
     alpha: np.ndarray,
     preset: BackgroundPreset,
+    backdrop: np.ndarray | None = None,
 ) -> tuple[Image.Image, Placement]:
     """Place the cut-out subject on a flat canvas. Returns (RGB image, placement).
 
     source_rgb: uint8 [H, W, 3]
     alpha:      float32 [H, W] in [0, 1], same H/W as source_rgb
+    backdrop:   uint8 [canvas, canvas, 3], already cover-cropped, or None
+
+    A preset that names a backdrop and is handed none is an ERROR here, not a
+    flat-colour render. A catalogue in which some listings got the linen and some
+    got white — because a fetch failed quietly on a Tuesday — is the exact failure
+    the whole deterministic-compositor argument exists to prevent, and it is
+    invisible until a buyer sees the grid. The pipeline refuses first, with a
+    legible `error:backdrop missing` flag; this is the second lock on the same
+    door, for the CLI and for any future caller.
     """
     if source_rgb.ndim != 3 or source_rgb.shape[2] != 3:
         raise ComposeError("source must be RGB uint8 [H, W, 3]")
     if alpha.shape[:2] != source_rgb.shape[:2]:
         raise ComposeError("alpha and source must have the same dimensions")
+    if preset.backdrop and backdrop is None:
+        raise ComposeError("preset names a backdrop but none was supplied")
+    if backdrop is not None and backdrop.shape != (preset.canvas, preset.canvas, 3):
+        raise ComposeError(
+            f"backdrop must be cover-cropped to {preset.canvas}x{preset.canvas} before compositing"
+        )
 
     place = plan_placement(alpha, preset)
     x0, y0, x1, y1 = place.bbox
@@ -139,7 +208,10 @@ def compose(
     sub_a = np.clip(sub_a, 0.0, 1.0).astype(np.float32)
 
     canvas = np.empty((preset.canvas, preset.canvas, 3), dtype=np.float32)
-    canvas[:, :] = np.asarray(preset.rgb(), dtype=np.float32)
+    if backdrop is not None:
+        canvas[:, :] = backdrop.astype(np.float32)
+    else:
+        canvas[:, :] = np.asarray(preset.rgb(), dtype=np.float32)
 
     if preset.shadow:
         canvas = _draw_shadow(canvas, sub_a, place, preset)

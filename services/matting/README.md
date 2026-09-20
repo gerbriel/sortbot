@@ -9,7 +9,7 @@ is [`CONTRACT.md`](./CONTRACT.md).
 
 ---
 
-## The two ideas worth knowing before reading the code
+## The three ideas worth knowing before reading the code
 
 **1. The matting backend is an interface; everything else is arithmetic.**
 Matting is the one part that is a model, costs money, and will be replaced.
@@ -32,6 +32,35 @@ Which is why **the alpha master is the durable asset**. The cutout (`cut-*.webp`
 lossless alpha) is what a matting call bought; the composite (`bg-*.jpg`) is
 arithmetic. Keep the first, throw away the second whenever the look changes.
 
+**3. A photo backdrop is the same arithmetic with a different fill.** A preset can
+name a backdrop image instead of a flat colour (`backdrop.storagePath`, uploaded to
+`{uid}/backdrops/…`); it is cover-cropped to the canvas and the garment is placed
+on it by **byte-for-byte the same code** as the flat path. So a seller switching a
+catalogue from white to linen changes what is behind the garment, not where it sits.
+A backdrop that cannot be fetched **fails the photo** — it never quietly renders on
+the flat colour, because half a catalogue on linen and half on white is invisible
+until a buyer sees the grid. See [`CONTRACT.md` §4.3](./CONTRACT.md).
+
+---
+
+## Two things that will stop it working, and are not bugs
+
+**Replicate needs credit.** With an empty balance the API answers `402
+{"title":"Insufficient credit"}` — and `429` under concurrency, which is the same
+gate wearing a different number. Every photo then fails with
+`mask_flags = ['error:replicate 402 Insufficient credit — …']`, which is the flag
+saying exactly what to do: add a card at
+<https://replicate.com/account/billing>. A `402` is deliberately **not** retried
+(credit does not arrive within a minute); a `429` or a `5xx` is, five times with
+2/4/8/16/32 s backoff. `CONTRACT.md` §8.1 is the full table.
+
+**A Fly trial account stops every machine after five minutes.** A long batch will
+be interrupted mid-flight, every time, until there is a card on the Fly account.
+That is survivable by design rather than by luck: shutdown drains what it can,
+writes the rest back to `mask_status = 'queued'` with a log line, and the next
+submit picks queued rows straight back up — so **the recovery is to press the
+button again**. It is still a batch that cannot finish in one go, so add the card.
+
 ---
 
 ## Quick start
@@ -40,7 +69,7 @@ arithmetic. Keep the first, throw away the second whenever the look changes.
 cd services/matting
 python3.12 -m venv .venv && . .venv/bin/activate
 pip install -e '.[test]'
-python -m pytest -q                      # 157 tests, no network
+python -m pytest -q                      # 247 tests, no network
 
 export SUPABASE_URL=https://<project>.supabase.co
 export SUPABASE_SERVICE_ROLE_KEY=...      # server-only, see "Secrets"
@@ -73,9 +102,13 @@ run, every write fails on a missing column.
 | `REPLICATE_INPUT_KEY` | `image` | verified against the published schema |
 | `REPLICATE_RESOLUTION_KEY` | `resolution` | takes `"WxH"`, a string |
 | `LOCAL_MODEL` / `LOCAL_HR_MODEL` | `ZhengPeng7/BiRefNet` / `…_HR` | |
+| `REPLICATE_RETRY_ATTEMPTS` | `5` | retries of a `429`/`5xx`/transport error. `0` disables |
+| `REPLICATE_RETRY_BASE_SECONDS` | `2` | first backoff; the ladder is 2, 4, 8, 16, 32 s ±20% |
+| `REPLICATE_TIMEOUT_SECONDS` | `180` | deadline on ONE prediction's polling |
 | `MATTING_ENV` | `production` | `dev` relaxes the version pin |
 | `ALLOWED_ORIGINS` | `https://arcadian.ltd,http://localhost:5173` | never `*` |
 | `CONCURRENCY` | `4` | images in flight per job |
+| `IMAGE_TIMEOUT_S` | `180` | outer deadline on one photo — see below |
 | `MAX_IDS_PER_JOB` | `2000` | |
 | `MAX_BODY_BYTES` | `262144` | |
 | `SCORE_*` | see below | review thresholds |
@@ -94,6 +127,47 @@ extra steps).
 
 Because `mask_model` carries the pin, "re-run everything the old model touched"
 is a query rather than a guess.
+
+### The two 180s
+
+`REPLICATE_TIMEOUT_SECONDS` bounds **one prediction's polling**;
+`IMAGE_TIMEOUT_S` bounds **the whole photo** — download, matting including its
+retries, two uploads, the row PATCH. The outer one exists because every inner
+deadline covers one call and a photo can wedge *between* them, holding one of
+`CONCURRENCY` slots while its row still says `queued`; that reads exactly like
+"the feature stopped working", with nothing in the log.
+
+They are equal by default, which means the outer one usually fires first and the
+flag reads `error:timeout after 180s`. That is honest and actionable. If you would
+rather have Replicate's own richer message, set `REPLICATE_TIMEOUT_SECONDS`
+comfortably below `IMAGE_TIMEOUT_S` — remembering that a full retry ladder is 62 s
+of the outer budget on its own.
+
+---
+
+## Backdrops
+
+A preset with `backdrop: { storagePath, fit: "cover" }` composites onto a photo
+instead of a flat colour. The app uploads them to
+`{uploaderUserId}/backdrops/{unix_ms}-{slug}.jpg` at ≤ 2048 px, in the same bucket
+as everything else.
+
+- Fetched and decoded **once per job**, then cover-cropped to `canvas × canvas`
+  (scale to cover, centre crop, LANCZOS) and reused for every image.
+- The **placement is unchanged** — same padding, anchor, shadow and arithmetic as
+  the flat path, asserted against it in `test_compose.py`.
+- `color` fills nothing while a backdrop is set. It still matters under a shadow,
+  which multiplies rather than painting grey, so a contact shadow darkens the linen.
+- The backdrop **is part of the preset hash** (its path, as a bare string), so a
+  new backdrop is a new look and old composites are correctly stale. `fit` is not
+  hashed, because `"cover"` is its only value — `CONTRACT.md` §4.1 rule 7 says what
+  to do the day that changes.
+- A backdrop that cannot be fetched or decoded fails the row with
+  `error:backdrop missing`, never a flat-colour render.
+
+Offline: `--backdrop <file>` does the same thing against a local image (the CLI
+hashes the file's *name*, so its output filenames differ per backdrop but will not
+match the service's hash for the same picture — it says so when it runs).
 
 ---
 
@@ -152,6 +226,7 @@ column, move the numbers, run again, without touching production.
 
 ```bash
 python -m app.cli --backend local --preset preset.json --in ./photos --out ./out
+python -m app.cli --backend local --backdrop linen.jpg  --in ./photos --out ./out
 ```
 
 Writes `cut-*.webp` and `bg-<hash>-*.jpg` per input and prints the status, score
@@ -160,8 +235,9 @@ backend code, so a composite produced here is byte-identical to one the service
 would produce for the same preset and alpha.
 
 It exists because the founder's work is not allowed to stop because a service is
-down, a card expired, or Replicate is having an afternoon. It needs no Supabase
-at all.
+down, a card expired, or Replicate is having an afternoon — none of which is
+hypothetical: the first production run died on a billing gate. It needs no
+Supabase at all.
 
 ---
 
@@ -170,6 +246,13 @@ at all.
 **Deployed (Sept 20 2026):** Fly app `sortbot`, region `sjc`, two shared-cpu-1x / 1 GB machines that auto-stop when idle, backend `replicate`, model pinned `men1scus/birefnet@f74986db`. Public IPs: shared v4 `66.241.124.148`, v6 `2a09:8280:1::195:70d4:0`. The hostname `matting.arcadian.ltd` needs DNS (A + AAAA to those IPs, or `CNAME → pe9qqe6.sortbot.fly.dev`); `fly certs show matting.arcadian.ltd` says Ready once it resolves. `sortbot.fly.dev` is the raw address and answers `/healthz` today.
 
 **Fastest path:** `REPLICATE_API_TOKEN=… SUPABASE_SERVICE_ROLE_KEY=… ./deploy.sh` (after `fly auth login`). It pins the model version, sets every secret, deploys, and requests the certificate for `matting.arcadian.ltd`; re-running is safe. The manual steps below are what it does.
+
+> **Add a card to the Fly account.** On a trial, Fly stops every machine after
+> **five minutes**, so any batch longer than that is killed mid-flight — every time.
+> Nothing is lost when it happens (shutdown leaves the unfinished rows `queued`,
+> and resubmitting picks them up), but a large batch cannot finish in one pass until
+> the account is paid. Same for Replicate credit: with an empty balance every photo
+> fails with `error:replicate 402 Insufficient credit …`.
 
 
 The container is one stateless process with four secrets and a health check, so
@@ -270,7 +353,7 @@ Tang (2010) written against the base OpenCV API rather than a dependency on
 ## Tests
 
 ```bash
-python -m pytest -q          # 157 tests
+python -m pytest -q          # 247 tests
 ```
 
 **No test touches the network.** The Replicate backend is driven through an

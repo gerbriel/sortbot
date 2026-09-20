@@ -78,6 +78,17 @@ class Settings:
     replicate_timeout_seconds: float = field(
         default_factory=lambda: _float("REPLICATE_TIMEOUT_SECONDS", 180.0)
     )
+    # How many times a RETRYABLE Replicate response (429, 5xx, a transport error)
+    # is tried again, and the first backoff. Five retries at a base of 2 s is the
+    # documented ladder 2, 4, 8, 16, 32 (±20% jitter) — 62 s of waiting at worst.
+    # A 402 is NOT retryable at any count: insufficient credit does not appear
+    # within a minute, and retrying it just turns one legible failure into six.
+    replicate_retry_attempts: int = field(
+        default_factory=lambda: max(0, _int("REPLICATE_RETRY_ATTEMPTS", 5))
+    )
+    replicate_retry_base_seconds: float = field(
+        default_factory=lambda: max(0.0, _float("REPLICATE_RETRY_BASE_SECONDS", 2.0))
+    )
     local_model: str = field(default_factory=lambda: _env("LOCAL_MODEL", "ZhengPeng7/BiRefNet"))
     local_hr_model: str = field(default_factory=lambda: _env("LOCAL_HR_MODEL", "ZhengPeng7/BiRefNet_HR"))
 
@@ -90,6 +101,12 @@ class Settings:
     max_ids_per_job: int = field(default_factory=lambda: max(1, _int("MAX_IDS_PER_JOB", 2000)))
     max_body_bytes: int = field(default_factory=lambda: _int("MAX_BODY_BYTES", 256 * 1024))
     http_timeout_seconds: float = field(default_factory=lambda: _float("HTTP_TIMEOUT_SECONDS", 60.0))
+    # The OUTER bound on one photo: download + matting (including its retries) +
+    # two uploads + the row PATCH. It exists because every inner deadline is a
+    # deadline on ONE call, and a photo can die between them — a row left 'queued'
+    # with a worker slot held is indistinguishable from "the feature stopped
+    # working". Whichever deadline fires first names itself in the flag.
+    image_timeout_seconds: float = field(default_factory=lambda: _float("IMAGE_TIMEOUT_S", 180.0))
 
     # ── Review thresholds (see score.py and README "Scoring") ───────────────
     coverage_min: float = field(default_factory=lambda: _float("SCORE_COVERAGE_MIN", 0.12))

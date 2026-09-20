@@ -14,7 +14,7 @@ from app.pipeline import already_done
 from app.storage import derived_paths
 
 TAG = "replicate:men1scus/birefnet@f74986db"
-HASH = "7abc910f"
+HASH = "6300e6dc"
 
 
 def row(**over) -> ImageRow:
@@ -25,7 +25,7 @@ def row(**over) -> ImageRow:
         "image_url": "https://cdn/photo.jpg",
         "org_id": "org-1",
         "cutout_storage_path": "user/prod/cut-x-1.webp",
-        "composite_storage_path": "user/prod/bg-7abc910f-1.jpg",
+        "composite_storage_path": "user/prod/bg-6300e6dc-1.jpg",
         "bg_preset": HASH,
         "mask_status": "auto",
         "mask_model": TAG,
@@ -40,7 +40,7 @@ def test_a_row_matted_with_this_model_and_preset_is_skipped():
 
 def test_a_new_preset_is_not_skipped():
     """A new look needs a new composite — from the SAME alpha, so it is free."""
-    assert already_done(row(), TAG, "c7e0869c") is False
+    assert already_done(row(), TAG, "a4c629a4") is False
 
 
 def test_a_new_model_is_not_skipped():
@@ -63,12 +63,28 @@ def test_a_failed_row_is_always_retried():
     assert already_done(row(mask_status="failed"), TAG, HASH) is False
 
 
-@pytest.mark.parametrize("status", ["auto", "review", "approved", "original", "queued"])
+@pytest.mark.parametrize("status", ["auto", "review", "approved", "original"])
 def test_a_human_decision_is_never_re_matted_by_a_plain_run(status):
     """THE IMPORTANT ONE. 'approved' and 'original' are somebody's judgement;
     a background refresh that quietly re-cut them would throw that away and the
     review queue would refill with work that had already been done."""
     assert already_done(row(mask_status=status), TAG, HASH) is True
+
+
+def test_a_queued_row_is_re_accepted_because_nobody_is_working_on_it():
+    """THE OTHER IMPORTANT ONE, and it cost a production run to learn.
+
+    'queued' is written BEFORE any work starts, so a machine that dies mid-batch
+    leaves its remaining photos queued with nothing behind them — and on Fly's
+    trial every machine is stopped after five minutes, so that is the normal case.
+    The trap is that mark_queued touches only mask_status: a re-queued row still
+    carries the PREVIOUS run's model and preset, so the idempotency key matches and
+    the row would be skipped forever, permanently 'in flight' with no process.
+
+    The rows this process really is holding are excluded in main.py, from the one
+    place that knows: JobRegistry.inflight_ids().
+    """
+    assert already_done(row(mask_status="queued"), TAG, HASH) is False
 
 
 # ── derived paths ───────────────────────────────────────────────────────────
@@ -123,3 +139,55 @@ def test_two_runs_produce_different_paths():
 def test_a_source_at_the_bucket_root_still_works():
     cut, comp = derived_paths("photo.jpg", TAG, HASH)
     assert "/" not in cut and "/" not in comp
+
+
+# ── what a submit takes on ──────────────────────────────────────────────────
+
+
+def rows(*specs) -> list:
+    out = []
+    for i, over in enumerate(specs, start=1):
+        out.append(row(id=f"img-{i}", **over))
+    return out
+
+
+def test_accepted_rows_skips_what_is_already_done():
+    from app.pipeline import accepted_rows
+
+    batch = rows({}, {"bg_preset": "deadbeef"})
+    taken = accepted_rows(batch, matter_tag=TAG, preset_hash=HASH, force=False)
+    assert [r.id for r in taken] == ["img-2"]
+
+
+def test_force_takes_a_done_row():
+    from app.pipeline import accepted_rows
+
+    batch = rows({}, {})
+    taken = accepted_rows(batch, matter_tag=TAG, preset_hash=HASH, force=True)
+    assert len(taken) == 2
+
+
+def test_a_row_this_process_is_holding_is_skipped_even_under_force():
+    """MONEY, not correctness. The per-org lock means a duplicate job runs AFTER
+    the first, so nothing is corrupted — but its accepted list was decided before
+    the first job wrote a row, so `already_done` cannot catch it retrospectively
+    and every photo is matted (and billed) twice. `force` means "ignore what the
+    row says", never "do it twice"."""
+    from app.pipeline import accepted_rows
+
+    batch = rows({"mask_status": "queued"}, {"mask_status": "queued"})
+    taken = accepted_rows(
+        batch, matter_tag=TAG, preset_hash=HASH, force=True, inflight={"img-1"}
+    )
+    assert [r.id for r in taken] == ["img-2"]
+
+
+def test_an_orphaned_queued_row_is_taken_when_nobody_is_holding_it():
+    """The Fly-trial case: the machine that queued these went away. Note the rows
+    carry the CURRENT model and preset, which is exactly why the status has to be
+    part of the decision — the idempotency key alone would skip them forever."""
+    from app.pipeline import accepted_rows
+
+    batch = rows({"mask_status": "queued"}, {"mask_status": "queued"})
+    taken = accepted_rows(batch, matter_tag=TAG, preset_hash=HASH, force=False, inflight=frozenset())
+    assert [r.id for r in taken] == ["img-1", "img-2"]
