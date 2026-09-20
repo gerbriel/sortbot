@@ -138,20 +138,36 @@ export async function fetchFoundingAudit(limit = 50): Promise<FoundingAuditRow[]
    for that address in this workspace.") so it can be shown as-is.
    ════════════════════════════════════════════════════════════════════════════ */
 
-/** The plans `finance_plan_prices` is seeded with — MIRRORS
- *  app_private.org_plan_list() in founder_console.sql. A plan outside this list
- *  prices at nothing and silently drops out of projected MRR, which is why both
- *  sides reject one. Change this and change the SQL in the same commit. */
+/**
+ * THE FALLBACK / SEED LIST — not the set of plans.
+ *
+ * Plans are DATA now: `finance_plan_prices` is the catalog, `founding_plan_directory`
+ * reads it, and `app_private.org_plan_list()` (which is what actually gates a write)
+ * reads the same table. These nine are only what the table is SEEDED with, and
+ * therefore what a plan dropdown shows in the one situation where the catalog cannot
+ * be read — before `plan_management.sql` has been run, or if the directory read fails.
+ *
+ * DO NOT use this list to decide what the user may pick. The server is the gate; a
+ * client-side membership test here is exactly what made a tier added in Finance →
+ * Customers impossible to assign to anybody.
+ */
 export const ORG_PLANS = [
   'free', 'beta', 'starter', 'basic', 'growth',
   'pro', 'business', 'scale', 'enterprise',
 ] as const;
 
-export type OrgPlan = (typeof ORG_PLANS)[number];
+/** A plan key. Deliberately open: it is whatever string is in the catalog, and
+ *  `organizations.plan` is plain text. It was a closed union while the list was
+ *  hardcoded in two hand-synced places; closing it again would re-create that. */
+export type OrgPlan = string;
 
-export function isOrgPlan(value: string | null | undefined): value is OrgPlan {
-  return !!value && (ORG_PLANS as readonly string[]).includes(value);
-}
+/** `free` and `beta` cannot be renamed or deleted, and both halves of the app
+ *  need to say so: `organizations.plan` DEFAULTs to `'free'`, the waitlist
+ *  approval path and this console's new-workspace default write `'beta'`, and
+ *  `finance_summary`'s founding-discount test reads the literal `'beta'`.
+ *  The server refuses either way — this is what lets the UI explain WHY before
+ *  the click rather than after it. */
+export const PROTECTED_PLANS: readonly string[] = ['free', 'beta'];
 
 export type FounderFailure = 'forbidden' | 'unavailable' | 'error';
 
@@ -206,10 +222,32 @@ const FAILURE_TEXT: Record<FounderFailure, string> = {
   error: '',
 };
 
-function failure(error: { code?: string; message: string }, what: string): FounderWriteResult {
+/** `unavailableText` is a parameter because two migrations install the RPCs on
+ *  this page independently — a founder whose founder_console.sql is fine still
+ *  has to be told which OTHER file to run. Omitted, the behaviour is unchanged. */
+function failure(
+  error: { code?: string; message: string },
+  what: string,
+  unavailableText: string = FAILURE_TEXT.unavailable,
+): FounderWriteResult {
   const reason = classify(error);
   log.error(`${what} | ${error.code ?? ''} ${error.message}`);
-  return { ok: false, reason, error: FAILURE_TEXT[reason] || error.message };
+  const text = reason === 'unavailable' ? unavailableText : FAILURE_TEXT[reason];
+  return { ok: false, reason, error: text || error.message };
+}
+
+/** The same three-way classification for a READ, which reports a status rather
+ *  than an ok/error pair. `log.db` rather than `log.error`: a read that finds no
+ *  function is a setup fact, not a failure of something the user asked for. */
+function readFailure(
+  error: { code?: string; message: string },
+  what: string,
+  unavailableText: string = FAILURE_TEXT.unavailable,
+): { status: FounderFailure; error: string } {
+  const reason = classify(error);
+  log.db(`${what} | ${error.code ?? ''} ${error.message}`);
+  const text = reason === 'unavailable' ? unavailableText : FAILURE_TEXT[reason];
+  return { status: reason, error: text || error.message };
 }
 
 /**
@@ -234,8 +272,10 @@ export async function createWorkspace(fields: {
   return { ok: true, id: (data as string | null) ?? undefined };
 }
 
-/** Move a workspace onto another plan. Rejected server-side if it is not one of
- *  ORG_PLANS, so a stale client cannot write a plan the books cannot price. */
+/** Move a workspace onto another plan. The plan key is validated server-side
+ *  against `app_private.org_plan_list()`, which reads the catalog — so a plan
+ *  created through `upsertPlan` (or in Finance → Customers) is assignable
+ *  immediately, and a plan the books cannot price is still refused. */
 export async function setOrgPlan(orgId: string, plan: OrgPlan): Promise<FounderWriteResult> {
   const { error } = await supabase.rpc('founding_set_org_plan', { p_org: orgId, p_plan: plan });
   if (error) return failure(error, 'setOrgPlan');
@@ -285,6 +325,242 @@ export async function fetchOrgDetail(orgId: string): Promise<OrgDetailResult> {
         marketplaces: raw.marketplaces ?? [],
       },
     };
+  } catch (err) {
+    return { status: 'error', error: String(err) };
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PLAN MANAGEMENT — the catalog, and the record of who has been on what
+   (supabase/migrations/plan_management.sql)
+
+   TWO PROBLEMS, ONE FILE.
+
+   1. PLANS WERE A HARDCODED LIST IN TWO HAND-SYNCED PLACES —
+      app_private.org_plan_list() and ORG_PLANS above. Finance → Customers has
+      always been able to add a row to finance_plan_prices, so a tier could be
+      given a price and then never assigned to anybody, silently. The fix is
+      that finance_plan_prices IS the catalog: org_plan_list() reads it, so
+      founding_set_org_plan and founding_create_workspace inherit data-driven
+      plans with no edit to founder_console.sql at all.
+
+   2. "WHO WAS A BETA USER" WAS NOT RECORDED ANYWHERE DURABLE.
+      organizations.plan is one mutable column — the moment a beta shop moves to
+      pro, the fact is gone. beta_signups has no org_id, founding_admin_audit
+      only sees changes made through this console, and `created_at <= cutoff` is
+      a lossy proxy. org_plan_history is written by a TRIGGER on organizations,
+      which is the one thing that also catches a SQL-Editor edit, and it keeps
+      org_id and org_name WITHOUT a foreign key so the record outlives the
+      workspace itself.
+
+   Same three-failure contract as everything above; only the `unavailable`
+   sentence differs, because it names a different migration.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+const PLAN_SETUP_TEXT = 'Run supabase/migrations/plan_management.sql to turn this on.';
+
+/** One row of the catalog, with the two usage counts that decide what may be
+ *  done to it. `workspaces` is how many are on it NOW (blocks a delete);
+ *  `ever_used` is how many have ever been (does NOT block one — retiring a tier
+ *  is fine, and history keeps the name it had at the time). */
+export interface PlanRow {
+  plan: string;
+  display_name: string | null;
+  monthly_cents: number;
+  note: string | null;
+  is_active: boolean;
+  sort_order: number;
+  workspaces: number;
+  ever_used: number;
+  /** `free` / `beta` — see PROTECTED_PLANS. */
+  protected: boolean;
+}
+
+/** One plan change for one workspace. `changed_by_email` is null for a change
+ *  made in the SQL Editor, which is a fact worth showing rather than hiding. */
+export interface PlanHistoryRow {
+  plan: string;
+  previous_plan: string | null;
+  changed_at: string;
+  changed_by_email: string | null;
+  /**
+   * 'trigger' — a real plan change for this workspace.
+   * 'backfill' — the one row per org the migration wrote for state that
+   *   predates the trigger.
+   * 'rename'  — the cascade from renaming a TIER. Renaming a plan updates
+   *   organizations.plan for every workspace on it, which fires the trigger
+   *   once per workspace; those rows are recorded rather than suppressed, so a
+   *   reader MUST render them as "renamed X → Y" and not as a plan move.
+   *
+   * Typed `string`, not a union: the column is free text and a newer migration
+   * may add a value, which must render rather than crash.
+   */
+  source: string;
+}
+
+/** A workspace that has ever been on a given plan. `exists_now` is false for a
+ *  workspace that has since been deleted — the whole point of the table, and
+ *  why `org_name` is denormalised rather than joined. */
+export interface PlanAlumniRow {
+  org_id: string;
+  org_name: string | null;
+  current_plan: string | null;
+  first_on: string;
+  last_on: string;
+  still_on: boolean;
+  created_at: string | null;
+  exists_now: boolean;
+}
+
+export type PlanDirectoryResult =
+  | { status: 'ok'; plans: PlanRow[] }
+  | { status: FounderFailure; error?: string };
+
+export type PlanAlumniResult =
+  | { status: 'ok'; rows: PlanAlumniRow[] }
+  | { status: FounderFailure; error?: string };
+
+/** `renamePlan` answers with the number of workspaces it moved. A separate
+ *  field rather than a count smuggled through `error`, which the UI prints. */
+export interface PlanRenameResult extends FounderWriteResult {
+  moved?: number;
+}
+
+/** PostgREST renders a `bigint` (`count(*)`, `monthly_cents`) as a JSON number
+ *  today, but it is entitled to hand one back as a string. Two of these feed a
+ *  `!==` dirty-check in the plans editor, where `'4900' !== 4900` would leave
+ *  every row permanently showing unsaved changes. Coerce once, here. */
+function num(value: unknown, fallback = 0): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function toPlanRow(raw: Partial<PlanRow>): PlanRow {
+  return {
+    plan: String(raw.plan ?? ''),
+    display_name: raw.display_name ?? null,
+    monthly_cents: num(raw.monthly_cents),
+    note: raw.note ?? null,
+    is_active: raw.is_active !== false,
+    sort_order: num(raw.sort_order, 100),
+    workspaces: num(raw.workspaces),
+    ever_used: num(raw.ever_used),
+    protected: raw.protected === true || PROTECTED_PLANS.includes(String(raw.plan ?? '')),
+  };
+}
+
+/** The plan catalog, already ordered by the server (`sort_order, plan`).
+ *
+ *  THIS IS WHAT EVERY PLAN DROPDOWN READS. Falling back to ORG_PLANS is the
+ *  caller's job and only on `unavailable`, because a catalog that answered
+ *  `forbidden` or errored is not evidence about what plans exist. */
+export async function fetchPlanDirectory(): Promise<PlanDirectoryResult> {
+  try {
+    const { data, error } = await supabase.rpc('founding_plan_directory');
+    if (error) return readFailure(error, 'founding_plan_directory', PLAN_SETUP_TEXT);
+    return { status: 'ok', plans: ((data ?? []) as Partial<PlanRow>[]).map(toPlanRow) };
+  } catch (err) {
+    return { status: 'error', error: String(err) };
+  }
+}
+
+/**
+ * Create a plan, or change one that exists.
+ *
+ * THE TWO HALVES OF THIS ARGUMENT LIST BEHAVE DIFFERENTLY, and getting it wrong
+ * destroys data silently:
+ *
+ * - `displayName` and `note` are REPLACED. Sending null CLEARS them. They are
+ *   therefore REQUIRED here, nullable rather than optional, so that every call
+ *   site has to state what it means — a partial writer that posted only
+ *   `{ plan, isActive }` would wipe that tier's label and the note Finance
+ *   wrote against it, with nothing failing anywhere.
+ * - `monthlyCents` is required for the same reason (it is a REPLACE too).
+ * - `isActive` and `sortOrder` are sent as null when omitted, which the
+ *   function reads as "column default on insert, leave alone on update".
+ *
+ * A caller that wants to flip one field reads the row it is editing and sends
+ * the whole record back. That is what the Plans tab's one-Save-per-row does.
+ *
+ * The key is normalised here as well as in SQL for the same reason
+ * `createWorkspace` lower-cases the email: the function compares
+ * `lower(btrim(p_plan))`, so a client sending ` Pro ` would otherwise look like
+ * a create when it is an update.
+ */
+export async function upsertPlan(fields: {
+  plan: string;
+  /** REPLACED — null clears it. Required so no caller forgets. */
+  displayName: string | null;
+  monthlyCents: number;
+  /** REPLACED — null clears it. Required so no caller forgets. */
+  note: string | null;
+  isActive?: boolean;
+  sortOrder?: number;
+}): Promise<FounderWriteResult> {
+  const { error } = await supabase.rpc('founding_upsert_plan', {
+    p_plan: fields.plan.trim().toLowerCase(),
+    p_display_name: fields.displayName?.trim() || null,
+    p_monthly_cents: Math.round(fields.monthlyCents),
+    p_note: fields.note?.trim() || null,
+    p_is_active: fields.isActive ?? null,
+    p_sort_order: fields.sortOrder ?? null,
+  });
+  if (error) return failure(error, 'upsertPlan', PLAN_SETUP_TEXT);
+  return { ok: true };
+}
+
+/**
+ * Rename a plan, cascading to every workspace on it in one transaction —
+ * `finance_plan_prices.plan` and `organizations.plan` move together, which is
+ * why this is an RPC and not a table write (the `plan` column is deliberately
+ * outside the client's UPDATE grant).
+ *
+ * The server refuses to rename `free` or `beta`, and refuses a key that already
+ * exists. History is NOT rewritten: it records what a plan was called at the
+ * time, which is the only version of it that was ever true.
+ */
+export async function renamePlan(from: string, to: string): Promise<PlanRenameResult> {
+  const { data, error } = await supabase.rpc('founding_rename_plan', {
+    p_from: from.trim().toLowerCase(),
+    p_to: to.trim().toLowerCase(),
+  });
+  if (error) return failure(error, 'renamePlan', PLAN_SETUP_TEXT);
+  return { ok: true, moved: num(data) };
+}
+
+/** Delete a plan. Refused server-side when it is protected or any workspace is
+ *  on it — in that case the answer is `is_active = false`, which keeps the row
+ *  PRICED so historical MRR still joins. */
+export async function deletePlan(plan: string): Promise<FounderWriteResult> {
+  const { error } = await supabase.rpc('founding_delete_plan', { p_plan: plan.trim().toLowerCase() });
+  if (error) return failure(error, 'deletePlan', PLAN_SETUP_TEXT);
+  return { ok: true };
+}
+
+/** One workspace's plan changes, newest first. `[]` on ANY failure — this is a
+ *  detail line inside an already-rendered row, so the surrounding panel decides
+ *  what an empty list means (it knows whether the migration has been run). */
+export async function fetchOrgPlanHistory(orgId: string): Promise<PlanHistoryRow[]> {
+  try {
+    const { data, error } = await supabase.rpc('founding_org_plan_history', { p_org: orgId });
+    if (error) {
+      log.db(`founding_org_plan_history unavailable (${error.code ?? ''} ${error.message})`);
+      return [];
+    }
+    return (data ?? []) as PlanHistoryRow[];
+  } catch {
+    return [];
+  }
+}
+
+/** Every workspace that has ever been on `plan`, oldest first — INCLUDING the
+ *  ones that no longer exist. This is the question `organizations.plan` can
+ *  never answer, and the reason org_plan_history exists. */
+export async function fetchPlanAlumni(plan: string = 'beta'): Promise<PlanAlumniResult> {
+  try {
+    const { data, error } = await supabase.rpc('founding_plan_alumni', { p_plan: plan.trim().toLowerCase() });
+    if (error) return readFailure(error, 'founding_plan_alumni', PLAN_SETUP_TEXT);
+    return { status: 'ok', rows: (data ?? []) as PlanAlumniRow[] };
   } catch (err) {
     return { status: 'error', error: String(err) };
   }

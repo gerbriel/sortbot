@@ -30,8 +30,10 @@ vi.mock('./supabase', () => ({
 }));
 
 import {
-  ORG_PLANS, isOrgPlan,
+  ORG_PLANS, PROTECTED_PLANS,
   createWorkspace, setOrgPlan, renameOrg, inviteMember, fetchOrgDetail,
+  fetchPlanDirectory, upsertPlan, renamePlan, deletePlan,
+  fetchOrgPlanHistory, fetchPlanAlumni,
 } from './foundingAdminService';
 
 const ok = (data: unknown = null) => { response = { data, error: null }; };
@@ -43,21 +45,22 @@ beforeEach(() => {
 });
 
 describe('ORG_PLANS', () => {
-  it('is exactly the set finance.sql seeds finance_plan_prices with', () => {
-    // A plan outside this list prices at nothing and silently drops out of
-    // projected MRR. app_private.org_plan_list() carries the same nine.
+  it('is the nine finance_plan_prices is SEEDED with — the fallback, not the set', () => {
+    // Since plan_management.sql, the catalog is a table and org_plan_list()
+    // reads it. This list is only what a dropdown shows when the catalog cannot
+    // be read at all. Adding a tenth plan is a row, not an edit to this array.
     expect([...ORG_PLANS]).toEqual([
       'free', 'beta', 'starter', 'basic', 'growth',
       'pro', 'business', 'scale', 'enterprise',
     ]);
   });
 
-  it('isOrgPlan accepts a member and rejects everything else', () => {
-    expect(isOrgPlan('pro')).toBe(true);
-    expect(isOrgPlan('platinum')).toBe(false);
-    expect(isOrgPlan('')).toBe(false);
-    expect(isOrgPlan(null)).toBe(false);
-    expect(isOrgPlan(undefined)).toBe(false);
+  it('names the two plans neither half of the app may rename or delete', () => {
+    // organizations.plan DEFAULTs to 'free'; the waitlist path and the
+    // console's new-workspace default write 'beta'; finance_summary's founding
+    // test reads the literal 'beta'. The server refuses too — this is so the
+    // UI can say WHY before the click.
+    expect([...PROTECTED_PLANS]).toEqual(['free', 'beta']);
   });
 });
 
@@ -167,5 +170,222 @@ describe('fetchOrgDetail', () => {
     expect((await fetchOrgDetail('org-1')).status).toBe('forbidden');
     fail('PGRST202');
     expect((await fetchOrgDetail('org-1')).status).toBe('unavailable');
+  });
+});
+
+/* ── Plan management (supabase/migrations/plan_management.sql) ───────────────
+   Same reasoning as the block above, plus one thing that only applies here:
+   the `unavailable` sentence must name plan_management.sql and NOT
+   founder_console.sql. A founder who has run one file and not the other gets
+   sent to the wrong SQL Editor tab otherwise, and both look identically
+   "broken" from the UI. */
+
+describe('plan RPC names and argument names', () => {
+  it('fetchPlanDirectory calls founding_plan_directory with no arguments', async () => {
+    ok([]);
+    await fetchPlanDirectory();
+    expect(calls[0]).toEqual({ fn: 'founding_plan_directory', args: undefined });
+  });
+
+  it('upsertPlan sends all six p_ arguments, key normalised', async () => {
+    await upsertPlan({
+      plan: '  Studio ', displayName: '  Studio  ', monthlyCents: 29900,
+      note: ' launch tier ', isActive: true, sortOrder: 40,
+    });
+    expect(calls[0]).toEqual({
+      fn: 'founding_upsert_plan',
+      args: {
+        // lower+trim here as well as in SQL: the function compares
+        // lower(btrim(p_plan)), so ' Studio ' would look like a CREATE when it
+        // is an update of the row that already exists.
+        p_plan: 'studio', p_display_name: 'Studio', p_monthly_cents: 29900,
+        p_note: 'launch tier', p_is_active: true, p_sort_order: 40,
+      },
+    });
+  });
+
+  it('sends null for an omitted FLAG, and requires the two REPLACE fields', async () => {
+    // The two halves of this argument list behave differently, and the type
+    // enforces the dangerous one: `displayName` and `note` are REPLACED by the
+    // function — null CLEARS them — so they are required rather than optional,
+    // and a partial writer that posted only { plan, isActive } cannot compile.
+    // `isActive` / `sortOrder` are the opposite: null means "column default on
+    // insert, leave the existing value alone on update", and an OMITTED key
+    // would be dropped from the JSON body so the RPC would not resolve at all.
+    await upsertPlan({ plan: 'studio', displayName: null, monthlyCents: 0, note: null });
+    expect(calls[0].args).toEqual({
+      p_plan: 'studio', p_display_name: null, p_monthly_cents: 0,
+      p_note: null, p_is_active: null, p_sort_order: null,
+    });
+  });
+
+  it('upsertPlan rounds cents and trims the two replace fields to null when blank', async () => {
+    await upsertPlan({
+      plan: 'studio', displayName: '   ', monthlyCents: 4999.6, note: '  ',
+    });
+    // '' would be a stored empty string where the column means "unset", and the
+    // UI falls back to the key on null, not on ''.
+    expect(calls[0].args).toEqual({
+      p_plan: 'studio', p_display_name: null, p_monthly_cents: 5000,
+      p_note: null, p_is_active: null, p_sort_order: null,
+    });
+  });
+
+  it('renamePlan sends p_from / p_to and reports the workspaces moved', async () => {
+    ok(7);
+    const res = await renamePlan(' Growth ', '  SCALE-UP ');
+    expect(calls[0]).toEqual({ fn: 'founding_rename_plan', args: { p_from: 'growth', p_to: 'scale-up' } });
+    // The count rides its own field rather than being smuggled through `error`,
+    // which the UI prints verbatim.
+    expect(res).toEqual({ ok: true, moved: 7 });
+  });
+
+  it('deletePlan sends p_plan', async () => {
+    await deletePlan('Studio');
+    expect(calls[0]).toEqual({ fn: 'founding_delete_plan', args: { p_plan: 'studio' } });
+  });
+
+  it('fetchOrgPlanHistory sends p_org', async () => {
+    ok([]);
+    await fetchOrgPlanHistory('org-1');
+    expect(calls[0]).toEqual({ fn: 'founding_org_plan_history', args: { p_org: 'org-1' } });
+  });
+
+  it('fetchPlanAlumni defaults to beta and sends p_plan either way', async () => {
+    ok([]);
+    await fetchPlanAlumni();
+    expect(calls[0]).toEqual({ fn: 'founding_plan_alumni', args: { p_plan: 'beta' } });
+    ok([]);
+    await fetchPlanAlumni('Pro');
+    expect(calls[1]).toEqual({ fn: 'founding_plan_alumni', args: { p_plan: 'pro' } });
+  });
+});
+
+describe('fetchPlanDirectory', () => {
+  it('coerces the bigint counts, which PostgREST may hand back as strings', async () => {
+    // monthly_cents feeds a `!==` dirty-check in the plans editor: '4900' would
+    // never equal 4900 and every row would show unsaved changes forever.
+    ok([{
+      plan: 'pro', display_name: 'Pro', monthly_cents: '25000', note: null,
+      is_active: true, sort_order: '60', workspaces: '3', ever_used: '9', protected: false,
+    }]);
+    const res = await fetchPlanDirectory();
+    if (res.status !== 'ok') throw new Error('expected ok');
+    expect(res.plans[0]).toEqual({
+      plan: 'pro', display_name: 'Pro', monthly_cents: 25000, note: null,
+      is_active: true, sort_order: 60, workspaces: 3, ever_used: 9, protected: false,
+    });
+  });
+
+  it('fills the optional fields and infers `protected` from the key', async () => {
+    // A server that predates the `protected` column must not let the UI offer a
+    // Delete on `free` — the client knows the same two names.
+    ok([{ plan: 'free' }, { plan: 'beta' }, { plan: 'studio' }]);
+    const res = await fetchPlanDirectory();
+    if (res.status !== 'ok') throw new Error('expected ok');
+    expect(res.plans.map(p => p.protected)).toEqual([true, true, false]);
+    expect(res.plans[2]).toEqual({
+      plan: 'studio', display_name: null, monthly_cents: 0, note: null,
+      is_active: true, sort_order: 100, workspaces: 0, ever_used: 0, protected: false,
+    });
+  });
+
+  it('reports a missing function as unavailable, naming plan_management.sql', async () => {
+    for (const code of ['42883', 'PGRST202']) {
+      fail(code, 'function does not exist');
+      const res = await fetchPlanDirectory();
+      if (res.status === 'ok') throw new Error(`expected a failure for ${code}`);
+      expect(res.status, code).toBe('unavailable');
+      expect(res.error, code).toContain('plan_management.sql');
+      // Naming the wrong migration is worse than naming none: founder_console.sql
+      // may well already have been run.
+      expect(res.error, code).not.toContain('founder_console.sql');
+    }
+  });
+
+  it('reports 42501 as forbidden and anything else as error', async () => {
+    fail('42501');
+    expect((await fetchPlanDirectory()).status).toBe('forbidden');
+    fail('P0001', 'Something went wrong.');
+    const res = await fetchPlanDirectory();
+    if (res.status === 'ok') throw new Error('expected a failure');
+    expect(res.status).toBe('error');
+    expect(res.error).toBe('Something went wrong.');
+  });
+});
+
+describe('plan write failures', () => {
+  it('a missing function names plan_management.sql on every write', async () => {
+    fail('42883', 'function does not exist');
+    for (const res of [
+      await upsertPlan({ plan: 'x', displayName: null, monthlyCents: 0, note: null }),
+      await renamePlan('a', 'b'),
+      await deletePlan('x'),
+    ]) {
+      expect(res.reason).toBe('unavailable');
+      expect(res.error).toContain('plan_management.sql');
+    }
+  });
+
+  it('the database\'s own refusal is shown as-is', async () => {
+    // These functions write their messages in plain English on purpose: "free
+    // and beta are built in and cannot be renamed" is the whole explanation.
+    fail('P0001', 'The free plan is built in and cannot be renamed.');
+    const res = await renamePlan('free', 'gratis');
+    expect(res.reason).toBe('error');
+    expect(res.error).toBe('The free plan is built in and cannot be renamed.');
+    expect(res.moved).toBeUndefined();
+  });
+
+  it('forbidden still reads as a permission sentence, not a setup hint', async () => {
+    fail('42501', 'permission denied');
+    const res = await deletePlan('studio');
+    expect(res.reason).toBe('forbidden');
+    expect(res.error).toBe('Founding Workspace admins only.');
+  });
+});
+
+describe('fetchOrgPlanHistory', () => {
+  it('returns [] rather than throwing on a missing function', async () => {
+    fail('42883', 'function does not exist');
+    await expect(fetchOrgPlanHistory('org-1')).resolves.toEqual([]);
+  });
+
+  it('returns [] on a permission failure too — the panel decides what empty means', async () => {
+    fail('42501');
+    await expect(fetchOrgPlanHistory('org-1')).resolves.toEqual([]);
+  });
+
+  it('passes the rows through untouched', async () => {
+    const rows = [{
+      plan: 'pro', previous_plan: 'beta', changed_at: '2027-03-12T00:00:00Z',
+      changed_by_email: 'me@shop.test', source: 'trigger',
+    }];
+    ok(rows);
+    await expect(fetchOrgPlanHistory('org-1')).resolves.toEqual(rows);
+  });
+});
+
+describe('fetchPlanAlumni', () => {
+  it('carries a workspace that no longer exists', async () => {
+    // The point of the whole table: organizations.plan cannot answer this, and
+    // a foreign key would have deleted the answer with the workspace.
+    ok([{
+      org_id: 'gone-1', org_name: 'Closed Shop', current_plan: null,
+      first_on: '2026-02-01T00:00:00Z', last_on: '2026-11-01T00:00:00Z',
+      still_on: false, created_at: null, exists_now: false,
+    }]);
+    const res = await fetchPlanAlumni('beta');
+    if (res.status !== 'ok') throw new Error('expected ok');
+    expect(res.rows[0].exists_now).toBe(false);
+    expect(res.rows[0].org_name).toBe('Closed Shop');
+  });
+
+  it('reports unavailable with the right migration named', async () => {
+    fail('PGRST202', 'no function matches');
+    const res = await fetchPlanAlumni();
+    if (res.status === 'ok') throw new Error('expected a failure');
+    expect(res.status).toBe('unavailable');
+    expect(res.error).toContain('plan_management.sql');
   });
 });

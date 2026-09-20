@@ -173,6 +173,159 @@
   margin-top: 0.2rem;
 }
 
+/* ── Plans: the catalog table ─────────────────────────────────────────────
+   A real <table> at desktop and, at ≤640px, OrgPanel.css's `.an-table--cards`
+   treatment: each <td> carries a data-label and prints as one label/value line.
+   Nothing here restates those rules — only the widths and the inline controls,
+   which the shared table does not know about. */
+
+.fc-plan-table { margin-top: 0.4rem; }
+
+.fc-plan-table td { vertical-align: middle; }
+
+.fc-plan-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.fc-plan-key code {
+  font-size: var(--fs-sm);
+  background: var(--ink-850);
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+}
+
+/* The editable cells. A plain input rather than `ui-input`: these sit inside a
+   dense table row, where the primitive's 3.4rem height and full-width block
+   layout would make every row three lines tall. */
+.fc-plan-input {
+  width: 100%;
+  max-width: 18rem;
+  min-height: 3.4rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--ink-850);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+
+.fc-plan-input:disabled { opacity: 0.5; }
+
+.fc-plan-input--num {
+  max-width: 9rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.fc-plan-money {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  justify-content: flex-end;
+}
+
+.fc-plan-money-mark { color: var(--text-muted); font-size: var(--fs-sm); }
+
+/* "was $250.00" beside a dirty price. It is the only thing in the row that says
+   what the saved value is once the input has been typed over. */
+.fc-plan-was {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.fc-plan-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.fc-plan-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* WHY a control is not offered, rather than a disabled control with no reason.
+   A protected plan, or one with workspaces on it, gets this sentence in place
+   of the Rename/Delete pair (AGENTS.md §18 #12's sibling: an explanation beats
+   a greyed button the user has to guess about). */
+.fc-plan-why {
+  flex: 1 1 24rem;
+  min-width: 0;
+  max-width: 44rem;
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-normal);
+  color: var(--text-muted);
+  text-align: left;
+}
+
+.fc-plan-why code {
+  background: var(--ink-850);
+  border-radius: 3px;
+  padding: 0 0.2rem;
+}
+
+.fc-plan-add {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.4rem;
+  max-width: 120rem;
+}
+
+.fc-plan-add > *:first-child { flex: 0 1 26rem; min-width: 0; }
+.fc-plan-add > *:nth-child(2) { flex: 0 1 26rem; min-width: 0; }
+.fc-plan-add > *:nth-child(3) { flex: 0 1 18rem; min-width: 0; }
+
+/* ── Plan history, inside an expanded workspace ───────────────────────────── */
+
+.fc-history-list { margin-bottom: 0.4rem; }
+
+.fc-history-row .fa-ms-org {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* ── Alumni ───────────────────────────────────────────────────────────────
+   The answer to "who was a beta user, ten years on". A deleted workspace is
+   the whole point of the list, so it is dimmed and flagged rather than hidden —
+   and dimmed only to the WCAG floor, because it is still real content. */
+
+.fc-alumni-toolbar { align-items: center; }
+
+.fc-alumni-summary {
+  margin: 0 0 0.6rem;
+  padding: 0.8rem 1.2rem;
+  border-radius: 8px;
+  background: var(--ink-850);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  max-width: 120rem;
+}
+
+.fc-alumni-summary strong { color: var(--text-primary); }
+
+.fc-alumni-row--gone {
+  border-left: 2px solid var(--danger);
+  padding-left: 0.8rem;
+}
+
+.fc-alumni-row--gone .org-member-email strong { color: var(--text-secondary); }
+
 /* ── Phone ────────────────────────────────────────────────────────────────
    Below 640px the controls stack and every target clears the 44px floor. The
    16px (var(--fs-md)) restatement is what stops mobile Safari zooming into a
@@ -199,4 +352,20 @@
   .fc-setup { font-size: var(--fs-base); }
   .fc-view .shopify-conn-help,
   .fc-view .fc-setup { max-width: none; }
+
+  /* Plans: the shared `.an-table--cards` rules turn each row into a card; these
+     let the controls fill the value side of the label/value line, and keep the
+     44px floor (OrgPanel.css already restates 16px for inputs under .fc-view). */
+  .fc-plan-input { max-width: none; min-height: 44px; }
+  .fc-plan-input--num { max-width: 12rem; }
+  .fc-plan-actions { justify-content: flex-start; width: 100%; }
+  .fc-plan-why { flex: 1 1 100%; max-width: none; text-align: left; }
+  .fc-plan-add { flex-direction: column; align-items: stretch; }
+  .fc-plan-add > *,
+  .fc-plan-add > *:first-child,
+  .fc-plan-add > *:nth-child(2),
+  .fc-plan-add > *:nth-child(3) { flex: none; }
+
+  .fc-alumni-toolbar { flex-direction: column; align-items: stretch; }
+  .fc-alumni-summary { font-size: var(--fs-base); max-width: none; }
 }
