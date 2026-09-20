@@ -57,6 +57,10 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           # Storage limit in GB (defaults to 100 for Pro plan if not set)
           VITE_STORAGE_LIMIT_GB: ${{ secrets.VITE_STORAGE_LIMIT_GB }}
+          # Origin of the self-hosted photo-background service (a hostname, not a
+          # credential — the app calls it with the user's own Supabase session).
+          # Unset/empty → the whole Backgrounds feature hides (AGENTS.md §4).
+          VITE_MATTING_URL: ${{ secrets.VITE_MATTING_URL }}
       
       - name: Setup Pages
         uses: actions/configure-pages@v4

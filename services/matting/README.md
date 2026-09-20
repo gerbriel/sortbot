@@ -167,6 +167,9 @@ at all.
 
 ## Deploying
 
+**Fastest path:** `REPLICATE_API_TOKEN=… SUPABASE_SERVICE_ROLE_KEY=… ./deploy.sh` (after `fly auth login`). It pins the model version, sets every secret, deploys, and requests the certificate for `matting.arcadian.ltd`; re-running is safe. The manual steps below are what it does.
+
+
 The container is one stateless process with four secrets and a health check, so
 any Docker host works. `fly.toml.example` is a worked Fly config with
 scale-to-zero (`min_machines_running = 0`) — the founder mats a batch and then
