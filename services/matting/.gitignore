@@ -16,3 +16,8 @@ fly.toml
 
 # Output of `python -m app.cli --out ...` when run in place.
 out/
+
+# Local deploy secrets (see deploy.sh). Never committed.
+.env.deploy
+.env
+.env.*

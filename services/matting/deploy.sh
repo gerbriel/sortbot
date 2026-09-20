@@ -29,6 +29,15 @@ MODEL="${REPLICATE_MODEL:-men1scus/birefnet}"
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing: $1" >&2; exit 1; }; }
 need flyctl; need curl; need python3
 
+# The two server-only secrets may be given in a local, gitignored file instead
+# of on the command line, so they never sit in a shell history or a chat log:
+#   services/matting/.env.deploy
+#     REPLICATE_API_TOKEN=r8_…
+#     SUPABASE_SERVICE_ROLE_KEY=eyJ…
+if [ -f .env.deploy ]; then
+  set -a; . ./.env.deploy; set +a
+fi
+
 : "${REPLICATE_API_TOKEN:?set REPLICATE_API_TOKEN (replicate.com → Account → API tokens)}"
 : "${SUPABASE_SERVICE_ROLE_KEY:?set SUPABASE_SERVICE_ROLE_KEY (Supabase → Project Settings → API; never put this in a VITE_* var)}"
 
