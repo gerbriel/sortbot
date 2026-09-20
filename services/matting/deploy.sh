@@ -34,6 +34,8 @@ need flyctl; need curl; need python3
 #   services/matting/.env.deploy
 #     REPLICATE_API_TOKEN=r8_…
 #     SUPABASE_SERVICE_ROLE_KEY=eyJ…
+#     FLY_API_TOKEN=fo1_…        # optional: instead of `fly auth login`
+#                                # (fly.io → Account → Access Tokens, or `fly tokens create deploy`)
 if [ -f .env.deploy ]; then
   set -a; . ./.env.deploy; set +a
 fi
