@@ -167,6 +167,8 @@ at all.
 
 ## Deploying
 
+**Deployed (Sept 20 2026):** Fly app `sortbot`, region `sjc`, two shared-cpu-1x / 1 GB machines that auto-stop when idle, backend `replicate`, model pinned `men1scus/birefnet@f74986db`. Public IPs: shared v4 `66.241.124.148`, v6 `2a09:8280:1::195:70d4:0`. The hostname `matting.arcadian.ltd` needs DNS (A + AAAA to those IPs, or `CNAME → pe9qqe6.sortbot.fly.dev`); `fly certs show matting.arcadian.ltd` says Ready once it resolves. `sortbot.fly.dev` is the raw address and answers `/healthz` today.
+
 **Fastest path:** `REPLICATE_API_TOKEN=… SUPABASE_SERVICE_ROLE_KEY=… ./deploy.sh` (after `fly auth login`). It pins the model version, sets every secret, deploys, and requests the certificate for `matting.arcadian.ltd`; re-running is safe. The manual steps below are what it does.
 
 

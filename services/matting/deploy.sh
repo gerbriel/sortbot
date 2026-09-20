@@ -21,7 +21,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP="${FLY_APP:-arcadian-matting}"
+APP="${FLY_APP:-sortbot}"               # the Fly app this service lives in (deployed Sept 20 2026)
 REGION="${FLY_REGION:-sjc}"           # Supabase project is West US (N. California)
 HOSTNAME="${MATTING_HOSTNAME:-matting.arcadian.ltd}"
 MODEL="${REPLICATE_MODEL:-men1scus/birefnet}"
@@ -58,9 +58,14 @@ if [ -z "${REPLICATE_VERSION:-}" ]; then
 fi
 echo "pinning ${MODEL} @ ${REPLICATE_VERSION}"
 
-if [ ! -f fly.toml ]; then
-  sed -e "s/^app = .*/app = \"${APP}\"/" -e "s/^primary_region = .*/primary_region = \"${REGION}\"/" fly.toml.example > fly.toml
-  fly launch --copy-config --no-deploy --name "$APP" --region "$REGION" --yes
+# fly.toml is derived from the example every run (it is gitignored), so the
+# app name and region are always what this script says they are.
+sed -e "s/^app = .*/app = \"${APP}\"/" -e "s/^primary_region = .*/primary_region = \"${REGION}\"/" fly.toml.example > fly.toml
+# Create the app only if it does not already answer. A DEPLOY token (scoped to
+# one existing app) cannot create apps — with one, create the app in the Fly
+# dashboard first and set FLY_APP to its name.
+if ! fly status --app "$APP" >/dev/null 2>&1; then
+  fly apps create "$APP" --org "${FLY_ORG:-personal}"
 fi
 
 fly secrets set --app "$APP" --stage \

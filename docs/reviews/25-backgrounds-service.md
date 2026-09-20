@@ -465,3 +465,28 @@ transformers/timm (Apache-2.0).
 3. `cp fly.toml.example fly.toml`, set `app`, `fly deploy`, `fly certs add matting.arcadian.ltd`.
 4. Add `https://matting.arcadian.ltd` to `connect-src` in `index.html`'s CSP.
 5. Mat one listing and look at it. Then a hundred, and tune `SCORE_*`.
+
+---
+
+## Rollout log (Sept 20 2026)
+
+- Deployed with `FLY_APP=sortbot FLY_REGION=sjc ./deploy.sh`. The Fly token the founder minted was a
+  DEPLOY token scoped to an app named `sortbot` that a `fly launch` had just created (two `goStatic`
+  machines in `ams`, no public IP, nothing the business used); those machines were destroyed and the
+  service deployed into that app in `sjc` next to the Supabase project. A deploy token cannot create
+  apps, which is why `deploy.sh` now creates the app only when `fly status` cannot find it.
+- Model pinned at `men1scus/birefnet@f74986db…`; secrets set (`--stage`); two shared-cpu-1x / 1 GB
+  machines, auto-stop; Fly's HTTP check on `/healthz` passing with
+  `{"ok":true,"backend":"replicate","model":"replicate:men1scus/birefnet@f74986db"}`; the startup
+  call to Replicate's model endpoint returned 200 (token valid).
+- The app had NO public IPs (the interrupted launch never allocated any): allocated a shared v4
+  `66.241.124.148` and a dedicated v6 `2a09:8280:1::195:70d4:0`. `/healthz` verified 200 at the IP
+  with SNI. Certificate for `matting.arcadian.ltd` requested; **pending the founder's DNS records**
+  (A + AAAA to those IPs, or `CNAME → pe9qqe6.sortbot.fly.dev`).
+- GitHub secret `VITE_MATTING_URL=https://matting.arcadian.ltd` set; the Pages build inlines it.
+  Until DNS resolves the origin is unreachable, and until `image_backgrounds.sql` runs the column
+  probe keeps the feature hidden anyway — so the order of the two remaining founder steps does not
+  matter.
+- Not yet done: `image_backgrounds.sql` in the SQL Editor (production SQL is not reachable from this
+  session), the DNS records, and the first real photo.
+
