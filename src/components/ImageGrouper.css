@@ -2006,3 +2006,228 @@
     min-height: 36px;
   }
 }
+
+/* ══ Photo backgrounds — Step 2 ═════════════════════════════════════════════
+   Three surfaces: a corner badge on the cards that want attention, the
+   Backgrounds ▾ popover, and the lightbox review strip. Everything resolves
+   through the tokens; the semantics (warning / danger) appear only where they
+   signal a real state, which is the §1 rule. */
+
+/* ── The corner badge ──────────────────────────────────────────────────────
+   Opposite corner from `.selection-indicator` (top-right), so a flagged photo
+   that is also selected shows BOTH rather than one under the other. Deliberately
+   absent on `auto` / `approved`: a badge on every card is a badge on none. */
+.bg-badge {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.bg-badge--review { background: var(--warning);  color: var(--ink-950); }
+.bg-badge--failed { background: var(--danger);   color: var(--ink-950); }
+/* Muted, not pale: the other two badges are saturated with a white glyph, and
+   an --ink-700 chip on a beige photo was barely there. This is the same weight
+   without claiming to be a warning. */
+.bg-badge--queued { background: var(--text-muted); color: var(--ink-950); }
+
+.bgp-spin { animation: bgp-spin 1s linear infinite; }
+@keyframes bgp-spin { to { transform: rotate(360deg); } }
+
+/* A moving spinner is a distraction, not information, for someone who has asked
+   not to see motion. The icon simply sits still. */
+@media (prefers-reduced-motion: reduce) {
+  .bgp-spin { animation: none; }
+}
+
+/* ── The Backgrounds ▾ popover ─────────────────────────────────────────────
+   Inherits .gtb-panel; this only adds what the panel's own content needs. */
+.gtb-panel--bg { min-width: 20rem; }
+
+/* The trigger's count is a WARNING when photos are waiting, and neutral while a
+   job runs — the two mean different things and must not look alike. */
+.gtb-count--warn { background: var(--warning); color: var(--ink-950); }
+.gtb-count--busy { background: var(--ink-700); color: var(--text-secondary); }
+
+.gtb-trigger--flag { border-color: var(--warning); }
+
+.bgp-counts {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.bgp-hint {
+  margin: 0.25rem 0 0;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.bgp-wide { width: 100%; justify-content: center; }
+
+/* Stacked and full-width, not a wrapping row: the panel is ~280px, the two
+   labels are different lengths, and a wrapped row leaves two ragged buttons
+   that read as a mistake. Each child is a ConfirmAction, which swaps its
+   trigger for a prompt plus two buttons when armed — so the row it becomes
+   needs the full width anyway. */
+.bgp-bulk {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+}
+
+.bgp-bulk > .ui-btn,
+.bgp-bulk > .ui-confirm { width: 100%; justify-content: center; }
+
+.bgp-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+}
+
+.bgp-preset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--fs-2xs);
+  color: var(--text-secondary);
+}
+
+.bgp-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  display: inline-block;
+}
+
+.bgp-notice {
+  margin: 0.4rem 0 0;
+  font-size: var(--fs-2xs);
+  color: var(--text-secondary);
+}
+
+/* ── The lightbox review strip ─────────────────────────────────────────────
+   The lightbox is a dark overlay, so this surface sets its own literal light
+   foreground for the same reason the nav does (§1) — it does not sit on the
+   page's white canvas and would otherwise render black on black. */
+.lb-segmented {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.lb-segmented .lightbox-tool-btn { border-radius: 0; }
+.lb-segmented .lightbox-tool-btn:first-child { border-radius: 6px 0 0 6px; }
+.lb-segmented .lightbox-tool-btn:last-child  { border-radius: 0 6px 6px 0; }
+
+/* (0,3,0), and it has to be. `ProductDescriptionGenerator.css` is imported AFTER
+   this file (the crop-fs-* styles are shared with Step 3) and redefines
+   `.lightbox-tool-btn` at (0,1,0) — so a single-class rule here loses the
+   cascade to a stylesheet that knows nothing about this control, and the
+   "which one am I looking at" segmented pair silently renders as two identical
+   grey buttons. Measured: both read rgb(233,233,233) before this. */
+.lb-segmented .lightbox-tool-btn.lb-seg--on,
+.lb-segmented .lightbox-tool-btn.lb-seg--on:hover {
+  background: var(--accent);
+  color: var(--ink-950);
+  border-color: var(--accent);
+}
+
+.lb-review {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem 1rem;
+  /* 72rem is 648px at the 9px root (§16) — the strip carries a status, up to
+     five flag sentences and three buttons, and at 46rem they stacked into a
+     column that pushed the actions off the bottom of a short viewport. */
+  max-width: min(72rem, calc(100vw - 2rem));
+  padding: 0.7rem 1rem;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(6px);
+  z-index: 10000;
+}
+
+.lb-review-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.lb-status {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: #f2f2f2;
+}
+
+.lb-status--review { color: #ffc65c; }
+.lb-status--failed { color: #ff8d8d; }
+.lb-status--auto,
+.lb-status--approved { color: #7fe0a6; }
+
+.lb-flags {
+  margin: 0;
+  padding-left: 1.05rem;
+  font-size: var(--fs-2xs);
+  color: #d6d6d6;
+}
+
+.lb-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+/* Phones: the strip is the decision, so it gets the full width and 44px
+   targets, and it clears the tab bar like every other bottom-anchored
+   surface (§1 — one offset, `--tabbar-h`). */
+@media (max-width: 640px) {
+  /* The lightbox toolbar was already wider than a phone — Rotate L ran off the
+     left and Copy Crop off the right, because it is centred with
+     `translateX(-50%)` and nothing bounded it. Adding Before/After made the one
+     control a reviewer actually needs on a phone the one furthest off screen.
+     Bounding it and letting it scroll sideways is the same treatment the Step-2
+     toolbar row gets, and it reaches the pre-existing buttons too. */
+  .lightbox-toolbar {
+    max-width: calc(100vw - 1rem);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    /* Only the horizontal axis: `overflow-x: auto` alone makes a box scrollable
+       on BOTH axes, and a vertically-scrollable pill would trap the swipe that
+       is meant to dismiss the lightbox. */
+    overflow-y: hidden;
+  }
+  .lightbox-toolbar::-webkit-scrollbar { display: none; }
+  .lightbox-tool-btn { flex: 0 0 auto; }
+
+  .lb-review {
+    left: 0;
+    right: 0;
+    bottom: calc(var(--tabbar-h, 0px) + 8px);
+    transform: none;
+    max-width: none;
+    border-radius: 12px 12px 0 0;
+    padding-bottom: calc(0.7rem + var(--safe-b, 0px));
+  }
+  .lb-review-actions { width: 100%; }
+  .lb-review-actions .ptb-btn { flex: 1 1 8rem; min-height: 44px; justify-content: center; }
+  .lb-segmented .lightbox-tool-btn { min-height: 44px; }
+  .bg-badge { width: 22px; height: 22px; }
+}

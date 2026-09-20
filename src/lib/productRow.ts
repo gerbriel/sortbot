@@ -75,12 +75,29 @@ import { publicImageUrl, thumbnailImageUrl } from './storageUrls';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see above
 type DynamicRow = Record<string, any>;
 
-/** Shape of the joined `product_images` rows both restore queries select. */
+/**
+ * Shape of the joined `product_images` rows both restore queries select.
+ *
+ * The background columns are OPTIONAL because the restore selects deliberately
+ * do NOT ask for them: selecting an unknown column fails the whole statement
+ * (42703), and the photo-backgrounds migration ships after this code, so the
+ * one query the app cannot afford to break must not depend on it. They are read
+ * separately by `backgroundService.fetchImageRowsForProducts`, which is
+ * allowed to come back `unavailable`. Reading them here costs nothing and means
+ * the merge is already correct the day the select does carry them.
+ */
 export interface ProductImageRowLite {
+  id?: string | null;
   image_url?: string | null;
   storage_path?: string | null;
   position?: number | null;
   original_name?: string | null;
+  cutout_storage_path?: string | null;
+  composite_storage_path?: string | null;
+  bg_preset?: string | null;
+  mask_status?: string | null;
+  mask_score?: number | null;
+  mask_flags?: string[] | null;
 }
 
 /** Shape of a `products` row. Columns beyond the two we name are read dynamically. */
@@ -110,6 +127,37 @@ export function imagesFromRow(row: ProductRowLite) {
 }
 
 /**
+ * The background state carried by ONE of a row's joined image rows.
+ *
+ * WHICH one matters. `saveProductToDatabase` writes a whole GROUP's photos
+ * against the leader product, so `row.product_images` can be four rows for four
+ * different garments' angles — and a mask status is per PHOTO, never per
+ * listing. So: the row whose `storage_path` is the item's own, and only when
+ * there is no ambiguity (`preferPath` given). With no path to match on, the
+ * first row by position is used, which is the same photo `imagesFromRow`
+ * already calls the item's primary.
+ *
+ * Every field comes back `undefined` when the columns are not in the select —
+ * see the type. That is the normal, pre-migration case.
+ */
+export function backgroundFromRow(row: ProductRowLite, preferPath?: string | null) {
+  const sorted = [...(row.product_images ?? [])].sort(
+    (a, b) => (a.position ?? 0) - (b.position ?? 0),
+  );
+  const match = (preferPath && sorted.find(i => i.storage_path === preferPath)) || sorted[0];
+  if (!match) return {};
+  return {
+    productImageId:       match.id ?? undefined,
+    cutoutStoragePath:    match.cutout_storage_path ?? undefined,
+    compositeStoragePath: match.composite_storage_path ?? undefined,
+    bgPreset:             match.bg_preset ?? undefined,
+    maskStatus:           match.mask_status ?? undefined,
+    maskScore:            match.mask_score ?? undefined,
+    maskFlags:            match.mask_flags ?? undefined,
+  };
+}
+
+/**
  * Strip the garbled "sz" title artifact so the title regenerates cleanly.
  * Present in all four original copies.
  */
@@ -134,6 +182,9 @@ export function productRowToClothingItem(
   const resolvedPreview = urls[0] || reconstructed;
 
   return {
+    // A DB-built item has no workflow_state to carry background state, so the
+    // joined row is its only source. Absent columns spread nothing.
+    ...backgroundFromRow(row, storagePath),
     id: row.id,
     preview: resolvedPreview,
     imageUrls: urls.length ? urls : (reconstructed ? [reconstructed] : []),
@@ -258,6 +309,17 @@ export function mergeProductRowIntoItem(
 
   const r = row as DynamicRow;
   const { urls: groupUrls, originalName: rowOriginalName } = imagesFromRow(row);
+  /**
+   * Background state: SERVICE-OWNED, so the row wins — but only where the row
+   * actually HAS a value (`??`, not `||`).
+   *
+   * Two reasons it must be `??`. (a) The restore selects do not carry these
+   * columns until the migration runs, so a row-wins-unconditionally merge would
+   * wipe the three fields `slimForWorkflowState` persists precisely so the
+   * first render after a reload is right. (b) `mask_score: 0` and an empty
+   * `mask_flags` array are real answers, and `||` would discard both.
+   */
+  const rowBackground = backgroundFromRow(row, item.storagePath);
 
   /**
    * The `|| ''` tail, applied only when the caller asked for it.
@@ -362,6 +424,13 @@ export function mergeProductRowIntoItem(
     discountedShipping:        s(r.discounted_shipping, item.discountedShipping),
     mpn:                       s(r.mpn, item.mpn),
     customLabel0:              s(r.custom_label_0, item.customLabel0),
+    productImageId:            rowBackground.productImageId       ?? item.productImageId,
+    cutoutStoragePath:         rowBackground.cutoutStoragePath    ?? item.cutoutStoragePath,
+    compositeStoragePath:      rowBackground.compositeStoragePath ?? item.compositeStoragePath,
+    bgPreset:                  rowBackground.bgPreset             ?? item.bgPreset,
+    maskStatus:                rowBackground.maskStatus           ?? item.maskStatus,
+    maskScore:                 rowBackground.maskScore            ?? item.maskScore,
+    maskFlags:                 rowBackground.maskFlags            ?? item.maskFlags,
   };
 
   if (setProductGroup) {

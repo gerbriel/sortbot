@@ -13,6 +13,7 @@ import {
   cleanSzTitle,
   STARTUP_MERGE_OPTIONS,
   OPEN_BATCH_MERGE_OPTIONS,
+  backgroundFromRow,
   type ProductRowLite,
 } from './productRow';
 
@@ -563,5 +564,130 @@ describe('the two option presets are the two call sites', () => {
       'setOriginalName',
       'setProductGroup',
     ]);
+  });
+});
+
+
+/**
+ * Photo backgrounds. The service owns every one of these columns except
+ * `mask_status`, and the app only ever writes THAT after a person decided — so
+ * the merge's job is to take the row's answer when it has one and never to
+ * invent, drop or overwrite one with nothing.
+ */
+describe('backgroundFromRow', () => {
+  const withBg = (): ProductRowLite => ({
+    id: 'p1',
+    product_images: [
+      {
+        id: 'img-b', storage_path: 'u/p1/second.jpg', position: 1,
+        composite_storage_path: 'u/p1/second-bg.jpg', mask_status: 'review',
+        mask_score: 0.41, mask_flags: ['edge'], cutout_storage_path: 'u/p1/second-cut.png',
+        bg_preset: '7abc910f',
+      },
+      {
+        id: 'img-a', storage_path: 'u/p1/first.jpg', position: 0,
+        composite_storage_path: 'u/p1/first-bg.jpg', mask_status: 'auto',
+        mask_score: 0.96, mask_flags: [], cutout_storage_path: 'u/p1/first-cut.png',
+        bg_preset: '7abc910f',
+      },
+    ],
+  });
+
+  it('picks the row for the ITEM\'s own photo, not the group leader\'s first', () => {
+    expect(backgroundFromRow(withBg(), 'u/p1/second.jpg')).toEqual({
+      productImageId: 'img-b',
+      cutoutStoragePath: 'u/p1/second-cut.png',
+      compositeStoragePath: 'u/p1/second-bg.jpg',
+      bgPreset: '7abc910f',
+      maskStatus: 'review',
+      maskScore: 0.41,
+      maskFlags: ['edge'],
+    });
+  });
+
+  it('falls back to the first row by position when there is no path to match on', () => {
+    expect(backgroundFromRow(withBg()).productImageId).toBe('img-a');
+    expect(backgroundFromRow(withBg(), 'u/p1/nothing-like-this.jpg').productImageId).toBe('img-a');
+  });
+
+  it('is empty — not a row of nulls — when the columns are not in the select (pre-migration)', () => {
+    expect(backgroundFromRow(fullRow(), 'u/p1/first.jpg')).toEqual({
+      productImageId: undefined,
+      cutoutStoragePath: undefined,
+      compositeStoragePath: undefined,
+      bgPreset: undefined,
+      maskStatus: undefined,
+      maskScore: undefined,
+      maskFlags: undefined,
+    });
+  });
+
+  it('is {} for a row with no images at all', () => {
+    expect(backgroundFromRow({ id: 'p1' })).toEqual({});
+    expect(backgroundFromRow({ id: 'p1', product_images: [] })).toEqual({});
+  });
+});
+
+describe('background columns on both restore paths', () => {
+  const bgRow = (): ProductRowLite => ({
+    ...fullRow(),
+    product_images: [{
+      id: 'img-1', image_url: 'https://cdn.test/first.jpg', storage_path: 'u/p1/first.jpg',
+      position: 0, original_name: 'DSC1.jpg',
+      cutout_storage_path: 'u/p1/first-cut.png', composite_storage_path: 'u/p1/first-bg.jpg',
+      bg_preset: 'c7e0869c', mask_status: 'review', mask_score: 0.5, mask_flags: ['soft', 'edge'],
+    }],
+  });
+
+  it('the BUILDER carries them onto a DB-built item (its only source)', () => {
+    const item = productRowToClothingItem(bgRow(), htmlToPlain);
+    expect(item.productImageId).toBe('img-1');
+    expect(item.compositeStoragePath).toBe('u/p1/first-bg.jpg');
+    expect(item.cutoutStoragePath).toBe('u/p1/first-cut.png');
+    expect(item.bgPreset).toBe('c7e0869c');
+    expect(item.maskStatus).toBe('review');
+    expect(item.maskScore).toBe(0.5);
+    expect(item.maskFlags).toEqual(['soft', 'edge']);
+  });
+
+  it('the row WINS on both merge presets — these columns are service-owned', () => {
+    const stale = baseItem({ storagePath: 'u/p1/first.jpg', maskStatus: 'approved', maskScore: 0.1 });
+    for (const opts of [STARTUP_MERGE_OPTIONS, OPEN_BATCH_MERGE_OPTIONS]) {
+      const merged = mergeProductRowIntoItem(stale, bgRow(), htmlToPlain, opts);
+      expect(merged.maskStatus).toBe('review');
+      expect(merged.maskScore).toBe(0.5);
+      expect(merged.productImageId).toBe('img-1');
+    }
+  });
+
+  it('a row with the columns ABSENT keeps the item\'s persisted state — pre-migration, both presets', () => {
+    const restored = baseItem({
+      storagePath: 'u/p1/first.jpg',
+      productImageId: 'img-1',
+      compositeStoragePath: 'u/p1/first-bg.jpg',
+      maskStatus: 'approved',
+    });
+    for (const opts of [STARTUP_MERGE_OPTIONS, OPEN_BATCH_MERGE_OPTIONS]) {
+      const merged = mergeProductRowIntoItem(restored, fullRow(), htmlToPlain, opts);
+      expect(merged.maskStatus).toBe('approved');
+      expect(merged.compositeStoragePath).toBe('u/p1/first-bg.jpg');
+      expect(merged.productImageId).toBe('img-1');
+    }
+  });
+
+  it('a mask_score of 0 and an empty mask_flags survive — `??`, not `||`', () => {
+    const row: ProductRowLite = {
+      ...fullRow(),
+      product_images: [{
+        id: 'img-1', storage_path: 'u/p1/first.jpg', position: 0,
+        mask_status: 'auto', mask_score: 0, mask_flags: [],
+      }],
+    };
+    const merged = mergeProductRowIntoItem(
+      baseItem({ storagePath: 'u/p1/first.jpg', maskScore: 0.9, maskFlags: ['soft'] }),
+      row, htmlToPlain, OPEN_BATCH_MERGE_OPTIONS,
+    );
+    expect(merged.maskScore).toBe(0);
+    expect(merged.maskFlags).toEqual([]);
   });
 });

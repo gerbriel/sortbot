@@ -1733,3 +1733,159 @@
   /* The arrow between two stacked inputs is noise, not information. */
   .mkt-vocab-edit .mkt-arrow { display: none; }
 }
+
+/* ══ Photo backgrounds (Settings tab) ═══════════════════════════════════════
+   Preview LEFT, controls right — the preview is the control here, so it leads
+   the reading order rather than sitting as an afterthought at the end of a
+   form. Everything resolves through the tokens; the one literal is the
+   checkerboard, which stands in for "transparent" and is not a theme colour. */
+
+.bg-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.6rem;
+  align-items: flex-start;
+  margin-bottom: 0.6rem;
+}
+
+.bg-preview-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+}
+
+/* The canvas is drawn at 200 CSS px (× devicePixelRatio inside), so it is
+   pinned here rather than left to the flex line. The border is what keeps a
+   white backdrop from dissolving into a white card. */
+.bg-preview {
+  width: 200px;
+  height: 200px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: block;
+  /* A faint checkerboard behind the canvas: the composite is opaque, but while
+     the colour input is mid-edit the fill can be momentarily transparent, and a
+     blank white square would read as "the preview is broken". */
+  background-image:
+    linear-gradient(45deg, var(--ink-850) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--ink-850) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--ink-850) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--ink-850) 75%);
+  background-size: 14px 14px;
+  background-position: 0 0, 0 7px, 7px -7px, -7px 0;
+}
+
+.bg-preview-meta {
+  margin: 0;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  max-width: 200px;
+}
+
+.bg-preview-meta code {
+  font-size: var(--fs-2xs);
+  padding: 0.05rem 0.25rem;
+  border-radius: 4px;
+  background: var(--ink-850);
+  color: var(--text-secondary);
+}
+
+.bg-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  flex: 1 1 26rem;
+  min-width: 0;      /* a flex item defaults to min-width:auto and will not shrink */
+}
+
+.bg-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
+.bg-field--row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+}
+
+.bg-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
+.bg-label {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.bg-field input[type="range"] { width: 100%; max-width: 22rem; }
+
+.bg-inline select {
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: var(--fs-xs);
+  font-family: inherit;
+  background: var(--ink-800);
+  color: var(--text-primary);
+}
+
+.bg-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.bg-swatch {
+  width: 2.6rem;
+  height: 2.6rem;
+  min-width: 2.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* The tick has to read on white AND on near-black, so it is drawn with a
+     mix-blend rather than a fixed colour. */
+  color: var(--text-primary);
+  mix-blend-mode: normal;
+}
+
+.bg-swatch .lucide { mix-blend-mode: difference; color: #808080; }
+
+.bg-swatch--on {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.bg-hex {
+  width: 7.5rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: var(--fs-xs);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-transform: uppercase;
+}
+
+.bg-note { margin: 0; }
+
+/* Phones: the preview and its controls stack, and every target clears the
+   44px floor (§1). The preview keeps its 200px — shrinking it defeats it. */
+@media (max-width: 640px) {
+  .bg-settings { gap: 1rem; }
+  .bg-controls { flex-basis: 100%; }
+  .bg-swatch { width: 44px; height: 44px; min-width: 44px; }
+  .bg-hex { min-height: 44px; font-size: var(--fs-md); }
+  .bg-inline select { min-height: 44px; font-size: var(--fs-md); }
+}

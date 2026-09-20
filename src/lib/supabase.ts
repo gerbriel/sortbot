@@ -93,6 +93,21 @@ export interface Database {
           alt_text: string | null;
           original_name: string | null;
           created_at: string;
+          /* ── Photo backgrounds (image_backgrounds.sql — NOT YET RUN) ───────
+             Written by the self-hosted matting service; the app writes only
+             `mask_status`, and only when a person decided (AGENTS.md §9).
+             Optional here because the migration ships after this code and
+             naming an absent column fails the whole statement. */
+          cutout_storage_path?: string | null;
+          composite_storage_path?: string | null;
+          /** 8-hex hash of the BackgroundPreset the composite was built with. */
+          bg_preset?: string | null;
+          /** queued | auto | review | approved | original | failed; null = never processed. */
+          mask_status?: string | null;
+          mask_score?: number | null;
+          mask_flags?: string[] | null;
+          mask_model?: string | null;
+          matted_at?: string | null;
         };
         Insert: Omit<Database['public']['Tables']['product_images']['Row'], 'id' | 'created_at'>;
         Update: Partial<Database['public']['Tables']['product_images']['Insert']>;

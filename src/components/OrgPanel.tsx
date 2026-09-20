@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Users, X, Pencil, Check, Copy, LogOut, Trash2, ChevronRight, ChevronDown, ShoppingBag, Tags, ArrowUp, ArrowDown, Plus, Store, Globe, ShieldCheck } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Users, X, Pencil, Check, Copy, LogOut, Trash2, ChevronRight, ChevronDown, ShoppingBag, Tags, ArrowUp, ArrowDown, Plus, Store, Globe, ShieldCheck, Image as ImageIcon } from 'lucide-react';
 import {
   fetchOrgMembers, fetchOrgInvites, inviteToOrg, revokeInvite, removeMember,
   renameOrganization, updateMemberRole, fetchMemberActivity,
@@ -16,7 +16,11 @@ import {
 } from '../lib/shopifyConnectionService';
 import {
   getOrgDescriptionSettings, saveOrgDescriptionSettings,
-  DEFAULT_DESCRIPTION_SETTINGS, type DescriptionSettings,
+  DEFAULT_DESCRIPTION_SETTINGS, DEFAULT_BACKGROUND_PRESET,
+  BACKGROUND_COLORS, BACKGROUND_PADDING_MAX,
+  BACKGROUND_QUALITY_MIN, BACKGROUND_QUALITY_MAX,
+  normalizeBackgroundColor, presetHash,
+  type DescriptionSettings, type BackgroundPreset, type BackgroundAnchor,
 } from '../lib/descriptionSettings';
 import {
   PLATFORM_PRESETS, ADJUSTMENT_TYPES, ROUNDING_MODES, MAX_PERCENT, MAX_FIXED,
@@ -35,6 +39,84 @@ import {
   type MarketplaceKey, type VocabKind,
 } from '../lib/marketplaces/types';
 import './OrgPanel.css';
+
+/* ── Photo-background preview ───────────────────────────────────────────────
+ *
+ * THE SAME FIT MATH THE SERVICE USES, drawn at 200px over a placeholder
+ * garment. A preset is six numbers and nobody reasons about "0.12 padding,
+ * anchored top" in the abstract — the preview is the control. It is a stand-in
+ * shape rather than a real photo on purpose: the Settings tab has no batch open
+ * and no photo to borrow, and a placeholder that obeys the same arithmetic
+ * answers the only question being asked (how much margin, where does it sit).
+ *
+ * If the geometry here and the service's ever disagree, THIS is wrong — the
+ * composite is what ships. Keep the three steps in this order: fill the canvas,
+ * compute the inner box from the padding fraction, fit the subject into it
+ * preserving its aspect, then anchor it.
+ */
+const BG_PREVIEW_PX = 200;
+/** A hanging garment is taller than it is wide; 3:4 is the common camera-roll shape. */
+const BG_SUBJECT_ASPECT = 3 / 4;
+
+function drawBackgroundPreview(canvas: HTMLCanvasElement, preset: BackgroundPreset): void {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = BG_PREVIEW_PX * dpr;
+  canvas.height = BG_PREVIEW_PX * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, BG_PREVIEW_PX, BG_PREVIEW_PX);
+
+  // 1. the backdrop
+  ctx.fillStyle = normalizeBackgroundColor(preset.color);
+  ctx.fillRect(0, 0, BG_PREVIEW_PX, BG_PREVIEW_PX);
+
+  // 2. the inner box the subject must fit inside
+  const pad = BG_PREVIEW_PX * Math.max(0, Math.min(BACKGROUND_PADDING_MAX, preset.padding));
+  const innerW = BG_PREVIEW_PX - pad * 2;
+  const innerH = BG_PREVIEW_PX - pad * 2;
+  if (innerW <= 0 || innerH <= 0) return;
+
+  // 3. fit preserving aspect, then anchor
+  let w = innerW;
+  let h = w / BG_SUBJECT_ASPECT;
+  if (h > innerH) { h = innerH; w = h * BG_SUBJECT_ASPECT; }
+  const x = pad + (innerW - w) / 2;
+  const y = preset.anchor === 'top' ? pad : pad + (innerH - h) / 2;
+
+  if (preset.shadow) {
+    ctx.save();
+    ctx.filter = 'blur(4px)';
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2, y + h + 3, w * 0.38, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // The placeholder subject: a rounded rect with a neck notch, enough to read
+  // as a garment without pretending to be a photo.
+  const r = Math.min(w, h) * 0.12;
+  ctx.fillStyle = 'rgba(0,0,0,0.30)';
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  ctx.fill();
+  // neck notch, cut out of the shape so the backdrop shows through
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath();
+  ctx.ellipse(x + w / 2, y, w * 0.16, h * 0.06, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+}
 
 interface OrgPanelProps {
   org: Organization;
@@ -123,6 +205,12 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   // is loaded and saved with the block above — one write, never two that can
   // half-apply.
   const [descPlatforms, setDescPlatforms] = useState<PlatformPricingRule[]>([]);
+  /* ── Photo backgrounds (description_settings.background) ──────────────────
+     One recipe per workspace, edited here and applied by the matting service
+     to photos processed FROM NOW ON. */
+  const [descBackground, setDescBackground] = useState<BackgroundPreset>({ ...DEFAULT_BACKGROUND_PRESET });
+  const [bgHash, setBgHash] = useState('');
+  const bgCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // ── Marketplaces (marketplaces.sql) ───────────────────────────────────────
   // Which marketplaces this workspace sells on, and what each one calls a
@@ -158,10 +246,29 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
       setDescProseEnabled(s.proseEnabled);
       setDescProseStyle(s.proseStyle);
       setDescPlatforms(s.platformPricing);
+      setDescBackground(s.background);
       setDescLoaded(true);
     });
     return () => { cancelled = true; };
   }, [org.id]);
+
+  /* Redraw on every change. The canvas is only mounted on the Settings tab, so
+     the ref is null elsewhere and the effect is a no-op. */
+  useEffect(() => {
+    const canvas = bgCanvasRef.current;
+    if (canvas) drawBackgroundPreview(canvas, descBackground);
+  }, [descBackground, panelTab, descLoaded]);
+
+  /* The preset hash, shown as meta. Async (crypto.subtle), so it is state; the
+     cancel flag stops a slow digest from overwriting a newer one. */
+  useEffect(() => {
+    let cancelled = false;
+    presetHash(descBackground).then(h => { if (!cancelled) setBgHash(h); });
+    return () => { cancelled = true; };
+  }, [descBackground]);
+
+  const patchBackground = (patch: Partial<BackgroundPreset>) =>
+    setDescBackground(prev => ({ ...prev, ...patch }));
 
   const handleSaveDescSettings = async () => {
     if (busy) return;
@@ -176,6 +283,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
       proseEnabled: descProseEnabled,
       proseStyle: descProseStyle.trim(),
       platformPricing: descPlatforms,
+      background: descBackground,
       disclaimerLines: descDisclaimers.split('\n').map(l => l.trim()).filter(Boolean),
     };
     const res = await saveOrgDescriptionSettings(org.id, settings);
@@ -197,9 +305,10 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
     setDescVendor(DEFAULT_DESCRIPTION_SETTINGS.vendorName);
     setDescProseEnabled(DEFAULT_DESCRIPTION_SETTINGS.proseEnabled);
     setDescProseStyle(DEFAULT_DESCRIPTION_SETTINGS.proseStyle);
-    // descPlatforms is deliberately NOT reset: "reset the description format"
-    // must not silently delete the workspace's marketplace pricing, which is
-    // a different subject that happens to share a JSONB column.
+    // descPlatforms and descBackground are deliberately NOT reset: "reset the
+    // description format" must not silently delete the workspace's marketplace
+    // pricing or its photo-background recipe — two different subjects that
+    // happen to share a JSONB column.
     setNotice('Reset to the default format — click Save format to apply it.');
   };
 
@@ -1002,6 +1111,149 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
             <div className="desc-settings-actions">
               <button className="org-invite-btn" disabled={busy} onClick={handleSaveDescSettings}>
                 Save marketplaces
+              </button>
+            </div>
+
+            {/* ── Photo backgrounds ─────────────────────────────────────────
+                One recipe for the whole workspace. The matting service cuts the
+                garment out and pastes it onto this flat colour at this size;
+                nothing here is generative. Changing it does NOT touch photos
+                already processed — a composite keeps the preset hash it was
+                built with, which is how Step 2 can offer to re-run rather than
+                silently reprocessing a batch behind the seller's back. */}
+            <h3 className="org-section-title"><ImageIcon size={15} aria-hidden="true" /> Photo backgrounds</h3>
+            <p className="shopify-conn-help">
+              Cut each garment out of its photo and put it on a plain backdrop, the same
+              way every time. Changing this only affects photos processed from now on —
+              re-run a batch from Step 2 to apply it to older photos.
+            </p>
+
+            <div className="bg-settings">
+              <div className="bg-preview-col">
+                <canvas
+                  ref={bgCanvasRef}
+                  className="bg-preview"
+                  width={BG_PREVIEW_PX}
+                  height={BG_PREVIEW_PX}
+                  role="img"
+                  aria-label={`Preview: ${descBackground.canvas}px square, ${normalizeBackgroundColor(descBackground.color)} backdrop, ${Math.round(descBackground.padding * 100)}% margin, ${descBackground.anchor === 'top' ? 'hanging from the top' : 'centered'}${descBackground.shadow ? ', with a shadow' : ''}`}
+                />
+                <p className="bg-preview-meta">
+                  {descBackground.canvas} × {descBackground.canvas} px · JPEG {descBackground.quality}
+                  {bgHash && <> · preset <code>{bgHash}</code></>}
+                </p>
+              </div>
+
+              <div className="bg-controls">
+                <div className="bg-field">
+                  <span className="bg-label">Backdrop</span>
+                  <div className="bg-swatches">
+                    {BACKGROUND_COLORS.map(c => {
+                      const on = normalizeBackgroundColor(descBackground.color) === c.hex;
+                      return (
+                        <button
+                          key={c.hex}
+                          type="button"
+                          className={`bg-swatch${on ? ' bg-swatch--on' : ''}`}
+                          style={{ background: c.hex }}
+                          aria-pressed={on}
+                          title={`${c.label} (${c.hex})`}
+                          onClick={() => patchBackground({ color: c.hex })}
+                        >
+                          <span className="ui-sr-only">{c.label}</span>
+                          {on && <Check size={13} aria-hidden="true" />}
+                        </button>
+                      );
+                    })}
+                    <input
+                      className="bg-hex"
+                      value={descBackground.color}
+                      maxLength={7}
+                      spellCheck={false}
+                      aria-label="Backdrop colour, as a hex value"
+                      onChange={(e) => patchBackground({ color: e.target.value })}
+                      onBlur={(e) => patchBackground({ color: normalizeBackgroundColor(e.target.value) })}
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-field">
+                  <span className="bg-label">Margin — {Math.round(descBackground.padding * 100)}%</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={Math.round(BACKGROUND_PADDING_MAX * 100)}
+                    step={1}
+                    value={Math.round(descBackground.padding * 100)}
+                    aria-label="Margin around the garment, as a percentage of the canvas"
+                    onChange={(e) => patchBackground({ padding: Number(e.target.value) / 100 })}
+                  />
+                </div>
+
+                <div className="bg-field bg-field--row">
+                  <label className="bg-inline">
+                    <span className="bg-label">Position</span>
+                    <select
+                      value={descBackground.anchor}
+                      onChange={(e) => patchBackground({ anchor: e.target.value as BackgroundAnchor })}
+                    >
+                      <option value="center">Centered</option>
+                      <option value="top">Hanging from top</option>
+                    </select>
+                  </label>
+
+                  <label className="bg-inline">
+                    <span className="bg-label">Canvas</span>
+                    <select
+                      value={String(descBackground.canvas)}
+                      onChange={(e) => patchBackground({ canvas: Number(e.target.value) })}
+                    >
+                      <option value="1024">1024 px</option>
+                      <option value="1536">1536 px</option>
+                      <option value="2048">2048 px (recommended)</option>
+                      <option value="2560">2560 px</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="bg-field">
+                  <span className="bg-label">Quality — {descBackground.quality}</span>
+                  <input
+                    type="range"
+                    min={BACKGROUND_QUALITY_MIN}
+                    max={BACKGROUND_QUALITY_MAX}
+                    step={1}
+                    value={descBackground.quality}
+                    aria-label="JPEG quality of the composite"
+                    onChange={(e) => patchBackground({ quality: Number(e.target.value) })}
+                  />
+                </div>
+
+                <label className="plat-check">
+                  <input
+                    type="checkbox"
+                    checked={descBackground.shadow}
+                    onChange={(e) => patchBackground({ shadow: e.target.checked })}
+                  />
+                  Add a soft shadow under the garment
+                </label>
+                <p className="shopify-conn-help bg-note">
+                  Several marketplaces reject anything but a plain, even backdrop — leave the
+                  shadow off unless you know yours allows one.
+                </p>
+              </div>
+            </div>
+
+            <div className="desc-settings-actions">
+              <button className="org-invite-btn" disabled={busy} onClick={handleSaveDescSettings}>
+                Save backgrounds
+              </button>
+              <button
+                className="org-confirm-no"
+                disabled={busy}
+                onClick={() => setDescBackground({ ...DEFAULT_BACKGROUND_PRESET })}
+              >
+                Reset to white
               </button>
             </div>
           </>

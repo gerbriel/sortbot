@@ -229,6 +229,30 @@ jobs:
 
           exit $fail
 
+  matting:
+    name: Matting service (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          # services/matting/pyproject.toml declares requires-python >= 3.12.
+          python-version: '3.12'
+
+      - name: Install the service
+        run: pip install -e 'services/matting[test]'
+
+      - name: Unit tests
+        # No network: the Replicate backend and the auth boundary are both
+        # driven through httpx.MockTransport. A test that could reach Replicate
+        # would spend money on every CI run; one that could reach Supabase could
+        # write to the real product_images table.
+        run: python -m pytest -q services/matting
+
   edge-functions:
     name: Edge Function typecheck (Deno)
     runs-on: ubuntu-latest

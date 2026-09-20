@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, memo } from 'react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
-import { Package, Image, ArrowUpDown, Check, RotateCcw, CornerUpLeft, CornerUpRight, X, Camera, Circle, CircleDot, Crosshair, ClipboardPaste, Trash2, Scissors, Columns3, Layers, ChevronsDownUp, Filter, SlidersHorizontal, Link2, Tag } from 'lucide-react';
+import { Package, Image, ArrowUpDown, Check, RotateCcw, CornerUpLeft, CornerUpRight, X, Camera, Circle, CircleDot, Crosshair, ClipboardPaste, Trash2, Scissors, Columns3, Layers, ChevronsDownUp, Filter, SlidersHorizontal, Link2, Tag, Wand2, AlertTriangle, Ban, Loader, RefreshCw } from 'lucide-react';
 import {
   PHONE_BREAKPOINT_PX,
   clampGridColumns,
@@ -15,7 +15,19 @@ import './ImageGrouper.css';
 import { createTransformQueue } from '../lib/imageTransforms';
 import { isRepeatToggle as isRepeatToggleAt, isSelectionModeActive } from '../lib/selectionGesture';
 import { stackLayers, stackReserve, stackOverflowBadge } from '../lib/stackLayout';
+import {
+  backgroundsAvailable, maskFlagLabel, pollBackgroundJob,
+  rerunImage, resolveCatalogPath, setMaskStatus, setMaskStatusMany,
+  submitBackgroundJob, summarizeMaskStatuses,
+} from '../lib/backgroundService';
+import { DEFAULT_BACKGROUND_PRESET, presetHash, type BackgroundPreset } from '../lib/descriptionSettings';
+import { ConfirmAction } from './ui';
 import './ProductDescriptionGenerator.css'; // crop-fs-* styles shared with PDG
+
+/** How often a running background job is polled. 4 s: a mask takes seconds per
+ *  photo, so anything tighter is a request per frame of a progress bar nobody
+ *  is watching closely, and anything looser makes a four-photo re-run feel stuck. */
+const BG_POLL_MS = 4000;
 
 /** Retry a failed image load up to 3 times with exponential backoff + cache-bust.
  *  Stores attempt count on the element itself via data-retry so no React state is needed.
@@ -125,9 +137,19 @@ interface ImageGrouperProps {
   onImageDeleted?: () => void; // called after any delete syncs to DB, so Library can refresh
   onSelectionChange?: (selectedIds: Set<string>) => void; // lift selection state so parent can pass to CategoryZones
   onActionsReady?: (actions: GrouperActions) => void; // lift action callbacks so parent can render buttons elsewhere
+  /* ── Photo backgrounds ────────────────────────────────────────────────────
+     The workspace's recipe (description_settings.background) and the caller's
+     role. Both come from App as STABLE props — an inline object literal here
+     would defeat this component's memo (§18 #24). */
+  backgroundPreset?: BackgroundPreset;
+  orgRole?: string;
+  /** Ask App to re-read product_images and re-join the mask columns onto the
+   *  items. App owns that join because Step 4's export gate reads it too; this
+   *  component never writes the store. */
+  onBackgroundsChanged?: () => void;
 }
 
-const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsChange, userId, batchId, onImageDeleted, onSelectionChange, onActionsReady }) => {
+const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsChange, userId, batchId, onImageDeleted, onSelectionChange, onActionsReady, backgroundPreset, orgRole, onBackgroundsChanged }) => {
   const [groupedItems, setGroupedItems] = useState<ClothingItem[]>([]);
   // Ref mirror so the initializeItems effect always reads the live groupedItems value
   // without capturing a stale closure (the effect only depends on [items]).
@@ -278,8 +300,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // date:     '' = all dates | YYYY-MM-DD = specific day
   // view:     'all' | 'groups' | 'singles'
   // category: '' = all | 'uncategorized' | any category string
-  interface Filters { date: string; view: 'all' | 'groups' | 'singles'; category: string; }
-  const [filters, setFilters] = useState<Filters>({ date: '', view: 'all', category: '' });
+  interface Filters {
+    date: string;
+    view: 'all' | 'groups' | 'singles';
+    category: string;
+    /** '' = all · 'review' = needs a background review · 'processed' = has a
+     *  composite we would export · 'unprocessed' = never matted, or it failed. */
+    background: '' | 'review' | 'processed' | 'unprocessed';
+  }
+  const [filters, setFilters] = useState<Filters>({ date: '', view: 'all', category: '', background: '' });
   const setFilter = <K extends keyof Filters>(key: K, val: Filters[K]) =>
     setFilters(prev => ({ ...prev, [key]: val }));
 
@@ -288,9 +317,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // controls (four sort buttons, the two view toggles, the date select, one
   // chip per category, the columns slider, the clear-originals action), so the
   // idle toolbar is a single line.
-  const [openPanel, setOpenPanel] = useState<'filter' | 'view' | null>(null);
+  const [openPanel, setOpenPanel] = useState<'filter' | 'view' | 'bg' | null>(null);
   const filterTriggerRef = useRef<HTMLButtonElement | null>(null);
   const viewTriggerRef   = useRef<HTMLButtonElement | null>(null);
+  const bgTriggerRef     = useRef<HTMLButtonElement | null>(null);
 
   // Auto-group state — number of photos per product
   const [autoGroupN, setAutoGroupN] = useState<string>('4');
@@ -429,6 +459,44 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const getItemUrl = (item: ClothingItem) =>
     publicImageUrl(item.storagePath) || item.imageUrls?.[0] || item.preview || '';
 
+  /**
+   * What a CARD shows: the composite once the background is settled in its
+   * favour, the original otherwise. `resolveCatalogPath` is the one place that
+   * rule lives (§18), so the grid, the CSV and every marketplace feed cannot
+   * disagree about which file a photo is.
+   *
+   * Note the composite is a DIFFERENT storage path, never an overwrite, so the
+   * §18 #35 cache-invalidation problem does not arise here.
+   */
+  const cardImageUrl = (item: ClothingItem): string | undefined => {
+    const catalog = resolveCatalogPath(item);
+    if (catalog && catalog !== item.storagePath) return publicImageUrl(catalog);
+    return item.thumbnailUrl || item.preview || item.imageUrls?.[0];
+  };
+
+  /** The composite's URL, or '' — the lightbox's "After". */
+  const compositeUrl = (item: ClothingItem): string =>
+    item.compositeStoragePath ? publicImageUrl(item.compositeStoragePath) : '';
+
+  /**
+   * The corner mark on a card. ONLY the three states that want attention —
+   * `auto` and `approved` are the quiet majority and a badge on every one of
+   * 400 cards is a badge on none of them.
+   */
+  const backgroundBadge = (item: ClothingItem) => {
+    if (!bgAvailable) return null;
+    if (item.maskStatus === 'review') {
+      return <span className="bg-badge bg-badge--review" title="The cut-out needs a look — double-click to review"><AlertTriangle size={11} /></span>;
+    }
+    if (item.maskStatus === 'failed') {
+      return <span className="bg-badge bg-badge--failed" title="The background could not be removed — this photo exports untouched"><Ban size={11} /></span>;
+    }
+    if (item.maskStatus === 'queued') {
+      return <span className="bg-badge bg-badge--queued" title="Processing…"><Loader size={11} className="bgp-spin" /></span>;
+    }
+    return null;
+  };
+
   /** Open lightbox by item ID — builds a pool of item IDs for navigation. */
   /**
    * Double-click entry point for the lightbox (report 30).
@@ -460,9 +528,19 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     const isGrouped = live.productGroup && live.productGroup !== live.id
       && groupedItemsRef.current.filter(i => i.productGroup === live.productGroup).length > 1;
 
-    const poolItems = isGrouped
-      ? groupedItemsRef.current.filter(i => i.productGroup === live.productGroup)
-      : singleItemsRef.current;
+    /* While the "Needs review" filter is on, Left/Right walk the REVIEW pool —
+       every flagged photo in the batch, groups included. That is the whole
+       point of the filter: settle the four photos that need a decision without
+       paging through the four hundred that do not. */
+    const reviewPool = filters.background === 'review'
+      ? groupedItemsRef.current.filter(i => i.maskStatus === 'review')
+      : null;
+
+    const poolItems = reviewPool && reviewPool.some(i => i.id === live.id)
+      ? reviewPool
+      : isGrouped
+        ? groupedItemsRef.current.filter(i => i.productGroup === live.productGroup)
+        : singleItemsRef.current;
 
     const pool = poolItems.map(i => i.id);
     const src = getItemUrl(live);
@@ -473,6 +551,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       setLightboxIndex(idx >= 0 ? idx : 0);
       setLightboxItemId(live.id);
       setLightboxSrc(src);
+      setLightboxBefore(false);   // After is the default — see the state comment
     } else console.warn('[ImageGrouper] openLightboxForItem: no URL found for item', itemId);
   };
 
@@ -482,7 +561,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       const nextId = lightboxPool[ni];
       const nextItem = groupedItemsRef.current.find(i => i.id === nextId)
         ?? singleItemsRef.current.find(i => i.id === nextId);
-      if (nextItem) { setLightboxItemId(nextId); setLightboxSrc(getItemUrl(nextItem)); }
+      if (nextItem) { setLightboxItemId(nextId); setLightboxSrc(getItemUrl(nextItem)); setLightboxBefore(false); }
       return ni;
     });
   };
@@ -1780,7 +1859,9 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     };
     const closeOnKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      const trigger = openPanel === 'filter' ? filterTriggerRef.current : viewTriggerRef.current;
+      const trigger = openPanel === 'filter' ? filterTriggerRef.current
+        : openPanel === 'bg' ? bgTriggerRef.current
+        : viewTriggerRef.current;
       setOpenPanel(null);
       trigger?.focus();
     };
@@ -2410,6 +2491,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     if (filters.date && !(item.capturedAt && localDateKey(item.capturedAt) === filters.date)) return false;
     if (filters.category === 'uncategorized' && item.category) return false;
     if (filters.category && filters.category !== 'uncategorized' && item.category !== filters.category) return false;
+    if (filters.background) {
+      const status = item.maskStatus;
+      // 'processed' means "a composite is what we would export", which is the
+      // resolveCatalogPath rule and NOT "the service has touched it" — a photo
+      // whose original the seller chose to keep is deliberately not in here.
+      if (filters.background === 'review'      && status !== 'review') return false;
+      if (filters.background === 'processed'   && !(status === 'auto' || status === 'approved')) return false;
+      if (filters.background === 'unprocessed' && !(!status || status === 'failed')) return false;
+    }
     return true;
   };
 
@@ -2419,8 +2509,178 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [singleItems, multiItemGroups, filters]);
 
-  const activeFilterCount = [filters.date, filters.view !== 'all' ? filters.view : '', filters.category]
+  const activeFilterCount = [filters.date, filters.view !== 'all' ? filters.view : '', filters.category, filters.background]
     .filter(Boolean).length;
+
+  /* ══ Photo backgrounds ══════════════════════════════════════════════════════
+   *
+   * Step 2 is where a seller looks at every photo, so it is where the review
+   * belongs — but the point of the feature is NOT reviewing every photo. The
+   * service scores its own masks; `auto` passes silently and only `review` and
+   * `failed` ever ask for attention. A 400-photo batch with four flags should
+   * cost four decisions, which is why the badges are on the flagged cards only
+   * and the filter has a one-tap "Needs review (N)".
+   *
+   * DATA OWNERSHIP: this component reads the mask columns off the ITEMS (App
+   * joins them on after hydration, because Step 4's export gate reads the same
+   * values) and never writes the store. Its writes go to `product_images` and
+   * it then asks App to re-read, through `onBackgroundsChanged`.
+   */
+  const [bgAvailable, setBgAvailable] = useState<boolean | null>(null);
+  const [bgJob, setBgJob] = useState<{ id: string; done: number; total: number } | null>(null);
+  const [bgBusy, setBgBusy] = useState<string | null>(null);
+  const [bgNotice, setBgNotice] = useState<string | null>(null);
+  /** Lightbox Before/After. AFTER is the default — the composite is what the
+   *  reviewer is being asked about; Before is the reference, not the subject. */
+  const [lightboxBefore, setLightboxBefore] = useState(false);
+  const bgPollRef = useRef<number | null>(null);
+  const bgPreset = backgroundPreset ?? DEFAULT_BACKGROUND_PRESET;
+  /** The current preset's 8-hex hash. Async (crypto.subtle), so it is state;
+   *  '' until it resolves, which simply means "no photo looks stale yet" — the
+   *  safe failure, since nothing is re-run behind the user's back. */
+  const [bgPresetHash, setBgPresetHash] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    presetHash(bgPreset).then(h => { if (!cancelled) setBgPresetHash(h); });
+    return () => { cancelled = true; };
+  }, [bgPreset]);
+
+  useEffect(() => {
+    let cancelled = false;
+    backgroundsAvailable().then(ok => { if (!cancelled) setBgAvailable(ok); });
+    return () => { cancelled = true; };
+  }, []);
+
+  /* Stop the poll on unmount. It re-queues itself, so without this a batch
+     switch (which remounts via the `key` prop) leaves a timer talking to a
+     detached component for the tab's lifetime — the same failure the
+     auto-scroll rAF cleanup above exists for. */
+  useEffect(() => () => {
+    if (bgPollRef.current !== null) { clearTimeout(bgPollRef.current); bgPollRef.current = null; }
+  }, []);
+
+  const bgSummary = useMemo(() => summarizeMaskStatuses(groupedItems), [groupedItems]);
+
+  /** The photos a "Process" press would act on: the SELECTION when there is
+   *  one, the whole batch otherwise — and only ever the ones that have a
+   *  product_images row to name (a just-uploaded photo has none until
+   *  registerItemsInDB has run). */
+  const bgProcessTargets = useMemo(() => {
+    const pool = selectedItems.size > 0
+      ? groupedItems.filter(i => selectedItems.has(i.id))
+      : groupedItems;
+    return pool.filter(i => i.productImageId && (!i.maskStatus || i.maskStatus === 'failed'));
+  }, [groupedItems, selectedItems]);
+
+  /**
+   * Photos built with a DIFFERENT background recipe than the workspace's
+   * current one — what "re-run a batch from Step 2 to apply it to older photos"
+   * in the Settings copy refers to.
+   *
+   * `original` is excluded on purpose: the person said "do not use a cut-out on
+   * this photo", and a new backdrop colour is not a reason to ask them again.
+   */
+  const bgStale = useMemo(() => {
+    if (!bgPresetHash) return [];
+    return groupedItems.filter(i =>
+      i.productImageId && i.bgPreset && i.bgPreset !== bgPresetHash && i.maskStatus !== 'original');
+  }, [groupedItems, bgPresetHash]);
+
+  /** Everything currently flagged for a human. Used by the two bulk verdicts. */
+  const bgFlagged = useMemo(
+    () => groupedItems.filter(i => i.maskStatus === 'review' && i.productImageId),
+    [groupedItems],
+  );
+
+  const pollBgJob = useCallback((jobId: string) => {
+    const tick = async () => {
+      const res = await pollBackgroundJob(jobId);
+      if (!res.ok) {
+        setBgJob(null);
+        setBgNotice(res.error);
+        return;
+      }
+      const p = res.value;
+      setBgJob({ id: jobId, done: p.done, total: p.total });
+      if (p.status === 'done') {
+        setBgJob(null);
+        setBgNotice(
+          `Backgrounds done — ${p.auto} ready, ${p.review} need a look` +
+          (p.failed ? `, ${p.failed} could not be processed` : '') + '.',
+        );
+        onBackgroundsChanged?.();
+        return;
+      }
+      // Refresh the rows as it goes, so the badges appear while it runs.
+      onBackgroundsChanged?.();
+      bgPollRef.current = window.setTimeout(tick, BG_POLL_MS);
+    };
+    bgPollRef.current = window.setTimeout(tick, BG_POLL_MS);
+  }, [onBackgroundsChanged]);
+
+  /** `force` is only ever true for the re-apply: a fresh pass must not redo
+   *  work the service would correctly skip. */
+  const runBackgroundJob = async (targets: ClothingItem[], force: boolean, busyKey: string) => {
+    if (targets.length === 0 || bgJob) return;
+    setBgBusy(busyKey);
+    setBgNotice(null);
+    const res = await submitBackgroundJob(targets.map(i => i.productImageId!), bgPreset, force);
+    setBgBusy(null);
+    if (!res.ok) { setBgNotice(res.error); return; }
+    /* `accepted: 0` with an empty jobId is a SUCCESS meaning "already up to
+       date" (the service contract says so in words). Polling an empty id would
+       404 and report a failure for work that did not need doing. */
+    if (res.value.accepted === 0) {
+      setBgNotice(res.value.skipped > 0
+        ? `Already done — ${res.value.skipped} photo${res.value.skipped === 1 ? '' : 's'} already use this background.`
+        : 'Nothing to process.');
+      return;
+    }
+    setBgJob({ id: res.value.jobId, done: 0, total: res.value.accepted });
+    onBackgroundsChanged?.();
+    pollBgJob(res.value.jobId);
+  };
+
+  const handleProcessBackgrounds = () => runBackgroundJob(bgProcessTargets, false, 'process');
+  const handleReapplyBackgrounds = () => runBackgroundJob(bgStale, true, 'reapply');
+
+  /** One verdict across everything flagged. `approved` keeps the cut-out,
+   *  `original` keeps the untouched photo — both are settled answers, so either
+   *  one un-blocks the export. */
+  const handleBulkVerdict = async (status: 'approved' | 'original') => {
+    if (bgFlagged.length === 0) return;
+    setBgBusy(status);
+    setBgNotice(null);
+    const { failed } = await setMaskStatusMany(bgFlagged.map(i => i.productImageId!), status);
+    setBgBusy(null);
+    setBgNotice(failed === 0
+      ? `${bgFlagged.length} photo${bgFlagged.length === 1 ? '' : 's'} ${status === 'approved' ? 'approved' : 'left as the original'}.`
+      : `${failed} photo${failed === 1 ? '' : 's'} could not be saved.`);
+    onBackgroundsChanged?.();
+  };
+
+  /** One photo's verdict, from the lightbox. Optimistic only in the sense that
+   *  the notice appears at once — the value itself is re-read from the row. */
+  const handleItemVerdict = async (item: ClothingItem, status: 'approved' | 'original' | 'review') => {
+    if (!item.productImageId) return;
+    setBgBusy(`item:${item.id}`);
+    const res = await setMaskStatus(item.productImageId, status);
+    setBgBusy(null);
+    setBgNotice(res.ok ? null : res.error);
+    onBackgroundsChanged?.();
+  };
+
+  const handleRerun = async (item: ClothingItem) => {
+    if (!item.productImageId) return;
+    setBgBusy(`item:${item.id}`);
+    const res = await rerunImage(item.productImageId, bgPreset, 2048);
+    setBgBusy(null);
+    if (!res.ok) { setBgNotice(res.error); return; }
+    setBgNotice('Re-running at 2K…');
+    setBgJob({ id: res.value.jobId, done: 0, total: 1 });
+    pollBgJob(res.value.jobId);
+  };
 
   // Keep a ref so event-handler closures always see the current singleItems list
   const singleItemsRef = useRef<ClothingItem[]>(singleItems);
@@ -2691,12 +2951,44 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 </div>
               )}
 
+              {bgAvailable && (
+                <div className="gtb-panel-section">
+                  <span className="gtb-label">Background</span>
+                  <div className="gtb-panel-chips">
+                    <button
+                      type="button"
+                      className={`sort-btn${filters.background === 'review' ? ' active' : ''}`}
+                      onClick={() => setFilter('background', filters.background === 'review' ? '' : 'review')}
+                      title="Show only photos whose cut-out needs a look"
+                    >
+                      Needs review{bgSummary.review > 0 ? ` (${bgSummary.review})` : ''}
+                    </button>
+                    <button
+                      type="button"
+                      className={`sort-btn${filters.background === 'processed' ? ' active' : ''}`}
+                      onClick={() => setFilter('background', filters.background === 'processed' ? '' : 'processed')}
+                      title="Show only photos that would export with a new background"
+                    >
+                      Processed
+                    </button>
+                    <button
+                      type="button"
+                      className={`sort-btn${filters.background === 'unprocessed' ? ' active' : ''}`}
+                      onClick={() => setFilter('background', filters.background === 'unprocessed' ? '' : 'unprocessed')}
+                      title="Show only photos that have never been processed, or that failed"
+                    >
+                      Not processed
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {activeFilterCount > 0 && (
                 <div className="gtb-panel-foot">
                   <button
                     type="button"
                     className="sort-btn filter-clear-btn"
-                    onClick={() => setFilters({ date: '', view: 'all', category: '' })}
+                    onClick={() => setFilters({ date: '', view: 'all', category: '', background: '' })}
                     title="Clear all filters"
                   >
                     <X size={11} /> Clear filters
@@ -2790,6 +3082,140 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             </div>
           )}
         </div>
+
+        {/* ── Backgrounds ▾ — process, watch, and settle the flagged ones ──
+              Same popover mechanism as Filter/View and, like them, NOT portaled:
+              `.grouper-toolbar` is on the click-outside-deselect safe list, so a
+              portal here would wipe the selection on every click inside the
+              panel. Rendered only when the service AND the columns are both
+              there — a control that cannot work is worse than no control. */}
+        {bgAvailable && (
+        <div className="gtb-panel-wrap">
+          <button
+            type="button"
+            ref={bgTriggerRef}
+            className={`sort-btn gtb-trigger${openPanel === 'bg' ? ' active' : ''}${bgSummary.review > 0 ? ' gtb-trigger--flag' : ''}`}
+            aria-haspopup="true"
+            aria-expanded={openPanel === 'bg'}
+            aria-controls="gtb-panel-bg"
+            onClick={() => setOpenPanel(p => (p === 'bg' ? null : 'bg'))}
+            title="Remove and replace photo backgrounds"
+          >
+            <Wand2 size={13} /> Backgrounds
+            {bgJob
+              ? <span className="gtb-count gtb-count--busy">{bgJob.done}/{bgJob.total}</span>
+              : bgSummary.review > 0
+                ? <span className="gtb-count gtb-count--warn">{bgSummary.review}</span>
+                : null}
+          </button>
+
+          {openPanel === 'bg' && (
+            <div className="gtb-panel gtb-panel--bg" id="gtb-panel-bg" role="group" aria-label="Photo backgrounds">
+              <div className="gtb-panel-section">
+                <span className="gtb-label">This batch</span>
+                <p className="bgp-counts">
+                  {bgSummary.auto + bgSummary.approved} ready · {bgSummary.review} need a look
+                  {bgSummary.failed > 0 && <> · {bgSummary.failed} failed</>}
+                  {bgSummary.unprocessed > 0 && <> · {bgSummary.unprocessed} not processed</>}
+                </p>
+              </div>
+
+              <div className="gtb-panel-section">
+                <div className="gtb-panel-opts">
+                  <button
+                    type="button"
+                    className="ptb-btn ptb-btn--primary bgp-wide"
+                    disabled={!!bgJob || bgBusy === 'process' || bgProcessTargets.length === 0}
+                    onClick={handleProcessBackgrounds}
+                    title={selectedItems.size > 0
+                      ? 'Process the selected photos'
+                      : 'Process every photo in this batch that has not been done yet'}
+                  >
+                    {bgJob
+                      ? <><Loader size={12} className="bgp-spin" /> Processing {bgJob.done}/{bgJob.total}…</>
+                      : <><Wand2 size={12} /> Process {bgProcessTargets.length} photo{bgProcessTargets.length === 1 ? '' : 's'}
+                          {selectedItems.size > 0 ? ' (selected)' : ''}</>}
+                  </button>
+                </div>
+                {bgProcessTargets.length === 0 && !bgJob && (
+                  <p className="bgp-hint">
+                    {bgSummary.total === 0
+                      ? 'No photos in this batch yet.'
+                      : 'Every photo here has already been processed.'}
+                  </p>
+                )}
+              </div>
+
+              {bgStale.length > 0 && (
+                <div className="gtb-panel-section">
+                  <span className="gtb-label">{bgStale.length} on an older background</span>
+                  <button
+                    type="button"
+                    className="ptb-btn bgp-wide"
+                    disabled={!!bgJob || bgBusy === 'reapply'}
+                    onClick={() => void handleReapplyBackgrounds()}
+                    title="Rebuild these with the workspace's current background recipe"
+                  >
+                    <RefreshCw size={12} /> Re-apply to {bgStale.length}
+                  </button>
+                  <p className="bgp-hint">
+                    Photos you chose to keep untouched are left alone.
+                  </p>
+                </div>
+              )}
+
+              {/* The two bulk verdicts. There is deliberately no "approve all
+                  unflagged": an `auto` photo ALREADY exports its composite, so
+                  such a button would set a column and change nothing. What is
+                  worth a bulk action is the flagged pile, in either direction. */}
+              {bgFlagged.length > 0 && (
+                <div className="gtb-panel-section">
+                  <span className="gtb-label">{bgFlagged.length} flagged</span>
+                  <div className="bgp-bulk">
+                    <ConfirmAction
+                      label={`Approve all ${bgFlagged.length}`}
+                      confirmLabel="Approve"
+                      prompt={`Use the cut-out on all ${bgFlagged.length} flagged photos?`}
+                      tone="neutral"
+                      size="sm"
+                      disabled={!!bgBusy || !!bgJob}
+                      onConfirm={() => void handleBulkVerdict('approved')}
+                    />
+                    <ConfirmAction
+                      label="Keep originals"
+                      confirmLabel="Keep originals"
+                      prompt={`Keep the untouched photo on all ${bgFlagged.length}?`}
+                      tone="neutral"
+                      size="sm"
+                      disabled={!!bgBusy || !!bgJob}
+                      onConfirm={() => void handleBulkVerdict('original')}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="ptb-btn bgp-wide"
+                    onClick={() => { setFilter('background', 'review'); setOpenPanel(null); }}
+                  >
+                    Show them
+                  </button>
+                </div>
+              )}
+
+              <div className="gtb-panel-foot bgp-foot">
+                <span className="bgp-preset" title="The workspace's background recipe">
+                  <span className="bgp-swatch" style={{ background: bgPreset.color }} aria-hidden="true" />
+                  {bgPreset.canvas}px · {Math.round(bgPreset.padding * 100)}% margin
+                </span>
+                {orgRole === 'owner' || orgRole === 'admin'
+                  ? <span className="bgp-hint">Change it in Workspace › Settings.</span>
+                  : <span className="bgp-hint">A workspace admin sets this.</span>}
+              </div>
+
+              {bgNotice && <p className="bgp-notice" role="status">{bgNotice}</p>}
+            </div>
+          )}
+        </div>
+        )}
 
         <span className="gtb-divider" />
 
@@ -3176,10 +3602,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       <Check size={12} className="category-check" />
                     </div>
                   )}
-                  {(item.thumbnailUrl || item.preview || item.imageUrls?.[0]) ? (
+                  {cardImageUrl(item) ? (
                     <div className="image-with-controls">
                       <img 
-                        src={item.thumbnailUrl || item.preview || item.imageUrls?.[0]} 
+                        src={cardImageUrl(item)} 
                         alt="Product" 
                         draggable={false}
                         loading="lazy"
@@ -3193,6 +3619,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   ) : (
                     <div className="lazy-skeleton lazy-skeleton--error" aria-hidden="true" />
                   )}
+                  {backgroundBadge(item)}
                   {selectedItems.has(item.id) && (
                     <div className="selection-indicator"><Check size={20} /></div>
                   )}
@@ -3424,10 +3851,10 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                         if (photoSelectModeRef.current) togglePhotoPick(item.id);
                       }}
                     >
-                      {(item.thumbnailUrl || item.preview || item.imageUrls?.[0]) ? (
+                      {cardImageUrl(item) ? (
                         <>
                           <img
-                            src={item.thumbnailUrl || item.preview || item.imageUrls?.[0]}
+                            src={cardImageUrl(item)}
                             alt="Product"
                             draggable={false}
                             loading="lazy"
@@ -3435,6 +3862,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                             onError={retryImg}
                             style={{ transform: `rotate(${item.imageRotation || 0}deg)` }}
                           />
+                          {backgroundBadge(item)}
                         </>
                       ) : (
                         <div className="lazy-skeleton lazy-skeleton--error" aria-hidden="true" />
@@ -3507,7 +3935,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     {stackLayers(items.length, { compact: isPhone }).map((layer) => {
                       const item = items[layer.index];
                       const isTop = layer.index === 0;
-                      const url = isTop ? (item.thumbnailUrl || item.preview || item.imageUrls?.[0]) : undefined;
+                      const url = isTop ? cardImageUrl(item) : undefined;
                       return (
                         <div
                           key={item.id}
@@ -3535,6 +3963,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                         </div>
                       );
                     })}
+                    {/* A closed pile shows ONE badge for the whole group: the
+                        leader's photo may be clean while a sibling is flagged,
+                        and a pile with a flagged photo inside it must say so or
+                        the "Needs review" filter is the only way to find it. */}
+                    {(() => {
+                      const flagged = items.find(i => i.maskStatus === 'review')
+                        ?? items.find(i => i.maskStatus === 'failed')
+                        ?? items.find(i => i.maskStatus === 'queued');
+                      return flagged ? backgroundBadge(flagged) : null;
+                    })()}
                     {items[0].category && (
                       <span className="category-badge gs-cat">{items[0].category}</span>
                     )}
@@ -3559,6 +3997,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
           ?? null;
         const canNav = lightboxPool.length > 1;
         const cropping = cropModal.open;
+        /* ── Photo backgrounds in the lightbox ─────────────────────────────
+           A card is too small to judge an edge, so the decision is made here.
+           AFTER is what is shown by default: the composite is the thing being
+           asked about, and Before is the reference. */
+        const lbComposite = lbItem ? compositeUrl(lbItem) : '';
+        const lbReviewable = !!(bgAvailable && lbItem?.productImageId && (lbComposite || lbItem?.cutoutStoragePath));
+        const lbSrc = (lbReviewable && !lightboxBefore && lbComposite) ? lbComposite : lightboxSrc;
+        const lbFlags = lbItem?.maskFlags ?? [];
+        const lbBusy = bgBusy === `item:${lbItem?.id}`;
         return (
           <div
             className="lightbox-overlay"
@@ -3618,9 +4065,75 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     {' '}Copy Crop
                   </button>
                 )}
+
+                {/* Before / After. A segmented pair rather than a toggle button:
+                    which one is on screen has to be readable at a glance while
+                    comparing two nearly identical pictures. */}
+                {lbReviewable && lbComposite && (
+                  <span className="lb-segmented" role="group" aria-label="Show the original or the new background">
+                    <button
+                      type="button"
+                      className={`lightbox-tool-btn${lightboxBefore ? ' lb-seg--on' : ''}`}
+                      aria-pressed={lightboxBefore}
+                      onClick={(e) => { e.stopPropagation(); setLightboxBefore(true); }}
+                    >Before</button>
+                    <button
+                      type="button"
+                      className={`lightbox-tool-btn${!lightboxBefore ? ' lb-seg--on' : ''}`}
+                      aria-pressed={!lightboxBefore}
+                      onClick={(e) => { e.stopPropagation(); setLightboxBefore(false); }}
+                    >After</button>
+                  </span>
+                )}
               </div>
+
+              {/* The review strip. Only on a photo that HAS a cut-out — there is
+                  nothing to approve otherwise, and an always-present row of
+                  disabled buttons teaches nothing. */}
+              {lbReviewable && lbItem && (
+                <div className="lb-review" onClick={(e) => e.stopPropagation()}>
+                  <div className="lb-review-left">
+                    <span className={`lb-status lb-status--${lbItem.maskStatus ?? 'none'}`}>
+                      {lbItem.maskStatus === 'review' ? 'Needs a look'
+                        : lbItem.maskStatus === 'approved' ? 'Approved'
+                        : lbItem.maskStatus === 'original' ? 'Keeping the original'
+                        : lbItem.maskStatus === 'auto' ? 'Ready'
+                        : lbItem.maskStatus === 'failed' ? 'Could not be processed'
+                        : 'Processing…'}
+                    </span>
+                    {lbFlags.length > 0 && (
+                      <ul className="lb-flags">
+                        {lbFlags.map(f => <li key={f}>{maskFlagLabel(f)}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                  <div className="lb-review-actions">
+                    <button
+                      type="button"
+                      className="ptb-btn ptb-btn--primary"
+                      disabled={lbBusy || lbItem.maskStatus === 'approved'}
+                      onClick={() => void handleItemVerdict(lbItem, 'approved')}
+                      title="Use the cut-out for this photo everywhere it is exported"
+                    ><Check size={12} /> Approve</button>
+                    <button
+                      type="button"
+                      className="ptb-btn"
+                      disabled={lbBusy || lbItem.maskStatus === 'original'}
+                      onClick={() => void handleItemVerdict(lbItem, 'original')}
+                      title="Export the untouched photo instead"
+                    ><Image size={12} /> Keep original</button>
+                    <button
+                      type="button"
+                      className="ptb-btn"
+                      disabled={lbBusy || !!bgJob}
+                      onClick={() => void handleRerun(lbItem)}
+                      title="Try again at 2K — slower, and usually cleaner on soft or fine edges"
+                    ><RefreshCw size={12} /> Re-run at 2K</button>
+                  </div>
+                </div>
+              )}
               {canNav && <button className="lightbox-nav lightbox-nav--prev" onClick={(e) => { e.stopPropagation(); navigateLightboxGrouper(-1); }}>‹</button>}
-              <img src={lightboxSrc} alt="Full size preview" className="lightbox-image"
+              <img src={lbSrc} alt="Full size preview" className="lightbox-image"
                 crossOrigin="anonymous"
                 style={{ transform: `rotate(${lbItem?.imageRotation || 0}deg)` }}
                 onClick={(e) => e.stopPropagation()} />

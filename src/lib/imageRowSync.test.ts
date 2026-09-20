@@ -5,6 +5,9 @@ import {
   mergeProductImageRows,
   stage4ColumnsKnownAvailable,
   __resetStage4ProbeForTests,
+  backgroundColumnsKnownAvailable,
+  __resetBackgroundColumnProbeForTests,
+  BACKGROUND_COLUMNS,
   type ExistingProductImageRow,
 } from './imageRowSync';
 import type { ClothingItem } from '../App';
@@ -168,5 +171,180 @@ describe('stage4ColumnsKnownAvailable', () => {
   it('is false until the async probe has resolved positively', () => {
     __resetStage4ProbeForTests();
     expect(stage4ColumnsKnownAvailable()).toBe(false);
+  });
+});
+
+
+/**
+ * Photo backgrounds across the delete-then-reinsert.
+ *
+ * `registerItemsInDB` wipes every product_images row for the batch on EVERY
+ * open and on startup restore, and rebuilds them from in-memory items. The
+ * matting service owns five of the six mask columns and a reviewer owns the
+ * sixth, so a whole-row replacement here erases a day of work on the next
+ * refresh. These lock the guard (AGENTS.md §18).
+ */
+describe('photo-background columns', () => {
+  const bgItem = item({
+    id: 'p1',
+    storagePath: 'u/p1/img.jpg',
+    cutoutStoragePath: 'u/p1/img-cut.png',
+    compositeStoragePath: 'u/p1/img-bg.jpg',
+    bgPreset: '7abc910f',
+    maskStatus: 'approved',
+    maskScore: 0.93,
+    maskFlags: ['soft'],
+  });
+
+  it('PRE-migration (background=false): names none of the six columns', () => {
+    const row = buildProductImageRow(bgItem, 'u1', 0, 'https://cdn/img.jpg', false);
+    for (const col of BACKGROUND_COLUMNS) expect(row).not.toHaveProperty(col);
+  });
+
+  it('defaults to false, so no existing caller starts writing them', () => {
+    const row = buildProductImageRow(bgItem, 'u1', 0, 'https://cdn/img.jpg', true);
+    for (const col of BACKGROUND_COLUMNS) expect(row).not.toHaveProperty(col);
+  });
+
+  it('POST-migration (background=true): carries what the item knows', () => {
+    const row = buildProductImageRow(bgItem, 'u1', 0, 'https://cdn/img.jpg', false, true);
+    expect(row.cutout_storage_path).toBe('u/p1/img-cut.png');
+    expect(row.composite_storage_path).toBe('u/p1/img-bg.jpg');
+    expect(row.bg_preset).toBe('7abc910f');
+    expect(row.mask_status).toBe('approved');
+    expect(row.mask_score).toBe(0.93);
+    expect(row.mask_flags).toEqual(['soft']);
+  });
+
+  it('nulls them for an item that has never been processed — EXCEPT mask_flags', () => {
+    const row = buildProductImageRow(
+      item({ id: 'p2', storagePath: 'u/p2/a.jpg' }), 'u1', 0, 'https://cdn/a.jpg', false, true);
+    for (const col of BACKGROUND_COLUMNS) {
+      if (col === 'mask_flags') continue;
+      expect(row[col]).toBeNull();
+    }
+    // `mask_flags` is `not null default '{}'` in image_backgrounds.sql — writing
+    // null there fails the whole insert, and this row builder feeds the
+    // delete-then-reinsert that runs on every batch open.
+    expect(row.mask_flags).toEqual([]);
+  });
+
+  it('backgroundColumnsKnownAvailable is false until the probe resolves positively', () => {
+    __resetBackgroundColumnProbeForTests();
+    expect(backgroundColumnsKnownAvailable()).toBe(false);
+  });
+});
+
+describe('mergeProductImageRows — the wipe must never drop mask state', () => {
+  const dbRow = (o: Partial<ExistingProductImageRow> & { product_id: string; image_url: string }) => ({
+    storage_path: null,
+    user_id: 'u1',
+    position: 0,
+    alt_text: 'x',
+    original_name: null,
+    transforms: null,
+    ...o,
+  }) as ExistingProductImageRow;
+
+  const fullExisting = () => dbRow({
+    product_id: 'p1', image_url: 'https://cdn/img.jpg', storage_path: 'u/p1/img.jpg',
+    cutout_storage_path: 'u/p1/img-cut.png',
+    composite_storage_path: 'u/p1/img-bg.jpg',
+    bg_preset: '7abc910f',
+    mask_status: 'auto',
+    mask_score: 0.96,
+    mask_flags: [],
+  });
+
+  it('preserves ALL six when the computed row knows none of them (the startup-restore case)', () => {
+    const computed = [buildProductImageRow(
+      item({ id: 'p1', storagePath: 'u/p1/img.jpg' }), 'u1', 0, 'https://cdn/img.jpg', false, true)];
+    const [row] = mergeProductImageRows(computed, [fullExisting()]);
+    expect(row.cutout_storage_path).toBe('u/p1/img-cut.png');
+    expect(row.composite_storage_path).toBe('u/p1/img-bg.jpg');
+    expect(row.bg_preset).toBe('7abc910f');
+    expect(row.mask_status).toBe('auto');
+    expect(row.mask_score).toBe(0.96);
+    expect(row.mask_flags).toEqual([]);
+  });
+
+  it('preserves PER COLUMN — an item that knows only its status keeps the score and flags', () => {
+    // Exactly what a reloaded item looks like: slimForWorkflowState persists
+    // three of the six, so the other three arrive null.
+    const computed = [buildProductImageRow(
+      item({
+        id: 'p1', storagePath: 'u/p1/img.jpg',
+        compositeStoragePath: 'u/p1/img-bg.jpg', maskStatus: 'approved',
+      }), 'u1', 0, 'https://cdn/img.jpg', false, true)];
+    const [row] = mergeProductImageRows(computed, [fullExisting()]);
+    expect(row.mask_status).toBe('approved');          // the reviewer's newer verdict WINS
+    expect(row.mask_score).toBe(0.96);                 // the service's, preserved
+    expect(row.bg_preset).toBe('7abc910f');            // the service's, preserved
+    expect(row.cutout_storage_path).toBe('u/p1/img-cut.png');
+  });
+
+  it('an EMPTY mask_flags from the app is "nothing to say", not "no warnings"', () => {
+    // A hydrating item never carries flags — they are outside the
+    // slimForWorkflowState whitelist — so the builder writes []. Reading that
+    // as an answer would clear a real warning on every batch open.
+    const computed = [buildProductImageRow(
+      item({ id: 'p1', storagePath: 'u/p1/img.jpg', maskStatus: 'review' }),
+      'u1', 0, 'https://cdn/img.jpg', false, true)];
+    const existingFlagged = dbRow({
+      product_id: 'p1', image_url: 'https://cdn/img.jpg', storage_path: 'u/p1/img.jpg',
+      mask_status: 'review', mask_flags: ['edge', 'soft'],
+    });
+    const [row] = mergeProductImageRows(computed, [existingFlagged]);
+    expect(row.mask_flags).toEqual(['edge', 'soft']);
+  });
+
+  it('a new photo with no counterpart still writes [] rather than null', () => {
+    const computed = [buildProductImageRow(
+      item({ id: 'p1', storagePath: 'u/p1/new.jpg' }), 'u1', 0, 'https://cdn/new.jpg', false, true)];
+    const [row] = mergeProductImageRows(computed, []);
+    expect(row.mask_flags).toEqual([]);
+    expect(row.mask_flags).not.toBeNull();
+  });
+
+  it('matches on storage_path, so a regenerated public URL still keeps the mask', () => {
+    const computed = [buildProductImageRow(
+      item({ id: 'p1', storagePath: 'u/p1/img.jpg' }), 'u1', 0, 'https://cdn2/img.jpg', false, true)];
+    const [row] = mergeProductImageRows(computed, [fullExisting()]);
+    expect(row.image_url).toBe('https://cdn2/img.jpg');
+    expect(row.mask_status).toBe('auto');
+  });
+
+  it('never invents a column PRE-migration — an absent column stays absent', () => {
+    const computed = [buildProductImageRow(
+      item({ id: 'p1', storagePath: 'u/p1/img.jpg' }), 'u1', 0, 'https://cdn/img.jpg', false)];
+    const existingNoBg = dbRow({
+      product_id: 'p1', image_url: 'https://cdn/img.jpg', storage_path: 'u/p1/img.jpg',
+    });
+    const [row] = mergeProductImageRows(computed, [existingNoBg]);
+    for (const col of BACKGROUND_COLUMNS) expect(row).not.toHaveProperty(col);
+  });
+
+  it('a genuinely NEW photo carries no borrowed mask state', () => {
+    const computed = [buildProductImageRow(
+      item({ id: 'p1', storagePath: 'u/p1/new.jpg' }), 'u1', 0, 'https://cdn/new.jpg', false, true)];
+    const rows = mergeProductImageRows(computed, [fullExisting()]);
+    const fresh = rows.find(r => r.storage_path === 'u/p1/new.jpg')!;
+    expect(fresh.mask_status).toBeNull();
+    // and the existing photo is still carried across, untouched
+    const kept = rows.find(r => r.storage_path === 'u/p1/img.jpg')!;
+    expect(kept.mask_status).toBe('auto');
+  });
+
+  it('a carried-forward row that is not replaced keeps its mask columns verbatim', () => {
+    const computed = [buildProductImageRow(
+      item({ id: 'p1', storagePath: 'u/p1/a.jpg' }), 'u1', 0, 'https://cdn/a.jpg', false, true)];
+    const other = dbRow({
+      product_id: 'p1', image_url: 'https://cdn/b.jpg', storage_path: 'u/p1/b.jpg', position: 1,
+      mask_status: 'review', mask_flags: ['edge'],
+    });
+    const rows = mergeProductImageRows(computed, [other]);
+    const carried = rows.find(r => r.storage_path === 'u/p1/b.jpg')!;
+    expect(carried.mask_status).toBe('review');
+    expect(carried.mask_flags).toEqual(['edge']);
   });
 });

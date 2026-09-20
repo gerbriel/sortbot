@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
+  BACKGROUND_REVIEW_MESSAGE,
   cellSummary, effectiveTargets, fixableIssues, nextTargets,
-  summarizeMarketplace, summarizeMatrix,
+  summarizeMarketplace, summarizeMatrix, withBackgroundIssues,
 } from './matrix';
 import type { FormattedListing, MarketplaceKey, ReadinessIssue } from './types';
 
@@ -198,5 +199,83 @@ describe('fixableIssues', () => {
       ]),
     ]);
     expect(fixableIssues(s).map(i => i.value)).toEqual(['Ecko Unltd']);
+  });
+});
+
+
+/**
+ * Photo backgrounds block a feed exactly as a $0 price blocks the Shopify CSV:
+ * an `error`, therefore a blocked column, therefore no download. A photo that
+ * FAILED to mat, or that a person chose to keep untouched, is a settled answer
+ * and must not block anything.
+ */
+describe('withBackgroundIssues', () => {
+  const clean = () => [listing('L1', []), listing('L2', []), listing('L3', [])];
+
+  it('adds a blocking photos error only to the listings that have a waiting photo', () => {
+    const out = withBackgroundIssues(clean(), new Map([['L2', 3]]));
+    expect(out[0].issues).toEqual([]);
+    expect(out[2].issues).toEqual([]);
+    expect(out[1].issues).toEqual([{
+      marketplace: 'ebay',
+      level: 'error',
+      field: 'photos',
+      message: BACKGROUND_REVIEW_MESSAGE,
+    }]);
+  });
+
+  it('adds it ONCE however many photos are waiting — the count belongs to the cell', () => {
+    const out = withBackgroundIssues(clean(), new Map([['L1', 7]]));
+    expect(out[0].issues.filter(i => i.field === 'photos')).toHaveLength(1);
+  });
+
+  it('keeps the adapter\'s own issues and appends after them', () => {
+    const withBrand = [listing('L1', [issue({ field: 'brand', value: 'Ecko Unltd', fixKind: 'brand' })])];
+    const out = withBackgroundIssues(withBrand, new Map([['L1', 1]]));
+    expect(out[0].issues.map(i => i.field)).toEqual(['brand', 'photos']);
+  });
+
+  it('is a pure pass-through when nothing is waiting — the same array object', () => {
+    const input = clean();
+    expect(withBackgroundIssues(input, new Map())).toBe(input);
+    const zeroed = withBackgroundIssues(input, new Map([['L1', 0]]));
+    expect(zeroed[0].issues).toEqual([]);
+  });
+
+  it('never mutates the listing it was given', () => {
+    const input = clean();
+    withBackgroundIssues(input, new Map([['L1', 2]]));
+    expect(input[0].issues).toEqual([]);
+  });
+
+  it('tags the issue with the listing\'s OWN marketplace, not a hardcoded one', () => {
+    const depop: FormattedListing = { ...listing('L1', []), marketplace: 'depop' as MarketplaceKey };
+    const [out] = withBackgroundIssues([depop], new Map([['L1', 1]]));
+    expect(out.issues[0].marketplace).toBe('depop');
+  });
+
+  it('BLOCKS the column, exactly like the $0 price gate', () => {
+    const summary = summarizeMarketplace('ebay', withBackgroundIssues(clean(), new Map([['L2', 1]])));
+    expect(summary.blocked).toBe(true);
+    expect(summary.error).toBe(1);
+    expect(summary.clean).toBe(2);
+  });
+
+  it('turns the cell red rather than amber', () => {
+    const [, l2] = withBackgroundIssues(clean(), new Map([['L2', 1]]));
+    expect(cellSummary(l2).level).toBe('error');
+  });
+
+  it('collapses into ONE checklist line with a count — the message is a constant', () => {
+    const summary = summarizeMarketplace(
+      'ebay', withBackgroundIssues(clean(), new Map([['L1', 1], ['L2', 4], ['L3', 2]])));
+    const photos = summary.issues.filter(i => i.field === 'photos');
+    expect(photos).toHaveLength(1);
+    expect(photos[0].count).toBe(3);
+  });
+
+  it('is not fixable by a vocabulary row — it has no fixKind', () => {
+    const summary = summarizeMarketplace('ebay', withBackgroundIssues(clean(), new Map([['L1', 1]])));
+    expect(fixableIssues(summary)).toEqual([]);
   });
 });

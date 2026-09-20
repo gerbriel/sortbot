@@ -16,8 +16,10 @@ import { getAdapter } from '../lib/marketplaces/registry';
 import { buildListingPack, packToText, type ListingPack } from '../lib/marketplaces/pack';
 import {
   cellSummary, effectiveTargets, fixableIssues, nextTargets, summarizeMatrix,
+  withBackgroundIssues,
   type IssueSummary, type MarketplaceSummary,
 } from '../lib/marketplaces/matrix';
+import { isBackgroundBlocking, resolveCatalogPath } from '../lib/backgroundService';
 import {
   MARKETPLACE_KEYS,
   type FormattedListing, type MarketplaceKey, type VocabResolver,
@@ -77,12 +79,16 @@ interface ListingRow {
 }
 
 /**
- * The same rule `GoogleSheetExporter.resolvePublicUrl` follows: `imageUrls[0]`
- * when it is a real https URL, else rebuilt from `storagePath` THROUGH
- * `storageUrls` (§18 #20), else a `preview` only if it is not a blob: URL — a
- * blob is session-local and useless in a feed, a pack or a zip.
+ * The same rule `GoogleSheetExporter.resolvePublicUrl` follows: the background
+ * COMPOSITE first when there is one (`resolveCatalogPath`, the one place that
+ * rule lives — §18); then `imageUrls[0]` when it is a real https URL, else
+ * rebuilt from `storagePath` THROUGH `storageUrls` (§18 #20), else a `preview`
+ * only if it is not a blob: URL — a blob is session-local and useless in a
+ * feed, a pack or a zip.
  */
 function resolveUrl(item: ClothingItem): string {
+  const catalog = resolveCatalogPath(item);
+  if (catalog && catalog !== item.storagePath) return publicImageUrl(catalog);
   const candidate = item.imageUrls?.[0] || '';
   if (candidate.startsWith('https://')) return candidate;
   if (item.storagePath) return publicImageUrl(item.storagePath);
@@ -244,17 +250,35 @@ function MarketplaceExportInner({
   }, [items]);
 
   /**
+   * How many of each listing's photos are still waiting on a background review
+   * (or are in flight). Counted from the group's own items — no extra read, the
+   * store already carries the state.
+   */
+  const blockingByListing = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of rows) {
+      const n = r.group.filter(isBackgroundBlocking).length;
+      if (n > 0) map.set(r.productGroupId, n);
+    }
+    return map;
+  }, [rows]);
+
+  /**
    * `format()` for every (listing × target). Pure and a few hundred calls at
    * batch scale, so it is memoized on everything that can change its answer —
    * recomputing it per render would re-run ten adapters over 375 listings on
    * every keystroke in the fix inputs.
+   *
+   * The background gate is applied HERE, on the adapters' output, rather than
+   * inside each of the ten: it is not a marketplace's rule, it is ours, and one
+   * `withBackgroundIssues` cannot be implemented nine different ways.
    */
   const formatted = useMemo(() => {
     const out = new Map<MarketplaceKey, FormattedListing[]>();
     for (const key of targets) {
       const adapter = getAdapter(key);
       const pricingRule = pricingFor(key);
-      out.set(key, rows.map(r => adapter.format({
+      out.set(key, withBackgroundIssues(rows.map(r => adapter.format({
         group: r.group,
         item: r.item,
         imageUrls: r.imageUrls,
@@ -262,10 +286,10 @@ function MarketplaceExportInner({
         descriptionSettings: descriptionSettings ?? undefined,
         pricingRule,
         vocab,
-      })));
+      })), blockingByListing));
     }
     return out;
-  }, [targets, rows, vocab, vendorName, descriptionSettings, pricingFor]);
+  }, [targets, rows, vocab, vendorName, descriptionSettings, pricingFor, blockingByListing]);
 
   const summaries: MarketplaceSummary[] = useMemo(
     () => summarizeMatrix(targets, formatted),

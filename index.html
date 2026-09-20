@@ -28,10 +28,21 @@
                                arrow in ComprehensiveProductForm.css; blob: for
                                URL.createObjectURL upload previews.
            connect-src         Supabase REST/auth/storage/Edge Functions over
-                               https, Realtime presence over wss. Nothing else
-                               is fetched. 'self' also covers the dev server's
-                               ws:// HMR socket (CSP3 'self' matches same-origin
-                               ws/wss).
+                               https, Realtime presence over wss, and the
+                               self-hosted matting service at
+                               matting.arcadian.ltd (photo backgrounds — it is
+                               called with the user's own Supabase session JWT,
+                               never a shared secret; see AGENTS.md §9). It is
+                               named EXACTLY rather than wildcarded: this is the
+                               one origin in the policy that is ours and not
+                               Supabase's, and a wildcard there would buy
+                               nothing and cover a subdomain nobody audited.
+                               Nothing else is fetched. 'self' also covers the
+                               dev server's ws:// HMR socket (CSP3 'self'
+                               matches same-origin ws/wss); localhost:8080 for a
+                               matting service run locally is appended by a
+                               `command === 'serve'` plugin in vite.config.ts,
+                               so it never reaches the built policy.
            worker-src          public/sw.js, same origin.
            font-src            system font stacks only; data: is belt-and-braces.
 
@@ -52,7 +63,7 @@
       style-src 'self' 'unsafe-inline';
       img-src 'self' data: blob: https://*.supabase.co https://images.unsplash.com;
       font-src 'self' data:;
-      connect-src 'self' https://*.supabase.co wss://*.supabase.co;
+      connect-src 'self' https://*.supabase.co wss://*.supabase.co https://matting.arcadian.ltd;
       worker-src 'self';
       object-src 'none';
       base-uri 'none';

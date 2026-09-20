@@ -31,6 +31,15 @@ const fullItem = (): ClothingItem =>
     originalUrl: 'https://cdn/orig.jpg',
     descriptionEdited: true,
     customDescription: 'faded, boxy, single stitch',
+    productImageId: 'img-row-1',
+    compositeStoragePath: 'user/prod/img-bg.jpg',
+    maskStatus: 'approved',
+    // Service-owned detail read on demand, NOT persisted — the row read is
+    // always back before a reviewer can open a photo.
+    cutoutStoragePath: 'user/prod/img-cut.png',
+    bgPreset: '7abc910f',
+    maskScore: 0.94,
+    maskFlags: ['soft'],
   } as unknown as ClothingItem);
 
 describe('slimForWorkflowState (Supabase workflow_state blob)', () => {
@@ -54,6 +63,10 @@ describe('slimForWorkflowState (Supabase workflow_state blob)', () => {
       brandCategory: undefined,
       descriptionEdited: true,
       customDescription: 'faded, boxy, single stitch',
+      // Photo backgrounds: the three the first render after a reload needs.
+      productImageId: 'img-row-1',
+      compositeStoragePath: 'user/prod/img-bg.jpg',
+      maskStatus: 'approved',
     });
   });
 
@@ -65,6 +78,20 @@ describe('slimForWorkflowState (Supabase workflow_state blob)', () => {
     expect(slim).not.toHaveProperty('generatedDescription');
     expect(slim).not.toHaveProperty('voiceDescription');
     expect(slim).not.toHaveProperty('seoTitle');
+  });
+
+  it('persists only three of the seven background fields — the rest are read on demand', () => {
+    const [slim] = slimForWorkflowState([fullItem()]) as unknown as Record<string, unknown>[];
+    expect(slim.productImageId).toBe('img-row-1');
+    expect(slim.compositeStoragePath).toBe('user/prod/img-bg.jpg');
+    expect(slim.maskStatus).toBe('approved');
+    // Only ever read on a photo the reviewer has opened, by which time
+    // fetchImageRowsForProducts has landed. Keeping them would grow every
+    // autosave PATCH for data nothing reads on first paint.
+    expect(slim).not.toHaveProperty('cutoutStoragePath');
+    expect(slim).not.toHaveProperty('bgPreset');
+    expect(slim).not.toHaveProperty('maskScore');
+    expect(slim).not.toHaveProperty('maskFlags');
   });
 
   it('output is JSON-serializable (blob-safe)', () => {

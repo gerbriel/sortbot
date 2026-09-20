@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arcadian-matting"
+version = "0.1.0"
+description = "Cutout + deterministic background replacement for Arcadian product photos"
+requires-python = ">=3.12"
+
+# Runtime dependencies, and nothing else. Every one of these is permissively
+# licensed and listed with its licence in README.md. In particular there is NO
+# torch here: the `local` backend's weights and framework are an optional extra
+# so the default image stays ~200 MB instead of ~2.5 GB.
+dependencies = [
+    "fastapi>=0.115",          # MIT
+    "uvicorn[standard]>=0.32",  # BSD-3-Clause
+    "httpx>=0.27",             # BSD-3-Clause
+    "pillow>=10.4",            # HPND (MIT-like)
+    "numpy>=1.26",             # BSD-3-Clause
+    "opencv-python-headless>=4.10",  # Apache-2.0
+]
+
+[project.optional-dependencies]
+# In-process BiRefNet. Not installed by the Dockerfile — see README "Backends".
+local = [
+    "torch>=2.4",
+    "torchvision>=0.19",
+    "transformers>=4.44",
+    "timm>=1.0",
+    "einops>=0.8",
+    "kornia>=0.7",
+]
+test = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.setuptools.packages.find]
+# Keep tests/ out of the installed wheel; pytest finds them from the source
+# tree, and shipping them would put a top-level `tests` package on the path.
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["error::DeprecationWarning:app.*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]

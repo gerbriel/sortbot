@@ -82,6 +82,61 @@ export function nextTargets(
   return next;
 }
 
+// ── Photo backgrounds ───────────────────────────────────────────────────────
+
+/**
+ * The message a listing gets when one of its photos is still waiting on a
+ * background review.
+ *
+ * IT IS A CONSTANT, and that is the design. `summarizeMarketplace` collapses
+ * issues whose `level|field|fixKind|value|message` match into ONE checklist
+ * line with a count — so a fixed sentence gives "× 12" where "2 photos need a
+ * review" / "1 photo needs a review" would give twelve near-identical lines.
+ * The per-listing count is already visible in the cell.
+ */
+export const BACKGROUND_REVIEW_MESSAGE =
+  'A photo is still waiting for a background review — Step 2 › Filter › Needs review.';
+
+/**
+ * PURE. The same listings, with a blocking `photos` issue added to any listing
+ * that still has a photo awaiting review (or in flight).
+ *
+ * `level: 'error'` on purpose: an error is what `summarizeMarketplace` turns
+ * into `blocked`, which is what refuses the feed download — exactly the rule
+ * the $0 price gate already follows, and exactly the rule the Shopify CSV gate
+ * follows. The alternative — letting it through as a warning — means a feed
+ * that ships whichever photo happened to be current when the file was built,
+ * which is the one outcome nobody can undo after an import.
+ *
+ * `failed` and `original` photos deliberately do NOT block: both export the
+ * untouched photo, which is a settled answer.
+ *
+ * An issue is added at most ONCE per listing however many of its photos are
+ * waiting — the count belongs to the cell, not to the checklist.
+ */
+export function withBackgroundIssues(
+  listings: readonly FormattedListing[],
+  blockingByListing: ReadonlyMap<string, number>,
+): FormattedListing[] {
+  if (blockingByListing.size === 0) return listings as FormattedListing[];
+  return listings.map(listing => {
+    const blocking = blockingByListing.get(listing.productGroupId) ?? 0;
+    if (blocking <= 0) return listing;
+    return {
+      ...listing,
+      issues: [
+        ...listing.issues,
+        {
+          marketplace: listing.marketplace,
+          level: 'error' as IssueLevel,
+          field: 'photos',
+          message: BACKGROUND_REVIEW_MESSAGE,
+        },
+      ],
+    };
+  });
+}
+
 // ── One cell ────────────────────────────────────────────────────────────────
 
 export type CellLevel = 'clean' | 'warning' | 'error';

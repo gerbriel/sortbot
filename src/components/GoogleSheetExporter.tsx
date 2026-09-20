@@ -17,13 +17,24 @@ import {
   type PlatformPricingRule,
 } from '../lib/platformPricing';
 import { getOrgDescriptionSettings } from '../lib/descriptionSettings';
+import { isBackgroundBlocking, resolveCatalogPath } from '../lib/backgroundService';
 import './GoogleSheetExporter.css';
 
 /**
  * Returns a full https:// Supabase public URL for an item, or '' if unavailable.
  * Rejects blob: URLs because Shopify can't fetch those.
+ *
+ * THE COMPOSITE COMES FIRST. When a photo's background was removed and the
+ * result accepted, the catalogue photo is the composite — and `imageUrls[0]`
+ * always points at the ORIGINAL, so it cannot be consulted first or a matted
+ * batch would export the un-matted files. `resolveCatalogPath` is the only
+ * place that rule lives (AGENTS.md §18); everything below it is the historical
+ * fallback chain, unchanged.
  */
 function resolvePublicUrl(item: ClothingItem): string {
+  const catalog = resolveCatalogPath(item);
+  if (catalog && catalog !== item.storagePath) return publicImageUrl(catalog);
+
   // imageUrls[0] is the authoritative full-res URL — use it if it's a real https URL
   const candidate = item.imageUrls?.[0] || '';
   if (candidate.startsWith('https://')) return candidate;
@@ -265,6 +276,17 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
     return { ...p, seoTitle: candidate };
   });
 
+  /**
+   * Photos whose background is not settled: waiting for a review, or still
+   * being processed. Blocking, for the same reason a $0 price blocks — an
+   * import is not undoable, and "whichever photo happened to be current when
+   * the file was built" is not an answer a shop can correct afterwards.
+   *
+   * `failed` and `original` do NOT block: both export the untouched photo,
+   * which IS a settled answer.
+   */
+  const pendingBackgroundPhotos = items.filter(isBackgroundBlocking);
+
   // Products with no price or a price of 0 — Shopify requires a real price, so block export.
   const invalidPricedProducts = products
     .map((p, idx) => ({ p, idx }))
@@ -274,6 +296,16 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
     });
 
   const handleDownloadCSV = () => {
+    // Block export until every photo's background is settled (see above).
+    if (pendingBackgroundPhotos.length > 0) {
+      alert(
+        `Cannot export — ${pendingBackgroundPhotos.length} photo` +
+        `${pendingBackgroundPhotos.length > 1 ? 's need' : ' needs'} a background review.\n\n` +
+        `Go to Step 2 › Filter › Needs review, then approve the cut-out or keep the original.`
+      );
+      return;
+    }
+
     // Block export until every product has a real price (> 0).
     if (invalidPricedProducts.length > 0) {
       const names = invalidPricedProducts
@@ -344,6 +376,20 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                 <span className="stat-label">Categories</span>
               </div>
             </div>
+
+            {pendingBackgroundPhotos.length > 0 && (
+              <div className="export-price-gate" style={{
+                marginTop: '0.75rem', padding: '0.75rem 1rem', borderRadius: 8,
+                background: 'var(--danger-dim)', border: '1px solid var(--danger)', color: 'var(--danger)',
+                fontSize: 'var(--fs-sm)', fontWeight: 600,
+              }}>
+                <Ban size={13} style={{ flexShrink: 0 }} /> Export blocked — {pendingBackgroundPhotos.length} photo
+                {pendingBackgroundPhotos.length > 1 ? 's need' : ' needs'} a background review.
+                <span style={{ display: 'block', marginTop: '0.35rem', fontWeight: 500 }}>
+                  Step 2 › Filter › Needs review — approve the cut-out, or keep the original photo.
+                </span>
+              </div>
+            )}
 
             {invalidPricedProducts.length > 0 && (
               <div className="export-price-gate" style={{

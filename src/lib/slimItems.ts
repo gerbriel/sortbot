@@ -33,6 +33,27 @@ export interface SlimWorkflowItem {
   brandCategory?: ClothingItem['brandCategory'];
   descriptionEdited?: boolean;
   customDescription?: string;
+  /* ── Photo backgrounds — three tiny strings, and they have to be here ──────
+   *
+   * They LOOK derivable from product_images, which is the bar this whitelist
+   * sets (§11). They are not, at the one moment that matters: startup restore
+   * sets all four arrays from this blob and fires `registerItemsInDB`
+   * IMMEDIATELY, before any background row has been read. Without them, the
+   * first render after a reload shows every composited photo as its original
+   * and every reviewed photo as unreviewed — and, worse, Step 4's gate would
+   * read "nothing to review" on a batch that has 40 photos waiting.
+   *
+   * The background row read (`fetchImageRowsForProducts`) still runs on every
+   * batch open and after every job, and it is authoritative; these three are
+   * what the UI has to work with until it lands. Together they are ~90 bytes an
+   * item against a payload measured in hundreds of KB.
+   *
+   * The SCORE, the FLAGS, the cutout path and the preset hash are deliberately
+   * NOT here: they are only read on a photo the reviewer has opened, which is
+   * always after the row read has landed. */
+  productImageId?: string;
+  compositeStoragePath?: string;
+  maskStatus?: string;
 }
 
 /**
@@ -115,6 +136,11 @@ export const slimForWorkflowState = (items: ClothingItem[]): SlimWorkflowItem[] 
       // Voice/chip-entered freeform note — no products column holds it, so the
       // workflow_state blob is its only home across reloads.
       customDescription:   item.customDescription,
+      // Background state the first render after a reload needs before the
+      // product_images read lands — see the whitelist comment.
+      productImageId:        item.productImageId,
+      compositeStoragePath:  item.compositeStoragePath,
+      maskStatus:            item.maskStatus,
     };
   });
 

@@ -30,7 +30,8 @@ import { slimForWorkflowState, ultraSlimForBackup, asClothingItems } from './lib
 import { scheduleWorkflowBackup, flushWorkflowBackup, cancelWorkflowBackup, WORKFLOW_BACKUP_KEY } from './lib/workflowBackup';
 import { readWorkflowBackup, resolveRestoreItems, workflowStateCapturedAt } from './lib/restoreSource';
 import { saveStatus } from './lib/saveStatusStore';
-import { buildProductImageRow, mergeProductImageRows, stage4ColumnsAvailable, type ExistingProductImageRow } from './lib/imageRowSync';
+import { buildProductImageRow, mergeProductImageRows, stage4ColumnsAvailable, backgroundColumnsAvailable, BACKGROUND_COLUMNS, type ExistingProductImageRow } from './lib/imageRowSync';
+import { backgroundsAvailable, fetchImageRowsForProducts } from './lib/backgroundService';
 import { useStoreItemArray, liveArrayRef } from './lib/workflowStore';
 
 // Live read-only views into workflowStore — replace the old ref-mirror pattern.
@@ -370,6 +371,27 @@ export interface ClothingItem {
   // very first upload).  Cleared once "Clear originals cache" is run.
   originalStoragePath?: string; // Supabase Storage path of the pre-crop original
   originalUrl?: string;         // Public URL of the pre-crop original
+
+  // ── Photo backgrounds (lib/backgroundService.ts, AGENTS.md §9) ────────────
+  // Written by the self-hosted matting service onto product_images and joined
+  // onto the item after hydration. The APP only ever writes `maskStatus`, and
+  // only when a person decided; every other field here is the service's.
+  /** `product_images.id` — the id the matting service takes. NOT this item's id
+   *  (a product's photos are separate rows), which is why it has to be carried. */
+  productImageId?: string;
+  /** The alpha master, beside the source in the same bucket folder. */
+  cutoutStoragePath?: string;
+  /** The flat-colour composite. Served as the catalogue photo ONLY through
+   *  `resolveCatalogPath` (§18) — never read directly. */
+  compositeStoragePath?: string;
+  /** 8-hex hash of the BackgroundPreset this composite was built with. */
+  bgPreset?: string;
+  /** queued | auto | review | approved | original | failed; undefined = never processed. */
+  maskStatus?: string;
+  maskScore?: number;
+  /** Heuristic warnings — 'coverage', 'edge', 'fragments', 'soft', 'contrast',
+   *  'error:<reason>'. Rendered as sentences by `maskFlagLabel`. */
+  maskFlags?: string[];
 }
 
 /**
@@ -935,13 +957,18 @@ function App() {
       // Stage 4 dual-write: rows include transforms + captured_at + original_storage_path
       // (the latter two only once the stage4_slim_fields migration has been run).
       const stage4 = await stage4ColumnsAvailable();
+      /* Photo backgrounds: the mask columns must be carried across the wipe or
+         a batch open erases every cut-out and every review (AGENTS.md §18).
+         The probe is the columns ONLY — a workspace with no matting service
+         configured still has to preserve state already in the database. */
+      const bgCols = await backgroundColumnsAvailable();
       // position 0: each of these rows is the PRIMARY image of its own product.
       // (It used to be the item's index in `registerable`, which made every
       // product's single row claim a different, meaningless position.)
       const productImageRows = registerable.flatMap((item) => {
         const imageUrl = item.imageUrls?.[0] || publicImageUrl(item.storagePath) || null;
         if (!imageUrl) return []; // no image_url available at all — skip
-        return [buildProductImageRow(item, activeUser.id, 0, imageUrl, stage4)];
+        return [buildProductImageRow(item, activeUser.id, 0, imageUrl, stage4, bgCols)];
       });
       if (productImageRows.length > 0) {
         // Delete-then-insert strategy: wipe ALL product_images rows for the
@@ -964,7 +991,8 @@ function App() {
         //     The wipe itself STAYS (AGENTS.md §18 #3) — it is still what clears a
         //     stale row whose CDN URL changed for a file we are re-writing.
         const existingRowSelect = 'product_id, image_url, storage_path, position, alt_text, original_name, transforms, user_id'
-          + (stage4 ? ', captured_at, original_storage_path' : '');
+          + (stage4 ? ', captured_at, original_storage_path' : '')
+          + (bgCols ? ', ' + BACKGROUND_COLUMNS.join(', ') : '');
         const existingRows: ExistingProductImageRow[] = [];
         let existingReadOk = true;
         for (const chunk of chunked(productIds)) {
@@ -1436,6 +1464,13 @@ function App() {
                   } catch (e) {
                     log.app(`startup restore | DB hydration error: ${e}`);
                   }
+                  /* Photo backgrounds: joined AFTER the DB hydration, in the
+                     same fire-and-forget pass. `slimForWorkflowState` persists
+                     three of the six fields so the FIRST paint is already
+                     right; this is what makes the other three (score, flags,
+                     cut-out path) available to the reviewer, and what picks up
+                     anything the service wrote while the tab was closed. */
+                  void refreshBackgroundRows();
                 })();
 
                 // Auto-rescan EXIF for items missing capturedAt (old batches uploaded before ac06e11).
@@ -1510,6 +1545,7 @@ function App() {
                   setProcessedItems(backupItems);
                   setPhoneStep(resumeStep(processedItemsRef.current));
                   registerItemsInDB(backupItems, savedBatchId, session.user);
+                  void refreshBackgroundRows();
                 }
               }
             }
@@ -1874,6 +1910,80 @@ function App() {
   /* The Workspace dashboard's one link out to the founder half, and Home's
      founder widget. Stable for the same reason as everything else here. */
   const onOpenFounderStable = useEventCallback(() => setActiveView('founder'));
+
+  /* ══ Photo backgrounds — the one join ═══════════════════════════════════════
+   *
+   * The matting service writes six columns on `product_images`; the app reads
+   * them and hangs them on the items. APP OWNS THIS JOIN, not ImageGrouper,
+   * because two surfaces need the same answer: Step 2's review, and Step 4's
+   * export gate (which reads `step4ExportItems`, i.e. `processedItems`). Two
+   * readers with two fetches is two lists that disagree about whether a batch
+   * is ready to export.
+   *
+   * It patches all four arrays and does NOT auto-save: the three background
+   * fields that ARE in the `slimForWorkflowState` whitelist ride along on the
+   * next save of its own accord, and firing a 2 s debounce on every poll tick
+   * of a 400-photo job would re-upload the whole blob a dozen times for values
+   * the database already holds.
+   *
+   * A photo with several rows resolves by `storage_path` first (a group's
+   * photos live as N rows against the LEADER product, so the first row is
+   * routinely another garment's angle) and falls back to the first row.
+   */
+  const refreshBackgroundRowsRef = useRef(false);
+  const refreshBackgroundRows = useCallback(async () => {
+    if (refreshBackgroundRowsRef.current) return;       // one read in flight at a time
+    if (!(await backgroundsAvailable())) return;
+    const live = processedItemsRef.current.length ? processedItemsRef.current : groupedImagesRef.current;
+    const ids = [...new Set(live.map(i => i.id).filter(Boolean))];
+    if (ids.length === 0) return;
+    refreshBackgroundRowsRef.current = true;
+    try {
+      const res = await fetchImageRowsForProducts(ids);
+      if (res.status !== 'ok') return;
+
+      // product_id → rows, so a group leader's several rows can be told apart.
+      const byProduct = new Map<string, typeof res.rows>();
+      for (const row of res.rows) {
+        const list = byProduct.get(row.product_id);
+        if (list) list.push(row); else byProduct.set(row.product_id, [row]);
+      }
+
+      const patch = (arr: ClothingItem[]) => arr.map(item => {
+        const rows = byProduct.get(item.id);
+        if (!rows || rows.length === 0) return item;
+        const row = (item.storagePath && rows.find(r => r.storage_path === item.storagePath)) || rows[0];
+        if (
+          item.productImageId === row.id &&
+          item.maskStatus === (row.mask_status ?? undefined) &&
+          item.compositeStoragePath === (row.composite_storage_path ?? undefined) &&
+          item.maskScore === (row.mask_score ?? undefined)
+        ) return item;   // unchanged — keep the identity so memo'd children bail out
+        return {
+          ...item,
+          productImageId:       row.id,
+          cutoutStoragePath:    row.cutout_storage_path ?? undefined,
+          compositeStoragePath: row.composite_storage_path ?? undefined,
+          bgPreset:             row.bg_preset ?? undefined,
+          maskStatus:           row.mask_status ?? undefined,
+          maskScore:            row.mask_score ?? undefined,
+          maskFlags:            row.mask_flags ?? undefined,
+        };
+      });
+
+      setUploadedImages(patch(uploadedImagesRef.current));
+      setGroupedImages(patch(groupedImagesRef.current));
+      setSortedImages(patch(sortedImagesRef.current));
+      setProcessedItems(patch(processedItemsRef.current));
+    } finally {
+      refreshBackgroundRowsRef.current = false;
+    }
+  // The four setters are store bindings and never change identity.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const onBackgroundsChangedStable = useEventCallback(() => { void refreshBackgroundRows(); });
+
   /* Step 4's marketplaces panel → the Workspace dashboard, on its Marketplaces
      tab. Stable, because the panel is memo'd (§18 #24). */
   const onOpenWorkspaceMarketplaces = useEventCallback(() => {
@@ -3109,6 +3219,12 @@ function App() {
       }
     }
 
+    /* Join the photo-background state on. Fire-and-forget, AFTER the items are
+       in the store: Step 2's badges and Step 4's export gate both read it, and
+       neither can be right until it lands. `backgroundsAvailable()` gates it,
+       so a deployment with no matting service pays nothing. */
+    void refreshBackgroundRows();
+
     // Auto-rescan EXIF for any items missing capturedAt — fires in background after open.
     // Old batches (uploaded before ac06e11) never had capturedAt set. This silently
     // downloads each image and reads DateTimeOriginal so dates appear on Step 2 cards
@@ -3422,6 +3538,13 @@ function App() {
                   onImageDeleted={onImageDeletedStable}
                   onSelectionChange={setSelectedGroupItems}
                   onActionsReady={setGrouperActions}
+                  /* Photo backgrounds. `orgDescSettings` is state, so
+                     `?.background` is the SAME object across renders — passing
+                     `{...preset}` here would defeat ImageGrouper's memo on every
+                     App render (§18 #24). */
+                  backgroundPreset={orgDescSettings?.background}
+                  orgRole={currentOrg ? orgRole : undefined}
+                  onBackgroundsChanged={onBackgroundsChangedStable}
                 />
                 </GrouperErrorBoundary>
               </div>
