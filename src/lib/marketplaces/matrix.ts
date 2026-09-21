@@ -137,6 +137,47 @@ export function withBackgroundIssues(
   });
 }
 
+// ── Research review ─────────────────────────────────────────────────────────
+
+/**
+ * PURE. The same listings, with a NON-blocking `price` warning on any listing
+ * the price engine flagged for a human look.
+ *
+ * `level: 'warning'`, and that is the whole decision. An `error` is what
+ * `summarizeMarketplace` turns into `blocked`, which refuses the feed download —
+ * the rule the $0 price gate and the background gate both follow, because those
+ * two describe a file that is definitely wrong. A review flag is ADVICE: the
+ * price may be perfectly good, the founder's own line is that this never
+ * publishes on its own, and a research pass that can stop an export is a
+ * research pass that gets switched off the first time it is wrong.
+ *
+ * One issue per listing however many reasons it has — the reasons are joined
+ * into the message, so `summarizeMarketplace`'s de-duplication still collapses
+ * identical wordings across listings into one checklist line with a count.
+ */
+export function withResearchIssues(
+  listings: readonly FormattedListing[],
+  reasonsByListing: ReadonlyMap<string, readonly string[]>,
+): FormattedListing[] {
+  if (reasonsByListing.size === 0) return listings as FormattedListing[];
+  return listings.map(listing => {
+    const reasons = reasonsByListing.get(listing.productGroupId);
+    if (!reasons || reasons.length === 0) return listing;
+    return {
+      ...listing,
+      issues: [
+        ...listing.issues,
+        {
+          marketplace: listing.marketplace,
+          level: 'warning' as IssueLevel,
+          field: 'price',
+          message: `Research flagged this price for a look — ${reasons.join(' ')}`,
+        },
+      ],
+    };
+  });
+}
+
 // ── One cell ────────────────────────────────────────────────────────────────
 
 export type CellLevel = 'clean' | 'warning' | 'error';

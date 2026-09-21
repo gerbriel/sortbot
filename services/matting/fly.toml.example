@@ -30,6 +30,20 @@ primary_region = "iad"             # put it near the Supabase project
   # a concurrency limit against the upstream rate limit, not a CPU count.
   CONCURRENCY = "4"
   MAX_IDS_PER_JOB = "2000"
+  # ── Embeddings (app/embed.py) ─────────────────────────────────────────────
+  # Two images at a time, one ORT thread each: unlike matting, this WORKS rather
+  # than waits, so more parallelism on a shared vCPU is slower, not faster.
+  EMBED_CONCURRENCY = "2"
+  EMBED_THREADS = "1"
+  # WITHOUT THE VOLUME BELOW, LEAVE THIS AT /tmp AND EXPECT A ~350 MB DOWNLOAD
+  # ON EVERY COLD START. With `auto_stop_machines`, that is once per working
+  # session — tolerable, and free on Fly's outbound, but it delays the first
+  # Find similar by a minute on a slow link. Set it to /data once the volume
+  # exists and the download becomes a one-off.
+  MODEL_CACHE_DIR = "/tmp/models"
+  # Set to "0" on a deployment that only mats photos: the weights are then never
+  # fetched, and /v1/embed fetches them on first use if it is ever called.
+  EMBED_PREFETCH = "1"
 
 [http_service]
   internal_port = 8080
@@ -66,7 +80,32 @@ primary_region = "iad"             # put it near the Supabase project
   # 2048 >= 16 GB on CPU, and a CPU pass is ~15 s an image against ~2 s hosted.
   # If you switch MATTING_BACKEND=local, resize first — it will not OOM
   # gracefully, it will be killed mid-batch and leave rows 'queued'.
+  #
+  # THE EMBEDDING SESSION FITS, but only just: CLIP ViT-B/32 fp32 is ~400 MB
+  # resident once warm (measured), and the embed job runs on the SAME per-org
+  # lock as matting for exactly that reason — the machine's peak is the larger of
+  # the two, never the sum. If you raise EMBED_CONCURRENCY above 2 or run both
+  # kinds of job concurrently, go to 2gb first.
   memory = "1gb"
+
+# ── OPTIONAL: persist the embedding weights across cold starts ──────────────
+# MODEL_CACHE_DIR defaults to /tmp, which Fly throws away when the machine stops
+# — so with `auto_stop_machines = "stop"` the ~350 MB CLIP file is re-downloaded
+# on every cold start. A 1 GB volume makes it a one-off:
+#
+#     fly volumes create matting_models --size 1 --region iad
+#
+# then uncomment this block AND set MODEL_CACHE_DIR = "/data/models" above.
+#
+# THE CATCH, and it is why this is off by default: a volume pins the app to ONE
+# machine in ONE region (a volume cannot be shared), so it trades horizontal
+# scaling for a download. For a single founder-operated service that is a good
+# trade; for two machines behind a load balancer it is not, and each would want
+# its own volume.
+#
+# [mounts]
+#   source = "matting_models"
+#   destination = "/data"
 
 # A SIGTERM mid-image leaves a row 'queued' with an orphaned cutout already
 # uploaded. The app drains in-flight work on shutdown (app/jobs.py), so give it

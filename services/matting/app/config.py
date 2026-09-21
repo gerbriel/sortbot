@@ -92,6 +92,57 @@ class Settings:
     local_model: str = field(default_factory=lambda: _env("LOCAL_MODEL", "ZhengPeng7/BiRefNet"))
     local_hr_model: str = field(default_factory=lambda: _env("LOCAL_HR_MODEL", "ZhengPeng7/BiRefNet_HR"))
 
+    # ── Embeddings (see app/embed.py and README "Embeddings") ───────────────
+    # The ONNX export of OpenAI's CLIP ViT-B/32 vision tower. fp32 and not the
+    # quantized file: the quantized one was MEASURED at 0.90-0.97 cosine
+    # agreement with fp32 and — the part that decides it — it moves the
+    # PAIRWISE similarities this feature ranks and thresholds on (0.842 -> 0.785
+    # on one of the three test photos). It was also slower on ARM. The numbers
+    # are in docs/pricing/02-embeddings.md.
+    embed_model_url: str = field(
+        default_factory=lambda: _env(
+            "EMBED_MODEL_URL",
+            "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/main/onnx/vision_model.onnx",
+        )
+    )
+    # Expected size and digest of the file above. BOTH are checked after a
+    # download, because a truncated 350 MB fetch does not raise — it produces a
+    # file onnxruntime refuses later, in a worker, one image at a time. Set
+    # EMBED_MODEL_SHA256='' to skip the digest when pointing at your own export.
+    embed_model_bytes: int = field(default_factory=lambda: _int("EMBED_MODEL_BYTES", 351685709))
+    embed_model_sha256: str = field(
+        default_factory=lambda: _env(
+            "EMBED_MODEL_SHA256",
+            "fd6e1402a588279d1723c7534d4bcba5bc0b14b47dfab0e46f8c47b8270d7d40",
+        ).lower()
+    )
+    # Where the file is cached. ON FLY THIS IS EPHEMERAL unless a volume is
+    # mounted at /data — see fly.toml.example's commented [mounts] block and the
+    # README. Without one, every cold start re-downloads ~350 MB.
+    model_cache_dir: str = field(default_factory=lambda: _env("MODEL_CACHE_DIR", "/tmp/models"))
+    # What lands in listing_embeddings.model. Two vectors with DIFFERENT values
+    # here are never compared (the RPC filters on it), so this string is the
+    # migration boundary for a model change: write a new one and re-run.
+    embed_model_tag: str = field(default_factory=lambda: _env("EMBED_MODEL_TAG"))
+    # Images in flight per embed job. Lower than CONCURRENCY on purpose: matting
+    # waits on Replicate, this one WORKS — 512 floats out of a 224x224 conv stack
+    # on a shared vCPU. Two keeps one image downloading while another infers
+    # without the two inferences fighting over the same core.
+    embed_concurrency: int = field(default_factory=lambda: max(1, _int("EMBED_CONCURRENCY", 2)))
+    # onnxruntime intra-op threads. 1 on a shared-cpu-1x: more threads than cores
+    # is slower, and the parallelism that helps here is EMBED_CONCURRENCY.
+    embed_threads: int = field(default_factory=lambda: max(1, _int("EMBED_THREADS", 1)))
+    # The outer bound on one photo: download + decode + preprocess + inference +
+    # upsert. Same reasoning as IMAGE_TIMEOUT_S, a fifth of the value — nothing
+    # here calls a third party.
+    embed_timeout_seconds: float = field(default_factory=lambda: _float("EMBED_TIMEOUT_S", 60.0))
+    # Fetch the model at container start rather than on the first request. It is
+    # a background task, so /healthz and matting are unaffected either way; turn
+    # it off on a deployment that never embeds and does not want the bandwidth.
+    embed_prefetch: bool = field(
+        default_factory=lambda: _env("EMBED_PREFETCH", "1").lower() not in ("0", "false", "no")
+    )
+
     # ── Service behaviour ───────────────────────────────────────────────────
     env: str = field(default_factory=lambda: _env("MATTING_ENV", "production").lower())
     allowed_origins: list[str] = field(
@@ -122,6 +173,32 @@ class Settings:
     # BiRefNet frequently handles those fine. The other four are all "the mask
     # is probably wrong".
     advisory_flags: list[str] = field(default_factory=lambda: _csv("MATTING_ADVISORY_FLAGS", "contrast"))
+
+    @property
+    def embed_model_file(self) -> str:
+        """The basename the model is cached under, taken from the URL."""
+        leaf = self.embed_model_url.split("?")[0].rstrip("/").rsplit("/", 1)[-1]
+        return leaf or "vision_model.onnx"
+
+    @property
+    def embed_model_path(self) -> str:
+        return os.path.join(self.model_cache_dir, self.embed_model_file)
+
+    @property
+    def embed_tag(self) -> str:
+        """The `model` column's value.
+
+        DERIVED from the file by default, so the tag and the weights cannot
+        disagree: a quantized export would write `@onnx-q8`, which the RPC treats
+        as a different model and therefore never compares against an `@onnx`
+        vector. Swapping the URL without swapping the tag is exactly the mistake
+        that produces a table of two incomparable vector populations that sort
+        against each other convincingly.
+        """
+        if self.embed_model_tag:
+            return self.embed_model_tag
+        suffix = "onnx-q8" if "quant" in self.embed_model_file.lower() else "onnx"
+        return f"clip-vit-base-patch32@{suffix}"
 
     @property
     def model_owner_name(self) -> tuple[str, str]:

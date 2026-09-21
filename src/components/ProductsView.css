@@ -596,6 +596,55 @@
 
 .pv-print-wrap { display: none; }
 
+/* ── Sold history (the Sold card) ──────────────────────────────────────────── */
+
+/* A record, not an edit: neutral surface, and the only coloured thing is the
+ * price itself, because that is the number a reseller is scanning for. */
+.pv-sales {
+  margin: 0 0 0.6rem;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+}
+
+.pv-sales li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.7rem;
+  padding: 0.4rem 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.pv-sale-price {
+  font-size: var(--fs-md);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.pv-sale-meta {
+  flex: 1 1 14rem;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.pv-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--success);
+}
+
+@media (max-width: 640px) {
+  /* Price on its line, then the meta, then Remove full-width — three things do
+     not fit across 390px without the meta losing its last word. */
+  .pv-sales li { flex-direction: column; align-items: flex-start; }
+  .pv-sale-meta { flex: none; }
+}
+
 @media print {
   @page { size: auto; margin: 0; }
 

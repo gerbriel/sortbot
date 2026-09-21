@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   Search, Loader2, AlertTriangle, PackageSearch, QrCode, Printer, Tag,
-  ArrowUpRight, Save, RefreshCw, Check, Pencil, X,
+  ArrowUpRight, Save, RefreshCw, Check, Pencil, X, Banknote, Trash2,
 } from 'lucide-react';
 import type { ClothingItem } from '../App';
 import {
@@ -19,6 +19,13 @@ import { saveStatus } from '../lib/saveStatusStore';
 import { code128Svg } from '../lib/barcode';
 import { LABEL_TEMPLATES } from '../lib/labelTemplates';
 import { baseSize } from '../lib/csvExport';
+import {
+  recordSale, fetchSales, deleteSale, daysToSell, researchAvailable,
+  type SaleRow,
+} from '../lib/researchService';
+import { formatCents } from '../lib/pricing';
+import { MARKETPLACE_KEYS } from '../lib/marketplaces/types';
+import { parseAmountToCents, todayKey } from '../lib/financeService';
 import { ConfirmAction } from './ui';
 import ListingLabelsPicker from './ListingLabelsPicker';
 import './ProductsView.css';
@@ -46,6 +53,13 @@ import './ProductsView.css';
  * change into the open batch's store arrays. Reaching into the store from here
  * would be a second writer racing Step 3's two debounced saves.
  */
+
+/**
+ * Where a piece can be sold. The ten marketplace keys plus `other`, so a flea
+ * market or a friend is recordable — a sale the app refuses to record is a sale
+ * that leaves the price history wrong, which is the whole thing this feeds.
+ */
+const SALE_PLACES: readonly string[] = [...MARKETPLACE_KEYS, 'other'];
 
 /** The fields this view edits. Everything else about a listing stays in Step 3. */
 interface Draft {
@@ -717,6 +731,24 @@ export default function ProductsView({
                 </>
               )}
             </div>
+
+            {/* ── Sold ─────────────────────────────────────────────────────
+                   The manual half of the feedback loop (plan step 6). A recorded
+                   sale becomes a COMP for the next similar piece, which is the
+                   only free comps source this app has — so this small form is
+                   what makes the price engine get better instead of staying
+                   flat. The Shopify webhook writes the same row later. */}
+            <SoldPanel
+              /* KEYED ON THE LISTING, so switching listings remounts it and every
+                 draft resets for free. Resetting them in an effect instead is
+                 setState-inside-an-effect, which react-hooks v7 rejects — and a
+                 price typed for one garment must never be submittable against
+                 the next one. */
+              key={detail.id}
+              productGroupId={detail.id}
+              sku={skuDraft.trim() || null}
+              listedPrice={draft.price}
+            />
           </>
         )}
       </section>
@@ -919,6 +951,191 @@ function LabelManager({ labels, onChanged }: { labels: ListingLabel[]; onChanged
           );
         })}
       </ul>
+      {error && <p className="pv-warn" role="alert"><AlertTriangle size={13} aria-hidden="true" /> {error}</p>}
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   SoldPanel — "this one sold", and what it sold for.
+
+   THE MANUAL HALF of docs/pricing/00-plan.md step 6. Nothing else in the app
+   records an outcome, and without an outcome the price engine has no free comps
+   source at all: `fetchOwnComps` reads exactly the rows this form writes. So a
+   small form here is the difference between a price suggestion that improves as
+   the shop sells and one that is the same on day 400 as on day 1.
+
+   It owns its own fetching (the house pattern — ListingLabelsPicker,
+   MarketplaceExport) and renders nothing until `pricing_research.sql` has been
+   run. It writes only `listing_sales`, so it can never disturb a listing, a
+   batch or the workflow store.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+function SoldPanel({
+  productGroupId, sku, listedPrice,
+}: { productGroupId: string; sku: string | null; listedPrice: string }) {
+  const [available, setAvailable] = useState(false);
+  const [sales, setSales] = useState<SaleRow[]>([]);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const [priceDraft, setPriceDraft] = useState('');
+  const [dateDraft, setDateDraft] = useState(todayKey());
+  const [placeDraft, setPlaceDraft] = useState('shopify');
+  const [orderDraft, setOrderDraft] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    researchAvailable().then(ok => { if (!cancelled) setAvailable(ok); });
+    return () => { cancelled = true; };
+  }, []);
+
+  /** Re-read after a write. Called from handlers only — see the effect below. */
+  const reload = useCallback(async () => {
+    const res = await fetchSales([productGroupId]);
+    if (res.status !== 'ok') return;
+    setSales(res.rows.get(productGroupId) ?? []);
+  }, [productGroupId]);
+
+  // The FIRST read is inlined rather than calling `reload()`: react-hooks v7
+  // rejects a setState-calling function invoked directly in an effect body, and
+  // an inlined read is also the only shape with a cancel guard — which this
+  // needs, because the panel is keyed on the listing and unmounts mid-flight.
+  useEffect(() => {
+    if (!available) return;
+    let cancelled = false;
+    fetchSales([productGroupId]).then(res => {
+      if (cancelled || res.status !== 'ok') return;
+      setSales(res.rows.get(productGroupId) ?? []);
+    });
+    return () => { cancelled = true; };
+  }, [available, productGroupId]);
+
+  if (!available) return null;
+
+  const submit = async () => {
+    // Reuses financeService's parser so "$45", "45.00" and "45" all mean the
+    // same thing here as they do in the ledger — one money parser in the app.
+    const cents = parseAmountToCents(priceDraft);
+    if (cents === null) { setError('Enter what it sold for.'); return; }
+    setBusy(true);
+    setError(null);
+    const res = await recordSale({
+      productGroupId,
+      sku,
+      soldPriceCents: cents,
+      listedPriceCents: parseAmountToCents(listedPrice) ?? null,
+      // A date-only value becomes midnight UTC, which is what the column wants.
+      soldAt: dateDraft ? `${dateDraft}T12:00:00Z` : null,
+      marketplace: placeDraft,
+      externalOrderId: orderDraft,
+    });
+    setBusy(false);
+    if (!res.ok) { setError(res.error); return; }
+    setSaved(true);
+    setOpen(false);
+    setPriceDraft('');
+    setOrderDraft('');
+    await reload();
+  };
+
+  return (
+    <div className="pv-card">
+      <h3 className="pv-card-title"><Banknote size={13} aria-hidden="true" /> Sold</h3>
+
+      {sales.length > 0 && (
+        <ul className="pv-sales">
+          {sales.map(sale => {
+            const days = daysToSell(sale);
+            return (
+              <li key={sale.id}>
+                <span className="pv-sale-price">{formatCents(sale.sold_price_cents)}</span>
+                <span className="pv-sale-meta">
+                  {sale.sold_at.slice(0, 10)}
+                  {sale.marketplace ? ` · ${sale.marketplace}` : ''}
+                  {days !== null ? ` · ${days} day${days === 1 ? '' : 's'} to sell` : ''}
+                  {sale.source === 'shopify_webhook' ? ' · from Shopify' : ''}
+                </span>
+                <ConfirmAction
+                  label="Remove"
+                  confirmLabel="Remove this sale?"
+                  onConfirm={async () => {
+                    const res = await deleteSale(sale.id);
+                    if (!res.ok) { setError(res.error); return; }
+                    await reload();
+                  }}
+                  icon={<Trash2 size={12} aria-hidden="true" />}
+                />
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {!open && (
+        <div className="pv-card-actions">
+          <button type="button" className="pv-btn pv-btn--primary" onClick={() => setOpen(true)}>
+            <Banknote size={14} aria-hidden="true" /> Mark as sold
+          </button>
+          {saved && <span className="pv-saved"><Check size={13} aria-hidden="true" /> Recorded</span>}
+        </div>
+      )}
+
+      {open && (
+        <>
+          <div className="pv-grid">
+            <label className="pv-field">
+              <span>Sold for</span>
+              <input
+                value={priceDraft}
+                inputMode="decimal"
+                placeholder="45.00"
+                autoFocus
+                onChange={(e) => setPriceDraft(e.target.value)}
+              />
+            </label>
+            <label className="pv-field">
+              <span>Date</span>
+              <input type="date" value={dateDraft} onChange={(e) => setDateDraft(e.target.value)} />
+            </label>
+            <label className="pv-field">
+              <span>Where</span>
+              <select value={placeDraft} onChange={(e) => setPlaceDraft(e.target.value)}>
+                {SALE_PLACES.map(k => <option key={k} value={k}>{k}</option>)}
+              </select>
+            </label>
+            <label className="pv-field">
+              <span>Order number</span>
+              <input
+                value={orderDraft}
+                spellCheck={false}
+                placeholder="optional"
+                onChange={(e) => setOrderDraft(e.target.value)}
+              />
+            </label>
+          </div>
+          <p className="pv-hint">
+            Recorded sales become the comparables the next similar piece is priced
+            from. The listed price comes from the Fields card above.
+          </p>
+          <div className="pv-card-actions">
+            <button
+              type="button" className="pv-btn pv-btn--primary"
+              onClick={() => void submit()}
+              disabled={busy}
+            >
+              {busy ? <Loader2 size={14} className="pv-spin" aria-hidden="true" /> : <Save size={14} aria-hidden="true" />}
+              Record sale
+            </button>
+            <button type="button" className="pv-btn" onClick={() => { setOpen(false); setError(null); }}>
+              <X size={14} aria-hidden="true" /> Cancel
+            </button>
+          </div>
+        </>
+      )}
+
       {error && <p className="pv-warn" role="alert"><AlertTriangle size={13} aria-hidden="true" /> {error}</p>}
     </div>
   );

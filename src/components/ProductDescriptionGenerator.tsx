@@ -23,6 +23,7 @@ import { saveStatus, useSaveStatus } from '../lib/saveStatusStore';
 import { clampLensPosition } from '../lib/magnifierPosition';
 import BrandSpelling, { type BrandNotice } from './BrandSpelling';
 import ListingLabelsPicker from './ListingLabelsPicker';
+import ResearchCard from './ResearchCard';
 import {
   fetchBrandAliases, saveBrandAlias, deleteBrandAlias,
   aliasCandidates, builtinBrandCandidates, type BrandAlias,
@@ -63,6 +64,8 @@ interface ProductDescriptionGeneratorProps {
    *  App re-sets it on every scan (even of the same code), so re-scanning a
    *  listing you already have open still re-focuses it. */
   focusProductId?: string | null;
+  /** The workspace id — for the research card's similar-listings strip. */
+  orgId?: string | null;
 }
 
 // Web Speech API types
@@ -100,6 +103,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   batchId,
   descriptionSettings,
   focusProductId,
+  orgId,
 }) => {
   // Stage 2b: processedItems lives in workflowStore — the SAME list App.tsx
   // reads/writes. This is the FULL item list (uncategorized singles included);
@@ -336,6 +340,42 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     () => (currentGroupIdsKey ? currentGroupIdsKey.split(',') : []),
     [currentGroupIdsKey],
   );
+
+  // ── The research card's inputs ────────────────────────────────────────────
+  // Everything the piece has been SAID to be, in one string: the dictation, the
+  // chips the seller tapped, and the generated body. identification.ts reads
+  // words, and it must not have to know which field they arrived in.
+  const researchTranscript = useMemo(() => [
+    currentItem?.voiceDescription ?? '',
+    currentItem?.customDescription ?? '',
+    currentItem?.generatedDescription ?? '',
+  ].filter(Boolean).join(' \n '), [
+    currentItem?.voiceDescription, currentItem?.customDescription, currentItem?.generatedDescription,
+  ]);
+
+  // The leader convention (§11): the listing's id is its group leader's.
+  const researchGroupId = currentItem ? (currentItem.productGroup || currentItem.id) : '';
+  // The listing's product_images ids, memoized on the joined string so the
+  // strip's fetch key is stable across renders (§18 #24).
+  const researchImageKey = currentGroup.map(i => i.productImageId || '').join('|');
+  const researchImageIds = useMemo(
+    () => researchImageKey.split('|').filter(Boolean),
+    [researchImageKey],
+  );
+
+  /**
+   * How the research card writes a field. It goes through the SAME
+   * handleTableFieldChange a typed value goes through, so an applied price gets
+   * the group-wide patch, the transcript line, the debounced save and the
+   * saveStatusStore report for free — and the card never touches the store.
+   *
+   * Routed through the existing ref rather than passing the function directly so
+   * the prop identity is stable and the newest closure always runs: the same
+   * construction App's useEventCallback uses, and for the same reason (§8).
+   */
+  const applyResearchField = useCallback((fieldKey: string, value: string) => {
+    applyTableFieldRef.current?.(fieldKey, value);
+  }, []);
 
   // Notify App that items changed so it schedules the workflow_state auto-save.
   // Stage 2b: the store is the single source of truth — this callback carries
@@ -3538,6 +3578,25 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 listing_labels.sql has been run, and never touches processedItems
                 — so it cannot interact with the store patches around it. */}
             <ListingLabelsPicker productIds={currentGroupIds} />
+
+            {/* Research — era, condition, flaws, rarity and a price, each with
+                the evidence behind it. Suggests; never applies. Every write goes
+                back through handleTableFieldChange, so this component is not a
+                second writer of the store (§8). Renders nothing until
+                pricing_research.sql has been run. */}
+            {currentItem && (
+              <ResearchCard
+                productGroupId={researchGroupId}
+                batchId={batchId}
+                item={currentItem}
+                transcript={researchTranscript}
+                brandTerms={brandTermsForChips}
+                onApplyField={applyResearchField}
+                orgId={orgId ?? null}
+                productImageId={currentItem.productImageId ?? null}
+                productImageIds={researchImageIds}
+              />
+            )}
           </div>
 
           {/* Comprehensive Product Form - All 62 CSV Fields */}

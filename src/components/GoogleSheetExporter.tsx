@@ -1,5 +1,5 @@
 import { forwardRef, useImperativeHandle, useEffect, useMemo, useState, memo } from 'react';
-import { Ban, FileText, CheckCircle2, Tags } from 'lucide-react';
+import { Ban, FileText, CheckCircle2, Tags, Microscope, AlertTriangle, ArrowUpRight } from 'lucide-react';
 import type { ClothingItem } from '../App';
 import { supabase } from '../lib/supabase';
 import { publicImageUrl } from '../lib/storageUrls';
@@ -18,6 +18,7 @@ import {
 } from '../lib/platformPricing';
 import { getOrgDescriptionSettings } from '../lib/descriptionSettings';
 import { isBackgroundBlocking, resolveCatalogPath } from '../lib/backgroundService';
+import { fetchLatestPrices, type PriceRow } from '../lib/researchService';
 import './GoogleSheetExporter.css';
 
 /**
@@ -65,6 +66,9 @@ interface GoogleSheetExporterProps {
    *  an org id is, the settings are fetched here. Lets the exporter work in
    *  any mount that has an org without threading settings through it. */
   orgId?: string;
+  /** Jump back to a listing in Step 3. App passes `openListingInStep3`; without
+   *  it the Research split still lists the flagged listings, just without a link. */
+  onOpenListing?: (productId: string, batchId?: string | null) => void;
 }
 
 export interface GoogleSheetExporterHandle {
@@ -72,7 +76,7 @@ export interface GoogleSheetExporterHandle {
 }
 
 const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExporterProps>(
-  ({ items, compactMode = false, vendorName, platformPricing, orgId }, ref) => {
+  ({ items, compactMode = false, vendorName, platformPricing, orgId, onOpenListing }, ref) => {
 
   // Titles of products that ALREADY exist in the DB from OTHER batches (a proxy for
   // "already uploaded to Shopify"). Used to suffix this export's titles/handles so a new
@@ -295,6 +299,36 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
       return isNaN(n) || n <= 0;
     });
 
+  /**
+   * THE RESEARCH SPLIT: ready to export, and needs a look.
+   *
+   * The newest `listing_prices` row per listing, through the same
+   * `fetchLatestPrices` the marketplaces panel reads — so "flagged" means one
+   * thing in Step 4, not two. Chunked and projected; pre-migration it is empty
+   * and none of this renders.
+   *
+   * IT IS NOT A GATE. The CSV still downloads. A $0 price is a file that is
+   * definitely wrong; a review flag is advice, and the founder's own rule is
+   * that this never publishes on its own — so the split informs the person about
+   * to press the button and does not take the button away.
+   */
+  const [priceRows, setPriceRows] = useState<Map<string, PriceRow>>(new Map());
+  const groupIdsKey = products.map(p => p.productGroup || p.id).join(',');
+  useEffect(() => {
+    let cancelled = false;
+    const ids = groupIdsKey ? groupIdsKey.split(',') : [];
+    if (ids.length === 0) { setPriceRows(new Map()); return; }
+    fetchLatestPrices(ids).then(res => {
+      if (!cancelled && res.status === 'ok') setPriceRows(res.rows);
+    });
+    return () => { cancelled = true; };
+  }, [groupIdsKey]);
+
+  const flaggedProducts = products
+    .map((p, idx) => ({ p, idx, row: priceRows.get(p.productGroup || p.id) }))
+    .filter((x): x is { p: typeof products[number]; idx: number; row: PriceRow } =>
+      !!x.row?.needs_review);
+
   const handleDownloadCSV = () => {
     // Block export until every photo's background is settled (see above).
     if (pendingBackgroundPhotos.length > 0) {
@@ -376,6 +410,56 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                 <span className="stat-label">Categories</span>
               </div>
             </div>
+
+            {/* Research — ready to export vs needs a look. Above the price gate
+                because it is advice about the same file the gate below refuses:
+                read the advice, then find out whether you may export at all. */}
+            {priceRows.size > 0 && (
+              <div className="export-research">
+                <p className="export-research-head">
+                  <Microscope size={13} aria-hidden="true" /> Research
+                </p>
+                <div className="export-research-split">
+                  <span className="export-research-stat">
+                    <strong>{products.length - flaggedProducts.length}</strong> ready to export
+                  </span>
+                  <span className={`export-research-stat${flaggedProducts.length > 0 ? ' export-research-stat--flag' : ''}`}>
+                    <strong>{flaggedProducts.length}</strong> need{flaggedProducts.length === 1 ? 's' : ''} a look
+                  </span>
+                </div>
+                {flaggedProducts.length > 0 && (
+                  <ul className="export-research-list">
+                    {flaggedProducts.slice(0, 8).map(({ p, idx, row }) => (
+                      <li key={p.id || idx}>
+                        <span className="export-research-title">
+                          <AlertTriangle size={11} aria-hidden="true" /> {buildCleanTitle(p, idx)}
+                        </span>
+                        <span className="export-research-why">{row.review_reasons.join(' ')}</span>
+                        {onOpenListing && (
+                          <button
+                            type="button"
+                            className="export-research-open"
+                            /* No batch id: Step 4 is showing the OPEN batch, and
+                               openListingInStep3 focuses within it when none is given. */
+                            onClick={() => onOpenListing(p.productGroup || p.id)}
+                          >
+                            <ArrowUpRight size={11} aria-hidden="true" /> Open in Step 3
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                    {flaggedProducts.length > 8 && (
+                      <li className="export-research-more">
+                        …and {flaggedProducts.length - 8} more
+                      </li>
+                    )}
+                  </ul>
+                )}
+                <p className="export-research-note">
+                  A flag is advice, not a block — the CSV still downloads.
+                </p>
+              </div>
+            )}
 
             {pendingBackgroundPhotos.length > 0 && (
               <div className="export-price-gate" style={{

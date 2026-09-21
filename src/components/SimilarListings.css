@@ -1,0 +1,279 @@
+/* SimilarListings — "you have listed something like this before".
+ *
+ * Every colour resolves through a token; there is no hex in this file (AGENTS.md
+ * §1). The only semantic colour spent is on the DUPLICATE case, because that is
+ * the one state that changes what the seller does: "you already listed this" is a
+ * warning, and "here are three comps" is information.
+ *
+ * IT IS A HORIZONTALLY SCROLLING STRIP AT EVERY WIDTH, not a grid that reflows.
+ * Eight cards of one garment each read as a row of options; the same eight in a
+ * wrapping grid read as a second listing view, which is not what a glance while
+ * pricing wants. `overscroll-behavior-x: contain` stops a sideways swipe on a
+ * phone from chaining into the page, and `scroll-snap` makes a flick land on a
+ * card rather than between two.
+ *
+ * Touch targets are a literal 44px at every width, for the reason §1 gives: every
+ * other length here is a rem against the 9px root, and a rem touch target drifts
+ * off the accessibility floor the next time that root is retuned.
+ */
+
+.sl-root {
+  margin: 0.75rem 0;
+  padding: 0.7rem 0.8rem;
+  background: var(--ink-850);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+/* ── head ─────────────────────────────────────────────────────────────────── */
+
+.sl-head {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.55rem;
+  color: var(--text-secondary);
+}
+
+.sl-head-text {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* The loudest thing in the component, deliberately: it is the only line here a
+ * seller has to act on before publishing. */
+.sl-dup-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: auto;
+  padding: 0.25rem 0.55rem;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  line-height: var(--lh-tight);
+  color: var(--warning);
+  background: var(--warning-dim);
+  border: 1px solid var(--warning);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* ── notes and the button ─────────────────────────────────────────────────── */
+
+.sl-note {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0 0.5rem;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+  color: var(--text-muted);
+}
+
+.sl-note--warn {
+  color: var(--warning);
+}
+
+.sl-spin {
+  animation: sl-spin 1s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes sl-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Honours a reduced-motion preference rather than spinning regardless. */
+@media (prefers-reduced-motion: reduce) {
+  .sl-spin { animation: none; }
+}
+
+.sl-find {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 44px;
+  padding: 0.3rem 0.9rem;
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--ink-800);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.sl-find:hover { background: var(--ink-750); }
+.sl-find:active { background: var(--ink-700); }
+
+/* index.css pins `white-space: nowrap` on every button, which a label inside one
+ * inherits and can then never wrap — the defect the Home dashboard's tool tiles
+ * hit ("Manage Cate…"). Undone here rather than fought with a width. */
+.sl-find-label,
+.sl-card-title,
+.sl-card-meta,
+.sl-card-dup {
+  white-space: normal;
+}
+
+/* ── the strip ────────────────────────────────────────────────────────────── */
+
+.sl-strip {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0 0 0.25rem;
+  list-style: none;
+  overflow-x: auto;
+  overflow-y: hidden;              /* one axis only — `auto` on x implies both */
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sl-item {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+}
+
+.sl-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 11rem;
+  padding: 0;
+  text-align: left;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+}
+
+.sl-card--open {
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.sl-card--open:hover .sl-thumb,
+.sl-card--open:focus-visible .sl-thumb {
+  border-color: var(--accent);
+}
+
+.sl-card--open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sl-thumb {
+  position: relative;
+  display: block;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: var(--ink-800);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.sl-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.sl-thumb-empty {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--ink-750);
+}
+
+/* The similarity word, over the photo. It is selected off `data-label` so the
+ * visual state and the rendered text cannot drift apart. */
+.sl-badge {
+  position: absolute;
+  inset-block-end: 0.25rem;
+  inset-inline-start: 0.25rem;
+  padding: 0.15rem 0.4rem;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  line-height: var(--lh-tight);
+  border-radius: 4px;
+  background: var(--ink-950);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.sl-badge[data-label='near duplicate'] {
+  color: var(--warning);
+  background: var(--warning-dim);
+  border-color: var(--warning);
+}
+
+.sl-card-title {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  color: var(--text-primary);
+  /* Two lines, then clamp: a 60-character Shopify title must not make one card
+   * three times the height of its neighbours and push the strip's own scrollbar
+   * off screen. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.sl-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-snug);
+  color: var(--text-muted);
+}
+
+.sl-price {
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+/* A sale is the whole point of the strip when there is one, so it gets the one
+ * positive semantic in the component. */
+.sl-sold {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.sl-card-dup {
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  color: var(--warning);
+}
+
+/* ── phone ────────────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .sl-root {
+    padding: 0.6rem 0.65rem;
+  }
+
+  /* Narrower cards so two are on screen at once — one card filling the viewport
+   * hides the fact that the row scrolls. */
+  .sl-card {
+    width: 9.5rem;
+  }
+
+  /* 16px, never 15: mobile Safari zooms the page on a focused control under 16px
+   * and does not zoom back (§1). --fs-md IS 16px, so the token buys the behaviour. */
+  .sl-find {
+    width: 100%;
+    font-size: var(--fs-md);
+  }
+}

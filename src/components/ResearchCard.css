@@ -1,0 +1,357 @@
+/* ResearchCard — era, condition, rarity and price, each with its evidence.
+ *
+ * Every colour resolves through a token (AGENTS.md §1): no hex anywhere in this
+ * file. Semantics appear only where they signal real state — the "needs a look"
+ * flag and the low-confidence chip — because everything else here is data, and
+ * a card where four things are coloured tells the reader nothing.
+ *
+ * Mobile-first within the workflow's existing shape: the facet grid is
+ * auto-fitting, so it is two columns on a desktop and one on a phone with no
+ * media query at all, and every control is a 44px touch target at every width
+ * (§1's touch floor — a literal px on purpose, against the 9px root).
+ *
+ * THERE IS NO SCROLLER IN HERE. Step 3 has exactly one scroller, the page
+ * (§10); a nested one captures the wheel and latches, which is the bug report
+ * 36 fixed. The evidence lists grow instead, behind a disclosure.
+ */
+
+.rc {
+  margin: 0.75rem 0;
+  padding: 0.7rem 0.8rem;
+  background: var(--ink-850);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+/* ── Head ─────────────────────────────────────────────────────────────────── */
+
+.rc-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+  color: var(--text-secondary);
+}
+
+.rc-title {
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.rc-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.45rem;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  border-radius: 999px;
+  background: var(--warning-dim);
+  color: var(--warning);
+}
+
+.rc-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: auto;
+  min-height: 44px;                 /* touch floor — see the header note */
+  padding: 0.2rem 0.6rem;
+  font: inherit;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.rc-refresh:hover:not(:disabled) { background: var(--ink-750); color: var(--text-secondary); }
+.rc-refresh:disabled { opacity: 0.55; cursor: default; }
+
+.rc-spin { animation: rc-spin 0.9s linear infinite; }
+@keyframes rc-spin { to { transform: rotate(360deg); } }
+
+/* Respect a reader who has asked for less motion — the spinner is decoration,
+   the disabled button already says "working". */
+@media (prefers-reduced-motion: reduce) {
+  .rc-spin { animation: none; }
+}
+
+/* ── Confidence ───────────────────────────────────────────────────────────── */
+
+/* The chip is the one place a number is coloured, and only LOW is semantic:
+   "medium" and "high" are neutral because colouring three bands turns a signal
+   into a decoration. */
+.rc-conf {
+  padding: 0.1rem 0.4rem;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  white-space: nowrap;
+  border-radius: 999px;
+  background: var(--ink-700);
+  color: var(--text-secondary);
+}
+
+.rc-conf--low { background: var(--warning-dim); color: var(--warning); }
+
+/* ── The facet grid ───────────────────────────────────────────────────────── */
+
+/* auto-fit with a 22rem floor: two columns on a desktop, one on a phone, and no
+   media query to keep in step with the three breakpoints. 22rem is ~198px at
+   the 9px root, which is the narrowest a facet reads at. */
+.rc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: 0.6rem;
+  /* Each facet is its NATURAL height. The default `stretch` makes a one-line
+     "Not dated" box as tall as the condition facet beside it, which reads as an
+     empty panel the seller is supposed to fill in — the same defect the
+     marketplaces pass found in its two card grids. */
+  align-items: start;
+}
+
+.rc-facet {
+  padding: 0.55rem 0.6rem;
+  background: var(--ink-800);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  min-width: 0;                     /* a grid item defaults to min-content */
+}
+
+/* The price is the one a seller looks for first, so it spans the row when there
+   is room for two columns. */
+.rc-facet--price { grid-column: 1 / -1; }
+
+.rc-facet-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.rc-label {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.rc-value {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.rc-value--price { font-size: var(--fs-lg); }
+
+.rc-range {
+  margin: 0.25rem 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.rc-method { color: var(--text-muted); }
+
+/* ── Flaws ────────────────────────────────────────────────────────────────── */
+
+/* Flaws are a DISCLOSURE, not a grade, so they are listed rather than folded
+   into the condition word beside them (see identification.ts). */
+.rc-flaws {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rc-flaws li {
+  padding: 0.1rem 0.4rem;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  border-radius: 999px;
+  background: var(--ink-750);
+  color: var(--text-secondary);
+}
+
+/* ── Apply buttons ────────────────────────────────────────────────────────── */
+
+.rc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.rc-use {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+  min-height: 44px;
+  padding: 0.25rem 0.7rem;
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--ink-800);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.rc-actions .rc-use { margin-top: 0; }
+
+.rc-use:hover:not(:disabled) { background: var(--ink-750); }
+.rc-use:disabled { opacity: 0.6; cursor: default; }
+
+/* The accent is black (§1) and every solid-accent fill already sets
+   color: var(--ink-950), which is white — so this falls out for free. */
+.rc-use--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--ink-950);
+}
+
+.rc-use--primary:hover:not(:disabled) {
+  background: var(--accent);
+  opacity: 0.88;
+}
+
+/* ── The explanation ──────────────────────────────────────────────────────── */
+
+.rc-explain {
+  margin: 0.45rem 0 0;
+  padding-left: 1.1rem;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  color: var(--text-secondary);
+}
+
+.rc-explain li { margin-bottom: 0.15rem; }
+
+.rc-note {
+  margin: 0.4rem 0 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+/* ── Why ──────────────────────────────────────────────────────────────────── */
+
+.rc-why { margin-top: 0.4rem; }
+
+.rc-why-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 44px;
+  padding: 0.15rem 0.35rem 0.15rem 0;
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.rc-why-toggle:hover { color: var(--text-secondary); }
+
+.rc-why-list {
+  margin: 0.2rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+}
+
+.rc-why-list li {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.2rem 0;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.rc-why-kind {
+  flex: 0 0 7.5rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.rc-why-text { min-width: 0; }
+
+/* A line that argues AGAINST the answer above it. The only other semantic
+   colour in this file, and it earns it: without a visual difference a
+   contradiction reads as one more supporting reason. */
+.rc-why-against .rc-why-text { color: var(--danger); }
+.rc-why-against .rc-why-kind { color: var(--danger); opacity: 0.8; }
+
+/* ── Rarity dots ──────────────────────────────────────────────────────────── */
+
+.rc-dots { display: inline-flex; gap: 0.1rem; align-items: center; }
+/* "We have nothing to go on" — never five empty dots, which reads as a measured
+   zero rather than as an absence. */
+.rc-unknown { font-size: var(--fs-sm); color: var(--text-muted); }
+.rc-dot { color: var(--ink-700); }
+.rc-dot--on { color: var(--text-primary); }
+
+/* ── Review ───────────────────────────────────────────────────────────────── */
+
+.rc-review {
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--warning-dim);
+  border: 1px solid var(--warning);
+  border-radius: 6px;
+}
+
+.rc-review-head {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--warning);
+}
+
+.rc-review-list {
+  margin: 0.3rem 0 0;
+  padding-left: 1.1rem;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  color: var(--text-secondary);
+}
+
+.rc-error {
+  margin: 0.35rem 0 0;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--danger);
+}
+
+/* ── The SimilarListings slot ─────────────────────────────────────────────── */
+
+/* Empty until the embeddings pass mounts its component here. No height and no
+   border, so an empty slot is invisible rather than a mystery gap. */
+.rc-similar-slot:empty { display: none; }
+.rc-similar-slot { margin-top: 0.6rem; }
+
+/* ── Phone ────────────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  /* Step 3's own scale, and the evidence "kind" column stops being a column —
+     at 390px a 7.5rem label plus a sentence leaves nothing for the sentence. */
+  .rc-why-list li { flex-direction: column; gap: 0.1rem; }
+  .rc-why-kind { flex: none; }
+  .rc-use { width: 100%; justify-content: center; }
+  .rc-actions .rc-use { width: auto; flex: 1 1 12rem; }
+}

@@ -380,6 +380,7 @@ sortingapp/
 │   │   ├── MessagesView.tsx / .css  # 'messages' view (§6) — the full-page half of messaging: "Messages" for a user, "Inbox" for a founder. Searchable thread list beside a full-height conversation, founder Open/Closed/All chips with live counts, unread-first ordering with a real unread dot element (+ a visually-hidden "(unread)"), Up/Down keyboard walk over the list, Enter-to-send composer with an optional Subject on a new conversation, `EmptyState` for all four empty cases, and a one-column stack with a "All conversations" back control ≤1024px. Reads `supportStore` — it fetches nothing of its own.
 │   │   ├── FinanceView.tsx / .css  # 'finance' view (§6), Founding admins only. Sub-tabs Overview / Transactions / Customers / Reports, held in COMPONENT state so App's diff stays the same shape as the CRM's. Ledger CRUD with the two-step `org-confirm-yes/no` delete (no `confirm()`), a two-series monthly P&L chart in `--accent` + `--text-muted` (semantics reserved for the one real state: profit sign), plan-price editor, projected MRR list vs discounted, two CSV downloads and a printable statement. The Transactions tab lists TEMPLATES (what you edit); everything else shows expanded occurrences. FinanceView.css only adds what Finance needs on top of the `.tool-view` scale, plus the print stylesheet (the `visibility` technique — everything invisible, `.fin-print` painted back, so app chrome outside this component is free to change).
 │   │   ├── LabelPrintView.tsx / .css  # 'labels' view (§6), every member. Print sheet for the OPEN batch: one row per listing (rows come from `buildGroupArray`, the same builder Step 3 navigates with), three real label stocks from `lib/labelTemplates.ts`, a Code 128 SVG per label and the SKU underneath. READ-ONLY on the workflow store — its one mutation is `ensureSkus`, which writes `products.sku` and touches no in-memory item. Stores DEselection (so "print everything" is the empty set and late-arriving listings are never dropped); the print stylesheet hides everything but the sheet and drives `@page` from the same template.
+│   │   ├── ResearchCard.tsx / .css  # Step 3 research card, under the preset controls. Era / condition + flaws / rarity / price, each with a confidence chip and an expandable "Why" list of evidence, plus a "Needs a look" flag and Mark reviewed. SUGGESTS, NEVER APPLIES — every value is behind a button and the button calls `onApplyField`, which PDG points at `handleTableFieldChange`, so an applied price inherits the group patch, the transcript line, the debounce and the saveStatusStore report and this component never touches the workflow store. Owns its own capture (one identification + one price row per RUN, keyed on the suggestion so a keystroke does not append a row; a `corrected`/`accepted` event per field on the way out). Renders nothing pre-migration. Carries an empty `.rc-similar-slot` for `SimilarListings`.
 │   │   ├── ProductsView.tsx / .css  # 'products' view (§6), every member. THE ONE SURFACE THAT IS NOT BATCH-SHAPED: search every listing in the workspace, then edit its seven correction fields (through `syncGroupFieldsToDatabase`, the same writer Step 3 uses), its SKU/barcode, and its labels — plus a one-label print sheet and "Open in workflow". Never writes the workflow store; it writes `products` and reports the save to App via `onListingEdited`. Contains `LabelManager`, the workspace label-vocabulary CRUD.
 │   │   ├── BarcodeScannerView.tsx / .css  # 'scan' view (§6), every member. Three inputs: the phone camera via the browser's own `BarcodeDetector` (`code_128`, sampled every 160 ms — NO WASM polyfill; where the API is missing the view says so), a USB/Bluetooth scanner (it is a keyboard — it types the code and presses Enter), and a typed SKU. Every exit path goes through `stopCamera`, which stops every TRACK (pausing the <video> leaves the camera light on). A hit renders the listing card plus "Open in Step 3" when App supplies `onOpenListing`.
 │   │   ├── ToolView.tsx / .css    # THE full-page shell every header tool opens into (§6). Title row (icon + <h1> + one-line description + optional actions), "Back to workflow" first in tab order, Escape-to-back, optional `tabs` slot, `wide` (Library/Board), `escapeToBack` (Board). Focuses the <h1> and scrolls to top on open. ToolView.css owns THE spacing scale for all tool views — page padding `3rem clamp(2rem,4vw,6rem) 6rem`, 3rem section gaps, 2rem card padding, 4rem controls, 4.5rem table rows, 1400px measure — plus `--tv-sticky-top`, the header-clearance var the sticky editor columns and tab rails share. Per-tool CSS scopes its page overrides under `.tool-view` rather than rewriting 30 KB files. Tested in ToolView.test.tsx (8 tests).
@@ -408,6 +409,9 @@ sortingapp/
 │   │   ├── imageRowSync.ts        # product_images row builders + Stage 4 dual-write: stage4ColumnsAvailable() (cached probe) / stage4ColumnsKnownAvailable() (its synchronous view), buildTransforms(), buildProductImageRow(), and mergeProductImageRows() — the merge that makes registerItemsInDB's wipe non-destructive (§11).
 │   │   ├── libraryData.ts         # PURE Library derivation: deriveLibraryData(wfBatches, savedProducts, savedImages) → {batches, groups, images}; owns ProductGroup/ImageRecord, cleanTitle, the per-batch-memoized makeBatchName, the two-pass imageList dedup/gap-fill rules and batch synthesis. Imports storageUrls, not supabase.
 │   │   ├── libraryService.ts      # fetchSavedProducts / fetchSavedImages (paginated 1000/page), duplicateBatch (copies workflow_state.processedItems and recomputes the counts), delete operations for Library.
+│   │   ├── identification.ts / .test.ts  # PURE, DEPENDENCY-FREE identification (66 tests): era, condition + flaws, rarity, each with EVIDENCE and a confidence, plus title/tag/metafield suggestions. Candidates are PROPOSED by strong signals (typed field, spoken decade, a one-decade brand, a model's introduction year) and SCORED by construction cues, so a cue can never invent an era on its own; a rejected candidate's own proposal is carried onto the winner as dissent. `vocab_models.year_introduced` is the one HARD constraint. Cue bounds are YEARS and candidates are DECADES, so the test is OVERLAP. `BrandFacts` is an INPUT — a static `BRAND_DNA` import cost 113 kB of first paint; `loadBrandFacts` fetches it behind a dynamic import, cached.
+│   │   ├── pricing.ts / .test.ts  # PURE price engine (52 tests). Spoken price wins outright → sold median → asking median discounted 15% → `insufficient` (and it names NO number; NEVER 0, which the export gate reads as unpriced). ASKING AND SOLD ARE NEVER IN ONE MEDIAN. Trimmed median, IQR band, condition multiplier, `.99` rounding (a documented replica of platformPricing's, asserted to agree). `needsReview` + reasons in words. Every figure in `explanation` traces to the inputs, asserted.
+│   │   ├── researchService.ts / .test.ts  # The five research tables (67 tests). `researchAvailable()` probe, `logEvents` (ONE chunked insert), `saveIdentification` (reads its id back so Mark reviewed has a row), `savePrice`, `recordSale` (23505 → words), `fetchSales`, `daysToSell` (read time, never stored), `fetchLatestIdentifications`/`fetchLatestPrices` (newest per listing), `fetchOwnComps` (brand+category → category+era → category, and NO "everything ever sold" step), `fetchCachedComps` + `compsQueryKey` (one key per DESIGN — size and condition are not in it). WRITES FAIL QUIET, deliberately the opposite of §18 #41: a research log that interrupts a dictation is one that gets turned off.
 │   │   ├── platformPricing.ts     # PURE per-marketplace pricing (feature 21): PlatformPricingRule, applyPlatformPrice / formatPlatformPrice, rounding (`none` / `.99` = NEAREST dollar less a penny / `whole`), platformSlug (the CSV filename), describePlatformRule + pricingExample (the settings copy), normalizePlatformRules (run on every read of the JSONB), selectablePlatforms. TWO INVARIANTS ARE TESTED EXHAUSTIVELY — `$0`/non-finite passes through untouched, and no rule can produce a non-positive price (§18 #42).
 │   │   ├── backgroundService.ts   # THE app's half of photo backgrounds (§9). `resolveCatalogPath` is THE rule for which file a photo IS (composite when `auto`/`approved`, original otherwise) and every consumer calls it — the grid, the Shopify CSV, every marketplace feed. Also `backgroundsAvailable()` (env + a cached column probe, the `stage4ColumnsAvailable` shape), `fetchImageRowsForProducts` (chunked, projected, RLS-scoped), `summarizeMaskStatuses`, `isBackgroundBlocking`, `maskFlagLabel` (machine flag → a sentence), and the four authenticated calls at the matting service. **It writes exactly ONE column, `mask_status`, and only when a person decided.** 51 tests.
 │   │   ├── barcode.ts             # FIRST-PARTY Code 128 (feature 25): the 107-row table, subsets B and C chosen automatically (A is deliberately not implemented), encodeCode128 / patternToBars / code128Svg, and the SKU system — `ACD-` + 6 Crockford base32 characters (I/L/O/U dropped: a SKU is read aloud and typed off a printed label), isGeneratedSku, generateSkuCandidate, skuLookupCandidates (the exact spelling FIRST, the confusable fold second — never an edit to the first). No dependency, no network, no DOM.
@@ -733,6 +737,27 @@ The colour / word / vendor labels a shop puts on a listing, and the join that ap
 #### `products.sku` / `products.barcode`
 
 Both columns **already existed** (`supabase/schema.sql`, and the `Database` type in `src/lib/supabase.ts`), so the `add column if not exists` statements in `listing_labels.sql` are no-ops on a real database. What is new is **`products_org_sku_uidx`** — a unique **partial** index on `(org_id, sku) where sku is not null`. A SKU is the key a scanner looks a product up by, so two products sharing one inside a workspace makes the scanner ambiguous; partial because the overwhelming majority of rows have no SKU and NULLs must not collide. SKUs are `ACD-` + 6 Crockford base32 characters, assigned lazily by `ensureSkus` (§11). The index creation is wrapped in a `DO` block that catches `unique_violation`, so a database that already holds duplicate free-text SKUs gets a NOTICE and the rest of the migration still installs.
+
+#### Research (`supabase/migrations/pricing_research.sql` — WRITTEN, NOT YET RUN)
+
+What was suggested, what a human changed it to, and what the piece sold for.
+Org-scoped exactly like `listing_labels.sql`: `org_id default default_org_id()`,
+membership RLS on all four verbs, **no admin gate** — the person who corrects a
+price or marks a piece sold is whoever is listing that day.
+
+| Table | What it holds | The decision inside it |
+|---|---|---|
+| `pricing_events` | One row per (listing, field, moment): `suggested` / `corrected` / `accepted`, `source`, `confidence`. `field` and `source` are CHECKed vocabularies. | **APPEND-ONLY — no UPDATE grant at all.** A logged suggestion is a fact about a moment; editing it destroys the signal plan step 7 needs. A correction is a new row. `accepted` NULL means "not yet decided", which is not `false`. |
+| `listing_identifications` | One row per RUN: era + `era_evidence`, condition + `flaws[]`, `rarity` (0..1) + evidence, `confidence`, `suggestions`, `model` (the engine version). | **`reviewed` is the ONE column in the UPDATE grant** — "I have looked at this" is a fact about a person, not about the run. |
+| `listing_prices` | One row per RUN: `suggested_cents` / `low` / `high`, `method`, ordered `explanation`, `comps`, `needs_review` + `review_reasons[]`. | **NULL is a real answer and 0 is refused by a CHECK**: `insufficient` declines to name a number, and the export gate reads $0 as "unpriced". No UPDATE grant. |
+| `listing_sales` | The contract in `docs/pricing/00-plan.md`, column for column (the embeddings RPC reads it). | Unique on `(org_id, product_group_id, coalesce(external_order_id, ''))` — an EXPRESSION index, so `recordSale` inserts and translates 23505. The money, dates, marketplace and sku ARE updatable (a mistyped sold price poisons every future comp); scope, source and provenance are not. |
+| `price_comps_cache` | `(org_id, source, query_key)` → `comps` + `expires_at`. | **NOTHING WRITES IT YET, on purpose** — the seam for the eBay Browse API and web search. `expires_at` is NOT NULL because a cache row with no expiry is a permanent wrong answer, and the read filters it in the QUERY. |
+
+**`product_group_id` is deliberately NOT a foreign key in any of them** — the
+same decision `listing_publications` made. The leader `products` row can be
+deleted or re-created while the garment is still on a rack and still sold last
+Tuesday; a cascade would destroy the only record that cannot be reconstructed.
+`batch_id` IS one, `on delete set null`. `days_to_sell` is computed at read time.
 
 #### `brand_aliases` (`supabase/migrations/brand_aliases.sql` — WRITTEN, NOT YET RUN)
 
@@ -1281,6 +1306,64 @@ Full write-up: `docs/marketplaces/03-step4.md`.
 - **On a phone:** the grid scrolls in its own box with the listing column frozen (header cell
   `z-index: 3` over the sticky header row's 2 and the body cells' 1), cards go one column, and
   the fix row keeps its input and Save side by side under a full-width label.
+
+### Research — the Step 3 card, the Step 4 split, Mark as sold (Sept 2026)
+**Files:** `components/ResearchCard.tsx` / `.css`, `lib/identification.ts`, `lib/pricing.ts`,
+`lib/researchService.ts`, `lib/marketplaces/matrix.ts` (`withResearchIssues`), the Research block
+in `GoogleSheetExporter`, `SoldPanel` in `ProductsView`, `supabase/migrations/pricing_research.sql`.
+Plan and decisions: `docs/pricing/00-plan.md`, `docs/pricing/01-research-stage.md`.
+
+Steps 1, 2, 4 and 5 of the pricing plan. **Pre-migration every one of these surfaces renders
+nothing** and Steps 1-4 behave exactly as they do today.
+
+- **THE MODEL NEVER NAMES THE PRICE.** `computePrice` does, from comps, and every figure in its
+  `explanation` is copied from a comp, copied from the listing, or arithmetic over those — which a
+  test asserts by extracting every dollar figure from the sentences. That is the whole reason a
+  price here is defensible, and it is what a future "let the model suggest a number" would break.
+- **ASKING AND SOLD ARE NEVER MERGED.** What three people are ASKING says what they hope, and it
+  sits systematically above what the last one SOLD for. Sold comps are medianed alone; asking comps
+  are only reached below `MIN_COMPS = 3` solds, are discounted 15%, and say so in words. Sold comps
+  that were too few to median are NAMED in the explanation rather than quietly folded in.
+- **A SPOKEN PRICE WINS OUTRIGHT**, at confidence 1, consulting nothing — the plan's "skip entirely
+  for anything already priced out loud". `item.price` IS that price once dictation has written it,
+  so the card passes it straight in rather than trying to tell "spoken" from "typed": either way a
+  human decided.
+- **`insufficient` names no number, and NULL is never 0.** Zero is a number, and the export price
+  gate reads $0 as "unpriced" — a 0 here would be a suggestion the gate then blocks on. The column
+  CHECK refuses it too.
+- **Every answer carries EVIDENCE, and a contradiction shows BOTH sides.** A bare "1990s" is a claim
+  a reseller cannot check. Candidates are proposed by strong signals and scored by construction
+  cues, so a cue never invents an era; a rejected candidate's own spoken proposal is carried onto
+  the winner as dissent, unless the winner is the field the seller typed. `vocab_models.year_introduced`
+  is the one HARD constraint (a garment cannot predate the model it is). Cue bounds are YEARS and
+  candidates are DECADES, so the test is OVERLAP — comparing against the decade's START made "single
+  stitch, not after 1995" contradict the 1990s, which is wrong about the most used dating cue in
+  resale.
+- **Flaws are collected separately from the grade.** "Faded" is a look a buyer pays for; "pit stains"
+  is a defect that must be disclosed. A WORN flaw (holes / stains / pilling / fraying / thin spots /
+  odour) overrides a claim of NWT or New down to Excellent — "NWT · holes, stains" is a case waiting
+  to happen — while a cracked print, a missing button or age yellowing do not, because those happen
+  to genuinely deadstock stock.
+- **The card SUGGESTS and never applies.** Every value is behind a button, and the button goes
+  through `handleTableFieldChange`, the same path a typed value takes, so it inherits the group
+  patch, the transcript line, the debounced save and the `saveStatusStore` report — and the card is
+  never a second writer of the store.
+- **Step 4's split is ADVICE, not a gate.** *N ready to export · M need a look*, with reasons and
+  Open in Step 3, above the price gate — **the CSV still downloads**. The same rows add a
+  `warning`-level `ReadinessIssue` to every marketplace column (`withResearchIssues`), which is why
+  a feed is not blocked either: a $0 price is a file that is definitely wrong, a review flag is not,
+  and a research pass that can stop an export is one that gets switched off the first time it is
+  wrong. Both surfaces read the same `fetchLatestPrices`, so "flagged" means one thing.
+- **Writes fail quiet, deliberately the opposite of §18 #41.** A failed research log must never
+  surface as "Save failed" or interrupt a dictation. The one exception is **Mark reviewed**, where a
+  person pressed a button and is waiting: 0 rows updated un-presses it and says why.
+- **Comps come from the shop's own sold history** (`fetchOwnComps`), narrowing brand + category →
+  category + era → category. **There is no "everything the shop ever sold" step**: the median of a
+  whole inventory is not a comparable, it is an average price, and `insufficient` is the honest
+  answer instead.
+- **Mark as sold** (Products) is the manual half of the feedback loop — sold price, date, where (the
+  ten marketplace keys + `other`), optional order id — and a recorded sale becomes the comp the next
+  similar piece is priced from.
 
 ### Labels and Scan (Sept 14 2026, feature 25)
 **Files:** `LabelPrintView.tsx`, `BarcodeScannerView.tsx`, `ListingLabelsPicker.tsx`, `lib/barcode.ts`, `lib/labelsService.ts`, `lib/labelTemplates.ts`, `supabase/migrations/listing_labels.sql`
@@ -2197,6 +2280,7 @@ deleted with its comment on the next App.css pass.
 | **`brand_aliases.sql`** | **Written, NOT run** | Prereq: `multi_org_tenancy.sql` (it uses `default_org_id()` / `user_org_ids()`). Until it runs, `brandAliasService` reports `'unavailable'`, the whole Step-3 brand-spelling surface hides, and dictation behaves exactly as it does today — safe to ship the code first. Verified over three rounds on a throwaway Postgres 14 (idempotence, the canonical-`heard` CHECK, the upgrade path from an earlier version of the file, column-grant immutability); additive, idempotent, rollback at the bottom (which deliberately does not drop the shared `my_email()`). |
 | **`team_messaging.sql`** | **Written, NOT run** | Prereqs: `multi_org_tenancy.sql`, `beta_signups.sql`, `support_messaging.sql`, `security_abuse_limits.sql`. **Run `perf_rls_initplan.sql` immediately AFTER it** — that file recreates the five support policies, and its section 8 now branches on whether `support_threads.kind` exists so either order ends correct; running neither leaves today's behaviour untouched. `security_function_hardening.sql` / `security_rpc_wrappers.sql` need no re-run (this file replaces one trigger function, re-stating its own revokes, and creates its new policy helper in `app_private` behind a public invoker wrapper already). Until it runs, `fetchThreads` falls back to the old column list, `teamAvailable` is false and the whole team surface — the kind chips, the teammate picker, the participant labels — hides; support messaging is untouched. Verified on a throwaway Postgres 14 — 15 scenarios, including that a founding admin in another workspace sees a support thread and NOT a team one, that no `42P17` recursion occurs, and that both run orders with the perf file end in an identical policy set. Additive, idempotent. **The rollback block has a mandatory PRE-STEP** (delete the `'member'` messages and the `kind='team'` threads first): it is not one transaction, its last statement refuses while a `'member'` row survives, and a half-finished rollback leaves every team conversation readable from the founders' inbox — the block says so at the top. **Known limit, not fixed here:** `security_abuse_limits.sql`'s 20-open-threads quota counts every thread I STARTED, so team threads share the support budget — narrowing it means editing that file's trigger, which would put the same function in two migrations. |
 | **`marketplaces.sql`** | **Written, NOT run** | Prereqs: `multi_org_tenancy.sql` (uses `user_org_ids()`, `default_org_id()`, `is_org_admin()`) and `org_description_settings.sql` (the price rules `org_marketplaces.settings.pricingRuleId` points at). `beta_signups.sql` is needed only for the GLOBAL vocabulary rows (`is_beta_admin()`); everything else works without it. Until it runs, `marketplaceService` reports `'unavailable'`, the Workspace dashboard's **Marketplaces** tab shows the setup hint, and Steps 1-4 behave exactly as they do today — so the code ships first, in the house order. Verified on a throwaway Postgres 14 across **33 scenarios** (`docs/marketplaces/02-data.md` §5), including the idempotent re-apply, the upgrade path from an earlier version of the file, the collision-refusal message, and rollback → re-apply (which deliberately KEEPS the shared `my_email()`). Adds no SECURITY DEFINER function, so the hardening files need no re-run for it. |
+| **`pricing_research.sql`** | **Written, NOT run** | Prereq: `multi_org_tenancy.sql` (uses `default_org_id()` / `user_org_ids()`). Adds no function, so neither hardening file needs a re-run. Until it runs, `researchAvailable()` is false and EVERY research surface hides: the Step 3 card, the Step 4 ready/needs-a-look split, the marketplace warnings and the Products **Mark as sold** card — Steps 1-4 behave exactly as today, so the code ships first in the house order. Verified across **33 scenarios** on a throwaway Postgres 14 (`docs/pricing/01-research-stage.md` §2), including cross-org isolation on all five tables, the append-only and column-grant refusals, the `coalesce(external_order_id, '')` uniqueness, the $0-price CHECK, the idempotent re-apply, the stale table-wide-grant upgrade path, and rollback → re-apply. **`listing_sales` is the one table holding data a shop cannot re-derive** — the rollback block says to copy it first. |
 | **`listing_labels.sql`** | **Written, NOT run** | Prereq: `multi_org_tenancy.sql`. Until it runs, the Step-3 labels picker renders nothing, the Labels view still prints titles and prices (without barcodes, since SKUs cannot be assigned), and the scanner says what is missing. Verified on a throwaway Postgres 14 across 12 checks — cross-org isolation both with and without `products` RLS, cascades, every CHECK, the **duplicate-SKU degradation path** (the unique index is skipped with a NOTICE instead of aborting the migration), and rollback (which deliberately RETAINS `products.sku`/`.barcode`). |
 | **One-off `products.vendor` repair (report 23)** | **Owed — run by hand, NOT a migration** | The code no longer creates or re-serves the bug, but rows written during the 34-minute July 2026 window still hold the shop's own name in the column that hydrates back into `brand`. The SQL — a preview query, a deliberately WIDER `%vintage%` count so a spaced or misspelled variant is seen rather than missed, the narrow repair, and a check of `category_presets.vendor` — is in `docs/reviews/12-step3-fields-brands-sizes.md`, "Final stitch" §5. It is a one-shop data edit, not schema, which is why it is not in `supabase/migrations/`. |
 | **`app_errors.sql`** | **Written, NOT run** | Prereqs: `multi_org_tenancy.sql` + `beta_signups.sql` (needs `organizations` and `is_beta_admin()`). Additive, idempotent, rollback at the bottom; the VERIFY block is the smoke test. Until it runs, `errorReporter` latches off and **Founder tools → Errors** shows a setup hint. Retention is manual: `select public.app_errors_prune(90);`. |
@@ -2451,7 +2535,34 @@ npm run lint
     reseller discovers after an import that the catalogue carries the un-matted photos. And note it must
     be consulted BEFORE `imageUrls[0]`, which always points at the original.
 
-54. **Do not store an empty `target_marketplaces` from the UI, and do not let the last target be turned
+54. **Never merge asking prices and sold prices into one median, and never let a comps source
+    become "everything the shop ever sold".** What people are ASKING says what they hope and sits
+    systematically above what the last one SOLD for, so `computePrice` medians the two separately,
+    reaches asking ONLY below `MIN_COMPS` solds, discounts it 15%, says so in the explanation, and
+    NAMES the sold comps it could not use rather than quietly folding them in. `fetchOwnComps`
+    stops at "same category" for the same reason: the median of a whole inventory is an average
+    price, not a comparable, and `insufficient` — which names no number at all — is the honest
+    answer. Both rules are asserted exhaustively in `pricing.test.ts`; a change here is a change
+    somebody has to make on purpose.
+
+55. **The model never names the final price, and nothing in `pricing.ts` may invent a figure.**
+    `computePrice` computes it from the comps, and every number in `explanation` is copied from a
+    comp, copied from the listing, or arithmetic over those — a test extracts every dollar figure
+    from the sentences and checks it. `insufficient` must stay NULL and never 0: zero is a number,
+    the export price gate reads $0 as "unpriced", and a 0 suggestion is one the gate then blocks
+    on (the column CHECK refuses it too). The same applies one level up: the Step 3 card SUGGESTS
+    and never applies — every value is behind a button, and the button goes through
+    `handleTableFieldChange` so the card is never a second writer of the store (§8).
+
+56. **Do not train on, aggregate across, or otherwise read another workspace's captured research.**
+    Every table in `pricing_research.sql` is org-scoped with no cross-tenant escape — no
+    `is_beta_admin()` branch, no SECURITY DEFINER reader — and `fetchOwnComps` reads only the
+    caller's own `listing_sales`. The plan's own rule (`docs/pricing/00-plan.md`, "What to watch
+    out for") is that captured data is used only for the workspace that produced it until the
+    terms say otherwise, and plan step 7's shop-specific model is *per shop*. A cross-workspace
+    query here is a promise broken, not a feature.
+
+57. **Do not store an empty `target_marketplaces` from the UI, and do not let the last target be turned
     off.** The column defaults to `'{}'` and nothing in it distinguishes "not chosen yet" from "chosen
     none", so `effectiveTargets` reads empty as EVERY ENABLED marketplace — a batch nobody has configured
     shows every column, which is the only reading that says anything. `nextTargets` writes the explicit

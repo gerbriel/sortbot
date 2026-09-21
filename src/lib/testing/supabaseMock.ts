@@ -17,7 +17,7 @@ export interface MockFilter {
    *  whole `or=(...)` argument as a single string, so it is recorded verbatim
    *  under the column name 'or'. That raw string is exactly what a search test
    *  needs to assert about escaping and column coverage. */
-  kind: 'eq' | 'neq' | 'is' | 'in' | 'gte' | 'lte' | 'not' | 'or';
+  kind: 'eq' | 'neq' | 'is' | 'in' | 'gt' | 'gte' | 'lt' | 'lte' | 'not' | 'or' | 'ilike';
   column: string;
   value: unknown;
 }
@@ -46,8 +46,11 @@ interface Builder extends PromiseLike<QueryResult> {
   neq(column: string, value: unknown): Builder;
   is(column: string, value: unknown): Builder;
   in(column: string, value: unknown[]): Builder;
+  gt(column: string, value: unknown): Builder;
   gte(column: string, value: unknown): Builder;
+  lt(column: string, value: unknown): Builder;
   lte(column: string, value: unknown): Builder;
+  ilike(column: string, value: string): Builder;
   not(column: string, op: string, value: unknown): Builder;
   or(filter: string): Builder;
   order(column: string, options?: unknown): Builder;
@@ -153,8 +156,11 @@ export function createSupabaseMock(): MockedSupabaseClient {
       neq(c, v) { return filter('neq', c, v); },
       is(c, v) { return filter('is', c, v); },
       in(c, v) { return filter('in', c, v); },
+      gt(c, v) { return filter('gt', c, v); },
       gte(c, v) { return filter('gte', c, v); },
+      lt(c, v) { return filter('lt', c, v); },
       lte(c, v) { return filter('lte', c, v); },
+      ilike(c, v) { return filter('ilike', c, v); },
       not(c, _op, v) { return filter('not', c, v); },
       or(f) { return filter('or', 'or', f); },
       order() { return builder; },

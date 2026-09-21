@@ -21,6 +21,13 @@ line of the app — is written against the four-line `Matter` protocol in
 given photo, so a backend change is answerable after the fact rather than a
 silent fork in the catalog.
 
+**1b. It also embeds.** `POST /v1/embed` writes a CLIP vector per photo into
+`listing_embeddings`, which is what powers "similar past listings", the shop's own
+price comps and duplicate detection (`docs/pricing/00-plan.md` step 3). It shares
+this service's auth boundary, its job runner and its per-workspace lock, and it
+touches none of the matting columns. See "Embeddings" below and
+[`CONTRACT.md` §9](./CONTRACT.md).
+
 **2. Compositing is deterministic, never generative.** Same source, same alpha,
 same preset → the same pixels on every machine, forever. A generative "replace
 the background" pass makes every photo slightly different, and a catalog page of
@@ -113,6 +120,15 @@ run, every write fails on a missing column.
 | `MAX_BODY_BYTES` | `262144` | |
 | `SCORE_*` | see below | review thresholds |
 | `MATTING_ADVISORY_FLAGS` | `contrast` | flags that do **not** force review |
+| `EMBED_MODEL_URL` | Xenova CLIP `vision_model.onnx` | see "Embeddings" |
+| `EMBED_MODEL_BYTES` | `351685709` | expected size; `0` skips the check |
+| `EMBED_MODEL_SHA256` | the fp32 file's digest | `''` skips the check |
+| `EMBED_MODEL_TAG` | derived from the filename | what lands in `listing_embeddings.model` |
+| `MODEL_CACHE_DIR` | `/tmp/models` | **ephemeral on Fly without a volume** |
+| `EMBED_PREFETCH` | `1` | fetch the weights at container start |
+| `EMBED_CONCURRENCY` | `2` | photos in flight per embed job |
+| `EMBED_THREADS` | `1` | onnxruntime intra-op threads |
+| `EMBED_TIMEOUT_S` | `60` | outer deadline on one photo |
 
 ### Why `REPLICATE_VERSION` is mandatory
 
@@ -222,6 +238,79 @@ column, move the numbers, run again, without touching production.
 
 ---
 
+## Embeddings
+
+`POST /v1/embed` writes one CLIP vector per photo into **`listing_embeddings`**.
+That table is what "similar past listings" reads, what the shop's own price comps
+are built from, and what catches the jacket somebody already listed last month —
+docs/pricing/00-plan.md step 3, the free one. The HTTP shape, the skip rule and the
+nearest-neighbour RPC are in [`CONTRACT.md` §5 and §9](./CONTRACT.md).
+
+**Run `supabase/migrations/listing_embeddings.sql` first.** Until then the endpoint
+answers `503` and the app hides the surface — the code ships before the SQL, in the
+house order.
+
+### The model
+
+OpenAI **CLIP ViT-B/32**, vision tower only, as the MIT-licensed ONNX export
+`Xenova/clip-vit-base-patch32` → `onnx/vision_model.onnx`. No torch, no API key,
+nothing at run time but `onnxruntime` and a file on disk.
+
+**fp32 and not the quantized export**, and this was measured rather than assumed
+(three real garment photos; the workings are in `docs/pricing/02-embeddings.md`):
+
+| | fp32 | int8 |
+|---|---|---|
+| cosine agreement with fp32 | — | 0.9216 / 0.9682 / 0.8986 |
+| pairwise similarity, the three pairs | 0.842 / 0.770 / 0.819 | 0.785 / 0.740 / 0.802 |
+| latency, 1 thread, arm64 | **15 ms** | 25 ms |
+| resident after warm-up | 407 MB | 239 MB |
+| download | 335 MiB | 85 MiB |
+
+The pairwise row is what decided it. This feature never consumes an embedding — it
+consumes the **cosine between two of them**, and it calls 0.92 a near duplicate. A
+quantization that moves every pair down by 0.03–0.06 does not add noise to a
+ranking, it moves a user-visible threshold out from under it. It was also *slower*
+on arm64, so the 170 MB bought nothing.
+
+### Memory, and why the embed job shares matting's lock
+
+The session is **~400 MB resident** once warm, and it is loaded **lazily on the
+first `/v1/embed`** — so a deployment that only mats photos never pays for it and
+`/healthz` never waits on it. A 1 GB machine fits it, but only because embed jobs
+and matting jobs take the **same per-workspace lock** (`app/jobs.py`): the peak is
+the larger of the two, never the sum. Raise `EMBED_CONCURRENCY` above 2, or remove
+that lock, and go to 2 GB first.
+
+### The weights are downloaded at run time, not baked into the image
+
+`MODEL_CACHE_DIR` defaults to `/tmp/models` and the file is fetched in the
+background at container start (`EMBED_PREFETCH=1`), verified against its expected
+byte count **and** sha256, and written with an atomic rename — so a process killed
+mid-download leaves a `.part` file, never a truncated model that the next start
+would happily load and produce subtly wrong vectors from.
+
+**On Fly, `/tmp` is thrown away when the machine stops.** With
+`auto_stop_machines = "stop"` that means a ~350 MB fetch per cold start: free, but
+it delays the first "Find similar" by up to a minute on a slow link. A 1 GB volume
+makes it a one-off — `fly.toml.example` has the `[mounts]` block commented out with
+the trade-off written next to it (a volume pins the app to one machine in one
+region).
+
+### Changing the model
+
+Set `EMBED_MODEL_URL` (and `EMBED_MODEL_BYTES` / `EMBED_MODEL_SHA256` for the new
+file, or `''` to skip the digest), then re-run `POST /v1/embed` over the catalogue.
+There is **no migration**: `listing_embeddings.model` records which model produced
+each vector, the RPC only ever compares vectors that share it, and the tag is
+**derived from the filename** so it cannot silently stay the same. Old vectors are
+replaced photo by photo as the re-run reaches them — the primary key is the photo
+alone.
+
+A model of a different WIDTH is a migration, because 512 is in the column type.
+
+---
+
 ## Offline CLI
 
 ```bash
@@ -309,6 +398,11 @@ The `local` backend is $0 per image and a fixed machine cost instead; on a
 scale-to-zero host the hosted backend is cheaper until roughly a few thousand
 images a month.
 
+**Embedding costs nothing per image** — it runs in this process, on the CPU you
+are already paying for, at roughly 15 ms a photo (measured, arm64, one thread;
+expect several times that on a shared vCPU). The only cost is a ~350 MB download
+per cold start unless a volume is mounted — see "Embeddings".
+
 ---
 
 ## Licences
@@ -324,12 +418,15 @@ restricts commercial resale listings.
 | Pillow | HPND (MIT-like) |
 | NumPy | BSD-3-Clause |
 | OpenCV (`opencv-python-headless`) | Apache-2.0 |
+| onnxruntime | MIT |
 | **BiRefNet** (code and weights) | **MIT** |
+| **CLIP ViT-B/32 weights** (OpenAI) | **MIT** — <https://github.com/openai/CLIP> |
+| **CLIP ONNX export** (`Xenova/clip-vit-base-patch32`) | **MIT** — <https://huggingface.co/Xenova/clip-vit-base-patch32> |
 | pytest / pytest-asyncio *(test only)* | MIT |
 | torch / torchvision *(`[local]` extra)* | BSD-3-Clause |
 | transformers / timm *(`[local]` extra)* | Apache-2.0 |
 
-**Two things to be aware of.**
+**Three things to be aware of.**
 
 1. **BiRefNet's code and weights are MIT, but the DIS5K dataset it was trained on
    carries its own terms**, published as a PDF by the dataset authors rather than
@@ -338,7 +435,13 @@ restricts commercial resale listings.
    founder's call to read it before this goes commercial, and it is not one this
    file can make. See the BiRefNet repository's dataset links.
 
-2. **BRIA RMBG was excluded on purpose.** It is the obvious alternative and it
+2. **CLIP is MIT on both halves — the weights and the export — which is why it is
+   the embedding model here.** The obvious alternatives are not: SigLIP's best
+   checkpoints and several OpenCLIP variants carry dataset terms or non-commercial
+   clauses, and an embedding of a reseller's own inventory is commercial use. If
+   the model is ever swapped, check the WEIGHTS' licence, not just the code's.
+
+3. **BRIA RMBG was excluded on purpose.** It is the obvious alternative and it
    often cuts clothing slightly better, but it is **CC BY-NC** — non-commercial.
    A reseller's catalog is the definition of commercial use. Do not swap it in
    without buying BRIA's commercial licence, and if you do, put the licence
@@ -353,11 +456,12 @@ Tang (2010) written against the base OpenCV API rather than a dependency on
 ## Tests
 
 ```bash
-python -m pytest -q          # 247 tests
+python -m pytest -q          # 346 tests
 ```
 
-**No test touches the network.** The Replicate backend is driven through an
-`httpx.MockTransport` and so is the auth boundary — a test that could reach
+**No test touches the network, and no test loads a model.** The Replicate backend
+is driven through an `httpx.MockTransport`, so is the auth boundary, so is the
+CLIP weights download, and the ONNX session is stood in for — a test that could reach
 Replicate is a test that spends money on every CI run, and a test that could
 reach Supabase is a test that can write to the real `product_images` table.
 

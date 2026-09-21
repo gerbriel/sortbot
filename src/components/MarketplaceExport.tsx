@@ -17,9 +17,11 @@ import { buildListingPack, packToText, type ListingPack } from '../lib/marketpla
 import {
   cellSummary, effectiveTargets, fixableIssues, nextTargets, summarizeMatrix,
   withBackgroundIssues,
+  withResearchIssues,
   type IssueSummary, type MarketplaceSummary,
 } from '../lib/marketplaces/matrix';
 import { isBackgroundBlocking, resolveCatalogPath } from '../lib/backgroundService';
+import { fetchLatestPrices } from '../lib/researchService';
 import {
   MARKETPLACE_KEYS,
   type FormattedListing, type MarketplaceKey, type VocabResolver,
@@ -264,6 +266,34 @@ function MarketplaceExportInner({
   }, [rows]);
 
   /**
+   * Which listings the price engine flagged, and why.
+   *
+   * ONE projected read of the newest `listing_prices` row per listing, chunked —
+   * the same data `GoogleSheetExporter`'s Research summary reads, through the
+   * same function, so the two surfaces cannot disagree about which listings are
+   * flagged. Two reads at Step 4 open is the cost of each panel owning its own
+   * fetching (the house pattern: ListingLabelsPicker, MarketplaceExport itself).
+   *
+   * Pre-migration it is simply empty and no warning appears anywhere.
+   */
+  const [researchReasons, setResearchReasons] = useState<Map<string, string[]>>(new Map());
+  const rowIdsKey = rows.map(r => r.productGroupId).join(',');
+  useEffect(() => {
+    let cancelled = false;
+    const ids = rowIdsKey ? rowIdsKey.split(',') : [];
+    if (ids.length === 0) { setResearchReasons(new Map()); return; }
+    fetchLatestPrices(ids).then(res => {
+      if (cancelled || res.status !== 'ok') return;
+      const map = new Map<string, string[]>();
+      for (const [gid, row] of res.rows) {
+        if (row.needs_review && row.review_reasons.length) map.set(gid, row.review_reasons);
+      }
+      setResearchReasons(map);
+    });
+    return () => { cancelled = true; };
+  }, [rowIdsKey]);
+
+  /**
    * `format()` for every (listing × target). Pure and a few hundred calls at
    * batch scale, so it is memoized on everything that can change its answer —
    * recomputing it per render would re-run ten adapters over 375 listings on
@@ -278,7 +308,7 @@ function MarketplaceExportInner({
     for (const key of targets) {
       const adapter = getAdapter(key);
       const pricingRule = pricingFor(key);
-      out.set(key, withBackgroundIssues(rows.map(r => adapter.format({
+      out.set(key, withResearchIssues(withBackgroundIssues(rows.map(r => adapter.format({
         group: r.group,
         item: r.item,
         imageUrls: r.imageUrls,
@@ -286,10 +316,10 @@ function MarketplaceExportInner({
         descriptionSettings: descriptionSettings ?? undefined,
         pricingRule,
         vocab,
-      })), blockingByListing));
+      })), blockingByListing), researchReasons));
     }
     return out;
-  }, [targets, rows, vocab, vendorName, descriptionSettings, pricingFor, blockingByListing]);
+  }, [targets, rows, vocab, vendorName, descriptionSettings, pricingFor, blockingByListing, researchReasons]);
 
   const summaries: MarketplaceSummary[] = useMemo(
     () => summarizeMatrix(targets, formatted),

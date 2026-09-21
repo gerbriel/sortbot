@@ -15,6 +15,13 @@ again" is an acceptable recovery and a batch is minutes, not hours, the
 in-memory version is the right size. It is written down here so the day it
 stops being the right size is a decision rather than a discovery.
 
+IT RUNS TWO KINDS OF JOB. `submit` mats photos; `submit_embed` computes CLIP
+embeddings (app/embed_pipeline.py). They share the job state, the registry and —
+deliberately — the per-org LOCK, so a 1 GB machine never holds a CLIP session and
+four in-flight matting decodes at once. They do NOT share the in-flight set: that
+one is read by `pipeline.accepted_rows` to decide what a MATTING submit skips, and
+an embedding's photo ids in there would silently make "Process photos" skip them.
+
 ONE JOB PER WORKSPACE AT A TIME, queued rather than rejected. Two reasons:
 a second submit is almost always "I added ten more photos", and rejecting it
 makes the caller invent a retry loop; and 375 concurrent PATCHes against one
@@ -50,6 +57,8 @@ import numpy as np
 from .auth import ImageRow
 from .backends import Matter
 from .config import Settings
+from .embed import Embedder
+from .embed_pipeline import EmbedOutcome, run_embed_batch
 from .pipeline import ImageOutcome, load_backdrop, process_image
 from .preset import BackgroundPreset
 from .storage import mark_queued
@@ -100,9 +109,19 @@ class JobRegistry:
         # Image ids this process has set to 'queued' and not yet written a result
         # for. See the module docstring for the two things that read it.
         self._inflight: set[str] = set()
+        # A SECOND, SEPARATE set for embed jobs, and the separation is the whole
+        # point. `_inflight` is read by pipeline.accepted_rows to decide what a
+        # MATTING submit skips; putting an embedding's photo ids in there would
+        # make "Process photos" silently skip every photo a running embed job
+        # happened to be holding. The two jobs touch different columns and share
+        # nothing but the org lock.
+        self._embed_inflight: set[str] = set()
 
     def inflight_ids(self) -> frozenset[str]:
         return frozenset(self._inflight)
+
+    def embed_inflight_ids(self) -> frozenset[str]:
+        return frozenset(self._embed_inflight)
 
     def _lock_for(self, org_id: str) -> asyncio.Lock:
         lock = self._org_locks.get(org_id)
@@ -154,6 +173,97 @@ class JobRegistry:
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
         return job
+
+    def submit_embed(
+        self,
+        *,
+        client: httpx.AsyncClient,
+        embedder: Embedder,
+        org_id: str,
+        rows: list[ImageRow],
+        group_map: dict[str, str | None],
+    ) -> JobState:
+        """An embedding job, on the same registry and the SAME per-org lock.
+
+        Sharing the lock with matting is deliberate rather than incidental. Both
+        jobs download every photo in the batch from the same bucket, and on a
+        1 GB shared-cpu-1x machine a CLIP session (~400 MB resident, CPU-bound)
+        running alongside four in-flight 12 MP decodes is how this gets OOM-killed
+        mid-batch. Serialising them costs a founder nothing — the two buttons are
+        pressed minutes apart — and it makes the machine's peak memory the larger
+        of the two rather than the sum.
+        """
+        job = JobState(job_id=str(uuid.uuid4()), org_id=org_id, total=len(rows))
+        self._jobs[job.job_id] = job
+        self._evict()
+        self._embed_inflight.update(r.id for r in rows)
+
+        task = asyncio.create_task(
+            self._run_embed(client, embedder, job, rows, org_id, group_map),
+            name=f"embed-job-{job.job_id[:8]}",
+        )
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        return job
+
+    async def _run_embed(
+        self,
+        client: httpx.AsyncClient,
+        embedder: Embedder,
+        job: JobState,
+        rows: list[ImageRow],
+        org_id: str,
+        group_map: dict[str, str | None],
+    ) -> None:
+        """The embed job body.
+
+        The progress shape is the matting one, so the browser polls ONE endpoint
+        with one parser: an embedded photo counts as `auto` (it needed nobody) and
+        a failed one as `failed`. `review` stays 0 — an embedding is 512 numbers,
+        and there is nothing for a human to approve.
+        """
+        async with self._lock_for(org_id):
+            def tick(outcome: EmbedOutcome) -> None:
+                self._embed_inflight.discard(outcome.image_id)
+                job.done += 1
+                if outcome.ok:
+                    job.auto += 1
+                else:
+                    job.failed += 1
+
+            cancelled = False
+            try:
+                await run_embed_batch(
+                    client,
+                    self._s,
+                    embedder,
+                    rows,
+                    org_id=org_id,
+                    group_map=group_map,
+                    on_result=tick,
+                )
+            except asyncio.CancelledError:
+                cancelled = True
+                raise
+            except Exception:  # noqa: BLE001 — run_embed_batch promises not to, but
+                # a bug in the counting above must not leave the job 'running'.
+                log.exception("embed job %s failed outright", job.job_id[:8])
+            finally:
+                if not cancelled:
+                    # Same belt-and-braces as _run: an id left in the set would be
+                    # skipped by every future submit, and a photo that can never be
+                    # embedded again is worse than one embedded twice.
+                    for r in rows:
+                        self._embed_inflight.discard(r.id)
+                job.status = "done"
+                job.finished_at = time.monotonic()
+                log.info(
+                    "embed job %s finished: %d embedded, %d failed of %d",
+                    job.job_id[:8],
+                    job.auto,
+                    job.failed,
+                    job.total,
+                )
 
     async def _run(
         self,

@@ -19,6 +19,12 @@ dependencies = [
     "pillow>=10.4",            # HPND (MIT-like)
     "numpy>=1.26",             # BSD-3-Clause
     "opencv-python-headless>=4.10",  # Apache-2.0
+    # CLIP image embeddings (app/embed.py). A RUNTIME dependency and not an
+    # extra, unlike `local` below: the embedding endpoint is part of the default
+    # deployment, and onnxruntime is ~20 MB of wheel with no CUDA and no torch.
+    # The 350 MB of WEIGHTS are downloaded at run time into MODEL_CACHE_DIR, so
+    # they are not in the image either.
+    "onnxruntime>=1.19",       # MIT
 ]
 
 [project.optional-dependencies]

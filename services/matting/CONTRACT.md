@@ -193,8 +193,19 @@ is behind the garment and not where the garment is.
 The only unauthenticated endpoint.
 
 ```json
-{ "ok": true, "backend": "replicate", "model": "replicate:men1scus/birefnet@f74986db" }
+{
+  "ok": true,
+  "backend": "replicate",
+  "model": "replicate:men1scus/birefnet@f74986db",
+  "embedModel": "clip-vit-base-patch32@onnx",
+  "embedReady": true
+}
 ```
+
+`embedReady` is whether the CLIP weights are on disk yet. It is `false` for the
+first minute or so of a cold start on an ephemeral `MODEL_CACHE_DIR` — show that,
+not "broken"; `POST /v1/embed` fetches them on first use if the prefetch has not
+finished.
 
 ### `POST /v1/jobs` → `202`
 
@@ -284,6 +295,59 @@ Unlike `POST /v1/jobs`, this is **not** filtered against the images in flight: t
 caller has explicitly asked for this one photo to be redone, and honouring that is
 worth more than saving one matting call. Jobs are serialised per workspace, so it
 runs after whatever is in progress rather than alongside it.
+
+### `POST /v1/embed` → `202`
+
+CLIP-embed these photos into `listing_embeddings` (see §9). Nothing to do with
+matting: it writes **no** `product_images` column, and it is the only endpoint
+here whose output the app reads through SQL rather than off a row.
+
+```jsonc
+// request
+{
+  "productImageIds": ["uuid", "..."],   // <= MAX_IDS_PER_JOB (default 2000)
+  "force": false
+}
+```
+
+```jsonc
+// response
+{ "jobId": "uuid", "accepted": 12, "skipped": 3 }
+```
+
+Poll it with `GET /v1/jobs/{jobId}` — the same endpoint and the same shape. An
+embedded photo counts as **`auto`** (it needed nobody) and `review` is always `0`.
+
+**Auth is byte-for-byte the auth of `POST /v1/jobs`** (§2): the caller is resolved
+through `/auth/v1/user`, every row is read with the service role and joined to its
+org, and one foreign or unknown id is `403` for the whole request. An embedding is
+a searchable fingerprint of somebody's inventory, so it gets the same boundary as
+a cutout and not a softer one.
+
+**Skip rule.** Unless `force`, a photo is skipped when it already has a
+`listing_embeddings` row whose `model` equals this deployment's tag. Two
+consequences worth knowing:
+
+- A row embedded with a **different** model is always taken, `force` or not. The
+  nearest-neighbour RPC never compares across models, so such a row is invisible
+  to the feature until it is replaced — which is what makes changing the model a
+  re-run of this endpoint rather than a migration.
+- As with `/v1/jobs`, a photo **this process is already embedding** is skipped even
+  under `force`, for the same reason: jobs are serialised per workspace, so a
+  duplicate would run afterwards with an accepted list decided before the first one
+  wrote anything.
+
+`accepted: 0` with `jobId: ""` is a **success** meaning "already embedded".
+Duplicate ids are collapsed.
+
+**`503` means the table is missing** — i.e. `supabase/migrations/listing_embeddings.sql`
+has not been run. The body is deliberately generic; the client detects that case
+for itself with a column probe and can name the file.
+
+**A failed photo writes no row at all** — not a zero vector, not a NULL embedding.
+A zero vector is orthogonal to everything and would sit quietly at the bottom of
+every neighbour list forever; an absent row is what makes pressing the button
+again work. The job carries on, and the failure is one of the `failed` count.
 
 ---
 
@@ -397,3 +461,76 @@ row fails — they are load, and load passes. **`402` and every other `4xx` fail
 the first response**: insufficient credit does not appear within a minute, and
 retrying turns one legible failure into six identical ones and a minute of dead
 capacity per photo. The count is `REPLICATE_RETRY_ATTEMPTS` (`0` disables it).
+
+---
+
+## 9. Embeddings
+
+`POST /v1/embed` (§5) writes rows to **`listing_embeddings`** —
+`supabase/migrations/listing_embeddings.sql`, run by hand like every other
+migration here. The app does not read the vectors; it calls the RPC that ranks
+them.
+
+### 9.1 The row
+
+| Column | Value |
+|---|---|
+| `product_image_id` | PK. `product_images.id`, cascade delete. **One CURRENT embedding per photo** — the model is *not* part of the key, so a re-run replaces rather than accumulates. |
+| `product_id` | the photo's `products` row |
+| `product_group_id` | the group LEADER's id, read from `products.product_group` and **NULL when that value is absent or is not a uuid** (the column is `text`; a listing whose group cannot be read is a listing of one photo) |
+| `org_id` | the workspace, from the authorized rows — never from the request |
+| `embedding` | `vector(512)`, **L2-normalised before it is written** |
+| `model` | this deployment's tag, e.g. `clip-vit-base-patch32@onnx` |
+| `created_at` | the database's, never sent |
+
+`storage_path` is what gets embedded — **the original photo, never the composite.**
+A cutout on a flat canvas is a different image to CLIP, and a catalogue embedded
+half one way and half the other has useless cross-comparisons that look fine.
+
+### 9.2 The model, and why this one
+
+OpenAI **CLIP ViT-B/32**, vision tower only, as the ONNX export
+`Xenova/clip-vit-base-patch32` → `onnx/vision_model.onnx` (~350 MB, fp32).
+Licences: CLIP weights **MIT** (OpenAI), the export **MIT** (Xenova),
+`onnxruntime` **MIT**. No torch, no API key, no third party at run time.
+
+Preprocessing is CLIP's own, reproduced exactly: shortest side to 224 with PIL
+bicubic, centre crop 224×224, RGB, `/255`, then mean
+`[0.48145466, 0.4578275, 0.40821073]` and std `[0.26862954, 0.26130258, 0.27577711]`,
+NCHW float32. Output is the 512-wide `image_embeds`, L2-normalised.
+
+**The quantized export was measured and rejected**, and the numbers are in
+`docs/pricing/02-embeddings.md`: cosine agreement with fp32 was 0.90–0.97 (not the
+>0.99 that would have made it interchangeable), and — the deciding part — it moved
+every *pairwise* similarity down by 0.03–0.06. This feature consumes the cosine
+*between* two embeddings and thresholds it at 0.92; a quantization that shifts the
+pairs does not add noise to a ranking, it moves the thresholds out from under it.
+It was also slower on arm64 (25 ms vs 15 ms).
+
+Swapping the model is `EMBED_MODEL_URL` plus a re-run. The tag is **derived from
+the filename** so the two cannot disagree, and a differing tag is what stops the
+old and new vectors from ever being compared.
+
+### 9.3 `match_listing_images(p_product_image_id uuid, p_limit int default 12)`
+
+The read side, and the only one the app uses. A `public` SECURITY INVOKER wrapper
+over an `app_private` SECURITY DEFINER body (AGENTS.md §18 #45).
+
+Returns, ordered by cosine similarity descending:
+`(product_image_id, product_id, product_group_id, similarity real, title text,
+price numeric, sold_price_cents bigint, sold_at timestamptz)`.
+
+- **Same workspace only**, and a query photo in another workspace returns an
+  **empty result** rather than an error — an error would distinguish "not yours"
+  from "no neighbours" and make the RPC an existence oracle over `product_image_id`.
+- **Same `model` only.** A cosine across two models sorts convincingly and means
+  nothing.
+- **The query listing's own `product_group_id` is excluded**, and so is the query
+  photo. A listing's other four photos are not a comp; they are the same garment.
+- `title` / `price` come from the group LEADER's `products` row, falling back to
+  the photo's own row for the legacy fresh-uuid groups (AGENTS.md §11).
+- `sold_price_cents` / `sold_at` come from the **most recent** `listing_sales` row
+  for that group, and are `NULL` when `pricing_research.sql` has not been run —
+  that table is read through `to_regclass`, so its arrival needs no re-run of the
+  embeddings migration.
+- `p_limit` is clamped to 1–50.

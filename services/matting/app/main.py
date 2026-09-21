@@ -6,6 +6,7 @@ ever disagree, CONTRACT.md is the bug report and this is the bug.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -18,6 +19,13 @@ from pydantic import BaseModel, Field
 from .auth import AuthError, ForbiddenError, authorize, bearer_token
 from .backends import BackendUnavailable, build_matter
 from .config import get_settings
+from .embed import OnnxEmbedder, ensure_model_file, model_is_present
+from .embed_store import (
+    EmbedStoreError,
+    accepted_embed_rows,
+    fetch_existing_models,
+    fetch_group_map,
+)
 from .jobs import JobRegistry
 from .pipeline import accepted_rows
 from .preset import BackgroundPreset, PresetError
@@ -41,6 +49,11 @@ class RerunRequest(BaseModel):
     resolution: int = 1024
 
 
+class EmbedRequest(BaseModel):
+    productImageIds: list[str] = Field(default_factory=list)
+    force: bool = False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings(refresh=True)
@@ -57,14 +70,37 @@ async def lifespan(app: FastAPI):
     app.state.client = client
     app.state.jobs = JobRegistry(settings)
     app.state.matter = build_matter(settings, client)
+    # Constructed, NOT loaded: the 350 MB session is built on the first
+    # /v1/embed (see OnnxEmbedder), so a deployment that only mats photos never
+    # pays for it and /healthz never waits on it.
+    app.state.embedder = OnnxEmbedder(settings)
+    app.state.model_task = None
 
     log.info(
-        "matting up: backend=%s model=%s concurrency=%d bucket=%s",
+        "matting up: backend=%s model=%s concurrency=%d bucket=%s embed=%s",
         settings.backend,
         app.state.matter.tag,
         settings.concurrency,
         settings.bucket,
+        settings.embed_tag,
     )
+
+    # THE MODEL FILE IS FETCHED IN THE BACKGROUND, at container start, and this
+    # is the one place the scale-to-zero trade-off bites: MODEL_CACHE_DIR
+    # defaults to /tmp, which on Fly is ephemeral, so every cold start re-fetches
+    # ~350 MB. A 1 GB volume mounted at /data (see fly.toml.example's commented
+    # [mounts] block) turns that into a one-off. It is a task rather than an
+    # await because the health check has 20 s of grace and this has 350 MB of
+    # download: blocking startup on it would fail the deploy on a slow link,
+    # for a feature the first request can wait for anyway.
+    if settings.embed_prefetch and not model_is_present(settings):
+        async def _prefetch() -> None:
+            try:
+                await ensure_model_file(client, settings)
+            except Exception as exc:  # noqa: BLE001 — never fail startup for this
+                log.warning("embed: model prefetch failed (%s) — /v1/embed will retry", exc)
+
+        app.state.model_task = asyncio.create_task(_prefetch(), name="embed-model-prefetch")
 
     # Report the live version so pinning is a copy-paste, not a hunt. It is
     # NEVER adopted automatically — see ReplicateMatter.latest_version.
@@ -91,6 +127,18 @@ async def lifespan(app: FastAPI):
         # finish as 'queued' so pressing the button again picks it up.
         await app.state.jobs.drain()
         await app.state.jobs.requeue_inflight(client, settings)
+        # The prefetch holds the httpx client, so it has to stop before the
+        # client closes. `ensure_model_file` deletes its own partial file on
+        # cancellation, so this leaves nothing half-written behind.
+        task = getattr(app.state, "model_task", None)
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception:  # noqa: BLE001 — shutdown must not fail on a prefetch
+                pass
         await client.aclose()
 
 
@@ -150,6 +198,20 @@ async def _backend_handler(_: Request, exc: BackendUnavailable) -> JSONResponse:
     return JSONResponse({"error": "Matting backend unavailable."}, status_code=503)
 
 
+@app.exception_handler(EmbedStoreError)
+async def _embed_store_handler(_: Request, exc: EmbedStoreError) -> JSONResponse:
+    """503, and the reason stays in the log.
+
+    The overwhelmingly likely cause is that listing_embeddings.sql has not been
+    run, and the CLIENT already detects that for itself with a column probe
+    (embeddingsService.embeddingsAvailable) — so it can say which file to run
+    without this endpoint echoing a server's words at a reseller. Same rule as
+    the Edge Functions, §9.
+    """
+    log.error("embed store: %s", exc)
+    return JSONResponse({"error": "Embeddings are unavailable."}, status_code=503)
+
+
 @app.get("/healthz")
 async def healthz() -> dict:
     """The only unauthenticated endpoint. It reveals the backend name and the
@@ -160,6 +222,12 @@ async def healthz() -> dict:
         "ok": True,
         "backend": settings.backend,
         "model": matter.tag if matter else settings.replicate_model,
+        # Which embedding model this deployment writes, and whether its weights
+        # are on disk yet. `embedReady: false` is the honest answer during the
+        # first minutes of a cold start on an ephemeral MODEL_CACHE_DIR, and it is
+        # what a settings screen should show rather than "broken".
+        "embedModel": settings.embed_tag,
+        "embedReady": model_is_present(settings),
     }
 
 
@@ -211,6 +279,78 @@ async def create_job(body: JobRequest, authorization: str | None = Header(defaul
         len(accepted),
         skipped,
         preset.hash,
+        org_id,
+    )
+    return {"jobId": job.job_id, "accepted": len(accepted), "skipped": skipped}
+
+
+@app.post("/v1/embed", status_code=202)
+async def create_embed_job(
+    body: EmbedRequest, authorization: str | None = Header(default=None)
+) -> dict:
+    """CLIP-embed these photos. SAME AUTH BOUNDARY AS /v1/jobs, no exceptions.
+
+    `authorize` is the whole security story (app/auth.py): the caller is resolved
+    through /auth/v1/user, every requested row is read with the service role and
+    joined to its org, and one foreign or unknown id is 403 for the WHOLE request.
+    A different rule here would be a second boundary to keep in step with the
+    first, and an embedding is not less sensitive than a cutout — it is a
+    searchable fingerprint of somebody's inventory.
+
+    202 with `jobId: ""` means "nothing to do", exactly as POST /v1/jobs does:
+    every photo already carries this model's vector. The app renders that as
+    already up to date rather than as an error.
+
+    THIS ENDPOINT WRITES NOTHING TO `product_images`. No mark_queued, no
+    mask_status — those columns belong to the matting feature, and borrowing one
+    to mean "embedding in flight" would make the review queue lie.
+    """
+    settings = get_settings()
+    token = bearer_token(authorization)
+
+    ids = list(dict.fromkeys(i for i in body.productImageIds if isinstance(i, str) and i))
+    if not ids:
+        raise ForbiddenError("no product image ids supplied")
+    if len(ids) > settings.max_ids_per_job:
+        return JSONResponse(
+            {"error": f"at most {settings.max_ids_per_job} images per job"}, status_code=422
+        )
+
+    _, org_id, rows = await authorize(app.state.client, settings, token, ids)
+
+    embedder = app.state.embedder
+    existing = await fetch_existing_models(app.state.client, settings, [r.id for r in rows])
+    accepted = accepted_embed_rows(
+        rows,
+        existing=existing,
+        tag=embedder.tag,
+        force=body.force,
+        inflight=app.state.jobs.embed_inflight_ids(),
+    )
+    skipped = len(rows) - len(accepted)
+
+    if not accepted:
+        return {"jobId": "", "accepted": 0, "skipped": skipped}
+
+    # Read BEFORE the job starts, so the whole job shares one lookup and a photo's
+    # group cannot change under it half way through a batch.
+    group_map = await fetch_group_map(
+        app.state.client, settings, [r.product_id for r in accepted if r.product_id]
+    )
+
+    job = app.state.jobs.submit_embed(
+        client=app.state.client,
+        embedder=embedder,
+        org_id=org_id,
+        rows=accepted,
+        group_map=group_map,
+    )
+    log.info(
+        "embed job %s accepted %d skipped %d model=%s org=%s",
+        job.job_id[:8],
+        len(accepted),
+        skipped,
+        embedder.tag,
         org_id,
     )
     return {"jobId": job.job_id, "accepted": len(accepted), "skipped": skipped}

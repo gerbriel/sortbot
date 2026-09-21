@@ -372,3 +372,112 @@
   .export-platform { flex-direction: column; align-items: stretch; }
   .export-platform-select { width: 100%; }
 }
+
+/* ── Research split (ready to export / needs a look) ───────────────────────── */
+
+/* Sits above the price gate: advice about the same file the gate can refuse.
+ * Neutral surface, not a semantic one — being flagged is not an error, and only
+ * the count and the per-row icon carry --warning. */
+.export-research {
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--ink-850);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.export-research-head {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0 0.4rem;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.export-research-split {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.export-research-stat strong {
+  font-size: var(--fs-md);
+  color: var(--text-primary);
+}
+
+.export-research-stat--flag strong { color: var(--warning); }
+
+.export-research-list {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+}
+
+.export-research-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+  padding: 0.35rem 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.export-research-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.export-research-title svg { color: var(--warning); }
+
+.export-research-why {
+  flex: 1 1 18rem;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.export-research-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 44px;                 /* touch floor (AGENTS.md §1) */
+  padding: 0.2rem 0.6rem;
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--ink-800);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  /* Buttons inherit white-space: nowrap from index.css, which is right here —
+     the label is two words and must not break mid-phrase. */
+}
+
+.export-research-open:hover { background: var(--ink-750); }
+
+.export-research-more { color: var(--text-muted); font-size: var(--fs-xs); }
+
+.export-research-note {
+  margin: 0.45rem 0 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  /* One line per fact at phone width: the title, then the reason, then the link
+     full-width, rather than three things fighting for 390px. */
+  .export-research-list li { flex-direction: column; align-items: flex-start; }
+  .export-research-why { flex: none; }
+  .export-research-open { width: 100%; justify-content: center; }
+}

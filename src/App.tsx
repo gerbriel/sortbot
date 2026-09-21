@@ -3638,6 +3638,7 @@ function App() {
               batchId={currentBatchId}
               descriptionSettings={orgDescSettings}
               focusProductId={focusListingId}
+              orgId={currentOrg?.id ?? null}
             />
             <PhoneStepNav step={3} reachable={phoneReachable} onSelect={goToPhoneStep} />
           </section>
@@ -3699,6 +3700,7 @@ function App() {
                     vendorName={resolvedVendorName}
                     platformPricing={orgDescSettings?.platformPricing}
                     items={step4ExportItems}
+                    onOpenListing={openListingInStep3}
                   />
                 </div>
               </div>
