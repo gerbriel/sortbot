@@ -1,6 +1,22 @@
 // Rasterises the Arcadian "A" mark (the glyph from public/favicon.svg) into the
-// source images @capacitor/assets reads. Run by hand from the repo root:
+// source images @capacitor/assets reads, plus the web images served from
+// public/. Run by hand from the repo root:
 //   node assets/make-sources.mjs && npm run assets:generate
+//
+// Outputs:
+//   assets/  icon-only, icon-foreground, icon-background, splash, splash-dark
+//            (inputs to @capacitor/assets)
+//   public/  og.png (1200x630 Open Graph / Twitter card), apple-touch-icon.png
+//            (180, opaque), icon-192.png and icon-512.png (site.webmanifest)
+//
+// The og.png wordmark is set in Outfit 500, the one brand font, from the
+// self-hosted file src/assets/fonts/outfit-latin-300-700.woff2. It is drawn
+// with sharp's text input (Pango), which registers that file through its
+// `fontfile` option, so the result does not depend on fonts installed on the
+// machine. librsvg ignores @font-face, so an <text> element in the SVG would
+// silently fall back to a system face. A "Fontconfig error: Cannot load default
+// config file" line on stderr is harmless. Output is deterministic for a given
+// sharp version (sharp is pinned in package-lock.json).
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -46,12 +62,53 @@ function svg({ canvas, markSize, fg, bg }) {
   )
 }
 
-async function write(name, input, { alpha }) {
+async function write(name, input, { alpha, dir = here }) {
   let img = sharp(input)
   if (!alpha) img = img.flatten({ background: WHITE }).removeAlpha()
-  await img.png({ compressionLevel: 9, palette: true }).toFile(join(here, name))
-  const meta = await sharp(join(here, name)).metadata()
-  console.log(`${name}: ${meta.width}x${meta.height}, channels ${meta.channels}`)
+  const out = join(dir, name)
+  await img.png({ compressionLevel: 9, palette: true }).toFile(out)
+  const meta = await sharp(out).metadata()
+  console.log(`${out.slice(join(here, '..').length + 1)}: ${meta.width}x${meta.height}, channels ${meta.channels}`)
+}
+
+const publicDir = join(here, '..', 'public')
+const fontFile = join(here, '..', 'src', 'assets', 'fonts', 'outfit-latin-300-700.woff2')
+
+// Open Graph card: 1200x630 white, the favicon tile (black rounded square,
+// white "A") left of the word "Arcadian". The tile rather than the bare glyph:
+// a bare black "A" beside a word that starts with "A" reads as "A Arcadian".
+// The word is trimmed to its ink ("Arcadian" has no descenders, so the box runs
+// from the baseline to the ascender of the d) and the tile is centred on it.
+async function og() {
+  const W = 1200, H = 630, SIZE = 160, GAP = 48
+  // Matches .wordmark in src/index.css: weight 500, letter-spacing -0.03em.
+  // Pango letter_spacing is in 1/1024 pt; dpi 72 makes 1 pt = 1 px.
+  const spacing = Math.round(-0.03 * SIZE * 1024)
+  const word = await sharp({
+    text: {
+      text: `<span foreground="${BLACK}" font_weight="500" letter_spacing="${spacing}">Arcadian</span>`,
+      fontfile: fontFile,
+      font: `Outfit ${SIZE}`,
+      dpi: 72,
+      rgba: true,
+    },
+  }).trim().png().toBuffer({ resolveWithObject: true })
+  const wordW = word.info.width, wordH = word.info.height
+  // The tile is public/favicon.svg itself, rasterised at 1.6x the word's ink height.
+  const markPx = Math.round(wordH * 1.6)
+  const mark = await sharp(Buffer.from(favicon), { density: (72 * markPx) / 64 })
+    .resize(markPx, markPx).png().toBuffer()
+  const left = Math.round((W - (markPx + GAP + wordW)) / 2)
+  const markTop = Math.round((H - markPx) / 2)
+  const wordTop = Math.round((H - wordH) / 2)
+  const card = await sharp({ create: { width: W, height: H, channels: 4, background: WHITE } })
+    .composite([
+      { input: mark, left, top: markTop },
+      { input: word.data, left: left + markPx + GAP, top: wordTop },
+    ])
+    .png()
+    .toBuffer()
+  await write('og.png', card, { alpha: false, dir: publicDir })
 }
 
 // iOS / legacy icon: opaque white, mark about 56% of the tile.
@@ -68,3 +125,11 @@ await write('icon-background.png', svg({ canvas: 1024, markSize: 0, fg: WHITE, b
 // Splash screens: 2732 square, mark about 20% of the width.
 await write('splash.png', svg({ canvas: 2732, markSize: 546, fg: BLACK, bg: WHITE }), { alpha: false })
 await write('splash-dark.png', svg({ canvas: 2732, markSize: 546, fg: WHITE, bg: BLACK }), { alpha: false })
+
+// Web: Open Graph card, Apple touch icon (iOS rejects transparency and rounds
+// the corners itself, so opaque white with the mark at about 56%, like
+// icon-only), and the two web manifest icons in the same style.
+await og()
+await write('apple-touch-icon.png', svg({ canvas: 180, markSize: 100, fg: BLACK, bg: WHITE }), { alpha: false, dir: publicDir })
+await write('icon-192.png', svg({ canvas: 192, markSize: 108, fg: BLACK, bg: WHITE }), { alpha: false, dir: publicDir })
+await write('icon-512.png', svg({ canvas: 512, markSize: 288, fg: BLACK, bg: WHITE }), { alpha: false, dir: publicDir })

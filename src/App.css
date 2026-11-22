@@ -174,7 +174,7 @@
 .step1-import-btn {
   padding: 0.5rem 1rem;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-weight: 600;
   font-size: var(--fs-sm);
   cursor: pointer;
@@ -557,7 +557,7 @@
   background: var(--ink-800);
   color: var(--text-primary);
   padding: 0.65rem 1rem;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   font-size: var(--fs-sm);
   font-weight: 500;
   box-shadow: var(--shadow-lg);
@@ -872,7 +872,7 @@
     background: var(--ink-800);
     border: 1px solid var(--border-strong);
     border-bottom: none;
-    border-radius: 12px 12px 0 0;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.18);
   }
 

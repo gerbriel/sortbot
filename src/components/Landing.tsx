@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Target, RotateCcw, RotateCw, Trash2, Scissors, Mic, Download,
   BadgeDollarSign, MessageSquare, Users, Package, Check, Shirt, Layers, Clock,
@@ -85,6 +85,16 @@ export default function Landing({ onLoginClick }: LandingProps) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null);
   const [done, setDone] = useState(false);
+
+  // The static <title> in index.html stays the bare "Arcadian" (CI and the
+  // uptime probe assert it, and it is right for the signed-in app). Only the
+  // marketing page gets the descriptive tab/search title, and it hands the
+  // previous one back when the visitor signs in and Landing unmounts.
+  useEffect(() => {
+    const previous = document.title;
+    document.title = 'Arcadian: vintage clothing photos to Shopify listings';
+    return () => { document.title = previous; };
+  }, []);
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
