@@ -1,0 +1,56 @@
+/* ── InfoDisclosure ─────────────────────────────────────────────────────────
+   A header row (title + info button on the left, the caller's actions on the
+   right) and an inline help panel directly beneath it. Flow content, not a
+   popover: no z-index, no positioning, nothing to clip at phone width. */
+
+.ui-info-disclosure__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.ui-info-disclosure__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.ui-info-disclosure__btn[aria-expanded='true'] {
+  background: var(--ink-750);
+  color: var(--text-primary);
+}
+
+/* The card surface every grey section uses. A caller nested inside an
+   --ink-850 section passes panelClassName to step it up to --ink-800. */
+.ui-info-disclosure__panel {
+  margin-top: 0.6rem;
+  padding: 1rem 1.2rem;
+  background: var(--ink-850);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  animation: ui-info-disclosure-in var(--dur-fast) var(--ease);
+}
+
+.ui-info-disclosure__panel:focus { outline: none; }
+.ui-info-disclosure__panel[hidden] { display: none; }
+
+@keyframes ui-info-disclosure-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-info-disclosure__panel { animation: none; }
+}
+
+/* Phone: the info button keeps the 44px floor (a literal px on purpose, see
+   Button.css). IconButton already does this for its own classes; restated so
+   a caller's head layout cannot shrink it. */
+@media (max-width: 640px) {
+  .ui-info-disclosure__btn { width: 44px; height: 44px; }
+}

@@ -312,8 +312,11 @@ describe('ProductDescriptionGenerator dictation wiring', () => {
   it('the hint copy carries no em dash', async () => {
     const { container } = mount(<ProductDescriptionGenerator onProcessed={() => {}} />);
     await flush();
-    const label = Array.from(container.querySelectorAll('label')).find(l => l.textContent?.includes('field name'));
-    expect(label?.textContent).toBeTruthy();
-    expect(label?.textContent).not.toContain(String.fromCharCode(0x2014));
+    // The hint moved from the header sentence into the info panel
+    // (ProductDescriptionGenerator.voiceHelp.test.tsx); the panel is in the
+    // DOM while closed, so the whole voice section's copy is checked here.
+    const section = container.querySelector('.voice-result');
+    expect(section?.textContent).toContain('field name');
+    expect(section?.textContent).not.toContain(String.fromCharCode(0x2014));
   });
 });

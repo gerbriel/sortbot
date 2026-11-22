@@ -208,6 +208,87 @@
   font-size: var(--fs-base);
 }
 
+/* Header row title (the old <label> sentence, now just the title beside the
+   InfoDisclosure button). Same type as the label rule above. */
+.voice-result-disclosure {
+  margin-bottom: 0.5rem;
+}
+
+.voice-result-title {
+  font-weight: 600;
+  color: var(--gray-700);
+  font-size: var(--fs-base);
+}
+
+/* "How dictation works" panel. It sits inside the --ink-850 form section, so
+   it steps up to --ink-800 (the surface the old reference column used) to
+   separate from it. */
+.voice-help {
+  background: var(--ink-800);
+}
+
+.voice-help-rule {
+  margin: 0 0 0.6rem;
+  color: var(--text-secondary);
+}
+
+.voice-help-rule kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 0 0.3rem;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-sm);
+  background: var(--ink-850);
+  color: var(--text-primary);
+}
+
+.voice-help-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.8rem;
+}
+
+.voice-help-examples code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--fs-xs);
+  color: var(--text-primary);
+  background: var(--ink-850);
+  border-radius: var(--radius-sm);
+  padding: 0.2rem 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+/* Field reference: two columns of "spoken name  example" rows. */
+.voice-help-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 2.4rem;
+  row-gap: 0.1rem;
+  margin: 0;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-xs);
+}
+
+.voice-help-field {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.voice-help-field dt {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.voice-help-field dd {
+  margin: 0;
+  color: var(--text-muted);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
 .description-textarea {
   width: 100%;
   min-width: 100%;
@@ -1482,16 +1563,21 @@
     justify-content: center;
   }
 
-  /* Voice Description head: hint on its own full-width line, then Clear
-     Fields and the Table/Text toggle on the next, toggle pushed right. The
-     inline flex on both elements has no wrap, so wrap is added here. */
+  /* Voice description head: the title and its info button on their own
+     full-width line, then Clear Fields and the Table/Text toggle on the
+     next, toggle pushed right. The tools' inline flex has no wrap, so wrap
+     is added here. */
   .voice-result-head {
     flex-wrap: wrap;
     gap: 0.5rem;
   }
 
-  .voice-result-head > label {
+  .voice-result-head > .ui-info-disclosure__title {
     flex: 1 1 100%;
+  }
+
+  .voice-help-fields {
+    column-gap: 1.6rem;
   }
 
   .voice-result-tools {

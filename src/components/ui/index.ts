@@ -36,6 +36,9 @@ export type { TabListProps, TabPanelProps, TabProps, TabsProps } from './Tabs';
 export { Dialog, DialogFooterSpacer } from './Dialog';
 export type { DialogProps, DialogSize } from './Dialog';
 
+export { InfoDisclosure } from './InfoDisclosure';
+export type { InfoDisclosureProps } from './InfoDisclosure';
+
 export { ConfirmAction } from './ConfirmAction';
 export type { ConfirmActionProps } from './ConfirmAction';
 

@@ -16,8 +16,9 @@ import { log, isDebugEnabled } from '../lib/debugLogger';
 import VoiceCommandTable from './VoiceCommandTable';
 import {
   parseVoiceChunk, flushVoiceState, detectActiveField, patchVoiceLine, fixTranscript,
-  EMPTY_VOICE_STATE, type VoiceParseState, type VoiceWrite,
+  EMPTY_VOICE_STATE, type VoiceParseState, type VoiceWrite, FIELD_TO_VOICE_LABEL,
 } from '../lib/voiceGrammar';
+import { InfoDisclosure } from './ui/InfoDisclosure';
 import { resolvePreset } from '../lib/presetResolver';
 import {
   createSpeechRecognizer, isSpeechAvailable,
@@ -39,6 +40,18 @@ import { fetchActiveChips, getBrandTerms, getAllBrandKeywordEntries, termMatches
 import { requestProse } from '../lib/proseService';
 import type { DescriptionSettings } from '../lib/descriptionSettings';
 import './ProductDescriptionGenerator.css';
+
+// The field reference in the "How dictation works" panel: the same fields and
+// example values the old VOICE COMMANDS column listed, with each spoken name
+// read from the grammar's own vocabulary so the help cannot drift from it.
+const VOICE_HELP_FIELDS: ReadonlyArray<readonly [fieldKey: string, example: string]> = [
+  ['color', 'red'], ['brand', 'Nike'], ['size', 'large'], ['material', 'cotton'],
+  ['condition', 'good'], ['price', '$20'], ['era', '90s'], ['style', 'casual'],
+  ['gender', 'women'], ['flaws', 'small hole'], ['care', 'hand wash'],
+  ['meas_width', '18"'], ['meas_length', '28"'], ['meas_waist', '32"'],
+  ['meas_inseam', '30"'], ['meas_outseam', '40"'], ['meas_leg', '18"'],
+  ['seoTitle', 'vintage tee'],
+];
 
 // Live view into the store — replaces the old per-render processedItems mirror.
 // .current always reads the CURRENT full item list (async handlers can't go stale).
@@ -3058,12 +3071,19 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               </div>
             )}
             <div className="voice-result">
-              {/* Mode toggle. The two classes are layout hooks only: at phone
-                  width (PDG.css) the hint takes its own line and the tools wrap
-                  beneath it, instead of the hint being squeezed into a 140px
-                  column beside them. */}
-              <div className="voice-result-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <label><strong>Voice Description:</strong> <span style={{ fontWeight: 400, color: 'var(--text-muted)', fontSize: '0.85em' }}>say <em>field name → value</em>; the next field name ends it (e.g. <em>"brand Nike size large"</em>). Say <em>"period"</em> or press <strong>.</strong> to end one on its own</span></label>
+              {/* Header row: the title with its info button on the left, Clear
+                  Fields and the Table / Text toggle on the right. The dictation
+                  help lives in the InfoDisclosure panel (opened by the button)
+                  rather than in a sentence here and a column beside the text
+                  view. voice-result-head and voice-result-tools are layout hooks:
+                  at phone width (PDG.css) the tools wrap onto their own line. */}
+              <InfoDisclosure
+                label="How dictation works"
+                heading={<strong className="voice-result-title">Voice description</strong>}
+                className="voice-result-disclosure"
+                headClassName="voice-result-head"
+                panelClassName="voice-help"
+                actions={
                 <div className="voice-result-tools" style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                   <button
                     type="button"
@@ -3090,7 +3110,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       fontSize: 'var(--fs-2xs)',
                       fontWeight: 600,
                       /* Destructive pill: translucent danger fill + full-strength
-                         danger text — the old pale-tint/dark-text pair inverts to
+                         danger text. The old pale-tint/dark-text pair inverts to
                          ~1.4:1 on the dark canvas. */
                       border: '1px solid var(--danger)',
                       borderRadius: '6px',
@@ -3126,7 +3146,26 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     ))}
                   </div>
                 </div>
-              </div>
+                }
+              >
+                <p className="voice-help-rule">
+                  Say a field name, then its value. The next field name ends the one before it,
+                  so no 'period' is needed between fields. For a free-form description, say
+                  'period' or press <kbd>.</kbd> when you are done.
+                </p>
+                <div className="voice-help-examples">
+                  <code>brand Nike size large price forty</code>
+                  <code>description super soft faded boxy fit period</code>
+                </div>
+                <dl className="voice-help-fields">
+                  {VOICE_HELP_FIELDS.map(([fieldKey, example]) => (
+                    <div key={fieldKey} className="voice-help-field">
+                      <dt>{FIELD_TO_VOICE_LABEL[fieldKey] ?? fieldKey}</dt>
+                      <dd>{example}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </InfoDisclosure>
 
               {/* Keywords: type to find a resale descriptor and add or remove
                   it from the description. PDG owns the vocabulary, the brand
@@ -3147,51 +3186,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   onChange={handleTableFieldChange}
                 />
               ) : (
-                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
-                  {/* Command key reference table */}
-                  <div style={{
-                    flexShrink: 0,
-                    width: '150px',
-                    /* Nested panel inside the --ink-850 form section — steps up
-                       to --ink-800 so it separates without a heavy border. */
-                    background: 'var(--ink-800)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '6px',
-                    padding: '0.5rem 0.6rem',
-                    fontSize: 'var(--fs-2xs)',
-                    lineHeight: '1.6',
-                  }}>
-                    <div style={{ fontWeight: 700, marginBottom: '0.3rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: 'var(--fs-2xs)' }}>Voice Commands</div>
-                    {[
-                      ['color', 'red'],
-                      ['brand', 'Nike'],
-                      ['size', 'large'],
-                      ['material', 'cotton'],
-                      ['condition', 'good'],
-                      ['price', '$20'],
-                      ['era', '90s'],
-                      ['style', 'casual'],
-                      ['gender', 'women'],
-                      ['flaws', 'small hole'],
-                      ['care', 'hand wash'],
-                      ['width', '18"'],
-                      ['length', '28"'],
-                      ['waist', '32"'],
-                      ['inseam', '30"'],
-                      ['outseam', '40"'],
-                      ['leg opening', '18"'],
-                      ['title', 'vintage tee'],
-                    ].map(([field, ex]) => (
-                      <div key={field} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.25rem' }}>
-                        <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{field}</span>
-                        <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'right' }}>{ex} <span style={{ color: 'var(--text-faint)' }}>•</span></span>
-                      </div>
-                    ))}
-                    <div style={{ marginTop: '0.4rem', paddingTop: '0.4rem', borderTop: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 'var(--fs-2xs)' }}>
-                      Say <strong style={{ color: 'var(--accent)' }}>period</strong> to end each field
-                    </div>
-                  </div>
-                  {/* Textarea */}
+                <div>
+                  {/* Transcript, full width. The field reference that used to sit
+                      in a column beside it is in the header's info panel. */}
                   <textarea 
                     value={currentItem.voiceDescription || interimTranscript || ''}
                     onChange={(e) => {
@@ -3286,17 +3283,17 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       });
                       setProcessedItems(updated);
                     }}
-                    placeholder={"Start Recording and speak...\n\nNo 'period' needed — the next field name ends the one before it:\n  brand Nike size large price forty\n  chest 38 waist 32 sleeve 25\n\nFor a free-form description, say 'period' (or press .) when you're done:\n  description super soft faded boxy fit period"}
+                    placeholder="Start Recording and speak. The field names you say become the fields below."
                     rows={8}
                     className="description-textarea js-autogrow"
-                    style={{ flex: 1, minWidth: 0 }}
+                    style={{ width: '100%' }}
                     onKeyDown={(e) => e.stopPropagation()}
                   />
                 </div>
               )}
             </div>
 
-            {/* Title — editable above the AI description */}
+            {/* Title: editable above the AI description */}
             <div style={{ marginTop: '0.75rem' }}>
               <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontWeight: 600, marginBottom: '0.4rem' }}>
                 <span>Title:</span>
@@ -3348,12 +3345,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               />
               {!currentItem.seoTitle && (
                 <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', margin: '0.25rem 0 0' }}>
-                  Preview from current fields — type to override, or hit Generate to lock it in
+                  Preview from current fields. Type to override, or hit Generate to lock it in.
                 </p>
               )}
               {duplicateTitleWarning && (
                 <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--danger)', margin: '0.25rem 0 0', fontWeight: 600 }}>
-                  <AlertTriangle size={12} style={{ flexShrink: 0 }} /> Duplicate title — this title already exists in another batch on Shopify
+                  <AlertTriangle size={12} style={{ flexShrink: 0 }} /> Duplicate title: this title already exists in another batch on Shopify
                 </p>
               )}
             </div>
