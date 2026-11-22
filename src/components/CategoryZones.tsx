@@ -10,6 +10,8 @@ import LazyImg from './LazyImg';
 import { log } from '../lib/debugLogger';
 import { Shirt, Wind, User, Package, Box, ShoppingBag, Footprints, Glasses, Watch, Headphones, Briefcase, Heart, Star, Zap, GripVertical, X, Users, UserRound, Baby, Crown, Layers, Columns2, Dumbbell, Gem, Medal, PersonStanding, Ribbon, Sparkles, Menu, Check } from 'lucide-react';
 import './CategoryZones.css';
+import { DROP_ATTR, STEP2_DROP_EVENT } from './step2TouchDrag';
+import type { Step2DropDetail } from './step2TouchDrag';
 
 // Map icon names or category names to icon components
 const getCategoryIcon = (iconNameOrCategory: string, size: number = 24) => {
@@ -349,7 +351,12 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
       productGroup = catDraggedItem.productGroup || catDraggedItem.id;
     }
     if (!productGroup) { setCatDraggedItem(null); setDragOverCategory(null); return; }
+    assignGroupToCategory(productGroup, category);
+  };
 
+  /* The commit half of "this group goes in that category". The HTML5 (mouse)
+     drop above and the touch drop (STEP2_DROP_EVENT, below) both end here. */
+  const assignGroupToCategory = (productGroup: string, category: string) => {
     const groupItems = items.filter(item => (item.productGroup || item.id) === productGroup);
     const itemsWithPreset = applyPreset(groupItems, category);
     log.sorter(`handleCategoryDrop | drag-assign | category=${category} productGroup=${productGroup} groupItems=${groupItems.length}`);
@@ -387,7 +394,12 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
       } catch { /* ignore */ }
       if (!productGroup && catDraggedItem) productGroup = catDraggedItem.productGroup || catDraggedItem.id;
     }
+    clearCategory(productGroup);
+  };
 
+  /* The commit half of Clear Category: the selection when there is one, else
+     the dragged group (mouse or touch), else nothing. */
+  const clearCategory = (productGroup: string | undefined) => {
     // If items are selected (click path or drop with selection), clear all selected
     if (selectedItemIds && selectedItemIds.size > 0) {
       log.sorter(`handleClearCategory | selected | count=${selectedItemIds.size}`);
@@ -628,8 +640,40 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
      dock in its expanded state (functional, just taller). */
   const hasSelection = !!selectedItemIds && selectedItemIds.size > 0;
 
+  // ── Touch drop (long-press drag started in ImageGrouper) ───────────────
+  // Same rule as the mouse drop: with a selection, the drop assigns the
+  // selection (exactly what a tap on the zone does); without one, it assigns
+  // the dragged photo's group. The handler is re-pointed every render so it
+  // reads the current items and selection; the listener is attached once.
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const touchDropRef = useRef<(target: HTMLElement, d: Step2DropDetail) => void>(() => {});
+  touchDropRef.current = (target, d) => {
+    const kind = target.getAttribute(DROP_ATTR);
+    const groupId = d.payload.groupId;
+    if (kind === 'category') {
+      const category = target.getAttribute('data-drop-category');
+      if (!category) return;
+      log.sorter(`touchDrop | category=${category} payload=${d.payload.kind}:${groupId}`);
+      if (selectedItemIds && selectedItemIds.size > 0) void handleCategoryClick(category);
+      else assignGroupToCategory(groupId, category);
+    } else if (kind === 'clear') {
+      clearCategory(groupId);
+    }
+  };
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const onDrop = (ev: Event) => {
+      const target = (ev.target as HTMLElement | null)?.closest?.(`[${DROP_ATTR}]`) as HTMLElement | null;
+      if (!target || !el.contains(target)) return;
+      touchDropRef.current(target, (ev as CustomEvent<Step2DropDetail>).detail);
+    };
+    el.addEventListener(STEP2_DROP_EVENT, onDrop);
+    return () => el.removeEventListener(STEP2_DROP_EVENT, onDrop);
+  }, []);
+
   return (
-    <div className={`category-zones-container${compactMode ? ' compact' : ''}${hasSelection ? ' has-selection' : ''}`}>
+    <div ref={rootRef} className={`category-zones-container${compactMode ? ' compact' : ''}${hasSelection ? ' has-selection' : ''}`}>
       {/* Category Zones */}
       <div className="category-zones">
         {/* Category search */}
@@ -710,18 +754,20 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
 
         {compactMode && selectedItemIds && selectedItemIds.size > 0 && (
           <p className="cz-selection-hint" style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', margin: '0 0 0.5rem', textAlign: 'center' }}>
-            {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} selected — click a category to assign
+            {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} selected. Tap or click a category to assign.
           </p>
         )}
         {loading ? (
           <p>Loading categories...</p>
         ) : (
-          <div className={compactMode ? 'category-list' : 'category-grid'}>
+          <div className={compactMode ? 'category-list' : 'category-grid'} data-step2-scroll-x="">
             {(zonePresets.length > 0 ? zonePresets : []).map(preset => {
               const color = getPresetColor(preset.category_name);
               return (
               <div
                 key={preset.id}
+                data-step2-drop="category"
+                data-drop-category={preset.category_name}
                 className={`category-zone ${dragOverCategory === preset.category_name ? 'drag-over' : ''}${selectedItemIds && selectedItemIds.size > 0 ? ' clickable' : ''}`}
                 style={{ borderColor: color, '--category-color': color, cursor: selectedItemIds && selectedItemIds.size > 0 ? 'pointer' : undefined } as React.CSSProperties}
                 onDragOver={(e) => handleCategoryDragOver(e, preset.category_name)}
@@ -739,6 +785,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
             })}
             {/* Clear Category zone */}
             <div
+              data-step2-drop="clear"
               className={`category-zone category-zone-clear ${dragOverClear ? 'drag-over-clear' : ''}${selectedItemIds && selectedItemIds.size > 0 ? ' clickable' : ''}`}
               onDragOver={(e) => { e.preventDefault(); setDragOverClear(true); }}
               onDragLeave={() => setDragOverClear(false)}

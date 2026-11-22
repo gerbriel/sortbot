@@ -440,6 +440,16 @@ select option {
      the shell-less screens (waitlist gate) at 0. */
   .app-container { --tabbar-h: calc(var(--tabbar-row) + var(--safe-b)); }
 
+  /* 0. NO SIDEWAYS PAGE. A page that pans horizontally under a thumb is the
+        clearest "this is a website in a wrapper" tell inside a native shell.
+        Every surface is meant to fit already (wide tables scroll inside their
+        own boxes); this is the backstop for the one that does not. `clip`,
+        never `hidden`: `hidden` turns body into a scroll container, which
+        breaks every position: sticky inside it (the header, the docks). On
+        html it applies to the viewport; fixed layers (sheets, toasts, the tab
+        bar) are not clipped by it. */
+  html, body { overflow-x: clip; }
+
   /* 3a. iOS ZOOM. Safari zooms the whole page when a control smaller than 16px
          takes focus, and never zooms back out. --fs-md IS 16px, so this is the
          token that buys the behaviour — never a literal, and never 15px. */

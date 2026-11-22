@@ -257,8 +257,10 @@
   flex-shrink: 0;
 }
 
-/* Batch Actions (Hover Overlay) */
-.batch-actions {
+/* Batch Actions (Hover Overlay). Scoped to .batch-card: an unscoped .batch-actions
+   used to leak into Step 4 (App.tsx reuses the class name) and hide its Save / Clear
+   row once the Library chunk had loaded. */
+.batch-card .batch-actions {
   position: absolute;
   bottom: 0;
   left: 0;
@@ -361,7 +363,7 @@
     transform: none;
   }
 
-  .batch-actions {
+  .batch-card .batch-actions {
     opacity: 1;
     pointer-events: all;
     background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.85) 100%);

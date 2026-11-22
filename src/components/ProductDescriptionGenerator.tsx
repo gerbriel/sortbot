@@ -18,6 +18,10 @@ import {
   EMPTY_VOICE_STATE, type VoiceParseState, type VoiceWrite,
 } from '../lib/voiceGrammar';
 import { resolvePreset } from '../lib/presetResolver';
+import {
+  createSpeechRecognizer, isSpeechAvailable,
+  type SpeechRecognizer, type SpeechStartOptions,
+} from '../lib/native/speech';
 import { useStoreItemArray, liveArrayRef } from '../lib/workflowStore';
 import { saveStatus, useSaveStatus } from '../lib/saveStatusStore';
 import { clampLensPosition } from '../lib/magnifierPosition';
@@ -68,33 +72,39 @@ interface ProductDescriptionGeneratorProps {
   orgId?: string | null;
 }
 
-// Web Speech API types
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
-}
+// Dictation goes through lib/native/speech.ts (the browser's Web Speech API on
+// the web, the native plugin in the app). These are the options PDG always used.
+const SPEECH_START_OPTIONS: SpeechStartOptions = { lang: 'en-US', continuous: true, interimResults: true };
+/** Native only: a session that ends this fast having heard nothing counts as a
+ *  "quick end"; consecutive quick ends back the restart off, and too many in a
+ *  row stop dictation instead of spinning the recogniser. */
+const NATIVE_QUICK_END_MS = 1000;
+const NATIVE_MAX_QUICK_ENDS = 5;
+const NATIVE_RESTART_MAX_DELAY_MS = 5000;
 
-interface SpeechRecognitionResultList {
-  length: number;
-  item(index: number): SpeechRecognitionResult;
-  [index: number]: SpeechRecognitionResult;
-}
-
-interface SpeechRecognitionResult {
-  isFinal: boolean;
-  length: number;
-  item(index: number): SpeechRecognitionAlternative;
-  [index: number]: SpeechRecognitionAlternative;
-}
-
-interface SpeechRecognitionAlternative {
-  transcript: string;
-  confidence: number;
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  error: string;
-  message: string;
+/**
+ * Start a dictation session. A rejected start() goes to `onFail` (the browser
+ * API used to throw synchronously; the adapter rejects instead). On native,
+ * start() only resolves after the permission check and listener setup, so a
+ * Stop pressed in that window found no session to stop: end it here instead,
+ * and clear the "starting" flag ourselves rather than relying on onStart alone.
+ * `onLive` (native) marks the session live at that point too: Android only
+ * fires onStart once the user starts speaking, so waiting for it left the
+ * button stuck on "Wait..." and Stop ignored.
+ */
+function startDictation(
+  recognizer: SpeechRecognizer,
+  wanted: { current: boolean },
+  starting: { current: boolean },
+  onFail: () => void,
+  onLive?: () => void,
+) {
+  recognizer.start(SPEECH_START_OPTIONS).then(() => {
+    if (recognizer.kind !== 'native') return;
+    if (!wanted.current) { void recognizer.abort(); return; }
+    starting.current = false;
+    onLive?.();
+  }, onFail);
 }
 
 const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = ({
@@ -307,7 +317,10 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     });
   };
 
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognizer | null>(null);
+  /** Native only: mark the session live when start() resolves (set by the
+   *  recogniser effect). Android's onStart waits for the user to speak. */
+  const markDictationLiveRef = useRef<() => void>(() => {});
   const isRecordingRef = useRef(false);
   const isStartingRef = useRef(false);
   const lastClickTimeRef = useRef(0);
@@ -553,23 +566,44 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   }, [focusProductId, groupArray]);
 
   useEffect(() => {
-    // Check if browser supports Speech Recognition
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    
-    if (!SpeechRecognition) {
+    // Can dictation work here? The browser's Web Speech API on the web, the
+    // native plugin inside the app; lib/native/speech.ts decides which.
+    let disposed = false;
+    void isSpeechAvailable().then(available => {
+      if (disposed || available) return;
       setSpeechSupported(false);
       console.warn('Speech Recognition not supported in this browser. Use Chrome or Edge.');
-      return;
-    }
+    });
 
-    // Initialize Speech Recognition
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true; // Changed back to true for continuous listening
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-    recognition.maxAlternatives = 1;
+    // One recogniser, reused across sessions (start() is called again after onEnd).
+    const recognition = createSpeechRecognizer();
+    const isNativeRecognizer = recognition.kind === 'native';
 
-    recognition.onstart = () => {
+    // BATCHING. The adapter calls onResult once PER RESULT; the browser hands
+    // them over in batches (one onresult event), and the grammar below was
+    // written against that batch. The calls for one event arrive synchronously
+    // in a row, so they are collected here and handled together in a microtask
+    // (or immediately at onEnd, so a session's last result always lands before
+    // the end-of-session logic runs).
+    let pendingFinals: string[] = [];
+    let pendingInterim = '';
+    let pendingCount = 0;
+    let flushQueued = false;
+    // Native restart guard: see NATIVE_QUICK_END_MS.
+    let sessionStartedAt = 0;
+    let sessionHeard = false;
+    let quickEnds = 0;
+    // Native: the session went live (start() resolved or onStart, whichever
+    // came first). Cleared at onEnd. The web path does not use it.
+    let nativeSessionLive = false;
+
+    recognition.onStart = () => {
+      if (isNativeRecognizer) {
+        if (nativeSessionLive) return;
+        nativeSessionLive = true;
+      }
+      sessionStartedAt = Date.now();
+      sessionHeard = false;
       setIsRecording(true);
       isRecordingRef.current = true;
       isStartingRef.current = false;
@@ -583,18 +617,29 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       }, 1000);
     };
 
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interim = '';
-      const finals: string[] = [];
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = fixTranscript(event.results[i][0].transcript);
-        // Each result is ONE utterance — kept separate so the grammar can tell
-        // "a fresh utterance started with a field title" from "the speaker is
-        // still narrating", which is what closes an open description.
-        if (event.results[i].isFinal) finals.push(transcript);
-        else interim += transcript;
+    recognition.onResult = (rawTranscript, isFinal) => {
+      const transcript = fixTranscript(rawTranscript);
+      // Each result is ONE utterance — kept separate so the grammar can tell
+      // "a fresh utterance started with a field title" from "the speaker is
+      // still narrating", which is what closes an open description.
+      if (isFinal) pendingFinals.push(transcript);
+      else pendingInterim += transcript;
+      pendingCount++;
+      sessionHeard = true;
+      if (!flushQueued) {
+        flushQueued = true;
+        queueMicrotask(flushResults);
       }
+    };
+
+    function flushResults() {
+      flushQueued = false;
+      if (pendingCount === 0) return;
+      const finals = pendingFinals;
+      const interim = pendingInterim;
+      pendingFinals = [];
+      pendingInterim = '';
+      pendingCount = 0;
 
       if (finals.length > 0) {
         const final = finals.join(' ') + ' ';
@@ -643,16 +688,16 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
         // "style"…) are not commands until "period" closes it.
         setActiveVoiceField(detectActiveField(interim, voiceStateRef.current));
       }
-    };
+    }
 
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+    recognition.onError = (_message, code) => {
       // Ignore aborted errors (expected during stop/cleanup)
-      if (event.error === 'aborted') {
+      if (code === 'aborted') {
         return;
       }
-      
+
       // For no-speech, just continue (continuous mode will handle it)
-      if (event.error === 'no-speech') {
+      if (code === 'no-speech') {
         return;
       }
       
@@ -663,7 +708,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
       setInterimTranscript('');
       
       let errorMessage = 'Speech recognition error: ';
-      switch (event.error) {
+      switch (code) {
         case 'audio-capture':
           errorMessage += 'No microphone found or access denied.';
           break;
@@ -674,34 +719,56 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
           errorMessage += 'Network error. Please check your connection.';
           break;
         default:
-          errorMessage += event.error;
+          errorMessage += code;
       }
       alert(errorMessage);
     };
 
-    recognition.onend = () => {
-      // The browser ends the session on its own silence timeout. Whatever the
-      // speaker had already dictated stays in voiceStateRef (it is NOT cleared
-      // here), so an open description survives the gap and keeps accumulating
-      // when recognition resumes below.
+    recognition.onEnd = () => {
+      nativeSessionLive = false;
+      // A session's last results land before anything below reads state.
+      flushResults();
+      // The browser ends the session on its own silence timeout (the native
+      // recognisers end after every pause). Whatever the speaker had already
+      // dictated stays in voiceStateRef (it is NOT cleared here), so an open
+      // description survives the gap and keeps accumulating when recognition
+      // resumes below.
       // Only restart if we're still supposed to be recording
       // This happens when continuous mode times out or browser limits it
       if (isRecordingRef.current && !isStartingRef.current) {
+        let delay = 300;
+        if (isNativeRecognizer) {
+          // Restart guard (native only). A session that ends almost at once
+          // having heard nothing (microphone busy, recogniser refusing) would
+          // otherwise restart every 300 ms forever. Back off, then give up.
+          const quick = !sessionHeard && Date.now() - sessionStartedAt < NATIVE_QUICK_END_MS;
+          quickEnds = quick ? quickEnds + 1 : 0;
+          if (quickEnds >= NATIVE_MAX_QUICK_ENDS) {
+            quickEnds = 0;
+            isRecordingRef.current = false;
+            isStartingRef.current = false;
+            setIsRecording(false);
+            setInterimTranscript('');
+            commitVoiceBoundaryRef.current();
+            alert('Speech recognition keeps stopping. Tap Start Recording to try again.');
+            return;
+          }
+          delay = Math.min(300 * 2 ** quickEnds, NATIVE_RESTART_MAX_DELAY_MS);
+        }
         isStartingRef.current = true;
-        
+
         setTimeout(() => {
-          if (isRecordingRef.current && recognitionRef.current) {
-            try {
-              recognitionRef.current.start();
-            } catch (err) {
+          const recognizer = recognitionRef.current;
+          if (isRecordingRef.current && recognizer) {
+            startDictation(recognizer, isRecordingRef, isStartingRef, () => {
               setIsRecording(false);
               isRecordingRef.current = false;
               isStartingRef.current = false;
-            }
+            }, markDictationLiveRef.current);
           } else {
             isStartingRef.current = false;
           }
-        }, 300);
+        }, delay);
       } else {
         setIsRecording(false);
         setInterimTranscript('');
@@ -710,17 +777,19 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     };
 
     recognitionRef.current = recognition;
+    // Native: start() resolving counts as onStart (guarded to once per session).
+    markDictationLiveRef.current = () => recognition.onStart?.();
 
     return () => {
-      if (recognitionRef.current) {
-        try {
-          isRecordingRef.current = false;
-          isStartingRef.current = false;
-          recognitionRef.current.abort();
-        } catch (err) {
-          // Cleanup error - ignore
-        }
-      }
+      disposed = true;
+      isRecordingRef.current = false;
+      isStartingRef.current = false;
+      markDictationLiveRef.current = () => {};
+      // On native this ends the session synchronously and detaches the plugin
+      // listeners, so a late partial cannot reach this unmounted instance.
+      recognition.abort().catch(() => {
+        // Cleanup error - ignore
+      });
     };
     // Mount-stable on purpose: the recogniser must outlive group navigation, or
     // the teardown aborts mid-utterance and drops whatever was being dictated.
@@ -1153,14 +1222,12 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     isRecordingRef.current = true;
     isStartingRef.current = true;
 
-    try {
-      recognitionRef.current.start();
-    } catch (error) {
+    startDictation(recognitionRef.current, isRecordingRef, isStartingRef, () => {
       isRecordingRef.current = false;
       isStartingRef.current = false;
       setIsTransitioning(false);
       alert('Could not start speech recognition. Make sure microphone access is allowed.');
-    }
+    }, markDictationLiveRef.current);
   };
 
   const handleStopRecording = async () => {
@@ -1195,11 +1262,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
     commitVoiceBoundaryRef.current();
     
     if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (err) {
+      recognitionRef.current.stop().catch(() => {
         // Ignore stop errors
-      }
+      });
     }
     setInterimTranscript('');
 
@@ -2891,7 +2956,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 <button
                   type="button"
                   className="button button-secondary voice-period-btn"
-                  title={'End the current field — same as saying "period". Shortcut: the . key'}
+                  title={'End the current field, same as saying "period". Shortcut: the . key'}
                   onClick={commitVoiceBoundary}
                 >
                   <CircleDot size={12} style={{ flexShrink: 0 }} /> Period
@@ -2986,10 +3051,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               </div>
             )}
             <div className="voice-result">
-              {/* Mode toggle */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <label><strong>Voice Description</strong> <span style={{ fontWeight: 400, color: 'var(--text-muted)', fontSize: '0.85em' }}>— say <em>field name → value</em>; the next field name ends it (e.g. <em>"brand Nike size large"</em>). Say <em>"period"</em> or press <strong>.</strong> to end one on its own</span></label>
-                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+              {/* Mode toggle. The two classes are layout hooks only: at phone
+                  width (PDG.css) the hint takes its own line and the tools wrap
+                  beneath it, instead of the hint being squeezed into a 140px
+                  column beside them. */}
+              <div className="voice-result-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <label><strong>Voice Description:</strong> <span style={{ fontWeight: 400, color: 'var(--text-muted)', fontSize: '0.85em' }}>say <em>field name → value</em>; the next field name ends it (e.g. <em>"brand Nike size large"</em>). Say <em>"period"</em> or press <strong>.</strong> to end one on its own</span></label>
+                <div className="voice-result-tools" style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                   <button
                     type="button"
                     title="Clear all voice fields"

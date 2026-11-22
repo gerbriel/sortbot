@@ -446,7 +446,8 @@
   }
 
   .cz-gender-row button {
-    min-height: 40px;
+    /* Was 40px, under the 44px touch floor (AGENTS.md §1). */
+    min-height: var(--tap, 44px);
     padding: 0.3rem 0.9rem !important;
     font-size: var(--fs-sm) !important;
   }
@@ -487,5 +488,39 @@
      Library/desktop variant shares this stylesheet. */
   .category-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ── Touch drag (long press), Nov 2026 ───────────────────────────────────
+   On a touch screen a long press in the grid now picks a photo or a group up
+   (step2TouchDrag.ts), and these zones are where it lands. While a drag is
+   live, every zone goes back to the dashed "drop target" border the phone
+   rail otherwise drops, and the zone under the finger takes the same fill
+   the mouse .drag-over uses. Keyed on attributes React does not own, so none
+   of this can match during a mouse drag. Not width-scoped: a tablet is touch
+   too. */
+html.step2-touch-dragging .category-zones-container.compact .category-zone {
+  border-style: dashed;
+}
+
+.category-zone[data-step2-over] {
+  border-color: var(--category-color, var(--success));
+  border-style: solid !important;
+  background: var(--success-dim);
+  box-shadow: 0 8px 20px var(--success-dim);
+}
+
+.category-zone-clear[data-step2-over] {
+  border-color: var(--danger) !important;
+  background: var(--danger-dim) !important;
+  box-shadow: 0 8px 20px var(--danger-dim) !important;
+}
+
+/* The selection hint is the only words the dock shows a touch user; keep it
+   from sitting on one line that runs off a 390px screen. */
+@media (max-width: 640px) {
+  .cz-selection-hint {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 }

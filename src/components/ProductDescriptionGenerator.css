@@ -1392,7 +1392,9 @@
   display: flex;
   flex-direction: column;
   position: sticky;
-  top: calc(var(--space-8) + 60px);
+  /* + --safe-t: the sticky app header grows by the status-bar inset inside a
+     native shell (App.css), so the dock must clear that too. 0 in a browser. */
+  top: calc(var(--space-8) + 60px + var(--safe-t, 0px));
   z-index: 5;
   padding: var(--space-3);
   background: var(--ink-850);
@@ -1540,12 +1542,31 @@
     justify-content: center;
   }
 
+  /* Voice Description head: hint on its own full-width line, then Clear
+     Fields and the Table/Text toggle on the next, toggle pushed right. The
+     inline flex on both elements has no wrap, so wrap is added here. */
+  .voice-result-head {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .voice-result-head > label {
+    flex: 1 1 100%;
+  }
+
+  .voice-result-tools {
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+
   .descriptor-chips {
     gap: 0.35rem;
   }
 
   .descriptor-chip {
     min-height: var(--tap, 44px);
+    /* Short keywords ("y2k", "rare") measured 37px wide: the floor is both axes. */
+    min-width: var(--tap, 44px);
     padding: 0.4rem 0.8rem;
     font-size: var(--fs-sm);
   }

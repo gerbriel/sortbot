@@ -333,7 +333,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
     // Block export until every photo's background is settled (see above).
     if (pendingBackgroundPhotos.length > 0) {
       alert(
-        `Cannot export — ${pendingBackgroundPhotos.length} photo` +
+        `Cannot export: ${pendingBackgroundPhotos.length} photo` +
         `${pendingBackgroundPhotos.length > 1 ? 's need' : ' needs'} a background review.\n\n` +
         `Go to Step 2 › Filter › Needs review, then approve the cut-out or keep the original.`
       );
@@ -350,7 +350,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
         ? `\n…and ${invalidPricedProducts.length - 10} more`
         : '';
       alert(
-        `Cannot export — ${invalidPricedProducts.length} ` +
+        `Cannot export: ${invalidPricedProducts.length} ` +
         `product${invalidPricedProducts.length > 1 ? 's have' : ' has'} a price of $0 or no price set.\n` +
         `Set a price in Step 3 for:\n\n${names}${more}`
       );
@@ -456,7 +456,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                   </ul>
                 )}
                 <p className="export-research-note">
-                  A flag is advice, not a block — the CSV still downloads.
+                  A flag is advice, not a block. The CSV still downloads.
                 </p>
               </div>
             )}
@@ -467,10 +467,10 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                 background: 'var(--danger-dim)', border: '1px solid var(--danger)', color: 'var(--danger)',
                 fontSize: 'var(--fs-sm)', fontWeight: 600,
               }}>
-                <Ban size={13} style={{ flexShrink: 0 }} /> Export blocked — {pendingBackgroundPhotos.length} photo
+                <Ban size={13} style={{ flexShrink: 0 }} /> Export blocked: {pendingBackgroundPhotos.length} photo
                 {pendingBackgroundPhotos.length > 1 ? 's need' : ' needs'} a background review.
                 <span style={{ display: 'block', marginTop: '0.35rem', fontWeight: 500 }}>
-                  Step 2 › Filter › Needs review — approve the cut-out, or keep the original photo.
+                  Step 2 › Filter › Needs review, then approve the cut-out or keep the original photo.
                 </span>
               </div>
             )}
@@ -481,7 +481,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
                 background: 'var(--danger-dim)', border: '1px solid var(--danger)', color: 'var(--danger)',
                 fontSize: 'var(--fs-sm)', fontWeight: 600,
               }}>
-                <Ban size={13} style={{ flexShrink: 0 }} /> Export blocked — {invalidPricedProducts.length} product
+                <Ban size={13} style={{ flexShrink: 0 }} /> Export blocked: {invalidPricedProducts.length} product
                 {invalidPricedProducts.length > 1 ? 's have' : ' has'} no price (or $0).
                 Set a price in Step 3 before exporting:
                 <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.2rem', fontWeight: 500 }}>

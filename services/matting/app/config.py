@@ -145,8 +145,17 @@ class Settings:
 
     # ── Service behaviour ───────────────────────────────────────────────────
     env: str = field(default_factory=lambda: _env("MATTING_ENV", "production").lower())
+    # The web app, the Vite dev server, and the Capacitor native shell's webview
+    # origins: capacitor://localhost (iOS) and https://localhost (Android, the
+    # Capacitor 8 default scheme). Exact matches only; the bare http origin is
+    # deliberately absent so nothing served from a developer machine on port 80
+    # passes CORS. CONTRACT.md §3.
     allowed_origins: list[str] = field(
-        default_factory=lambda: _csv("ALLOWED_ORIGINS", "https://arcadian.ltd,http://localhost:5173")
+        default_factory=lambda: _csv(
+            "ALLOWED_ORIGINS",
+            "https://arcadian.ltd,http://localhost:5173,"
+            "capacitor://localhost,https://localhost",
+        )
     )
     concurrency: int = field(default_factory=lambda: max(1, _int("CONCURRENCY", 4)))
     max_ids_per_job: int = field(default_factory=lambda: max(1, _int("MAX_IDS_PER_JOB", 2000)))

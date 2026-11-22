@@ -38,7 +38,7 @@
      is sticky at z-index 100 and roughly 6rem tall; without this offset a
      sticky editor column or tab rail slides underneath it. One variable so the
      five sticky rules across the tool CSS files stay in step. */
-  --tv-sticky-top: 8.5rem;
+  --tv-sticky-top: calc(8.5rem + var(--safe-t));
 }
 
 .tool-view-inner {
@@ -239,22 +239,23 @@
 
 @media (max-width: 640px) {
   .tool-view {
-    /* 1.5rem gutters (13.5px on the 9px root), and a bottom that clears BOTH
-       the fixed tab bar and the home indicator: --tabbar-h carries the
-       safe-area inset and is 0 at every wider breakpoint, so this one calc is
-       correct everywhere and nothing has to undo it. */
-    padding: 1.5rem;
+    /* 1.8rem side gutters (16.2px on the 9px root, the phone gutter the
+       mobile-readiness pass asked for; it was 1.5rem = 13.5px), and a bottom
+       that clears BOTH the fixed tab bar and the home indicator: --tabbar-h
+       carries the safe-area inset and is 0 at every wider breakpoint, so this
+       one calc is correct everywhere and nothing has to undo it. */
+    padding: 1.5rem 1.8rem;
     padding-bottom: calc(4rem + var(--tabbar-h));
     /* Landscape notch. max() means the inset can only add room. */
-    padding-left: max(1.5rem, var(--safe-l));
-    padding-right: max(1.5rem, var(--safe-r));
+    padding-left: max(1.8rem, var(--safe-l));
+    padding-right: max(1.8rem, var(--safe-r));
     /* dvh tracks Safari's collapsing toolbar; vh is the largest viewport, so a
        vh-based min-height leaves a scroll the page did not need. */
     min-height: calc(100dvh - 10rem);
     /* The header loses its subtitle and its tool row at this width, so it is
        about half as tall — a sticky column inside a view should not reserve
        the desktop offset. */
-    --tv-sticky-top: 6rem;
+    --tv-sticky-top: calc(6rem + var(--safe-t));
   }
 
   .tool-view-inner { gap: 2rem; }

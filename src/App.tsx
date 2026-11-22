@@ -3445,7 +3445,7 @@ function App() {
               <h2>Step 1: Upload Images</h2>
               {uploadedImages.length > 0 && currentBatchId ? (
                 <p className="step-description" style={{ fontSize: 'var(--fs-lg)', color: 'var(--success)', margin: 0 }}>
-                  <Plus size={11} style={{ flexShrink: 0 }} /> <strong>Batch active</strong> — drop more images here to add them to this batch ({uploadedImages.length} image{uploadedImages.length !== 1 ? 's' : ''} already loaded)
+                  <Plus size={11} style={{ flexShrink: 0 }} /> <strong>Batch active.</strong> Drop more images here to add them to this batch ({uploadedImages.length} image{uploadedImages.length !== 1 ? 's' : ''} already loaded)
                 </p>
               ) : (
                 <p className="step-description" style={{ fontSize: 'var(--fs-lg)', color: 'var(--text-secondary)', margin: 0 }}>
@@ -3608,25 +3608,25 @@ function App() {
               if (multiGroups > 0 && singles > 0) {
                 return (
                   <p style={{ color: 'var(--accent)', fontWeight: 500, marginBottom: '0.5rem', fontSize: 'var(--fs-sm)' }}>
-                    <Package size={11} style={{ flexShrink: 0 }} /> {totalListings} total listing{totalListings !== 1 ? 's' : ''}: {multiGroups} multi-image group{multiGroups !== 1 ? 's' : ''} + {singles} single{singles !== 1 ? 's' : ''} ({imageCount} images) — use Next/Previous to navigate{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
+                    <Package size={11} style={{ flexShrink: 0 }} /> {totalListings} total listing{totalListings !== 1 ? 's' : ''}: {multiGroups} multi-image group{multiGroups !== 1 ? 's' : ''} + {singles} single{singles !== 1 ? 's' : ''} ({imageCount} images). Use Next/Previous to navigate{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
                   </p>
                 );
               } else if (multiGroups > 0) {
                 return (
                   <p style={{ color: 'var(--accent)', fontWeight: 500, marginBottom: '0.5rem', fontSize: 'var(--fs-sm)' }}>
-                    <Package size={11} style={{ flexShrink: 0 }} /> {multiGroups} product group{multiGroups !== 1 ? 's' : ''} ({imageCount} images grouped) — use Next/Previous to navigate listings{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
+                    <Package size={11} style={{ flexShrink: 0 }} /> {multiGroups} product group{multiGroups !== 1 ? 's' : ''} ({imageCount} images grouped). Use Next/Previous to navigate listings{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
                   </p>
                 );
               } else if (singles > 0) {
                 return (
                   <p style={{ color: 'var(--accent)', fontWeight: 500, marginBottom: '0.5rem', fontSize: 'var(--fs-sm)' }}>
-                    <Package size={11} style={{ flexShrink: 0 }} /> {singles} categorized listing{singles !== 1 ? 's' : ''} ({imageCount} image{imageCount !== 1 ? 's' : ''}) — use Next/Previous to navigate{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
+                    <Package size={11} style={{ flexShrink: 0 }} /> {singles} categorized listing{singles !== 1 ? 's' : ''} ({imageCount} image{imageCount !== 1 ? 's' : ''}). Use Next/Previous to navigate{excluded > 0 ? ` · ${excluded} uncategorized single${excluded !== 1 ? 's' : ''} hidden` : ''}
                   </p>
                 );
               } else {
                 return (
                   <p style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-sm)', marginBottom: '0.5rem' }}>
-                    <AlertTriangle size={11} style={{ flexShrink: 0 }} /> No categorized items yet — go back to Step 2 and drag items to a category zone.
+                    <AlertTriangle size={11} style={{ flexShrink: 0 }} /> No categorized items yet. Go back to Step 2 and drag items to a category zone.
                   </p>
                 );
               }
@@ -3667,7 +3667,9 @@ function App() {
               />
             )}
             <details>
-              <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 'var(--fs-md)', userSelect: 'none', padding: '0.25rem 0' }}>
+              {/* `.step4-summary` (App.css) lifts this to the 44px touch floor
+                  on phones; the inline padding alone made it a 22px target. */}
+              <summary className="step4-summary" style={{ cursor: 'pointer', fontWeight: 600, fontSize: 'var(--fs-md)', userSelect: 'none', padding: '0.25rem 0' }}>
                 Step 4: Review &amp; Export ▾
               </summary>
 

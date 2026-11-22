@@ -24,7 +24,7 @@ primary_region = "iad"             # put it near the Supabase project
   # makes a catalog's cutouts inconsistent, which is worse than having none.
   # The startup log prints the current latest so re-pinning is a copy-paste.
   REPLICATE_VERSION = "f74986db0355b58403ed20963af156525e2891ea3c2d499bfbfb2a28cd87c5d7"
-  ALLOWED_ORIGINS = "https://arcadian.ltd,http://localhost:5173"
+  ALLOWED_ORIGINS = "https://arcadian.ltd,http://localhost:5173,capacitor://localhost,https://localhost"
   BUCKET = "product-images"
   # Four images in flight. Each one is mostly waiting on Replicate, so this is
   # a concurrency limit against the upstream rate limit, not a CPU count.

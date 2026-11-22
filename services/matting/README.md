@@ -113,7 +113,7 @@ run, every write fails on a missing column.
 | `REPLICATE_RETRY_BASE_SECONDS` | `2` | first backoff; the ladder is 2, 4, 8, 16, 32 s ±20% |
 | `REPLICATE_TIMEOUT_SECONDS` | `180` | deadline on ONE prediction's polling |
 | `MATTING_ENV` | `production` | `dev` relaxes the version pin |
-| `ALLOWED_ORIGINS` | `https://arcadian.ltd,http://localhost:5173` | never `*` |
+| `ALLOWED_ORIGINS` | `https://arcadian.ltd,http://localhost:5173,capacitor://localhost,https://localhost,http://localhost` | never `*` |
 | `CONCURRENCY` | `4` | images in flight per job |
 | `IMAGE_TIMEOUT_S` | `180` | outer deadline on one photo — see below |
 | `MAX_IDS_PER_JOB` | `2000` | |

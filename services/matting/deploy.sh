@@ -76,7 +76,7 @@ fly secrets set --app "$APP" --stage \
   REPLICATE_MODEL="$MODEL" \
   REPLICATE_VERSION="$REPLICATE_VERSION" \
   MATTING_BACKEND=replicate \
-  ALLOWED_ORIGINS="https://arcadian.ltd,http://localhost:5173"
+  ALLOWED_ORIGINS="https://arcadian.ltd,http://localhost:5173,capacitor://localhost,https://localhost"
 
 fly deploy --app "$APP" --remote-only
 

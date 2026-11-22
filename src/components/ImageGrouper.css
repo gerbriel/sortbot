@@ -2273,3 +2273,84 @@
   .lb-segmented .lightbox-tool-btn { min-height: 44px; }
   .bg-badge { width: 22px; height: 22px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TOUCH DRAG (long press), Nov 2026 mobile-readiness pass
+   step2TouchDrag.ts drives it for touch and pen pointers only; a mouse keeps
+   HTML5 drag and its .drag-over / .reorder-over-* classes above. These rules
+   key off attributes React does not own (data-step2-source / data-step2-over)
+   and the html.step2-touch-dragging class, so none of them can ever match on a
+   mouse-only desktop. Not inside a width query on purpose: an iPad or a
+   Capacitor tablet build is touch at 1024px too.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* The pill that follows the finger. Positioned by a transform from JS; the
+   offset lifts it above the fingertip so the target stays visible. */
+.step2-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10000;
+  pointer-events: none;
+  margin: -56px 0 0 -40px;
+  padding: 0.8rem 1.4rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--ink-950);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  white-space: nowrap;
+  box-shadow: var(--shadow-lg);
+}
+
+/* What is being carried. */
+[data-step2-source] {
+  opacity: 0.4;
+}
+
+/* While a drag is live nothing in the grid should start a text selection or
+   the iOS image callout under the moving finger. */
+html.step2-touch-dragging .image-grouper-container,
+html.step2-touch-dragging .category-zones-container {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Dropping onto a group (or onto a single to make a new group). */
+.product-group-card[data-step2-over],
+.single-item-card[data-step2-over="on"] {
+  border-color: var(--success);
+  box-shadow: 0 0 0 4px var(--success-dim);
+}
+
+/* A single carried over a single REORDERS (same rule as the mouse path), so
+   it gets the same edge bar the mouse reorder shows. A photo from a group
+   carried over a single makes a group instead; the ring below says so. */
+html.step2-touch-dragging .single-item-card[data-step2-over="before"] {
+  box-shadow: -3px 0 0 0 var(--accent);
+}
+html.step2-touch-dragging .single-item-card[data-step2-over="after"] {
+  box-shadow: 3px 0 0 0 var(--accent);
+}
+
+/* A photo inside an opened group: reorder target. */
+.group-image-item[data-step2-over] {
+  border: 3px dashed var(--success) !important;
+  box-shadow: 0 0 0 3px var(--success-dim) !important;
+  background: var(--success-dim);
+}
+
+/* Long press is the pickup gesture on every touch device, not just phones, so
+   the callout / text-selection suppression the phone block applies to cards
+   also has to hold on a coarse pointer at tablet width. */
+@media (pointer: coarse) {
+  .single-item-card,
+  .product-group-card,
+  .group-image-item {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+}

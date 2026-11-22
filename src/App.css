@@ -703,9 +703,20 @@
   }
 }
 
+/* STATUS BAR / NOTCH. Inside a native shell (Capacitor) the web view runs edge
+   to edge under the status bar, and `viewport-fit=cover` makes --safe-t report
+   its height. The sticky black bar is the top edge of the app, so it absorbs
+   the inset: its fill runs up behind the clock while the wordmark and trigger
+   sit below it. ADDED to the band's padding, not max()'d against it, because
+   the inset is entirely covered by system UI. --safe-t is 0 in a desktop or
+   mobile browser tab, so this renders exactly as before there. Declared after
+   the ≤768 and ≤480 `padding` shorthands above, which would otherwise reset it. */
+.app-header { padding-top: calc(var(--space-4) + var(--safe-t)); }
+
 /* Same rule one band down, where the base padding steps to --space-4. */
 @media (max-width: 768px) {
   .app-header {
+    padding-top: calc(var(--space-3) + var(--safe-t));
     padding-left: max(var(--space-4), var(--safe-l));
     padding-right: max(var(--space-4), var(--safe-r));
   }
@@ -822,8 +833,9 @@
 
   /* ── Step 2: the category panel becomes a bottom action dock ────────────
      Desktop assigns a category by dragging a group card onto a zone. HTML5
-     drag-and-drop does not fire on touch, so the phone path is the second,
-     already-supported one: select in the grid, then tap a category. Docking the
+     drag-and-drop does not fire on touch, so on a phone that drag is a long
+     press (step2TouchDrag.ts), and the select-then-tap path still works
+     beside it: select in the grid, then tap a category. Docking the
      panel keeps that second tap in thumb reach no matter how far the grid has
      been scrolled. */
   /* Block, not grid: a sticky-bottom dock needs a containing block that is
@@ -872,6 +884,17 @@
     max-height: 26vh;
   }
 
+  /* Since Nov 2026 a long press in the grid also DRAGS on touch
+     (components/step2TouchDrag.ts), and this dock is where the drag lands.
+     For the length of a drag it takes its full height and an accent edge so
+     the drop row reads as the destination. The selector carries the html
+     class, so it outranks the idle cap above. */
+  html.step2-touch-dragging .step2-right-panel {
+    max-height: 38vh;
+    border-color: var(--accent);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.18), 0 0 0 2px var(--accent);
+  }
+
   /* ── Step 4 ────────────────────────────────────────────────────────────── */
   .batch-actions {
     flex-direction: column;
@@ -883,6 +906,27 @@
     min-width: 0;
     min-height: 48px;
   }
+
+  /* The Review & Export disclosure was a 22px-tall target (its padding is
+     inline). Flex rather than list-item so min-height centres the label; the
+     label carries its own caret glyph, so the native marker is not missed. */
+  .step-section .step4-summary {
+    display: flex;
+    align-items: center;
+    min-height: var(--tap, 44px);
+  }
+}
+
+/* ── Step 1 on a touch-only device (phone, tablet, Capacitor shell) ─────────
+   Import Folder opens an <input webkitdirectory>, which iOS and iPadOS do not
+   support and Android WebViews honour unreliably: the button either does
+   nothing or opens a plain file picker that cannot select a folder. It is
+   removed rather than left as a broken control. Import ZIP stays (a ZIP is an
+   ordinary file and every mobile picker can choose one) and, as the only
+   child left, takes the full row. Width-independent on purpose: an iPad is
+   wider than 640px and has the same limitation. */
+@media (hover: none) and (pointer: coarse) {
+  .step1-header-actions .step1-folder-btn { display: none; }
 }
 /* ▲▲▲ END MOBILE WORKFLOW BLOCK ▲▲▲ */
 

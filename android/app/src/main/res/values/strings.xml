@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Arcadian</string>
+    <string name="title_activity_main">Arcadian</string>
+    <string name="package_name">ltd.arcadian.app</string>
+    <string name="custom_url_scheme">ltd.arcadian.app</string>
+</resources>

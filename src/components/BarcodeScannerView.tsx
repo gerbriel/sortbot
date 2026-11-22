@@ -5,6 +5,12 @@ import {
 import { findProductBySku, labelSwatch, type ScannedProduct, type ListingLabel } from '../lib/labelsService';
 import { publicImageUrl } from '../lib/storageUrls';
 import { baseSize } from '../lib/csvExport';
+import {
+  getBarcodeDetectorCtor, scanBarcodes, usesNativeBarcodeScanner, BarcodeScanError,
+  type BarcodeDetectorLike,
+} from '../lib/native/barcode';
+import { hasNativePlugin } from '../lib/native/nativePlugin';
+import type { PluginListenerHandle } from '@capacitor/core';
 import './BarcodeScannerView.css';
 
 /**
@@ -34,16 +40,30 @@ import './BarcodeScannerView.css';
  * stopped keeps the phone's camera light on after navigation. Every exit path
  * — stop button, unmount, an error mid-stream — goes through `stopCamera`, and
  * the ref holding the stream is read in a cleanup, never during render.
+ *
+ * IN THE NATIVE APP (Nov 2026) the camera path is different and the web one is
+ * untouched. When `usesNativeBarcodeScanner()` is true (the ML Kit plugin is
+ * linked on both iOS and Android), "Scan with camera" opens ML Kit's own full-screen scanner through
+ * `scanBarcodes()` in lib/native/barcode.ts. The webview never opens a
+ * getUserMedia stream there, so there is no stream to stop and no light to
+ * leave on: the native scanner owns the camera and releases it when it closes.
+ * The one rule that still applies is the mounted guard, because the scan
+ * resolves asynchronously and the view may be gone by then. hasNativePlugin()
+ * remains the guard for a build where the plugin was removed: the view then
+ * runs the web path, which in WKWebView means the "no built-in reader" note
+ * and the other two inputs. The iOS scanner path is untested on a device.
  */
 
-/** The subset of the BarcodeDetector API we use. It is not in lib.dom yet. */
-interface DetectedBarcode { rawValue: string; format: string }
-interface BarcodeDetectorLike { detect(source: CanvasImageSource): Promise<DetectedBarcode[]> }
-type BarcodeDetectorCtor = new (opts?: { formats?: string[] }) => BarcodeDetectorLike;
+/** The web path's detector constructor (BarcodeDetector), or null. */
+const getDetectorCtor = getBarcodeDetectorCtor;
 
-function getDetectorCtor(): BarcodeDetectorCtor | null {
-  const ctor = (window as unknown as { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
-  return typeof ctor === 'function' ? ctor : null;
+/** The first barcode in a restored ML Kit scan() result (see the restore
+ *  effect below), or '' when the payload is not one. */
+function restoredBarcodeValue(event: { pluginId?: string; success?: boolean; data?: unknown }): string {
+  if (event.pluginId !== 'BarcodeScanner' || !event.success) return '';
+  const barcodes = (event.data as { barcodes?: Array<{ rawValue?: unknown }> } | undefined)?.barcodes;
+  const raw = Array.isArray(barcodes) ? barcodes[0]?.rawValue : undefined;
+  return typeof raw === 'string' ? raw.trim() : '';
 }
 
 /** How often to sample a frame. ~6/s reads instantly to a human and leaves the
@@ -87,7 +107,14 @@ export default function BarcodeScannerView({ onOpenListing }: BarcodeScannerView
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [history, setHistory] = useState<string[]>([]);
 
-  const detectorSupported = getDetectorCtor() !== null;
+  /** Native app with ML Kit linked: the camera button opens the native scanner. */
+  const nativeScanner = usesNativeBarcodeScanner();
+  /** True while the native full-screen scanner is open (or installing). */
+  const [nativeScanning, setNativeScanning] = useState(false);
+  /** Native only: "downloading the scanner" progress line. */
+  const [nativeNote, setNativeNote] = useState<string | null>(null);
+
+  const detectorSupported = nativeScanner || getDetectorCtor() !== null;
 
   const stopCamera = useCallback(() => {
     if (timerRef.current !== null) {
@@ -120,7 +147,44 @@ export default function BarcodeScannerView({ onOpenListing }: BarcodeScannerView
     }
   }, []);
 
+  /** Native: one full-screen ML Kit scan per tap. No stream lives in the webview. */
+  const startNativeScan = useCallback(async () => {
+    setCameraError(null);
+    setNativeNote(null);
+    setNativeScanning(true);
+    try {
+      const { barcodes, cancelled } = await scanBarcodes({
+        formats: ['code_128'],
+        onModuleInstallProgress: (p) => {
+          if (!mountedRef.current) return;
+          setNativeNote(p == null
+            ? 'Downloading the barcode scanner. This happens once.'
+            : `Downloading the barcode scanner: ${Math.round(p)}%`);
+        },
+      });
+      if (!mountedRef.current) return;
+      setNativeNote(null);
+      if (cancelled || barcodes.length === 0) return;
+      void lookup(barcodes[0].rawValue);
+    } catch (err) {
+      if (!mountedRef.current) return;
+      setNativeNote(null);
+      setCameraError(
+        err instanceof BarcodeScanError && err.code === 'permission-denied'
+          ? 'Camera permission was denied. Allow it in Settings, or use a USB scanner / type the SKU.'
+          : err instanceof BarcodeScanError && err.code === 'module-install-failed'
+            ? 'The barcode scanner could not be downloaded. Check your connection, or use a USB scanner / type the SKU.'
+            : err instanceof BarcodeScanError && err.code === 'unsupported'
+              ? 'No camera found on this device. Use a USB scanner or type the SKU.'
+              : 'Could not start the camera. Use a USB scanner or type the SKU.',
+      );
+    } finally {
+      if (mountedRef.current) setNativeScanning(false);
+    }
+  }, [lookup]);
+
   const startCamera = useCallback(async () => {
+    if (nativeScanner) { await startNativeScan(); return; }
     const Ctor = getDetectorCtor();
     if (!Ctor) {
       setCameraError('This browser has no built-in barcode reader. Use a USB scanner or type the SKU below.');
@@ -170,7 +234,7 @@ export default function BarcodeScannerView({ onOpenListing }: BarcodeScannerView
       );
       stopCamera();
     }
-  }, [lookup, stopCamera]);
+  }, [lookup, stopCamera, nativeScanner, startNativeScan]);
 
   // Unmount: flip the mounted flag first so in-flight lookups go quiet, then
   // release the camera. Navigating away with the light still on is the bug
@@ -182,6 +246,30 @@ export default function BarcodeScannerView({ onOpenListing }: BarcodeScannerView
       stopCamera();
     };
   }, [stopCamera]);
+
+  // Native only: Android may kill the webview while ML Kit's full-screen
+  // scanner is open. The app then reloads and the scan's result arrives as
+  // @capacitor/app's `appRestoredResult` instead of resolving scanBarcodes().
+  // Capacitor holds that event until a listener is added, so it is delivered
+  // when this view mounts. Never runs on the web (no plugin, no import).
+  // Likely dead on Android: ML Kit's scan() uses the Play services scanner UI, not an activity result of ours.
+  useEffect(() => {
+    if (!nativeScanner || !hasNativePlugin('App')) return;
+    let disposed = false;
+    let handle: PluginListenerHandle | null = null;
+    import('@capacitor/app')
+      .then(({ App }) => App.addListener('appRestoredResult', (event) => {
+        const value = restoredBarcodeValue(event);
+        if (!value || !mountedRef.current) return;
+        void lookup(value);
+      }))
+      .then((h) => { if (disposed) void h.remove(); else handle = h; })
+      .catch(() => { /* no restore handling; the normal scan path still works */ });
+    return () => {
+      disposed = true;
+      void handle?.remove();
+    };
+  }, [nativeScanner, lookup]);
 
   const submitManual = (value: string) => {
     const v = value.trim();
@@ -207,21 +295,37 @@ export default function BarcodeScannerView({ onOpenListing }: BarcodeScannerView
           </p>
         )}
 
-        <div className={`bsv-video-wrap${cameraOn ? ' bsv-video-wrap--on' : ''}`}>
-          {/* muted + playsInline are what let a phone play this without a
-              fullscreen takeover; the stream has no audio track anyway. */}
-          <video ref={videoRef} className="bsv-video" muted playsInline />
-          {!cameraOn && (
-            <div className="bsv-video-placeholder">
-              <Camera size={26} aria-hidden="true" />
-              <span>Camera off</span>
-            </div>
-          )}
-          {cameraOn && <div className="bsv-reticle" aria-hidden="true" />}
-        </div>
+        {nativeScanner ? (
+          // Native: the scanner opens full screen, so there is no preview here.
+          <p className="bsv-help">
+            {nativeNote ?? 'Tap Scan with camera, point it at the label, and the listing appears below.'}
+          </p>
+        ) : (
+          <div className={`bsv-video-wrap${cameraOn ? ' bsv-video-wrap--on' : ''}`}>
+            {/* muted + playsInline are what let a phone play this without a
+                fullscreen takeover; the stream has no audio track anyway. */}
+            <video ref={videoRef} className="bsv-video" muted playsInline />
+            {!cameraOn && (
+              <div className="bsv-video-placeholder">
+                <Camera size={26} aria-hidden="true" />
+                <span>Camera off</span>
+              </div>
+            )}
+            {cameraOn && <div className="bsv-reticle" aria-hidden="true" />}
+          </div>
+        )}
 
         <div className="bsv-actions">
-          {cameraOn ? (
+          {nativeScanner ? (
+            <button
+              type="button"
+              className="bsv-btn bsv-btn--primary"
+              onClick={() => void startNativeScan()}
+              disabled={nativeScanning}
+            >
+              {nativeScanning ? <Loader2 size={14} className="bsv-spin" /> : <Camera size={14} />} Scan with camera
+            </button>
+          ) : cameraOn ? (
             <button type="button" className="bsv-btn" onClick={stopCamera}>
               <CameraOff size={14} /> Stop camera
             </button>

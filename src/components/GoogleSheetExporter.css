@@ -301,6 +301,15 @@
     min-height: 48px;
   }
 
+  /* The frozen Handle column held a 50-character handle on one line, ~330px:
+     at 360px it covered the whole table box, so a sideways pan scrolled the
+     other 53 columns underneath it and none were ever visible. Let it wrap,
+     so it settles at its inline 180px minimum (about half the screen). */
+  .preview-table td:first-child {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
   .export-instructions {
     padding: 0.9rem;
   }

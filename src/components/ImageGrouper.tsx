@@ -26,6 +26,12 @@ import {
   type BackgroundPreset, type WorkspaceBackdrop,
 } from '../lib/descriptionSettings';
 import { ConfirmAction } from './ui';
+import {
+  beginLongPressDrag, installTouchMoveGuard, isInteractiveTarget, isTouchPointer,
+  noteStep2PointerDown, shouldBlockHtml5Drag,
+  DROP_ATTR, STEP2_DROP_EVENT,
+} from './step2TouchDrag';
+import type { Step2DragPayload, Step2DropDetail } from './step2TouchDrag';
 import './ProductDescriptionGenerator.css'; // crop-fs-* styles shared with PDG
 
 /** How often a running background job is polled. 4 s: a mask takes seconds per
@@ -493,7 +499,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
   const backgroundBadge = (item: ClothingItem) => {
     if (!bgAvailable) return null;
     if (item.maskStatus === 'review') {
-      return <span className="bg-badge bg-badge--review" title="The cut-out needs a look — double-click to review"><AlertTriangle size={11} /></span>;
+      return <span className="bg-badge bg-badge--review" title="The cut-out needs a look. Double-click to review"><AlertTriangle size={11} /></span>;
     }
     if (item.maskStatus === 'failed') {
       /* The reason goes in the tooltip, not just "it failed". The first real
@@ -504,8 +510,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         <span
           className="bg-badge bg-badge--failed"
           title={why
-            ? `Could not be processed: ${why} — this photo exports untouched`
-            : 'The background could not be removed — this photo exports untouched'}
+            ? `Could not be processed: ${why}. This photo exports untouched`
+            : 'The background could not be removed. This photo exports untouched'}
         ><Ban size={11} /></span>
       );
     }
@@ -2121,6 +2127,13 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       return;
     }
 
+    moveItemIntoGroup(movingItem, sourceGroup, targetGroup);
+  };
+
+  /* The commit half of a "put this photo in that group" drop. Shared by the
+     HTML5 (mouse) path above and the touch path (handleTouchDrop), so the two
+     can never disagree about what a drop does. */
+  const moveItemIntoGroup = (movingItem: ClothingItem, sourceGroup: string | null, targetGroup: string) => {
     // No-op: dropped on its own group
     if (sourceGroup === targetGroup) {
       setDragOverGroup(null);
@@ -2132,7 +2145,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
     }
 
     const afterMove = groupedItems.map(item =>
-      item.id === movingItem!.id
+      item.id === movingItem.id
         ? { ...item, productGroup: targetGroup }
         : item
     );
@@ -2241,7 +2254,11 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const dropBefore = e.clientX < rect.left + rect.width / 2;
+    reorderSingles(idsToMove, overId, dropBefore);
+  };
 
+  /* The commit half of a singles-grid reorder (mouse and touch share it). */
+  const reorderSingles = (idsToMove: string[], overId: string, dropBefore: boolean) => {
     // Build the base order
     const base = singleItemsRef.current.map(i => i.id);
     const order = manualOrder.length > 0 ? [...manualOrder] : base;
@@ -2319,10 +2336,18 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       return;
     }
 
+    reorderPhotoInGroup(srcPhotoId, targetPhotoId, groupId);
+  };
+
+  /* The commit half of a within-group photo reorder (mouse and touch share it). */
+  const reorderPhotoInGroup = (srcPhotoId: string, targetPhotoId: string, groupId: string) => {
     const photoList = [...groupedItems.filter(i => (i.productGroup || i.id) === groupId)];
     const fromIdx = photoList.findIndex(p => p.id === srcPhotoId);
     const toIdx = photoList.findIndex(p => p.id === targetPhotoId);
-    if (fromIdx === -1 || toIdx === -1) return;
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) {
+      setDraggedPhotoId(null); setDraggedPhotoGroupId(null); setDragOverPhotoId(null);
+      return;
+    }
 
     const moved = photoList.splice(fromIdx, 1)[0];
     photoList.splice(toIdx, 0, moved);
@@ -2349,6 +2374,90 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
       setDragOverGroup(null);
     }
   };
+
+  // ── Touch drag (long press) ──────────────────────────────────────────────
+  // HTML5 drag never fires on a touch screen, so touch and pen pointers get a
+  // long-press drag from step2TouchDrag.ts. The mouse keeps the HTML5 path
+  // above. Both end in moveItemIntoGroup / reorderSingles / reorderPhotoInGroup,
+  // and CategoryZones receives a drop on a category the same way, through the
+  // STEP2_DROP_EVENT it listens for on its own root.
+  const touchDragCancelRef = useRef<(() => void) | null>(null);
+
+  const startTouchDrag = (e: React.PointerEvent<HTMLElement>, payload: Step2DragPayload) => {
+    noteStep2PointerDown(e.pointerType);
+    if (!isTouchPointer(e.pointerType) || !e.isPrimary) return;
+    if (isInteractiveTarget(e.target as Element)) return;
+    // One drag at a time; a second finger is a pinch, not a pickup.
+    if (touchDragCancelRef.current) return;
+    touchDragCancelRef.current = beginLongPressDrag(
+      { pointerId: e.pointerId, pointerType: e.pointerType, clientX: e.clientX, clientY: e.clientY },
+      {
+        payload,
+        sourceEl: e.currentTarget,
+        scrollContainer: () => scrollContentRef.current,
+        onEnd: () => { touchDragCancelRef.current = null; },
+      },
+    );
+  };
+
+  /** The selection block a single carries, mirroring the mouse rule in
+   *  handleReorderDragStart: the whole multi-select when the card is in it. */
+  const singlesBlockFor = (itemId: string): string[] => {
+    const sel = selectedItemsRef.current;
+    return sel.has(itemId) && sel.size > 1
+      ? singleItemsRef.current.filter(i => sel.has(i.id)).map(i => i.id)
+      : [itemId];
+  };
+
+  const handleTouchDropRef = useRef<(target: HTMLElement, d: Step2DropDetail) => void>(() => {});
+  handleTouchDropRef.current = (target, d) => {
+    const kind = target.getAttribute(DROP_ATTR);
+    const overItem = target.getAttribute('data-drop-item');
+    const overGroup = target.getAttribute('data-drop-group');
+    const p = d.payload;
+    log.grouper(`touchDrop | ${p.kind} ${p.itemId} → ${kind} item=${overItem} group=${overGroup}`);
+    // A whole group only ever goes to a category (CategoryZones handles that).
+    if (p.kind === 'group') return;
+    const moving = groupedItems.find(i => i.id === p.itemId);
+    if (!moving) return;
+
+    if (kind === 'single' && overItem) {
+      if (p.kind === 'single') {
+        if (p.ids.length === 1 && p.ids[0] === overItem) return;
+        reorderSingles(p.ids, overItem, d.side === 'before');
+      } else if (overGroup) {
+        moveItemIntoGroup(moving, p.groupId, overGroup);
+      }
+    } else if (kind === 'group' && overGroup) {
+      moveItemIntoGroup(moving, p.groupId, overGroup);
+    } else if (kind === 'photo' && overItem && overGroup) {
+      if (p.kind === 'photo' && p.groupId === overGroup) {
+        if (p.itemId !== overItem) reorderPhotoInGroup(p.itemId, overItem, overGroup);
+      } else {
+        moveItemIntoGroup(moving, p.groupId, overGroup);
+      }
+    }
+  };
+
+  // Listener + scroll guard live on the grid's own scroll box. Every drag
+  // source and grid drop target is inside it; the category targets are
+  // CategoryZones' business.
+  useEffect(() => {
+    const el = scrollContentRef.current;
+    if (!el) return;
+    const onDrop = (ev: Event) => {
+      const target = (ev.target as HTMLElement | null)?.closest?.(`[${DROP_ATTR}]`) as HTMLElement | null;
+      if (!target || !el.contains(target)) return;
+      handleTouchDropRef.current(target, (ev as CustomEvent<Step2DropDetail>).detail);
+    };
+    el.addEventListener(STEP2_DROP_EVENT, onDrop);
+    const removeGuard = installTouchMoveGuard(el);
+    return () => {
+      el.removeEventListener(STEP2_DROP_EVENT, onDrop);
+      removeGuard();
+      touchDragCancelRef.current?.();
+    };
+  }, []);
 
   // Delete image handler
   // (Single-photo handleDeleteImage removed with the per-photo × button —
@@ -2664,7 +2773,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
            them, so the panel's own line fills in a beat later — this sentence
            only has to stop being the last word on the subject. */
         setBgNotice(
-          `Backgrounds done — ${p.auto} ready, ${p.review} need a look` +
+          `Backgrounds done: ${p.auto} ready, ${p.review} need a look` +
           (p.failed ? `, ${p.failed} could not be processed (see below)` : '') + '.',
         );
         onBackgroundsChanged?.();
@@ -2691,7 +2800,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
        404 and report a failure for work that did not need doing. */
     if (res.value.accepted === 0) {
       setBgNotice(res.value.skipped > 0
-        ? `Already done — ${res.value.skipped} photo${res.value.skipped === 1 ? '' : 's'} already use this background.`
+        ? `Already done: ${res.value.skipped} photo${res.value.skipped === 1 ? '' : 's'} already use this background.`
         : 'Nothing to process.');
       return;
     }
@@ -2832,7 +2941,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
             {cropPasteProgress.status === 'running'
               ? `Applying crop to ${cropPasteProgress.total} image${cropPasteProgress.total > 1 ? 's' : ''}…`
               : cropPasteProgress.failed.length > 0
-                ? `Done — ${cropPasteProgress.failed.length} failed`
+                ? `Done: ${cropPasteProgress.failed.length} failed`
                 : 'Crop applied successfully!'}
           </div>
           <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--fs-xs)', marginTop: 1 }}>
@@ -3350,7 +3459,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               }
             }}
             title={pickMode
-              ? `Pick mode ON — selecting ${autoGroupN} at a time. Click to turn off.`
+              ? `Pick mode ON: selecting ${autoGroupN} at a time. Click to turn off.`
               : `Pick mode: auto-select next ${autoGroupN} ungrouped images for manual grouping`}
           >
             {pickMode ? <><CircleDot size={12} /> Pick</> : <><Circle size={12} /> Pick</>}
@@ -3363,7 +3472,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         <button
           className={`ptb-btn photo-pick-toggle${photoSelectMode ? ' photo-pick-toggle--on' : ''}`}
           title={photoSelectMode
-            ? 'Pick mode ON — click photos (even inside groups) to select them, then use the tools here. Click to turn off.'
+            ? 'Pick mode ON. Click photos (even inside groups) to select them, then use the tools here. Click to turn off.'
             : 'Turn on to click-select photos (even inside groups), then rotate/crop/revert/delete them from this toolbar'}
           onClick={(e) => {
             e.stopPropagation();
@@ -3522,7 +3631,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               <button className="ptb-link" onClick={() => { setCopiedRotation(null); setCopiedCrop(undefined); setCopiedCropAspect(null); }}>
                 clear
               </button>
-              {selectedItems.size === 0 && <em> — now select target photos</em>}
+              {selectedItems.size === 0 && <em> · now select target photos</em>}
             </span>
             {selectedItems.size > 0 && (
               <button
@@ -3633,10 +3742,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                 <div
                   key={item.id}
                   data-item-id={item.id}
+                  data-step2-drop="single"
+                  data-drop-item={item.id}
+                  data-drop-group={itemGroupId}
+                  onPointerDown={(e) => startTouchDrag(e, { kind: 'single', itemId: item.id, groupId: itemGroupId, ids: singlesBlockFor(item.id) })}
                   className={`single-item-card ${dragOverGroup === itemGroupId ? 'drag-over' : ''} ${item.category ? 'has-category' : ''} ${selectedItems.has(item.id) ? 'selected' : ''} ${reorderDragId !== null && (reorderDragId === item.id || selectedItems.has(item.id)) ? 'reorder-dragging' : ''} ${isReorderTarget ? (reorderOverSide === 'left' ? 'reorder-over-left' : 'reorder-over-right') : ''}`}
                   draggable={!selectionThresholdMet}
                   onDragStart={(e) => {
                     if (selectionThresholdMet) { e.preventDefault(); return; }
+                    // iPadOS long press: the touch path owns this drag.
+                    if (shouldBlockHtml5Drag()) { e.preventDefault(); return; }
                     // Use reorder drag (within singles grid)
                     handleReorderDragStart(e, item.id);
                     // Also set up group-drag so dropping ON a group card still works
@@ -3765,10 +3880,15 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
               <div
                 key={groupId}
                 data-group-id={groupId}
+                data-step2-drop="group"
+                data-drop-group={groupId}
+                onPointerDown={(e) => startTouchDrag(e, { kind: 'group', groupId, itemId: items[0].id, count: items.length })}
                 className={`product-group-card ${dragOverGroup === groupId ? 'drag-over' : ''} ${items[0].category ? 'has-category' : ''} ${items.every(i => selectedItems.has(i.id)) ? 'all-selected' : items.some(i => selectedItems.has(i.id)) ? 'some-selected' : ''}`}
                 draggable={!selectionThresholdMet}
                 onDragStart={(e) => {
                   if (selectionThresholdMet) { e.preventDefault(); return; }
+                  // iPadOS long press: the touch path owns this drag.
+                  if (shouldBlockHtml5Drag()) { e.preventDefault(); return; }
                   // Drag the whole group to a CategoryZone
                   const dragData = {
                     item: items[0],
@@ -3915,7 +4035,22 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       data-item-id={item.id}
                       className={`group-image-item ${dragOverPhotoId === item.id && draggedPhotoGroupId === groupId ? 'photo-drag-over' : ''} ${draggedPhotoId === item.id ? 'photo-dragging' : ''} ${photoSelectMode && selectedItems.has(item.id) ? 'photo-picked' : ''}`}
                       draggable={!photoSelectMode}
-                      onDragStart={(e) => { e.stopPropagation(); handlePhotoDragStart(e, item, groupId); }}
+                      data-step2-drop="photo"
+                      data-drop-item={item.id}
+                      data-drop-group={groupId}
+                      onPointerDown={(e) => {
+                        // The photo, not the whole group card, is what a press here picks up.
+                        noteStep2PointerDown(e.pointerType);
+                        if (!isTouchPointer(e.pointerType)) return;
+                        e.stopPropagation();
+                        if (!photoSelectModeRef.current) startTouchDrag(e, { kind: 'photo', itemId: item.id, groupId });
+                      }}
+                      onDragStart={(e) => {
+                        e.stopPropagation();
+                        // iPadOS long press: the touch path owns this drag.
+                        if (shouldBlockHtml5Drag()) { e.preventDefault(); return; }
+                        handlePhotoDragStart(e, item, groupId);
+                      }}
                       onDragOver={(e) => handlePhotoDragOver(e, item.id, groupId)}
                       onDrop={(e) => handlePhotoDrop(e, item.id, groupId)}
                       onDragEnd={handlePhotoDragEnd}
@@ -3980,8 +4115,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                     role="button"
                     tabIndex={0}
                     aria-expanded={false}
-                    aria-label={`Pile of ${items.length} photos — open`}
-                    title={`${items.length} photos — click to open this pile`}
+                    aria-label={`Pile of ${items.length} photos, open`}
+                    title={`${items.length} photos. Click to open this pile`}
                     onMouseDown={(e) => { e.stopPropagation(); noteGestureStart(items[0].id); }}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -4222,7 +4357,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                       className="ptb-btn"
                       disabled={lbBusy || !!bgJob}
                       onClick={() => void handleRerun(lbItem)}
-                      title="Try again at 2K — slower, and usually cleaner on soft or fine edges"
+                      title="Try again at 2K. Slower, and usually cleaner on soft or fine edges"
                     ><RefreshCw size={12} /> Re-run at 2K</button>
                   </div>
                 </div>
@@ -4256,7 +4391,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                           applyAndPersistTransformGrouper(cropModal.itemId!, tempCrop));
                       } catch (err) {
                         console.error('[crop] apply failed:', err);
-                        alert('Could not apply the crop — the image could not be loaded or uploaded. Please try again.');
+                        alert('Could not apply the crop. The image could not be loaded or uploaded. Please try again.');
                       }
                       // onGrouped is now called inside applyAndPersistTransformGrouper
                       // with the correct post-crop items — no need to call it here.

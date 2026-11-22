@@ -3,13 +3,15 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { log } from './lib/debugLogger'
+import { isNative } from './lib/platform'
 
 // Register the image-caching Service Worker.
 // The SW intercepts all Supabase Storage image requests and caches them for
 // 7 days using a stale-while-revalidate strategy, bypassing the `Cache-Control:
 // no-cache` header that Supabase Storage free tier sends on every response.
 // Without this, 800 images are revalidated on every page refresh.
-if ('serviceWorker' in navigator) {
+// Skipped in the Capacitor shell: service workers do not run in the iOS WKWebView.
+if ('serviceWorker' in navigator && !isNative()) {
   // Vite sets import.meta.env.BASE_URL to '/' locally and '/sortbot/' on GitHub Actions
   const swUrl = `${import.meta.env.BASE_URL}sw.js`;
   window.addEventListener('load', () => {

@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { log, isDebugEnabled } from '../lib/debugLogger';
 import { buildProductImageRow, stage4ColumnsAvailable } from '../lib/imageRowSync';
 import { publicImageUrl } from '../lib/storageUrls';
+import { nativePhotosAvailable, pickPhotos, takePhoto } from '../lib/native/photos';
 import './ImageUpload.css';
 import { XCircle, RefreshCw, X, Archive, CheckCircle2, AlertTriangle, Camera, Images } from 'lucide-react';
 
@@ -672,7 +673,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
         try {
           const resp = await fetch(url);
           if (!resp.ok) {
-            errors.push(`Fetch failed (${resp.status}) — ${item.storagePath.split('/').pop()}`);
+            errors.push(`Fetch failed (${resp.status}): ${item.storagePath.split('/').pop()}`);
             skipped++;
             return;
           }
@@ -709,7 +710,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
             });
 
           if (error) {
-            errors.push(`Upload error — ${item.storagePath.split('/').pop()}: ${error.message}`);
+            errors.push(`Upload error, ${item.storagePath.split('/').pop()}: ${error.message}`);
             skipped++;
             return;
           }
@@ -717,7 +718,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
           markCompressed(item.storagePath);
           totalSavedBytes += originalSize - compressed.size;
         } catch (err) {
-          errors.push(`Error — ${item.storagePath!.split('/').pop()}: ${err instanceof Error ? err.message : String(err)}`);
+          errors.push(`Error, ${item.storagePath!.split('/').pop()}: ${err instanceof Error ? err.message : String(err)}`);
           skipped++;
         }
       }));
@@ -779,6 +780,36 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     const files = Array.from(e.target.files || []);
     processFiles(files);
     e.target.value = '';
+  };
+
+  /* "Take photos" / "Choose from library". In the native app these open the
+   * camera plugin (lib/native/photos.ts) and its Files go into the SAME
+   * processFiles pipeline as the inputs (EXIF capture time first, then
+   * lastModified, which the adapter sets to the capture time). On the web the
+   * hidden input is clicked SYNCHRONOUSLY, inside the tap, exactly as before:
+   * an await in front of .click() can lose the user activation the browser
+   * needs to open a file picker. */
+  const handleTakePhotos = async () => {
+    if (!nativePhotosAvailable()) { cameraInputRef.current?.click(); return; }
+    try {
+      const file = await takePhoto();
+      if (file) processFiles([file]);   // null on native means the user cancelled
+    } catch (err) {
+      log.upload(`takePhoto failed: ${(err as Error)?.message ?? err}`);
+      onToast?.('Could not open the camera. Please try again.');
+    }
+  };
+
+  const handleChooseFromLibrary = async () => {
+    if (!nativePhotosAvailable()) { libraryInputRef.current?.click(); return; }
+    try {
+      const files = await pickPhotos({ limit: 0 });   // 0 = no limit, like the multiple input
+      if (files === null) libraryInputRef.current?.click();   // no native picker after all
+      else if (files.length > 0) processFiles(files);         // [] means the user cancelled
+    } catch (err) {
+      log.upload(`pickPhotos failed: ${(err as Error)?.message ?? err}`);
+      onToast?.('Could not open your photo library. Please try again.');
+    }
   };
 
   const handleZipChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -904,19 +935,19 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                       <button
                         type="button"
                         className="dz-action dz-action--primary"
-                        onClick={(e) => { e.stopPropagation(); cameraInputRef.current?.click(); }}
+                        onClick={(e) => { e.stopPropagation(); void handleTakePhotos(); }}
                       >
                         <Camera size={18} /> Take photos
                       </button>
                       <button
                         type="button"
                         className="dz-action"
-                        onClick={(e) => { e.stopPropagation(); libraryInputRef.current?.click(); }}
+                        onClick={(e) => { e.stopPropagation(); void handleChooseFromLibrary(); }}
                       >
                         <Images size={18} /> Choose from library
                       </button>
                       <p className="dropzone-mobile-hint">
-                        JPG, PNG or WEBP. Folder and ZIP import are in the buttons above.
+                        JPG, PNG or WEBP. To add a ZIP, use Import ZIP above.
                       </p>
                     </div>
                     <p className="dropzone-hint">Supports: JPG, PNG, WEBP · or drop a ZIP file</p>
@@ -999,7 +1030,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                     <button
                       type="button"
                       onClick={recompressExisting}
-                      title="Re-download and recompress existing images to save storage space. URLs stay the same — no re-upload needed. Each image is only compressed once."
+                      title="Re-download and recompress existing images to save storage space. URLs stay the same, so nothing is re-uploaded. Each image is only compressed once."
                       style={{
                         width: '100%',
                         padding: '0.6rem 1rem',

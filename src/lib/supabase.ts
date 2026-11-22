@@ -1,4 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupportedStorage } from '@supabase/supabase-js';
+import { Preferences } from '@capacitor/preferences';
+import { isNative } from './platform';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -7,7 +9,30 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables. Please check your .env file.');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Native shell only (Capacitor): keep the auth session in @capacitor/preferences
+// (iOS UserDefaults / Android SharedPreferences, inside the app sandbox) rather
+// than the webview's localStorage, which iOS can evict under storage pressure.
+// Same default storageKey, so nothing else changes. NOT encrypted: it is
+// app-private storage, not the Keychain/Keystore. Every method returns a
+// promise, which supabase-js's SupportedStorage accepts and awaits.
+const nativeAuthStorage: SupportedStorage = {
+  async getItem(key) {
+    const { value } = await Preferences.get({ key });
+    return value;
+  },
+  async setItem(key, value) {
+    await Preferences.set({ key, value });
+  },
+  async removeItem(key) {
+    await Preferences.remove({ key });
+  },
+};
+
+// On the web this is the exact call it always was (default options, session in
+// localStorage), so the web client is unchanged.
+export const supabase = isNative()
+  ? createClient(supabaseUrl, supabaseAnonKey, { auth: { storage: nativeAuthStorage } })
+  : createClient(supabaseUrl, supabaseAnonKey);
 
 // Database types
 export interface Database {

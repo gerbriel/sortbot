@@ -67,7 +67,15 @@ here would be an existence oracle over the uuid space.
 
 ## 3. CORS
 
-`ALLOWED_ORIGINS` (default `https://arcadian.ltd,http://localhost:5173`).
+`ALLOWED_ORIGINS` (default `https://arcadian.ltd,http://localhost:5173,capacitor://localhost,https://localhost`).
+The last two are the **native app origins**: the Capacitor shell (iOS and
+Android, `capacitor.config.ts` at the repo root) serves the same web build from
+`capacitor://localhost` on iOS and `https://localhost` on Android (the Capacitor 8
+default `androidScheme`). The bare `http://localhost` origin is deliberately not
+allowed, so nothing served from a developer machine on port 80 passes CORS. A deployment that overrides `ALLOWED_ORIGINS` must list them
+too, or the native apps' matting calls fail CORS while the web keeps working.
+Verified by `test_cors.py`.
+
 Methods `GET, POST, OPTIONS`; headers `Authorization, Content-Type`. Never `*` —
 the browser sends a bearer token on every call.
 

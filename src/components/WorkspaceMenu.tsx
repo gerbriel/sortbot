@@ -162,7 +162,15 @@ export default function WorkspaceMenu({
     if (!open) return;
     const isInside = (n: Node | null) =>
       !!n && (!!wrapRef.current?.contains(n) || !!popRef.current?.contains(n));
-    const onDown = (e: MouseEvent) => { if (!isInside(e.target as Node)) close(false); };
+    /* The phone sheet's scrim is NOT dismissed here: it closes on its own
+       click (below). Closing on mousedown unmounted the scrim before the
+       browser dispatched the tap's click, so that click landed on whatever
+       sat underneath (a ghost tap on a Step 3 button, say). */
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Element | null;
+      if (t?.classList?.contains('wsmenu-scrim')) return;
+      if (!isInside(t)) close(false);
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { e.stopPropagation(); close(true); return; }
       // Tab leaves the menu behind. Focus is handed back to the trigger only
@@ -330,7 +338,7 @@ export default function WorkspaceMenu({
           {/* Scrim exists only at phone width, where the menu is a sheet. Above
               that the press-outside listener is the whole dismissal story and a
               full-screen layer would swallow the user's next click. */}
-          <div className="wsmenu-scrim" aria-hidden="true" />
+          <div className="wsmenu-scrim" aria-hidden="true" onClick={() => close(false)} />
           <div
             className="wsmenu-pop"
             ref={popRef}
