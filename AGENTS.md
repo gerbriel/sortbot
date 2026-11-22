@@ -1,3 +1,12 @@
+60. **A trigger on `auth.users` must be SECURITY DEFINER.** The auth service inserts the row as
+    `supabase_auth_admin`, so an INVOKER trigger runs as that role, which owns nothing in `public`
+    and cannot write `user_profiles`; the insert raises, the auth transaction rolls back, and every
+    sign-up fails with "Database error saving new user". That is what the root script
+    `fix_security_warnings.sql` did in June 2026 (its comment says the trigger "fires as postgres",
+    which is false), and sign-up was dead until `067_fix_signup_trigger.sql`. The fix also wraps the
+    profile insert so bookkeeping can never block account creation. Rule: `grep -n "on auth.users"`
+    before touching any trigger function, and never make one of those INVOKER.
+
 # AGENTS.md — Arcadian Codebase Reference
 
 > **For any coding agent or contributor reading this file:**
@@ -553,7 +562,7 @@ sortingapp/
 ├── vitest.config.ts               # happy-dom + dummy Supabase env vars.
 ├── tsconfig*.json, eslint.config.js, package.json
 ├── index.html                     # Vite entry. Carries the CSP <meta http-equiv> + referrer policy (§9) and the pre-paint canvas <style>.
-├── ADD_APPLIED_PRESET_ID.sql, database_migration_csv_fields.sql, fix_security_warnings.sql  # Ad-hoc SQL at the repo root, outside supabase/migrations/.
+├── ADD_APPLIED_PRESET_ID.sql, database_migration_csv_fields.sql, fix_security_warnings.sql  # Ad-hoc SQL at the repo root, outside supabase/migrations/. **fix_security_warnings.sql BROKE SIGN-UP** (June 2026 to 22 Nov 2026): it made `handle_new_user()` SECURITY INVOKER, but an insert into auth.users fires its trigger as supabase_auth_admin, which cannot write `user_profiles`, so every sign-up got "Database error saving new user". `067_fix_signup_trigger.sql` repairs it. Never run that root file again (§18 #60).
 ├── check-and-run-migration.js, check-collaborative-changes.js, run-collaborative-migration.js, run-categories-migration.sh, test-db-connection.html, console-log.html  # One-off helpers. Not part of the app.
 ├── ANALYSIS.md                    # Strengths/weaknesses assessment + the multi-org SaaS roadmap.
 └── proxy.log                      # Leftover log file. In .gitignore — never committed.
