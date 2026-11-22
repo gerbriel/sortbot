@@ -51,7 +51,7 @@ export interface WorkflowBatch {
   lastEditedAt?: string;
   /**
    * MarketplaceKey[] — the marketplaces this batch is being listed on, chosen
-   * in Step 4 from the workspace's enabled set (marketplaces.sql).
+   * in Step 4 from the workspace's enabled set (059_marketplaces.sql).
    *
    * OPTIONAL, and it must stay optional: the column does not exist until that
    * migration is run, and every batch created before it defaults to `{}`.
@@ -214,7 +214,7 @@ const WORKFLOW_BATCH_RESTORE_COLUMNS = [
   'id', 'user_id', 'batch_name', 'batch_number', 'current_step', 'is_completed',
   'total_images', 'product_groups_count', 'categorized_count', 'processed_count',
   'saved_products_count', 'created_at', 'updated_at', 'last_opened_at', 'workflow_state',
-  // Which marketplaces this batch is being listed on (marketplaces.sql). Read
+  // Which marketplaces this batch is being listed on (059_marketplaces.sql). Read
   // here rather than in a second query because Step 4 needs it the moment a
   // batch opens; PostgREST simply omits an unknown column from the projection
   // it cannot find, so a pre-migration database errors rather than silently
@@ -388,7 +388,7 @@ export async function updateWorkflowBatch(
  *
  * So the UPDATE is now guarded on the `updated_at` value we read: a BEFORE UPDATE
  * trigger stamps `updated_at = NOW()` on every write to this table
- * (`create_workflow_batches.sql:98-109`), which makes it a reliable version token.
+ * (`007_create_workflow_batches.sql:98-109`), which makes it a reliable version token.
  * If the guard matches nothing, someone wrote in between — we re-read and re-apply
  * ONCE, then give up rather than loop.
  *
@@ -569,7 +569,7 @@ export async function deleteWorkflowBatch(batchId: string): Promise<boolean> {
     }
 
     // ── 2. Claim ownership so the owner-scoped DELETE policies permit removal ──
-    // UPDATE is collaborative (collaborative_edit_policies.sql), so this works for
+    // UPDATE is collaborative (030_collaborative_edit_policies.sql), so this works for
     // a batch created by another account in the shared workspace. If we cannot even
     // claim the batch row, the DELETE cannot succeed either — refuse, and destroy
     // nothing (this is the check that used to be missing).

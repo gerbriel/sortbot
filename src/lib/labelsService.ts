@@ -7,7 +7,7 @@ import { generateSkuCandidate, isGeneratedSku, skuLookupCandidates } from './bar
  * labelsService — colour/word/vendor labels on listings, and the SKU a label's
  * barcode encodes.
  *
- * Backed by supabase/migrations/listing_labels.sql. FORWARD-COMPATIBLE in the
+ * Backed by supabase/migrations/053_listing_labels.sql. FORWARD-COMPATIBLE in the
  * house style: every read reports `unavailable` when the migration has not been
  * run, and the UI hides itself rather than showing an error to a user who has
  * done nothing wrong. Shipping the code before the SQL is the normal order here

@@ -9,7 +9,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
  * **The RPC contract.** PostgREST resolves a function by its NAME and its
  * ARGUMENT NAMES, and renders the response from its RETURN TYPE. Rename
  * `p_product_image_id` in either half and you get a 404 at runtime with nothing in
- * the type system to catch it. `supabase/migrations/listing_embeddings.sql` spells
+ * the type system to catch it. `supabase/migrations/065_listing_embeddings.sql` spells
  * the same names in its wrapper; these tests are the other end of that pair.
  *
  * **The thresholds.** `similarityLabel` turns a cosine into a claim a seller acts
@@ -201,7 +201,7 @@ describe('daysAgo', () => {
 describe('formatSoldLine', () => {
   const now = Date.parse('2026-09-20T12:00:00Z');
 
-  it('is EMPTY when the listing never sold — which is every row before pricing_research.sql runs', () => {
+  it('is EMPTY when the listing never sold — which is every row before 064_pricing_research.sql runs', () => {
     expect(formatSoldLine({ soldPriceCents: null, soldAt: null }, now)).toBe('');
     expect(formatSoldLine({ soldPriceCents: 0, soldAt: '2026-09-01T00:00:00Z' }, now)).toBe('');
   });
@@ -465,7 +465,7 @@ describe('ensureEmbeddings', () => {
     const res = await ensureEmbeddings(['img-1']);
     expect(res.ok).toBe(false);
     if (res.ok) return;
-    expect(res.error).toContain('listing_embeddings.sql');
+    expect(res.error).toContain('065_listing_embeddings.sql');
     expect(res.status).toBe(503);
   });
 

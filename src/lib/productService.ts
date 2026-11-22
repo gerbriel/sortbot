@@ -519,7 +519,7 @@ export const deleteProduct = async (productId: string): Promise<boolean> => {
  * normal path), the Step-3 keepalive unload flush (which cannot await a
  * supabase-js round trip), and the unit tests.
  *
- * `stage4` gates the columns added by supabase/migrations/stage4_slim_fields.sql —
+ * `stage4` gates the columns added by supabase/migrations/033_stage4_slim_fields.sql —
  * writing an unknown column fails the WHOLE request with PGRST204.
  */
 export const buildProductPatch = (

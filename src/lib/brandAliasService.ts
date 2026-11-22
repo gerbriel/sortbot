@@ -3,7 +3,7 @@ import { log } from './debugLogger';
 import { normalizeBrand, type BrandCandidate } from './brandSpelling';
 
 /**
- * brandAliasService — the `brand_aliases` table (brand_aliases.sql).
+ * brandAliasService — the `brand_aliases` table (052_brand_aliases.sql).
  *
  * PER WORKSPACE, WRITABLE BY ANY MEMBER. Unlike descriptor_chips and
  * brand_keywords (founder-only global vocabulary), this is one shop's own record

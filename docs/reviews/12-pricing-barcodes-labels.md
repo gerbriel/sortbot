@@ -46,7 +46,7 @@ interface PlatformPricingRule {
 ```
 
 Stored as `description_settings.platformPricing` on `organizations` — the JSONB
-that already exists (`org_description_settings.sql`). **No migration.**
+that already exists (`037_org_description_settings.sql`). **No migration.**
 `DEFAULT_DESCRIPTION_SETTINGS.platformPricing` is `[]`, so a workspace that never
 opens the setting exports exactly the prices it always did, and nothing in the
 description engine reads the key — the golden description snapshot is untouched
@@ -178,7 +178,7 @@ never offer something that will not save.
 **Why any member can write labels.** A label is shared shop vocabulary — a
 vendor's name, a drop. A vocabulary only admins can extend is not shared. There
 is no `is_org_admin()` gate anywhere in the file (contrast
-`org_shopify_connections.sql`, where the token genuinely needs one).
+`035_org_shopify_connections.sql`, where the token genuinely needs one).
 
 `product_labels`' INSERT policy additionally proves the **product** belongs to
 the caller's workspace, not just the join row: otherwise a member could tag
@@ -377,7 +377,7 @@ resolve at all. No emoji — `lucide-react` throughout.
 ## 6. Migration verification (throwaway Postgres 14)
 
 Two clusters, ports 55441/55442, `initdb` into the scratchpad, applied
-`stub2.sql` → `multi_org_tenancy.sql` → `beta_signups.sql` → `listing_labels.sql`,
+`stub2.sql` → `031_multi_org_tenancy.sql` → `032_beta_signups.sql` → `053_listing_labels.sql`,
 each with `ON_ERROR_STOP=1`. **Both clusters stopped and deleted afterwards**
 (`pgrep` clean, sockets gone, data dirs removed). No repo file changed by the
 harness.
@@ -407,7 +407,7 @@ grant) — now stated in the file rather than left to be rediscovered.
 
 Two harness-only compensations, not defects: `stub2.sql` grants `authenticated`
 nothing on `products`, and RLS on the five data tables is enabled by
-`schema.sql`, not by `multi_org_tenancy.sql`. Check 5 was run both ways.
+`schema.sql`, not by `031_multi_org_tenancy.sql`. Check 5 was run both ways.
 
 One pre-existing behaviour noted, out of scope: `delete from organizations` is
 blocked by `products_org_id_fkey` (tenancy FKs have no `ON DELETE`). Our two
@@ -542,8 +542,8 @@ cannot interact with the store patches in §18.11.
 
 ### (e) Run the migration
 
-`supabase/migrations/listing_labels.sql`, in the SQL Editor, **after**
-`multi_org_tenancy.sql`. Additive and idempotent; rollback at the bottom. Until
+`supabase/migrations/053_listing_labels.sql`, in the SQL Editor, **after**
+`031_multi_org_tenancy.sql`. Additive and idempotent; rollback at the bottom. Until
 it is run, the labels picker renders nothing, the print view still prints titles
 and prices, and the scanner says what is missing.
 
@@ -566,7 +566,7 @@ and prices, and the scanner says what is missing.
 | `src/components/ListingLabelsPicker.tsx` / `.css` | Per-listing label chips with partial state |
 | `src/components/LabelPrintView.tsx` / `.css` | Print sheet + `@page` stylesheet |
 | `src/components/BarcodeScannerView.tsx` / `.css` | Camera / USB scanner / typed SKU |
-| `supabase/migrations/listing_labels.sql` | Two tables, RLS, the SKU unique index, rollback |
+| `supabase/migrations/053_listing_labels.sql` | Two tables, RLS, the SKU unique index, rollback |
 
 **Modified**
 
@@ -577,7 +577,7 @@ and prices, and the scanner says what is missing.
 | `src/lib/csvExport.test.ts` | +13 tests (pricing, SKU/barcode columns). **Golden snapshot untouched** |
 | `src/components/GoogleSheetExporter.tsx` / `.css` | Platform selector, adjusted preview + CSV, filename slug, summary line |
 | `src/components/OrgPanel.tsx` / `.css` | Marketplace pricing section |
-| `supabase/migrations/listing_labels.sql` | Two comments corrected after the PG14 run |
+| `supabase/migrations/053_listing_labels.sql` | Two comments corrected after the PG14 run |
 
 ---
 

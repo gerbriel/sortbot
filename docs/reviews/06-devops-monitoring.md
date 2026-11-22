@@ -16,7 +16,7 @@ the table is missing, and the panel shows a setup hint instead of an error.
 
 | File | Status | What it is |
 |---|---|---|
-| `supabase/migrations/app_errors.sql` | **new, NOT run** | `app_errors` table + RLS + rate-limit trigger + `app_errors_summary(days)` + `app_errors_prune(keep_days)`. Additive, idempotent, rollback at the bottom. |
+| `supabase/migrations/046_app_errors.sql` | **new, NOT run** | `app_errors` table + RLS + rate-limit trigger + `app_errors_summary(days)` + `app_errors_prune(keep_days)`. Additive, idempotent, rollback at the bottom. |
 | `src/lib/errorReporter.ts` | **new** | `installErrorReporter()`, `reportError()`, `setErrorContext()`, fingerprinting, PII scrubbing, dedupe + cap, `fetchErrorSummary()`. |
 | `src/lib/errorReporter.test.ts` | **new** | 27 tests over the pure helpers and the insert path. |
 | `src/components/ErrorsPanel.tsx` | **new** | Founders-only Errors view, same shape as `AnalyticsPanel`. |
@@ -29,9 +29,9 @@ Files deliberately **not** touched (owned by the concurrent performance agent):
 
 ---
 
-## 2. `app_errors.sql` — the table
+## 2. `046_app_errors.sql` — the table
 
-Mirrors `analytics_events.sql` exactly: the browser writes, only Founding admins
+Mirrors `043_analytics_events.sql` exactly: the browser writes, only Founding admins
 read, no client UPDATE/DELETE, one aggregate RPC for the panel, a prune function,
 rollback at the bottom.
 
@@ -51,7 +51,7 @@ Three decisions worth knowing:
 * **A per-session rate trigger (20 rows / 10 min, errcode 54000).** The table
   exists to catch crash loops, and a crash loop is exactly what would otherwise
   write a million rows before anyone noticed. Same style as
-  `security_abuse_limits.sql`: SECURITY DEFINER so it can COUNT rows the caller
+  `050_security_abuse_limits.sql`: SECURITY DEFINER so it can COUNT rows the caller
   has no SELECT grant for.
 
 `app_errors_summary(p_days)` returns one jsonb payload: `totals`
@@ -63,7 +63,7 @@ series, and `views`. UTC days, same convention as `analytics_summary`.
 ### Verified against a real Postgres
 
 A throwaway PG 17 cluster with stubbed `auth.users`, `organizations` and
-`is_beta_admin()` (the same technique used for `founding_user_admin.sql`).
+`is_beta_admin()` (the same technique used for `039_founding_user_admin.sql`).
 All green, cluster destroyed afterwards:
 
 | # | Check | Result |
@@ -179,7 +179,7 @@ idempotent and `typeof window`-guarded, so StrictMode's double invoke is safe):
 ```ts
 // First-party error tracking: window 'error' + 'unhandledrejection' → app_errors.
 // Module scope so it is listening before the first render. No-op on localhost and
-// until app_errors.sql has been run.
+// until 046_app_errors.sql has been run.
 installErrorReporter();
 ```
 
@@ -241,11 +241,11 @@ That file is also locked right now.
 
 ## 6. The migration to run
 
-In the Supabase SQL Editor, **after** `multi_org_tenancy.sql` and
-`beta_signups.sql` (it needs `organizations` and `is_beta_admin()`):
+In the Supabase SQL Editor, **after** `031_multi_org_tenancy.sql` and
+`032_beta_signups.sql` (it needs `organizations` and `is_beta_admin()`):
 
 ```
-supabase/migrations/app_errors.sql
+supabase/migrations/046_app_errors.sql
 ```
 
 Additive — creates one table, one trigger and two functions, touches nothing

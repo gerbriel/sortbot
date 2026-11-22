@@ -74,7 +74,7 @@ A PostgREST `UPDATE … WHERE id = $1` that matches nothing is **not an error**.
 * If the item has no `products` row — which happens whenever the per-chunk upsert in
   `ImageUpload.tsx:376-378` errored (it only `console.error`s and the item still flows on
   through `onChunkReady`) — the write is a no-op reported as success.
-* If RLS blocks the UPDATE (pre-`collaborative_edit_policies.sql`, editing someone
+* If RLS blocks the UPDATE (pre-`030_collaborative_edit_policies.sql`, editing someone
   else's listing), same outcome.
 
 The loss is permanent, because `workflow_state` is slim: `slimForWorkflowState`
@@ -877,7 +877,7 @@ restore bug twice as hard to read and races `registerItemsInDB` against itself.
 | 14 | Ref mirrors retired → `liveArrayRef` | Confirmed (`App.tsx:30-33`, `workflowStore.ts:121-127`). Staleness is now impossible for those four reads. |
 | 15 | Raw `console.log` crept back | **Worse than documented** — see finding 18. |
 | 16 | 9 px base font | Still true (`index.css`). |
-| 17 | `capturedAt` has no DB column | **Partly addressed**: `stage4_slim_fields.sql` adds `product_images.captured_at` and `buildProductImageRow` writes it when the probe passes (`imageRowSync.ts:89-92`) — but **nothing reads it back**. Gap-filled items (`App.tsx:2241`) still get `capturedAt: undefined`, so the symptom is unchanged until the restore path selects the column. |
+| 17 | `capturedAt` has no DB column | **Partly addressed**: `033_stage4_slim_fields.sql` adds `product_images.captured_at` and `buildProductImageRow` writes it when the probe passes (`imageRowSync.ts:89-92`) — but **nothing reads it back**. Gap-filled items (`App.tsx:2241`) still get `capturedAt: undefined`, so the symptom is unchanged until the restore path selects the column. |
 
 Also worth noting about the Stage 4 probe: `stage4ColumnsAvailable()`
 (`imageRowSync.ts:24-39`) caches the *first* result for the session and treats **any**

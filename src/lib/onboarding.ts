@@ -153,7 +153,7 @@ export function deriveOnboardingSteps(input: Partial<OnboardingFacts>): Onboardi
     action: { kind: 'navigate', label: 'Review categories', view: 'categories' },
   });
 
-  // 3. Where you sell. Absent — not undone — before marketplaces.sql has run.
+  // 3. Where you sell. Absent — not undone — before 059_marketplaces.sql has run.
   if (admin && f.marketplaces !== 'unavailable') {
     steps.push({
       id: 'marketplaces',

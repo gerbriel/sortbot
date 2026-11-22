@@ -15,7 +15,7 @@
   gap: 1.5rem;
 }
 
-/* The one line shown when founder_console.sql has not been run. Warning, not
+/* The one line shown when 060_founder_console.sql has not been run. Warning, not
    danger: nothing is broken, five capabilities are simply not installed. */
 .fc-setup {
   margin: 0;

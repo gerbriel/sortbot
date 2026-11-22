@@ -165,7 +165,7 @@ export default function CrmPanel() {
     return (
       <section className="ft-card">
         <p className="ft-setup">
-          The CRM is not set up yet — run <code>supabase/migrations/crm.sql</code> in the SQL Editor.
+          The CRM is not set up yet — run <code>supabase/migrations/044_crm.sql</code> in the SQL Editor.
           Contacts are then built from beta requests and accounts automatically; nothing leaves this project.
         </p>
       </section>

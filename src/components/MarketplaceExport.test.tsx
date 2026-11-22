@@ -102,7 +102,7 @@ describe('MarketplaceExport', () => {
   it('shows the setup hint, and nothing else, when the migration has not run', async () => {
     vi.mocked(fetchOrgMarketplaces).mockResolvedValue({ status: 'unavailable' });
     const { container } = await render();
-    expect(container.textContent).toContain('marketplaces.sql');
+    expect(container.textContent).toContain('059_marketplaces.sql');
     expect(container.querySelector('.mkx-matrix')).toBeNull();
     expect(container.querySelector('.mkx-targets')).toBeNull();
   });

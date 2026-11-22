@@ -137,7 +137,7 @@ export default function FinanceView() {
     return (
       <section className="ft-card">
         <p className="ft-setup">
-          Finance is not set up yet — run <code>supabase/migrations/finance.sql</code> in the SQL Editor.
+          Finance is not set up yet — run <code>supabase/migrations/051_finance.sql</code> in the SQL Editor.
           It adds the ledger, the plan-price table and the <code>finance_summary()</code> aggregate.
           Nothing here talks to a payment processor or an accounting service: the books live in this project.
         </p>
@@ -738,7 +738,7 @@ function Customers({ summary, prices, range, onChanged }: {
         <Tile
           label="Active in range"
           text={c.active_workspaces === null ? '—' : String(c.active_workspaces)}
-          note={c.active_workspaces === null ? 'needs analytics_events.sql' : 'workspaces with recorded activity'}
+          note={c.active_workspaces === null ? 'needs 043_analytics_events.sql' : 'workspaces with recorded activity'}
         />
         <Tile
           label="Projected MRR"

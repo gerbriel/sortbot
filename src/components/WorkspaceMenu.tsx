@@ -251,7 +251,7 @@ export default function WorkspaceMenu({
 
   /* The storage meter as ONE menu row. Label + figures, a track, the file
      count and the almost-full flag; clicking the row re-reads the number
-     (one RPC — perf_storage_usage.sql) and the menu stays open so the update
+     (one RPC — 057_perf_storage_usage.sql) and the menu stays open so the update
      is seen. The visual figures are aria-hidden and restated in the row's
      accessible name so a screen reader hears one sentence, not five spans. */
   const renderStorage = () => {

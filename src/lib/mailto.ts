@@ -21,7 +21,7 @@
  * fall back to an unvalidated href.
  *
  * The server half of the same finding is the `beta_signups_email_chk`
- * constraint in supabase/migrations/security_abuse_limits.sql.
+ * constraint in supabase/migrations/050_security_abuse_limits.sql.
  */
 
 /** A plain, single address. Deliberately stricter than RFC 5322: this gates a

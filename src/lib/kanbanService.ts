@@ -11,7 +11,7 @@ import type {
 } from './kanban/types';
 
 /**
- * kanbanService — CRUD for the Kanban board (supabase/migrations/kanban_board.sql).
+ * kanbanService — CRUD for the Kanban board (supabase/migrations/040_kanban_board.sql).
  *
  * SECURITY: every table is org-scoped with org_id DEFAULT default_org_id(), so
  * this module never PASSES org_id on insert — the DB tags the row. Any member of
@@ -24,7 +24,7 @@ import type {
  * (two "Backlog" lanes, foreign cards interleaved by rank). The filter names the
  * workspace being VIEWED; RLS still decides whether you may see it at all.
  *
- * FORWARD-COMPATIBLE: if kanban_board.sql has not been run, fetchBoard reports
+ * FORWARD-COMPATIBLE: if 040_kanban_board.sql has not been run, fetchBoard reports
  * 'unavailable' and the board shows a "run the migration" panel instead of an
  * error. Shipping this code before running the SQL is safe.
  *

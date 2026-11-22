@@ -69,7 +69,7 @@ export default function FoundingUsersTab({
       <EmptyState
         icon={<UserCog size={22} />}
         title="No accounts to manage yet"
-        description="This list is empty until founding_user_admin.sql has been run. Until then every other tab still works."
+        description="This list is empty until 039_founding_user_admin.sql has been run. Until then every other tab still works."
       />
     );
   }

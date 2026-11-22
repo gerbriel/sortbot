@@ -146,7 +146,7 @@ describe('supportService — participants and roles', () => {
 });
 
 describe('supportService — pre-migration fallback', () => {
-  it('retries without the team columns when team_messaging.sql has not run', async () => {
+  it('retries without the team columns when 058_team_messaging.sql has not run', async () => {
     const row = { id: 't1', user_id: 'u1', status: 'open', last_message_at: '2026-09-13T10:00:00Z' };
     mock.responder = call => {
       if (call.table !== 'support_threads' || call.op !== 'select') return undefined;

@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
  * PostgREST, which has no compiler behind it: an RPC is resolved by its
  * function NAME and its ARGUMENT NAMES, so a renamed key in one of these
  * objects is a silent 404 at runtime with nothing in the type system to catch
- * it. `supabase/migrations/founder_console.sql` spells the same names in its
+ * it. `supabase/migrations/060_founder_console.sql` spells the same names in its
  * wrappers; these tests are the other end of that pair.
  *
  * The three error classifications matter for the same reason: 42501, a missing
@@ -46,7 +46,7 @@ beforeEach(() => {
 
 describe('ORG_PLANS', () => {
   it('is the nine finance_plan_prices is SEEDED with — the fallback, not the set', () => {
-    // Since plan_management.sql, the catalog is a table and org_plan_list()
+    // Since 062_plan_management.sql, the catalog is a table and org_plan_list()
     // reads it. This list is only what a dropdown shows when the catalog cannot
     // be read at all. Adding a tenth plan is a row, not an edit to this array.
     expect([...ORG_PLANS]).toEqual([
@@ -119,7 +119,7 @@ describe('error classification', () => {
       fail(code, 'function does not exist');
       const res = await createWorkspace({ name: 'X', plan: 'beta', ownerEmail: 'a@b.com' });
       expect(res.reason, code).toBe('unavailable');
-      expect(res.error, code).toContain('founder_console.sql');
+      expect(res.error, code).toContain('060_founder_console.sql');
     }
   });
 
@@ -173,10 +173,10 @@ describe('fetchOrgDetail', () => {
   });
 });
 
-/* ── Plan management (supabase/migrations/plan_management.sql) ───────────────
+/* ── Plan management (supabase/migrations/062_plan_management.sql) ───────────────
    Same reasoning as the block above, plus one thing that only applies here:
-   the `unavailable` sentence must name plan_management.sql and NOT
-   founder_console.sql. A founder who has run one file and not the other gets
+   the `unavailable` sentence must name 062_plan_management.sql and NOT
+   060_founder_console.sql. A founder who has run one file and not the other gets
    sent to the wrong SQL Editor tab otherwise, and both look identically
    "broken" from the UI. */
 
@@ -290,16 +290,16 @@ describe('fetchPlanDirectory', () => {
     });
   });
 
-  it('reports a missing function as unavailable, naming plan_management.sql', async () => {
+  it('reports a missing function as unavailable, naming 062_plan_management.sql', async () => {
     for (const code of ['42883', 'PGRST202']) {
       fail(code, 'function does not exist');
       const res = await fetchPlanDirectory();
       if (res.status === 'ok') throw new Error(`expected a failure for ${code}`);
       expect(res.status, code).toBe('unavailable');
-      expect(res.error, code).toContain('plan_management.sql');
-      // Naming the wrong migration is worse than naming none: founder_console.sql
+      expect(res.error, code).toContain('062_plan_management.sql');
+      // Naming the wrong migration is worse than naming none: 060_founder_console.sql
       // may well already have been run.
-      expect(res.error, code).not.toContain('founder_console.sql');
+      expect(res.error, code).not.toContain('060_founder_console.sql');
     }
   });
 
@@ -315,7 +315,7 @@ describe('fetchPlanDirectory', () => {
 });
 
 describe('plan write failures', () => {
-  it('a missing function names plan_management.sql on every write', async () => {
+  it('a missing function names 062_plan_management.sql on every write', async () => {
     fail('42883', 'function does not exist');
     for (const res of [
       await upsertPlan({ plan: 'x', displayName: null, monthlyCents: 0, note: null }),
@@ -323,7 +323,7 @@ describe('plan write failures', () => {
       await deletePlan('x'),
     ]) {
       expect(res.reason).toBe('unavailable');
-      expect(res.error).toContain('plan_management.sql');
+      expect(res.error).toContain('062_plan_management.sql');
     }
   });
 
@@ -386,6 +386,6 @@ describe('fetchPlanAlumni', () => {
     const res = await fetchPlanAlumni();
     if (res.status === 'ok') throw new Error('expected a failure');
     expect(res.status).toBe('unavailable');
-    expect(res.error).toContain('plan_management.sql');
+    expect(res.error).toContain('062_plan_management.sql');
   });
 });

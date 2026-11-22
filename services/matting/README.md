@@ -89,7 +89,7 @@ uvicorn app.main:app --reload --port 8080
 `GET /healthz` should answer
 `{"ok":true,"backend":"replicate","model":"replicate:men1scus/birefnet@f74986db"}`.
 
-**Prerequisite:** run `supabase/migrations/image_backgrounds.sql`. Until it has
+**Prerequisite:** run `supabase/migrations/063_image_backgrounds.sql`. Until it has
 run, every write fails on a missing column.
 
 ---
@@ -246,7 +246,7 @@ are built from, and what catches the jacket somebody already listed last month �
 docs/pricing/00-plan.md step 3, the free one. The HTTP shape, the skip rule and the
 nearest-neighbour RPC are in [`CONTRACT.md` §5 and §9](./CONTRACT.md).
 
-**Run `supabase/migrations/listing_embeddings.sql` first.** Until then the endpoint
+**Run `supabase/migrations/065_listing_embeddings.sql` first.** Until then the endpoint
 answers `503` and the app hides the surface — the code ships before the SQL, in the
 house order.
 

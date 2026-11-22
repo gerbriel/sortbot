@@ -966,7 +966,7 @@ function LabelManager({ labels, onChanged }: { labels: ListingLabel[]; onChanged
    the shop sells and one that is the same on day 400 as on day 1.
 
    It owns its own fetching (the house pattern — ListingLabelsPicker,
-   MarketplaceExport) and renders nothing until `pricing_research.sql` has been
+   MarketplaceExport) and renders nothing until `064_pricing_research.sql` has been
    run. It writes only `listing_sales`, so it can never disturb a listing, a
    batch or the workflow store.
    ──────────────────────────────────────────────────────────────────────────── */

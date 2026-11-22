@@ -305,11 +305,11 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   const [bgBackdropImg, setBgBackdropImg] = useState<HTMLImageElement | null>(null);
   const bgFileRef = useRef<HTMLInputElement | null>(null);
 
-  // ── Marketplaces (marketplaces.sql) ───────────────────────────────────────
+  // ── Marketplaces (059_marketplaces.sql) ───────────────────────────────────────
   // Which marketplaces this workspace sells on, and what each one calls a
   // brand / colour / condition / size / category. Members READ both; admins
   // edit the opt-in row, any member edits the workspace vocabulary (the same
-  // split brand_aliases.sql uses, and for the same reason), and founding
+  // split 052_brand_aliases.sql uses, and for the same reason), and founding
   // admins additionally edit the GLOBAL rows every tenant consumes.
   const [mktStatus, setMktStatus] = useState<'loading' | 'ok' | 'unavailable'>('loading');
   const [mktRows, setMktRows] = useState<OrgMarketplaceRow[]>([]);
@@ -1603,7 +1603,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
 
         {panelTab === 'marketplaces' && mktStatus === 'unavailable' && (
           <p className="ft-setup">
-            Marketplaces are not set up yet — run <code>supabase/migrations/marketplaces.sql</code> in
+            Marketplaces are not set up yet — run <code>supabase/migrations/059_marketplaces.sql</code> in
             the SQL Editor. Until then nothing changes: Step 4 exports the Shopify CSV exactly as it
             does today. Once the tables exist, this is where you choose which marketplaces you sell
             on and teach the app what each one calls your brands, colours and sizes.

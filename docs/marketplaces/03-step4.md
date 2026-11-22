@@ -14,7 +14,7 @@ vocabulary gap in place, and mark what has been posted. The connectors (eBay,
 Etsy, Shopify write) are plan phase 3 and still need the founder's explicit yes
 on external APIs (`00-plan.md` §6.1).
 
-**No SQL was run.** `supabase/migrations/marketplaces.sql` is still written and
+**No SQL was run.** `supabase/migrations/059_marketplaces.sql` is still written and
 not applied, so in production today the panel renders one setup line and Step 4
 behaves exactly as it did before.
 
@@ -111,8 +111,8 @@ there, and a row here is the same product the CSV exports.
 Every issue carrying a `fixKind` and a `value` becomes an inline
 `Remember: «value» → [input]` row under that marketplace's checklist. Saving calls
 `upsertVocab({ orgId, marketplace, kind, canonical, marketplaceValue })` — a
-**workspace** row, with no admin gate, exactly as `marketplaces.sql` and
-`brand_aliases.sql` intend: the person who hits it is whoever is listing, not
+**workspace** row, with no admin gate, exactly as `059_marketplaces.sql` and
+`052_brand_aliases.sql` intend: the person who hits it is whoever is listing, not
 whoever happens to be an admin. The vocabulary is refetched on success, the
 resolver is rebuilt, and the matrix re-resolves — so the warning disappears from
 every listing that shared that value, not just the one that surfaced it.

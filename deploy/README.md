@@ -111,10 +111,10 @@ Self-hosting checklist for this app specifically:
 1. Create the `product-images` Storage bucket (public today — README "Known
    limitation: image files are publicly readable").
 2. Apply `supabase/migrations/*.sql` **by hand, in dependency order**. Start
-   with the table-creating ones, then `multi_org_tenancy.sql`, then the
-   migrations that depend on it (`beta_signups.sql`, `analytics_events.sql`,
-   `crm.sql`, `support_messaging.sql`, `org_shopify_connections.sql`,
-   `founding_user_admin.sql`, `vocab_*.sql`). Several are destructive — read the
+   with the table-creating ones, then `031_multi_org_tenancy.sql`, then the
+   migrations that depend on it (`032_beta_signups.sql`, `043_analytics_events.sql`,
+   `044_crm.sql`, `045_support_messaging.sql`, `035_org_shopify_connections.sql`,
+   `039_founding_user_admin.sql`, `vocab_*.sql`). Several are destructive — read the
    warnings in AGENTS.md §5 first.
 3. Edge Functions are optional. Without them `shopify-titles` falls back to
    database-only title dedup and `generate-prose` returns 503 with the

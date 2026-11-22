@@ -6,7 +6,7 @@ import { normalizePlatformRules, type PlatformPricingRule } from './platformPric
  * descriptionSettings — per-workspace control over how the generated listing
  * description is formatted (the rule-based text engine in textAIService).
  *
- * Stored as a JSONB column on organizations (org_description_settings.sql).
+ * Stored as a JSONB column on organizations (037_org_description_settings.sql).
  * Org owners/admins edit it in the Workspace panel; existing RLS already
  * covers it (members SELECT their org, admins UPDATE it). Every field has a
  * default matching today's output, so a missing column, missing row, or empty
@@ -122,7 +122,7 @@ export function normalizeBackgroundBackdrop(raw: unknown): BackgroundBackdrop | 
 /**
  * WHERE a backdrop file goes: `{userId}/backdrops/{timestamp}-{slug}.jpg`.
  *
- * The uid prefix is not decoration — `security_storage_policies.sql` scopes
+ * The uid prefix is not decoration — `049_security_storage_policies.sql` scopes
  * writes by the leading path segment, so a backdrop under the uploader's own uid
  * needs no new policy. The timestamp makes the name unique without a lookup, and
  * the slug keeps it recognisable in a bucket listing. Always `.jpg`, because the

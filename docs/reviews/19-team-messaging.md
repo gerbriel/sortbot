@@ -1,7 +1,7 @@
 # 19 — Team messaging: a second KIND of conversation on the messaging tables
 
-**Date:** 15 Sept 2026 · **Scope:** `supabase/migrations/team_messaging.sql` (new),
-`perf_rls_initplan.sql` §8, `src/lib/supportService.ts`, `src/lib/supportStore.ts`,
+**Date:** 15 Sept 2026 · **Scope:** `supabase/migrations/058_team_messaging.sql` (new),
+`056_perf_rls_initplan.sql` §8, `src/lib/supportService.ts`, `src/lib/supportStore.ts`,
 `src/components/MessagesView.tsx` + `.css`, `src/components/SupportWidget.tsx`,
 `src/App.tsx` (six lines) · **Nothing committed. No SQL was run against Supabase.**
 
@@ -74,7 +74,7 @@ public.is_thread_participant(p_thread uuid)        -- SECURITY INVOKER wrapper
 ```
 
 created in `app_private` **from the start**, behind a `public` invoker wrapper, exactly
-the shape `security_function_hardening.sql` produces for the other eight policy helpers
+the shape `054_security_function_hardening.sql` produces for the other eight policy helpers
 (§18 #45) — so that file never has to move it and its re-run order is unaffected. Both
 halves keep `grant execute … to authenticated`, which is not optional: an RLS expression
 requires the *invoking* role to hold EXECUTE on what it calls.
@@ -97,15 +97,15 @@ also why `createTeamThread` writes the roster **before** the first message.
 
 ## 3. The ordering hazard, and why it had to be handled here
 
-`perf_rls_initplan.sql` (written, not yet run) recreates every RLS policy with its helper
+`056_perf_rls_initplan.sql` (written, not yet run) recreates every RLS policy with its helper
 calls wrapped as `(select …)`. Its section 8 recreates precisely the five policies this
 feature rewrites — `support_threads_select`, `_insert`, `_update`, `support_messages_select`,
-`_insert` — with their **pre-team** definitions. Run it after `team_messaging.sql` and team
+`_insert` — with their **pre-team** definitions. Run it after `058_team_messaging.sql` and team
 visibility would be silently revoked, with nothing failing: threads would simply stop
 appearing, the roster table would still be there, and every test would still pass.
 
 **It is worse than a revoke, and the verification run proved it.** With
-`perf_rls_initplan.sql` applied on top of `team_messaging.sql` unmodified, participant B lost
+`056_perf_rls_initplan.sql` applied on top of `058_team_messaging.sql` unmodified, participant B lost
 their own thread and could no longer post into it — *and founder E, in an unrelated workspace,
 gained read access to that team thread and could post `'founder'` into it.* The restored
 policies are `user_id = auth.uid() or is_beta_admin()` with no `kind` test, so the file did not
@@ -114,16 +114,16 @@ in §5 is that failure, and the same scenario passing afterwards.
 
 Both files therefore end in the same state now, in either order:
 
-- `team_messaging.sql` writes its policies **already InitPlan-wrapped**, so it is not
+- `058_team_messaging.sql` writes its policies **already InitPlan-wrapped**, so it is not
   undoing the perf work when it runs second.
-- `perf_rls_initplan.sql` §8 branches on whether `support_threads.kind` exists and emits
+- `056_perf_rls_initplan.sql` §8 branches on whether `support_threads.kind` exists and emits
   the NEW definitions when it does, the original ones when it does not — so it stays
   correct on a database where team messaging was never installed.
 
-Recommended order is stated in both headers: `team_messaging.sql`, then
-`perf_rls_initplan.sql` last, as that file's own header already requires of every
-migration that touches a policy. `security_function_hardening.sql` and
-`security_rpc_wrappers.sql` need **no** re-run: this file replaces one trigger function
+Recommended order is stated in both headers: `058_team_messaging.sql`, then
+`056_perf_rls_initplan.sql` last, as that file's own header already requires of every
+migration that touches a policy. `054_security_function_hardening.sql` and
+`055_security_rpc_wrappers.sql` need **no** re-run: this file replaces one trigger function
 (treatment B — it re-states its own revokes) and creates its new helper in `app_private`
 already.
 
@@ -157,14 +157,14 @@ Grants are column-level: `insert (thread_id, user_id, email)`, `update (last_rea
 | `support_messages_insert` | `sender_id = me` **and** (`user` on a support thread I own · `founder` on a support thread, as a founding admin · `member` on a team thread I am in) |
 
 `support_threads_insert` is deliberately **not** recreated: it belongs to
-`security_verified_email.sql` (it carries the verified-email condition) and a team thread
+`048_security_verified_email.sql` (it carries the verified-email condition) and a team thread
 needs nothing extra from it — the row is still `user_id = me`, and
-`security_abuse_limits.sql`'s BEFORE INSERT trigger still derives `org_id` / `org_name`
+`050_security_abuse_limits.sql`'s BEFORE INSERT trigger still derives `org_id` / `org_name`
 from the caller's real membership, which is what makes the members INSERT policy's
 `org_members` check meaningful.
 
 The members INSERT policy proving the *product* relationship is the same shape as
-`product_labels` in `listing_labels.sql`: a guessed `user_id` from another workspace is
+`product_labels` in `053_listing_labels.sql`: a guessed `user_id` from another workspace is
 rejected by the database, not just by the picker.
 
 ### 4.1 The rollback has a mandatory PRE-STEP, for the same reason
@@ -183,7 +183,7 @@ Deleting the team *threads* is not tidying up either: once `kind` is dropped the
 moment at which a team thread can be told apart from a support one. So the block now opens with
 an explicit PRE-STEP giving both `delete` statements, why the block is not atomic, what the
 half-way state exposes, and that the conversations must be exported first if they are to be
-kept. No executable statement changed. (`perf_rls_initplan.sql` §8 also handles this state: if
+kept. No executable statement changed. (`056_perf_rls_initplan.sql` §8 also handles this state: if
 `kind` exists but the helper does not, it raises a NOTICE and falls back rather than aborting.)
 
 `support_thread_members` joins the realtime publication so that live read receipts are a
@@ -228,8 +228,8 @@ Full raw log: `tm-full.log`.
 
 | File | Change |
 |---|---|
-| `supabase/migrations/team_messaging.sql` | One comment block added: an explicit **PRE-STEP** at the top of the ROLLBACK section (bug 1 below). No executable statement changed. |
-| `supabase/migrations/perf_rls_initplan.sql` | **Section 8 rewritten to branch on the schema** (Task B), the commented section-8 rollback mirrored, and the file header's RE-RUN ORDER list updated. Nothing outside section 8 / its rollback / the header was touched. |
+| `supabase/migrations/058_team_messaging.sql` | One comment block added: an explicit **PRE-STEP** at the top of the ROLLBACK section (bug 1 below). No executable statement changed. |
+| `supabase/migrations/056_perf_rls_initplan.sql` | **Section 8 rewritten to branch on the schema** (Task B), the commented section-8 rollback mirrored, and the file header's RE-RUN ORDER list updated. Nothing outside section 8 / its rollback / the header was touched. |
 
 No other file was opened for writing. `src/**`, `AGENTS.md`, `CHANGELOG.md` and `docs/**` were
 being edited concurrently by another worker and are untouched here.
@@ -238,16 +238,16 @@ being edited concurrently by another worker and are untouched here.
 
 ### Apply chain
 
-The chain in the task brief needed three additions before `perf_rls_initplan.sql` could run at
-all. **None of them is caused by `team_messaging.sql`** — they are pre-existing unguarded
-dependencies in `perf_rls_initplan.sql`, reproduced below and now written into that file's
+The chain in the task brief needed three additions before `056_perf_rls_initplan.sql` could run at
+all. **None of them is caused by `058_team_messaging.sql`** — they are pre-existing unguarded
+dependencies in `056_perf_rls_initplan.sql`, reproduced below and now written into that file's
 header:
 
 | Failure on the literal brief chain | Cause |
 |---|---|
-| `perf:180 ERROR: function public.auth_email_verified() does not exist` | section 1 (`org_invites_select`) calls it; it is created by `security_verified_email.sql`, which the brief chain omitted |
+| `perf:180 ERROR: function public.auth_email_verified() does not exist` | section 1 (`org_invites_select`) calls it; it is created by `048_security_verified_email.sql`, which the brief chain omitted |
 | `perf:662 ERROR: relation "public.analytics_events" does not exist` | section 10's first `create index` is unguarded (every other index in that section is behind `to_regclass`) |
-| `perf:629 ERROR: function public.storage_prefix_writable(text) does not exist` | section 11 is guarded on `storage.objects` existing, not on the helper; the helper comes from `security_storage_policies.sql` |
+| `perf:629 ERROR: function public.storage_prefix_writable(text) does not exist` | section 11 is guarded on `storage.objects` existing, not on the helper; the helper comes from `049_security_storage_policies.sql` |
 
 Each is a `do $$ … $$` block or a bare statement that aborts atomically, so nothing was left
 half-applied — but the file stops there. Fixed in the harness by adding the three migrations;
@@ -258,26 +258,26 @@ Final chain, all `exit=0`:
 
 ```
 ───── apply: tm-stub.sql ─────                      exit=0     (auth/storage stub + the 5 data tables)
-───── apply: multi_org_tenancy.sql ─────            exit=0
-───── apply: beta_signups.sql ─────                 exit=0
-───── apply: support_messaging.sql ─────            exit=0
-───── apply: analytics_events.sql ─────             exit=0     (added: perf §10 needs the table)
-───── apply: security_abuse_limits.sql ─────        exit=0
-───── apply: security_invites_hardening.sql ─────   exit=0     (added: AGENTS §16 puts it before verified_email)
-───── apply: security_storage_policies.sql ─────    exit=0     (added: perf §11 needs storage_prefix_writable)
-───── apply: security_verified_email.sql ─────      exit=0     (added: perf §1 needs auth_email_verified)
-───── apply: security_function_hardening.sql ─────  exit=0
-───── apply: team_messaging.sql ─────               exit=0
-───── apply: perf_rls_initplan.sql ─────            exit=0
+───── apply: 031_multi_org_tenancy.sql ─────            exit=0
+───── apply: 032_beta_signups.sql ─────                 exit=0
+───── apply: 045_support_messaging.sql ─────            exit=0
+───── apply: 043_analytics_events.sql ─────             exit=0     (added: perf §10 needs the table)
+───── apply: 050_security_abuse_limits.sql ─────        exit=0
+───── apply: 047_security_invites_hardening.sql ─────   exit=0     (added: AGENTS §16 puts it before verified_email)
+───── apply: 049_security_storage_policies.sql ─────    exit=0     (added: perf §11 needs storage_prefix_writable)
+───── apply: 048_security_verified_email.sql ─────      exit=0     (added: perf §1 needs auth_email_verified)
+───── apply: 054_security_function_hardening.sql ─────  exit=0
+───── apply: 058_team_messaging.sql ─────               exit=0
+───── apply: 056_perf_rls_initplan.sql ─────            exit=0
 fixture loaded
 ```
 
-`security_function_hardening.sql` applied **cleanly** on the stub (it moved
+`054_security_function_hardening.sql` applied **cleanly** on the stub (it moved
 `is_beta_admin`, `user_org_ids`, `default_org_id`, `is_org_admin`, `org_has_members`,
 `invited_role` into `app_private` and left same-name invoker wrappers in `public`), so no
 scenario is affected by its absence.
 
-`team_messaging.sql`'s own first-run output was six `NOTICE … does not exist, skipping` lines
+`058_team_messaging.sql`'s own first-run output was six `NOTICE … does not exist, skipping` lines
 for the policies it drops before creating, and `NOTICE: schema "app_private" already exists`.
 No warnings, no errors.
 
@@ -292,7 +292,7 @@ Inserted as `postgres` so RLS cannot hide a fixture mistake.
 | Org **Z** `3333…` "Shop Z", slug `shop-z` | member **D** (owner, `d@shopz.test`) |
 
 All five `auth.users` rows carry `email_confirmed_at`, which is
-`security_verified_email.sql`'s precondition. Every `org_members` row carries `email`,
+`048_security_verified_email.sql`'s precondition. Every `org_members` row carries `email`,
 because `support_thread_members_insert` matches against it.
 
 ---
@@ -319,7 +319,7 @@ because `support_thread_members_insert` matches against it.
      bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb | b@shopx.test | f
 ```
 
-`org_id`/`org_name` were derived by `security_abuse_limits.sql`'s BEFORE INSERT trigger, not
+`org_id`/`org_name` were derived by `050_security_abuse_limits.sql`'s BEFORE INSERT trigger, not
 supplied. `last_sender_id` is A. The sender's own participant row was stamped to the message
 (`t`); the recipient's was not (`f`) — the §6 trigger extension works.
 
@@ -430,13 +430,13 @@ support thread untouched: threads 1 | messages 2
 
 `user_last_read_at` / `founder_last_read_at` are stamped by the trigger exactly as before;
 A's support unread is `t` before marking read and `f` after; A moving
-`founder_last_read_at` is silently reverted by `security_abuse_limits.sql`'s BEFORE UPDATE
+`founder_last_read_at` is silently reverted by `050_security_abuse_limits.sql`'s BEFORE UPDATE
 trigger (`founder_stamp_untouched = t`); A still cannot see D's support thread; E sees both
 support threads and no team thread.
 
 #### 11 — idempotence — **PASS**
 
-Re-applying `team_messaging.sql` produced only `already exists, skipping` notices, `exit=0`.
+Re-applying `058_team_messaging.sql` produced only `already exists, skipping` notices, `exit=0`.
 
 ```
 kind census before: support 1 | team 1
@@ -494,7 +494,7 @@ That is bug 1 (below). Fix: a PRE-STEP block added at the top of the ROLLBACK se
 ```
 
 `kind` and `last_sender_id` gone, the members table and both helper halves gone, the DELETE
-grant revoked, exactly the five `support_messaging.sql` policies back.
+grant revoked, exactly the five `045_support_messaging.sql` policies back.
 
 **12c — support messaging still works after the rollback:**
 
@@ -505,17 +505,17 @@ C sees only their own thread · E sees all threads · A sees only their own
 a 'member' message is now refused → ERROR: new row violates row-level security policy
 ```
 
-**12d — re-apply `team_messaging.sql`, re-run scenarios 1-3:** `exit=0`, and 1/2/3 produce
+**12d — re-apply `058_team_messaging.sql`, re-run scenarios 1-3:** `exit=0`, and 1/2/3 produce
 output identical to the first run (A sees both, B sees the team thread, C and D see nothing,
 E sees the support thread only).
 
-One honest note: the rollback restores `support_messaging.sql`'s policy *text*, i.e. the
-un-`(select …)`-wrapped form. Re-running `perf_rls_initplan.sql` afterwards re-wraps them
+One honest note: the rollback restores `045_support_messaging.sql`'s policy *text*, i.e. the
+un-`(select …)`-wrapped form. Re-running `056_perf_rls_initplan.sql` afterwards re-wraps them
 through the new else branch. That is the documented re-run order, not a defect.
 
-#### 13 — after `perf_rls_initplan.sql` — **FAIL before the Task B fix, PASS after**
+#### 13 — after `056_perf_rls_initplan.sql` — **FAIL before the Task B fix, PASS after**
 
-**Before** (the file as it shipped, run after `team_messaging.sql`):
+**Before** (the file as it shipped, run after `058_team_messaging.sql`):
 
 ```
 --- 2 support_threads  [as B] ---   (0 rows)                 ← participant lost their own thread
@@ -532,7 +532,7 @@ Four of the five recreated policies are the pre-team text, and the pre-team
 `support_threads_select` is `user_id = me or is_beta_admin()` with no `kind` test — so it
 does not merely revoke team access, it *inverts* the privacy guarantee. (Interestingly
 `support_threads_delete` and the three `support_thread_members` policies survived, because
-`perf_rls_initplan.sql` never mentions them — a half-broken state is worse than a wholly
+`056_perf_rls_initplan.sql` never mentions them — a half-broken state is worse than a wholly
 broken one.)
 
 **After** the section-8 branch, on the same clean build:
@@ -594,7 +594,7 @@ revoked from all three client roles and the trigger still fires (scenarios 1, 7,
 
 #### Bug 1 — the ROLLBACK block can half-finish and expose every team conversation to the founders
 
-**Found by scenario 12a. Fixed in `team_messaging.sql` (comment only).**
+**Found by scenario 12a. Fixed in `058_team_messaging.sql` (comment only).**
 
 The block's existing note — *"Narrow the CHECKs back (fails if any 'member' row survives —
 clear them first)"* — is true but sits at the bottom, describes only the message CHECK, and
@@ -613,15 +613,15 @@ why the block is not atomic, what the half-way state exposes, and that the conve
 be exported first if they are to be kept. No executable statement in the migration changed.
 Re-verified: with the pre-step the rollback runs to completion in one pass (scenario 12b).
 
-#### Bug 2 — `perf_rls_initplan.sql` silently revokes team access *and* inverts the privacy guarantee
+#### Bug 2 — `056_perf_rls_initplan.sql` silently revokes team access *and* inverts the privacy guarantee
 
-**Found by scenario 13. Fixed in `perf_rls_initplan.sql` section 8 — this is Task B.**
+**Found by scenario 13. Fixed in `056_perf_rls_initplan.sql` section 8 — this is Task B.**
 
 Detailed above. Section 8 now branches; see the next section.
 
-#### Not a bug in `team_messaging.sql`, recorded anyway
+#### Not a bug in `058_team_messaging.sql`, recorded anyway
 
-`perf_rls_initplan.sql` has three unguarded prerequisites (`auth_email_verified`,
+`056_perf_rls_initplan.sql` has three unguarded prerequisites (`auth_email_verified`,
 `analytics_events`, `storage_prefix_writable`) that abort the file on a database missing the
 migration that supplies them. Those sections are outside this task's edit scope, so they were
 not changed; a paragraph naming all three was added to that file's header, where the RE-RUN
@@ -629,23 +629,23 @@ ORDER note already lives.
 
 ---
 
-### Task B — `perf_rls_initplan.sql` section 8
+### Task B — `056_perf_rls_initplan.sql` section 8
 
 Section 8 now:
 
 1. Creates `support_threads_insert` **once, outside the branch** — it is owned by
-   `security_verified_email.sql`, is identical either way, and was not otherwise touched.
+   `048_security_verified_email.sql`, is identical either way, and was not otherwise touched.
 2. Computes `team_ready` = the `support_threads.kind` column exists **and**
    `public.is_thread_participant(uuid)` exists.
-3. `team_ready` → installs the definitions **textually identical to `team_messaging.sql` §8**
+3. `team_ready` → installs the definitions **textually identical to `058_team_messaging.sql` §8**
    (`support_threads_select` / `_update` / `_delete`, `support_messages_select` / `_insert`),
    plus the four `support_thread_members` policies behind
    `to_regclass('public.support_thread_members') is not null`.
-4. otherwise → the existing `support_messaging.sql` definitions, unchanged.
+4. otherwise → the existing `045_support_messaging.sql` definitions, unchanged.
 5. If `kind` exists but the helper does not — the reachable half-rolled-back state from bug 1 —
    it raises a `NOTICE` naming the situation and falls back, rather than aborting the section.
 
-Also updated: the file header's RE-RUN ORDER list now includes `team_messaging.sql`, with a
+Also updated: the file header's RE-RUN ORDER list now includes `058_team_messaging.sql`, with a
 sentence saying it is the one entry whose order does not matter; and the commented section-8
 ROLLBACK now guards the pre-team text on `kind` being absent, with a `raise notice` and an
 explanation of why restoring it on a team-enabled database is the wrong move.
@@ -653,8 +653,8 @@ explanation of why restoring it on a team-enabled database is the wrong move.
 #### Both orders, and the no-team case
 
 ```
-════════ (i)  team_messaging.sql → perf_rls_initplan.sql ════════   scenarios 2,3,5,6 + X1-X3: PASS
-════════ (ii) perf_rls_initplan.sql → team_messaging.sql ════════   scenarios 2,3,5,6 + X1-X3: PASS
+════════ (i)  058_team_messaging.sql → 056_perf_rls_initplan.sql ════════   scenarios 2,3,5,6 + X1-X3: PASS
+════════ (ii) 056_perf_rls_initplan.sql → 058_team_messaging.sql ════════   scenarios 2,3,5,6 + X1-X3: PASS
 ```
 
 Stronger than matching behaviour — the two live policy sets are textually identical. Dumped
@@ -678,10 +678,10 @@ IDENTICAL (no output above)
 (10 rows)
 ```
 
-**No-team database (the else branch).** Rebuilt the chain without `team_messaging.sql`:
+**No-team database (the else branch).** Rebuilt the chain without `058_team_messaging.sql`:
 
 ```
-───── apply: perf_rls_initplan.sql ─────  exit=0
+───── apply: 056_perf_rls_initplan.sql ─────  exit=0
 (no section-8 notice → the else branch ran silently, as intended)
 
 --- diff: else branch (new file) vs the file as it was before this edit ---
@@ -696,7 +696,7 @@ and support messaging itself still works there: A opens a thread and posts `user
 
 ```
 NOTICE:  perf_rls_initplan: support_threads.kind exists but public.is_thread_participant(uuid)
-         does not — installing the PRE-TEAM policies. Re-run team_messaging.sql (or finish its
+         does not — installing the PRE-TEAM policies. Re-run 058_team_messaging.sql (or finish its
          rollback) and then re-run this file.
 exit=0
        policyname       |  cmd
@@ -705,8 +705,8 @@ exit=0
  support_threads_update | UPDATE
 ```
 
-**Idempotence of the edited file:** applied `perf_rls_initplan.sql` a second and third time on
-the team build, then `team_messaging.sql` again on top of that. All `exit=0`, and the dumped
+**Idempotence of the edited file:** applied `056_perf_rls_initplan.sql` a second and third time on
+the team build, then `058_team_messaging.sql` again on top of that. All `exit=0`, and the dumped
 policy set was unchanged after each.
 
 ---
@@ -725,9 +725,9 @@ policy set was unchanged after each.
 | 8 | Column grants on `added_at` / `last_read_at` | **PASS** |
 | 9 | Creator cleanup: cascade yes, support thread no, non-creator no | **PASS** |
 | 10 | Support threads byte-for-byte unchanged | **PASS** |
-| 11 | Idempotence of `team_messaging.sql` | **PASS** |
+| 11 | Idempotence of `058_team_messaging.sql` | **PASS** |
 | 12 | Rollback then re-apply | **PASS** (after bug 1 fixed; 12a recorded as the failure) |
-| 13 | After `perf_rls_initplan.sql` | **FAIL before Task B, PASS after** |
+| 13 | After `056_perf_rls_initplan.sql` | **FAIL before Task B, PASS after** |
 | 14 | No `42P17` infinite recursion anywhere | **PASS** |
 | 15 | `is_thread_participant` execute privileges + table grants | **PASS** |
 | B | Both run orders end in an identical policy set; no-team branch unchanged | **PASS** |
@@ -747,7 +747,7 @@ policy set was unchanged after each.
   allow (notably: never `last_read_at` on INSERT, never `kind` on UPDATE) is not checked here.
 - **No PostgREST.** Everything went through `psql`, so error *shapes* the client sees
   (`42501` vs a PostgREST `401`/`403` envelope) are not verified.
-- **Quota interaction.** `security_abuse_limits.sql`'s 20-open-threads quota counts a user's
+- **Quota interaction.** `050_security_abuse_limits.sql`'s 20-open-threads quota counts a user's
   team threads alongside their support threads. That is current behaviour, not a regression,
   and was not exercised — it needs 20 threads to trigger.
 - **Scale.** Single-row fixtures throughout; no assertion that
@@ -841,7 +841,7 @@ landing at the top of the list, `teamAvailable` following the fetch).
 - **No Realtime run.** The subscription is unchanged and `support_thread_members` is
   deliberately not subscribed, so there is nothing new to observe, but the store's
   behaviour under a live burst is still only exercised against the mock.
-- **The 20-open-threads quota is now shared.** `security_abuse_limits.sql`'s
+- **The 20-open-threads quota is now shared.** `050_security_abuse_limits.sql`'s
   `support_thread_before_insert` counts every open thread I *started*, which now includes
   team threads. Narrowing it to `kind = 'support'` means editing that file's trigger
   function, which would put the same function body in two migrations and create exactly
@@ -855,10 +855,10 @@ landing at the top of the list, `teamAvailable` following the fetch).
 - **Nothing went through PostgREST.** Every scenario ran in `psql`, so the error *shapes* the
   client sees (a bare `42501` versus a PostgREST envelope) are not verified, and neither is the
   assumption behind the pre-migration fallback that a missing embed answers `PGRST200`.
-- **Three pre-existing gaps in `perf_rls_initplan.sql`** surfaced while building the apply
+- **Three pre-existing gaps in `056_perf_rls_initplan.sql`** surfaced while building the apply
   chain and were documented in that file's header rather than fixed, being outside this pass's
-  edit scope: section 1 calls `auth_email_verified()` (needs `security_verified_email.sql`),
-  section 11 calls `storage_prefix_writable()` (needs `security_storage_policies.sql`), and
+  edit scope: section 1 calls `auth_email_verified()` (needs `048_security_verified_email.sql`),
+  section 11 calls `storage_prefix_writable()` (needs `049_security_storage_policies.sql`), and
   section 10's first `create index` on `analytics_events` is unguarded while every other index
   in that section is. Each aborts the file on a database missing the migration that supplies it.
 - **No email or push when a teammate writes.** Same as support: the badge and Realtime are

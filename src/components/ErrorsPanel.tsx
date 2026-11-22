@@ -75,7 +75,7 @@ export default function ErrorsPanel() {
 
       {state.status === 'unavailable' && (
         <p className="ft-setup">
-          Error tracking is not set up yet — run <code>supabase/migrations/app_errors.sql</code> in the
+          Error tracking is not set up yet — run <code>supabase/migrations/046_app_errors.sql</code> in the
           SQL Editor. Reporting starts the moment the table exists: uncaught errors, rejected promises
           and caught render errors, with no keys and no third-party service. Messages are scrubbed of
           emails and ids in the browser, and localhost is skipped.

@@ -196,7 +196,7 @@ async def test_the_pre_migration_failure_names_the_migration_file(settings):
     async with rec.client() as client:
         with pytest.raises(EmbedStoreError) as caught:
             await fetch_existing_models(client, settings, ["img-1"])
-    assert "listing_embeddings.sql" in str(caught.value)
+    assert "065_listing_embeddings.sql" in str(caught.value)
 
 
 # ── fetch_group_map ─────────────────────────────────────────────────────────

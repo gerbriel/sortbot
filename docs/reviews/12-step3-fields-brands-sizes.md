@@ -171,13 +171,13 @@ Four outcomes, and which one fires is the whole UX:
 | `suggestion` | strong phonetic/fuzzy, nothing saved | "Did you mean …?" Use / Ignore — **field untouched** |
 | *nothing* | no candidate over threshold | says nothing |
 
-**`supabase/migrations/brand_aliases.sql`** — `(org_id default default_org_id(),
+**`supabase/migrations/052_brand_aliases.sql`** — `(org_id default default_org_id(),
 heard, preferred, created_by, created_by_email, created_at, updated_at)`, unique
 on `(org_id, lower(btrim(heard)))`, org-membership RLS on all four verbs with
 **no admin gate** — this is one shop's record of its own inventory, so any member
-maintains it (contrast `vocab_tables.sql`, which is founder chrome behind
+maintains it (contrast `036_vocab_tables.sql`, which is founder chrome behind
 `is_beta_admin()`). Authorship is pinned on INSERT and made immutable by column
-grants, exactly as in `kanban_board.sql`. Additive, idempotent, rollback at the
+grants, exactly as in `040_kanban_board.sql`. Additive, idempotent, rollback at the
 bottom (which deliberately does **not** drop the shared `my_email()`).
 
 **`src/lib/brandAliasService.ts`** — fetch / save / delete, `'unavailable'`
@@ -282,7 +282,7 @@ seeds a preset `vendor`.
    `brand: item.brand || preset.vendor || undefined`, reverted by `f8ae919`
    **34 minutes later** for exactly this reason. The preset field is labelled
    **"Default Vendor/Brand"** in `CategoryPresetsManager.tsx:743` and documented
-   as "Default vendor/brand if applicable" in `category_presets.sql:21` — so a
+   as "Default vendor/brand if applicable" in `003_category_presets.sql:21` — so a
    shop typing its own name there is the intended reading. Everything preset-
    applied in that window got `brand = 'C&D Vintage'`.
 
@@ -451,17 +451,17 @@ and report PDG's writes; I did not modify `saveStatusStore.ts`.
 
 ---
 
-## Verification — `brand_aliases.sql` on a throwaway Postgres 14
+## Verification — `052_brand_aliases.sql` on a throwaway Postgres 14
 
-`initdb` into the scratchpad, `stub2.sql` → `multi_org_tenancy.sql` →
-`beta_signups.sql` → `brand_aliases.sql`, applied twice. **Cluster stopped and
+`initdb` into the scratchpad, `stub2.sql` → `031_multi_org_tenancy.sql` →
+`032_beta_signups.sql` → `052_brand_aliases.sql`, applied twice. **Cluster stopped and
 deleted afterwards.** Two full rounds plus a focused third.
 
 **Round 1 — all 10 checks green**, and five defects found. All five fixed:
 
 | # | Defect | Fix |
 |---|---|---|
-| 1 | A comment predicted `permission denied for column created_by`; PG 14 actually says `... for table brand_aliases` on an UPDATE column-privilege denial | VERIFY block now matches on the **SQLSTATE 42501** and lists all four immutable columns. (The same wrong wording is in `kanban_board.sql:265` — not my file, flagged below.) |
+| 1 | A comment predicted `permission denied for column created_by`; PG 14 actually says `... for table brand_aliases` on an UPDATE column-privilege denial | VERIFY block now matches on the **SQLSTATE 42501** and lists all four immutable columns. (The same wrong wording is in `040_kanban_board.sql:265` — not my file, flagged below.) |
 | 2 | Header said the index was on `lower(heard)`; it is on `lower(btrim(heard))` | comment corrected |
 | 3 | `heard` was normalised only inside the index, never on write — a row stored as `'  la tiger  '` is matched by the btrimmed index but **not** by the client's `.ilike` lookup, so "re-point this correction" finds nothing, inserts, trips 23505, and the service reports success having changed nothing | new `brand_aliases_heard_is_canonical` CHECK |
 | 4 | Header described an upsert that does not exist (PostgREST cannot target an expression index with `onConflict`) | rewritten to say what actually happens |
@@ -498,7 +498,7 @@ indexable; each of the seven is rejected by the CHECK with **23514
 `heard_is_canonical`**; and the collision guard raises as designed. Cluster
 destroyed.
 
-**Not my file:** `kanban_board.sql:265-266` carries the same incorrect
+**Not my file:** `040_kanban_board.sql:265-266` carries the same incorrect
 "permission denied for column" wording as defect 1.
 
 ---
@@ -514,7 +514,7 @@ destroyed.
 | `src/lib/magnifierPosition.ts` | **new** — viewport clamp |
 | `src/lib/magnifierPosition.test.ts` | **new** — 7 |
 | `src/components/BrandSpelling.tsx` / `.css` | **new** — notices + inline manager (inline and full variants) |
-| `supabase/migrations/brand_aliases.sql` | **new** — per-workspace aliases, org RLS, any member writes |
+| `supabase/migrations/052_brand_aliases.sql` | **new** — per-workspace aliases, org RLS, any member writes |
 | `src/lib/textAIService.ts` | shared trigger alternation; title strip sweep; stop words; `normalizeSizeValue` rewrite; size↔measurement bridge |
 | `src/lib/voiceGrammar.ts` | `FIELD_TO_TITLES`, `stripFieldTitlePrefix`, applied in `emit` + `flushVoiceState` |
 | `src/lib/applyPresetToGroup.ts` | `scrubSellerBrand` on the brand passthrough |
@@ -560,7 +560,7 @@ colours outside the nav, no AGENTS.md/README/CHANGELOG edits, nothing committed.
    it at two points, but `productRow.ts` still lets `products.vendor` beat a live
    edit, and the poisoned rows are still in the database. See §23 Deferred (4
    items, one of them a AGENTS.md correction).
-2. **`brand_aliases.sql` must be run** before the Step 3 surface appears at all.
+2. **`052_brand_aliases.sql` must be run** before the Step 3 surface appears at all.
    Until then every path reports `'unavailable'` and Step 3 behaves exactly as
    today — safe to ship code first.
 3. **The built-in brand library is now reachable from Step 3** (lazily, on the
@@ -575,7 +575,7 @@ colours outside the nav, no AGENTS.md/README/CHANGELOG edits, nothing committed.
    `brandAliasService`, `magnifierPosition`), §5 folder map (four new libs, one
    new component, one new migration), §7 (the `brand_aliases` table), §10 Step 3
    (Save button, brand corrections), §15 (sizes, stop words, the report-23
-   resolution), and §16 (`brand_aliases.sql` "built — migration not yet run").
+   resolution), and §16 (`052_brand_aliases.sql` "built — migration not yet run").
 
 ---
 
@@ -583,7 +583,7 @@ colours outside the nav, no AGENTS.md/README/CHANGELOG edits, nothing committed.
 
 1. **9** CONFIRMED, two leaks: eleven hand-copied boundary lists all missing the same seven field titles, and nothing stripping a title already stored. One shared alternation built from the parser's own vocabulary + `stripFieldTitlePrefix`. 48 tests, one per title.
 2. **11** CONFIRMED: the stop-word set was missing whole grammatical classes, and `it's` could never match because apostrophes survive the punctuation strip. Rebuilt by class; five domain words deliberately kept.
-3. **14** BUILT: `brandSpelling.ts` (word-aligned phonetic matcher, no dependency), `brand_aliases.sql`, `brandAliasService.ts`, and a Step 3 surface — auto-apply + Undo, "Did you mean?", "Remember for this workspace", and a manager for any member plus a founder tab.
+3. **14** BUILT: `brandSpelling.ts` (word-aligned phonetic matcher, no dependency), `052_brand_aliases.sql`, `brandAliasService.ts`, and a Step 3 surface — auto-apply + Undo, "Did you mean?", "Remember for this workspace", and a manager for any member plus a founder tab.
 4. **17** CONFIRMED: the lens was unclamped in both axes. `clampLensPosition` flips then clamps; the CSS centring transform had to go with it.
 5. **23** CONFIRMED, but **not** in preset apply — a 34-minute-lived build poisoned `products.vendor`, which IS the storage column for `brand`, and hydration lets the DB row beat a live edit. Healed at preset-apply and on listing open; **two edits and a data repair I do not own remain** (§23 Deferred).
 6. **26** CONFIRMED: everything outside S/M/L/XL degraded silently. Nine size families, `1X` never folded into `XL`, a hyphen never a waist×inseam separator, size↔measurement bridged both ways.

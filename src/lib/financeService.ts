@@ -1,7 +1,7 @@
 /**
  * Finance — the founder's books, kept in OUR OWN Supabase project
  * (`finance_transactions`, `finance_plan_prices`, `finance_settings`;
- * migration `supabase/migrations/finance.sql`). No payment processor, no
+ * migration `supabase/migrations/051_finance.sql`). No payment processor, no
  * accounting vendor, no external API: a ledger the founder types into, plan
  * prices that value the customer base, and one SECURITY DEFINER aggregate
  * (`finance_summary`) that the Finance view draws.
@@ -101,7 +101,7 @@ export interface FinanceSummary {
   customers: {
     total_workspaces: number; total_members: number;
     new_workspaces: number; new_members: number;
-    /** null when analytics_events.sql has not been run — not zero. */
+    /** null when 043_analytics_events.sql has not been run — not zero. */
     active_workspaces: number | null;
     founding_workspaces: number; founding_discount_pct: number;
     projected_mrr_cents: number; projected_mrr_list_cents: number;
@@ -306,7 +306,7 @@ export function rangeForPreset(preset: Exclude<RangePreset, 'custom'>, today: st
   }
 }
 
-// ── Recurrence expansion (must match finance.sql) ────────────────────────────
+// ── Recurrence expansion (must match 051_finance.sql) ────────────────────────────
 
 /** Only the fields the expansion depends on — so tests and previews stay light. */
 export interface RecurringLike {

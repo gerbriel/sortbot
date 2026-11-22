@@ -5,7 +5,7 @@ import type { OrgRole } from './orgService';
 /**
  * foundingAdminService — cross-workspace user management for Founding
  * Workspace admins, backed by the SECURITY DEFINER functions in
- * supabase/migrations/founding_user_admin.sql.
+ * supabase/migrations/039_founding_user_admin.sql.
  *
  * WHY RPCs AND NOT TABLE WRITES: org_members RLS is scoped to workspaces the
  * caller belongs to (is_org_admin), so a founding admin cannot see or write a
@@ -41,8 +41,8 @@ export interface FoundingUserRow {
 export interface FoundingAuditRow {
   id: string;
   actor_email: string | null;
-  /** The four membership verbs from founding_user_admin.sql, plus the four
- *  workspace verbs from founder_console.sql. `founding_admin_audit.action`
+  /** The four membership verbs from 039_founding_user_admin.sql, plus the four
+ *  workspace verbs from 060_founder_console.sql. `founding_admin_audit.action`
  *  is plain text with no CHECK, so a row written by a newer migration than
  *  this build still renders — auditSummary falls through to the raw verb. */
   action:
@@ -122,7 +122,7 @@ export async function fetchFoundingAudit(limit = 50): Promise<FoundingAuditRow[]
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   FOUNDER CONSOLE — workspace lifecycle (supabase/migrations/founder_console.sql)
+   FOUNDER CONSOLE — workspace lifecycle (supabase/migrations/060_founder_console.sql)
 
    Same shape and the same reason as everything above: a founding admin is not a
    member of a tenant workspace, so `organizations` and `org_invites` RLS
@@ -145,7 +145,7 @@ export async function fetchFoundingAudit(limit = 50): Promise<FoundingAuditRow[]
  * reads it, and `app_private.org_plan_list()` (which is what actually gates a write)
  * reads the same table. These nine are only what the table is SEEDED with, and
  * therefore what a plan dropdown shows in the one situation where the catalog cannot
- * be read — before `plan_management.sql` has been run, or if the directory read fails.
+ * be read — before `062_plan_management.sql` has been run, or if the directory read fails.
  *
  * DO NOT use this list to decide what the user may pick. The server is the gate; a
  * client-side membership test here is exactly what made a tier added in Finance →
@@ -199,7 +199,7 @@ export interface OrgDetail {
   invites: OrgDetailInvite[];
   counts: { batches: number; products: number; images: number };
   last_active: string | null;
-  /** Enabled marketplace keys. Always [] when marketplaces.sql has not run. */
+  /** Enabled marketplace keys. Always [] when 059_marketplaces.sql has not run. */
   marketplaces: string[];
 }
 
@@ -218,12 +218,12 @@ function classify(error: { code?: string; message: string }): FounderFailure {
 
 const FAILURE_TEXT: Record<FounderFailure, string> = {
   forbidden: 'Founding Workspace admins only.',
-  unavailable: 'Run supabase/migrations/founder_console.sql to turn this on.',
+  unavailable: 'Run supabase/migrations/060_founder_console.sql to turn this on.',
   error: '',
 };
 
 /** `unavailableText` is a parameter because two migrations install the RPCs on
- *  this page independently — a founder whose founder_console.sql is fine still
+ *  this page independently — a founder whose 060_founder_console.sql is fine still
  *  has to be told which OTHER file to run. Omitted, the behaviour is unchanged. */
 function failure(
   error: { code?: string; message: string },
@@ -255,7 +255,7 @@ function readFailure(
  *
  * If `ownerEmail` already has an account they are made OWNER outright. If it
  * does not, they get an ADMIN invite and join on their first sign-in — an
- * invite may never mint an owner (security_invites_hardening.sql), so the
+ * invite may never mint an owner (047_security_invites_hardening.sql), so the
  * founder promotes them afterwards. Categories and presets are NOT seeded here:
  * orgService seeds an empty workspace on that first sign-in, so the default
  * list keeps exactly one home (src/lib/categories.ts).
@@ -332,7 +332,7 @@ export async function fetchOrgDetail(orgId: string): Promise<OrgDetailResult> {
 
 /* ════════════════════════════════════════════════════════════════════════════
    PLAN MANAGEMENT — the catalog, and the record of who has been on what
-   (supabase/migrations/plan_management.sql)
+   (supabase/migrations/062_plan_management.sql)
 
    TWO PROBLEMS, ONE FILE.
 
@@ -342,7 +342,7 @@ export async function fetchOrgDetail(orgId: string): Promise<OrgDetailResult> {
       given a price and then never assigned to anybody, silently. The fix is
       that finance_plan_prices IS the catalog: org_plan_list() reads it, so
       founding_set_org_plan and founding_create_workspace inherit data-driven
-      plans with no edit to founder_console.sql at all.
+      plans with no edit to 060_founder_console.sql at all.
 
    2. "WHO WAS A BETA USER" WAS NOT RECORDED ANYWHERE DURABLE.
       organizations.plan is one mutable column — the moment a beta shop moves to
@@ -357,7 +357,7 @@ export async function fetchOrgDetail(orgId: string): Promise<OrgDetailResult> {
    sentence differs, because it names a different migration.
    ════════════════════════════════════════════════════════════════════════════ */
 
-const PLAN_SETUP_TEXT = 'Run supabase/migrations/plan_management.sql to turn this on.';
+const PLAN_SETUP_TEXT = 'Run supabase/migrations/062_plan_management.sql to turn this on.';
 
 /** One row of the catalog, with the two usage counts that decide what may be
  *  done to it. `workspaces` is how many are on it NOW (blocks a delete);

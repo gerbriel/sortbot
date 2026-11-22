@@ -11,7 +11,7 @@ third party at run time, nothing new in `package.json`.
 | `services/matting/app/embed_store.py` | the `listing_embeddings` reader, the skip rule, the writer |
 | `services/matting/app/embed_pipeline.py` | one photo, start to finish |
 | `POST /v1/embed` (`app/main.py`) | 202 `{ jobId, accepted, skipped }`, same auth as `/v1/jobs` |
-| `supabase/migrations/listing_embeddings.sql` | the table, the vector index, `match_listing_images` |
+| `supabase/migrations/065_listing_embeddings.sql` | the table, the vector index, `match_listing_images` |
 | `src/lib/embeddingsService.ts` | `embeddingsAvailable` / `findSimilar` / `ensureEmbeddings` / `similarityLabel` |
 | `src/components/SimilarListings.tsx` + `.css` | the strip. **Not mounted anywhere** — the founder places it |
 
@@ -134,7 +134,7 @@ trade-off written next to it (a volume pins the app to one machine in one region
 
 ## The migration
 
-`supabase/migrations/listing_embeddings.sql` — **written, verified, NOT RUN.** One
+`supabase/migrations/065_listing_embeddings.sql` — **written, verified, NOT RUN.** One
 table, one function pair, no change to anything that exists.
 
 Decisions worth knowing:
@@ -185,7 +185,7 @@ Decisions worth knowing:
 A throwaway PG 14.21 cluster with **real pgvector 0.8.6** (the Homebrew bottle only
 ships for PG 17/18, so it was built from source against `postgresql@14`'s pgxs — the
 `vector` column and the HNSW index are therefore genuinely exercised, not stubbed),
-plus a stub of the Supabase-managed pieces and `multi_org_tenancy.sql`. Fixture:
+plus a stub of the Supabase-managed pieces and `031_multi_org_tenancy.sql`. Fixture:
 two workspaces, six listings, vectors of the form `v(θ) = [cos θ, sin θ, 0 … 0]` so
 every expected cosine is arithmetic rather than a guess.
 
@@ -199,7 +199,7 @@ every expected cosine is arithmetic rather than a guess.
 | 6 | `p_limit` honoured; 0 → 1, null → 12, 99999 → clamped | ✅ |
 | 7 | workspace B querying A's photo; B querying its own | 0 rows; 0 rows |
 | 8 | unknown / unembedded `product_image_id` | 0 rows, no error |
-| 9 | before `pricing_research.sql`: `sold_price_cents` / `sold_at` | NULL on every row |
+| 9 | before `064_pricing_research.sql`: `sold_price_cents` / `sold_at` | NULL on every row |
 | 10 | RLS on the table: A sees 7, B sees 1, leak count | 0 leaked |
 | 11 | `update … set org_id` as a member | `42501 permission denied` |
 | 11b–d | member may rewrite `embedding`/`model`, may delete own row, may NOT delete B's | ✅ |
@@ -275,7 +275,7 @@ the defect the Home dashboard's tool tiles hit.
   wiring and the auth boundary are covered by 99 offline tests; the 350 MB
   download, the cold-start prefetch and the volume story have been reasoned about
   and unit-tested against a MockTransport, not watched on Fly.
-- **`listing_embeddings.sql` has not been run against Supabase.** Only the
+- **`065_listing_embeddings.sql` has not been run against Supabase.** Only the
   throwaway PG 14 cluster above.
 - **Real-world recall.** The 0.92 threshold is calibrated on one re-shoot and two
   genuine comps. It is the right shape and it is a single named constant; the first

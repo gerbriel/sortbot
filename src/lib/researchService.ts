@@ -4,7 +4,7 @@ import { chunked, ID_CHUNK } from './chunk';
 import type { PriceComp, PriceMethod } from './pricing';
 
 /**
- * researchService — the client seam onto supabase/migrations/pricing_research.sql.
+ * researchService — the client seam onto supabase/migrations/064_pricing_research.sql.
  *
  * FIVE TABLES, ONE JOB: remember what the app suggested, what a human changed it
  * to, and what the piece eventually sold for. That record is step 1 of
@@ -168,7 +168,7 @@ let availabilityProbe: Promise<boolean> | null = null;
 let availabilityKnown = false;
 
 /**
- * True when `pricing_research.sql` has been run. Cached for the session — the
+ * True when `064_pricing_research.sql` has been run. Cached for the session — the
  * answer cannot change without a migration, and every listing open asks.
  *
  * One projected row against `pricing_events`, the same shape

@@ -9,7 +9,7 @@ import {
 /**
  * marketplaceService — the data half of multi-marketplace publishing.
  *
- * Backed by supabase/migrations/marketplaces.sql. Four things live here and
+ * Backed by supabase/migrations/059_marketplaces.sql. Four things live here and
  * nowhere else:
  *
  *   1. WHICH marketplaces a workspace sells on (`org_marketplaces`), and that

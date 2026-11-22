@@ -8,7 +8,7 @@ import { getMyBetaSignup } from './betaService';
  * orgService — multi-org tenancy bootstrap and workspace management.
  *
  * Designed to be FORWARD-COMPATIBLE: if the tenancy migration
- * (supabase/migrations/multi_org_tenancy.sql) has NOT been run yet, every
+ * (supabase/migrations/031_multi_org_tenancy.sql) has NOT been run yet, every
  * function here fails soft and `ensureOrganization` returns { mode: 'legacy' },
  * in which case the app behaves exactly as the pre-tenancy shared workspace.
  * Deploying this code before running the migration is safe.
@@ -51,7 +51,7 @@ export type OrgBootstrapResult =
 
 /* ── Seeding an EMPTY workspace ──────────────────────────────────────────────
    A workspace the founder created from the Founder console
-   (supabase/migrations/founder_console.sql) exists before its owner has ever
+   (supabase/migrations/060_founder_console.sql) exists before its owner has ever
    signed in, so it has no categories: Step 2 would open with nothing to drag
    onto and the preset buttons would do nothing. The seed therefore runs on
    every branch that RESOLVES a workspace, not only on the branch that creates

@@ -44,7 +44,7 @@ class EmbedStoreError(RuntimeError):
 def as_uuid(value: object) -> str | None:
     """`products.product_group` is a TEXT column holding a uuid. Prove it.
 
-    The column has been text since add_product_group_column.sql, and the leader
+    The column has been text since 021_add_product_group_column.sql, and the leader
     convention puts a `products.id` in it — so in practice every value parses.
     `listing_embeddings.product_group_id` is a real `uuid`, though, and a single
     unparseable value would fail the WHOLE chunked upsert it happened to share a
@@ -86,7 +86,7 @@ async def fetch_existing_models(
             # founder has deployed this service before running the SQL.
             raise EmbedStoreError(
                 f"could not read {TABLE} ({resp.status_code}) — has "
-                f"supabase/migrations/listing_embeddings.sql been run?"
+                f"supabase/migrations/065_listing_embeddings.sql been run?"
             )
         for row in resp.json() or []:
             key, model = row.get("product_image_id"), row.get("model")

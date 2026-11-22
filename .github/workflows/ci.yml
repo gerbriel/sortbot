@@ -171,10 +171,10 @@ jobs:
           git fetch --no-tags origin "+refs/heads/*:refs/remotes/origin/*" >/dev/null 2>&1 || true
 
           if git rev-parse --verify --quiet "$base_ref" >/dev/null; then
-            changed=$(git diff --name-only --diff-filter=d "$base_ref...HEAD" -- 'supabase/migrations/*.sql' || true)
+            changed=$(git diff --name-status -M --diff-filter=d "$base_ref...HEAD" -- 'supabase/migrations/*.sql' | awk '$1 != "R100" {print $NF}' || true)
           else
             echo "::warning::could not resolve $base_ref — falling back to the files changed in the last commit"
-            changed=$(git diff --name-only --diff-filter=d HEAD~1 HEAD -- 'supabase/migrations/*.sql' || true)
+            changed=$(git diff --name-status -M --diff-filter=d HEAD~1 HEAD -- 'supabase/migrations/*.sql' | awk '$1 != "R100" {print $NF}' || true)
           fi
 
           {

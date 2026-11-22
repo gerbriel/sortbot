@@ -1,7 +1,7 @@
 /**
  * First-party CRM (Founding Workspace only) — contacts, stages, tags,
  * follow-ups and notes, stored in our own Supabase project (`crm_contacts`,
- * `crm_notes`; migration crm.sql). There is no external CRM behind this.
+ * `crm_notes`; migration 044_crm.sql). There is no external CRM behind this.
  *
  * NOTE FOR LATER — `crm_sync_contacts()` could be INCREMENTAL, and is not.
  * It re-derives and re-upserts EVERY contact from beta_signups + auth.users +

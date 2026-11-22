@@ -20,7 +20,7 @@ echo ""
 echo "Copying SQL to clipboard..."
 
 # Copy the SQL file to clipboard (macOS)
-cat supabase/migrations/categories.sql | pbcopy
+cat supabase/migrations/002_categories.sql | pbcopy
 
 echo ""
 echo "✅ SQL copied to clipboard!"

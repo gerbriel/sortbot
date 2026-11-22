@@ -211,7 +211,7 @@ stuck "loading" if an await threw.
   model, which is a design question rather than a wiring one.
 - **`LabelPrintView` and `ListingLabelsPicker` were not edited.** The picker is reused as-is; the print sheet is a
   parallel implementation sharing the template data.
-- **No migration.** `listing_labels.sql` is still unrun (§16); pre-migration the labels and SKU surfaces hide or
+- **No migration.** `053_listing_labels.sql` is still unrun (§16); pre-migration the labels and SKU surfaces hide or
   say what is missing, and the search, the field editing and Open in workflow all work regardless.
 
 ## 7. Still unverified

@@ -42,7 +42,7 @@ async function checkAndRunMigration() {
         console.log('3. Go to SQL Editor');
         console.log('4. Click "New Query"');
         console.log('5. Copy and paste the contents of:');
-        console.log('   supabase/migrations/create_workflow_batches.sql');
+        console.log('   supabase/migrations/007_create_workflow_batches.sql');
         console.log('6. Click "Run" button\n');
         console.log('Or run this command if you have Supabase CLI:');
         console.log('   supabase db push\n');

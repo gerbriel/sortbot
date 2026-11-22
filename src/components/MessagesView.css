@@ -542,7 +542,7 @@
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   TEAM CONVERSATIONS (team_messaging.sql)
+   TEAM CONVERSATIONS (058_team_messaging.sql)
 
    Appended as one fenced block rather than woven through the file above, so a
    future revert is a delete. Everything here is additive — no rule above is

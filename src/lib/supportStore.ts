@@ -67,7 +67,7 @@ export interface SupportStoreState {
   threads: SupportThread[];
   /** null = not checked yet · false = tables missing / unreachable · true = live. */
   available: boolean | null;
-  /** false = team_messaging.sql has not been run. Support messaging still works
+  /** false = 058_team_messaging.sql has not been run. Support messaging still works
    *  in full; the team surface (the picker, the kind chips) hides itself. */
   teamAvailable: boolean;
   /** Ticks once per COMPLETED server refetch. Consumers reload their open
@@ -120,7 +120,7 @@ export function applyReadStamp(
 
 /**
  * The optimistic echo of the `support_after_message` trigger (migration
- * support_messaging.sql): a new message bumps the thread's last_* columns,
+ * 045_support_messaging.sql): a new message bumps the thread's last_* columns,
  * REOPENS a closed thread, and stamps the sender's own read marker. Mirroring
  * it here is what makes the list settle instantly instead of one refetch later.
  */
@@ -378,7 +378,7 @@ export interface UseSupportThreads {
   /** Ordered for `role`: open before closed, unread before read, newest first. */
   sorted: SupportThread[];
   available: boolean | null;
-  /** false until team_messaging.sql has been run (support still works). */
+  /** false until 058_team_messaging.sql has been run (support still works). */
   teamAvailable: boolean;
   /** Everything waiting on me, support and team. The header trigger and the
    *  Inbox row count this. */

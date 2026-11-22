@@ -1,7 +1,7 @@
 # 25 — Automated background removal and replacement (the service half)
 
 **Status:** built, tested, **nothing run against Supabase and nothing deployed.**
-`supabase/migrations/image_backgrounds.sql` is written and NOT run. The app half
+`supabase/migrations/063_image_backgrounds.sql` is written and NOT run. The app half
 (`src/lib/backgroundService.ts` and its UI) was built in parallel against
 [`services/matting/CONTRACT.md`](../../services/matting/CONTRACT.md); this
 document covers the migration, the service, and the decisions behind them.
@@ -16,7 +16,7 @@ document covers the migration, the service, and the decisions behind them.
 
 | | |
 |---|---|
-| `supabase/migrations/image_backgrounds.sql` | 8 columns + 1 CHECK + 1 partial index on `product_images`. No new table, policy, function or grant change. |
+| `supabase/migrations/063_image_backgrounds.sql` | 8 columns + 1 CHECK + 1 partial index on `product_images`. No new table, policy, function or grant change. |
 | `services/matting/` | FastAPI service, Python 3.12, 6 runtime deps, **157 tests**, Dockerfile, Fly config, README, CONTRACT. |
 | `.github/workflows/ci.yml` | one additive `matting` job (Python 3.12 → `pip install -e` → `pytest`). No existing job touched. |
 
@@ -79,7 +79,7 @@ Eight nullable columns (`mask_flags` is `not null default '{}'`), one CHECK on
 `mask_status`, one partial index on `(product_id) where mask_status = 'review'`.
 
 **No RLS change, deliberately.** `product_images` is already org-scoped under
-`multi_org_tenancy.sql`; members already SELECT and UPDATE their own workspace's
+`031_multi_org_tenancy.sql`; members already SELECT and UPDATE their own workspace's
 rows, and that existing grant is exactly what lets the review UI write
 `approved` / `original` from the browser. Adding a policy here would be a
 second, drifting copy of a rule that already holds.
@@ -101,7 +101,7 @@ Two smaller calls, both written into the file:
 
 Cluster built with the recipe in the brief: `initdb`, port 55703, the Supabase
 stub schema (auth schema, `auth.uid()`, the three roles), then
-`multi_org_tenancy.sql`, then a fixture with one workspace, one product and two
+`031_multi_org_tenancy.sql`, then a fixture with one workspace, one product and two
 photos.
 
 | # | Scenario | Result |
@@ -121,10 +121,10 @@ photos.
 | S13 | re-apply after rollback | 8 columns back, bookkeeping `(all null)`, CHECK in force again |
 
 **One harness finding, not a migration finding.** S10/S11 initially showed an
-outsider reading and writing freely. The cause is that `multi_org_tenancy.sql`
+outsider reading and writing freely. The cause is that `031_multi_org_tenancy.sql`
 runs `enable row level security` on only the three *org* tables — the five data
 tables already had RLS on in production (from the original `create_*` migrations
-/ `shared_workspace_rls.sql`), so the tenancy file only **swaps their policies**.
+/ `025_shared_workspace_rls.sql`), so the tenancy file only **swaps their policies**.
 A cluster bootstrapped from the migrations alone therefore has org policies that
 are present but **inert**. The fixture now enables it explicitly and both
 scenarios pass. Worth knowing if anyone ever rebuilds a database from
@@ -457,8 +457,8 @@ transformers/timm (Apache-2.0).
 
 ## 9. To turn it on
 
-1. Run `supabase/migrations/image_backgrounds.sql` in the SQL Editor (after
-   `multi_org_tenancy.sql`).
+1. Run `supabase/migrations/063_image_backgrounds.sql` in the SQL Editor (after
+   `031_multi_org_tenancy.sql`).
 2. `fly secrets set SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… SUPABASE_ANON_KEY=… REPLICATE_API_TOKEN=…`
    — **none of these may ever be given a `VITE_` name** (AGENTS.md §4; CI greps
    `dist/` for `service_role`-shaped strings for exactly this reason).
@@ -484,10 +484,10 @@ transformers/timm (Apache-2.0).
   with SNI. Certificate for `matting.arcadian.ltd` requested; **pending the founder's DNS records**
   (A + AAAA to those IPs, or `CNAME → pe9qqe6.sortbot.fly.dev`).
 - GitHub secret `VITE_MATTING_URL=https://matting.arcadian.ltd` set; the Pages build inlines it.
-  Until DNS resolves the origin is unreachable, and until `image_backgrounds.sql` runs the column
+  Until DNS resolves the origin is unreachable, and until `063_image_backgrounds.sql` runs the column
   probe keeps the feature hidden anyway — so the order of the two remaining founder steps does not
   matter.
-- Not yet done: `image_backgrounds.sql` in the SQL Editor (production SQL is not reachable from this
+- Not yet done: `063_image_backgrounds.sql` in the SQL Editor (production SQL is not reachable from this
   session), the DNS records, and the first real photo.
 
 
@@ -703,6 +703,6 @@ was committed and nothing was deployed.
 `httpx.MockTransport`, so the retry ladder, the 402 flag, the shutdown requeue and
 the backdrop composite have not been seen against the real Replicate API, real
 Supabase rows or a real SIGINT from Fly. The first two need credit on the Replicate
-account; the third needs `image_backgrounds.sql` to have been run. The backdrop
+account; the third needs `063_image_backgrounds.sql` to have been run. The backdrop
 feature also needs the app half to upload a backdrop and send its path — the same
 three hash vectors are the agreement point.

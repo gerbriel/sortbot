@@ -20,7 +20,7 @@ import type { ClothingItem } from '../App';
 let stage4Probe: Promise<boolean> | null = null;
 let stage4Known = false;
 
-/** True once supabase/migrations/stage4_slim_fields.sql has been run. Cached
+/** True once supabase/migrations/033_stage4_slim_fields.sql has been run. Cached
  *  for the session; any error (column missing, offline) counts as "not yet". */
 export function stage4ColumnsAvailable(): Promise<boolean> {
   if (!stage4Probe) {

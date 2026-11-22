@@ -617,7 +617,7 @@ export default function ResearchCard({
       )}
 
       {/* The embeddings strip (step 3 of the plan). It renders nothing until
-          listing_embeddings.sql has run and VITE_MATTING_URL is set, and it needs
+          065_listing_embeddings.sql has run and VITE_MATTING_URL is set, and it needs
           the lead photo's product_images id, which a listing only has once its
           rows have been hydrated — hence the guard. */}
       <div className="rc-similar-slot">

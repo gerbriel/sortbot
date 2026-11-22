@@ -93,7 +93,7 @@ export interface Database {
           alt_text: string | null;
           original_name: string | null;
           created_at: string;
-          /* ── Photo backgrounds (image_backgrounds.sql — NOT YET RUN) ───────
+          /* ── Photo backgrounds (063_image_backgrounds.sql — NOT YET RUN) ───────
              Written by the self-hosted matting service; the app writes only
              `mask_status`, and only when a person decided (AGENTS.md §9).
              Optional here because the migration ships after this code and
@@ -158,7 +158,7 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['categories']['Row'], 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Database['public']['Tables']['categories']['Insert']>;
       };
-      // ── Marketplaces (supabase/migrations/marketplaces.sql) ───────────────
+      // ── Marketplaces (supabase/migrations/059_marketplaces.sql) ───────────────
       // The workspace's opt-in, the per-marketplace vocabulary, and the record
       // of what has actually been published where. `marketplace` is
       // MarketplaceKey from src/lib/marketplaces/types.ts in all three; it is

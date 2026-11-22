@@ -3,7 +3,7 @@
  * Atlas layout (features grouped by subsystem with status + wiring) rebuilt
  * LIVE from board state, so it stays in sync with lane drags and task ticks.
  *
- * The seed migration (supabase/migrations/seed_kanban_feature_atlas.sql) wrote
+ * The seed migration (supabase/migrations/042_seed_kanban_feature_atlas.sql) wrote
  * every card with a `[Tag] Name` title and a structured notes block:
  *
  *   <description>

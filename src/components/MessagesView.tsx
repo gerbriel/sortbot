@@ -460,7 +460,7 @@ export default function MessagesView({ userEmail, orgName, userId, orgId, isFoun
                   <div className="mv-chips" role="group" aria-labelledby="mv-to-label">
                     {/* Offered to founders too: it is the only way to see the
                         support side of the product from the inside, and
-                        security_abuse_limits.sql already exempts them from the
+                        050_security_abuse_limits.sql already exempts them from the
                         open-thread quota for exactly that. */}
                     <button
                       type="button"
@@ -487,7 +487,7 @@ export default function MessagesView({ userEmail, orgName, userId, orgId, isFoun
                       No teammates yet — invite people from the Workspace dashboard and they appear here.
                     </p>
                   )}
-                  {/* Legacy mode: multi_org_tenancy.sql has not been run, so there
+                  {/* Legacy mode: 031_multi_org_tenancy.sql has not been run, so there
                       is no workspace to draw a roster from. */}
                   {teamAvailable && !orgId && (
                     <p className="mv-note">

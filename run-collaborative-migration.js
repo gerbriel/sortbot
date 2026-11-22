@@ -27,7 +27,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 async function runMigration() {
   console.log('🚀 Starting collaborative system migration...\n');
 
-  const migrationPath = path.join(__dirname, 'supabase', 'migrations', 'convert_to_shared_collaborative.sql');
+  const migrationPath = path.join(__dirname, 'supabase', 'migrations', '013_convert_to_shared_collaborative.sql');
   const migrationSQL = fs.readFileSync(migrationPath, 'utf-8');
 
   // Split by statement (rough split on semicolons outside of function bodies)

@@ -71,7 +71,7 @@ function SupportWidget({ userEmail, orgName, isFounder }: SupportWidgetProps) {
     if (open) listEndRef.current?.scrollIntoView({ block: 'end' });
   }, [messages, open, activeId]);
 
-  /* SUPPORT ONLY. Team conversations (team_messaging.sql) share these tables
+  /* SUPPORT ONLY. Team conversations (058_team_messaging.sql) share these tables
      and this store, but not this panel: the floating button is the line to the
      Arcadian team, and a colleague's message belongs on the Messages page with
      room for a participant list. One filter here keeps the two apart —

@@ -118,7 +118,7 @@ export default function VocabDashboard() {
     return () => { cancelled = true; };
   }, []);
 
-  /** Brand spellings — reports 'unavailable' until brand_aliases.sql is run. */
+  /** Brand spellings — reports 'unavailable' until 052_brand_aliases.sql is run. */
   const loadAliases = () => {
     fetchBrandAliases().then(res => {
       if (res.status === 'ok') { setAliases(res.aliases); setAliasesAvailable(true); }
@@ -331,7 +331,7 @@ export default function VocabDashboard() {
             </p>
             {!aliasesAvailable && (
               <p className="vocab-loading">
-                Brand spellings are not set up yet — run supabase/migrations/brand_aliases.sql.
+                Brand spellings are not set up yet — run supabase/migrations/052_brand_aliases.sql.
               </p>
             )}
             <BrandSpelling

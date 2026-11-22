@@ -11,7 +11,7 @@ import type { FormattedListing, MarketplaceKey, ReadinessIssue } from './types';
  * component has no harness that can count a column.
  *
  * The "empty targets means all enabled" rule is the load-bearing one: it is a
- * product decision `marketplaces.sql` deliberately left open (02-data.md §7.3),
+ * product decision `059_marketplaces.sql` deliberately left open (02-data.md §7.3),
  * and getting it wrong shows either an empty panel or a set of targets the
  * seller did not pick.
  */

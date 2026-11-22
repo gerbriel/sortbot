@@ -77,8 +77,8 @@ The free parts come before the paid parts. And the data collection that makes st
 
 ## Contracts between the two passes that build steps 1–5
 
-**Migrations.** `supabase/migrations/pricing_research.sql` (steps 1, 2, 4, 5, 6-manual)
-and `supabase/migrations/listing_embeddings.sql` (step 3). Both org-scoped through the
+**Migrations.** `supabase/migrations/064_pricing_research.sql` (steps 1, 2, 4, 5, 6-manual)
+and `supabase/migrations/065_listing_embeddings.sql` (step 3). Both org-scoped through the
 existing helpers, both additive, idempotent, rollback at the bottom, both verified on a
 throwaway Postgres. Either may run first; the embeddings RPC reads `listing_sales`
 only through `to_regclass`.

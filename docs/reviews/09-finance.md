@@ -148,7 +148,7 @@ round-trip feeds the whole view.
                       "founding", "created_at", "last_active" } ],      // income desc, name asc
   "customers": {
     "total_workspaces", "total_members", "new_workspaces", "new_members",
-    "active_workspaces",        // null when analytics_events.sql has not been run — NOT zero
+    "active_workspaces",        // null when 043_analytics_events.sql has not been run — NOT zero
     "founding_workspaces", "founding_discount_pct",
     "projected_mrr_cents", "projected_mrr_list_cents",
     "by_plan": [ { "plan", "workspaces", "members", "monthly_cents" } ]
@@ -177,7 +177,7 @@ Implementation notes:
 
 | File | Lines | What it is |
 |---|---|---|
-| `supabase/migrations/finance.sql` | ~370 | Three tables, RLS + column grants, touch triggers, seeds, `finance_summary()`, rollback block. |
+| `supabase/migrations/051_finance.sql` | ~370 | Three tables, RLS + column grants, touch triggers, seeds, `finance_summary()`, rollback block. |
 | `src/lib/financeService.ts` | ~640 | Typed CRUD, `fetchFinanceSummary` with `unavailable`/`forbidden` mapping, `normalizeSummary`, and the pure helpers: money in/out of cents, date maths, range presets, `expandOccurrences`, `buildMonthlyPnl`, `summarizeTransactions`, `buildCategoryBreakdown`, the two CSV builders, category suggestions, `validateTransactionInput`. |
 | `src/lib/financeService.test.ts` | ~300 | 34 tests (§below). |
 | `src/components/FinanceView.tsx` | ~880 | The page: Overview / Transactions / Customers / Reports. |
@@ -226,8 +226,8 @@ Implementation notes:
 ## 5. Verification on a throwaway Postgres 14
 
 `initdb` into the scratchpad, started with `-k /tmp -c wal_level=logical` on port
-55439, then `stub2.sql` → `multi_org_tenancy.sql` → `beta_signups.sql` →
-`analytics_events.sql` → `finance.sql`. **Cluster stopped and deleted afterwards.**
+55439, then `stub2.sql` → `031_multi_org_tenancy.sql` → `032_beta_signups.sql` →
+`043_analytics_events.sql` → `051_finance.sql`. **Cluster stopped and deleted afterwards.**
 All 18 checks green:
 
 | # | Check | Result |
@@ -343,7 +343,7 @@ CHECK; and summary normalization (partial payloads, `active_workspaces` null vs
 mocked so every pure helper runs for real: the setup hint when the migration has
 not run, the founders-only message on 42501, KPI + chart + legend + table parity,
 ledger filtering, the recurring-entry preview count, the Customers tab (including
-the "needs analytics_events.sql" note and both MRR numbers), the CSV download
+the "needs 043_analytics_events.sql" note and both MRR numbers), the CSV download
 calling `createObjectURL`/`revokeObjectURL`, and the printable statement adding
 up to the same profit the server returned. The clock is pinned with fake Date
 timers so the "year to date" default cannot make the suite date-dependent.
@@ -376,7 +376,7 @@ under `src/lib/`:
 under `supabase/migrations/`:
 
 ```
-│       ├── finance.sql            # First-party books: finance_transactions (ledger, recurring rows expanded at read time), finance_plan_prices, finance_settings, all founders-only (is_beta_admin()) with column-level UPDATE grants excluding created_by/created_at, + finance_summary(from,to) SECURITY DEFINER aggregate (totals, previous equal range, monthly series, by_category, by_workspace, customer/MRR stats; analytics_events optional via to_regclass). Run AFTER multi_org_tenancy.sql + beta_signups.sql. Additive, idempotent, rollback at the bottom.
+│       ├── 051_finance.sql            # First-party books: finance_transactions (ledger, recurring rows expanded at read time), finance_plan_prices, finance_settings, all founders-only (is_beta_admin()) with column-level UPDATE grants excluding created_by/created_at, + finance_summary(from,to) SECURITY DEFINER aggregate (totals, previous equal range, monthly series, by_category, by_workspace, customer/MRR stats; analytics_events optional via to_regclass). Run AFTER 031_multi_org_tenancy.sql + 032_beta_signups.sql. Additive, idempotent, rollback at the bottom.
 ```
 
 **§7 (data models)** — three new table blocks:
@@ -412,20 +412,20 @@ under `supabase/migrations/`:
 ```
 ### Finance (first-party)
 - `finance_summary(p_from, p_to)` RPC (Founding admins; 42501 otherwise) is the only read the Finance view makes. Everything is our own Postgres: no payment processor, no accounting service, no bank feed, no external API.
-- RECURRENCE RULE (implemented twice — finance.sql and financeService.expandOccurrences — and asserted against the same worked example in both): a recurring row is a template expanded at read time; steps are ANCHORED to occurred_on (Jan 31 monthly → Feb 28, Mar 31, Apr 30), and totals count OCCURRENCES, not rows.
+- RECURRENCE RULE (implemented twice — 051_finance.sql and financeService.expandOccurrences — and asserted against the same worked example in both): a recurring row is a template expanded at read time; steps are ANCHORED to occurred_on (Jan 31 monthly → Feb 28, Mar 31, Apr 30), and totals count OCCURRENCES, not rows.
 - FOUNDING DISCOUNT: a workspace is founding when plan = 'beta' OR created_at ≤ finance_settings.founding_cutoff — the cutoff is what makes the 30%-off-for-life promise survive an upgrade off the beta plan. The summary returns list MRR and discounted MRR side by side.
 ```
 
 **§15 (What's Done)**:
 
 ```
-- ✅ **Finance — first-party books (July 2026)** — `finance.sql` (finance_transactions / finance_plan_prices / finance_settings, all is_beta_admin(), column-level UPDATE grants excluding created_by/created_at) + `finance_summary()` SECURITY DEFINER aggregate + `financeService.ts` + `FinanceView.tsx` (Overview / Transactions / Customers / Reports inside ToolView, founding admins only). Recurring entries are TEMPLATES expanded at read time by the same anchored rule on both sides, so the chart, the ledger CSV, the P&L CSV and the printed statement always agree. Reports downloads go through csvExport's `escapeCsvValue` (formula guard included). 42 tests; verified end-to-end on a throwaway Postgres 14 (founders-only access, recurrence math, idempotent re-apply preserving founder price edits, rollback, and operation with analytics_events absent).
+- ✅ **Finance — first-party books (July 2026)** — `051_finance.sql` (finance_transactions / finance_plan_prices / finance_settings, all is_beta_admin(), column-level UPDATE grants excluding created_by/created_at) + `finance_summary()` SECURITY DEFINER aggregate + `financeService.ts` + `FinanceView.tsx` (Overview / Transactions / Customers / Reports inside ToolView, founding admins only). Recurring entries are TEMPLATES expanded at read time by the same anchored rule on both sides, so the chart, the ledger CSV, the P&L CSV and the printed statement always agree. Reports downloads go through csvExport's `escapeCsvValue` (formula guard included). 42 tests; verified end-to-end on a throwaway Postgres 14 (founders-only access, recurrence math, idempotent re-apply preserving founder price edits, rollback, and operation with analytics_events absent).
 ```
 
 **§16 (In progress / missing)**:
 
 ```
-| Finance module | **Built — migration not yet run** | `supabase/migrations/finance.sql` + `financeService.ts` + `FinanceView.tsx`. Ship the code first: every read reports 'unavailable' pre-migration and the view shows the setup step instead, so the Finance button is safe to expose immediately. Run the SQL after `multi_org_tenancy.sql` + `beta_signups.sql`. NOTE: the seeded plan prices (starter 4900 / pro 12900 / studio 29900) predate the current Landing tiers (Starter $50 / Pro $250 / Scale $700) — edit them in Finance → Customers → Plan prices, no migration needed. Not built: multi-currency (the column exists, the UI is USD-only), receipt attachments, and any bank/processor import. |
+| Finance module | **Built — migration not yet run** | `supabase/migrations/051_finance.sql` + `financeService.ts` + `FinanceView.tsx`. Ship the code first: every read reports 'unavailable' pre-migration and the view shows the setup step instead, so the Finance button is safe to expose immediately. Run the SQL after `031_multi_org_tenancy.sql` + `032_beta_signups.sql`. NOTE: the seeded plan prices (starter 4900 / pro 12900 / studio 29900) predate the current Landing tiers (Starter $50 / Pro $250 / Scale $700) — edit them in Finance → Customers → Plan prices, no migration needed. Not built: multi-currency (the column exists, the UI is USD-only), receipt attachments, and any bank/processor import. |
 ```
 
 ---
@@ -433,7 +433,7 @@ under `supabase/migrations/`:
 ## 10. Summary
 
 1. Founder asked to track finances, users, profit/expenses and pull reports.
-2. `supabase/migrations/finance.sql`: ledger + plan prices + settings, every
+2. `supabase/migrations/051_finance.sql`: ledger + plan prices + settings, every
    policy `is_beta_admin()`, `created_by`/`created_at` outside the UPDATE grant.
 3. `finance_summary(from, to)` returns totals, the previous equal-length range,
    a zero-filled monthly series, category/workspace breakdowns and customer+MRR

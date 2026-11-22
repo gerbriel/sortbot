@@ -1,7 +1,7 @@
 /**
  * In-app messaging, stored in our own Supabase project (`support_threads`,
- * `support_messages`, `support_thread_members`; migrations support_messaging.sql
- * and team_messaging.sql). No third-party chat service: the widget, the founder
+ * `support_messages`, `support_thread_members`; migrations 045_support_messaging.sql
+ * and 058_team_messaging.sql). No third-party chat service: the widget, the founder
  * inbox, the Messages page and the live updates all run here.
  *
  * TWO KINDS OF CONVERSATION share the tables, distinguished by `kind`:
@@ -24,7 +24,7 @@
  *
  * FORWARD-COMPATIBLE, TWICE OVER: fetchThreads() reports 'unavailable' when the
  * support tables are missing (both front ends hide), and reports
- * `teamAvailable: false` when only team_messaging.sql has not been run — the
+ * `teamAvailable: false` when only 058_team_messaging.sql has not been run — the
  * support half then works exactly as it always did and the team surface hides.
  */
 import { supabase } from './supabase';
@@ -72,9 +72,9 @@ export interface SupportMessage {
   created_at: string;
 }
 
-/** The columns support_messaging.sql shipped — the fallback select. */
+/** The columns 045_support_messaging.sql shipped — the fallback select. */
 const BASE_THREAD_COLS = 'id, user_id, user_email, org_id, org_name, subject, status, last_message_at, last_message_preview, last_sender_role, user_last_read_at, founder_last_read_at, created_at, updated_at';
-/** …plus the two columns team_messaging.sql added. Used on writes, where the
+/** …plus the two columns 058_team_messaging.sql added. Used on writes, where the
  *  roster is either empty or about to be written by the very next statement. */
 const TEAM_THREAD_WRITE_COLS = `${BASE_THREAD_COLS}, kind, last_sender_id`;
 /** …and the roster, aliased to `members`. Used on reads. */
@@ -82,7 +82,7 @@ const TEAM_THREAD_COLS = `${TEAM_THREAD_WRITE_COLS}, members:support_thread_memb
 const MESSAGE_COLS = 'id, thread_id, sender_id, sender_role, body, created_at';
 
 /**
- * What PostgREST answers with when `team_messaging.sql` has not been run.
+ * What PostgREST answers with when `058_team_messaging.sql` has not been run.
  *   42703    undefined column — `support_threads.kind` does not exist
  *   PGRST200 no relationship found — the embedded `support_thread_members`
  *   PGRST204 / PGRST100  column missing from the schema cache / parse failure
@@ -126,7 +126,7 @@ export async function fetchThreads(): Promise<ThreadsResult> {
     return { status: 'unavailable' };
   }
 
-  // team_messaging.sql has not been run: the support half still works.
+  // 058_team_messaging.sql has not been run: the support half still works.
   log.service(`fetchThreads | team messaging not migrated (${first.error.code}) — support only`);
   const { data, error } = await supabase
     .from('support_threads')
@@ -335,7 +335,7 @@ export async function setThreadStatus(threadId: string, status: ThreadStatus): P
  * by the widget's polling instead.
  *
  * `support_thread_members` is deliberately NOT subscribed although
- * team_messaging.sql publishes it: the only thing that changes on it is a read
+ * 058_team_messaging.sql publishes it: the only thing that changes on it is a read
  * marker, which is not news worth a render. It arrives with the next poll.
  */
 export function subscribeToSupport(

@@ -34,11 +34,11 @@ into one. All five are impossible from the client for the same reason the member
 writes already were: **a founding admin is not a member of a tenant workspace**, so
 `organizations` and `org_invites` RLS (`is_org_admin(org_id)`) hides those rows
 completely. They are RPCs, gated on `is_beta_admin()`, and audited — the shape
-`founding_user_admin.sql` established.
+`039_founding_user_admin.sql` established.
 
 ---
 
-## 2. The migration — `supabase/migrations/founder_console.sql`
+## 2. The migration — `supabase/migrations/060_founder_console.sql`
 
 **Written, NOT run.** Additive, idempotent, rollback at the bottom. **No new table,
 no new column, no policy change, no trigger.**
@@ -61,7 +61,7 @@ public.<fn>        SECURITY INVOKER wrapper, IDENTICAL signature
 
 Four decisions are worth keeping.
 
-**(a) An invite still may never mint an OWNER.** `security_invites_hardening.sql`
+**(a) An invite still may never mint an OWNER.** `047_security_invites_hardening.sql`
 closed invitee → owner self-promotion, and that rule stands. So
 `founding_create_workspace` branches on whether the email already has an account:
 a known account gets an **owner** membership written directly by the SECURITY
@@ -70,7 +70,7 @@ an **admin invite** that `ensureOrganization` accepts on their first sign-in —
 founder promotes them afterwards. Verified both ways (S6, S7).
 
 **(b) The plan vocabulary lives in ONE place per side.**
-`app_private.org_plan_list()` is the nine plans `finance.sql` seeds
+`app_private.org_plan_list()` is the nine plans `051_finance.sql` seeds
 `finance_plan_prices` with, and `ORG_PLANS` in `foundingAdminService.ts` mirrors it.
 A plan outside that set prices at nothing and silently drops out of projected MRR,
 which is why both halves reject one rather than one of them trusting the other.
@@ -79,16 +79,16 @@ which is why both halves reject one rather than one of them trusting the other.
 open invites and **counts** — never a batch, product or image row. S32 asserts the
 payload does not contain a product title that is sitting in the same workspace.
 `org_marketplaces` is read through `to_regclass` + dynamic SQL (the `finance_summary`
-pattern), so a database that never ran `marketplaces.sql` gets `[]`, not an error.
+pattern), so a database that never ran `059_marketplaces.sql` gets `[]`, not an error.
 
 **(d) It does not seed categories.** The default list has exactly one home
 (`src/lib/categories.ts` → `categoriesService.initializeDefaultCategories`), so a
 workspace created here is seeded by the CLIENT on its owner's first sign-in — see §3.
 
 One hazard is written into the header: `create schema if not exists app_private`
-means `security_function_hardening.sql`'s rollback (`drop schema app_private
+means `054_security_function_hardening.sql`'s rollback (`drop schema app_private
 restrict`) will refuse while these five bodies live there. Roll this file back first,
-exactly as `security_rpc_wrappers.sql` documents for its own nine. Confirmed in S33.
+exactly as `055_security_rpc_wrappers.sql` documents for its own nine. Confirmed in S33.
 
 `founding_admin_audit.action` is plain `text` with no CHECK, so the four new verbs
 (`create_workspace`, `set_plan`, `rename_org`, `invite_member`) needed no `ALTER`.
@@ -161,7 +161,7 @@ Other decisions:
   workspace always wins and the approved-request branch never runs for that person.
   That is stated in the component header, because it looks like a bug and is not.
 - **Availability is probed with a real read**, not guessed: after the directory loads,
-  one `fetchOrgDetail` on the first workspace answers "has `founder_console.sql` been
+  one `fetchOrgDetail` on the first workspace answers "has `060_founder_console.sql` been
   run?" — and the answer is kept as that workspace's detail, so expanding its row is
   free. A database with no workspaces at all leaves the status unknown and the Onboard
   tab simply tries; the RPC's own error is then what the founder sees.
@@ -201,12 +201,12 @@ explicit `ORDER` array. App gets the view, the lazy chunk, the `navItems` row an
 ## 4. SQL verification — 33 scenarios, two orders
 
 Throwaway Postgres 14 (`initdb` + `pg_ctl`, port 55701), the stub `auth`/`storage`
-schema, then `multi_org_tenancy.sql` → `beta_signups.sql` →
-`beta_admin_directory.sql` → `founding_user_admin.sql` →
-`security_invites_hardening.sql`. Callers impersonated with
+schema, then `031_multi_org_tenancy.sql` → `032_beta_signups.sql` →
+`034_beta_admin_directory.sql` → `039_founding_user_admin.sql` →
+`047_security_invites_hardening.sql`. Callers impersonated with
 `set local role authenticated; set local "request.jwt.claims" = '{…}'`.
 
-**Order A — `founder_console.sql` on a database with no hardening yet:**
+**Order A — `060_founder_console.sql` on a database with no hardening yet:**
 
 | # | Scenario | Result |
 |---|---|---|
@@ -231,16 +231,16 @@ schema, then `multi_org_tenancy.sql` → `beta_signups.sql` →
 | S21 | `founding_org_detail` | org + 2 members + 1 invite + counts `{batches 2, products 1, images 2}` + `last_active`; `member@shopa.test` resolved from `auth.users` because its `org_members.email` is NULL |
 | S22 | Audit trail | exactly 5 rows — one per SUCCESSFUL mutation, none for any refusal |
 | S23 / S23b | Audit readable by the founder / a non-founder | 5 rows / 0 rows |
-| S24 | With `marketplaces.sql` applied and 3 rows (one disabled) | `["ebay", "poshmark"]` — enabled only, sorted |
-| S25 | Re-apply `founder_console.sql` | clean, still works |
+| S24 | With `059_marketplaces.sql` applied and 3 rows (one disabled) | `["ebay", "poshmark"]` — enabled only, sorted |
+| S25 | Re-apply `060_founder_console.sql` | clean, still works |
 | S26 | Placement | 5 definer bodies in `app_private`, 5 invoker wrappers in `public` |
 | S27 | Linter 0028/0029 | none of the five is reachable by `anon`/`authenticated` as a definer |
 | S27b | `app_private.org_plan_list()` | `anon` f, `authenticated` f — internal guard, as intended |
-| S29 | `security_function_hardening.sql` + `security_rpc_wrappers.sql` run AFTER | the five still answer; placement identical to order B |
+| S29 | `054_security_function_hardening.sql` + `055_security_rpc_wrappers.sql` run AFTER | the five still answer; placement identical to order B |
 | S32 | Leak check on `founding_org_detail` | `clean — counts only` (a `SECRET-TENANT-TITLE` product in that workspace does not appear) |
 | S33 | `drop schema app_private restrict` | refuses, as the header says it will |
 
-**Order B — the hardening files applied BEFORE `founder_console.sql`:** the file
+**Order B — the hardening files applied BEFORE `060_founder_console.sql`:** the file
 applies cleanly, a founder can create a workspace, a non-founder still gets 42501,
 and **0028/0029 is completely clear across the whole `public` schema**. Both orders
 converge on an identical placement table.
@@ -298,7 +298,7 @@ is contained.
 - **Nothing is verified in a signed-in browser.** Same standing limitation as every
   pass since the mobile work: no agent can sign in. The React wiring is covered by
   tests, the cascade by screenshots; the two have not been seen together.
-- **`founder_console.sql` has not been run anywhere**, including the throwaway
+- **`060_founder_console.sql` has not been run anywhere**, including the throwaway
   cluster's production equivalent. Until it is, the console's Requests, Workspaces
   and Users tabs work exactly as the OrgPanel tabs did and the five new capabilities
   show one setup line.
@@ -309,5 +309,5 @@ is contained.
 - **No `auth.users` row is ever created.** That needs the service_role key, and an
   Edge Function holding it is a much larger blast radius than anything in this file.
   An unknown email gets an invite and signs up normally.
-- **`security_abuse_limits.sql` is untouched**, so its quotas are unchanged by this
+- **`050_security_abuse_limits.sql` is untouched**, so its quotas are unchanged by this
   pass.

@@ -57,7 +57,7 @@ Write actions are optimistic first, reconciled after:
 | `setStatus(id, status)` | only if the UPDATE succeeded | `refresh()` |
 
 `applySentMessage` is a deliberate mirror of the `support_after_message` trigger
-in `support_messaging.sql` — `last_message_at`, `left(body, 140)`,
+in `045_support_messaging.sql` — `last_message_at`, `left(body, 140)`,
 `last_sender_role`, **reopen the thread**, and stamp the sender's own read
 marker. Copying the trigger is what makes the list settle instantly instead of
 one round-trip later; the test asserts each of those five facts against the SQL.

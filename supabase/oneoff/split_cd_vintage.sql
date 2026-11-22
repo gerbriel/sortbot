@@ -53,13 +53,13 @@
 -- Founding Workspace", so a second run moves only what the first one missed
 -- and copies nothing twice.
 --
--- PREREQUISITE: supabase/migrations/tenant_scoped_uniqueness.sql (the script
+-- PREREQUISITE: supabase/migrations/061_tenant_scoped_uniqueness.sql (the script
 -- refuses to run until it has — see step 1.2).
 --
 -- OPTIONAL TABLES are read through to_regclass(), so the script runs the same
--- whether or not brand_aliases.sql, listing_labels.sql, crm.sql,
--- support_messaging.sql, marketplaces.sql, org_shopify_connections.sql,
--- org_description_settings.sql or founding_user_admin.sql have been applied.
+-- whether or not 052_brand_aliases.sql, 053_listing_labels.sql, 044_crm.sql,
+-- 045_support_messaging.sql, 059_marketplaces.sql, 035_org_shopify_connections.sql,
+-- 037_org_description_settings.sql or 039_founding_user_admin.sql have been applied.
 --
 -- AFTER RUNNING (things SQL cannot do)
 --   • CJ signs out and back in on the gmail account. He lands in C&D Vintage
@@ -73,7 +73,7 @@
 --     the global secrets, since the Founding Workspace is now a demo.
 --   • Storage: nothing moves. The bucket is public and paths are keyed by
 --     user id; CJ's files stay under his prefix, which is now read from the
---     new workspace. security_storage_policies.sql (if/when run) scopes writes
+--     new workspace. 049_security_storage_policies.sql (if/when run) scopes writes
 --     by ORG membership, and CJ is a member of the org his files belong to.
 --   • The client's "C&D Vintage" fallback for the Founding Workspace's Vendor
 --     column was removed in the same change (App.tsx); the Founding Workspace
@@ -149,7 +149,7 @@ begin
   -- 1.1 Resolve the parties ---------------------------------------------------
   select id into v_founding from public.organizations where slug = 'founding';
   if v_founding is null then
-    raise exception 'No organization with slug = ''founding'' — multi_org_tenancy.sql has not been run here.';
+    raise exception 'No organization with slug = ''founding'' — 031_multi_org_tenancy.sql has not been run here.';
   end if;
 
   select id into v_user from auth.users where lower(email) = lower(v_owner_email) limit 1;
@@ -167,7 +167,7 @@ begin
 
   -- 1.2 PRE-FLIGHT: names must be unique PER WORKSPACE, not database-wide -----
   -- categories.name and category_presets.category_name still carry the
-  -- single-workspace era's global UNIQUE unless tenant_scoped_uniqueness.sql
+  -- single-workspace era's global UNIQUE unless 061_tenant_scoped_uniqueness.sql
   -- has run. Under the global rule the copies in 1.9 / 1.10 cannot exist ("tees"
   -- is taken by the Founding Workspace), and the new workspace would open with
   -- no categories at all — so refuse now rather than build a broken tenant.
@@ -180,7 +180,7 @@ begin
       and ((c.relname = 'categories'       and i.indnkeyatts = 1 and i.indkey[0] = (select attnum from pg_attribute where attrelid = c.oid and attname = 'name'))
         or (c.relname = 'category_presets' and i.indnkeyatts = 1 and i.indkey[0] = (select attnum from pg_attribute where attrelid = c.oid and attname = 'category_name')))
   ) then
-    raise exception 'Refusing: category names are still unique across the WHOLE database. Run supabase/migrations/tenant_scoped_uniqueness.sql first, then re-run this script.';
+    raise exception 'Refusing: category names are still unique across the WHOLE database. Run supabase/migrations/061_tenant_scoped_uniqueness.sql first, then re-run this script.';
   end if;
 
   -- 1.3 The Founding Workspace must keep at least one owner/admin ------------
@@ -315,7 +315,7 @@ begin
     raise notice '[1.10] presets already present in the new workspace — not copied';
   end if;
 
-  -- 1.11 Marketplaces (marketplaces.sql) — copy opt-ins + workspace vocabulary,
+  -- 1.11 Marketplaces (059_marketplaces.sql) — copy opt-ins + workspace vocabulary,
   --      move the publication records of the moved listings
   if to_regclass('public.org_marketplaces') is not null then
     execute 'insert into public.org_marketplaces (org_id, marketplace, enabled, settings, created_by)
@@ -344,7 +344,7 @@ begin
     raise notice '[1.11] publication records moved: %', n;
   end if;
 
-  -- 1.12 Brand aliases (brand_aliases.sql) — copy
+  -- 1.12 Brand aliases (052_brand_aliases.sql) — copy
   if to_regclass('public.brand_aliases') is not null then
     execute 'insert into public.brand_aliases (org_id, heard, preferred, created_by, created_by_email)
              select $1, heard, preferred, $2, $3
@@ -354,7 +354,7 @@ begin
     raise notice '[1.12] brand aliases copied: %', n;
   end if;
 
-  -- 1.13 Listing labels (listing_labels.sql) — copy the vocabulary, re-point the
+  -- 1.13 Listing labels (053_listing_labels.sql) — copy the vocabulary, re-point the
   --      moved products' assignments at the copies
   if to_regclass('public.listing_labels') is not null then
     create temp table if not exists label_map (old_id uuid primary key, new_id uuid not null) on commit drop;

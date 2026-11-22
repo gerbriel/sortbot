@@ -29,7 +29,7 @@ import { mattingBaseUrl, pollBackgroundJob, type JobProgress, type ServiceResult
  *
  * FORWARD-COMPATIBLE in the house style (labelsService, brandAliasService,
  * backgroundService): with no `VITE_MATTING_URL`, or before
- * `supabase/migrations/listing_embeddings.sql` has been run,
+ * `supabase/migrations/065_listing_embeddings.sql` has been run,
  * `embeddingsAvailable()` is false and every surface hides itself.
  */
 
@@ -150,7 +150,7 @@ export function daysAgo(iso: string | null, now: number = Date.now()): number | 
  * PURE. The sold line, or '' when this listing never sold.
  *
  * `listing_sales` is the other migration's table, read by the RPC through
- * `to_regclass` — so before `pricing_research.sql` runs, every row here has a null
+ * `to_regclass` — so before `064_pricing_research.sql` runs, every row here has a null
  * sold price and this returns ''. That is the pre-migration state, not an error.
  */
 export function formatSoldLine(
@@ -193,7 +193,7 @@ export function embeddingsAvailable(): Promise<boolean> {
     )
       .then(({ error }) => {
         if (error) {
-          log.service(`embeddings | unavailable (${(error as { code?: string }).code ?? ''} ${(error as { message?: string }).message ?? ''}) — run supabase/migrations/listing_embeddings.sql`);
+          log.service(`embeddings | unavailable (${(error as { code?: string }).code ?? ''} ${(error as { message?: string }).message ?? ''}) — run supabase/migrations/065_listing_embeddings.sql`);
           return false;
         }
         availabilityKnown = true;
@@ -429,7 +429,7 @@ export async function ensureEmbeddings(
         return { ok: false, error: 'The service refused this session. Sign out and back in.', status: res.status };
       }
       if (res.status === 503) {
-        return { ok: false, error: 'Run supabase/migrations/listing_embeddings.sql to turn this on.', status: res.status };
+        return { ok: false, error: 'Run supabase/migrations/065_listing_embeddings.sql to turn this on.', status: res.status };
       }
       return { ok: false, error: `The service returned an error (${res.status}).`, status: res.status };
     }

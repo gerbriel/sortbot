@@ -4,7 +4,7 @@
  * is a leaf that imports only from here, which is what keeps them unit-testable
  * without a network, a DOM, or a Supabase client.
  *
- * Row types mirror the DB columns from supabase/migrations/kanban_board.sql
+ * Row types mirror the DB columns from supabase/migrations/040_kanban_board.sql
  * exactly (snake_case). Node types are the nested shape the UI renders, built
  * by tree.ts. Keep the two apart — the flat rows are what we read/write, the
  * nodes are what we draw.

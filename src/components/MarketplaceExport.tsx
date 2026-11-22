@@ -51,7 +51,7 @@ import './MarketplaceExport.css';
  * as a READINESS column only, and its header says where the download is. Two
  * buttons producing two different Shopify CSVs is the mistake this avoids.
  *
- * PRE-MIGRATION (`marketplaces.sql` not run) the whole panel is one setup line
+ * PRE-MIGRATION (`059_marketplaces.sql` not run) the whole panel is one setup line
  * and Step 4 behaves exactly as it did before — the standing forward-compatible
  * rule (labelsService, brandAliasService, financeService).
  */
@@ -503,7 +503,7 @@ function MarketplaceExportInner({
         <p className="mkx-setup">
           <Store size={13} /> Multi-marketplace publishing is ready in the app but its
           database tables have not been created yet — run{' '}
-          <code>supabase/migrations/marketplaces.sql</code> to turn it on.
+          <code>supabase/migrations/059_marketplaces.sql</code> to turn it on.
         </p>
       </section>
     );

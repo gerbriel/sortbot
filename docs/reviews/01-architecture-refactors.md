@@ -299,7 +299,7 @@ silently discarded everything App wrote in between. It is now **compare-and-set*
 reads `updated_at`, the UPDATE carries `.eq('updated_at', <that value>).select('id')`, and a 0-row
 result means someone wrote in between → **re-read and re-apply once**, then give up with a
 `console.warn` rather than loop. The token is reliable because a BEFORE UPDATE trigger stamps
-`updated_at = NOW()` on every write to this table (`create_workflow_batches.sql:98-109`) — I verified
+`updated_at = NOW()` on every write to this table (`007_create_workflow_batches.sql:98-109`) — I verified
 the trigger exists rather than assuming it. Return type widened `void` → `boolean`; all four Library
 call sites ignore it, so nothing broke. **On the normal path (no concurrent writer) the guard matches
 first try and behaviour is unchanged**, one extra column in the SELECT aside. +7 tests.

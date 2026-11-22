@@ -13,7 +13,7 @@ runbook for it.
 
 | File | What it is | Run it? |
 |---|---|---|
-| `supabase/migrations/tenant_scoped_uniqueness.sql` | A real migration: category names and preset category_names become unique **per workspace** instead of across the whole database. | Yes, first. Every environment needs it — it fixes a bug that empties every new tenant's Step 2. |
+| `supabase/migrations/061_tenant_scoped_uniqueness.sql` | A real migration: category names and preset category_names become unique **per workspace** instead of across the whole database. | Yes, first. Every environment needs it — it fixes a bug that empties every new tenant's Step 2. |
 | `supabase/oneoff/split_cd_vintage.sql` | The one-off: creates C&D Vintage, moves CJ's account and his work into it, copies the shared vocabulary across, re-points the rows that follow the account. | Yes, second, after reading its PREVIEW. It refuses to run until the migration has. |
 
 No client code changed for the split itself. One line in `App.tsx` was changed in the
@@ -29,13 +29,13 @@ The plan was simple: copy the Founding Workspace's categories and presets into t
 workspace so it opens "preseeded". Writing the copy surfaced this:
 
 ```
-supabase/migrations/convert_to_shared_collaborative_FIXED.sql:99
+supabase/migrations/014_convert_to_shared_collaborative_FIXED.sql:99
   ALTER TABLE public.categories ADD CONSTRAINT categories_name_key UNIQUE (name);
-supabase/migrations/category_presets.sql:10
+supabase/migrations/003_category_presets.sql:10
   category_name TEXT NOT NULL UNIQUE,
 ```
 
-Both constraints date from the single-workspace era, and `multi_org_tenancy.sql` added
+Both constraints date from the single-workspace era, and `031_multi_org_tenancy.sql` added
 `org_id` and per-workspace RLS to both tables without touching them. So the **namespace is
 still global**: because the Founding Workspace holds a category named `tees`, no other
 workspace can. That is not only a problem for this copy —
@@ -51,7 +51,7 @@ Verified on the throwaway cluster with the old constraints installed: a second w
 inserting `tees` fails with `duplicate key value violates unique constraint
 "categories_name_key"`.
 
-### The fix — `tenant_scoped_uniqueness.sql`
+### The fix — `061_tenant_scoped_uniqueness.sql`
 
 Drops the global constraints (looked up by **shape** — a unique index on exactly that one
 column — not by name, since the older files were run by hand) and creates four partial
@@ -77,7 +77,7 @@ Step 1.2 of the one-off inspects `pg_index` for a non-partial unique index on ex
 
 ```
 Refusing: category names are still unique across the WHOLE database.
-Run supabase/migrations/tenant_scoped_uniqueness.sql first, then re-run this script.
+Run supabase/migrations/061_tenant_scoped_uniqueness.sql first, then re-run this script.
 ```
 
 — before it has created or moved anything. Verified: under the old constraint the org
@@ -131,9 +131,9 @@ count is unchanged after the refusal.
    second pass.
 
 Every optional table is read through `to_regclass()`, so the script runs identically
-whether or not `brand_aliases.sql`, `listing_labels.sql`, `crm.sql`,
-`support_messaging.sql`, `marketplaces.sql`, `org_shopify_connections.sql`,
-`org_description_settings.sql` or `founding_user_admin.sql` have been applied.
+whether or not `052_brand_aliases.sql`, `053_listing_labels.sql`, `044_crm.sql`,
+`045_support_messaging.sql`, `059_marketplaces.sql`, `035_org_shopify_connections.sql`,
+`037_org_description_settings.sql` or `039_founding_user_admin.sql` have been applied.
 
 **Why a script and not the Founder console.** AGENTS.md §18 #16: the app's "move user"
 moves MEMBERSHIPS and never data, because a workspace's batches belong to the workspace,
@@ -147,7 +147,7 @@ and a rollback that puts every row back.
 ## 3. Runbook
 
 1. **Deploy** the client (the App.tsx Vendor-fallback change is in the onboarding pass).
-2. In the SQL Editor, as `postgres`: run **`tenant_scoped_uniqueness.sql`**. Expect two
+2. In the SQL Editor, as `postgres`: run **`061_tenant_scoped_uniqueness.sql`**. Expect two
    `dropped global unique constraint …` notices (or none, if a previous run already did
    it). Run its VERIFY (a).
 3. Open `split_cd_vintage.sql`. Run **section 0** on its own and read the three result
@@ -169,7 +169,7 @@ and a rollback that puts every row back.
    Founding Workspace is a demo now.
 8. Storage needs nothing. The bucket is public and paths are keyed by user id; CJ's files
    stay under his prefix, which is now read from the new workspace. If
-   `security_storage_policies.sql` is ever run, it scopes writes by ORG membership and CJ
+   `049_security_storage_policies.sql` is ever run, it scopes writes by ORG membership and CJ
    is a member of the workspace his files belong to.
 
 **To undo:** the ROLLBACK block at the bottom of the one-off (uncomment, set
@@ -260,7 +260,7 @@ Then, in order:
   and as a standalone unique INDEX — the first version of the guard compared
   `indkey::int2[]` to an array literal, which is always false because `int2vector` is
   zero-based, and only failed later at the copy; the guard and the migration's fallback
-  loop now test by subscript); `tenant_scoped_uniqueness.sql` then drops both shapes and
+  loop now test by subscript); `061_tenant_scoped_uniqueness.sql` then drops both shapes and
   creates the four indexes; a second workspace can hold `tees` while the same
   workspace still cannot hold it twice (`categories_org_name_uidx`); the migration
   re-applies as a no-op; its rollback with two workspaces sharing names prints the two

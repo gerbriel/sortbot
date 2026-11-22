@@ -9,13 +9,13 @@ separate pass; the slot it mounts into is left empty in the Step 3 card.*
 
 | Plan step | Built here | Migration |
 |---|---|---|
-| 1 Data capture | `pricing_events`, `listing_identifications`, `listing_prices`, `listing_sales`, `price_comps_cache` + `lib/researchService.ts` | `pricing_research.sql` |
+| 1 Data capture | `pricing_events`, `listing_identifications`, `listing_prices`, `listing_sales`, `price_comps_cache` + `lib/researchService.ts` | `064_pricing_research.sql` |
 | 2 Identification | `lib/identification.ts` — era, condition, flaws, rarity, each with evidence and a confidence | — |
 | 4 Comps + price | `lib/pricing.ts` over the workspace's OWN sold history (`fetchOwnComps`) | — |
 | 5 Review queue | `ResearchCard` in Step 3, the split in Step 4, a `warning` in every marketplace column | — |
 | 6 (manual half) | **Mark as sold** in Products | — |
 
-**`supabase/migrations/pricing_research.sql` is WRITTEN AND NOT RUN.** Until it
+**`supabase/migrations/064_pricing_research.sql` is WRITTEN AND NOT RUN.** Until it
 is, `researchAvailable()` is false, the Step 3 card renders nothing, the Step 4
 split renders nothing, no marketplace column gains a warning and the Sold card
 is absent. Steps 1–4 behave exactly as they do today.
@@ -28,7 +28,7 @@ lazy chunk on the way — see §3.
 
 ## 2. The five tables, and the decisions inside them
 
-Ordinary org-scoped data, the `listing_labels.sql` / `brand_aliases.sql` shape:
+Ordinary org-scoped data, the `053_listing_labels.sql` / `052_brand_aliases.sql` shape:
 `org_id default default_org_id()` so the client never sends it, membership RLS
 on all four verbs, **no admin gate**. The person who corrects a price or marks a
 piece sold is whoever is listing that day; a feedback loop only an admin can
@@ -70,7 +70,7 @@ Three more that are load-bearing:
 ### Verification — 33 scenarios on a throwaway Postgres 14
 
 Applied in order: a stub `auth` schema + the five base tables →
-`multi_org_tenancy.sql` → a two-workspace fixture → `pricing_research.sql`.
+`031_multi_org_tenancy.sql` → a two-workspace fixture → `064_pricing_research.sql`.
 **Nothing was run against Supabase.**
 
 | # | Scenario | Result |

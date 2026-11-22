@@ -81,7 +81,7 @@ describe('ensureOrganization — in-flight dedupe is keyed by user', () => {
 
 /**
  * seedWorkspaceIfEmpty — the repair that makes a founder-created workspace
- * usable. founder_console.sql creates the organizations row before its owner
+ * usable. 060_founder_console.sql creates the organizations row before its owner
  * has ever signed in, so that workspace has no categories: Step 2 would open
  * with nothing to drag onto. The seed therefore runs on every branch of
  * ensureOrganization that RESOLVES a workspace, not only on the one that

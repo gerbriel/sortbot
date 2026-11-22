@@ -202,7 +202,7 @@ async def _backend_handler(_: Request, exc: BackendUnavailable) -> JSONResponse:
 async def _embed_store_handler(_: Request, exc: EmbedStoreError) -> JSONResponse:
     """503, and the reason stays in the log.
 
-    The overwhelmingly likely cause is that listing_embeddings.sql has not been
+    The overwhelmingly likely cause is that 065_listing_embeddings.sql has not been
     run, and the CLIENT already detects that for itself with a column probe
     (embeddingsService.embeddingsAvailable) — so it can say which file to run
     without this endpoint echoing a server's words at a reseller. Same rule as

@@ -3,7 +3,7 @@
 Sept 2026. The APP side of automated background removal: the preset, the job
 submission, what Step 2 shows, how a person reviews a flagged mask without
 reviewing every photo, and what the export does about it. The service itself
-(`services/matting/`, its `CONTRACT.md`, the migration `image_backgrounds.sql`)
+(`services/matting/`, its `CONTRACT.md`, the migration `063_image_backgrounds.sql`)
 was built in parallel and is written up separately; this pass owns everything in
 `src/` plus the CSP and the docs.
 
@@ -66,7 +66,7 @@ Three things it does that are easy to get wrong and are tested exhaustively:
 ## 3. The preset, and the hash both sides compute
 
 `BackgroundPreset` lives in `description_settings.background` — the JSONB
-`org_description_settings.sql` already added, so **no migration**, for the same
+`037_org_description_settings.sql` already added, so **no migration**, for the same
 reasons `platformPricing` lives there: per-workspace presentation policy, edited
 on the same Settings tab. And like `platformPricing` it is normalised on every
 read, because it is free-form JSON driving an unattended image pipeline: a junk
@@ -259,7 +259,7 @@ form control at 16px.
 ## 9. Owed / not done
 
 - **Nothing has been seen signed in, and nothing has been run against real
-  rows.** `image_backgrounds.sql` is not run, the service is not deployed and
+  rows.** `063_image_backgrounds.sql` is not run, the service is not deployed and
   `VITE_MATTING_URL` is unset, so what ships today is the feature hiding itself.
   The first real run is the test: process one small batch, check the composites
   in Step 2, confirm the gate blocks and then releases.

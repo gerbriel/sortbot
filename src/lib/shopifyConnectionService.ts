@@ -5,7 +5,7 @@ import { log } from './debugLogger';
  * shopifyConnectionService — per-org Shopify Admin API credentials.
  *
  * SECURITY: the admin token is WRITE-ONLY from the client. The DB grants
- * (org_shopify_connections.sql) give `authenticated` INSERT on admin_token but
+ * (035_org_shopify_connections.sql) give `authenticated` INSERT on admin_token but
  * no SELECT on that column, so nothing here (and nothing anywhere in the
  * browser) can ever read a token back. Reads happen only in the shopify-titles
  * Edge Function via the service role. Never add admin_token to a select list —

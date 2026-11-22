@@ -4,7 +4,7 @@ import { log } from './debugLogger';
 /**
  * vocabService — founder-curated global vocabulary.
  *
- * Two tables (vocab_tables.sql): descriptor_chips (Step 3 quick-keyword chips)
+ * Two tables (036_vocab_tables.sql): descriptor_chips (Step 3 quick-keyword chips)
  * and brand_keywords (words merged into generated tags when the item's brand
  * matches). READ is open to every signed-in user in every workspace; WRITE is
  * Founding Workspace owners/admins only (RLS via is_beta_admin()).
@@ -264,7 +264,7 @@ export async function createModel(input: ModelInput): Promise<{ ok: boolean; err
   });
   if (error) {
     if (error.code === '23505') return { ok: false, error: `"${input.brand} ${input.model_name}" already exists — edit that row instead.` };
-    if (error.code === '42P01') return { ok: false, error: 'The models migration (vocab_models.sql) has not been run yet.' };
+    if (error.code === '42P01') return { ok: false, error: 'The models migration (038_vocab_models.sql) has not been run yet.' };
     return { ok: false, error: error.message };
   }
   return { ok: true };

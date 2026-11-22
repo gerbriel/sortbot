@@ -20,7 +20,7 @@
  * localhost (set localStorage `sortbot_analytics_force=1` to override while
  * testing) so dev crashes never pollute production numbers.
  *
- * FORWARD-COMPATIBLE: if app_errors.sql has not been run, the first failed
+ * FORWARD-COMPATIBLE: if 046_app_errors.sql has not been run, the first failed
  * insert marks the reporter unavailable and every later call is a no-op. A rate
  * limit rejection does NOT latch it off — only a missing table does.
  *
@@ -36,7 +36,7 @@ import { supabase } from './supabase';
 import { getSessionId, FORCE_KEY } from './analytics';
 import { log } from './debugLogger';
 
-/** Where the report came from. Mirrors the `source` CHECK in app_errors.sql. */
+/** Where the report came from. Mirrors the `source` CHECK in 046_app_errors.sql. */
 export type ErrorSource = 'window' | 'unhandledrejection' | 'boundary' | 'manual';
 
 /** Coarse browser families. Mirrors the `user_agent_class` CHECK. */

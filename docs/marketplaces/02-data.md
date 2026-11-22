@@ -6,7 +6,7 @@ dashboard's **Marketplaces** tab. It is the "where do you sell / what do they ca
 things / where has this listing been" half of `00-plan.md` §2b, §2c and §4. The
 adapters (`src/lib/marketplaces/*`) and Step 4 are a separate pass and consume this.
 
-**No SQL was run against Supabase.** `supabase/migrations/marketplaces.sql` is written,
+**No SQL was run against Supabase.** `supabase/migrations/059_marketplaces.sql` is written,
 verified on a throwaway Postgres 14, and not applied — the standing order (§16).
 
 ---
@@ -15,7 +15,7 @@ verified on a throwaway Postgres 14, and not applied — the standing order (§1
 
 | File | What |
 |---|---|
-| `supabase/migrations/marketplaces.sql` | **NEW, NOT RUN.** `org_marketplaces`, `marketplace_vocab`, `workflow_batches.target_marketplaces`, `listing_publications`. Additive, idempotent, rollback at the bottom. |
+| `supabase/migrations/059_marketplaces.sql` | **NEW, NOT RUN.** `org_marketplaces`, `marketplace_vocab`, `workflow_batches.target_marketplaces`, `listing_publications`. Additive, idempotent, rollback at the bottom. |
 | `src/lib/supabase.ts` | Database types for the three new tables. |
 | `src/lib/marketplaceService.ts` | All four reads/writes + the pure helpers. **NEW.** |
 | `src/lib/marketplaceService.test.ts` | 58 tests. **NEW.** |
@@ -41,7 +41,7 @@ admin of Shop A cannot write a row for Shop B).
 
 **Admin-gated deliberately.** Turning a marketplace on changes what every member is asked
 to publish to and commits the shop to a place it will be judged on. That is a workspace
-decision. Contrast `marketplace_vocab` below and `listing_labels.sql`, which are
+decision. Contrast `marketplace_vocab` below and `053_listing_labels.sql`, which are
 member-written for the opposite reason.
 
 **The PK columns are in the UPDATE grant**, unlike every other table in this schema. Only
@@ -71,12 +71,12 @@ published lists); a set `org_id` is that workspace's **override**, and the overr
 One table rather than two because every read wants both and the resolver has to merge them
 anyway; the scope is one nullable column and one line in each policy.
 
-**Member-written for workspace rows, with no admin gate**, copying `brand_aliases.sql`
+**Member-written for workspace rows, with no admin gate**, copying `052_brand_aliases.sql`
 verbatim in reasoning: this is one shop's record of how the labels it actually sells are
 spelled on the marketplaces it actually uses, and the person who will hit "remember this
 mapping" in Step 3 is whoever is dictating, not whoever happens to be an admin. A
 vocabulary only admins can extend is not a vocabulary the shop can keep current.
-**Founder-written for global rows** (`is_beta_admin()`), copying `vocab_tables.sql`: those
+**Founder-written for global rows** (`is_beta_admin()`), copying `036_vocab_tables.sql`: those
 are read by every tenant.
 
 **Authorship is pinned and immutable.** "Any member can edit any row" must not become "any
@@ -94,7 +94,7 @@ because NULL is not equal to NULL. `gen_random_uuid()` cannot produce the all-ze
 it can never collide with a real workspace.
 
 **The `canonical_is_trimmed` CHECK** is what makes that index trustworthy, and it is the
-`brand_aliases.sql` argument again: `btrim/1` strips U+0020 only, while JavaScript's
+`052_brand_aliases.sql` argument again: `btrim/1` strips U+0020 only, while JavaScript's
 `.trim()` strips the whole Unicode White_Space set. A row stored as `E'\tRed'` would satisfy
 a `btrim/1`-based constraint, take its own index slot, and never be found by the client —
 so "re-point this mapping" would find nothing, insert, trip 23505, and report success having
@@ -135,14 +135,14 @@ Three functions, all placed by the standing rules:
 
 | Function | Where | EXECUTE |
 |---|---|---|
-| `public.my_email()` | `public`, SECURITY **INVOKER** | `authenticated` — re-created byte for byte from `brand_aliases.sql` / `kanban_board.sql` so this file applies on its own. Not one of the eight `app_private`-wrapped helpers, so re-creating it plants nothing (§18 #43). |
+| `public.my_email()` | `public`, SECURITY **INVOKER** | `authenticated` — re-created byte for byte from `052_brand_aliases.sql` / `040_kanban_board.sql` so this file applies on its own. Not one of the eight `app_private`-wrapped helpers, so re-creating it plants nothing (§18 #43). |
 | `public.marketplace_vocab_trim(text)` | `public`, SECURITY **INVOKER**, `immutable strict`, `search_path` pinned | `authenticated` — a CHECK constraint runs as the invoking role. |
 | `public.marketplace_touch_updated_at()` | `public`, trigger, `search_path` pinned | **revoked from PUBLIC, anon and authenticated** — a trigger fires without the invoking role's EXECUTE (§18 #44). |
 
 Every policy helper call is written `(select public.…())` so it evaluates once per
 statement as an InitPlan (§18 #47). No SECURITY DEFINER function is added, so
-`security_function_hardening.sql` / `security_rpc_wrappers.sql` need no re-run for this
-file — but note the standing rule that replaying `multi_org_tenancy.sql` does.
+`054_security_function_hardening.sql` / `055_security_rpc_wrappers.sql` need no re-run for this
+file — but note the standing rule that replaying `031_multi_org_tenancy.sql` does.
 
 ---
 
@@ -193,7 +193,7 @@ Workspace dashboard → **Marketplaces**, visible to every member.
   `canonical → marketplace value`) with add, inline edit and the two-step `org-confirm-yes/no`
   delete, filterable by marketplace. Founding admins additionally see the GLOBAL rows with the
   same editor and an "all workspaces" badge, and get a checkbox to write one.
-- **Pre-migration** the whole tab is the standing `ft-setup` hint naming `marketplaces.sql`.
+- **Pre-migration** the whole tab is the standing `ft-setup` hint naming `059_marketplaces.sql`.
 
 Reuses OrgPanel's existing `.plat-*`, `.org-tab`, `.org-icon-btn`, `.org-confirm-*`,
 `.ft-setup` and `.shopify-conn-help` classes; the new `.mkt-*` rules are only what the
@@ -209,8 +209,8 @@ not already read.
 
 ## 5. Verification — throwaway PostgreSQL 14.21, port 55491
 
-Applied in order: stub `auth`/`storage` schema → `multi_org_tenancy.sql` →
-`beta_signups.sql` → `org_description_settings.sql` → `marketplaces.sql`. Two gaps the
+Applied in order: stub `auth`/`storage` schema → `031_multi_org_tenancy.sql` →
+`032_beta_signups.sql` → `037_org_description_settings.sql` → `059_marketplaces.sql`. Two gaps the
 stub has that real Supabase does not were filled by hand (table grants to `authenticated`
 on the five data tables, and `enable row level security` on `workflow_batches`) — both are
 stub artifacts, not migration behaviour.
@@ -264,7 +264,7 @@ signed-in user via `set local role authenticated` plus `request.jwt.claims`.
 ### Not verified
 
 - **Nothing was run against Supabase.** The real database has policies this stub does not
-  (the dashboard's permissive `storage.objects` policy, `perf_rls_initplan.sql`'s rewrites),
+  (the dashboard's permissive `storage.objects` policy, `056_perf_rls_initplan.sql`'s rewrites),
   and `workflow_batches` RLS was enabled by hand here.
 - **The tab has not been seen in a signed-in browser** — same standing gap as the mobile pass
   (§14 #26). It was type-checked and built; the layout was written against OrgPanel's existing
@@ -313,6 +313,6 @@ skipping identity rows because the adapter already matches the list itself; and 
 loose condition phrasings the normaliser does not read (`beat up`, `barely worn`, `sealed`,
 `well loved`…) mapped through each adapter's condition map. Brands are deliberately not seeded.
 
-Verified on a throwaway Postgres 14: applied after `marketplaces.sql` with no errors, applied a second
+Verified on a throwaway Postgres 14: applied after `059_marketplaces.sql` with no errors, applied a second
 time as a no-op (`on conflict` against the expression index resolves), 859 rows both times.
 

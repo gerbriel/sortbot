@@ -148,7 +148,7 @@ Each workspace connects its own store from **Workspace → Settings → Shopify*
 supabase functions deploy shopify-titles
 ```
 
-The Shopify section of the workspace panel only appears once `supabase/migrations/org_shopify_connections.sql` has been applied (it depends on `multi_org_tenancy.sql`); until then the UI hides itself and the global fallback below is the only path.
+The Shopify section of the workspace panel only appears once `supabase/migrations/035_org_shopify_connections.sql` has been applied (it depends on `031_multi_org_tenancy.sql`); until then the UI hides itself and the global fallback below is the only path.
 
 A global fallback store (used only by the founding workspace / pre-tenancy legacy mode) can be set with Supabase secrets:
 
@@ -169,17 +169,17 @@ Then enable it per workspace in **Workspace → Settings**. It is **off by defau
 
 ### Founder tools — analytics, CRM, messaging (first-party)
 
-Arcadian has its own analytics, CRM, support messaging and finance. They are **features of this app, stored in this project's own Supabase tables** — no third-party service, no external API, no payment processor, no keys to configure. Each one is a migration in `supabase/migrations/` (run in the SQL Editor after `multi_org_tenancy.sql` + `beta_signups.sql`); the UI hides itself until its tables exist, so the code can ship first.
+Arcadian has its own analytics, CRM, support messaging and finance. They are **features of this app, stored in this project's own Supabase tables** — no third-party service, no external API, no payment processor, no keys to configure. Each one is a migration in `supabase/migrations/` (run in the SQL Editor after `031_multi_org_tenancy.sql` + `032_beta_signups.sql`); the UI hides itself until its tables exist, so the code can ship first.
 
 | Feature | Migration | Who sees it |
 |---|---|---|
-| **Analytics** — cookieless pageviews + funnel events (Beta Signup → Account Created → Batch Created → CSV Exported), daily chart, referrers, devices | `analytics_events.sql` | Tracking runs for every visitor (Do Not Track honored, localhost skipped). Dashboard: Founding admins, header **Analytics** button |
-| **CRM** — one contact per email with stage (lead → approved → active → churned / lost), tags, next follow-up, notes. Beta requests and accounts (with their workspace) become contacts automatically via `crm_sync_contacts()` | `crm.sql` | Founding admins, header **CRM** button |
-| **Messaging** — two ways into the same conversations: the floating **Messages** button, and a full **Messages** page from the header (the **Inbox** for founders) with search, an unread badge, keyboard navigation and Enter-to-send. Live via Supabase Realtime with a polling fallback — one connection shared by both views and the badge | `support_messaging.sql` | Every signed-in user (waitlisted users get the floating button); the Inbox for Founding admins |
-| **Finance** — the founder's books: an income/expense ledger with recurring entries, monthly profit-and-loss over any range, per-workspace revenue, projected monthly recurring revenue at list price and after the founding discount, two CSV exports and a printable statement | `finance.sql` | Founding admins, header **Finance** button |
-| **Errors** — one row per uncaught error, rejected promise, or caught render error, grouped into issues by a fingerprint that survives a redeploy. KPI tiles, a top-issues table (with the full message for copy/paste), plus daily and by-screen breakdowns | `app_errors.sql` | Reporting runs for every visitor (localhost skipped). Dashboard: Founding admins, header **Analytics** button → Errors tab |
+| **Analytics** — cookieless pageviews + funnel events (Beta Signup → Account Created → Batch Created → CSV Exported), daily chart, referrers, devices | `043_analytics_events.sql` | Tracking runs for every visitor (Do Not Track honored, localhost skipped). Dashboard: Founding admins, header **Analytics** button |
+| **CRM** — one contact per email with stage (lead → approved → active → churned / lost), tags, next follow-up, notes. Beta requests and accounts (with their workspace) become contacts automatically via `crm_sync_contacts()` | `044_crm.sql` | Founding admins, header **CRM** button |
+| **Messaging** — two ways into the same conversations: the floating **Messages** button, and a full **Messages** page from the header (the **Inbox** for founders) with search, an unread badge, keyboard navigation and Enter-to-send. Live via Supabase Realtime with a polling fallback — one connection shared by both views and the badge | `045_support_messaging.sql` | Every signed-in user (waitlisted users get the floating button); the Inbox for Founding admins |
+| **Finance** — the founder's books: an income/expense ledger with recurring entries, monthly profit-and-loss over any range, per-workspace revenue, projected monthly recurring revenue at list price and after the founding discount, two CSV exports and a printable statement | `051_finance.sql` | Founding admins, header **Finance** button |
+| **Errors** — one row per uncaught error, rejected promise, or caught render error, grouped into issues by a fingerprint that survives a redeploy. KPI tiles, a top-issues table (with the full message for copy/paste), plus daily and by-screen breakdowns | `046_app_errors.sql` | Reporting runs for every visitor (localhost skipped). Dashboard: Founding admins, header **Analytics** button → Errors tab |
 
-**Not yet applied:** `analytics_events.sql`, `crm.sql`, `support_messaging.sql`, `app_errors.sql` and `finance.sql` are all written, additive, idempotent and carry their own rollback, but they must be run by hand in the Supabase SQL Editor. Until a tool's migration is run, that tool reports itself unavailable and shows a setup step instead of an error — Finance, for example, is safe to expose on the header before its tables exist. `finance.sql` seeds plan prices to match the pricing on the landing page (Starter $50, Basic $90, Growth $150, Pro $250, Business $350, Scale $700, Enterprise $1,200 per month) and a 30% founding discount, and seeds with `on conflict do nothing` so re-running it never overwrites a price you edited in the app.
+**Not yet applied:** `043_analytics_events.sql`, `044_crm.sql`, `045_support_messaging.sql`, `046_app_errors.sql` and `051_finance.sql` are all written, additive, idempotent and carry their own rollback, but they must be run by hand in the Supabase SQL Editor. Until a tool's migration is run, that tool reports itself unavailable and shows a setup step instead of an error — Finance, for example, is safe to expose on the header before its tables exist. `051_finance.sql` seeds plan prices to match the pricing on the landing page (Starter $50, Basic $90, Growth $150, Pro $250, Business $350, Scale $700, Enterprise $1,200 per month) and a 30% founding discount, and seeds with `on conflict do nothing` so re-running it never overwrites a price you edited in the app.
 
 Privacy: analytics rows carry a random per-tab session id, the referrer host, a coarse device class and — for signed-in users — their own user/workspace id. No cookies, no IP, no user agent. `select public.analytics_prune(365);` trims history.
 
@@ -203,11 +203,11 @@ Code can only go so far. These are in the repo and waiting on the owner, in this
 
 | Step | What | Notes |
 |---|---|---|
-| 1 | `supabase/migrations/security_invites_hardening.sql` | Closes an invited member's path to workspace **owner**. Needs `multi_org_tenancy.sql`; must run before step 2. |
-| 2 | `supabase/migrations/security_verified_email.sql` | Stops every email-matching RLS policy from trusting the unverified JWT email claim. Precondition: confirm `select count(*) from auth.users where email_confirmed_at is null;` returns 0 first, and turn **Confirm email** on in the dashboard. |
-| 3 | `supabase/migrations/security_abuse_limits.sql` | Size, format and rate limits on the three client-writable tables (analytics, beta signups, support messaging). All constraints are `NOT VALID`, so existing rows are untouched. |
-| 4 | `supabase/migrations/security_storage_policies.sql` | Org-scoped write/delete policies on `storage.objects`. **Inert until you drop the permissive policy that exists in the dashboard** — RLS policies are OR'ed. Run its inventory query first, then smoke-test upload, Step 3 crop, "Compress N Images", and deleting a teammate's batch. |
-| 5 | `supabase/migrations/app_errors.sql` | Turns on error reporting and the founder Errors panel. Independent of 1–4; needs `multi_org_tenancy.sql` + `beta_signups.sql`. |
+| 1 | `supabase/migrations/047_security_invites_hardening.sql` | Closes an invited member's path to workspace **owner**. Needs `031_multi_org_tenancy.sql`; must run before step 2. |
+| 2 | `supabase/migrations/048_security_verified_email.sql` | Stops every email-matching RLS policy from trusting the unverified JWT email claim. Precondition: confirm `select count(*) from auth.users where email_confirmed_at is null;` returns 0 first, and turn **Confirm email** on in the dashboard. |
+| 3 | `supabase/migrations/050_security_abuse_limits.sql` | Size, format and rate limits on the three client-writable tables (analytics, beta signups, support messaging). All constraints are `NOT VALID`, so existing rows are untouched. |
+| 4 | `supabase/migrations/049_security_storage_policies.sql` | Org-scoped write/delete policies on `storage.objects`. **Inert until you drop the permissive policy that exists in the dashboard** — RLS policies are OR'ed. Run its inventory query first, then smoke-test upload, Step 3 crop, "Compress N Images", and deleting a teammate's batch. |
+| 5 | `supabase/migrations/046_app_errors.sql` | Turns on error reporting and the founder Errors panel. Independent of 1–4; needs `031_multi_org_tenancy.sql` + `032_beta_signups.sql`. |
 | 6 | `deno check supabase/functions/*/index.ts` then `supabase functions deploy shopify-titles generate-prose` | **Then rotate `SHOPIFY_ADMIN_TOKEN` and `CF_API_TOKEN`** — assume both were reachable by anyone holding the public anon key. |
 
 Supabase dashboard settings no code can set: Authentication → Providers → Email → **Confirm email**, **Leaked password protection**, **minimum password length 10** (the dashboard value is authoritative); Authentication → **MFA (TOTP)**, especially for founding admins, whose access reaches every workspace's membership, the CRM and all support threads; Authentication → **Rate limits**; Database → **PITR / backups**, because the delete paths are irreversible.
@@ -218,7 +218,7 @@ Supabase dashboard settings no code can set: Authentication → Providers → Em
 
 Paths follow `{userId}/{productId}/{timestamp}-{random}.{ext}`, so URLs are unguessable in practice rather than by design. Treat uploaded photos as public data until private buckets + signed URLs land — every path→URL call in the app now goes through one helper (`src/lib/storageUrls.ts`), so that migration is a single function body rather than 23 call sites (tracked in [ANALYSIS.md](ANALYSIS.md) / AGENTS.md §16).
 
-`security_storage_policies.sql` (step 4 above) closes the **write** half of this — today any signed-in user of any workspace can overwrite or delete any other tenant's photos by path — and deliberately leaves SELECT public, because making it private is the separate signed-URL project. One mitigation already ships: signing out purges the Service Worker's image cache, so the next person on a shared machine cannot pull the previous workspace's photos out of it.
+`049_security_storage_policies.sql` (step 4 above) closes the **write** half of this — today any signed-in user of any workspace can overwrite or delete any other tenant's photos by path — and deliberately leaves SELECT public, because making it private is the separate signed-URL project. One mitigation already ships: signing out purges the Service Worker's image cache, so the next person on a shared machine cannot pull the previous workspace's photos out of it.
 
 ## Workflow
 
@@ -233,14 +233,14 @@ Paths follow `{userId}/{productId}/{timestamp}-{random}.{ext}`, so URLs are ungu
 
 The core workflow tables (`products`, `product_images`, `categories`, `category_presets`) are typed in `src/lib/supabase.ts`; the rest are typed in their own service modules (`workflowBatchService.ts`, `orgService.ts`, `shopifyConnectionService.ts`, `vocabService.ts`, `betaService.ts`). Schema and migration SQL live in `supabase/migrations/` (**read the warnings in AGENTS.md before running any of them** — several rewrite RLS policies).
 
-**Two workflow migrations are written but not yet applied** (both additive, idempotent, with rollback at the bottom, both verified against a throwaway Postgres 14, and both to be run after `multi_org_tenancy.sql`):
+**Two workflow migrations are written but not yet applied** (both additive, idempotent, with rollback at the bottom, both verified against a throwaway Postgres 14, and both to be run after `031_multi_org_tenancy.sql`):
 
 | Migration | What it turns on | Until it is run |
 |---|---|---|
-| `brand_aliases.sql` | Brand spelling memory in Step 3 | Every path reports itself unavailable and the brand-spelling surface hides; dictation behaves exactly as it does today. |
-| `listing_labels.sql` | Listing labels, SKUs and the Labels/Scan views | The labels picker renders nothing, the Labels view prints titles and prices without barcodes, and the scanner says what is missing. |
-| `security_function_hardening.sql` (run LAST, and again after any migration that recreates a helper) | Clears the Supabase linter's function warnings: policy helpers move to an unexposed `app_private` schema behind same-name wrappers, trigger functions lose client EXECUTE, RPCs lose `anon` | Nothing user-visible changes either way; the linter keeps warning. |
-| `security_rpc_wrappers.sql` (run after `security_function_hardening.sql`; re-run both, in that order, after replaying any migration that recreates a function) | Clears the last nine linter warnings: the client-called founder RPCs move to `app_private` behind identical same-name wrappers; the app's calls are unchanged | Nothing user-visible changes; the linter keeps reporting those nine. |
+| `052_brand_aliases.sql` | Brand spelling memory in Step 3 | Every path reports itself unavailable and the brand-spelling surface hides; dictation behaves exactly as it does today. |
+| `053_listing_labels.sql` | Listing labels, SKUs and the Labels/Scan views | The labels picker renders nothing, the Labels view prints titles and prices without barcodes, and the scanner says what is missing. |
+| `054_security_function_hardening.sql` (run LAST, and again after any migration that recreates a helper) | Clears the Supabase linter's function warnings: policy helpers move to an unexposed `app_private` schema behind same-name wrappers, trigger functions lose client EXECUTE, RPCs lose `anon` | Nothing user-visible changes either way; the linter keeps warning. |
+| `055_security_rpc_wrappers.sql` (run after `054_security_function_hardening.sql`; re-run both, in that order, after replaying any migration that recreates a function) | Clears the last nine linter warnings: the client-called founder RPCs move to `app_private` behind identical same-name wrappers; the app's calls are unchanged | Nothing user-visible changes; the linter keeps reporting those nine. |
 
 There is also **one one-off data repair** that is deliberately not a migration: a July 2026 build briefly wrote the shop's own name into `products.vendor`, which is the column that stores a garment's brand. The code no longer does this and heals what it sees, but the affected rows need a hand-run `update` — the SQL, with a preview query to read first, is in `docs/reviews/12-step3-fields-brands-sizes.md` ("Final stitch", section 5).
 

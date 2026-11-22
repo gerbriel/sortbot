@@ -3575,7 +3575,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 Shopify fields cannot hold, printed on the label and scanned back.
                 Every photo in the group gets the label, so it survives a regroup.
                 The component owns its own fetching, renders nothing until
-                listing_labels.sql has been run, and never touches processedItems
+                053_listing_labels.sql has been run, and never touches processedItems
                 — so it cannot interact with the store patches around it. */}
             <ListingLabelsPicker productIds={currentGroupIds} />
 
@@ -3583,7 +3583,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 the evidence behind it. Suggests; never applies. Every write goes
                 back through handleTableFieldChange, so this component is not a
                 second writer of the store (§8). Renders nothing until
-                pricing_research.sql has been run. */}
+                064_pricing_research.sql has been run. */}
             {currentItem && (
               <ResearchCard
                 productGroupId={researchGroupId}

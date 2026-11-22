@@ -150,7 +150,7 @@ describe('financeService — range presets', () => {
   });
 });
 
-describe('financeService — recurrence expansion (matches finance.sql)', () => {
+describe('financeService — recurrence expansion (matches 051_finance.sql)', () => {
   it('yields one date for a one-off, and nothing outside the range', () => {
     const t = txn({ occurred_on: '2026-02-14' });
     expect(expandOccurrences(t, { from: '2026-01-01', to: '2026-06-30' })).toEqual(['2026-02-14']);

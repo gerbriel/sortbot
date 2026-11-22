@@ -221,14 +221,14 @@ describe('FounderConsole', () => {
     expect(values).toEqual(['1', '1', '1', '1']);
   });
 
-  it('shows the setup line only when founder_console.sql is missing', async () => {
+  it('shows the setup line only when 060_founder_console.sql is missing', async () => {
     const clean = await render();
-    expect(clean.container.textContent).not.toContain('founder_console.sql');
+    expect(clean.container.textContent).not.toContain('060_founder_console.sql');
     cleanup();
 
     vi.mocked(fetchOrgDetail).mockResolvedValue({ status: 'unavailable' });
     const { container } = await render();
-    expect(one(container, '.fc-setup').textContent).toContain('founder_console.sql');
+    expect(one(container, '.fc-setup').textContent).toContain('060_founder_console.sql');
     // and the moved sections still work — this is not an error wall
     expect(tab(container, 'Requests')).toBeTruthy();
   });
@@ -352,15 +352,15 @@ describe('FounderConsole — plan dropdowns read the catalog', () => {
 });
 
 describe('FounderConsole — Plans tab', () => {
-  it('names plan_management.sql when the catalog is missing, and nothing else breaks', async () => {
+  it('names 062_plan_management.sql when the catalog is missing, and nothing else breaks', async () => {
     vi.mocked(fetchPlanDirectory).mockResolvedValue({ status: 'unavailable', error: 'x' });
     const { container } = await render();
     click(tab(container, 'Plans'));
     const hints = all(container, '.fc-setup').map(h => h.textContent ?? '').join(' ');
-    expect(hints).toContain('plan_management.sql');
-    // founder_console.sql is installed in this scenario; naming it would send
+    expect(hints).toContain('062_plan_management.sql');
+    // 060_founder_console.sql is installed in this scenario; naming it would send
     // the founder to a file they have already run.
-    expect(hints).not.toContain('founder_console.sql');
+    expect(hints).not.toContain('060_founder_console.sql');
     expect(tab(container, 'Requests')).toBeTruthy();
   });
 

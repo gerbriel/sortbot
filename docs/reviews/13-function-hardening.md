@@ -1,6 +1,6 @@
 # 13 — Function hardening (Supabase linter 0011 / 0028 / 0029)
 
-**Date:** 2026-09-14 · **Deliverable:** `supabase/migrations/security_function_hardening.sql` (one file, additive, idempotent, rollback included) · **No source file, AGENTS.md, README or CHANGELOG was touched. No SQL was run against Supabase.**
+**Date:** 2026-09-14 · **Deliverable:** `supabase/migrations/054_security_function_hardening.sql` (one file, additive, idempotent, rollback included) · **No source file, AGENTS.md, README or CHANGELOG was touched. No SQL was run against Supabase.**
 
 ---
 
@@ -118,7 +118,7 @@ Apply order used: stub → `multi_org_tenancy` → `beta_signups` → `analytics
 
 ### The rollback flaw the harness found
 
-The first rollback draft did `drop function public.is_beta_admin()` unconditionally and **failed** with `2BP01 … policy beta_select on table beta_signups depends on function is_beta_admin()` — because `beta_signups.sql` had been replayed in between, and the policies it recreated bound to the **wrapper**. The shipped block now catches `dependent_objects_still_exist` per helper, **never cascades**, names the dependent policies, and leaves that one helper hardened (a fully working state); the final `drop schema … restrict` refuses rather than destroying live policies. The clean-state rollback was then re-verified end to end.
+The first rollback draft did `drop function public.is_beta_admin()` unconditionally and **failed** with `2BP01 … policy beta_select on table beta_signups depends on function is_beta_admin()` — because `032_beta_signups.sql` had been replayed in between, and the policies it recreated bound to the **wrapper**. The shipped block now catches `dependent_objects_still_exist` per helper, **never cascades**, names the dependent policies, and leaves that one helper hardened (a fully working state); the final `drop schema … restrict` refuses rather than destroying live policies. The clean-state rollback was then re-verified end to end.
 
 ---
 
@@ -126,20 +126,20 @@ The first rollback draft did `drop function public.is_beta_admin()` unconditiona
 
 Every file below contains `create or replace function public.<Group-C-helper>`. Replaying one plants a fresh **SECURITY DEFINER copy in `public`** beside the `app_private` original.
 
-**Measured blast radius:** replaying `beta_signups.sql` produced `public.is_beta_admin() sd=t auth=t` — 0029 returns. **0028 did *not*** return, because `create or replace` **preserves the existing ACL** (it replaced the wrapper, keeping `anon ✗`). A migration that `DROP`s before creating would reset the ACL to PUBLIC and bring 0028 back too. Crucially, policies and defaults **kept pointing at the `app_private` OID** and the app kept working — *a linter regression, not an outage*.
+**Measured blast radius:** replaying `032_beta_signups.sql` produced `public.is_beta_admin() sd=t auth=t` — 0029 returns. **0028 did *not*** return, because `create or replace` **preserves the existing ACL** (it replaced the wrapper, keeping `anon ✗`). A migration that `DROP`s before creating would reset the ACL to PUBLIC and bring 0028 back too. Crucially, policies and defaults **kept pointing at the `app_private` OID** and the app kept working — *a linter regression, not an outage*.
 
-**Re-run `security_function_hardening.sql` after any of:**
+**Re-run `054_security_function_hardening.sql` after any of:**
 
 | Migration file | Group C helpers it recreates |
 |---|---|
-| `supabase/migrations/multi_org_tenancy.sql` | `user_org_ids`, `default_org_id`, `is_org_admin`, `org_has_members`, `invited_role` |
-| `supabase/migrations/beta_signups.sql` | `is_beta_admin` |
-| `supabase/migrations/security_verified_email.sql` | `auth_email_verified`, `invited_role` |
-| `supabase/migrations/security_storage_policies.sql` | `storage_prefix_writable` |
+| `supabase/migrations/031_multi_org_tenancy.sql` | `user_org_ids`, `default_org_id`, `is_org_admin`, `org_has_members`, `invited_role` |
+| `supabase/migrations/032_beta_signups.sql` | `is_beta_admin` |
+| `supabase/migrations/048_security_verified_email.sql` | `auth_email_verified`, `invited_role` |
+| `supabase/migrations/049_security_storage_policies.sql` | `storage_prefix_writable` |
 
 Replaying anything else (`analytics_events`, `app_errors`, `crm`, `support_messaging`, `security_abuse_limits`, `finance`, `beta_admin_directory`, `founding_user_admin`, `fix_linter_issues`, `export_library`) re-adds `grant execute … to authenticated` on its own Group A/B functions, so the same rule applies: **after replaying any migration, re-run this file.** It is idempotent and a no-op when nothing drifted.
 
-**Verified repair:** after the `beta_signups.sql` replay, one re-run of the hardening file turned the stray SD copy back into the invoker wrapper (`sd=f`) and returned the catalog hash to the canonical `281ddeb5…`.
+**Verified repair:** after the `032_beta_signups.sql` replay, one re-run of the hardening file turned the stray SD copy back into the invoker wrapper (`sd=f`) and returned the catalog hash to the canonical `281ddeb5…`.
 
 ---
 
@@ -147,12 +147,12 @@ Replaying anything else (`analytics_events`, `app_errors`, `crm`, `support_messa
 
 ```
 # in the Supabase SQL Editor, as postgres, AFTER a DB backup
-1. (already applied) multi_org_tenancy.sql, beta_signups.sql, beta_admin_directory.sql,
-   founding_user_admin.sql, analytics_events.sql, crm.sql, support_messaging.sql,
-   app_errors.sql, security_invites_hardening.sql, security_verified_email.sql,
-   security_abuse_limits.sql, security_storage_policies.sql, finance.sql,
-   brand_aliases.sql, listing_labels.sql
-2. security_function_hardening.sql          ← this file, last
+1. (already applied) 031_multi_org_tenancy.sql, 032_beta_signups.sql, 034_beta_admin_directory.sql,
+   039_founding_user_admin.sql, 043_analytics_events.sql, 044_crm.sql, 045_support_messaging.sql,
+   046_app_errors.sql, 047_security_invites_hardening.sql, 048_security_verified_email.sql,
+   050_security_abuse_limits.sql, 049_security_storage_policies.sql, 051_finance.sql,
+   052_brand_aliases.sql, 053_listing_labels.sql
+2. 054_security_function_hardening.sql          ← this file, last
 3. paste the two VERIFY queries at the bottom of the file
 4. re-run the Supabase database linter
 ```
@@ -166,7 +166,7 @@ Expected linter result: **0011 gone**, **0028 gone**, **0029 down to the nine Gr
 ### AGENTS.md §9 — under *Supabase*, after the **RLS** bullets
 
 ```markdown
-- **Function privileges (Sept 2026, `supabase/migrations/security_function_hardening.sql`):** `CREATE FUNCTION`
+- **Function privileges (Sept 2026, `supabase/migrations/054_security_function_hardening.sql`):** `CREATE FUNCTION`
   grants EXECUTE to PUBLIC, so every SECURITY DEFINER function was reachable by `anon` until this file. Three
   rules now hold, and new SQL must keep them. (1) **Policy / column-DEFAULT helpers live in `app_private`,
   not `public`** — `is_beta_admin`, `user_org_ids`, `default_org_id`, `is_org_admin`, `org_has_members`,
@@ -178,15 +178,15 @@ Expected linter result: **0011 gone**, **0028 gone**, **0029 down to the nine Gr
   keep `authenticated`** — `analytics_summary`, `app_errors_summary`, `beta_org_directory`, `crm_sync_contacts`,
   `finance_summary` and the four `founding_*`. Linter 0029 stays raised on those nine **by design**: they must
   sit in the exposed schema to be callable, and their real boundary is the `is_beta_admin()` check that raises
-  42501. **Re-running `multi_org_tenancy.sql`, `beta_signups.sql`, `security_verified_email.sql` or
-  `security_storage_policies.sql` plants a public SECURITY DEFINER copy beside the wrapper — re-run the
+  42501. **Re-running `031_multi_org_tenancy.sql`, `032_beta_signups.sql`, `048_security_verified_email.sql` or
+  `049_security_storage_policies.sql` plants a public SECURITY DEFINER copy beside the wrapper — re-run the
   hardening file afterwards.**
 ```
 
 ### AGENTS.md §16 — new row in the status table
 
 ```markdown
-| Function-privilege hardening (linter 0011/0028/0029) | **Written — migration not yet run** | `supabase/migrations/security_function_hardening.sql`: moves the 8 policy/default helpers into `app_private` behind same-name SECURITY INVOKER wrappers, revokes PUBLIC/anon from every SECURITY DEFINER function, revokes `authenticated` too from the 15 trigger/guard/maintenance ones, and pins `search_path` on `crm_touch_updated_at` + `finance_touch_updated_at`. Additive, idempotent, rollback at the bottom; verified on a throwaway PG 14 (rollback restores the exact pre-state). Ship code first — no client change is needed — then run the SQL. |
+| Function-privilege hardening (linter 0011/0028/0029) | **Written — migration not yet run** | `supabase/migrations/054_security_function_hardening.sql`: moves the 8 policy/default helpers into `app_private` behind same-name SECURITY INVOKER wrappers, revokes PUBLIC/anon from every SECURITY DEFINER function, revokes `authenticated` too from the 15 trigger/guard/maintenance ones, and pins `search_path` on `crm_touch_updated_at` + `finance_touch_updated_at`. Additive, idempotent, rollback at the bottom; verified on a throwaway PG 14 (rollback restores the exact pre-state). Ship code first — no client change is needed — then run the SQL. |
 ```
 
 ### AGENTS.md §18 — new "Do Not" entries
@@ -197,7 +197,7 @@ Expected linter result: **0011 gone**, **0028 gone**, **0029 down to the nine Gr
     `auth_email_verified` and `storage_prefix_writable` live in `app_private`; `public.<name>` is a
     SECURITY INVOKER wrapper. Redefining the public name replaces the wrapper with a SECURITY DEFINER
     copy and re-raises linter 0029. Edit the `app_private` function, or re-run
-    `security_function_hardening.sql` after whatever replanted it.
+    `054_security_function_hardening.sql` after whatever replanted it.
 
 19. **Do not "fix" a trigger function by granting EXECUTE back to `authenticated` or `anon`.** Triggers
     fire without it (verified). If a trigger appears not to run, the cause is the trigger definition or
@@ -207,7 +207,7 @@ Expected linter result: **0011 gone**, **0028 gone**, **0029 down to the nine Gr
     calls → `public`, `revoke from public, anon`, `grant to authenticated`, and gate the body on
     `is_beta_admin()`. Anything a policy, DEFAULT or another function calls → `app_private` + a `public`
     SECURITY INVOKER wrapper. Trigger or internal guard → `public`, EXECUTE revoked from all three client
-    roles. Always `set search_path`. Then add it to `security_function_hardening.sql`.
+    roles. Always `set search_path`. Then add it to `054_security_function_hardening.sql`.
 ```
 
 ### CHANGELOG bullet
@@ -215,7 +215,7 @@ Expected linter result: **0011 gone**, **0028 gone**, **0029 down to the nine Gr
 ```markdown
 - **Database function hardening (linter 0011 / 0028 / 0029)** — `CREATE FUNCTION` grants EXECUTE to PUBLIC,
   so all 27 SECURITY DEFINER functions were callable by the logged-out `anon` role. New migration
-  `supabase/migrations/security_function_hardening.sql`: the eight helpers that policies and `org_id` column
+  `supabase/migrations/054_security_function_hardening.sql`: the eight helpers that policies and `org_id` column
   DEFAULTs call move into a new unexposed `app_private` schema (with same-name SECURITY INVOKER wrappers in
   `public`, because function bodies re-resolve names at execution time while policies are bound by OID);
   the fifteen trigger functions, internal guards and maintenance routines lose EXECUTE from PUBLIC, `anon`
@@ -228,11 +228,11 @@ Expected linter result: **0011 gone**, **0028 gone**, **0029 down to the nine Gr
 
 ---
 
-## 7 — Follow-up: `security_rpc_wrappers.sql` (clearing the last nine 0029s)
+## 7 — Follow-up: `055_security_rpc_wrappers.sql` (clearing the last nine 0029s)
 
-**Production result of §1–§6:** the founder ran `security_function_hardening.sql`. The linter now reports **0011 gone, 0028 gone**, and 0029 on exactly the predicted set — `analytics_summary`, `beta_org_directory`, `crm_sync_contacts`, `finance_summary`, `founding_list_users`, `founding_move_user`, `founding_remove_membership`, `founding_set_membership`.
+**Production result of §1–§6:** the founder ran `054_security_function_hardening.sql`. The linter now reports **0011 gone, 0028 gone**, and 0029 on exactly the predicted set — `analytics_summary`, `beta_org_directory`, `crm_sync_contacts`, `finance_summary`, `founding_list_users`, `founding_move_user`, `founding_remove_membership`, `founding_set_membership`.
 
-> **`app_errors_summary` is absent from the linter output**, which means `supabase/migrations/app_errors.sql` was **never applied in production**. Nothing in the app breaks from that — `errorReporter.ts` treats a missing table/function as "reporting unavailable" and latches off — but the Errors view will stay empty until that migration is run. It is **still handled in both hardening files** (every statement is guarded by `to_regprocedure`, so it is a logged no-op today and correct the moment `app_errors.sql` is applied).
+> **`app_errors_summary` is absent from the linter output**, which means `supabase/migrations/046_app_errors.sql` was **never applied in production**. Nothing in the app breaks from that — `errorReporter.ts` treats a missing table/function as "reporting unavailable" and latches off — but the Errors view will stay empty until that migration is run. It is **still handled in both hardening files** (every statement is guarded by `to_regprocedure`, so it is a logged no-op today and correct the moment `046_app_errors.sql` is applied).
 
 ### 7.1 The decision
 
@@ -268,28 +268,28 @@ The §2 rationale for leaving 0029 raised was *"the function must stay in the ex
 | W3 anon | ✅ **0 of 18** reachable (9 wrappers + 9 `app_private` originals; the latter also fail at schema USAGE) |
 | W4 §1–§6 hardening not disturbed | ✅ tenant org RLS, `org_id` DEFAULT, SD support trigger all unchanged |
 | W5 founding lockout rail through the wrapper | ✅ `23514`, rolled back, count stays 1 |
-| Idempotency | ✅ runs 2 and 3 identical catalog hash (`6abc7466…`); **re-running `security_function_hardening.sql` on top is also a no-op** — its Group A list resolves to these wrappers and merely re-applies their grants |
-| Replay + repair | ✅ replaying `crm.sql` plants `public.crm_sync_contacts sd=t` (0029 returns; app keeps working). Notably it **also** regressed `crm_touch_updated_at`'s pinned `search_path` — so the rule is **re-run file 1, then file 2**; doing so restored the canonical hash exactly |
+| Idempotency | ✅ runs 2 and 3 identical catalog hash (`6abc7466…`); **re-running `054_security_function_hardening.sql` on top is also a no-op** — its Group A list resolves to these wrappers and merely re-applies their grants |
+| Replay + repair | ✅ replaying `044_crm.sql` plants `public.crm_sync_contacts sd=t` (0029 returns; app keeps working). Notably it **also** regressed `crm_touch_updated_at`'s pinned `search_path` — so the rule is **re-run file 1, then file 2**; doing so restored the canonical hash exactly |
 | **Layered rollback** | ✅ rollback #2 → **byte-identical diff** against the after-file-1 state; then rollback #1 → pristine **except** the two deliberately-retained `search_path` pins; `app_private` dropped |
 | Rollback **order** is enforced, not just documented | ✅ `drop schema app_private restrict` (the last line of file 1's rollback) **refuses** while the nine still live there: `cannot drop schema app_private because other objects depend on it` |
 | Final linter equivalents | ✅ 0028/0029 → **NONE**; 0011 → **NONE** |
 
-**A rollback bug the harness caught (second time lucky).** Rollback #2's first draft ended each move with `grant execute … to public`, restoring the *pristine* grant. Measured: that re-raised `anon ✓` on all nine while `security_function_hardening.sql` was still in force — a silent half-undo of the first file. It now restores the **file-1 privilege shape** (revoke PUBLIC/anon, grant `authenticated` + `service_role`) inline, and the diff against the after-file-1 dump is now empty.
+**A rollback bug the harness caught (second time lucky).** Rollback #2's first draft ended each move with `grant execute … to public`, restoring the *pristine* grant. Measured: that re-raised `anon ✓` on all nine while `054_security_function_hardening.sql` was still in force — a silent half-undo of the first file. It now restores the **file-1 privilege shape** (revoke PUBLIC/anon, grant `authenticated` + `service_role`) inline, and the diff against the after-file-1 dump is now empty.
 
 ### 7.3 Re-run after
 
 | Migration file | RPCs it replants |
 |---|---|
-| `analytics_events.sql` | `analytics_summary` |
-| `app_errors.sql` | `app_errors_summary` |
-| `beta_admin_directory.sql` | `beta_org_directory` |
-| `crm.sql` | `crm_sync_contacts` (**and** `crm_touch_updated_at`'s search_path) |
-| `finance.sql` | `finance_summary` (**and** `finance_touch_updated_at`'s search_path) |
-| `founding_user_admin.sql` | `founding_list_users`, `founding_set_membership`, `founding_remove_membership`, `founding_move_user` |
+| `043_analytics_events.sql` | `analytics_summary` |
+| `046_app_errors.sql` | `app_errors_summary` |
+| `034_beta_admin_directory.sql` | `beta_org_directory` |
+| `044_crm.sql` | `crm_sync_contacts` (**and** `crm_touch_updated_at`'s search_path) |
+| `051_finance.sql` | `finance_summary` (**and** `finance_touch_updated_at`'s search_path) |
+| `039_founding_user_admin.sql` | `founding_list_users`, `founding_set_membership`, `founding_remove_membership`, `founding_move_user` |
 
-General rule, unchanged and now measured: **after replaying any migration, run `security_function_hardening.sql` and then `security_rpc_wrappers.sql`.** Both are no-ops when nothing drifted.
+General rule, unchanged and now measured: **after replaying any migration, run `054_security_function_hardening.sql` and then `055_security_rpc_wrappers.sql`.** Both are no-ops when nothing drifted.
 
-**Run order:** `security_function_hardening.sql` → `security_rpc_wrappers.sql`. **Rollback order is the reverse**, and the database enforces it.
+**Run order:** `054_security_function_hardening.sql` → `055_security_rpc_wrappers.sql`. **Rollback order is the reverse**, and the database enforces it.
 
 ### 7.4 ⚠ The linter is now blind — §18 is the only remaining guard
 
@@ -300,7 +300,7 @@ After this file **no SECURITY DEFINER function anywhere in the exposed schema is
 **AGENTS.md §9 — replace the last sentence of the §6 block above ("…keep `authenticated` … 42501.") with:**
 
 ```markdown
-  (3) **The nine RPC-facing functions are split** (`security_rpc_wrappers.sql`): the SECURITY DEFINER body
+  (3) **The nine RPC-facing functions are split** (`055_security_rpc_wrappers.sql`): the SECURITY DEFINER body
   lives in `app_private` and a SECURITY INVOKER wrapper with an IDENTICAL signature stays in `public`, so
   `/rest/v1/rpc/<fn>` is unchanged and no client code moved. "Identical" is literal — PostgREST resolves by
   ARGUMENT NAME and renders from the RETURN TYPE, so the wrapper copies the arg names `src/` sends
@@ -308,14 +308,14 @@ After this file **no SECURITY DEFINER function anywhere in the exposed schema is
   `returns table (...)` column list in order, and the volatility. After this file **no SECURITY DEFINER
   function in `public` is executable by `anon` or `authenticated`** — 0028/0029 have nothing left to report,
   which also means THE LINTER WILL NOT CATCH THE NEXT ONE. §18 is the guard now. Re-run order after any
-  migration replay: `security_function_hardening.sql`, then `security_rpc_wrappers.sql`; rollback order is
+  migration replay: `054_security_function_hardening.sql`, then `055_security_rpc_wrappers.sql`; rollback order is
   the reverse (the first file's `drop schema app_private restrict` refuses otherwise).
 ```
 
 **AGENTS.md §16 — replace the row from §6 with:**
 
 ```markdown
-| Function-privilege hardening (linter 0011/0028/0029) | **Done — both migrations run** | `security_function_hardening.sql` (helpers → `app_private` behind invoker wrappers; EXECUTE revoked from PUBLIC/anon everywhere, and from `authenticated` too on the 15 trigger/guard/maintenance functions; `search_path` pinned on the two touch triggers) then `security_rpc_wrappers.sql` (the nine client RPCs split into an `app_private` definer body + an identical-signature `public` invoker wrapper). Linter: 0011, 0028 and 0029 all clear. No client code changed. `app_errors.sql` is **not applied in production** — its function is handled but inert. Both files are idempotent; re-run them in that order after replaying any migration. |
+| Function-privilege hardening (linter 0011/0028/0029) | **Done — both migrations run** | `054_security_function_hardening.sql` (helpers → `app_private` behind invoker wrappers; EXECUTE revoked from PUBLIC/anon everywhere, and from `authenticated` too on the 15 trigger/guard/maintenance functions; `search_path` pinned on the two touch triggers) then `055_security_rpc_wrappers.sql` (the nine client RPCs split into an `app_private` definer body + an identical-signature `public` invoker wrapper). Linter: 0011, 0028 and 0029 all clear. No client code changed. `046_app_errors.sql` is **not applied in production** — its function is handled but inert. Both files are idempotent; re-run them in that order after replaying any migration. |
 ```
 
 **AGENTS.md §18 — amend rule 18 and add rule 21:**
@@ -328,7 +328,7 @@ After this file **no SECURITY DEFINER function anywhere in the exposed schema is
     `founding_set_membership`, `founding_remove_membership`, `founding_move_user`) live in `app_private`;
     `public.<name>` is a SECURITY INVOKER wrapper. Redefining the public name replaces the wrapper with a
     SECURITY DEFINER copy and re-raises 0029. Edit the `app_private` function, or re-run
-    `security_function_hardening.sql` then `security_rpc_wrappers.sql`.
+    `054_security_function_hardening.sql` then `055_security_rpc_wrappers.sql`.
 
 21. **Do not change a wrapper's signature without changing its `app_private` twin identically.** PostgREST
     resolves RPCs by ARGUMENT NAME and renders the response from the RETURN TYPE, so renaming an argument,
@@ -340,8 +340,8 @@ After this file **no SECURITY DEFINER function anywhere in the exposed schema is
 **CHANGELOG bullet:**
 
 ```markdown
-- **The last nine database linter warnings cleared** — `supabase/migrations/security_rpc_wrappers.sql`
-  finishes what `security_function_hardening.sql` started. The nine functions the client calls through
+- **The last nine database linter warnings cleared** — `supabase/migrations/055_security_rpc_wrappers.sql`
+  finishes what `054_security_function_hardening.sql` started. The nine functions the client calls through
   `supabase.rpc(...)` kept warning 0029 because they had to stay in the exposed schema to be callable; that
   was true of the entry point, not of the definer rights. Each SECURITY DEFINER body now lives in the
   unexposed `app_private` schema behind a SECURITY INVOKER wrapper in `public` whose signature is identical
@@ -357,9 +357,9 @@ After this file **no SECURITY DEFINER function anywhere in the exposed schema is
 ## Summary
 
 - Two new migrations, no source/AGENTS.md/README/CHANGELOG edits, nothing committed, no SQL run against Supabase.
-- `security_function_hardening.sql` (§1–§6) shipped and is **live**: linter 0011 and 0028 gone, 0029 down to the nine client RPCs, exactly as predicted.
-- `security_rpc_wrappers.sql` (§7) clears those nine by splitting each into an `app_private` SECURITY DEFINER body + an identical-signature `public` SECURITY INVOKER wrapper — same arg names, DEFAULTs, `returns table` column order and volatility, so PostgREST and `src/` are untouched.
+- `054_security_function_hardening.sql` (§1–§6) shipped and is **live**: linter 0011 and 0028 gone, 0029 down to the nine client RPCs, exactly as predicted.
+- `055_security_rpc_wrappers.sql` (§7) clears those nine by splitting each into an `app_private` SECURITY DEFINER body + an identical-signature `public` SECURITY INVOKER wrapper — same arg names, DEFAULTs, `returns table` column order and volatility, so PostgREST and `src/` are untouched.
 - Verified on a throwaway PG 14 and destroyed: identical RPC result hash before/after, founder access intact, 42501 for non-founders, **0 of 18** anon-reachable, idempotent across three runs, layered rollback byte-identical.
 - Two rollback bugs were found *by* the harness and fixed: file 1 cascading over replay-bound policies, and file 2 restoring PUBLIC instead of the file-1 privilege shape.
-- `app_errors.sql` is **not applied in production** (its function is missing from the linter output) — handled but inert in both files; the Errors view stays empty until it is run.
+- `046_app_errors.sql` is **not applied in production** (its function is missing from the linter output) — handled but inert in both files; the Errors view stays empty until it is run.
 - After both files the linter can no longer see any SECURITY DEFINER function, so **AGENTS.md §18 is the only remaining guard** — paste-ready §9/§16/§18/CHANGELOG text is in §6 and §7.5.

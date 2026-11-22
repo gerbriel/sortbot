@@ -344,7 +344,7 @@ async def test_a_missing_listing_embeddings_table_is_503_not_500(wired):
     async with client:
         resp = await post_embed({"productImageIds": ["img-1"]})
     assert resp.status_code == 503
-    assert "listing_embeddings.sql" not in resp.text
+    assert "065_listing_embeddings.sql" not in resp.text
 
 
 # ── what it writes, and what it must not ────────────────────────────────────

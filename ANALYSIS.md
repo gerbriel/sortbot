@@ -38,8 +38,8 @@ AGENTS.md §15 is an unusually honest record of every race condition, RLS trap, 
 ## 3. Weaknesses (ranked by how hard they block the multi-org goal)
 
 ### 3.1 🔴 There is no tenancy boundary anywhere — the #1 blocker
-> **Update (July 2026): Phase 1 is code-complete.** `supabase/migrations/multi_org_tenancy.sql` + `orgService.ts` + `OrgPanel.tsx` implement org tables, org-scoped RLS, an additive backfill into a Founding Workspace, invites, and personal workspaces for new signups. The DB half activates when the migration is run in the SQL Editor (after a backup). Remaining from this section afterwards: private storage bucket (Phase 1b) and per-org Shopify secrets (Phase 2).
-- **Database:** `shared_workspace_rls.sql` + `collaborative_edit_policies.sql` mean every authenticated user can SELECT **and now INSERT/UPDATE** every row in `workflow_batches`, `products`, `product_images`. There is no `organizations` table, no roles, no membership concept.
+> **Update (July 2026): Phase 1 is code-complete.** `supabase/migrations/031_multi_org_tenancy.sql` + `orgService.ts` + `OrgPanel.tsx` implement org tables, org-scoped RLS, an additive backfill into a Founding Workspace, invites, and personal workspaces for new signups. The DB half activates when the migration is run in the SQL Editor (after a backup). Remaining from this section afterwards: private storage bucket (Phase 1b) and per-org Shopify secrets (Phase 2).
+- **Database:** `025_shared_workspace_rls.sql` + `030_collaborative_edit_policies.sql` mean every authenticated user can SELECT **and now INSERT/UPDATE** every row in `workflow_batches`, `products`, `product_images`. There is no `organizations` table, no roles, no membership concept.
 - **Auth:** open email/password signup against a public anon key. Anyone who finds the URL can create an account and immediately see and edit all existing inventory data. For a single trusted team this was a deliberate convenience; for a commercial product it is an outright data breach waiting for the second customer.
 - **Storage:** one public bucket, paths keyed by `userId` (not org), every image world-readable to anyone holding a URL.
 - **Shopify:** a single global `SHOPIFY_STORE`/`SHOPIFY_ADMIN_TOKEN` secret pair — one store for the whole deployment.
@@ -82,7 +82,7 @@ Ordered so that each phase de-risks the next. Rough sizing assumes current solo 
 3. **Repo/ops hygiene:** move root SQL into `supabase/migrations/`; adopt `supabase db push`/CLI migration tracking; add a staging Supabase project. (`consolelog.md` already removed.)
 4. **Hosting:** move to Vercel/Netlify/Cloudflare Pages with a custom domain. Kills the `/sortbot/` base-path complexity and unlocks preview deploys.
 
-### Phase 1 — Tenancy (the structural rewrite) — ✅ code-complete July 2026 (run `multi_org_tenancy.sql` to activate; storage privatization below is Phase 1b, still open)
+### Phase 1 — Tenancy (the structural rewrite) — ✅ code-complete July 2026 (run `031_multi_org_tenancy.sql` to activate; storage privatization below is Phase 1b, still open)
 1. **Schema:**
    ```sql
    organizations (id, name, slug, plan, created_at)
@@ -124,7 +124,7 @@ Ordered so that each phase de-risks the next. Rough sizing assumes current solo 
    - ImageGrouper → `useRubberBand`, `usePickMode`, `useGrouperShortcuts`, `GrouperSidebar.tsx`, `GroupCard.tsx`
    - Library → **`libraryData.ts` first** (the two-pass loadAll merge as a pure, unit-testable function — highest value), then per-tab components
 4. **Demote the JSONB scribbled note** (after step 2, ~2–3 weeks incl. soak):
-   a. ✅ **done July 2026** — `stage4_slim_fields.sql`: `captured_at` + `original_storage_path` on product_images, `description_edited` on products (`transforms` jsonb already existed for rotation/crop).
+   a. ✅ **done July 2026** — `033_stage4_slim_fields.sql`: `captured_at` + `original_storage_path` on product_images, `description_edited` on products (`transforms` jsonb already existed for rotation/crop).
    b. ✅ **done July 2026** — all three `product_images` write paths share `imageRowSync.buildProductImageRow` (transforms now written everywhere, not just Save Batch); `description_edited` flows through save + the PDG debounced update; everything feature-detected so the code shipped before the SQL ran. **Soak clock starts when the migration is run.**
    c. Flip restore priority: build items from products+product_images first, workflow_state as legacy fallback (today it's the reverse). Old batches stay readable forever via the fallback.
    d. Stop writing the blob; `workflow_batches` becomes metadata only. The gap-fill cap, ±24h orphan window, and stolen-row deletion — the scariest heuristics in the app — all become dead code, because there's no second copy left to reconcile.

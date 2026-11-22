@@ -223,7 +223,7 @@ describe('photo-background columns', () => {
       if (col === 'mask_flags') continue;
       expect(row[col]).toBeNull();
     }
-    // `mask_flags` is `not null default '{}'` in image_backgrounds.sql — writing
+    // `mask_flags` is `not null default '{}'` in 063_image_backgrounds.sql — writing
     // null there fails the whole insert, and this row builder feeds the
     // delete-then-reinsert that runs on every batch open.
     expect(row.mask_flags).toEqual([]);

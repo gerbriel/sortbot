@@ -19,7 +19,7 @@ import {
  * component decides, each of which is a judgement a rule cannot make:
  *
  *   1. IT PUTS ITSELF AWAY. No service, no migration, no workspace → no element.
- *      That is what lets this ship before `listing_embeddings.sql` is run, and it
+ *      That is what lets this ship before `065_listing_embeddings.sql` is run, and it
  *      has to hold even when the reads REJECT, because this sits inside Step 3
  *      and a throw there takes the dictation screen with it.
  *   2. AN EMPTY RESULT HAS TWO MEANINGS. "Never analysed" offers a button;
@@ -211,7 +211,7 @@ describe('what it sold for', () => {
     expect(one(container, '.sl-sold').textContent).toBe('sold $18.00 · 30 days ago');
   });
 
-  it('says "not sold yet" rather than nothing — which is every row before pricing_research.sql runs', async () => {
+  it('says "not sold yet" rather than nothing — which is every row before 064_pricing_research.sql runs', async () => {
     vi.mocked(findSimilar).mockResolvedValue({ status: 'ok', rows: [match()] });
     const { container } = await render();
     expect(one(container, '.sl-unsold').textContent).toBe('not sold yet');
@@ -420,12 +420,12 @@ describe('Find similar', () => {
 
   it('names the migration when the service says 503, and keeps the button', async () => {
     vi.mocked(ensureEmbeddings).mockResolvedValue({
-      ok: false, error: 'Run supabase/migrations/listing_embeddings.sql to turn this on.', status: 503,
+      ok: false, error: 'Run supabase/migrations/065_listing_embeddings.sql to turn this on.', status: 503,
     });
     const { container } = await render();
     click(buttonByText(container, 'Find similar'));
     await settle();
-    expect(one(container, '.sl-note--warn').textContent).toContain('listing_embeddings.sql');
+    expect(one(container, '.sl-note--warn').textContent).toContain('065_listing_embeddings.sql');
     expect(buttonByText(container, 'Find similar')).toBeTruthy();
   });
 

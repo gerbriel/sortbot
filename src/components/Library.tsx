@@ -666,7 +666,7 @@ const LibraryInner: React.FC<LibraryProps> = ({ userId, onOpenBatch, onBatchDele
     } else {
       setDeleteError(
         'Delete failed — the batch was NOT removed. Refresh and try again; if it keeps failing, ' +
-        'the database delete policy is blocking it (see collaborative_edit_policies.sql).'
+        'the database delete policy is blocking it (see 030_collaborative_edit_policies.sql).'
       );
     }
 
@@ -1589,7 +1589,7 @@ const LibraryInner: React.FC<LibraryProps> = ({ userId, onOpenBatch, onBatchDele
       setDeleteError(
         failedCount > 0
           ? `${failedCount} of ${items.length} batch${items.length !== 1 ? 'es' : ''} could NOT be deleted ` +
-            '(database delete policy blocked them — see collaborative_edit_policies.sql).'
+            '(database delete policy blocked them — see 030_collaborative_edit_policies.sql).'
           : null
       );
     } else if (viewMode === 'groups') {

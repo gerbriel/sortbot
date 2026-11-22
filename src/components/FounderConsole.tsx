@@ -42,13 +42,13 @@ import './FounderConsole.css';
    WHAT IS NEW HERE, rather than moved: creating a workspace before its owner
    has ever signed in, setting a workspace's plan, renaming one, inviting into
    one, and reading one workspace's roster. All five are RPCs in
-   supabase/migrations/founder_console.sql — a founding admin is not a member of
+   supabase/migrations/060_founder_console.sql — a founding admin is not a member of
    a tenant workspace, so organizations / org_invites RLS hides those rows
    entirely and no client-side query could ever do it.
 
    PRE-MIGRATION IT STILL WORKS. Requests, Workspaces and Users are the moved
    sections and behave exactly as they did in OrgPanel. Only the five new
-   capabilities need founder_console.sql, and their absence shows one setup line
+   capabilities need 060_founder_console.sql, and their absence shows one setup line
    naming the file — never an error wall.
 
    ONE SEQUENCING NOTE, because it looks like a bug and is not: approving a beta
@@ -62,7 +62,7 @@ import './FounderConsole.css';
 
 type ConsoleTab = 'overview' | 'requests' | 'workspaces' | 'onboard' | 'plans' | 'alumni' | 'users';
 type BetaFilter = 'pending' | 'approved' | 'denied' | 'all';
-/** 'unknown' until the first founder_console.sql RPC answers. Only
+/** 'unknown' until the first 060_founder_console.sql RPC answers. Only
  *  'unavailable' renders the setup line — 'error' and 'forbidden' are already
  *  reported as a notice by whatever call produced them. */
 type ConsoleStatus = 'unknown' | 'ok' | FounderFailure;
@@ -97,7 +97,7 @@ const fmtDollars = (cents: number) =>
   `$${(Math.round(cents) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /** Shown in the plan dropdowns ONLY when the catalog cannot be read — before
- *  plan_management.sql has been run. Never a filter on what the user may pick;
+ *  062_plan_management.sql has been run. Never a filter on what the user may pick;
  *  that was the bug (a tier added in Finance could never be assigned). */
 const FALLBACK_PLAN_OPTIONS: SelectOption[] = ORG_PLANS.map(p => ({ value: p, label: p }));
 
@@ -269,7 +269,7 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
     setLoading(false);
   };
 
-  /* Whether founder_console.sql has been run, answered with a REAL read rather
+  /* Whether 060_founder_console.sql has been run, answered with a REAL read rather
      than a guess — and the answer is kept as that workspace's detail, so
      expanding its row afterwards costs nothing. A database with no workspaces at
      all leaves the status 'unknown' and the Onboard tab simply tries; the RPC's
@@ -279,8 +279,8 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
     if (res.status === 'ok') setDetail(prev => ({ ...prev, [orgId]: res.detail }));
   };
 
-  /* The catalog read doubles as the probe for plan_management.sql — the same
-     trick applyProbe plays for founder_console.sql. Drafts are cleared on every
+  /* The catalog read doubles as the probe for 062_plan_management.sql — the same
+     trick applyProbe plays for 060_founder_console.sql. Drafts are cleared on every
      load: a draft keyed to a row the server has since changed is stale, and
      silently re-offering it as "unsaved" would write the old values back. */
   const applyPlans = (res: PlanDirectoryResult) => {
@@ -307,7 +307,7 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
      actual correctness point: a console unmounted mid-fetch must not write.
      It repeats `reload`'s four calls rather than calling it, so the effect has
      no changing dependency at all — and it does one thing `reload` does not,
-     which is probe whether founder_console.sql has been run. */
+     which is probe whether 060_founder_console.sql has been run. */
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -733,7 +733,7 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
   const setupHint = status === 'unavailable' && (
     <p className="fc-setup" role="status">
       Creating workspaces, changing plans, renaming and inviting need one more
-      migration: run <code>supabase/migrations/founder_console.sql</code> in the
+      migration: run <code>supabase/migrations/060_founder_console.sql</code> in the
       Supabase SQL Editor. Everything else on this page already works.
     </p>
   );
@@ -747,7 +747,7 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
   const planSetupHint = planStatus === 'unavailable' && (
     <p className="fc-setup" role="status">
       Plan management and plan history need one more migration: run{' '}
-      <code>supabase/migrations/plan_management.sql</code> in the Supabase SQL
+      <code>supabase/migrations/062_plan_management.sql</code> in the Supabase SQL
       Editor. Until then the plan dropdowns offer the nine seeded tiers and
       nothing else on this page changes.
     </p>
@@ -922,7 +922,7 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
             <EmptyState
               icon={<Building2 size={22} />}
               title="No workspaces listed"
-              description="beta_admin_directory.sql has not been run, or there is genuinely nothing here yet. Onboard a shop to start."
+              description="034_beta_admin_directory.sql has not been run, or there is genuinely nothing here yet. Onboard a shop to start."
               actions={<Button variant="primary" onClick={() => setTab('onboard')}>Onboard a workspace</Button>}
             />
           ) : (
@@ -1054,7 +1054,7 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
                                 {rows.length === 0 ? (
                                   <p className="org-panel-loading">
                                     {planStatus === 'unavailable'
-                                      ? <>Plan history needs <code>plan_management.sql</code>.</>
+                                      ? <>Plan history needs <code>062_plan_management.sql</code>.</>
                                       : 'No plan change recorded for this workspace yet.'}
                                   </p>
                                 ) : (
@@ -1079,7 +1079,7 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
                           {d === 'loading' && <p className="org-panel-loading">Loading…</p>}
                           {d === 'error' && (
                             <p className="org-panel-loading">
-                              Members and invites need <code>founder_console.sql</code>. The counts above come from
+                              Members and invites need <code>060_founder_console.sql</code>. The counts above come from
                               beta_org_directory and are current.
                             </p>
                           )}
@@ -1253,7 +1253,7 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
               description={
                 planStatus === 'unavailable'
                   ? `Nothing is broken meanwhile: every plan dropdown still offers the nine seeded tiers — ${ORG_PLANS.join(', ')} — and setting a workspace's plan works exactly as it does today. Running the migration above is what makes them editable and starts recording plan history.`
-                  : 'finance_plan_prices came back empty. Run finance.sql — or plan_management.sql, which re-creates and re-seeds the table — to get the nine starting tiers.'
+                  : 'finance_plan_prices came back empty. Run 051_finance.sql — or 062_plan_management.sql, which re-creates and re-seeds the table — to get the nine starting tiers.'
               }
             />
           ) : (

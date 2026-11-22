@@ -340,7 +340,7 @@ consequences worth knowing:
 `accepted: 0` with `jobId: ""` is a **success** meaning "already embedded".
 Duplicate ids are collapsed.
 
-**`503` means the table is missing** — i.e. `supabase/migrations/listing_embeddings.sql`
+**`503` means the table is missing** — i.e. `supabase/migrations/065_listing_embeddings.sql`
 has not been run. The body is deliberately generic; the client detects that case
 for itself with a column probe and can name the file.
 
@@ -467,7 +467,7 @@ capacity per photo. The count is `REPLICATE_RETRY_ATTEMPTS` (`0` disables it).
 ## 9. Embeddings
 
 `POST /v1/embed` (§5) writes rows to **`listing_embeddings`** —
-`supabase/migrations/listing_embeddings.sql`, run by hand like every other
+`supabase/migrations/065_listing_embeddings.sql`, run by hand like every other
 migration here. The app does not read the vectors; it calls the RPC that ranks
 them.
 
@@ -530,7 +530,7 @@ price numeric, sold_price_cents bigint, sold_at timestamptz)`.
 - `title` / `price` come from the group LEADER's `products` row, falling back to
   the photo's own row for the legacy fresh-uuid groups (AGENTS.md §11).
 - `sold_price_cents` / `sold_at` come from the **most recent** `listing_sales` row
-  for that group, and are `NULL` when `pricing_research.sql` has not been run —
+  for that group, and are `NULL` when `064_pricing_research.sql` has not been run —
   that table is read through `to_regclass`, so its arrival needs no re-run of the
   embeddings migration.
 - `p_limit` is clamped to 1–50.

@@ -11,8 +11,8 @@
 | Gate | Result |
 |---|---|
 | SQL | **64 scenarios** on a throwaway Postgres 17, three migration orders (§5) |
-| Files touched | `supabase/migrations/plan_management.sql` (new) · this file (new) |
-| Existing migrations edited | **none** — `finance.sql`, `founder_console.sql` and `perf_rls_initplan.sql` are untouched |
+| Files touched | `supabase/migrations/062_plan_management.sql` (new) · this file (new) |
+| Existing migrations edited | **none** — `051_finance.sql`, `060_founder_console.sql` and `056_perf_rls_initplan.sql` are untouched |
 | CI migration hygiene | ROLLBACK section ✅ · `idempotent` / `if not exists` ✅ |
 | Linter 0028/0029 | clear for all six new RPCs, in both hardening orders |
 
@@ -28,7 +28,7 @@
 ### 1.1 A plan you can price but cannot assign
 
 The plan vocabulary was a **hardcoded array in two hand-synced places**:
-`app_private.org_plan_list()` (`founder_console.sql` §3) and `ORG_PLANS` in
+`app_private.org_plan_list()` (`060_founder_console.sql` §3) and `ORG_PLANS` in
 `src/lib/foundingAdminService.ts`. Both writers that touch `organizations.plan` —
 `founding_set_org_plan` and `founding_create_workspace` — reject anything the array does not
 name.
@@ -54,7 +54,7 @@ sells 30% off list *for life* to founding shops. The four places that might have
 | `organizations.plan` | One value. Overwritten on every change. |
 | `beta_signups` | No `org_id` at all — email plus a free-text `org_name`. |
 | `founding_admin_audit` | Records only what a founder did **through the console**. A SQL-Editor `update organizations set plan = …` is invisible to it. |
-| `created_at <= founding_cutoff` (`finance.sql`) | A date proxy. Good enough to price with, useless as a record — and it says nothing about a shop that joined after the cutoff on a beta invite. |
+| `created_at <= founding_cutoff` (`051_finance.sql`) | A date proxy. Good enough to price with, useless as a record — and it says nothing about a shop that joined after the cutoff on a beta invite. |
 
 ---
 
@@ -63,11 +63,11 @@ sells 30% off list *for life* to founding shops. The four places that might have
 Three moves, in this order, and each one is load-bearing for the next:
 
 1. **`finance_plan_prices` becomes the plan catalog.** It already was one in intent —
-   `finance.sql`'s own header says it is "keyed by the value in `organizations.plan`, so
+   `051_finance.sql`'s own header says it is "keyed by the value in `organizations.plan`, so
    projected MRR is a JOIN, not a constant in the client". It gains `display_name`,
    `is_active` and `sort_order`.
 2. **`app_private.org_plan_list()` is replaced IN PLACE** to read that table. Same name,
-   same `returns text[]`. `founder_console.sql` is not edited, does not need to be, and
+   same `returns text[]`. `060_founder_console.sql` is not edited, does not need to be, and
    `founding_set_org_plan` / `founding_create_workspace` become data-driven the moment the
    `create or replace` lands. **That is the whole trick**, and scenario 6 is the proof.
 3. **`org_plan_history` is written by a TRIGGER on `organizations`**, not by the RPC.
@@ -84,7 +84,7 @@ difference between "we log our own writes" and "the column cannot change without
 
 ## 3. The migration — section map
 
-**`supabase/migrations/plan_management.sql`. Written, NOT run.** Additive, idempotent,
+**`supabase/migrations/062_plan_management.sql`. Written, NOT run.** Additive, idempotent,
 rollback at the bottom.
 
 | § | What |
@@ -92,11 +92,11 @@ rollback at the bottom.
 | header | The two problems, function placement, the two ⚠️ ordering hazards, what this file deliberately does not do |
 | 1 | `create schema if not exists app_private` (+ `usage` grants) — no-op when a security file already ran |
 | 2 | Preconditions: `organizations`, `is_beta_admin()`, `founding_admin_audit`, `assert_founding_admin()`, **and `app_private.org_plan_list()`** |
-| 3.1 | `finance_plan_prices` re-created **byte for byte** from `finance.sql`, plus its nine-row seed |
+| 3.1 | `finance_plan_prices` re-created **byte for byte** from `051_finance.sql`, plus its nine-row seed |
 | 3.2 | `add column if not exists` × 3 — `display_name`, `is_active`, `sort_order` |
 | 3.3 | Seed the two new columns for the nine known keys, only where untouched |
 | 3.4 | `finance_touch_updated_at()` **created only when absent**, + the `finance_plan_prices_touch` trigger |
-| 3.5 | RLS, the widened column UPDATE grant, and the four policies in `perf_rls_initplan.sql`'s exact form |
+| 3.5 | RLS, the widened column UPDATE grant, and the four policies in `056_perf_rls_initplan.sql`'s exact form |
 | 4 | **`app_private.org_plan_list()` replaced in place** — reads the catalog, two fallbacks to the nine literals, re-revoked |
 | 5 | `org_plan_history` — table, two indexes, RLS (`select` only, founders only, no client write at all) |
 | 6 | `public.org_plan_history_write()` + **two** triggers (`_ins`, `_upd`) |
@@ -126,7 +126,7 @@ no `ALTER`.
 
 ### 3.2 Why `org_plan_history.org_id` is not a foreign key
 
-Direct precedent: `listing_publications.product_group_id` in `marketplaces.sql` — *"a
+Direct precedent: `listing_publications.product_group_id` in `059_marketplaces.sql` — *"a
 cascade would destroy the only record it was ever posted"*. The same argument one level up:
 
 - **`ON DELETE CASCADE`** would delete exactly the rows a founder asking "who were our beta
@@ -148,12 +148,12 @@ change must not be able to veto a deletion.
 
 Three separate things in this codebase read those two literals:
 
-- **`organizations.plan`'s column DEFAULT is `'free'`** (`multi_org_tenancy.sql`). Rename
+- **`organizations.plan`'s column DEFAULT is `'free'`** (`031_multi_org_tenancy.sql`). Rename
   it and every workspace created afterwards lands on a plan that does not exist.
 - The **waitlist-approval path** and `founding_create_workspace`'s own default both write
   `'beta'`.
 - **`finance_summary()`'s founding-shop test is the literal string `'beta'`**
-  (`finance.sql`), mirrored in `financeService.ts` — AGENTS.md §18 #28. Renaming the plan
+  (`051_finance.sql`), mirrored in `financeService.ts` — AGENTS.md §18 #28. Renaming the plan
   would silently revoke the 30%-off-for-life promise for every founding shop.
 
 Refusing also keeps history truthful and keeps `founding_plan_alumni('beta')` meaning what
@@ -186,25 +186,25 @@ into the next statement.
 **History is never rewritten.** Rows written before a rename keep the old key forever —
 scenario 24. That is the only thing an append-only log can honestly claim.
 
-### 3.5 The two `finance.sql` interactions, both tested
+### 3.5 The two `051_finance.sql` interactions, both tested
 
 **The table.** `§3.1` re-creates `finance_plan_prices` byte for byte (precedent:
-`my_email()` in `marketplaces.sql`). `if not exists` + `on conflict do nothing` mean that
+`my_email()` in `059_marketplaces.sql`). `if not exists` + `on conflict do nothing` mean that
 whichever file runs second is a no-op, and **no price a founder edited is ever
 overwritten in either direction** (scenarios 24, 49).
 
-**The touch function.** `public.finance_touch_updated_at()` is `finance.sql`'s, and
-`security_function_hardening.sql` §9 **pins a `search_path` on it** to clear linter 0011.
+**The touch function.** `public.finance_touch_updated_at()` is `051_finance.sql`'s, and
+`054_security_function_hardening.sql` §9 **pins a `search_path` on it** to clear linter 0011.
 `create or replace` resets a function's config settings, so replacing it here would
 silently undo that fix. This file therefore creates it **only when it is absent**, already
 carrying the search_path it would otherwise have to be given later (scenarios 52, 53).
 
 **The policies.** `§3.5` writes the four `finance_plan_prices_*` policies in
-`perf_rls_initplan.sql`'s exact form — `(select public.is_beta_admin())`, §18 #47 — with
+`056_perf_rls_initplan.sql`'s exact form — `(select public.is_beta_admin())`, §18 #47 — with
 the same names, so **re-running that file afterwards is a byte-identical no-op** rather
 than a correction (scenario 51, asserted by diffing `pg_get_expr` before and after).
 
-`finance.sql` run *after* this file reverts those four to its own bare form; `perf` §7
+`051_finance.sql` run *after* this file reverts those four to its own bare form; `perf` §7
 restores them exactly (scenario 50). Same known hazard AGENTS.md §9 already documents.
 
 ### 3.6 The rollback's three deliberate asymmetries
@@ -214,10 +214,10 @@ restores them exactly (scenario 50). Same known hazard AGENTS.md §9 already doc
    would throw away labels and ordering for nothing. They are inert without the rest of the
    file.
 2. **`org_plan_history` is KEPT by default.** It is the record this file exists to create,
-   the same way `founder_console.sql`'s rollback leaves `founding_admin_audit` alone. The
+   the same way `060_founder_console.sql`'s rollback leaves `founding_admin_audit` alone. The
    drop is the last line, commented twice over.
 3. **`app_private.org_plan_list()` MUST be restored** to the hardcoded nine, and that
-   statement is *not* optional — `founder_console.sql` calls it by name, and leaving it
+   statement is *not* optional — `060_founder_console.sql` calls it by name, and leaving it
    reading a table this rollback no longer maintains makes every plan unassignable. The
    block restores the original definition including its `immutable` volatility and its
    revokes (scenarios 61–63).
@@ -233,7 +233,7 @@ Five, all deliberate. Each is also called out in my hand-back so the client agen
 | D1 | `source ... check (source in ('trigger','backfill'))` | adds `'rename'` | §3.4. Purely additive to the CHECK; `PlanHistoryRow.source` is already `string` on the client, so no TS type moves. |
 | D2 | "REFUSE to rename a protected plan" | also refuses renaming **into** `free`/`beta` | A plan renamed *into* a protected key silently becomes the target of the column DEFAULT, the waitlist path and the founding-discount rule, whatever it used to mean. Belt and braces; "already exists" covers the normal case anyway. |
 | D3 | (order of `founding_org_plan_history` unspecified) | `changed_at desc, plan` | The expanded workspace row reads downward from "where they are now". |
-| D4 | (nothing about `finance_touch_updated_at`) | created only when absent, born with a pinned `search_path` | §3.5. Without it, `updated_at` never moves on a database where `finance.sql` has not run. Replacing it unconditionally would undo the 0011 fix. |
+| D4 | (nothing about `finance_touch_updated_at`) | created only when absent, born with a pinned `search_path` | §3.5. Without it, `updated_at` never moves on a database where `051_finance.sql` has not run. Replacing it unconditionally would undo the 0011 fix. |
 | D5 | file named `24-plan-management.md` | `25-plan-management.md` | `24-cd-vintage-split.md` already exists. |
 
 ---
@@ -242,7 +242,7 @@ Five, all deliberate. Each is also called out in my hand-back so the client agen
 
 Throwaway **Postgres 17.10** (`initdb` + `pg_ctl`, TCP 55801, data dir in the scratchpad,
 torn down afterwards). Stub `auth` schema (`auth.users`, `auth.jwt()`, `auth.uid()`,
-`auth.role()`, the three Supabase roles) plus the five data tables `multi_org_tenancy.sql`
+`auth.role()`, the three Supabase roles) plus the five data tables `031_multi_org_tenancy.sql`
 adds `org_id` to. Then the real migrations in run order. Callers impersonated with
 `set local role authenticated; set local "request.jwt.claims" = '{…}'`. Method as
 `docs/reviews/22-founder-console.md` §4.
@@ -264,7 +264,7 @@ Actors: `founder@arcadian.test` (owner of the Founding Workspace), `tenant@shopa
 |---|---|---|
 | 4 | `founding_set_org_plan(…, 'studio')` **before** the plan exists | `Unknown plan: studio` |
 | 5 | `founding_upsert_plan('  STUDIO  ', 'Studio', 29900, …)` | created as `studio` — trimmed and case-folded |
-| 6 | **`founding_set_org_plan(…, 'studio')` immediately after** | **accepted**, workspace moved, `founder_console.sql` never edited |
+| 6 | **`founding_set_org_plan(…, 'studio')` immediately after** | **accepted**, workspace moved, `060_founder_console.sql` never edited |
 | 7 | A plan added by a plain `insert into finance_plan_prices` (the Finance → Customers control) | assignable too — `org_plan_list()` picks it up |
 | 8 | `founding_create_workspace('Shop C', 'studio_x', …)` with a brand-new plan | workspace created; the INSERT is recorded in history |
 
@@ -354,11 +354,11 @@ Actors: `founder@arcadian.test` (owner of the Founding Workspace), `tenant@shopa
 | 48 | Re-apply the whole file | clean; history unchanged at 8; `my-plan_2`'s hand-set `sort_order = 95` survives |
 | 49 | Re-apply after a founder edited a price to `31337` and a note | both survive |
 | 50 | Backfill re-run | idempotent — 8 → 8 |
-| 51 | `finance.sql` applied **after** | clean; prices and extra plans survive; the UPDATE grant keeps **all five** columns (GRANT is additive) |
+| 51 | `051_finance.sql` applied **after** | clean; prices and extra plans survive; the UPDATE grant keeps **all five** columns (GRANT is additive) |
 | 52 | …and its policies | revert to the bare `is_beta_admin()` form; `perf` §7 restores the wrapped form **exactly** |
-| 53 | `finance.sql` → `plan_management.sql` → `perf` §7 | **byte-identical no-op** for the four policies (diffed via `pg_get_expr`) |
-| 54 | `finance_touch_updated_at()` when `finance.sql` ran first **and was hardened** | `search_path=public` preserved — never replaced |
-| 55 | …when `finance.sql` has **not** run | created, born with `search_path=public`; the touch trigger fires and `updated_at` moves |
+| 53 | `051_finance.sql` → `062_plan_management.sql` → `perf` §7 | **byte-identical no-op** for the four policies (diffed via `pg_get_expr`) |
+| 54 | `finance_touch_updated_at()` when `051_finance.sql` ran first **and was hardened** | `search_path=public` preserved — never replaced |
+| 55 | …when `051_finance.sql` has **not** run | created, born with `search_path=public`; the touch trigger fires and `updated_at` moves |
 | 56 | **Order A** — hardening files first, then this file | clean; placement table identical to Order B |
 | 57 | **Order B** — this file first, then the hardening files | clean; **0028/0029 completely clear across the whole `public` schema** |
 | 58 | Re-running both hardening files afterwards | changes nothing of ours (diffed: schema, `prosecdef`, `proconfig`, EXECUTE) |
@@ -395,14 +395,14 @@ One more, run on a clean database to avoid inference:
    knows it — but AGENTS.md §18 #28 says that rule is implemented **twice** (SQL and
    `financeService.ts`) and asserted against one worked example on both sides. It is its own
    pass, with its own TypeScript half and its own test update. **Not smuggled in here.**
-2. **Add the new function signatures to `security_function_hardening.sql`** if that file is
+2. **Add the new function signatures to `054_security_function_hardening.sql`** if that file is
    ever revised: `public.org_plan_history_write()` belongs in §7's trigger list, and the six
    `founding_*_plan*` pairs in §8's. They are already hardened inline, so this is tidiness,
    not a gap — verified by scenario 58.
-3. **`finance.sql` replants a public SECURITY DEFINER `finance_summary`.** Observed in
-   Order A: applying `finance.sql` after the hardening files leaves exactly one 0029 hit.
-   Pre-existing, `finance.sql`'s doing, and already covered by AGENTS.md §9's "RE-RUN AFTER"
-   note — re-run `security_function_hardening.sql` then `security_rpc_wrappers.sql`.
+3. **`051_finance.sql` replants a public SECURITY DEFINER `finance_summary`.** Observed in
+   Order A: applying `051_finance.sql` after the hardening files leaves exactly one 0029 hit.
+   Pre-existing, `051_finance.sql`'s doing, and already covered by AGENTS.md §9's "RE-RUN AFTER"
+   note — re-run `054_security_function_hardening.sql` then `055_security_rpc_wrappers.sql`.
 4. **Consider a `plan_changed` notification.** Nothing tells a founder that a plan changed
    outside the console; the history now makes it *visible* but not *noticed*.
 

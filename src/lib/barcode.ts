@@ -282,7 +282,7 @@ export function isGeneratedSku(sku: string | null | undefined): boolean {
  * and the modulo introduces no bias.
  *
  * UNIQUENESS IS NOT ASSERTED HERE. This function is a candidate generator; the
- * `(org_id, sku)` unique index in listing_labels.sql is the authority, and
+ * `(org_id, sku)` unique index in 053_listing_labels.sql is the authority, and
  * labelsService retries on 23505. A pure function cannot know what the database
  * already holds, and pretending otherwise is how duplicate SKUs ship.
  */

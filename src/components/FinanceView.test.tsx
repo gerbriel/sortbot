@@ -125,7 +125,7 @@ describe('FinanceView', () => {
   it('shows the setup hint, and nothing else, when the migration has not run', async () => {
     vi.mocked(fetchFinanceSummary).mockResolvedValue({ status: 'unavailable' });
     const { container } = await render();
-    expect(container.textContent).toContain('finance.sql');
+    expect(container.textContent).toContain('051_finance.sql');
     expect(container.querySelector('.fin-tabs')).toBeNull();
   });
 
@@ -178,7 +178,7 @@ describe('FinanceView', () => {
     const { container } = await render();
     click(buttonByText(container, 'Customers'));
     expect(container.textContent).toContain('Rack City');
-    expect(container.textContent).toContain('needs analytics_events.sql');
+    expect(container.textContent).toContain('needs 043_analytics_events.sql');
     // Projected MRR is the discounted number; list price is shown beside it.
     expect(container.textContent).toContain('$163.30');
     expect(container.textContent).toContain('$178.00');

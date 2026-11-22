@@ -10,7 +10,7 @@
  * never pollute the numbers (set localStorage `sortbot_analytics_force=1` to
  * override while testing).
  *
- * FORWARD-COMPATIBLE: if analytics_events.sql has not been run, the first
+ * FORWARD-COMPATIBLE: if 043_analytics_events.sql has not been run, the first
  * failed insert marks the tracker unavailable and every later call is a no-op.
  *
  * Events fired by the app:

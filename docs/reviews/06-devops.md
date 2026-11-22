@@ -36,7 +36,7 @@ a diff in §4.3.
 | Migrations | 45 hand-run `.sql` files, no CLI tracking, no ledger | `supabase/migrations/` (45 files), `supabase/migrations/README.md:1` is a one-line stub |
 | Edge Functions | Deployed by hand; secrets via `supabase secrets set` | `supabase/functions/shopify-titles/index.ts:129`, `supabase/functions/generate-prose/index.ts:51,56-57` |
 | Error tracking | None. One local boundary around Step 2 only; no `window.onerror`/`unhandledrejection` handler exists | `src/App.tsx:210,2790,2811`; repo-wide grep found no global handler |
-| Analytics | First-party `analytics_events` + `analytics_summary()` RPC | `supabase/migrations/analytics_events.sql:23`, `src/lib/analytics.ts:1-25` |
+| Analytics | First-party `analytics_events` + `analytics_summary()` RPC | `supabase/migrations/043_analytics_events.sql:23`, `src/lib/analytics.ts:1-25` |
 | Uptime check | None | no workflow, no external monitor |
 | Test suite | 229 tests in 19 files, ~0.9 s — verified locally | `npm test` |
 | Lint | 311 problems (295 errors, 16 warnings) — verified locally, matches the AGENTS.md §17 baseline | `npm run lint` |
@@ -225,8 +225,8 @@ Two jobs, `permissions: contents: read`, concurrency-cancelled per ref.
 
    **Honest calibration:** a repo-wide *blocking* version of this check would
    fail today. Measured across all 45 migrations, only **16 satisfy both rules**;
-   29 do not (e.g. `clean_categories.sql`, `shared_workspace_rls.sql`,
-   `convert_to_shared_collaborative.sql`, `fix_rls_policies_complete.sql` — all
+   29 do not (e.g. `028_clean_categories.sql`, `025_shared_workspace_rls.sql`,
+   `013_convert_to_shared_collaborative.sql`, `011_fix_rls_policies_complete.sql` — all
    of which rewrite RLS policies with no documented undo). Gating on changed
    files makes the rule enforceable immediately and lets the 29 be fixed
    deliberately; gating on everything would make CI red on day one and get
@@ -391,7 +391,7 @@ SQL Editor; `supabase/migrations/README.md:1` is a one-line "Last updated"
 stamp; three more migrations live at the repo root
 (`ADD_APPLIED_PRESET_ID.sql`, `database_migration_csv_fields.sql`,
 `fix_security_warnings.sql`); two files differ only by suffix
-(`convert_to_shared_collaborative.sql` and `..._FIXED.sql`), and there is no
+(`013_convert_to_shared_collaborative.sql` and `..._FIXED.sql`), and there is no
 record of which one was run. Only 16 of 45 document a rollback.
 
 Consequence: **nobody can currently answer "what is the schema of production?"**
@@ -408,10 +408,10 @@ Recommended, in order, each cheap:
    ```markdown
    | # | File | Applied to prod | Applied to staging | Destructive | Rollback in file | Notes |
    |---|---|---|---|---|---|---|
-   | 001 | create_workflow_batches.sql | 2026-02-06 | - | no | no | base tables |
-   | 018 | shared_workspace_rls.sql | 2026-04-xx | - | YES (rewrites SELECT policies) | no | superseded by multi_org_tenancy |
-   | 031 | multi_org_tenancy.sql | NOT APPLIED | - | YES (replaces policies on 5 tables) | yes | take a backup first |
-   | 040 | analytics_events.sql | NOT APPLIED | - | no | yes | needs 031 + beta_signups |
+   | 001 | 007_create_workflow_batches.sql | 2026-02-06 | - | no | no | base tables |
+   | 018 | 025_shared_workspace_rls.sql | 2026-04-xx | - | YES (rewrites SELECT policies) | no | superseded by multi_org_tenancy |
+   | 031 | 031_multi_org_tenancy.sql | NOT APPLIED | - | YES (replaces policies on 5 tables) | yes | take a backup first |
+   | 040 | 043_analytics_events.sql | NOT APPLIED | - | no | yes | needs 031 + beta_signups |
    ```
 
    Fill "Applied to prod" from the dashboard's SQL history plus
@@ -420,9 +420,9 @@ Recommended, in order, each cheap:
    `select tablename, policyname from pg_policies where schemaname='public'`).
    That one query pair resolves most of the ambiguity in an afternoon.
 2. **Number new migrations** `NNN_description.sql` (or keep the existing
-   `YYYYMMDD_` style used by `20260426_add_transforms_to_product_images.sql`).
+   `YYYYMMDD_` style used by `029_add_transforms_to_product_images.sql`).
    Dependency order is currently encoded only in prose comments ("Run AFTER
-   multi_org_tenancy.sql"), which does not survive a fresh install.
+   031_multi_org_tenancy.sql"), which does not survive a fresh install.
 3. **Adopt the CLI without a rewrite.** `supabase/` has no `config.toml`, so the
    project is not linked. Path:
    * `supabase init` + `supabase link --project-ref <ref>`;
@@ -435,9 +435,9 @@ Recommended, in order, each cheap:
      `db push` on a mismatched history is how people drop things. Baseline
      instead: mark existing state as applied (`supabase migration repair`) once
      the ledger is trustworthy.
-4. **Rehearse every destructive migration on staging.** `multi_org_tenancy.sql`
-   replaces the policies on five tables; `shared_workspace_rls.sql` and
-   `collaborative_edit_policies.sql` rewrite INSERT/UPDATE/DELETE reachability.
+4. **Rehearse every destructive migration on staging.** `031_multi_org_tenancy.sql`
+   replaces the policies on five tables; `025_shared_workspace_rls.sql` and
+   `030_collaborative_edit_policies.sql` rewrite INSERT/UPDATE/DELETE reachability.
    A mistake here does not throw — it makes writes affect 0 rows, which this app
    partially papers over (`src/lib/workflowBatchService.ts:408-426`).
 
@@ -533,7 +533,7 @@ if any of these patterns ever reaches `dist/`.
 
 * **Database size** — alert well before the tier limit; `analytics_events` and
   `workflow_batches.workflow_state` are the two tables that grow without bound.
-  `analytics_prune(365)` exists (`supabase/migrations/analytics_events.sql`,
+  `analytics_prune(365)` exists (`supabase/migrations/043_analytics_events.sql`,
   retention section) but is not scheduled — schedule it with `pg_cron` or call
   it monthly.
 * **Storage size / egress** — the bucket is public and thumbnails are full-size
@@ -562,15 +562,15 @@ finds no `window.onerror` or `unhandledrejection` listener. Silent failure is
 also the codebase's documented default (AGENTS.md §13 "Error Handling Pattern").
 
 The migration below follows the exact conventions of
-`supabase/migrations/analytics_events.sql`: additive, idempotent, RLS with an
+`supabase/migrations/043_analytics_events.sql`: additive, idempotent, RLS with an
 insert-only client, founders-only read via `is_beta_admin()`, and a rollback
 section. **Not applied — review, then run in the SQL Editor.**
 
 ```sql
--- supabase/migrations/app_errors.sql   (PROPOSED — not applied)
--- First-party error tracking. Same model as analytics_events.sql: the browser
--- writes, only Founding admins read. Run AFTER multi_org_tenancy.sql and
--- beta_signups.sql (needs organizations + is_beta_admin()). Idempotent.
+-- supabase/migrations/046_app_errors.sql   (PROPOSED — not applied)
+-- First-party error tracking. Same model as 043_analytics_events.sql: the browser
+-- writes, only Founding admins read. Run AFTER 031_multi_org_tenancy.sql and
+-- 032_beta_signups.sql (needs organizations + is_beta_admin()). Idempotent.
 -- Rollback at the bottom.
 
 create table if not exists public.app_errors (
@@ -674,7 +674,7 @@ import { supabase } from './supabase';
 import { getSessionId, shouldTrack } from './analytics';
 
 type Kind = 'render' | 'window' | 'promise' | 'manual';
-let available = true;                       // latches off if app_errors.sql is unapplied
+let available = true;                       // latches off if 046_app_errors.sql is unapplied
 let ctx: { userId: string | null; orgId: string | null; step?: number; batchId?: string | null } =
   { userId: null, orgId: null };
 const seen = new Map<string, number>();     // fingerprint -> last sent (ms)
@@ -1029,7 +1029,7 @@ Levers, cheapest first:
 
 ### 8.5 Multi-tenancy readiness
 
-`multi_org_tenancy.sql` is code-complete but, per AGENTS.md §16, **not yet
+`031_multi_org_tenancy.sql` is code-complete but, per AGENTS.md §16, **not yet
 applied**. Until it is, every workspace shares one dataset. That is the single
 biggest blocker to onboarding a second paying customer, and it is a *migration*
 task, not a code task — which is exactly why §5.1's ledger and §3.2's staging

@@ -68,7 +68,7 @@ import './App.css';
 
 // First-party error tracking: window 'error' + 'unhandledrejection' → app_errors.
 // Module scope so it is listening before the first render. No-op on localhost and
-// until app_errors.sql has been run. Idempotent + typeof window-guarded, so
+// until 046_app_errors.sql has been run. Idempotent + typeof window-guarded, so
 // StrictMode's double invoke is safe.
 installErrorReporter();
 
@@ -472,7 +472,7 @@ const GROUP_UPSERT_DEBOUNCE_MS = 2000;
  * authenticated round trips — each one a `storage.objects` query under RLS,
  * and that RLS calls `storage_prefix_writable()`, which runs its own
  * `exists (select … from org_members …)`. Kept verbatim as the fallback so
- * the meter still works on a project where perf_storage_usage.sql has not
+ * the meter still works on a project where 057_perf_storage_usage.sql has not
  * been run.
  */
 async function walkStorageUsage(userId: string): Promise<{ usedBytes: number; fileCount: number }> {
@@ -666,7 +666,7 @@ function App() {
 
     let result: { usedBytes: number; fileCount: number } | null = null;
 
-    // One query (perf_storage_usage.sql). Sums the SAME rows the walk visits —
+    // One query (057_perf_storage_usage.sql). Sums the SAME rows the walk visits —
     // objects under this user's own uid prefix in the product-images bucket.
     if (!storageRpcMissingRef.current) {
       const { data, error } = await supabase.rpc('storage_usage_bytes');
@@ -3650,7 +3650,7 @@ function App() {
             {/* Multi-marketplace: which marketplaces this batch goes to, a
                 readiness grid, a feed CSV per feed marketplace and a copy-ready
                 pack per pack marketplace. Hides itself entirely until
-                marketplaces.sql has been run, so Step 4 is unchanged until then.
+                059_marketplaces.sql has been run, so Step 4 is unchanged until then.
                 SHOPIFY'S CSV STAYS BELOW — GoogleSheetExporter dedups titles
                 against the live store and runs the price gate, which the
                 adapter's serialize() cannot (docs/marketplaces/03-step4.md). */}

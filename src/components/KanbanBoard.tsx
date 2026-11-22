@@ -388,7 +388,7 @@ export default function KanbanBoard({ orgId, userId, userEmail, onClose }: Kanba
           <div className="kanban-unavailable">
             <p><strong>The board tables aren’t set up yet.</strong></p>
             <p>
-              Run <code>supabase/migrations/kanban_board.sql</code> in the Supabase SQL editor,
+              Run <code>supabase/migrations/040_kanban_board.sql</code> in the Supabase SQL editor,
               then reopen this panel. Nothing else in the app is affected until you do.
             </p>
           </div>

@@ -74,7 +74,7 @@ export default function AnalyticsPanel() {
 
       {state.status === 'unavailable' && (
         <p className="ft-setup">
-          Analytics is not set up yet — run <code>supabase/migrations/analytics_events.sql</code> in the
+          Analytics is not set up yet — run <code>supabase/migrations/043_analytics_events.sql</code> in the
           SQL Editor. Tracking starts the moment the table exists: no keys, no third-party script,
           the data stays in this project.
         </p>
