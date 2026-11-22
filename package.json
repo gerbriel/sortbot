@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "cap:sync": "npm run build && cap sync",
     "cap:ios": "cap open ios",
-    "cap:android": "cap open android"
+    "cap:android": "cap open android",
+    "assets:generate": "capacitor-assets generate --ios --android --iconBackgroundColor '#ffffff' --iconBackgroundColorDark '#000000' --splashBackgroundColor '#ffffff' --splashBackgroundColorDark '#000000'"
   },
   "dependencies": {
     "@capacitor-community/speech-recognition": "^7.0.1",
@@ -39,6 +40,7 @@
     "tus-js-client": "^4.3.1"
   },
   "devDependencies": {
+    "@capacitor/assets": "^4.0.0",
     "@capacitor/cli": "^8.6.2",
     "@eslint/js": "^9.39.1",
     "@types/node": "^24.10.1",

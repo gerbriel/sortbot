@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Users, ChevronDown, LogOut, ArrowLeft, Check, Cloud, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Users, ChevronDown, LogOut, ArrowLeft, Check, Cloud, RefreshCw, AlertTriangle, Trash2 } from 'lucide-react';
 import './WorkspaceMenu.css';
 
 /** The three bands the menu is divided into, in render order. */
@@ -63,6 +63,8 @@ interface WorkspaceMenuProps {
    */
   onSelect: (id: string, opener: HTMLElement | null) => void;
   onSignOut: () => void;
+  /** Opens the delete-account dialog. The row is hidden when omitted. */
+  onDeleteAccount?: () => void;
   /** Controlled: the phone tab bar's "More" opens this same menu. */
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -97,7 +99,7 @@ interface WorkspaceMenuProps {
  */
 export default function WorkspaceMenu({
   orgName, role, email, items, activeView, unreadCount = 0,
-  showBackToWorkflow, onSelect, onSignOut, open, onOpenChange, storage = null,
+  showBackToWorkflow, onSelect, onSignOut, onDeleteAccount, open, onOpenChange, storage = null,
 }: WorkspaceMenuProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -400,6 +402,19 @@ export default function WorkspaceMenu({
                 <span className="wsmenu-item-icon"><LogOut size={16} /></span>
                 <span className="wsmenu-item-label">Sign out</span>
               </button>
+              {onDeleteAccount && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  tabIndex={-1}
+                  className="wsmenu-item wsmenu-item--danger"
+                  title="Permanently delete your account"
+                  onClick={() => { close(false); onDeleteAccount(); }}
+                >
+                  <span className="wsmenu-item-icon"><Trash2 size={16} /></span>
+                  <span className="wsmenu-item-label">Delete account</span>
+                </button>
+              )}
             </div>
           </div>
         </>,

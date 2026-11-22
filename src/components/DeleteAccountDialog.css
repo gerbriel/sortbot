@@ -1,0 +1,174 @@
+/* Delete account dialog (DeleteAccountDialog.tsx). Tokens only: colour from
+   the semantic danger and warning pair, type from the font-size ramp, spacing
+   in rem. Written mobile-first; the ui Dialog already turns into a full-width
+   sheet at phone width. */
+
+.dad-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  font-size: var(--fs-base);
+  line-height: var(--lh-normal);
+  color: var(--text-primary);
+}
+
+.dad-lead,
+.dad-muted,
+.dad-row-text,
+.dad-error,
+.dad-alert p {
+  margin: 0;
+}
+
+.dad-muted {
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+
+.dad-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.dad-row {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--ink-850);
+  min-width: 0;
+}
+
+.dad-row--delete {
+  border-color: var(--danger);
+  background: var(--danger-dim);
+}
+
+.dad-row--last_owner,
+.dad-row--founding_admin {
+  border-color: var(--warning);
+  background: var(--warning-dim);
+}
+
+.dad-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.dad-row-name {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.dad-row-tag {
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.dad-row--delete .dad-row-tag { color: var(--danger); }
+.dad-row--last_owner .dad-row-tag,
+.dad-row--founding_admin .dad-row-tag { color: var(--warning); }
+
+.dad-row-text {
+  margin-top: var(--space-1);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.dad-alert {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--warning-dim);
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+}
+
+.dad-alert > svg {
+  color: var(--warning);
+  margin-top: 0.2rem;
+}
+
+.dad-alert-action {
+  margin-top: var(--space-3);
+}
+
+.dad-error {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--danger-dim);
+  color: var(--danger);
+  font-size: var(--fs-sm);
+}
+
+/* Phone: every control in the dialog meets the 44px touch floor (literal px,
+   AGENTS.md section 1), and the confirmation input is 16px so iOS does not
+   zoom on focus. */
+@media (max-width: 640px) {
+  .dad .ui-btn,
+  .dad-alert-action {
+    min-height: 44px;
+  }
+  .dad .dad-input {
+    min-height: 44px;
+    font-size: var(--fs-md);
+  }
+  .dad .ui-dialog__footer {
+    flex-wrap: wrap;
+  }
+  .dad .ui-dialog__footer .ui-btn {
+    flex: 1 1 auto;
+  }
+}
+
+/* Members of a workspace that blocks deletion, each with "Make owner". */
+.dad-alert-body { min-width: 0; flex: 1; }
+
+.dad-members {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.dad-member {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--ink-800);
+}
+
+.dad-member-name {
+  flex: 1 1 10rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.dad-member-role {
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 640px) {
+  .dad .dad-member .ui-btn { min-height: 44px; }
+}

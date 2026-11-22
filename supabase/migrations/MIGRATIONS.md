@@ -81,6 +81,7 @@ single-workspace era, superseded by 031 and never to be re-run.
 | 063 | image_backgrounds | image_backgrounds.sql | applied | object (product_images.mask_status) |
 | 064 | pricing_research | pricing_research.sql | applied | object |
 | 065 | listing_embeddings | listing_embeddings.sql | applied | object (listing_embeddings_vec_hnsw) |
+| 066 | account_deletion | (new: 066_account_deletion.sql) | applied | pushed via `supabase db push` on 2026-11-22 (verified on a throwaway PG 14 first; the `delete-account` edge function still needs `supabase functions deploy delete-account --use-api`). Pre-deploy check: `select conrelid::regclass, conname, confdeltype from pg_constraint where confrelid = 'auth.users'::regclass;` and read every a/r row; `select rolbypassrls from pg_roles where rolname = current_user;` (as the migration role, must be true); `select oid::regprocedure from pg_proc where proname = 'exec_sql';` (must be absent or service_role-only). Also re-creates `support_thread_before_update` (050) with the `app.account_deletion` IF. Run before deploying the delete-account function |
 
 ## Working with the history
 

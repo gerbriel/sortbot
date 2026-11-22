@@ -8,6 +8,9 @@ interface WaitlistGateProps {
   email: string;
   onSignOut: () => void;
   onRequested: () => void; // flips the screen to 'pending' after a successful request
+  /** Opens the delete-account dialog. A waitlisted person has an account too,
+   *  and this screen is the only one they can reach (App Store 5.1.1(v)). */
+  onDeleteAccount?: () => void;
 }
 
 /**
@@ -15,7 +18,7 @@ interface WaitlistGateProps {
  * beta request isn't approved yet. RLS already hides all data from them; this
  * screen is the friendly explanation (and lets them request access in-app).
  */
-export default function WaitlistGate({ status, email, onSignOut, onRequested }: WaitlistGateProps) {
+export default function WaitlistGate({ status, email, onSignOut, onRequested, onDeleteAccount }: WaitlistGateProps) {
   const [orgName, setOrgName] = useState('');
   const [contactName, setContactName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -91,6 +94,9 @@ export default function WaitlistGate({ status, email, onSignOut, onRequested }: 
           Free during the beta · founding shops get preferred pricing when paid plans launch
         </p>
         <button className="waitlist-signout" onClick={onSignOut}>Sign out ({email})</button>
+        {onDeleteAccount && (
+          <button className="waitlist-signout waitlist-delete" onClick={onDeleteAccount}>Delete account</button>
+        )}
       </div>
     </div>
   );

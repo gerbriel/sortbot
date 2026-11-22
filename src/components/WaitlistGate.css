@@ -90,6 +90,12 @@
   text-decoration: none;
 }
 
+.waitlist-delete {
+  display: block;
+  margin: var(--space-2) auto 0;
+  color: var(--danger);
+}
+
 /* ── Phone (≤640px) ─────────────────────────────────────────────────────────
    Same two rules as every other form in the app: 16px so iOS does not zoom the
    page on focus, and a real touch target. `.waitlist-form input` is (0,1,1) and

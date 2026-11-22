@@ -1,0 +1,41 @@
+/* "Your account was deleted." over the marketing page (AccountDeletedNotice).
+   Fixed to the bottom so it never covers the inverted landing nav; clears the
+   home indicator with the safe-area token. Tokens only, no hex. */
+
+.acct-deleted {
+  position: fixed;
+  z-index: 300;
+  left: 50%;
+  bottom: calc(var(--space-6) + var(--safe-b));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: calc(100vw - 3.6rem);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--ink-800);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--fs-base);
+  line-height: var(--lh-snug);
+}
+
+.acct-deleted > svg { color: var(--success); }
+
+.acct-deleted-text { min-width: 0; }
+
+.acct-deleted-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.acct-deleted-close:hover { background: var(--ink-750); }

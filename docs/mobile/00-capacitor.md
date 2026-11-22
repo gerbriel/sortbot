@@ -47,12 +47,12 @@ Checked on the dev Mac on 22 Nov 2026:
 | Tool | Needed for | Status then |
 |---|---|---|
 | Node 22+ | Capacitor CLI 8 | present (22.19) |
-| Xcode (full app, not only the command line tools) | `pod install`, building and running iOS | **missing**: `xcode-select -p` is `/Library/Developer/CommandLineTools` |
-| CocoaPods | `pod install` for the iOS project | present (`/opt/homebrew/bin/pod`), but `pod install` needs full Xcode |
-| Android Studio, Android SDK (`$ANDROID_HOME`) | building and running Android | **missing** |
-| JDK 21 | Gradle for Capacitor 8 | **missing** (no Java runtime; Android Studio bundles one) |
+| Xcode (full app, not only the command line tools) | `pod install`, building and running iOS | present (Xcode 27.2, 22 Nov 2026). Set `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` or run `sudo xcode-select -s` once so the CLI uses it |
+| CocoaPods | `pod install` for the iOS project | present (`/opt/homebrew/bin/pod`); `pod install` passed with 25 pods |
+| Android Studio, Android SDK (`$ANDROID_HOME`) | building and running Android | Android Studio installed via Homebrew; **SDK missing until its first-run wizard is completed** (`~/.zshrc` already exports `ANDROID_HOME` once the folder exists) |
+| JDK | Gradle for Capacitor 8 | present: Android Studio's bundled JBR (OpenJDK 25), exported as `JAVA_HOME` by `~/.zshrc` |
 
-So nothing native has been compiled or run yet, on either platform.
+iOS compiles: `xcodebuild -workspace ios/App/App.xcworkspace -scheme App -sdk iphonesimulator build` succeeded on 22 Nov 2026 with every plugin linked. **It cannot run on an Apple Silicon simulator while ML Kit is linked:** the GoogleMLKit and MLImage pods set `EXCLUDED_ARCHS[sdk=iphonesimulator*] = arm64` (Google ships no arm64 simulator slice), so the simulator build is x86_64 only, and iOS 27 simulators refuse both x86_64 apps and Rosetta boots (`simctl boot --arch=x86_64` answers "not one of the device's supported architectures"). Test on a real iPhone: plug it in, pick it as the run destination in Xcode, set a Team under Signing (a free personal team works for development), and press Run. If simulator testing is ever needed, add a Podfile switch that skips the ML Kit pod for simulator-only installs; the app already falls back to the web barcode path when the plugin is absent. Nothing Android has been built.
 
 To finish the setup:
 
@@ -94,7 +94,7 @@ that URL instead of the bundled files.
 | Android | `https://localhost` | `server.androidScheme: 'https'`, the Capacitor 8 default |
 
 - **CSP (`index.html`):** no change needed. `'self'` resolves to the webview's own origin, so the bundled script, styles, images and fonts still match, and Supabase and the matting service are named by absolute `https:`/`wss:` origins that do not depend on the page origin.
-- **Matting service:** `capacitor://localhost` and `https://localhost` are in the default `ALLOWED_ORIGINS` (bare `http://localhost` is deliberately refused) (`services/matting/app/config.py`, CONTRACT.md §3, `tests/test_cors.py`), and in `fly.toml.example` and `deploy.sh`. **The running Fly service still has the old two-origin list** (`ALLOWED_ORIGINS` is a Fly secret, set by the previous `deploy.sh`), so photo backgrounds and Find similar fail CORS in the native apps until `services/matting/deploy.sh` is run again. The web is unaffected either way.
+- **Matting service:** `capacitor://localhost` and `https://localhost` are in the default `ALLOWED_ORIGINS` (bare `http://localhost` is deliberately refused) (`services/matting/app/config.py`, CONTRACT.md §3, `tests/test_cors.py`), and in `fly.toml.example` and `deploy.sh`. **The running Fly service still has the old two-origin list** (`ALLOWED_ORIGINS` is a Fly secret, set by the previous `deploy. The 22 Nov 2026 redeploy attempt failed because the Fly.io trial has ended (every API call asks for a credit card at https://fly.io/trial) and the service is currently not answering at all, on the web too. After billing is restored, run `REPLICATE_VERSION=<value from services/matting/fly.toml> services/matting/deploy.sh` so the pinned model version is kept.sh`), so photo backgrounds and Find similar fail CORS in the native apps until `services/matting/deploy.sh` is run again. The web is unaffected either way.
 - **Supabase auth:** email and password sign-in needs no redirect URL. If a magic link or OAuth flow is ever added, the native app will need a deep link scheme and an entry in the Supabase redirect allowlist; that is not set up.
 
 ## What behaves differently on native
@@ -148,24 +148,56 @@ Permissions:
 
 ## Icons and splash screens
 
-The generated projects carry Capacitor's placeholder art. Replace it here:
+The Capacitor placeholder art was replaced on 22 Nov 2026 with the "A" mark from
+`public/favicon.svg` (the white glyph on that favicon's black tile, drawn on its own).
 
-- **iOS app icon:** `ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png` (one 1024x1024 PNG, no transparency).
-- **iOS splash:** `ios/App/App/Assets.xcassets/Splash.imageset/` (three 2732x2732 PNGs) and `ios/App/App/Base.lproj/LaunchScreen.storyboard`.
-- **Android icon:** `android/app/src/main/res/mipmap-*/ic_launcher*.png` and the adaptive icon in `mipmap-anydpi-v26/`, `drawable-v24/ic_launcher_foreground.xml`, `values/ic_launcher_background.xml`.
-- **Android splash:** `android/app/src/main/res/drawable*/splash.png`.
+**Sources** live in `assets/` at the repo root, which is the folder
+`@capacitor/assets` (a devDependency, approved) reads:
 
-Generating all sizes from one source image is what `@capacitor/assets` does, but
-it is not installed: adding it is a new dependency and needs the owner's OK
-first (AGENTS.md rule 4). Xcode's single-size app icon and Android Studio's Image
-Asset wizard do the same job without it.
+| File | Size | What it is |
+|---|---|---|
+| `icon-only.png` | 1024x1024 | Black mark on opaque white, mark 56% of the tile. iOS icon and the legacy Android icons. |
+| `icon-foreground.png` | 1024x1024 | Android adaptive foreground: black mark on transparent, 50% of the layer. The generated `mipmap-anydpi-v26/ic_launcher*.xml` insets each layer by 16.7%, so the layer is the visible icon and the mark clears a circular mask. |
+| `icon-background.png` | 1024x1024 | Android adaptive background: plain white. |
+| `splash.png` | 2732x2732 | White, black mark at 20% of the width. |
+| `splash-dark.png` | 2732x2732 | Black, white mark at 20% of the width. Used in dark mode. |
+
+`assets/make-sources.mjs` draws all five from the favicon's path with sharp, so
+they are reproducible: change the favicon, then regenerate.
+
+**Regenerate** from the repo root:
+
+```bash
+node assets/make-sources.mjs   # favicon.svg -> assets/*.png
+npm run assets:generate        # assets/*.png -> every iOS and Android size
+git checkout -- android/app/src/main/AndroidManifest.xml
+```
+
+The last line matters: the generator re-serialises `AndroidManifest.xml` (same
+content, collapsed whitespace and comments moved), which is noise in a diff.
+
+**Colours**, passed explicitly in the `assets:generate` script: icon and splash
+background `#ffffff`, dark-mode icon and splash background `#000000`. These are
+`--ink-950` and `--accent` from `src/index.css`; the mark is pure black on light
+and pure white on dark.
+
+**Outputs:**
+
+- **iOS app icon:** `ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png`, a single opaque 1024x1024 entry in `Contents.json` (the Xcode 14+ single-size format; Xcode derives every other size).
+- **iOS splash:** `Splash.imageset/Default@{1,2,3}x~universal~anyany.png` plus `-dark` variants (all 2732x2732), with a `luminosity: dark` appearance in `Contents.json`. The launch screen is Capacitor's `ios/App/App/Base.lproj/LaunchScreen.storyboard`, an image view showing the `Splash` image aspect-fill; it was not edited.
+- **Android icon:** `mipmap-{ldpi..xxxhdpi}/ic_launcher.png`, `ic_launcher_round.png`, `ic_launcher_foreground.png`, `ic_launcher_background.png`, and the adaptive XML in `mipmap-anydpi-v26/`. The old vector placeholders (`drawable/ic_launcher_background.xml`, `drawable-v24/ic_launcher_foreground.xml`) were deleted; nothing referenced them.
+- **Android splash:** `drawable/splash.png`, `drawable-{port,land}-{ldpi..xxxhdpi}/splash.png`, and the dark set in `drawable-night/` and `drawable-{port,land}-night-*`.
+
+The `@capacitor/status-bar` and `@capacitor/splash-screen` plugins are already
+installed but not configured or called: today the splash hides on Capacitor's
+default timing and the status bar keeps the platform default style.
 
 ## To do (needs a person)
 
-1. **Install Xcode** from the App Store, then `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` and `sudo xcodebuild -license accept`. Then `cd ios/App && pod install`, and build once on a device.
-2. **Install Android Studio**, open it once so it installs the SDK, and set `ANDROID_HOME` (and `platform-tools` on `PATH`) in `~/.zshrc` as shown under Prerequisites. Then build once on a device or a Play system-image emulator.
-3. **Redeploy the matting service** with `services/matting/deploy.sh`, so the running Fly app picks up the native origins in `ALLOWED_ORIGINS`. Until then photo backgrounds and Find similar fail CORS in the apps.
-4. **Replace the placeholder icons and splash screens** (see "Icons and splash screens" above).
+1. **Install Xcode** from the App Store (CocoaPods is already installed via Homebrew; Android Studio is installed too), then `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` and `sudo xcodebuild -license accept`. Then `cd ios/App && pod install`, and build once on a device.
+2. **Open Android Studio once** so its first-run wizard installs the SDK and you accept the SDK licenses. `~/.zshrc` already exports `ANDROID_HOME`, `platform-tools` on `PATH` and `JAVA_HOME` (Android Studio's bundled JDK), guarded so they activate once the SDK folder exists. Then build once on a device or a Play system-image emulator.
+3. **Restore Fly.io billing, then redeploy the matting service.** The 22 Nov 2026 attempt failed because the Fly trial has ended (add a card at https://fly.io/trial) and the service is not answering at all right now. Then run `REPLICATE_VERSION=<value from services/matting/fly.toml> services/matting/deploy.sh` so the pinned model is kept.
+4. ~~Replace the placeholder icons and splash screens~~ Done 22 Nov 2026 (see "Icons and splash screens" above). Swap the mark later by editing `public/favicon.svg` and regenerating.
 5. **Try every Known gap below on a real device** and decide which to fix; none of them has been seen yet.
 
 ## Known gaps

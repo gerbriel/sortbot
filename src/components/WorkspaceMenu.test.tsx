@@ -152,6 +152,33 @@ describe('WorkspaceMenu', () => {
   /* The storage meter used to be a bar under the header; it is a row here now.
      The whole row is the Refresh action, it is FIRST in the roving order, and
      its accessible name says everything the aria-hidden figures show. */
+  it('Delete account is the last row only when the prop is given, and it closes the menu', () => {
+    const a = mount(<Harness />);
+    press(one(a.container, '.wsmenu-trigger'), 1);
+    expect(menuitems().some(m => m.textContent?.includes('Delete account'))).toBe(false);
+    a.unmount();
+
+    const onDelete = vi.fn();
+    function H() {
+      const [open, setOpen] = useState(false);
+      return (
+        <WorkspaceMenu
+          orgName="Shop" items={items} activeView="workflow" showBackToWorkflow={false}
+          onSelect={() => {}} onSignOut={() => {}} onDeleteAccount={onDelete}
+          open={open} onOpenChange={setOpen}
+        />
+      );
+    }
+    const b = mount(<H />);
+    press(one(b.container, '.wsmenu-trigger'), 1);
+    const last = menuitems()[menuitems().length - 1];
+    expect(last.textContent).toContain('Delete account');
+    expect(last.className).toContain('wsmenu-item--danger');
+    press(last, 1);
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(pop()).toBeNull();
+  });
+
   describe('storage row', () => {
     const GB = 1024 ** 3;
     const base: WorkspaceStorage = {

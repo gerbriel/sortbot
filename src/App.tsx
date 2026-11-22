@@ -51,6 +51,7 @@ const loadExifr = () => (exifrModulePromise ??= import('exifr'));
 import WorkspaceMenu, { type WorkspaceNavItem, type WorkspaceStorage } from './components/WorkspaceMenu';
 import WaitlistGate from './components/WaitlistGate';
 import Landing from './components/Landing';
+import AccountDeletedNotice from './components/AccountDeletedNotice';
 import { getCategoryPresets } from './lib/categoryPresetsService';
 import { track, trackPageview, setAnalyticsContext, clearAnalyticsContext } from './lib/analytics';
 import { installErrorReporter, reportError, setErrorContext, clearErrorContext } from './lib/errorReporter';
@@ -155,6 +156,7 @@ const MessagesView = React.lazy(() => import('./components/MessagesView'));
 const LabelPrintView = React.lazy(() => import('./components/LabelPrintView'));
 const BarcodeScannerView = React.lazy(() => import('./components/BarcodeScannerView'));
 const ProductsView = React.lazy(() => import('./components/ProductsView'));
+const DeleteAccountDialog = React.lazy(() => import('./components/DeleteAccountDialog'));
 
 /** Every destination the app can be showing. The four workflow steps are one
  *  view ('workflow'); each header tool is a full page of its own. */
@@ -196,6 +198,7 @@ function AccountNav(
     showBackToWorkflow: boolean;
     onSelect: (id: string, opener: HTMLElement | null) => void;
     onSignOut: () => void;
+    onDeleteAccount?: () => void;
     open: boolean;
     onOpenChange: (open: boolean) => void;
     storage?: WorkspaceStorage | null;
@@ -585,6 +588,10 @@ function App() {
   // Logged-out visitors see the marketing landing at the main URL; "Log in"
   // switches to the Auth screen. Logged-in users skip both (session restore).
   const [showLogin, setShowLogin] = useState(false);
+  // In-app account deletion (App Store 5.1.1(v)): the dialog, and the one-line
+  // notice the marketing page shows right after a deletion. Neither is stored.
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const [accountDeletedNotice, setAccountDeletedNotice] = useState(false);
   // The four item arrays live in workflowStore — the single source of truth
   // (refactor Stage 2). useStoreItemArray keeps the exact useState API, so
   // every setter call site (value AND functional-update forms) is unchanged.
@@ -1676,6 +1683,40 @@ function App() {
     localStorage.removeItem('sortbot_current_batch_number');
   };
 
+  /** The account is gone (accountService already cleared the session). Run the
+   *  same teardown as Sign out, then land on the marketing page with a notice. */
+  const handleAccountDeleted = async () => {
+    log.auth('handleAccountDeleted');
+    setDeleteAccountOpen(false);
+    setAccountDeletedNotice(true);
+    setShowLogin(false);
+    setBetaWaitlist(null);
+    await handleSignOut();
+  };
+
+  // STABLE on purpose: the ui Dialog's focus effect depends on onClose, and a
+  // fresh arrow on every App render would pull focus out of the DELETE input.
+  const closeDeleteAccount = useCallback(() => setDeleteAccountOpen(false), []);
+  const openDeleteAccount = useCallback(() => setDeleteAccountOpen(true), []);
+
+  /** One element for both signed-in shells (the app and the waitlist gate). */
+  const deleteAccountDialog = deleteAccountOpen && user ? (
+    <Suspense fallback={null}>
+      <DeleteAccountDialog
+        open
+        userId={user.id}
+        email={user.email ?? null}
+        onClose={closeDeleteAccount}
+        onDeleted={() => { void handleAccountDeleted(); }}
+        currentOrgId={currentOrg?.id ?? null}
+        onOpenWorkspace={currentOrg ? () => {
+          setDeleteAccountOpen(false);
+          setActiveView('workspace');
+        } : undefined}
+      />
+    </Suspense>
+  ) : null;
+
   /**
    * Prune stale `products` rows for a batch.
    * Strategy: fetch current DB ids for the batch, diff against keepIds,
@@ -2132,7 +2173,12 @@ function App() {
   if (!user) {
     // Marketing landing is the front door; Auth only when "Log in" is clicked.
     if (!showLogin) {
-      return <Landing onLoginClick={() => setShowLogin(true)} />;
+      return (
+        <>
+          <Landing onLoginClick={() => { setAccountDeletedNotice(false); setShowLogin(true); }} />
+          {accountDeletedNotice && <AccountDeletedNotice onDismiss={() => setAccountDeletedNotice(false)} />}
+        </>
+      );
     }
     return (
       <div style={{ position: 'relative' }}>
@@ -2169,9 +2215,11 @@ function App() {
           email={user.email ?? ''}
           onSignOut={handleSignOut}
           onRequested={() => setBetaWaitlist('pending')}
+          onDeleteAccount={openDeleteAccount}
         />
         {/* Waitlisted users can still message the founders. */}
         <SupportWidget userEmail={user.email ?? null} orgName={null} isFounder={false} />
+        {deleteAccountDialog}
       </>
     );
   }
@@ -3406,6 +3454,7 @@ function App() {
               showBackToWorkflow={activeView !== 'workflow'}
               onSelect={handleNavSelect}
               onSignOut={handleSignOut}
+              onDeleteAccount={openDeleteAccount}
               open={navMenuOpen}
               onOpenChange={setNavMenuOpen}
               /* The storage meter (was a bar under the header) is a row in the
@@ -4062,6 +4111,9 @@ function App() {
         orgName={supportOrgName}
         isFounder={supportIsFounder}
       />
+
+      {/* ── Delete account (opened from the account menu) ── */}
+      {deleteAccountDialog}
 
       {/* ── Toast notifications ─────────────────────────────────────────────── */}
       {toasts.length > 0 && (

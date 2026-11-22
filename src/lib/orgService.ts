@@ -238,6 +238,33 @@ export async function fetchOrgMembers(orgId: string): Promise<OrgMemberRow[]> {
   return (data ?? []) as OrgMemberRow[];
 }
 
+/** One of MY memberships, with the workspace it is in. */
+export interface MyMembership {
+  org_id: string;
+  role: OrgRole;
+  created_at: string;
+  name: string;
+  slug: string | null;
+}
+
+/** Every workspace the signed-in user belongs to, oldest membership first.
+ *  Used by the account deletion summary. `null` on a failed read, so the
+ *  caller can tell "no workspaces" from "could not ask". */
+export async function fetchMyMemberships(userId: string): Promise<MyMembership[] | null> {
+  const { data, error } = await supabase
+    .from('org_members')
+    .select('org_id, role, created_at, organizations ( name, slug )')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true });
+  if (error) { log.error(`fetchMyMemberships | ${error.message}`); return null; }
+  type Row = { org_id: string; role: OrgRole; created_at: string;
+    organizations: { name?: string | null; slug?: string | null } | Array<{ name?: string | null; slug?: string | null }> | null };
+  return ((data ?? []) as unknown as Row[]).map((r) => {
+    const o = Array.isArray(r.organizations) ? r.organizations[0] : r.organizations;
+    return { org_id: r.org_id, role: r.role, created_at: r.created_at, name: o?.name ?? 'Workspace', slug: o?.slug ?? null };
+  });
+}
+
 export async function fetchOrgInvites(orgId: string): Promise<OrgInviteRow[]> {
   const { data, error } = await supabase
     .from('org_invites')
