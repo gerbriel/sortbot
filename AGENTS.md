@@ -1,12 +1,3 @@
-60. **A trigger on `auth.users` must be SECURITY DEFINER.** The auth service inserts the row as
-    `supabase_auth_admin`, so an INVOKER trigger runs as that role, which owns nothing in `public`
-    and cannot write `user_profiles`; the insert raises, the auth transaction rolls back, and every
-    sign-up fails with "Database error saving new user". That is what the root script
-    `fix_security_warnings.sql` did in June 2026 (its comment says the trigger "fires as postgres",
-    which is false), and sign-up was dead until `067_fix_signup_trigger.sql`. The fix also wraps the
-    profile insert so bookkeeping can never block account creation. Rule: `grep -n "on auth.users"`
-    before touching any trigger function, and never make one of those INVOKER.
-
 # AGENTS.md — Arcadian Codebase Reference
 
 > **For any coding agent or contributor reading this file:**
@@ -2841,3 +2832,12 @@ npm run lint
     `nativePlugin.ts`, `photos.ts` for `convertFileSrc`) and `@capacitor/preferences`
     (`supabase.ts`, used only on native); everything else is `import type`. Every
     feature must keep working on the web (§3 "Native shell").
+
+60. **A trigger on `auth.users` must be SECURITY DEFINER.** The auth service inserts the row as
+    `supabase_auth_admin`, so an INVOKER trigger runs as that role, which owns nothing in `public`
+    and cannot write `user_profiles`; the insert raises, the auth transaction rolls back, and every
+    sign-up fails with "Database error saving new user". That is what the root script
+    `fix_security_warnings.sql` did in June 2026 (its comment says the trigger "fires as postgres",
+    which is false), and sign-up was dead until `067_fix_signup_trigger.sql`. The fix also wraps the
+    profile insert so bookkeeping can never block account creation. Rule: `grep -n "on auth.users"`
+    before touching any trigger function, and never make one of those INVOKER.
