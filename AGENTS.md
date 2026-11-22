@@ -412,6 +412,7 @@ sortingapp/
 │   │   ├── VoiceCommandTable.tsx  # Step 3 keyword→field reference table with inline cell editing. RE-EXPORTS VOICE_KEYWORD_TO_FIELD from `lib/voiceGrammar.ts` (the vocabulary moved next to the parser; existing imports are unchanged).
 │   │   ├── ComprehensiveProductForm.tsx / .css  # Sub-form within Step 3 for all ~50 product fields. No local state. Takes a `brandExtra` slot (rendered under the Brand field) and an `onBrandEdited` callback; the size input's onBlur routes through `normalizeSizeValue(v, { keepFitsLike: true })`, so it inherits every size family for free.
 │   │   ├── BrandSpelling.tsx / .css  # Step 3 brand-spelling memory (report 14). Three notices — "Corrected … · Undo" (an exact hit on a saved alias), "Did you mean …?" (strong phonetic match, field UNTOUCHED until Use is clicked), and "Remember 'echo unlimited' → 'Ecko Unltd' for this workspace" — plus an inline manager (list / add / edit / two-step delete) reachable by ANY member. `variant="full"` renders the same manager as the Vocabulary dashboard's Brand spellings tab, where the scope badge flips to "this workspace only".
+│   │   ├── KeywordPicker.tsx / .css / .test.tsx  # Step 3 "Keywords" combobox (replaced the Quick keywords pill row, Nov 2026, §10 Step 3). Props `entries`, `isSuggested`, `isApplied`, `onToggle`; owns only its query/open/highlight state and the session's custom words. PDG keeps the vocabulary, brand suggestions and the description toggle. Built on ui `Field` + `RemovableChip`.
 │   │   ├── ListingLabelsPicker.tsx / .css  # Per-listing label chips, mounted in Step 3 under the preset controls. Contract is `productIds: string[]` (+ optional `readOnly`, `onChanged`); it owns its own fetching, never touches `processedItems`, and renders NOTHING pre-migration. A group's photos are separate `products` rows, so a chip has three states — on, off, **partial** (`2/4`, dashed) — and tapping a partial chip applies it to the rest rather than clearing it.
 │   │   ├── GoogleSheetExporter.tsx / .css  # Step 4 shell: fetches existing titles, coalesces group fields, dedups titles/handles, price gate, 54-column preview, blob download (object URL revoked on a deferred tick). The pure CSV builder lives in `lib/csvExport.ts`. Exported as `memo(forwardRef(...))`.
 │   │   ├── Library.tsx / .css      # FULL-PAGE VIEW (was a modal overlay), ~2790 lines. Batches / groups / images tabs, rename, duplicate, delete (ownership claim + reference-counted storage guard), rubber-band select. Derivation is `lib/libraryData.ts`; thumbnails now use the SHARED `components/LazyImg` (its private copy was deleted, so Library finally gets the retry/backoff). Exported as `memo(LibraryInner)`. Library.css's hover overlay is `.batch-card .batch-actions`, SCOPED, because App.tsx's Step 4 reuses `.batch-actions` and the unscoped rule hid Save / Clear once the Library chunk had loaded (§18 #58).
@@ -1415,8 +1416,30 @@ copy points at them.
   block, where it sticks to the top rather than the bottom) adds `--safe-t` to its `top` (it
   must clear the header, which grows by the status-bar inset in the native shell, §1); the Voice Description head
   (`.voice-result-head` / `.voice-result-tools`, layout hooks only) wraps at phone width so the
-  hint gets its own line instead of a 140px column; `.descriptor-chip` takes `min-width: 44px`
-  as well as the height (short keywords measured 37px wide).
+  hint gets its own line instead of a 140px column. (The `.descriptor-chip` 44px rule that
+  lived here went with the pill row; see Keywords below.)
+
+- **Keywords: a type-to-autofill picker, not a pill row (22 Nov 2026).** The ~30 always-visible
+  "Quick keywords" pills read as clutter, so they became `KeywordPicker.tsx`: one input
+  labelled "Keywords" (ui `Field`, so it has the `.ui-input` radius, height and focus ring)
+  over an ARIA combobox listbox. **PDG still owns all the data**: the vocabulary
+  (`fetchActiveChips()` with the `DESCRIPTOR_KEYWORDS` fallback), the brand suggestions
+  (`brandTermsForChips` + the word-association graph, `isChipSuggested`, `brandOnlyChips`) and
+  the description; it passes `entries` (brand-only words, then the curated chips),
+  `isSuggested`, `isApplied = descriptorActive` and `onToggle = toggleDescriptorKeyword`.
+  Typing filters case-insensitively, ranked exact match, then suggested, then prefix, then
+  substring, max 8 rows; suggested rows carry a quiet text tag "suggested" (no icon). An empty
+  focused field lists the brand's suggestions, or the first 8 keywords, plus a "Browse all (N)"
+  row that expands to the full set inside the list's own scroll. Applied keywords show a
+  `Check` and selecting one removes it (the same toggle as before). Text that is not an exact
+  entry gets an `Add "…"` row, so Enter on an unmatched word writes it as a custom keyword.
+  Enter / click apply and clear the field with focus kept; Arrow keys move the highlight
+  (it wraps); Escape closes (a second Escape clears the text); Tab and an outside click close
+  without applying. Applied keywords render beneath as ui `RemovableChip`s ("Remove keyword
+  X"), and nothing renders there when none are applied. Phone: input 44px at `--fs-md` (from
+  `.ui-input`), options 44px. `.voice-result label` outranks the ui label rule, so
+  `KeywordPicker.css` restates it at `.kwp .ui-field__label`. The founder dashboard still
+  calls the vocabulary "quick keyword chips" (`VocabDashboard.tsx`); only Step 3 changed.
 
 - **Step 3 has exactly one scroller: the page.** `.product-preview` is a transparent
   content-height column (the card chrome lives on `.preview-scroll-area`), `.preview-nav-dock` is

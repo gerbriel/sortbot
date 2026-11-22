@@ -1,0 +1,142 @@
+/* ── KeywordPicker (Step 3) ─────────────────────────────────────────────────
+   Input + listbox + applied chips. The input IS the ui/ Field primitive
+   (.ui-input: radius, height, focus ring), and the chips are ui RemovableChip,
+   so this file only lays them out and draws the listbox.
+
+   Written desktop-first with one phone block, matching the Step 3 files. */
+
+.kwp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+  max-width: 48rem;
+  min-width: 0;
+}
+
+.kwp-combo {
+  position: relative;
+  min-width: 0;
+}
+
+/* `.voice-result label` (PDG.css) is (0,1,1) and outranks the primitive's
+   (0,1,0) label rule; restated here at (0,2,0) so the label keeps the ui/
+   treatment instead of the block-level Voice Description heading style. */
+.kwp .ui-field__label {
+  display: block;
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.kwp .kwp-input::placeholder { color: var(--text-faint); }
+
+/* ── Listbox ── */
+.kwp-popup {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: var(--ink-800);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+
+/* The class sets display, so the hidden attribute needs restating. */
+.kwp-popup[hidden] { display: none; }
+
+/* A short fade on open, nothing else. Reduced motion drops it entirely
+   (index.css also zeroes transitions globally). */
+@starting-style {
+  .kwp-popup { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kwp-popup { transition: none; }
+}
+
+.kwp-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-1) 0;
+  /* Eight rows fit without scrolling; Browse all scrolls inside the list,
+     never the page. */
+  max-height: 36rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.kwp-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 3.6rem;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  color: var(--text-primary);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.kwp-option[aria-selected='true'] { background: var(--ink-750); }
+
+.kwp-check {
+  display: inline-flex;
+  width: 14px;
+  justify-content: center;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.kwp-option-label { flex: 1; min-width: 0; }
+
+.kwp-option--applied .kwp-option-label { font-weight: 600; }
+
+.kwp-tag {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.kwp-option--custom,
+.kwp-option--browse {
+  color: var(--text-secondary);
+  /* Aligns with entry labels, past the check column. */
+  padding-left: calc(var(--space-3) + 14px + var(--space-2));
+}
+
+.kwp-option--browse {
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+/* ── Applied chips ── */
+.kwp-applied {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.kwp-applied > li { display: inline-flex; }
+
+/* ── Phone ──────────────────────────────────────────────────────────────────
+   44px is a literal: it is a physical touch floor, not a spacing value
+   (AGENTS.md §1). The input already gets 44px and --fs-md from .ui-input. */
+@media (max-width: 640px) {
+  .kwp { max-width: none; }
+
+  .kwp-option {
+    min-height: 44px;
+    font-size: var(--fs-md);
+  }
+
+  .kwp-list { max-height: 50vh; }
+}

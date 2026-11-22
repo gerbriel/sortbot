@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
 import type { ClothingItem } from '../App';
 import { Target, AlertTriangle, Check, Download, Search, Hourglass, Square, Mic, Trash2,
-         Brush, ClipboardPaste, Crop, X, Sparkles, Brain, RefreshCw, Palette, ClipboardList,
+         Brush, ClipboardPaste, Crop, X, Brain, RefreshCw, Palette, ClipboardList,
          Lightbulb, Copy, CircleDot, Save } from 'lucide-react';
 import { ComprehensiveProductForm } from './ComprehensiveProductForm';
+import { KeywordPicker } from './KeywordPicker';
 import { getCategoryPresets } from '../lib/categoryPresetsService';
 import type { CategoryPreset } from '../lib/categoryPresets';
 import { applyPresetToProductGroup, applyPresetDirectly } from '../lib/applyPresetToGroup';
@@ -1787,14 +1788,20 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const isChipSuggested = (chip: { label: string; output: string }): boolean =>
     suggestedTerms.length > 0 && suggestedTerms.some(term => termMatchesChip(term, chip.label, chip.output));
 
-  // Every suggested word is represented in the chip row EXACTLY ONCE: terms
-  // that relate to an existing chip highlight that chip; terms with no chip
-  // equivalent become their own tappable chips (deduped, capped so a chatty
-  // association graph can't flood the row).
+  // Every suggested word is represented in the keyword picker EXACTLY ONCE:
+  // terms that relate to an existing chip mark that chip suggested; terms with
+  // no chip equivalent become entries of their own (deduped, capped so a
+  // chatty association graph can't flood the list).
   const brandOnlyChips: { label: string; output: string }[] = suggestedTerms
     .filter(term => !chipDefs.some(chip => termMatchesChip(term, chip.label, chip.output)))
     .slice(0, 12)
     .map(term => ({ label: term, output: term }));
+
+  // The KeywordPicker's vocabulary: brand-only words first, then the curated
+  // chips. The picker ranks suggested entries ahead of the rest itself.
+  const keywordEntries = [...brandOnlyChips, ...chipDefs];
+  const isKeywordSuggested = (entry: { label: string; output: string }): boolean =>
+    brandOnlyChips.some(b => b.output === entry.output) || isChipSuggested(entry);
 
   const descriptorActive = (kw: string): boolean => {
     const cur = (currentItem?.customDescription || '');
@@ -3121,51 +3128,15 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                 </div>
               </div>
 
-              {/* Quick keywords — tap to add/remove resale descriptors from the
-                  description field (no need to know or dictate the vocabulary) */}
-              <div className="descriptor-chips">
-                <span className="descriptor-chips-label">Quick keywords</span>
-                {(() => {
-                  // Row order: the brand's own words first (terms with no chip
-                  // equivalent become chips of their own), then existing chips
-                  // related to the brand, then the rest — stable within groups.
-                  const withFlags = chipDefs.map(chip => ({ chip, suggested: isChipSuggested(chip), brandOnly: false }));
-                  const ordered = [
-                    ...brandOnlyChips.map(chip => ({ chip, suggested: true, brandOnly: true })),
-                    ...[...withFlags].sort((a, b) => Number(b.suggested) - Number(a.suggested)),
-                  ];
-                  const anySuggested = ordered.some(w => w.suggested);
-                  return (
-                    <>
-                      {anySuggested && (
-                        <span className="descriptor-chips-hint">
-                          <Sparkles size={10} style={{ flexShrink: 0 }} /> suggested{currentItem?.brand ? ` for ${currentItem.brand}` : ''}
-                        </span>
-                      )}
-                      {ordered.map(({ chip, suggested, brandOnly }) => {
-                        const active = descriptorActive(chip.output);
-                        return (
-                          <button
-                            key={brandOnly ? `brand:${chip.label}` : chip.label}
-                            type="button"
-                            className={`descriptor-chip ${active ? 'descriptor-chip--on' : ''} ${suggested ? 'descriptor-chip--suggested' : ''}`}
-                            onClick={() => toggleDescriptorKeyword(chip.output)}
-                            title={
-                              active
-                                ? `Remove "${chip.output}" from the description`
-                                : suggested
-                                  ? `Suggested from your curated brand keywords. Add "${chip.output}" to the description`
-                                  : `Add "${chip.output}" to the description`
-                            }
-                          >
-                            {chip.label}
-                          </button>
-                        );
-                      })}
-                    </>
-                  );
-                })()}
-              </div>
+              {/* Keywords: type to find a resale descriptor and add or remove
+                  it from the description. PDG owns the vocabulary, the brand
+                  suggestions and the toggle; the picker only presents them. */}
+              <KeywordPicker
+                entries={keywordEntries}
+                isSuggested={isKeywordSuggested}
+                isApplied={descriptorActive}
+                onToggle={toggleDescriptorKeyword}
+              />
 
               {voiceMode === 'table' ? (
                 <VoiceCommandTable

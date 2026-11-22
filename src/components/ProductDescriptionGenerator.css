@@ -1293,67 +1293,7 @@
 }
 
 
-/* ── Quick descriptor keyword chips ─────────────────────────────────────── */
-.descriptor-chips {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.3rem;
-  margin: 0.5rem 0;
-}
-
-.descriptor-chips-label {
-  font-size: var(--fs-2xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-secondary);
-  margin-right: 0.2rem;
-}
-
-.descriptor-chip {
-  border: 1px solid var(--accent-line);
-  background: var(--accent-dim);
-  color: var(--accent);
-  border-radius: 20px;
-  padding: 0.2rem 0.65rem;
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s;
-}
-
-/* Hover intensifies the same accent tint (--accent-line is the stronger translucent step) */
-.descriptor-chip:hover { background: var(--accent-line); }
-
-.descriptor-chip--on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--ink-950);
-}
-
-/* Suggested chips — related to the current brand's curated keywords */
-.descriptor-chips-hint {
-  font-size: var(--fs-2xs);
-  font-weight: 700;
-  color: var(--warning);
-  margin-right: 0.15rem;
-  white-space: nowrap;
-}
-
-.descriptor-chip--suggested:not(.descriptor-chip--on) {
-  border-color: var(--warning);
-  background: var(--warning-dim);
-  color: var(--warning);
-}
-
-/* Hover brightens amber → gold rather than adding fill; on dark there is no
-   lighter translucent step available above --warning-dim. */
-.descriptor-chip--suggested:not(.descriptor-chip--on):hover {
-  background: var(--gold-dim);
-  border-color: var(--gold);
-  color: var(--gold);
-}
+/* The Step 3 keyword control lives in KeywordPicker.css. */
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MOBILE-FIRST STEP 3
@@ -1374,7 +1314,7 @@
 
 .crop-fs-btn,
 .crop-fs-pill,
-.descriptor-chip,
+.kwp-option,
 .preview-nav-controls .button,
 .voice-controls button {
   touch-action: manipulation;
@@ -1557,18 +1497,6 @@
   .voice-result-tools {
     flex: 1 1 100%;
     justify-content: space-between;
-  }
-
-  .descriptor-chips {
-    gap: 0.35rem;
-  }
-
-  .descriptor-chip {
-    min-height: var(--tap, 44px);
-    /* Short keywords ("y2k", "rare") measured 37px wide: the floor is both axes. */
-    min-width: var(--tap, 44px);
-    padding: 0.4rem 0.8rem;
-    font-size: var(--fs-sm);
   }
 
   .form-section {
