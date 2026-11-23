@@ -1,0 +1,174 @@
+/* LandingDemo: px units, like Landing.css (the landing page is px-based by
+   design; the app's rem scale would shrink it). Colours resolve through the
+   tokens in src/index.css only. Desktop-first, with one phone block. */
+
+.ldd {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  font-size: 16px;
+  color: var(--text-primary);
+  min-width: 0;
+}
+
+.ldd-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ldd-chips { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.ldd .ldd-chip { font-size: 14px; min-height: 36px; padding: 6px 14px; }
+
+.ldd-body {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+/* Neutral stand-in for a photo. No external image (CSP), no fake product shot. */
+.ldd-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  aspect-ratio: 4 / 5;
+  padding: 16px;
+  text-align: center;
+  background: var(--ink-850);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+}
+.ldd-tile span { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.ldd-tile small { font-size: 12px; color: var(--text-muted); }
+
+.ldd-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.ldd-step {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: var(--ink-800);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  min-width: 0;
+}
+
+.ldd-step-head { display: flex; align-items: center; gap: 10px; }
+.ldd .ldd-step-head h3 { margin: 0; font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.ldd-step-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--ink-950);
+  font-size: 12px;
+  font-weight: 700;
+}
+.ldd-step[data-visible='false'] .ldd-step-n { background: var(--ink-700); color: var(--text-secondary); }
+
+.ldd-step-body { min-width: 0; animation: ldd-in var(--dur) var(--ease) both; }
+.ldd-step-wait { padding: 2px 0; }
+
+@keyframes ldd-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ldd-step-body { animation: none; }
+}
+
+/* Step 1: the transcript with each recognised field name quietly marked. */
+.ldd .ldd-transcript {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.ldd-kw {
+  background: var(--ink-750);
+  color: var(--text-primary);
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+}
+
+/* Step 2: read-only cells. They are values, not inputs to fill. */
+.ldd-fields .ui-fieldcell { cursor: default; }
+.ldd-fields .ui-fieldcell__control { cursor: default; }
+
+/* Step 3 */
+.ldd-listing { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.ldd-listing-title, .ldd-desc { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ldd-k { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+.ldd-listing-title strong { font-size: 17px; line-height: 1.35; overflow-wrap: anywhere; }
+.ldd-count { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.ldd .ldd-desc p {
+  margin: 0;
+  white-space: pre-line;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+  padding: 12px;
+  background: var(--ink-900);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.ldd .ldd-note { margin: 0; font-size: 13px; color: var(--text-secondary); }
+
+/* Step 4: the first columns of the export row, as labelled cells that wrap. */
+.ldd-csv {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: clip;
+}
+.ldd-csv-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  margin: -1px 0 0 -1px;
+  min-width: 0;
+}
+.ldd-csv dt { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--text-muted); }
+.ldd-csv dd { margin: 0; font-size: 13px; color: var(--text-primary); overflow-wrap: anywhere; }
+
+.ldd .ldd-error { margin: 0; font-size: 14px; color: var(--danger); }
+
+@media (max-width: 640px) {
+  .ldd-body { grid-template-columns: minmax(0, 1fr); }
+  .ldd-tile { aspect-ratio: auto; flex-direction: row; justify-content: flex-start; padding: 12px 16px; }
+  .ldd-tile small { margin-left: auto; }
+  .ldd-controls { flex-direction: column; align-items: stretch; }
+  .ldd .ldd-chip { min-height: 44px; font-size: 15px; }
+  .ldd .ldd-replay { min-height: 44px; }
+  .ldd-step { padding: 14px; }
+  .ldd-fields .ui-fieldcell__control { font-size: 16px; }
+  .ldd-csv { grid-template-columns: minmax(0, 1fr); }
+}

@@ -14,6 +14,10 @@ import brand from '../brand.json';
 /** The product name as rendered everywhere ("SQRL"). */
 export const BRAND: string = brand.name;
 
+/** What the name stands for ("Super quick resale lister"). The landing hero's
+ *  subtitle and the footer's brand line; an expansion, not a tagline. */
+export const BRAND_DESCRIPTOR: string = brand.descriptor;
+
 /** The meta description, also the landing page's lead sentence. */
 export const BRAND_TAGLINE: string = brand.tagline;
 

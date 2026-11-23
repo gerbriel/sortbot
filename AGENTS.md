@@ -25,7 +25,9 @@ fixtures are identifiers, not brand copy, and were left alone on purpose.
 
 **How to rename (since 22 Nov 2026 the name lives in ONE file, `brand.json` at the root):**
 
-1. Edit `brand.json`: `name`, `tagline` (the meta description and landing lead), `landingTitle`
+1. Edit `brand.json`: `name`, `descriptor` (what the name stands for, "Super quick resale lister";
+   the landing hero subtitle and footer line, read in src/ only, not by `brand:apply`),
+   `tagline` (the meta description and landing lead), `landingTitle`
    (the marketing tab title, keep it under 60 characters) and `mark` (the icon letter).
 2. `npm run brand:apply` (`scripts/apply-brand.mjs`). It rewrites the static files that cannot
    import: `index.html` (`<title>`, description, og:site_name/title/description/image:alt,
@@ -42,7 +44,7 @@ fixtures are identifiers, not brand copy, and were left alone on purpose.
    rasterises the icon, splash, OG, touch and manifest sources with `name` from `brand.json`
    (`assets/make-sources.mjs`), runs `assets:generate` for every iOS and Android size, and
    reverts the manifest the generator reformats. Setup and caveats: docs/mobile/00-capacitor.md.
-4. Commit. Everything in `src/` reads `BRAND`, `BRAND_TAGLINE`, `BRAND_TITLE_LANDING` and
+4. Commit. Everything in `src/` reads `BRAND`, `BRAND_DESCRIPTOR`, `BRAND_TAGLINE`, `BRAND_TITLE_LANDING` and
    `BRAND_MARK` from `src/brand.ts`, which imports `brand.json`, so no source edit is needed.
    If the new name changes case or length a lot, retune `--wordmark-tracking` in index.css.
 
@@ -113,9 +115,10 @@ Because everything else resolves through tokens, **swapping the whole palette is
 ~45-line edit in `:root`.** This app has already shipped violet-on-dark, bone-on-dark
 and monochrome variants from that one block.
 
-Three colour surfaces are NOT tokens because they are data or stand-ins, and each
-must be retuned by hand when the palette changes:
-`Landing.tsx` mock garment tiles (inline hex, they stand in for photos),
+Two colour surfaces are NOT tokens because they are data, and each
+must be retuned by hand when the palette changes (the third, the `Landing.tsx`
+mock garment tiles in inline hex, went in the Nov 2026 landing restructure;
+the landing previews use token greys):
 `DEFAULT_CATEGORIES` in `lib/categories.ts` + the duplicate list in
 `initializeDefaultCategories`, and the colour-picker defaults in `CategoriesManager.tsx`.
 
@@ -433,7 +436,14 @@ sortingapp/
 │   │   ├── Auth.tsx / .css        # Email/password sign-in + sign-up. MIN_PASSWORD_LENGTH = 10, enforced on sign-up only (existing short passwords can still sign in).
 │   │   ├── HomeDashboard.tsx / .css  # THE 'home' view (§6) — the page a signed-in member lands on. Eight widgets in one auto-fit grid: `<OnboardingChecklist>` FIRST while a workspace is still being set up (it returns null itself, so there is nothing here to un-wire), current batch (counts + Resume + a two-step ConfirmAction "Start a new batch"), recent batches (opens through `getWorkflowBatch` → App's `handleOpenBatch`, because the metadata read projects `workflow_state` away), Inbox (consumes `useSupportThreads` — never subscribes), Tools (built FROM the `navItems` prop, so a role gate is declared once), Plan usage (since 22 Nov 2026: three quiet meters from `fetchOrgUsage(orgId)`, storage of plan GB, listings this month of the monthly cap with the basis as a hint, members of seats; `--warning` from 85%, `--danger` at or over, "Unlimited" with no bar for a null limit; caption plus the plan as a Badge; hidden on 'unavailable', 'forbidden' and 'error', and with no workspace; it replaced the per-person Storage widget and the `storage` prop is gone), Marketplaces, and a founder 7-day pulse. NOT wrapped in `<ToolView>` — there is nothing to go Back from on the page you arrive at; it restates ToolView's spacing scale instead. Every widget FAILS QUIET (a failed read renders its empty state) and a feature whose migration has not run hides entirely. **First real adopter of `src/components/ui/`** (StatTile/StatGrid, EmptyState, Button, ConfirmAction, Badge, Skeleton) — no primitive was edited.
 │   │   ├── OnboardingChecklist.tsx / .css / .test.tsx  # "Get set up" — the FIRST Home widget while it is showing, for every member (§6). Owns its own reads (categories, presets, marketplaces, Shopify, members, batch metadata; publications only when no batch reached Step 4), each guarded so a rejection is a fact it does not have. Renders NOTHING until they settle (no flash for an established shop), nothing once every required step is done, and nothing once dismissed — and a dismissed workspace reads nothing at all. Borrows `.home-card*` from HomeDashboard.css rather than defining a second card. Third adopter of `src/components/ui/` (Button, Badge, ConfirmAction) — no primitive edited.
-│   │   ├── Landing.tsx / .css     # Marketing landing rendered at the main URL for logged-out visitors + beta signup form. Landing.css stays px-based (§1). Photos from images.unsplash.com (the one non-Supabase img-src origin).
+│   │   ├── Landing.tsx / .css     # Marketing landing rendered at the main URL for logged-out visitors + beta signup form. Landing.css stays px-based (§1) but its colours and radii are the app tokens. No photography since Nov 2026 (images.unsplash.com was dropped from the CSP `img-src` the same day). Sections and rules: §10 "Marketing landing". Landing.test.tsx enforces the copy rules.
+│   │   ├── LandingPreviews.tsx    # EAGER product previews for the landing: the hero Step 2 workbench and one preview per How it works step, built from the app's own markup/classes and the pure primitives (PhoneStepper, FieldGrid, RemovableChip, Badge, StatTile). Inert, aria-hidden, captioned. Its CSS imports are already in the main bundle.
+│   │   ├── LandingDashboardPreview.tsx # LAZY landing "Your dashboard" previews, the two places every member sees plan usage: the Home Plan usage card (its markup via planUsageMeters) and the Workspace page's real `PlanUsageGroup` (imported from OrgPanel.tsx), both fed one fixture workspace. Never the founder console (customers do not see it). Lazy because it pulls HomeDashboard.css and the OrgPanel module and CSS. No Supabase calls.
+│   │   ├── landing/               # Interactive landing sections, each `React.lazy`-mounted by Landing.tsx. px-based CSS like Landing.css (§1). Copy rules: never "AI", "vision", "neural" or "scan"; no em dashes.
+│   │   │   ├── LandingDemo.tsx / .css / .test.tsx  # "See a listing come together." Three sample chips (Nike hoodie, Carhartt Detroit jacket, Levi's 501), a neutral placeholder tile (no images, CSP), four steps: the transcript with field titles marked by `scanFieldTitles`, the parsed fields as read-only `ui/FieldGrid` cells (preset-filled ones carry a "Preset" Badge), the generated title (with character count) and description, and six Shopify CSV columns. Steps reveal 250 ms apart with Skeletons before; under prefers-reduced-motion all at once. Replay re-runs; disabled while staging. All output is computed, nothing pre-written.
+│   │   │   ├── demoPipeline.ts / .test.ts  # The demo's engine run and its sample data: `parseVoiceChunk` + `flushVoiceState` (grammar writes) → `applyPresetDirectly` (inline real-shape presets) → `generateProductDescription` (the Regenerate context, plus a sample `descriptionSettings` whose disclaimer has no em dash; the default one has one) → `buildShopifyCsvRows`. The transcripts say "period" after every command because `extractFieldsFromVoice` misreads consecutive measurements without it (see the module header). This module is why the demo is lazy, though textAIService still ships in the entry chunk while App.tsx imports PDG statically.
+│   │   │   ├── TimeCalculator.tsx / .css / .test.tsx  # "What the typing costs you." Listings per week (5 to 300, default 40) and minutes per listing today (2 to 40, default 12), each a range slider bound to a number field (typed values apply live when in range, clamp on blur), plus an editable SQRL minutes estimate (1 to 10, default 3). Outputs: hours a month today, with SQRL, reclaimed, and extra listings at the SQRL pace. No money figures.
+│   │   │   └── timeMath.ts / .test.ts  # Pure math for TimeCalculator: 52/12 weeks a month, inputs clamped to the published ranges, reclaimed time never negative, extra listings rounded down; `formatHours` (one decimal) and `formatCount` (whole, grouped).
 │   │   ├── Wordmark.tsx           # The brand wordmark (the logo is the name in Outfit 500); used by the header, Landing, Auth, WaitlistGate.
 │   │   ├── WaitlistGate.tsx / .css  # Full-screen gate for a signed-in user with no membership and no invite. Carries a "Delete account" link (`onDeleteAccount`), because a waitlisted person has an account and this is the only screen they can reach.
 │   │   ├── DeleteAccountDialog.tsx / .css / .test.tsx  # In-app account deletion (App Store 5.1.1(v), Nov 2026). A ui `Dialog` opened from the account menu's "Delete account" row (and the waitlist gate), lazy-loaded, mounted by App only while open. Shows what happens to each workspace (`fetchAccountDeletionPlan`: deleted / you will leave / blocks deletion), requires typing DELETE, then calls `deleteMyAccount`. A `last_owner` refusal (preview or server) says "transfer ownership first" and lists that workspace's other members, each with a two-step **Make owner** (`ConfirmAction` → `updateMemberRole`, which RLS allows because the user is an owner there), then re-reads the plan; a server refusal is matched to its row by `orgId`, then name; the Open the Workspace page button appears only when the blocking workspace is `currentOrgId` (there is no workspace switcher). `founding_admin`, `blocked` ("needs a founder's help"), `unavailable` (function not deployed) and `failed` each get their own sentence. Wraps its body in `data-tv-modal` so ToolView's Escape leaves it alone. §7 "Account deletion".
@@ -1175,7 +1185,7 @@ Most state lives in `App.tsx`. **Exception (July 2026): the four item arrays** (
 - **`proseEnabled` defaults to false and is now enforced server-side too** (403 without it), not just in the client.
 
 ### There is NO third-party API in this app
-The Hugging Face/Llama-vision proxy (`huggingfaceService.ts`, `huggingface-proxy.cjs`, `TestLlamaVision.tsx`, `AISettings.tsx`) and the OpenAI path (`src/services/api.ts`) were **deleted** in Sept 2026 — all five were dead code, none was reachable from the running app, and `apis.google.com` / `api.openai.com` / `localhost:3001` are provably absent from the built bundle. The active description path is and always was `textAIService.ts → generateProductDescription()`, which is pure local rule-based text. The only outbound origins are Supabase (`https://` + `wss://`) and `images.unsplash.com` on the landing page.
+The Hugging Face/Llama-vision proxy (`huggingfaceService.ts`, `huggingface-proxy.cjs`, `TestLlamaVision.tsx`, `AISettings.tsx`) and the OpenAI path (`src/services/api.ts`) were **deleted** in Sept 2026 — all five were dead code, none was reachable from the running app, and `apis.google.com` / `api.openai.com` / `localhost:3001` are provably absent from the built bundle. The active description path is and always was `textAIService.ts → generateProductDescription()`, which is pure local rule-based text. The only outbound origins are Supabase (`https://` + `wss://`) and the self-hosted matting service; the landing page's `images.unsplash.com` photos were removed in Nov 2026.
 
 ### Edge Function hardening (Sept 2026)
 - **The anon key is a validly signed project JWT, so `verify_jwt` alone never proved a user.** Both functions now additionally resolve the caller through `/auth/v1/user` and return **401** when there is none.
@@ -1194,14 +1204,14 @@ GitHub Pages cannot send response headers, so a `<meta http-equiv="Content-Secur
 | `default-src` | `'self'` | Backstop for media/manifest/frame — the app has none of them. |
 | `script-src` | `'self'` | The built `index.html` has exactly one `/assets/*.js` module and **no inline script**; no CDN script anywhere. No `'unsafe-eval'` (the bundle's one `new Function` is jszip's setimmediate polyfill on a branch jszip never takes). |
 | `style-src` | `'self' 'unsafe-inline'` | The pre-paint `<style>` in `index.html` plus the app's pervasive React `style={{…}}` attributes. |
-| `img-src` | `'self' data: blob: https://*.supabase.co https://images.unsplash.com` | Product photos; the Landing page photos; `data:` for the SVG select arrow in `ComprehensiveProductForm.css`; `blob:` for upload previews. The wildcard keeps the policy env-agnostic. |
+| `img-src` | `'self' data: blob: https://*.supabase.co` | Product photos; `data:` for the SVG select arrow in `ComprehensiveProductForm.css`; `blob:` for upload previews. The wildcard keeps the policy env-agnostic. |
 | `font-src` | `'self' data:` | Nothing is fetched — every `font-family` is a system stack. |
 | `connect-src` | `'self' https://*.supabase.co wss://*.supabase.co https://matting.arcadian.ltd` | REST/auth/storage/`functions.invoke`, the TUS endpoint, the three raw `fetch()` calls that re-download storage images (EXIF rescan, recompress), Realtime — and the self-hosted matting service, named **exactly** rather than wildcarded (it is the one origin in the policy that is ours rather than Supabase's, and a wildcard would cover a subdomain nobody audited). `'self'` also covers the dev server's HMR socket (CSP3 `'self'` matches same-origin ws/wss). A locally-run matting service on `http://localhost:8080` is appended by a `command === 'serve'` `transformIndexHtml` plugin in `vite.config.ts` — the exact mechanism this section already named — so the built policy never carries it (verified against `dist/index.html`). |
 | `worker-src` | `'self'` | `public/sw.js`, same origin at both `/` and `/sortbot/`. |
 | `object-src` / `base-uri` | `'none'` / `'none'` | No plugin content; no `<base>`, so an injection cannot re-point every relative URL. |
 | `form-action` | `'self'` | Both forms `preventDefault()`; `'self'` rather than `'none'` so a future real post is not silently broken. |
 
-`<meta name="referrer" content="strict-origin-when-cross-origin">` is set explicitly so the Unsplash requests never carry a full app URL. **Two directives are deliberately absent:** `frame-ancestors` (per spec it MUST be ignored in a `<meta>`, so clickjacking protection needs a real header — i.e. moving off GitHub Pages, which also unlocks HSTS and `report-to`) and `upgrade-insecure-requests` (it would rewrite the dev server's `ws://localhost:5173` HMR socket and break `npm run dev`, and buys nothing — there is no `http://` subresource). Dev mode survives because Vite injects its refresh preamble ABOVE the meta tag, and a `<meta>` CSP only governs what is fetched after it is parsed; if a future Vite moves that preamble, the fix is a `transformIndexHtml` plugin that injects the meta only when `command === 'build'`.
+`<meta name="referrer" content="strict-origin-when-cross-origin">` is set explicitly so no cross-origin request carries a full app URL (it was written for the landing page's Unsplash photos, removed Nov 2026, and is kept for every other outbound request). **Two directives are deliberately absent:** `frame-ancestors` (per spec it MUST be ignored in a `<meta>`, so clickjacking protection needs a real header — i.e. moving off GitHub Pages, which also unlocks HSTS and `report-to`) and `upgrade-insecure-requests` (it would rewrite the dev server's `ws://localhost:5173` HMR socket and break `npm run dev`, and buys nothing — there is no `http://` subresource). Dev mode survives because Vite injects its refresh preamble ABOVE the meta tag, and a `<meta>` CSP only governs what is fetched after it is parsed; if a future Vite moves that preamble, the fix is a `transformIndexHtml` plugin that injects the meta only when `command === 'build'`.
 
 ### Photo backgrounds — the self-hosted matting service (Sept 2026)
 
@@ -1973,6 +1983,37 @@ next frame because PDG remounts (`key={currentBatchId}`) and its group array has
 **Founder console.** Usage tab (project tiles, workspaces by storage) and Plans → Limits (the three limits per plan via `founding_set_plan_limits`). Founders see an EmptyState naming 069 rather than a hidden tab, because they are the ones who can run it.
 
 **Tints, everywhere:** quiet `--accent` bar on `--ink-700`; `--warning` from 85% of a limit; `--danger` at or over 100%. No limit is ENFORCED yet: these are readouts. Enforcement (refusing an upload, a 4th seat, the 501st listing) is a separate piece of work.
+
+### Marketing landing (restructured 22 Nov 2026)
+
+`Landing.tsx`, rendered at the main URL for logged-out visitors, eager (first paint). Order:
+nav (How it works / Demo / Pricing / FAQ, Request access, Log in) · hero (the rack headline,
+`BRAND_DESCRIPTOR` "Super quick resale lister" from brand.json as the subtitle, LinkButton CTAs
+"Try the demo" → `#demo` and "Request beta access" → `#signup`, the Step 2 workbench preview) ·
+`#how` (four numbered steps, each over a preview of that step's real screen) · `#demo`
+(`landing/LandingDemo`, lazy) · `#time` (`landing/TimeCalculator`, lazy) · `#marketplaces` (the
+ten adapter names as `ui-chip` spans; `MARKETPLACE_NAMES` is a `Record<MarketplaceKey, string>`,
+so a new key is a compile error) · `#dashboard` (`LandingDashboardPreview`, lazy) · `#pricing`
+(`PRICING_TIERS`, one table at desktop with Pro the featured row; at <= 640px the same rows
+restack in the FieldGrid cell language via `data-label`; no toggle, no annual option) · `#faq`
+(six native `<details>`) · `#signup` (requestBetaAccess + `track('Beta Signup')`, unchanged) ·
+footer (brand, Navigation, Company; "© 2026 SQRL. Served from arcadian.ltd."; no social links
+exist in the repo). The app links to `#pricing` and `#signup`: keep both ids.
+
+**Truth rules (owner, Nov 2026), enforced by `Landing.test.tsx`:** the product is rule based
+(category presets, a dictation grammar, title/description templates, export feeds and copy
+packs). The page never says AI, vision, neural or scan, never claims one click publishing,
+delisting or API connectors, carries no invented statistics (the only numbers are the pricing
+table, the visitor's calculator inputs and preview fixtures captioned "sample data"), no
+testimonials, no mascot, no em dashes. The FAQ asks "Does SQRL guess at my listings?" rather
+than naming AI, because the test bans the word in rendered copy.
+
+**One look with the app:** every visual is a preview made from the app's own components and
+stylesheets (`LandingPreviews.tsx`, `LandingDashboardPreview.tsx`), inert and aria-hidden with
+a real caption. A preview body renders at app scale (the app's rem rules on the 9px root, 14px
+body); the page's element resets are written as `:where(.landing) :is(...)` so any app class
+rule inside a preview wins over them. A preview that needs a stylesheet the main bundle does not
+already ship goes in the lazy dashboard chunk, not in the eager file.
 
 ## 11. Critical Business Logic
 

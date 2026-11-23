@@ -1,47 +1,127 @@
-import { useEffect, useState } from 'react';
-import { BRAND, BRAND_TITLE_LANDING } from '../brand';
-import {
-  Target, RotateCcw, RotateCw, Trash2, Scissors, Mic, Download,
-  BadgeDollarSign, MessageSquare, Users, Package, Check, Shirt, Layers, Clock,
-} from 'lucide-react';
+import { Component, Suspense, lazy, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+import { BRAND, BRAND_DESCRIPTOR, BRAND_TITLE_LANDING } from '../brand';
+import { Check } from 'lucide-react';
 import { requestBetaAccess } from '../lib/betaService';
+import type { MarketplaceKey } from '../lib/marketplaces/types';
 import Wordmark from './Wordmark';
+import { Button, LinkButton } from './ui/Button';
+import { WorkbenchPreview, StepPreview } from './LandingPreviews';
 import { track } from '../lib/analytics';
+import './ui/Chip.css';
 import './Landing.css';
+
+/* The interactive pieces and the dashboard preview carry the page's heavy
+ * code (and, for the dashboard, HomeDashboard.css, OrgPanel.css and
+ * FounderConsole.css, none of which the main bundle has), so they are split
+ * out of the first paint and load behind a quiet skeleton. Landing itself,
+ * the hero workbench and the four step previews stay eager: they draw on
+ * stylesheets App already ships (AGENTS.md §8). */
+const LandingDemo = lazy(() => import('./landing/LandingDemo'));
+const TimeCalculator = lazy(() => import('./landing/TimeCalculator'));
+const LandingDashboardPreview = lazy(() => import('./LandingDashboardPreview'));
 
 interface LandingProps {
   onLoginClick: () => void;
 }
 
-/* ── Photography ────────────────────────────────────────────────────────────
- * Editorial vintage-clothing imagery, hosted on the Unsplash CDN (no bytes in
- * the repo, no build step). The `w` param is sized to the largest slot the
- * image can occupy, so nothing downloads a 5000px original.
- *
- * DO NOT hand-edit these URLs beyond the documented Unsplash query params
- * (w / h / q / auto / fit) — every one below was verified 200 image/jpeg.
- * Crops are steered with CSS object-position, not by rewriting the URL.
- */
-const PHOTO = {
-  /** Hero band: a long rail of dark wool blazers on a real thrift floor. */
-  heroRail: 'https://images.unsplash.com/photo-1675537057530-312348c6caa2?w=2400&q=75&auto=format&fit=crop',
-  /** Tour 1: shop-window rail of cream and oatmeal knitwear. */
-  knitRail: 'https://images.unsplash.com/photo-1445205170230-053b83016050?w=1200&q=75&auto=format&fit=crop',
-  /** Tour 3: stack of folded knitwear in neutral tones. Replaced a denim macro
-   *  that was electric blue — it was the one image on the page fighting the
-   *  black/white/grey palette instead of sitting inside it. */
-  knitStack: 'https://images.unsplash.com/photo-1760013531865-89ff324f83a6?w=1200&q=75&auto=format&fit=crop',
-  /** Signup band: folded jeans on seamless white, the calmest of the set. */
-  denimStack: 'https://images.unsplash.com/photo-1637069585336-827b298fe84a?w=1200&q=75&auto=format&fit=crop',
-} as const;
+/* ── No photography (Nov 2026) ──────────────────────────────────────────────
+ * The page used Unsplash stock photos (and credited them in the footer) until
+ * the owner asked for the product itself to be the picture: every visual is
+ * now a preview built from the app's own components (LandingPreviews.tsx,
+ * LandingDashboardPreview.tsx). Nothing on the page loads from
+ * images.unsplash.com any more, and that origin left the CSP img-src too. */
 
-/** Footer attribution. Unsplash does not require it; we credit anyway. */
-const PHOTO_CREDITS: { name: string; href: string }[] = [
-  { name: 'Anthony Sebbo', href: 'https://unsplash.com/photos/a-rack-of-shirts-in-a-clothing-store-Q-o0ILOg3kk' },
-  { name: 'Hannah Morgan', href: 'https://unsplash.com/photos/assorted-color-hanging-clothes-lot-ycVFts5Ma4s' },
-  { name: 'Claire Abdo', href: 'https://unsplash.com/photos/a-stack-of-jeans-sitting-on-top-of-each-other-aWLTXw6kbDw' },
-  { name: 'Katya Azimova', href: 'https://unsplash.com/photos/stack-of-folded-cozy-sweaters-in-neutral-colors-05O5v_aBkO0' },
+/** The page's own sections, in order. The nav (desktop) and the footer's
+ *  Navigation column both read this, so a section is renamed in one place. */
+const SECTION_LINKS: { href: string; label: string }[] = [
+  { href: '#how', label: 'How it works' },
+  { href: '#demo', label: 'Demo' },
+  { href: '#pricing', label: 'Pricing' },
+  { href: '#faq', label: 'FAQ' },
 ];
+
+/** How it works. Every sentence describes what the app does today (§10). */
+const STEPS: { title: string; body: string }[] = [
+  {
+    title: 'Upload photos',
+    body: 'Drop in a phone export, a folder or a ZIP. Capture time keeps every shot in the order you took it.',
+  },
+  {
+    title: 'Group and categorize',
+    body: 'Drag the angles of one piece into a single listing, then drop it onto a category. The preset fills shipping, policies and the title template.',
+  },
+  {
+    title: 'Dictate the details',
+    body: 'Say the field name, then the value. The grammar fills size, brand, measurements and flaws while you hold the garment.',
+  },
+  {
+    title: 'Export everywhere',
+    body: 'A Shopify CSV built for import, plus a feed or a copy pack for each marketplace you sell on.',
+  },
+];
+
+/** Display names of the ten export targets. Typed against MarketplaceKey (a
+ *  type only import, so no adapter code reaches the first paint), which makes
+ *  a missing or extra marketplace a compile error. Names match each adapter's
+ *  `spec.name` in src/lib/marketplaces/. */
+const MARKETPLACE_NAMES: Record<MarketplaceKey, string> = {
+  shopify: 'Shopify',
+  ebay: 'eBay',
+  etsy: 'Etsy',
+  poshmark: 'Poshmark',
+  mercari: 'Mercari',
+  grailed: 'Grailed',
+  depop: 'Depop',
+  facebook: 'Facebook',
+  vinted: 'Vinted',
+  whatnot: 'Whatnot',
+};
+
+/** Six real questions. Answers say only what the product does. */
+const FAQS: { q: string; a: string }[] = [
+  {
+    q: `Which marketplaces does ${BRAND} export to?`,
+    a: `Shopify, eBay, Etsy, Poshmark, Mercari, Grailed, Depop, Facebook, Vinted and Whatnot. Shopify gets a CSV built for its product import. The others get a feed file or a copy pack per listing that you paste into the marketplace's own app.`,
+  },
+  {
+    q: `Does ${BRAND} guess at my listings?`,
+    a: 'No. Every field comes from your category preset, your dictation or a title and description template you control. Dictation is read by a grammar, field name then value, so the same input gives the same listing every time. Nothing is invented, and you can always see why a field says what it says.',
+  },
+  {
+    q: `How is ${BRAND} related to arcadian.ltd?`,
+    a: `arcadian.ltd is the domain ${BRAND} is served from. Same product, same account.`,
+  },
+  {
+    q: 'Can I try it without a card?',
+    a: 'Yes. The beta is free, and the Free plan covers 5 listings a month after launch. No card is asked for at any point during the beta.',
+  },
+  {
+    q: 'Where do my photos live?',
+    a: 'In your own workspace in our Supabase project, private to your team. You can export your listings and photos at any time.',
+  },
+  {
+    q: 'Does my team get access?',
+    a: 'Yes. Each shop gets a private workspace with roles: an owner, admins and members, invited by email.',
+  },
+];
+
+/** If a lazy chunk fails to load (offline, a stale deploy), the section shows
+ *  one quiet line instead of taking the whole marketing page down with it. */
+class LazySlot extends Component<{ children: ReactNode; label: string }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() {
+    if (this.state.failed) {
+      return <p className="ld-slot-failed">The {this.props.label} could not load. Refresh the page to try again.</p>;
+    }
+    return (
+      <Suspense fallback={<div className="ld-skeleton" role="status" aria-label={`Loading the ${this.props.label}`} />}>
+        {this.props.children}
+      </Suspense>
+    );
+  }
+}
 
 /** One row of the launch pricing ladder. Prices are preformatted strings so
  *  the $1,200 comma and the $0.00 per item cell render exactly as speced. */
@@ -56,7 +136,7 @@ interface PricingTier {
 }
 
 /** Revised launch pricing (July 2026): eight tiers that differ by monthly item
- *  volume only — every plan gets the full product. Update pricing HERE. */
+ *  volume only; every plan gets the full product. Update pricing HERE. */
 const PRICING_TIERS: PricingTier[] = [
   { name: 'Free',       items: '5',     price: '$0',     perItem: '$0.00', founder: null },
   { name: 'Starter',    items: '25',    price: '$50',    perItem: '$2.00', founder: '$35' },
@@ -69,18 +149,25 @@ const PRICING_TIERS: PricingTier[] = [
 ];
 
 /**
- * Public marketing landing — rendered at the MAIN URL for logged-out visitors.
+ * Public marketing landing, rendered at the MAIN URL for logged-out visitors.
  * Logged-in users never see this (session restore takes them straight to the
  * dashboard). "Log in" → the Auth screen; the form → beta_signups (pending).
  *
  * COPY RULES (user): no emojis (lucide icons only), no "AI" wording, and no
- * dashes/hyphens/em dashes anywhere in the visible marketing text.
+ * dashes/hyphens/em dashes anywhere in the visible marketing text. The product
+ * is rule based (presets, a dictation grammar, templates, export feeds), so
+ * the page never says AI, vision, neural or scan, never claims one click
+ * publishing, delisting or API connectors, and carries no invented numbers:
+ * the only figures are the pricing table and the visitor's own calculator
+ * inputs. No testimonials until real ones exist. Landing.test.tsx enforces it.
  *
- * The "screenshot" panels are stylized CSS mockups of the real dashboard.
- * To swap in real screenshots later: drop PNGs in public/screenshots/ and
- * replace the .shot-mock divs with <img> tags. They are KEPT alongside the
- * photography — the mocks are the only thing on the page that shows what the
- * product actually looks like, so a photo never replaces one, it sits above it.
+ * Section order (Nov 2026): nav, hero, #how, #demo, #time, #marketplaces,
+ * #dashboard, #pricing, #faq, #signup, footer. The app links to #pricing and
+ * #signup; keep both ids.
+ *
+ * ONE LOOK WITH THE APP: controls are the ui primitives (LinkButton, Button,
+ * the chip classes) and every visual is a preview built from the app's own
+ * components and stylesheets, never stock photography or a drawn mock.
  */
 export default function Landing({ onLoginClick }: LandingProps) {
   const [busy, setBusy] = useState(false);
@@ -134,305 +221,179 @@ export default function Landing({ onLoginClick }: LandingProps) {
       <nav className="ld-nav">
         <span className="ld-logo"><Wordmark /> <span className="ld-chip">BETA</span></span>
         <span className="ld-nav-actions">
-          <a href="#pricing" className="ld-nav-link">Pricing</a>
+          {SECTION_LINKS.map(l => (
+            <a key={l.href} href={l.href} className="ld-nav-link">{l.label}</a>
+          ))}
           <a href="#signup" className="ld-nav-cta">Request access</a>
           <button className="ld-nav-login" onClick={onLoginClick}>Log in</button>
         </span>
       </nav>
 
       {/* ── Hero ──
-          The copy stays ON the light canvas and the photograph sits BELOW it as
-          a full-bleed band, so no text is ever laid over the image and the black
-          nav remains the page's only inverted surface. */}
+          The copy stays ON the light canvas and the product preview (a slice
+          of the Step 2 workbench) sits BELOW it, so the black nav remains the
+          page's only inverted surface. */}
       <header className="ld-hero">
         <div className="ld-hero-inner">
           <h1>Photograph the rack in the morning.<br />Listings live by lunch.</h1>
-          <p>
-            {BRAND} turns a camera roll of vintage clothing photos into listings that are
-            ready for Shopify. Group the angles, <em>speak</em> the details, export the file.
-            Built by resellers who list hundreds of pieces a week.
+          <p className="ld-hero-descriptor">{BRAND_DESCRIPTOR}</p>
+          <p className="ld-hero-sub">
+            Upload a batch of photos, group the angles of each piece, pick a category
+            preset, dictate the details, and export to Shopify and the marketplaces
+            you sell on.
           </p>
           <div className="ld-hero-ctas">
-            <a href="#signup" className="ld-btn-primary">Request beta access</a>
-            <a href="#tour" className="ld-btn-ghost">See how it works</a>
+            <LinkButton href="#demo" variant="primary" size="lg">Try the demo</LinkButton>
+            <LinkButton href="#signup" variant="secondary" size="lg">Request beta access</LinkButton>
           </div>
           <p className="ld-hero-note">Free during the beta · no card required · founding shops lock in 30% off for life</p>
         </div>
-        <figure className="ld-photo ld-hero-media">
-          <img
-            src={PHOTO.heroRail}
-            alt="A rack of vintage blazers and coats hanging in a thrift shop, warm afternoon light"
-            width={2400}
-            height={900}
-            loading="eager"
-            fetchPriority="high"
-          />
-        </figure>
+        <div className="ld-hero-media">
+          <WorkbenchPreview />
+        </div>
       </header>
 
-      {/* ── Stats strip ── */}
-      <section className="ld-stats">
-        <div><strong>1 drop</strong><span>hundreds of photos from folders, ZIPs, and phone exports</span></div>
-        <div><strong>50+ fields</strong><span>filled by voice while you hold the garment</span></div>
-        <div><strong>63 columns</strong><span>one CSV built exactly for Shopify import</span></div>
-        <div><strong>4 steps</strong><span>camera roll to storefront in the same day</span></div>
-      </section>
-
-      {/* ── Tour: alternating feature + mock screenshot ── */}
-      <section className="ld-tour" id="tour">
-
-        {/* 1 — Grouping */}
-        <div className="ld-tour-row">
-          <div className="ld-tour-text">
-            <h2>A pile of photos becomes products in minutes</h2>
-            <p>
-              Shot time ordering lines your photos up exactly as you shot them. Group
-              automatically by photos per item, or flip on pick mode and fly through
-              by hand. Rotate, crop, and clean up from one toolbar across hundreds of
-              images at once.
-            </p>
-            <ul>
-              <li>Turn 400 photos into 100 products in one click</li>
-              <li>Uploads resume on their own when spotty internet drops mid batch</li>
-              <li>Every photo action lives in one toolbar, not buried on each image</li>
-            </ul>
-          </div>
-          <div className="ld-tour-visual">
-            <figure className="ld-photo ld-tour-photo">
-              <img
-                src={PHOTO.knitRail}
-                alt="A window rack of cream and oatmeal knitwear in a second-hand clothing store"
-                width={1200}
-                height={675}
-                loading="lazy"
-                decoding="async"
-              />
-            </figure>
-            <div className="ld-shot" aria-hidden="true">
-              <div className="shot-bar"><i /><i /><i /><em>{BRAND} · Group &amp; Categorize</em></div>
-              <div className="shot-mock shot-mock--grid">
-                <div className="mock-toolbar">
-                  <b><Target size={11} /> Pick photos</b>
-                  <b><RotateCcw size={11} /> Rotate 4</b>
-                  <b><RotateCw size={11} /> Rotate 4</b>
-                  <b className="mk-green"><Scissors size={11} /> Copy Crop</b>
-                  <b className="mk-red"><Trash2 size={11} /> Delete</b>
-                </div>
-                <div className="mock-grid">
-                  {['#e4e4e7', '#a1a1aa', '#d4d4d8', '#71717a', '#c8c8cf', '#8d8d95', '#eaeaed', '#5c5c66'].map((c, i) => (
-                    <div key={i} className={`mock-card${i === 1 || i === 4 ? ' mock-card--sel' : ''}`} style={{ background: c }}>
-                      <Shirt size={22} />
-                    </div>
-                  ))}
-                </div>
-                <div className="mock-groupcard">
-                  <span className="mock-grouplabel"><Check size={11} /> 4 images · tees</span>
-                  <div className="mock-groupthumbs"><i style={{ background: '#e4e4e7' }} /><i style={{ background: '#a1a1aa' }} /><i style={{ background: '#d4d4d8' }} /><i style={{ background: '#71717a' }} /></div>
-                </div>
+      {/* ── How it works ── */}
+      <section className="ld-section" id="how" aria-labelledby="ld-how-h">
+        <div className="ld-section-head">
+          <h2 id="ld-how-h">How it works</h2>
+          <p>Four steps, the same four the app walks you through.</p>
+        </div>
+        <ol className="ld-steps">
+          {STEPS.map((s, i) => (
+            <li key={s.title} className="ld-card ld-step">
+              <div className="ld-step-text">
+                <span className="ld-num" aria-hidden="true">{i + 1}</span>
+                <h3>{s.title}</h3>
+                <p>{s.body}</p>
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 2 — Presets: set up once, apply forever */}
-        <div className="ld-tour-row ld-tour-row--flip">
-          <div className="ld-tour-text">
-            <h2>Set up your presets once. They do the typing forever.</h2>
-            <p>
-              Build a preset for each thing you sell: tees, hoodies, jackets, hats.
-              Each preset carries the shipping weight, the price floor, the policies,
-              the SEO title template, and the exact measurement fields that category
-              needs. Then drag whole groups of photos onto a category and every field
-              fills itself, across the entire batch at once.
-            </p>
-            <ul>
-              <li>Drop 30 groups on the tees category and all 30 inherit shipping, SEO, and policies instantly</li>
-              <li>The fields you used to retype on every single listing simply stop existing as work</li>
-              <li>New teammate on the rack today? Your presets are the training manual</li>
-            </ul>
-          </div>
-          <div className="ld-tour-visual">
-            <div className="ld-shot" aria-hidden="true">
-              <div className="shot-bar"><i /><i /><i /><em>{BRAND} · Category Presets</em></div>
-              <div className="shot-mock shot-mock--presets">
-                <div className="mock-preset-head"><Layers size={13} /> Tees preset</div>
-                <div className="mock-preset-rows">
-                  <div><label>Ships from</label><b>Los Angeles, CA</b></div>
-                  <div><label>Weight</label><b>300 g</b></div>
-                  <div><label>SEO template</label><b>{'{size}'} Vintage {'{brand}'} {'{era}'} Tee</b></div>
-                  <div><label>Measurements</label><b>Width · Length</b></div>
-                </div>
-                <div className="mock-preset-apply"><Check size={12} /> Applied to 30 products in one drop</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 3 — Voice */}
-        <div className="ld-tour-row">
-          <div className="ld-tour-text">
-            <h2>Talk. Don't type.</h2>
-            <p>
-              Hold the garment and say what you see. {BRAND} parses brands, sizes,
-              colors, and measurements into the right fields and writes a clean,
-              human listing with your measurements front and center.
-            </p>
-            <ul>
-              <li>Say brand Nike, size large, width 18, and the fields fill themselves</li>
-              <li>SEO titles built from a knowledge base of over 5,000 vintage brands and eras</li>
-              <li>Measurements in every listing means fewer returns</li>
-            </ul>
-          </div>
-          <div className="ld-tour-visual">
-            <figure className="ld-photo ld-tour-photo">
-              <img
-                src={PHOTO.knitStack}
-                alt="A stack of folded knitwear in cream, oatmeal and grey, resting on a wooden stool"
-                width={1200}
-                height={675}
-                loading="lazy"
-                decoding="async"
-              />
-            </figure>
-            <div className="ld-shot" aria-hidden="true">
-              <div className="shot-bar"><i /><i /><i /><em>{BRAND} · Describe</em></div>
-              <div className="shot-mock shot-mock--voice">
-                <div className="mock-mic"><Mic size={13} /> Recording… <span className="mock-wave"><i /><i /><i /><i /><i /></span></div>
-                <div className="mock-transcript">“brand nike period size large fits like medium period width 18 period…”</div>
-                <div className="mock-fields">
-                  <div><label>Brand</label><b>Nike</b></div>
-                  <div><label>Size</label><b>L (fits like M)</b></div>
-                  <div><label>Width</label><b>18"</b></div>
-                  <div><label>Price</label><b>$45</b></div>
-                </div>
-                <div className="mock-desc">
-                  <i style={{ width: '82%' }} /><i style={{ width: '95%' }} /><i style={{ width: '70%' }} /><i style={{ width: '88%' }} />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 4 — Export */}
-        <div className="ld-tour-row ld-tour-row--flip">
-          <div className="ld-tour-text">
-            <h2>One click to Shopify</h2>
-            <p>
-              Export a CSV with all 63 columns Shopify expects: taxonomy paths,
-              metafields, every photo positioned. Titles are checked against your
-              live store so imports never collide, and export blocks if any product
-              is missing a price.
-            </p>
-            <ul>
-              <li>Products land in shoot order, grouped exactly as you grouped them</li>
-              <li>Titles are checked against your existing catalog before the file is built</li>
-              <li>Works with your VA workflow: hand off the file and go</li>
-            </ul>
-          </div>
-          <div className="ld-tour-visual">
-            <div className="ld-shot" aria-hidden="true">
-              <div className="shot-bar"><i /><i /><i /><em>{BRAND} · Export</em></div>
-              <div className="shot-mock shot-mock--csv">
-                <div className="mock-thead"><b>Handle</b><b>Title</b><b>Price</b><b>Category</b><b>Size</b></div>
-                {[
-                  ['vintage nike 90s tee', 'XL Vintage Y2K Nike 90s Tee', '$45.00', 'T Shirts', 'XL'],
-                  ['carhartt detroit jacket', 'Carhartt Detroit Jacket', '$120.00', 'Coats & Jackets', 'L'],
-                  ['levis 501 straight', "Levi's 501 Straight Denim", '$68.00', 'Jeans', '32'],
-                ].map((row, i) => (
-                  <div key={i} className="mock-trow">{row.map((cell, j) => <span key={j}>{cell}</span>)}</div>
-                ))}
-                <div className="mock-download"><Download size={13} /> Download CSV · 11 products · 42 photos</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── The labor math ── */}
-      <section className="ld-math">
-        <h2>The math your bookkeeper will like</h2>
-        <p className="ld-math-sub">
-          Listing by hand takes most shops 8 to 12 minutes per piece: retyping shipping,
-          policies, and SEO, measuring, writing the description. With presets doing the
-          repetitive fields and voice doing the typing, the same listing takes about 3.
-        </p>
-        <div className="ld-math-grid">
-          <div>
-            <span className="ld-ic"><Clock size={22} /></span>
-            <strong>8 hours back</strong>
-            <p>every week for a shop listing 100 pieces, just from the minutes saved per listing</p>
-          </div>
-          <div>
-            <span className="ld-ic"><BadgeDollarSign size={22} /></span>
-            <strong>$500+ per month</strong>
-            <p>in labor at typical VA rates, before you count the batches that now ship the same day</p>
-          </div>
-          <div>
-            <span className="ld-ic"><Layers size={22} /></span>
-            <strong>Zero retyping</strong>
-            <p>presets carry shipping, policies, and SEO onto every future listing in that category, forever</p>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Founding shops incentive ── */}
-      <section className="ld-founding">
-        <h2>Why join as a founding shop?</h2>
-        <div className="ld-founding-grid">
-          <div><span className="ld-ic"><BadgeDollarSign size={22} /></span><h3>Free during beta</h3><p>Full product, unlimited listings, no card. When paid plans launch, founding shops lock in 30% off any tier, for life.</p></div>
-          <div><span className="ld-ic"><MessageSquare size={22} /></span><h3>A direct line to the builders</h3><p>Beta shops shape the roadmap. The last three features shipped came straight from a reseller's feedback.</p></div>
-          <div><span className="ld-ic"><Users size={22} /></span><h3>Your whole team, day one</h3><p>Private workspace with email invites. Your photographer, describer, and VA all working the same rack.</p></div>
-          <div><span className="ld-ic"><Package size={22} /></span><h3>Your data stays yours</h3><p>Everything exports to plain CSV any time. No contracts, nothing held hostage.</p></div>
-        </div>
-      </section>
-
-      {/* ── Pricing ── */}
-      <section className="ld-pricing" id="pricing">
-        <h2>Simple pricing when we launch</h2>
-        <p className="ld-pricing-sub">
-          Everything is <strong>free during the beta</strong>, and founding shops lock in
-          <strong> 30% off for life</strong> on any tier when paid plans launch.
-        </p>
-        <div className="ld-tiers ld-tiers--ladder">
-          {PRICING_TIERS.map(t => (
-            <div key={t.name} className={`ld-tier${t.featured ? ' ld-tier--featured' : ''}`}>
-              {t.featured && <div className="ld-tier-badge">Most popular</div>}
-              <h3>{t.name}</h3>
-              <div className="ld-tier-price">{t.price}<span>/mo</span></div>
-              <div className="ld-tier-items">{t.items} items a month</div>
-              <div className="ld-tier-peritem">{t.perItem} per item</div>
-              {t.founder && (
-                <div className="ld-tier-founder">Founding shops: {t.founder}/mo for life</div>
-              )}
-            </div>
+              <StepPreview index={i} />
+            </li>
           ))}
+        </ol>
+      </section>
+
+      {/* ── Demo (lazy) ── */}
+      <section className="ld-section" id="demo" aria-labelledby="ld-demo-h">
+        <div className="ld-section-head">
+          <h2 id="ld-demo-h">See a listing come together</h2>
+          <p>One piece, from a pile of photos to a finished listing, in the same steps the app uses.</p>
         </div>
+        <LazySlot label="demo">
+          <LandingDemo />
+        </LazySlot>
+      </section>
+
+      {/* ── Time calculator (lazy) ── */}
+      <section className="ld-section" id="time" aria-labelledby="ld-time-h">
+        <div className="ld-section-head">
+          <h2 id="ld-time-h">What the typing costs you</h2>
+          <p>Put in your own numbers and see the hours a week that go into retyping listings.</p>
+        </div>
+        <LazySlot label="calculator">
+          <TimeCalculator />
+        </LazySlot>
+      </section>
+
+      {/* ── Marketplaces ── */}
+      <section className="ld-section" id="marketplaces" aria-labelledby="ld-mkt-h">
+        <div className="ld-section-head">
+          <h2 id="ld-mkt-h">Export to where you sell</h2>
+          <p>Shopify imports the CSV directly. The others get a ready feed or a copy pack per listing.</p>
+        </div>
+        {/* The app's chip language (ui/Chip.css) on a plain span: these are
+            labels, not controls, so they must not be buttons. */}
+        <ul className="ld-markets ui-chip-group">
+          {Object.entries(MARKETPLACE_NAMES).map(([key, name]) => (
+            <li key={key} className="ld-market"><span className="ui-chip">{name}</span></li>
+          ))}
+        </ul>
+      </section>
+
+      {/* ── Your dashboard (lazy: it carries three app stylesheets) ── */}
+      <section className="ld-section" id="dashboard" aria-labelledby="ld-dash-h">
+        <div className="ld-section-head">
+          <h2 id="ld-dash-h">Your dashboard</h2>
+          <p>Plan usage sits on Home and on the Workspace page, for every member, so you always know where the month stands. Shown with sample data.</p>
+        </div>
+        <LazySlot label="dashboard preview">
+          <LandingDashboardPreview />
+        </LazySlot>
+      </section>
+
+      {/* ── Pricing ──
+          One table at desktop (plan, listings, price, per listing, founding
+          price; Pro is the featured row). At phone width the same rows restack
+          in the FieldGrid cell language with CSS alone: the plan name as a
+          caption over a framed two column grid, each cell labelled from its
+          data-label. */}
+      <section className="ld-section ld-pricing" id="pricing" aria-labelledby="ld-pricing-h">
+        <div className="ld-section-head">
+          <h2 id="ld-pricing-h">Pricing</h2>
+          <p>
+            Free during the beta, founding priced for life. When paid plans launch,
+            founding shops lock in 30% off any tier, for life.
+          </p>
+        </div>
+        <table className="ld-price-table">
+          <thead>
+            <tr>
+              <th scope="col">Plan</th>
+              <th scope="col">Listings per month</th>
+              <th scope="col">Price</th>
+              <th scope="col">Per listing</th>
+              <th scope="col">Founding price</th>
+            </tr>
+          </thead>
+          <tbody>
+            {PRICING_TIERS.map(t => (
+              <tr key={t.name} className={t.featured ? 'is-featured' : undefined}>
+                <th scope="row" data-label="Plan">
+                  {t.name}
+                  {t.featured && <span className="ld-featured-tag">Most popular</span>}
+                </th>
+                {/* Each value is ONE span so the phone layout (label left,
+                    value right) has exactly two flex items per cell. */}
+                <td data-label="Listings per month"><span>{t.items}</span></td>
+                <td data-label="Price"><span>{t.price}<span className="ld-per">/mo</span></span></td>
+                <td data-label="Per listing"><span>{t.perItem}</span></td>
+                <td data-label="Founding price">
+                  {t.founder
+                    ? <span>{t.founder}<span className="ld-per">/mo</span></span>
+                    : <span className="ld-muted">Free</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
         <p className="ld-tier-includes">
-          <Check size={14} /> Every plan includes the full product: grouping, voice
-          descriptions, category presets, a shared team workspace, and CSV export
-          built for Shopify.
+          <Check size={14} /> Every plan includes the full product: grouping, dictation,
+          category presets, a shared team workspace, and every export. Plans differ by
+          listings per month only.
         </p>
         <p className="ld-pricing-note">
           Planned launch pricing, subject to change before general availability.
-          Listings beyond your tier bill at your tier price per item.
-          Annual billing: 2 months free.
+          Listings beyond your tier bill at your tier price per listing.
         </p>
+      </section>
+
+      {/* ── FAQ ── */}
+      <section className="ld-section" id="faq" aria-labelledby="ld-faq-h">
+        <div className="ld-section-head">
+          <h2 id="ld-faq-h">Questions</h2>
+        </div>
+        <div className="ld-faq">
+          {FAQS.map(f => (
+            <details key={f.q} className="ld-faq-item">
+              <summary>{f.q}</summary>
+              <p>{f.a}</p>
+            </details>
+          ))}
+        </div>
       </section>
 
       {/* ── Signup ── */}
       <section className="ld-signup" id="signup">
-        {/* Near-white studio background: it dissolves into the card, so the
-            form needs no scrim and the heading below it stays full contrast. */}
-        <figure className="ld-photo ld-signup-photo">
-          <img
-            src={PHOTO.denimStack}
-            alt="A stack of four folded pairs of denim jeans in graduated blue washes on a plain white surface"
-            width={1200}
-            height={500}
-            loading="lazy"
-            decoding="async"
-          />
-        </figure>
         <h2>Request beta access</h2>
         <p className="ld-signup-sub">
           We are onboarding a small number of shops and review every request by hand,
@@ -459,26 +420,38 @@ export default function Landing({ onLoginClick }: LandingProps) {
             </label>
             <label>Anything else?<input name="notes" type="text" maxLength={500} placeholder="What is slowing your listing down today?" disabled={done} /></label>
           </div>
-          <button type="submit" disabled={busy || done}>
+          <Button type="submit" variant="primary" size="lg" fullWidth className="ld-submit" disabled={busy || done}>
             {done ? 'Requested. Check your email soon' : busy ? 'Sending…' : 'Request access'}
-          </button>
+          </Button>
           {msg && <p className={`ld-form-msg ld-form-msg--${msg.kind}`} role="status">{msg.text}</p>}
         </form>
         <p className="ld-signup-login">Already approved? <button onClick={onLoginClick}>Log in</button></p>
       </section>
 
       <footer className="ld-footer">
-        {BRAND} · built for vintage resellers · beta access is reviewed and approved by hand
-        <p className="ld-credit">
-          Photography:{' '}
-          {PHOTO_CREDITS.map((c, i) => (
-            <span key={c.href}>
-              {i > 0 && ', '}
-              <a href={c.href} target="_blank" rel="noopener noreferrer">{c.name}</a>
-            </span>
-          ))}
-          {' '}via Unsplash
-        </p>
+        <div className="ld-footer-cols">
+          <div className="ld-footer-brand">
+            <Wordmark />
+            <p className="ld-footer-descriptor">{BRAND_DESCRIPTOR}</p>
+            <p>Built for vintage resellers. Beta access is reviewed and approved by hand.</p>
+          </div>
+          <nav className="ld-footer-col" aria-label="Page sections">
+            <h3>Navigation</h3>
+            <ul>
+              {SECTION_LINKS.map(l => (
+                <li key={l.href}><a href={l.href}>{l.label}</a></li>
+              ))}
+            </ul>
+          </nav>
+          <div className="ld-footer-col">
+            <h3>Company</h3>
+            <ul>
+              <li><a href="#signup">Request access</a></li>
+              <li><button type="button" onClick={onLoginClick}>Log in</button></li>
+            </ul>
+          </div>
+        </div>
+        <p className="ld-footer-bottom">© 2026 {BRAND}. Served from arcadian.ltd.</p>
       </footer>
     </div>
   );

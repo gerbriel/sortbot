@@ -23,8 +23,8 @@
                                branch (via jszip), which jszip never takes.
            style-src           the inline <style> below, plus React's
                                style={{…}} attributes, need 'unsafe-inline'.
-           img-src             Supabase Storage photos; images.unsplash.com
-                               (Landing.tsx PHOTO); data: for the SVG select
+           img-src             Supabase Storage photos (the landing page has
+                               no photos since Nov 2026); data: for the SVG select
                                arrow in ComprehensiveProductForm.css; blob: for
                                URL.createObjectURL upload previews.
            connect-src         Supabase REST/auth/storage/Edge Functions over
@@ -61,7 +61,7 @@
       default-src 'self';
       script-src 'self';
       style-src 'self' 'unsafe-inline';
-      img-src 'self' data: blob: https://*.supabase.co https://images.unsplash.com;
+      img-src 'self' data: blob: https://*.supabase.co;
       font-src 'self' data:;
       connect-src 'self' https://*.supabase.co wss://*.supabase.co https://matting.arcadian.ltd;
       worker-src 'self';
