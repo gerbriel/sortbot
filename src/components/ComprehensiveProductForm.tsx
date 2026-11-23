@@ -1,7 +1,10 @@
 import React from 'react';
-import { ArrowLeft, DollarSign, Tag, Ruler, Package, Zap } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import type { ClothingItem } from '../App';
 import { normalizeSizeValue } from '../lib/textAIService';
+import { Badge } from './ui/Badge';
+import { FieldCell, FieldGrid, FieldGroup } from './ui/FieldGrid';
+import type { FieldCellControlProps } from './ui/FieldGrid';
 import './ComprehensiveProductForm.css';
 
 interface ComprehensiveProductFormProps {
@@ -9,7 +12,7 @@ interface ComprehensiveProductFormProps {
   currentGroup: ClothingItem[];
   processedItems: ClothingItem[];
   setProcessedItems: (items: ClothingItem[]) => void;
-  /** Rendered directly under the Brand input — the brand-spelling surface. */
+  /** Rendered directly under the Brand input (the Brand cell's footer): the brand-spelling surface. */
   brandExtra?: React.ReactNode;
   /** Fired when the seller types over the Brand field (report 14's "remember"). */
   onBrandEdited?: (value: string) => void;
@@ -23,7 +26,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
   brandExtra,
   onBrandEdited,
 }) => {
-  // Always highlight empty fields — visible on load, after voice, after reload
+  // Always highlight empty fields: visible on load, after voice, after reload
   const req = (value: any): string =>
     !value ? ' field-required-empty' : '';
 
@@ -50,12 +53,32 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
     return !!(currentItem._presetData && currentItem[fieldName as keyof ClothingItem]);
   };
 
-  const PresetBadge = ({ show }: { show: boolean }) => {
-    if (!show) return null;
+  // Plain render helpers (not components: components created during render
+  // violate the react-hooks purity rule). Both go in a cell's meta slot.
+  const presetBadge = (fieldName: string) => {
+    if (!isFromPreset(fieldName)) return null;
     return (
-      <span className="preset-badge" title={`From "${currentItem._presetData?.displayName}" preset`}>
-        <ArrowLeft size={11} style={{ flexShrink: 0 }} /> Preset
+      <span title={`From "${currentItem._presetData?.displayName}" preset`} style={{ cursor: 'help' }}>
+        <Badge tone="accent" icon={<ArrowLeft size={11} />}>Preset</Badge>
       </span>
+    );
+  };
+
+  // The control class every cell hands out, plus the empty-field class. The
+  // class stays on the control; FieldGrid.css draws the marker on its cell.
+  const cls = (c: FieldCellControlProps, value?: unknown) => `${c.className}${req(value)}`;
+
+  // Meta slot for a field that carries the empty-field class: any badge first,
+  // then the quiet "Required" word while the value is empty. Every required
+  // cell renders its marker this way, so the word never moves.
+  const need = (value: unknown, extra?: React.ReactNode) => {
+    const empty = !value;
+    if (!extra && !empty) return null;
+    return (
+      <>
+        {extra}
+        {empty && <span className="field-required-note">Required</span>}
+      </>
     );
   };
 
@@ -66,16 +89,14 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
     | Record<string, boolean>
     | undefined;
 
-  // Plain render helper (not a component — components created during render
-  // violate the react-hooks purity rule).
+  // A measurement's meta: the preset's "Needed" badge when the template flags
+  // it, otherwise the same "Required" word every other empty field shows
+  // (never both: "Needed" already says it).
   const measurementNeeded = (field: string, value?: string) => {
-    if (!measurementTemplate?.[field] || value) return null;
+    if (!measurementTemplate?.[field] || value) return need(value);
     return (
-      <span
-        className="measurement-needed-badge"
-        title={`The "${currentItem._presetData?.displayName}" preset expects this measurement`}
-      >
-        needed
+      <span title={`The "${currentItem._presetData?.displayName}" preset expects this measurement`}>
+        <Badge tone="warning">Needed</Badge>
       </span>
     );
   };
@@ -83,41 +104,31 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
   return (
     <div className="comprehensive-product-form">
 
-      {/* Row 1: Pricing */}
-      <div className="form-section-flat">
-        <h3 className="form-section-title"><DollarSign size={13} style={{ flexShrink: 0 }} /> Pricing</h3>
-        <div className="fields-row">
-          <div className="info-item">
-            <label>Price ($):</label>
-            <input type="number" value={currentItem.price || ''} onChange={(e) => updateGroupField('price', e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="e.g., 49.99" className={`info-input${req(currentItem.price)}`} step="0.01" min="0" />
-          </div>
-          <div className="info-item">
-            <label>Compare-at Price ($):</label>
-            <input type="number" value={currentItem.compareAtPrice || ''} onChange={(e) => updateGroupField('compareAtPrice', e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="Original price" className="info-input" step="0.01" min="0" />
-          </div>
-          <div className="info-item">
-            <label>Cost Per Item ($):</label>
-            <input type="number" value={currentItem.costPerItem || ''} onChange={(e) => updateGroupField('costPerItem', e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="Your cost" className="info-input" step="0.01" min="0" />
-          </div>
-        </div>
-      </div>
+      <FieldGroup caption="Pricing" data-section="pricing">
+        <FieldGrid columns={3}>
+          <FieldCell label="Price ($)" meta={need(currentItem.price)}>
+            {(c) => <input {...c} type="number" value={currentItem.price || ''} onChange={(e) => updateGroupField('price', e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="e.g., 49.99" className={cls(c, currentItem.price)} step="0.01" min="0" />}
+          </FieldCell>
+          <FieldCell label="Compare-at price ($)">
+            {(c) => <input {...c} type="number" value={currentItem.compareAtPrice || ''} onChange={(e) => updateGroupField('compareAtPrice', e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="Original price" step="0.01" min="0" />}
+          </FieldCell>
+          <FieldCell label="Cost per item ($)">
+            {(c) => <input {...c} type="number" value={currentItem.costPerItem || ''} onChange={(e) => updateGroupField('costPerItem', e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="Your cost" step="0.01" min="0" />}
+          </FieldCell>
+        </FieldGrid>
+      </FieldGroup>
 
-      {/* Row 2: Core Details */}
-      <div className="form-section-flat">
-        <h3 className="form-section-title"><Tag size={13} style={{ flexShrink: 0 }} /> Core Details</h3>
-        <div className="fields-row">
-          <div className="info-item">
-            <label>Brand: <PresetBadge show={isFromPreset('brand')} /></label>
-            <input type="text" value={currentItem.brand || ''} onChange={(e) => updateGroupField('brand', e.target.value)} onBlur={(e) => onBrandEdited?.(e.target.value)} placeholder="e.g., Nike, Levi's" className={`info-input${req(currentItem.brand)}`} />
-            {brandExtra}
-          </div>
-          <div className="info-item">
-            <label>Size:</label>
-            <input type="text" value={currentItem.size || ''} onChange={(e) => updateGroupField('size', e.target.value)} onBlur={(e) => { const norm = normalizeSizeValue(e.target.value, { keepFitsLike: true }); if (norm && norm !== e.target.value) updateGroupField('size', norm); }} placeholder="M · 1X · 32x34 · YM · PS" className={`info-input${req(currentItem.size)}`} />
-          </div>
-          <div className="info-item">
-            <label>Condition:</label>
-            <select value={currentItem.condition || ''} onChange={(e) => updateGroupField('condition', e.target.value)} className={`info-input${req(currentItem.condition)}`}>
+      <FieldGroup caption="Core details" data-section="core">
+        <FieldGrid columns={3}>
+          <FieldCell label="Brand" meta={need(currentItem.brand, presetBadge('brand'))} footer={brandExtra}>
+            {(c) => <input {...c} type="text" value={currentItem.brand || ''} onChange={(e) => updateGroupField('brand', e.target.value)} onBlur={(e) => onBrandEdited?.(e.target.value)} placeholder="e.g., Nike, Levi's" className={cls(c, currentItem.brand)} />}
+          </FieldCell>
+          <FieldCell label="Size" meta={need(currentItem.size)}>
+            {(c) => <input {...c} type="text" value={currentItem.size || ''} onChange={(e) => updateGroupField('size', e.target.value)} onBlur={(e) => { const norm = normalizeSizeValue(e.target.value, { keepFitsLike: true }); if (norm && norm !== e.target.value) updateGroupField('size', norm); }} placeholder="M · 1X · 32x34 · YM · PS" className={cls(c, currentItem.size)} />}
+          </FieldCell>
+          <FieldCell label="Condition" meta={need(currentItem.condition)}>
+            {(c) => (
+            <select {...c} value={currentItem.condition || ''} onChange={(e) => updateGroupField('condition', e.target.value)} className={cls(c, currentItem.condition)}>
               <option value="">Select condition...</option>
               <option value="New">New</option>
               <option value="NWT">NWT (New With Tags)</option>
@@ -126,192 +137,149 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
               <option value="Fair">Fair</option>
               <option value="Used">Used</option>
             </select>
-          </div>
-        </div>
-        <div className="fields-row">
-          <div className="info-item">
-            <label>Color:</label>
-            <input type="text" value={currentItem.color || ''} onChange={(e) => updateGroupField('color', e.target.value)} placeholder="e.g., Black, Blue" className={`info-input${req(currentItem.color)}`} />
-          </div>
-          <div className="info-item">
-            <label>Secondary Color:</label>
-            <input type="text" value={currentItem.secondaryColor || ''} onChange={(e) => updateGroupField('secondaryColor', e.target.value)} placeholder="Additional color" className="info-input" />
-          </div>
-          <div className="info-item">
-            <label>Material: <PresetBadge show={isFromPreset('material')} /></label>
-            <input type="text" value={currentItem.material || ''} onChange={(e) => updateGroupField('material', e.target.value)} placeholder="e.g., 100% Cotton" className={`info-input${req(currentItem.material)}`} />
-          </div>
-        </div>
-        <div className="fields-row">
-          <div className="info-item">
-            <label>Era/Vibe:</label>
-            <input type="text" value={currentItem.era || ''} onChange={(e) => updateGroupField('era', e.target.value)} placeholder="e.g., 90s, Y2K, vintage" className={`info-input${req(currentItem.era)}`} />
-          </div>
-          <div className="info-item">
-            <label>Style: <PresetBadge show={isFromPreset('style')} /></label>
-            <input type="text" value={currentItem.style || ''} onChange={(e) => updateGroupField('style', e.target.value)} placeholder="e.g., Streetwear, Preppy" className={`info-input${req(currentItem.style)}`} />
-          </div>
-          <div className="info-item">
-            <label>Gender: <PresetBadge show={isFromPreset('gender')} /></label>
-            <select value={currentItem.gender || ''} onChange={(e) => updateGroupField('gender', e.target.value)} className={`info-input${req(currentItem.gender)}`}>
+            )}
+          </FieldCell>
+          <FieldCell label="Color" meta={need(currentItem.color)}>
+            {(c) => <input {...c} type="text" value={currentItem.color || ''} onChange={(e) => updateGroupField('color', e.target.value)} placeholder="e.g., Black, Blue" className={cls(c, currentItem.color)} />}
+          </FieldCell>
+          <FieldCell label="Secondary color">
+            {(c) => <input {...c} type="text" value={currentItem.secondaryColor || ''} onChange={(e) => updateGroupField('secondaryColor', e.target.value)} placeholder="Additional color" />}
+          </FieldCell>
+          <FieldCell label="Material" meta={need(currentItem.material, presetBadge('material'))}>
+            {(c) => <input {...c} type="text" value={currentItem.material || ''} onChange={(e) => updateGroupField('material', e.target.value)} placeholder="e.g., 100% Cotton" className={cls(c, currentItem.material)} />}
+          </FieldCell>
+          <FieldCell label="Era or vibe" meta={need(currentItem.era)}>
+            {(c) => <input {...c} type="text" value={currentItem.era || ''} onChange={(e) => updateGroupField('era', e.target.value)} placeholder="e.g., 90s, Y2K, vintage" className={cls(c, currentItem.era)} />}
+          </FieldCell>
+          <FieldCell label="Style" meta={need(currentItem.style, presetBadge('style'))}>
+            {(c) => <input {...c} type="text" value={currentItem.style || ''} onChange={(e) => updateGroupField('style', e.target.value)} placeholder="e.g., Streetwear, Preppy" className={cls(c, currentItem.style)} />}
+          </FieldCell>
+          <FieldCell label="Gender" meta={need(currentItem.gender, presetBadge('gender'))}>
+            {(c) => (
+            <select {...c} value={currentItem.gender || ''} onChange={(e) => updateGroupField('gender', e.target.value)} className={cls(c, currentItem.gender)}>
               <option value="">Select gender...</option>
               <option value="Men">Men</option>
               <option value="Women">Women</option>
               <option value="Unisex">Unisex</option>
               <option value="Kids">Kids</option>
             </select>
-          </div>
-        </div>
-        <div className="fields-row">
-          <div className="info-item">
-            <label>Type (Garment): <PresetBadge show={isFromPreset('productType')} /></label>
-            <input type="text" value={currentItem.productType || ''} onChange={(e) => updateGroupField('productType', e.target.value)} placeholder="e.g., Sweater, Hoodie, Pants" className={`info-input${req(currentItem.productType)}`} />
-          </div>
-          <div className="info-item">
-            <label>Model Name:</label>
-            <input type="text" value={currentItem.modelName || ''} onChange={(e) => updateGroupField('modelName', e.target.value)} placeholder="e.g., Air Force 1, 501" className={`info-input${req(currentItem.modelName)}`} />
-          </div>
-          <div className="info-item">
-            <label>Flaws (if any):</label>
-            <input type="text" value={currentItem.flaws || ''} onChange={(e) => updateGroupField('flaws', e.target.value)} placeholder="e.g., minor pilling" className={`info-input${req(currentItem.flaws)}`} />
-          </div>
-        </div>
-        <div className="fields-row">
-          <div className="info-item">
-            <label>Tags (comma-separated): <PresetBadge show={isFromPreset('tags')} /></label>
-            <input type="text" value={currentItem.tags?.join(', ') || ''} onChange={(e) => updateGroupField('tags', e.target.value ? e.target.value.split(',').map(t => t.trim()).filter(t => t) : [])} placeholder="e.g., vintage, tees, black" className={`info-input${req(currentItem.tags?.length)}`} />
-          </div>
-          <div className="info-item">
-            <label>SEO Title:</label>
-            <input type="text" value={currentItem.seoTitle || ''} onChange={(e) => updateGroupField('seoTitle', e.target.value)} placeholder="e.g., Vintage Black Rolling Stones Tee" className={`info-input${req(currentItem.seoTitle)}`} />
-          </div>
-          <div className="info-item">
-            <label>Care Instructions: <PresetBadge show={isFromPreset('care')} /></label>
-            <input type="text" value={currentItem.care || ''} onChange={(e) => updateGroupField('care', e.target.value)} placeholder="e.g., Machine wash cold" className={`info-input${req(currentItem.care)}`} />
-          </div>
-        </div>
-      </div>
+            )}
+          </FieldCell>
+          <FieldCell label="Type (garment)" meta={need(currentItem.productType, presetBadge('productType'))}>
+            {(c) => <input {...c} type="text" value={currentItem.productType || ''} onChange={(e) => updateGroupField('productType', e.target.value)} placeholder="e.g., Sweater, Hoodie, Pants" className={cls(c, currentItem.productType)} />}
+          </FieldCell>
+          <FieldCell label="Model name" meta={need(currentItem.modelName)}>
+            {(c) => <input {...c} type="text" value={currentItem.modelName || ''} onChange={(e) => updateGroupField('modelName', e.target.value)} placeholder="e.g., Air Force 1, 501" className={cls(c, currentItem.modelName)} />}
+          </FieldCell>
+          <FieldCell label="Flaws (if any)" meta={need(currentItem.flaws)}>
+            {(c) => <input {...c} type="text" value={currentItem.flaws || ''} onChange={(e) => updateGroupField('flaws', e.target.value)} placeholder="e.g., minor pilling" className={cls(c, currentItem.flaws)} />}
+          </FieldCell>
+          <FieldCell label="Tags (comma-separated)" meta={need(currentItem.tags?.length, presetBadge('tags'))}>
+            {(c) => <input {...c} type="text" value={currentItem.tags?.join(', ') || ''} onChange={(e) => updateGroupField('tags', e.target.value ? e.target.value.split(',').map(t => t.trim()).filter(t => t) : [])} placeholder="e.g., vintage, tees, black" className={cls(c, currentItem.tags?.length)} />}
+          </FieldCell>
+          <FieldCell label="SEO title" meta={need(currentItem.seoTitle)}>
+            {(c) => <input {...c} type="text" value={currentItem.seoTitle || ''} onChange={(e) => updateGroupField('seoTitle', e.target.value)} placeholder="e.g., Vintage Black Rolling Stones Tee" className={cls(c, currentItem.seoTitle)} />}
+          </FieldCell>
+          <FieldCell label="Care instructions" meta={need(currentItem.care, presetBadge('care'))}>
+            {(c) => <input {...c} type="text" value={currentItem.care || ''} onChange={(e) => updateGroupField('care', e.target.value)} placeholder="e.g., Machine wash cold" className={cls(c, currentItem.care)} />}
+          </FieldCell>
+        </FieldGrid>
+      </FieldGroup>
 
-      {/* Row 3: Measurements */}
-      <div className="form-section-flat">
-        <h3 className="form-section-title"><Ruler size={13} style={{ flexShrink: 0 }} /> Measurements (inches)</h3>
-        <div className="fields-row">
-          <div className="info-item">
-            <label>Width ("): {measurementNeeded('width', currentItem.measurements?.width)}</label>
-            <input type="text" value={currentItem.measurements?.width || ''} onChange={(e) => updateGroupField('measurements.width', e.target.value)} placeholder="e.g., 22" className={`info-input${req(currentItem.measurements?.width)}`} />
-          </div>
-          <div className="info-item">
-            <label>Length ("): {measurementNeeded('length', currentItem.measurements?.length)}</label>
-            <input type="text" value={currentItem.measurements?.length || ''} onChange={(e) => updateGroupField('measurements.length', e.target.value)} placeholder="e.g., 28" className={`info-input${req(currentItem.measurements?.length)}`} />
-          </div>
-          <div className="info-item">
-            <label>Sleeve ("): {measurementNeeded('sleeve', currentItem.measurements?.sleeve)}</label>
-            <input type="text" value={currentItem.measurements?.sleeve || ''} onChange={(e) => updateGroupField('measurements.sleeve', e.target.value)} placeholder="e.g., 24" className={`info-input${req(currentItem.measurements?.sleeve)}`} />
-          </div>
-        </div>
-        <div className="fields-row">
-          <div className="info-item">
-            <label>Shoulder ("): {measurementNeeded('shoulder', currentItem.measurements?.shoulder)}</label>
-            <input type="text" value={currentItem.measurements?.shoulder || ''} onChange={(e) => updateGroupField('measurements.shoulder', e.target.value)} placeholder="e.g., 18" className={`info-input${req(currentItem.measurements?.shoulder)}`} />
-          </div>
-          <div className="info-item">
-            <label>Waist ("): {measurementNeeded('waist', currentItem.measurements?.waist)}</label>
-            <input type="text" value={currentItem.measurements?.waist || ''} onChange={(e) => updateGroupField('measurements.waist', e.target.value)} placeholder="e.g., 32" className={`info-input${req(currentItem.measurements?.waist)}`} />
-          </div>
-          <div className="info-item">
-            <label>Inseam ("): {measurementNeeded('inseam', currentItem.measurements?.inseam)}</label>
-            <input type="text" value={currentItem.measurements?.inseam || ''} onChange={(e) => updateGroupField('measurements.inseam', e.target.value)} placeholder="e.g., 30" className={`info-input${req(currentItem.measurements?.inseam)}`} />
-          </div>
-        </div>
-        <div className="fields-row">
-          <div className="info-item">
-            <label>Rise ("): {measurementNeeded('rise', currentItem.measurements?.rise)}</label>
-            <input type="text" value={currentItem.measurements?.rise || ''} onChange={(e) => updateGroupField('measurements.rise', e.target.value)} placeholder="e.g., 11" className={`info-input${req(currentItem.measurements?.rise)}`} />
-          </div>
-          <div className="info-item">{/* spacer */}</div>
-          <div className="info-item">{/* spacer */}</div>
-        </div>
-      </div>
+      <FieldGroup caption="Measurements (inches)" data-section="measurements">
+        <FieldGrid columns={3}>
+          <FieldCell label="Width" meta={measurementNeeded('width', currentItem.measurements?.width)}>
+            {(c) => <input {...c} type="text" value={currentItem.measurements?.width || ''} onChange={(e) => updateGroupField('measurements.width', e.target.value)} placeholder="e.g., 22" className={cls(c, currentItem.measurements?.width)} />}
+          </FieldCell>
+          <FieldCell label="Length" meta={measurementNeeded('length', currentItem.measurements?.length)}>
+            {(c) => <input {...c} type="text" value={currentItem.measurements?.length || ''} onChange={(e) => updateGroupField('measurements.length', e.target.value)} placeholder="e.g., 28" className={cls(c, currentItem.measurements?.length)} />}
+          </FieldCell>
+          <FieldCell label="Sleeve" meta={measurementNeeded('sleeve', currentItem.measurements?.sleeve)}>
+            {(c) => <input {...c} type="text" value={currentItem.measurements?.sleeve || ''} onChange={(e) => updateGroupField('measurements.sleeve', e.target.value)} placeholder="e.g., 24" className={cls(c, currentItem.measurements?.sleeve)} />}
+          </FieldCell>
+          <FieldCell label="Shoulder" meta={measurementNeeded('shoulder', currentItem.measurements?.shoulder)}>
+            {(c) => <input {...c} type="text" value={currentItem.measurements?.shoulder || ''} onChange={(e) => updateGroupField('measurements.shoulder', e.target.value)} placeholder="e.g., 18" className={cls(c, currentItem.measurements?.shoulder)} />}
+          </FieldCell>
+          <FieldCell label="Waist" meta={measurementNeeded('waist', currentItem.measurements?.waist)}>
+            {(c) => <input {...c} type="text" value={currentItem.measurements?.waist || ''} onChange={(e) => updateGroupField('measurements.waist', e.target.value)} placeholder="e.g., 32" className={cls(c, currentItem.measurements?.waist)} />}
+          </FieldCell>
+          <FieldCell label="Inseam" meta={measurementNeeded('inseam', currentItem.measurements?.inseam)}>
+            {(c) => <input {...c} type="text" value={currentItem.measurements?.inseam || ''} onChange={(e) => updateGroupField('measurements.inseam', e.target.value)} placeholder="e.g., 30" className={cls(c, currentItem.measurements?.inseam)} />}
+          </FieldCell>
+          <FieldCell label="Rise" meta={measurementNeeded('rise', currentItem.measurements?.rise)}>
+            {(c) => <input {...c} type="text" value={currentItem.measurements?.rise || ''} onChange={(e) => updateGroupField('measurements.rise', e.target.value)} placeholder="e.g., 11" className={cls(c, currentItem.measurements?.rise)} />}
+          </FieldCell>
+        </FieldGrid>
+      </FieldGroup>
 
-      {/* Row 4: Inventory & Shipping */}
-      <div className="form-section-flat">
-        <h3 className="form-section-title"><Package size={13} style={{ flexShrink: 0 }} /> Inventory & Shipping</h3>
-        <div className="fields-row">
-          <div className="info-item">
-            <label>SKU:</label>
-            <input type="text" value={currentItem.sku || ''} onChange={(e) => updateGroupField('sku', e.target.value)} placeholder="Stock keeping unit" className={`info-input${req(currentItem.sku)}`} />
-          </div>
-          <div className="info-item">
-            <label>Inventory Quantity:</label>
-            <input type="number" value={currentItem.inventoryQuantity || ''} onChange={(e) => updateGroupField('inventoryQuantity', e.target.value ? parseInt(e.target.value) : undefined)} placeholder="Stock level" className="info-input" min="0" />
-          </div>
-          <div className="info-item">
-            <label>Weight (grams): <PresetBadge show={isFromPreset('weightValue')} /></label>
-            <input type="text" value={currentItem.weightValue || ''} onChange={(e) => updateGroupField('weightValue', e.target.value)} placeholder="e.g., 350" className={`info-input${req(currentItem.weightValue)}`} />
-          </div>
-        </div>
-        <div className="fields-row">
-          <div className="info-item">
-            <label>Ships From: <PresetBadge show={isFromPreset('shipsFrom')} /></label>
-            <input type="text" value={currentItem.shipsFrom || ''} onChange={(e) => updateGroupField('shipsFrom', e.target.value)} placeholder="Shipping location" className={`info-input${req(currentItem.shipsFrom)}`} />
-          </div>
-          <div className="info-item">
-            <label>Parcel Size: <PresetBadge show={isFromPreset('parcelSize')} /></label>
-            <select value={currentItem.parcelSize || ''} onChange={(e) => updateGroupField('parcelSize', e.target.value)} className={`info-input${req(currentItem.parcelSize)}`}>
+      <FieldGroup caption="Inventory and shipping" data-section="inventory">
+        <FieldGrid columns={3}>
+          <FieldCell label="SKU" meta={need(currentItem.sku)}>
+            {(c) => <input {...c} type="text" value={currentItem.sku || ''} onChange={(e) => updateGroupField('sku', e.target.value)} placeholder="Stock keeping unit" className={cls(c, currentItem.sku)} />}
+          </FieldCell>
+          <FieldCell label="Inventory quantity">
+            {(c) => <input {...c} type="number" value={currentItem.inventoryQuantity || ''} onChange={(e) => updateGroupField('inventoryQuantity', e.target.value ? parseInt(e.target.value) : undefined)} placeholder="Stock level" min="0" />}
+          </FieldCell>
+          <FieldCell label="Weight (grams)" meta={need(currentItem.weightValue, presetBadge('weightValue'))}>
+            {(c) => <input {...c} type="text" value={currentItem.weightValue || ''} onChange={(e) => updateGroupField('weightValue', e.target.value)} placeholder="e.g., 350" className={cls(c, currentItem.weightValue)} />}
+          </FieldCell>
+          <FieldCell label="Ships from" meta={need(currentItem.shipsFrom, presetBadge('shipsFrom'))}>
+            {(c) => <input {...c} type="text" value={currentItem.shipsFrom || ''} onChange={(e) => updateGroupField('shipsFrom', e.target.value)} placeholder="Shipping location" className={cls(c, currentItem.shipsFrom)} />}
+          </FieldCell>
+          <FieldCell label="Parcel size" meta={need(currentItem.parcelSize, presetBadge('parcelSize'))}>
+            {(c) => (
+            <select {...c} value={currentItem.parcelSize || ''} onChange={(e) => updateGroupField('parcelSize', e.target.value)} className={cls(c, currentItem.parcelSize)}>
               <option value="">Select size...</option>
               <option value="Small">Small</option>
               <option value="Medium">Medium</option>
               <option value="Large">Large</option>
               <option value="Extra Large">Extra Large</option>
             </select>
-          </div>
-          <div className="info-item">
-            <label>Package Dimensions: <PresetBadge show={isFromPreset('packageDimensions')} /></label>
-            <input type="text" value={currentItem.packageDimensions || ''} onChange={(e) => updateGroupField('packageDimensions', e.target.value)} placeholder="e.g., 14 x 10 x 1 in" className={`info-input${req(currentItem.packageDimensions)}`} />
-          </div>
-          <div className="info-item">
-            <label>Requires Shipping: <PresetBadge show={isFromPreset('requiresShipping')} /></label>
-            <select value={currentItem.requiresShipping === undefined ? '' : currentItem.requiresShipping ? 'true' : 'false'} onChange={(e) => updateGroupField('requiresShipping', e.target.value === 'true')} className="info-input">
+            )}
+          </FieldCell>
+          <FieldCell label="Package dimensions" meta={need(currentItem.packageDimensions, presetBadge('packageDimensions'))}>
+            {(c) => <input {...c} type="text" value={currentItem.packageDimensions || ''} onChange={(e) => updateGroupField('packageDimensions', e.target.value)} placeholder="e.g., 14 x 10 x 1 in" className={cls(c, currentItem.packageDimensions)} />}
+          </FieldCell>
+          <FieldCell label="Requires shipping" meta={presetBadge('requiresShipping')}>
+            {(c) => (
+            <select {...c} value={currentItem.requiresShipping === undefined ? '' : currentItem.requiresShipping ? 'true' : 'false'} onChange={(e) => updateGroupField('requiresShipping', e.target.value === 'true')}>
               <option value="">Select...</option>
               <option value="true">Yes (Physical)</option>
               <option value="false">No (Digital)</option>
             </select>
-          </div>
-        </div>
-      </div>
+            )}
+          </FieldCell>
+        </FieldGrid>
+      </FieldGroup>
 
-      {/* Row 5: Status & Publishing */}
-      <div className="form-section-flat">
-        <h3 className="form-section-title"><Zap size={13} style={{ flexShrink: 0 }} /> Status & SEO</h3>
-        <div className="fields-row">
-          <div className="info-item">
-            <label>Status:</label>
-            <select value={currentItem.status || 'Active'} onChange={(e) => updateGroupField('status', e.target.value)} className="info-input">
+      <FieldGroup caption="Status and SEO" data-section="status">
+        <FieldGrid columns={3}>
+          <FieldCell label="Status">
+            {(c) => (
+            <select {...c} value={currentItem.status || 'Active'} onChange={(e) => updateGroupField('status', e.target.value)}>
               <option value="Active">Active</option>
               <option value="Draft">Draft</option>
               <option value="Archived">Archived</option>
             </select>
-          </div>
-          <div className="info-item">
-            <label>Published:</label>
-            <select value={currentItem.published === undefined ? 'true' : currentItem.published ? 'true' : 'false'} onChange={(e) => updateGroupField('published', e.target.value === 'true')} className="info-input">
+            )}
+          </FieldCell>
+          <FieldCell label="Published">
+            {(c) => (
+            <select {...c} value={currentItem.published === undefined ? 'true' : currentItem.published ? 'true' : 'false'} onChange={(e) => updateGroupField('published', e.target.value === 'true')}>
               <option value="true">Yes</option>
               <option value="false">No</option>
             </select>
-          </div>
-          <div className="info-item">
-            <label>Age Group: <PresetBadge show={isFromPreset('ageGroup')} /></label>
-            <input type="text" value={currentItem.ageGroup || ''} onChange={(e) => updateGroupField('ageGroup', e.target.value)} placeholder="e.g., Adult (13+ years)" className={`info-input${req(currentItem.ageGroup)}`} />
-          </div>
-        </div>
-        <div className="fields-row">
-          <div className="info-item fields-row--span2">
-            <label>SEO Description:</label>
-            <textarea value={currentItem.seoDescription || ''} onChange={(e) => updateGroupField('seoDescription', e.target.value)} placeholder="Meta description for search engines" className={`info-input js-autogrow${req(currentItem.seoDescription)}`} rows={2} />
-          </div>
-          <div className="info-item">
-            <label>Size Type: <PresetBadge show={isFromPreset('sizeType')} /></label>
-            <select value={currentItem.sizeType || ''} onChange={(e) => updateGroupField('sizeType', e.target.value)} className="info-input">
+            )}
+          </FieldCell>
+          <FieldCell label="Age group" meta={need(currentItem.ageGroup, presetBadge('ageGroup'))}>
+            {(c) => <input {...c} type="text" value={currentItem.ageGroup || ''} onChange={(e) => updateGroupField('ageGroup', e.target.value)} placeholder="e.g., Adult (13+ years)" className={cls(c, currentItem.ageGroup)} />}
+          </FieldCell>
+          <FieldCell label="SEO description" span={2} meta={need(currentItem.seoDescription)}>
+            {(c) => <textarea {...c} value={currentItem.seoDescription || ''} onChange={(e) => updateGroupField('seoDescription', e.target.value)} placeholder="Meta description for search engines" className={`${c.className} js-autogrow${req(currentItem.seoDescription)}`} rows={2} />}
+          </FieldCell>
+          <FieldCell label="Size type" meta={presetBadge('sizeType')}>
+            {(c) => (
+            <select {...c} value={currentItem.sizeType || ''} onChange={(e) => updateGroupField('sizeType', e.target.value)}>
               <option value="">Select size type...</option>
               <option value="Regular">Regular</option>
               <option value="Big & Tall">Big &amp; Tall</option>
@@ -319,9 +287,10 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
               <option value="Plus Size">Plus Size</option>
               <option value="One Size">One Size</option>
             </select>
-          </div>
-        </div>
-      </div>
+            )}
+          </FieldCell>
+        </FieldGrid>
+      </FieldGroup>
 
     </div>
   );

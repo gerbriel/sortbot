@@ -1,114 +1,12 @@
+/* The form is five labelled-cell groups (ui/FieldGrid): Pricing, Core
+   details, Measurements (inches), Inventory and shipping, Status and SEO. The
+   group, frame, grid, cell, label and control styles all live in
+   ui/FieldGrid.css, so this file only spaces the groups like the voice table
+   above it and keeps the empty-field highlight. */
 .comprehensive-product-form {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-}
-
-/* Flat section — no accordion, always visible.
-   NOTE: this file was written against --shopify-gray-N and --shopify-blue-N
-   names that were never defined anywhere, so every one of those was
-   invalid-at-computed-value-time and silently dropped. Named real tokens now.
-   Surface: these panels nest inside PDG's .form-section (--ink-850), so they
-   step UP to --ink-800 — at --ink-850 they would vanish into the parent card. */
-.form-section-flat {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--ink-800);
-  padding: 0.6rem 0.75rem 0.75rem;
-}
-
-.form-section-title {
-  /* icons replaced the emoji here — flex keeps them on the text row */
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin: 0 0 0.5rem 0;
-  font-size: var(--fs-2xs);
-  font-weight: 700;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  border-bottom: 1px solid var(--border-subtle);
-  padding-bottom: 0.3rem;
-}
-
-/* 3-column row */
-.fields-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.4rem 0.6rem;
-  margin-bottom: 0.4rem;
-}
-
-.fields-row:last-child {
-  margin-bottom: 0;
-}
-
-/* Span 2 columns */
-.fields-row--span2 {
-  grid-column: span 2;
-}
-
-.info-item {
-  display: flex;
-  flex-direction: column;
-}
-
-.info-item label {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-weight: 700;
-  margin-bottom: 0.2rem;
-  color: var(--accent);
-  font-size: var(--fs-2xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.info-input {
-  width: 100%;
-  padding: 0.3rem 0.4rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: var(--fs-xs);
-  transition: all 0.2s;
-  /* recessed one step below the --ink-800 panel it sits in */
-  background: var(--ink-850);
-  color: var(--text-primary);
-}
-
-.info-input:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-dim);
-}
-
-.info-input::placeholder {
-  color: var(--text-faint);
-  font-style: italic;
-}
-
-/* Preset Badge */
-.preset-badge {
-  display: inline-flex;
-  align-items: center;
-  font-size: var(--fs-2xs);
-  font-weight: 600;
-  color: var(--accent);
-  background: var(--accent-dim);
-  padding: 2px 8px;
-  border-radius: 10px;
-  border: 1px solid var(--accent-line);
-  cursor: help;
-  white-space: nowrap;
-}
-
-/* Measurements Grid */
-.measurements-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 0.4rem;
+  gap: var(--space-5);
 }
 
 /* Button Styles */
@@ -136,165 +34,38 @@
   border-color: var(--border-strong);
 }
 
-/* Responsive */
-@media (max-width: 900px) {
-  .fields-row {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .fields-row--span2 {
-    grid-column: span 2;
-  }
+/* ── Required and empty: a quiet in-cell marker ──────────────────────
+   `.field-required-empty` stays on the control exactly where the form's
+   req() logic puts it; the marker is drawn on the CELL that holds it: a 2px
+   --warning rule on the left, the same geometry as the dictation table's
+   --accent highlight (.vct-col--active), plus the word "Required" that the
+   form renders in the cell's meta slot. The control itself keeps the
+   plain-text-at-rest look: no border, no ring, no !important. */
+.comprehensive-product-form .ui-fieldcell:has(.field-required-empty) {
+  box-shadow: inset 2px 0 0 var(--warning);
 }
 
-@media (max-width: 600px) {
-  .fields-row {
-    grid-template-columns: 1fr;
-  }
-  .fields-row--span2 {
-    grid-column: span 1;
-  }
-  .measurements-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Textarea */
-textarea.info-input {
-  resize: vertical;
-  min-height: 80px;
-  font-family: inherit;
-}
-
-/* Select */
-select.info-input {
-  cursor: pointer;
-  background: var(--ink-850);
-  appearance: none;
-  /* Data URIs cannot read CSS custom properties, so the caret fill is the
-     literal value of --text-secondary (#a8a8b3). Keep the two in sync. */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23a8a8b3' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
-  padding-right: 2.5rem;
-}
-
-/* Number Input */
-input[type="number"].info-input {
-  appearance: textfield;
-  -moz-appearance: textfield;
-}
-
-input[type="number"].info-input::-webkit-inner-spin-button,
-input[type="number"].info-input::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-/* ── Required-field validation highlight ─────────────────────────────
-   Applied when showValidation=true and the field has no value.
-   A pulsing red border draws attention without being too aggressive.   */
-.field-required-empty {
-  border-color: var(--danger) !important;
-  /* the pulse needs two distinct alphas, so the ring is the --danger hue
-     (#f87171) at explicit opacities rather than the fixed --danger-dim */
-  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.3) !important;
-  animation: fieldRequiredPulse 1.8s ease-in-out 2;
-}
-
-@keyframes fieldRequiredPulse {
-  0%, 100% { box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.3); }
-  50%       { box-shadow: 0 0 0 4px rgba(248, 113, 113, 0.5); }
-}
-
-/* Once the user fills in the field, transition smoothly back to normal */
-.field-required-empty:focus {
-  border-color: var(--accent) !important;
-  box-shadow: 0 0 0 2px var(--accent-dim) !important;
-  animation: none;
-}
-
-/* "needed" badge — preset's measurement template expects this field and it's empty */
-.measurement-needed-badge {
-  display: inline-block;
-  margin-left: 0.3rem;
-  padding: 0.05rem 0.4rem;
-  border-radius: 10px;
-  background: var(--warning-dim);
-  color: var(--warning);
+.comprehensive-product-form .field-required-note {
   font-size: var(--fs-2xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  vertical-align: middle;
+  font-weight: 500;
+  line-height: var(--lh-snug);
+  color: var(--warning);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MOBILE-FIRST STEP 3 FORM
-   Additive; desktop untouched. ≤640px = phone.
-   Field text size is raised to --fs-md by the step-scoped rule in App.css (iOS
-   zooms any focused input under 16px), so it is deliberately NOT repeated here.
+   Additive; desktop untouched. <= 640px = phone. The two-column grid, 44px
+   cells and 16px controls are the shared rules in ui/FieldGrid.css. Group
+   captions are deliberately NOT sticky (docs/reviews/10-mobile-workflow.md):
+   a sticky caption slides under the app's own sticky nav.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-.info-input,
+.comprehensive-product-form .ui-fieldcell__control,
 .comprehensive-product-form .button {
   touch-action: manipulation;
 }
 
 @media (max-width: 640px) {
-  .comprehensive-product-form {
-    gap: 0.5rem;
-  }
-
-  /* One field per row — two 170px columns of label+input is where this form
-     starts truncating its own labels. */
-  .fields-row {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .fields-row--span2 {
-    grid-column: span 1;
-  }
-
-  .measurements-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.5rem;
-  }
-
-  .info-input {
-    min-height: var(--tap, 44px);
-    padding: 0.5rem 0.6rem;
-  }
-
-  select.info-input {
-    /* Keep the caret clear of the wider text. */
-    padding-right: 2.2rem;
-  }
-
-  .info-item label {
-    font-size: var(--fs-xs);
-    margin-bottom: 0.25rem;
-  }
-
-  .form-section-flat {
-    padding: 0.5rem 0.6rem 0.6rem;
-  }
-
-  /* NOT position:sticky — see docs/reviews/10-mobile-workflow.md. A sticky
-     sub-header at top:0 slides under the app's own sticky black nav (z-index
-     100, height owned by another surface) and reads as simply disappearing.
-     Instead the title is a full-bleed tinted strip so it stays an obvious
-     section boundary while scrolling a long form. */
-  .form-section-title {
-    margin: -0.5rem -0.6rem 0.5rem;
-    padding: 0.45rem 0.6rem;
-    background: var(--ink-850);
-    border-bottom: 1px solid var(--border);
-    border-radius: 10px 10px 0 0;
-    font-size: var(--fs-xs);
-  }
-
   .comprehensive-product-form .button {
     min-height: var(--tap, 44px);
     font-size: var(--fs-sm);

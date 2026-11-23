@@ -19,6 +19,8 @@ import {
   EMPTY_VOICE_STATE, type VoiceParseState, type VoiceWrite, FIELD_TO_VOICE_LABEL,
 } from '../lib/voiceGrammar';
 import { InfoDisclosure } from './ui/InfoDisclosure';
+import { Button } from './ui/Button';
+import { FieldCell, FieldGrid, FieldGroup } from './ui/FieldGrid';
 import { resolvePreset } from '../lib/presetResolver';
 import {
   createSpeechRecognizer, isSpeechAvailable,
@@ -3276,19 +3278,36 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               />
             </div>
 
-            {/* Title: editable above the AI description */}
-            <div style={{ marginTop: '0.75rem' }}>
-              <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontWeight: 600, marginBottom: '0.4rem' }}>
-                <span>Title:</span>
-                <span style={{
-                  fontSize: 'var(--fs-xs)',
-                  fontWeight: 400,
-                  color: (currentItem.seoTitle || '').length > 60 ? 'var(--danger)' : (currentItem.seoTitle || '').length > 50 ? 'var(--warning)' : 'var(--text-muted)'
-                }}>
+            {/* Title and Generated description: two full-width labelled cells
+                in one captionless group directly under the voice table, the
+                same cell language (ui/FieldGrid). */}
+            <FieldGroup style={{ marginTop: '0.75rem' }}>
+            <FieldGrid full>
+            <FieldCell
+              label="Title"
+              meta={
+                <span style={{ color: (currentItem.seoTitle || '').length > 60 ? 'var(--danger)' : undefined }}>
                   {(currentItem.seoTitle || '').length} / 60
                 </span>
-              </label>
+              }
+              hint={(!currentItem.seoTitle || duplicateTitleWarning) ? (
+                <>
+                  {!currentItem.seoTitle && (
+                    <p style={{ margin: 0 }}>
+                      Preview from current fields. Type to override, or hit Generate to lock it in.
+                    </p>
+                  )}
+                  {duplicateTitleWarning && (
+                    <p style={{ color: 'var(--danger)', margin: 0, fontWeight: 600 }}>
+                      <AlertTriangle size={12} style={{ flexShrink: 0 }} /> Duplicate title: this title already exists in another batch on Shopify
+                    </p>
+                  )}
+                </>
+              ) : undefined}
+            >
+              {c => (
               <input
+                {...c}
                 type="text"
                 value={currentItem.seoTitle || ''}
                 onChange={(e) => {
@@ -3322,28 +3341,54 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     : preview;
                   return trimmed || preview.slice(0, 60);
                 })()}
-                className="info-input"
-                style={{ width: '100%' }}
                 onKeyDown={(e) => e.stopPropagation()}
               />
-              {!currentItem.seoTitle && (
-                <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', margin: '0.25rem 0 0' }}>
-                  Preview from current fields. Type to override, or hit Generate to lock it in.
-                </p>
               )}
-              {duplicateTitleWarning && (
-                <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--danger)', margin: '0.25rem 0 0', fontWeight: 600 }}>
-                  <AlertTriangle size={12} style={{ flexShrink: 0 }} /> Duplicate title: this title already exists in another batch on Shopify
-                </p>
-              )}
-            </div>
+            </FieldCell>
 
-            {/* Generated description — sits directly below the voice box */}
-            <div style={{ marginTop: '0.75rem' }}>
-              <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem' }}>
-                Generated Description:
-              </label>
+            {/* Generated description: the Generate and Clear actions sit in
+                the label row as small ghost buttons. */}
+            <FieldCell
+              label="Generated description"
+              meta={
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={isGenerating ? <Brain size={12} /> : <RefreshCw size={12} />}
+                    onClick={() => handleRegenerateAll()}
+                    disabled={isGenerating || isSyncingFields || isSyncingFromVoice}
+                    title="Re-extract all fields from voice + description, then regenerate listing"
+                  >
+                    {isGenerating ? 'Generating…' : 'Generate'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<Trash2 size={12} />}
+                    onClick={() => {
+                      const updated = [...processedItems];
+                      currentGroup.forEach(groupItem => {
+                        const itemIndex = updated.findIndex(item => item.id === groupItem.id);
+                        if (itemIndex !== -1) {
+                          updated[itemIndex].generatedDescription = '';
+                          updated[itemIndex].seoDescription = '';
+                          updated[itemIndex].descriptionEdited = false;
+                        }
+                      });
+                      setProcessedItems(updated);
+                    }}
+                    title="Clear the generated description"
+                  >
+                    Clear
+                  </Button>
+                </>
+              }
+              hint="Reads voice and description, updates all fields, then writes a new description."
+            >
+              {c => (
               <textarea
+                {...c}
                 value={currentItem.generatedDescription}
                 onChange={(e) => {
                   const updated = [...processedItems];
@@ -3356,63 +3401,15 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   });
                   setProcessedItems(updated);
                 }}
-                className="info-textarea js-autogrow"
+                className={`${c.className} info-textarea js-autogrow`}
                 rows={6}
-                style={{ width: '100%' }}
                 onKeyDown={(e) => e.stopPropagation()}
               />
-              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                <button
-                  className="button button-primary"
-                  onClick={() => handleRegenerateAll()}
-                  disabled={isGenerating || isSyncingFields || isSyncingFromVoice}
-                  style={{
-                    flex: 1,
-                    background: isGenerating
-                      ? 'linear-gradient(135deg, var(--ink-700) 0%, var(--ink-800) 100%)'
-                      : 'linear-gradient(135deg, var(--accent) 0%, var(--accent-press) 100%)',
-                    /* .button paints a dark ink label, which is correct on the
-                       accent fill but vanishes on the muted busy-state fill. */
-                    color: isGenerating ? 'var(--text-secondary)' : 'var(--ink-950)',
-                  }}
-                  title="Re-extract all fields from voice + description, then regenerate listing"
-                >
-                  {isGenerating ? <><Brain size={12} /> Regenerating…</> : <><RefreshCw size={12} /> Regenerate Description</>}
-                </button>
-                <button
-                  className="button"
-                  onClick={() => {
-                    const updated = [...processedItems];
-                    currentGroup.forEach(groupItem => {
-                      const itemIndex = updated.findIndex(item => item.id === groupItem.id);
-                      if (itemIndex !== -1) {
-                        updated[itemIndex].generatedDescription = '';
-                        updated[itemIndex].seoDescription = '';
-                        updated[itemIndex].descriptionEdited = false;
-                      }
-                    });
-                    setProcessedItems(updated);
-                  }}
-                  title="Clear the generated description"
-                  style={{
-                    background: 'transparent',
-                    border: '1px solid var(--border-control)',
-                    color: 'var(--text-secondary)',
-                    padding: '0 0.75rem',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: 'var(--fs-xs)',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  <Trash2 size={12} /> Clear
-                </button>
-              </div>
-              <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', marginTop: '0.35rem', marginBottom: 0 }}>
-                Reads voice &amp; description → updates all fields → writes a new description
-              </p>
-            </div>
-            
+              )}
+            </FieldCell>
+            </FieldGrid>
+            </FieldGroup>
+
             {/* Display Intelligent Match Results */}
             {currentItem.modelName && (
               <div className="match-results" style={{

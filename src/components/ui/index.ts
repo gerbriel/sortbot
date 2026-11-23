@@ -48,6 +48,9 @@ export type {
   TextFieldProps, TextareaFieldProps,
 } from './Field';
 
+export { FieldGroup, FieldGrid, FieldCell } from './FieldGrid';
+export type { FieldCellControlProps, FieldCellProps, FieldGridProps, FieldGroupProps } from './FieldGrid';
+
 export { EmptyState } from './EmptyState';
 export type { EmptyStateProps } from './EmptyState';
 

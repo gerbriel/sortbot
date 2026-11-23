@@ -1,5 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import type { ClothingItem } from '../App';
+import { FieldCell, FieldGrid, FieldGroup } from './ui/FieldGrid';
 
 interface VoiceCommandTableProps {
   currentItem: ClothingItem;
@@ -195,70 +196,70 @@ const VoiceCommandTable: React.FC<VoiceCommandTableProps> = ({
       isEditing ? 'vct-col--editing' : '',
     ].filter(Boolean).join(' ');
 
+    // FieldCell owns the anatomy and the click-anywhere-focuses behaviour;
+    // the .vct-* classes stay as hooks for the tests and the local
+    // active/listening styles.
     return (
-      <div
+      <FieldCell
         key={field.key}
         className={className}
         data-field={field.key}
-        onClick={e => {
-          const input = (e.currentTarget as HTMLElement).querySelector('input');
-          if (input && e.target !== input) input.focus();
-        }}
+        label={field.label}
+        labelClassName="vct-header"
+        controlId={inputId}
       >
-        <label className="vct-header" htmlFor={inputId}>{field.label}</label>
-        <input
-          id={inputId}
-          className={`vct-cell${showInterim ? ' vct-cell--listening' : ''}`}
-          value={value}
-          placeholder={field.placeholder}
-          autoComplete="off"
-          onFocus={() => setEditing({ itemId: currentItem.id, key: field.key, draft: rawValue, original: rawValue })}
-          onChange={e => setEditing({
-            itemId: currentItem.id,
-            key: field.key,
-            draft: e.target.value,
-            original: editingRef.current?.key === field.key && editingRef.current.itemId === currentItem.id
-              ? editingRef.current.original
-              : rawValue,
-          })}
-          onBlur={commit}
-          onKeyDown={e => {
-            e.stopPropagation();
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              commit();
-              e.currentTarget.blur();
-            } else if (e.key === 'Escape') {
-              e.preventDefault();
-              const cur = editingRef.current;
-              if (cur && cur.key === field.key) setEditing({ ...cur, draft: cur.original });
-            }
-          }}
-        />
-      </div>
+        {c => (
+          <input
+            id={c.id}
+            className={`${c.className} vct-cell${showInterim ? ' vct-cell--listening' : ''}`}
+            value={value}
+            placeholder={field.placeholder}
+            autoComplete="off"
+            onFocus={() => setEditing({ itemId: currentItem.id, key: field.key, draft: rawValue, original: rawValue })}
+            onChange={e => setEditing({
+              itemId: currentItem.id,
+              key: field.key,
+              draft: e.target.value,
+              original: editingRef.current?.key === field.key && editingRef.current.itemId === currentItem.id
+                ? editingRef.current.original
+                : rawValue,
+            })}
+            onBlur={commit}
+            onKeyDown={e => {
+              e.stopPropagation();
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                commit();
+                e.currentTarget.blur();
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                const cur = editingRef.current;
+                if (cur && cur.key === field.key) setEditing({ ...cur, draft: cur.original });
+              }
+            }}
+          />
+        )}
+      </FieldCell>
     );
   };
 
   return (
     <div className="vct-wrapper">
       {VOICE_TABLE_GROUPS.map(group => (
-        <section
+        // FieldGroup's frame clips the grid's outer hairlines, so rules show
+        // only BETWEEN cells at any column count (ui/FieldGrid.css).
+        <FieldGroup
           key={group.id}
           className={`vct-row-group${group.full ? ' vct-row-group--title' : ''}`}
           data-group={group.id}
-          aria-labelledby={group.caption ? `vct-group-${group.id}` : undefined}
+          caption={group.caption}
+          captionClassName="vct-row-label"
+          frameClassName="vct-frame"
         >
-          {group.caption && <div className="vct-row-label" id={`vct-group-${group.id}`}>{group.caption}</div>}
-          {/* The frame clips the grid's outer hairlines: each cell draws a top
-              and left rule, the grid is pulled 1px up and left, and the frame
-              (overflow: clip, never a scroller, report 36) hides the overhang,
-              so rules show only BETWEEN cells at any column count. */}
-          <div className="vct-frame">
-            <div className={`vct-grid${group.full ? ' vct-grid--full' : ''}`}>
-              {group.fields.map(renderCell)}
-            </div>
-          </div>
-        </section>
+          <FieldGrid full={group.full} className={`vct-grid${group.full ? ' vct-grid--full' : ''}`}>
+            {group.fields.map(renderCell)}
+          </FieldGrid>
+        </FieldGroup>
       ))}
 
       {isRecording && activeField && (

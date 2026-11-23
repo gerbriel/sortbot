@@ -1,0 +1,252 @@
+/* ── FieldGroup / FieldGrid / FieldCell: labelled cells ─────────────────────
+   Moved here from the `.vct-*` rules in ProductDescriptionGenerator.css (the
+   dictation table the owner approved, 22 Nov 2026) so Step 3 has one cell
+   language. VoiceCommandTable, the Title and Generated description cells and
+   ComprehensiveProductForm all render through these rules.
+
+   Each field is one cell, a small label above its value. A group is a quiet
+   caption over a framed grid; there is no boxed group row, no header row and
+   no border between a label and its value. */
+
+.ui-fieldgroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ui-fieldgroup__caption {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* The frame owns the outer edge and clips the grid's overhang. `overflow:
+   clip` and never `hidden` or `auto`: clip creates no scroll container, so
+   the page stays the one scroller (report 36). */
+.ui-fieldgroup__frame {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: clip;
+  background: var(--ink-800);
+}
+
+/* Hairlines run only BETWEEN cells: every cell draws a top and left rule and
+   the grid is pulled 1px up and left, so the frame clips the outer ones. That
+   works at any column count with no empty-track fill. */
+.ui-fieldgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  margin: -1px 0 0 -1px;
+}
+
+/* `columns` hint: a track is never narrower than its share of N columns, so
+   a wide screen stops at N. */
+.ui-fieldgrid--capped {
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(max(12rem, calc(100% / var(--ui-fieldgrid-cols, 3))), 1fr)
+  );
+}
+
+.ui-fieldgrid--full {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ui-fieldcell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: var(--space-2) var(--space-2) var(--space-1);
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  cursor: text;
+  transition: background var(--dur-fast) var(--ease);
+  /* Lets a grid track shrink below the control's intrinsic width, so the
+     grid never overflows its column. */
+  min-width: 0;
+}
+
+.ui-fieldcell--span2 {
+  grid-column: span 2;
+}
+
+.ui-fieldcell--full {
+  grid-column: 1 / -1;
+}
+
+/* (0,2,0): outranks contextual label rules such as `.voice-result label`,
+   which would otherwise make this a bold 14px block with a margin. The
+   horizontal padding lines the label up with the control's text (the
+   control's padding plus its 1px border). */
+.ui-fieldcell .ui-fieldcell__label {
+  display: block;
+  margin: 0;
+  padding: 0 calc(0.5rem + 1px);
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+  line-height: var(--lh-snug);
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+
+/* Label row with a trailing meta slot (counter, badge, small action). */
+.ui-fieldcell__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.ui-fieldcell__head .ui-fieldcell__label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ui-fieldcell__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+  padding-right: calc(0.5rem + 1px);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-snug);
+  color: var(--text-muted);
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* The value. At rest it reads as plain text; focused it becomes the app's
+   input (the .ui-input radius and focus ring) in the same place, so nothing
+   shifts: the 1px border is always there, only its colour changes. */
+.ui-fieldcell__control {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0.2rem 0.5rem;
+  font: inherit;
+  font-size: var(--fs-base);
+  line-height: var(--lh-snug);
+  color: var(--text-primary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  outline: none;
+  text-overflow: ellipsis;
+  transition: border-color var(--dur-fast) var(--ease),
+              box-shadow var(--dur-fast) var(--ease);
+}
+.ui-fieldcell__control::placeholder {
+  color: var(--text-faint);
+}
+.ui-fieldcell__control:focus,
+.ui-fieldcell__control:focus-visible {
+  background-color: var(--ink-800);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+.ui-fieldcell__control:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+/* A textarea grows downward and reads as body copy. */
+textarea.ui-fieldcell__control {
+  line-height: var(--lh-normal);
+  resize: vertical;
+}
+
+/* A select keeps a quiet caret so it still reads as a choice at rest. Drawn
+   with gradients so the colour is a token (a data URI cannot read one).
+   (0,2,1) so the bare `select:focus` background shorthand cannot wipe it. */
+.ui-fieldcell select.ui-fieldcell__control {
+  appearance: none;
+  cursor: pointer;
+  padding-right: 1.8rem;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+    linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 0.9rem) 50%,
+    calc(100% - 0.55rem) 50%;
+  background-size: 0.35rem 0.35rem, 0.35rem 0.35rem;
+  background-repeat: no-repeat;
+}
+
+/* Numbers read as text: no spinner buttons. */
+input[type='number'].ui-fieldcell__control {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+input[type='number'].ui-fieldcell__control::-webkit-inner-spin-button,
+input[type='number'].ui-fieldcell__control::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* A checkbox cell: the control beside a short value text ("Yes"). */
+.ui-fieldcell__check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.2rem calc(0.5rem + 1px);
+  font-size: var(--fs-base);
+  color: var(--text-primary);
+}
+.ui-fieldcell__check input[type='checkbox'].ui-fieldcell__control {
+  width: auto;
+  padding: 0;
+  margin: 0;
+}
+
+.ui-fieldcell__hint {
+  margin: 0;
+  padding: 0 calc(0.5rem + 1px);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.ui-fieldcell__footer {
+  padding: 0 calc(0.5rem + 1px);
+  cursor: default;
+}
+
+/* ── Phone (<= 640px) ──────────────────────────────────────────────────────
+   Two equal shrinking columns, so a group can never push the page into a
+   horizontal scroll. The global phone rule already gives a control 44px and
+   16px type (index.css); the cell restates both because the control class
+   sets its own font-size at (0,1,0), which outranks the bare `input` rule.
+   44px is a literal on purpose: a touch target is a physical constant. */
+@media (max-width: 640px) {
+  .ui-fieldgrid,
+  .ui-fieldgrid--capped {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ui-fieldgrid--full {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ui-fieldcell {
+    min-height: 44px;
+  }
+
+  .ui-fieldcell__control {
+    min-height: 44px;
+    font-size: var(--fs-md);
+  }
+
+  .ui-fieldcell__check {
+    min-height: 44px;
+    font-size: var(--fs-md);
+  }
+
+  .ui-fieldcell__check input[type='checkbox'].ui-fieldcell__control {
+    min-height: 0;
+  }
+}

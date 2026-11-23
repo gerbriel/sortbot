@@ -789,8 +789,8 @@
      sliders keep their compact thumb.
      This does NOT duplicate the global `input, textarea, select` rule in
      index.css: that one is a bare type selector (0,0,1) and therefore LOSES to
-     every component class that sets its own size (.info-input and .vct-cell at
-     --fs-xs, .filter-select, .description-textarea). The step-scoped selector
+     every component class that sets its own size (.ui-fieldcell__control,
+     .filter-select, .description-textarea). The step-scoped selector
      here outranks them, so the fields users actually type into in Steps 1–4
      really do land at 16px. */
   .step-section input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),

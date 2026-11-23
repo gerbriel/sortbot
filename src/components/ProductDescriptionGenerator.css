@@ -356,9 +356,9 @@
    would be overwritten by the next keystroke anyway, and there is nothing left
    to reveal by dragging.
 
-   Scoped through the Step 3 root so it outranks `textarea.info-input`'s
-   `resize: vertical` (same specificity, different file — import order must not
-   be allowed to decide this). */
+   Scoped through the Step 3 root so it outranks `textarea.ui-fieldcell__control`'s
+   `resize: vertical` (ui/FieldGrid.css; import order must not be allowed to
+   decide this). */
 .product-description-container textarea.js-autogrow {
   overflow-y: hidden;
   resize: none;
@@ -448,38 +448,6 @@
   font-style: italic;
 }
 
-/* Info Item Styles (Manual Product Info Section) */
-.info-item {
-  margin-bottom: var(--space-4);
-}
-
-.info-item label {
-  display: block;
-  font-weight: 500;
-  color: var(--gray-700);
-  margin-bottom: var(--space-2);
-  font-size: var(--fs-base);
-}
-
-.info-input {
-  width: 100%;
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--gray-300);
-  border-radius: var(--radius-md);
-  font-size: var(--fs-base);
-  font-family: inherit;
-  transition: all 0.2s ease;
-  background: var(--ink-850);
-  color: var(--text-primary);
-  box-sizing: border-box;
-}
-
-.info-input:focus {
-  outline: none;
-  border-color: var(--shopify-blue);
-  box-shadow: 0 0 0 1px var(--shopify-blue);
-}
-
 /* Input with Regenerate Button */
 .input-with-button {
   display: flex;
@@ -496,35 +464,6 @@
   flex-shrink: 0;
   padding: var(--space-3) var(--space-4);
   margin-top: 0;
-}
-
-/* Measurements Grid */
-.measurements-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: var(--space-4);
-  margin-top: var(--space-3);
-}
-
-.measurement-input {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.measurement-input label {
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  color: var(--gray-600);
-  margin: 0;
-}
-
-.measurement-input input {
-  width: 100%;
-  padding: var(--space-3);
-  border: 1px solid var(--gray-300);
-  border-radius: var(--radius-md);
-  font-size: var(--fs-base);
 }
 
 /* Generated Content Display */
@@ -613,11 +552,6 @@
     width: 100%;
   }
   
-  .measurements-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: var(--space-3);
-  }
-  
   .navigation-controls {
     flex-direction: column;
     gap: var(--space-3);
@@ -661,11 +595,6 @@
   
   .form-group {
     margin-bottom: var(--space-4);
-  }
-  
-  .measurements-grid {
-    grid-template-columns: 1fr;
-    gap: var(--space-3);
   }
   
   .voice-warning {
@@ -1242,53 +1171,12 @@
   gap: var(--space-5);
 }
 
-.vct-row-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.vct-row-label {
-  font-size: var(--fs-xs);
-  font-weight: 500;
-  color: var(--text-muted);
-}
-
-/* The frame owns the outer edge and clips the grid's overhang (see the
-   comment in VoiceCommandTable.tsx). `overflow: clip` and never `hidden` or
-   `auto`: clip creates no scroll container, so the page stays the one
-   scroller (report 36). */
-.vct-frame {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  overflow: clip;
-  background: var(--ink-800);
-}
-
-.vct-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  margin: -1px 0 0 -1px;
-}
-
-.vct-grid--full {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.vct-col {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  padding: var(--space-2) var(--space-2) var(--space-1);
-  /* Hairlines between cells: top and left rules, the outer ones clipped. */
-  border-top: 1px solid var(--border);
-  border-left: 1px solid var(--border);
-  cursor: text;
-  transition: background var(--dur-fast) var(--ease);
-  /* Lets a grid track shrink below the input's intrinsic width, so the
-     table never overflows the form column. */
-  min-width: 0;
-}
+/* Group, frame, grid, cell, label and value are the shared labelled-cell
+   rules in ui/FieldGrid.css (`.ui-fieldgroup`, `.ui-fieldgrid`,
+   `.ui-fieldcell`, `.ui-fieldcell__label`, `.ui-fieldcell__control`); the
+   `.vct-*` classes on those elements are hooks only. What stays here is what
+   only the dictation table has: the active and listening states and the
+   status line. */
 
 /* Dictating into this cell: a subtle fill and a 2px accent rule on the left. */
 .vct-col--active {
@@ -1296,59 +1184,15 @@
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
-/* (0,2,0): outranks `.voice-result label`, which would otherwise make this a
-   bold 14px block with a margin. */
-.vct-col .vct-header {
-  display: block;
-  margin: 0;
-  padding: 0 calc(0.5rem + 1px);
-  font-size: var(--fs-2xs);
-  font-weight: 500;
-  line-height: var(--lh-snug);
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: text;
-}
-
 @keyframes vct-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%       { opacity: 0.5; transform: scale(1.4); }
 }
 
-/* The value. At rest it reads as plain text; focused it becomes the app's
-   input (the .ui-input radius and focus ring) in the same place, so nothing
-   shifts: the 1px border is always there, only its colour changes. */
-.vct-cell {
-  width: 100%;
-  min-width: 0;
-  margin: 0;
-  padding: 0.2rem 0.5rem;
-  font: inherit;
-  font-size: var(--fs-base);
-  line-height: var(--lh-snug);
-  color: var(--text-primary);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  outline: none;
-  text-overflow: ellipsis;
-  transition: border-color var(--dur-fast) var(--ease),
-              box-shadow var(--dur-fast) var(--ease);
-}
-.vct-cell::placeholder {
-  color: var(--text-faint);
-}
-.vct-cell:focus,
-.vct-cell:focus-visible {
-  background: var(--ink-800);
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-dim);
-}
-/* Interim words while dictating: the value slot, one step quieter. */
-.vct-cell--listening {
+/* Interim words while dictating: the value slot, one step quieter. (0,2,0)
+   so it outranks the shared `.ui-fieldcell__control` colour whatever order
+   the two stylesheets load in. */
+.vct-cell.vct-cell--listening {
   color: var(--text-secondary);
 }
 
@@ -1607,27 +1451,8 @@
     min-height: 56px;
   }
 
-  /* ── Voice field table: two columns, thumb-sized cells ───────────────────
-     Two equal shrinking columns, so the table can never push the page into a
-     horizontal scroll. The global phone rule already gives the input 44px and
-     16px type (index.css); the cell restates both because .vct-cell sets its
-     own font-size at (0,1,0), which outranks the bare `input` rule. */
-  .vct-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .vct-grid--full {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .vct-col {
-    min-height: 44px;
-  }
-
-  .vct-cell {
-    min-height: 44px;
-    font-size: var(--fs-md);
-  }
+  /* The voice field table's phone layout (two columns, 44px cells, 16px
+     values) is the shared labelled-cell rule in ui/FieldGrid.css. */
 }
 
 /* ── Period boundary button ──────────────────────────────────────────────────
