@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { act } from 'react';
 import OrgPanel, { PlanUsageGroup } from './OrgPanel';
-import { mount, cleanup, all, one } from './ui/testUtils';
+import { mount, cleanup, all, one, click } from './ui/testUtils';
 
 /**
  * The Workspace page's "Plan and usage" group (069). Only the network is
@@ -35,7 +35,13 @@ vi.mock('../lib/usageService', async (importOriginal) => {
   return { ...actual, fetchOrgUsage: vi.fn() };
 });
 
-import { fetchOrgMembers, fetchOrgInvites } from '../lib/orgService';
+vi.mock('../lib/insightsService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/insightsService')>();
+  return { ...actual, setShareInsights: vi.fn() };
+});
+
+import { fetchOrgMembers, fetchOrgInvites, type Organization } from '../lib/orgService';
+import { setShareInsights } from '../lib/insightsService';
 import { getOrgDescriptionSettings, DEFAULT_DESCRIPTION_SETTINGS } from '../lib/descriptionSettings';
 import { getShopifyConnection } from '../lib/shopifyConnectionService';
 import { fetchOrgMarketplaces, fetchVocab } from '../lib/marketplaceService';
@@ -114,5 +120,50 @@ describe('OrgPanel plan and usage', () => {
     const { container } = await renderPanel('owner');
     expect(container.textContent).not.toContain('Plan and usage');
     expect(container.textContent).not.toContain('boom');
+  });
+});
+
+describe('OrgPanel shared insights (071)', () => {
+  async function renderSettings(org: Organization, role: 'owner' | 'admin' | 'member' = 'admin') {
+    const view = mount(<OrgPanel org={org} myRole={role} myUserId="u1" onClose={() => {}} initialTab="settings" />);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    return view;
+  }
+
+  it('renders for an admin when the org row carries share_insights', async () => {
+    const { container } = await renderSettings({ ...ORG, share_insights: true });
+    const card = one(container, '.org-share-insights');
+    expect(card.textContent).toContain('Shared insights');
+    expect(card.textContent).toContain('Share anonymised insights with other shops');
+    expect(card.textContent).toContain('at least 5 listings from 2 or more shops');
+    expect(card.textContent).toContain('On');
+    expect((one(card, 'input[type="checkbox"]') as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('is hidden when the column is missing (071 not run) and for a plain member', async () => {
+    const pre = await renderSettings({ ...ORG });
+    expect(pre.container.querySelector('.org-share-insights')).toBeNull();
+    cleanup();
+    const member = await renderSettings({ ...ORG, share_insights: true }, 'member');
+    expect(member.container.querySelector('.org-share-insights')).toBeNull();
+  });
+
+  it('saves through setShareInsights with the org id and the new value', async () => {
+    vi.mocked(setShareInsights).mockResolvedValue({ status: 'ok', data: false });
+    const { container } = await renderSettings({ ...ORG, share_insights: true });
+    const box = one(container, '.org-share-insights input[type="checkbox"]') as HTMLInputElement;
+    await act(async () => { click(box); await Promise.resolve(); await Promise.resolve(); });
+    expect(setShareInsights).toHaveBeenCalledWith('org-1', false);
+    expect(box.checked).toBe(false);
+    expect(one(container, '.org-share-insights').textContent).toContain('Off');
+  });
+
+  it('shows the inline error on forbidden', async () => {
+    vi.mocked(setShareInsights).mockResolvedValue({ status: 'forbidden' });
+    const { container } = await renderSettings({ ...ORG, share_insights: true });
+    const box = one(container, '.org-share-insights input[type="checkbox"]') as HTMLInputElement;
+    await act(async () => { click(box); await Promise.resolve(); await Promise.resolve(); });
+    expect(one(container, '.org-share-error').textContent).toContain('owner or admin');
+    expect(box.checked).toBe(true);
   });
 });

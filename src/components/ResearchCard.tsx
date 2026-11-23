@@ -15,6 +15,10 @@ import {
   researchAvailable, fetchOwnComps, saveIdentification, savePrice, logEvents,
   markIdentificationReviewed, type PricingEventInput,
 } from '../lib/researchService';
+import {
+  insightsAvailable, fetchMarketPriceStats, fetchBrandEraSignals, marketSupportLabel,
+  type MarketPriceStat, type BrandEraSignal,
+} from '../lib/insightsService';
 import type { ModelRow } from '../lib/vocabService';
 import SimilarListings from './SimilarListings';
 import './ResearchCard.css';
@@ -234,6 +238,77 @@ export default function ResearchCard({
   }, [available, productGroupId, brand, category, era, refreshTick]);
 
   /**
+   * SHARED INSIGHTS (071): k-anonymous aggregates of OTHER sharing workspaces,
+   * consulted by the engine only after this shop's own sold comps. Same cache
+   * discipline as comps (one read per key per session, Refresh forces one), and
+   * the same failure mode: quiet. A failed or missing read is an empty list, so
+   * the card prices from its own data exactly as before 071. Nothing per
+   * listing crosses here; see insightsService.ts.
+   *
+   * The answers are stored WITH the key they answer, and read through a
+   * mismatch check, so a stale answer for the previous listing is never used.
+   */
+  const [insightsOk, setInsightsOk] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!available) return;
+    let cancelled = false;
+    insightsAvailable().then(ok => { if (!cancelled) setInsightsOk(ok); });
+    return () => { cancelled = true; };
+  }, [available]);
+
+  const marketCache = useRef(new Map<string, MarketPriceStat[]>());
+  const [loadedMarket, setLoadedMarket] = useState<{ key: string; stats: MarketPriceStat[] } | null>(null);
+  const marketKey = `${brand}|${category}|${era}|${refreshTick}`;
+  useEffect(() => {
+    if (!available || !insightsOk || !category) return;
+    const hit = marketCache.current.get(marketKey);
+    if (hit) { setLoadedMarket({ key: marketKey, stats: hit }); return; }
+    let cancelled = false;
+    fetchMarketPriceStats({ brand, category, era })
+      .then(res => (res.status === 'ok' ? res.data : null), () => null)
+      .then(stats => {
+        // Only an answer is cached; a failure is retried on the next key or Refresh.
+        if (stats) marketCache.current.set(marketKey, stats);
+        if (!cancelled) setLoadedMarket({ key: marketKey, stats: stats ?? [] });
+      });
+    return () => { cancelled = true; };
+  }, [available, insightsOk, marketKey, brand, category, era]);
+
+  const eraCache = useRef(new Map<string, BrandEraSignal[]>());
+  const [loadedEra, setLoadedEra] = useState<{ key: string; signals: BrandEraSignal[] } | null>(null);
+  const eraKey = `${brand.toLowerCase()}|${refreshTick}`;
+  useEffect(() => {
+    if (!available || !insightsOk || !brand) return;
+    const hit = eraCache.current.get(eraKey);
+    if (hit) { setLoadedEra({ key: eraKey, signals: hit }); return; }
+    let cancelled = false;
+    fetchBrandEraSignals(brand)
+      .then(res => (res.status === 'ok' ? res.data : null), () => null)
+      .then(signals => {
+        if (signals) eraCache.current.set(eraKey, signals);
+        if (!cancelled) setLoadedEra({ key: eraKey, signals: signals ?? [] });
+      });
+    return () => { cancelled = true; };
+  }, [available, insightsOk, eraKey, brand]);
+
+  const marketWanted = insightsOk === true && category !== '';
+  const eraWanted = insightsOk === true && brand !== '';
+  const market = useMemo<readonly MarketPriceStat[]>(
+    () => (marketWanted && loadedMarket?.key === marketKey ? loadedMarket.stats : []),
+    [marketWanted, loadedMarket, marketKey],
+  );
+  const eraSignals = useMemo<readonly BrandEraSignal[]>(
+    () => (eraWanted && loadedEra?.key === eraKey ? loadedEra.signals : []),
+    [eraWanted, loadedEra, eraKey],
+  );
+  /** True until every shared read this listing wants has answered (or failed).
+   *  It gates only the CAPTURE below, never the render, so a run is logged once
+   *  with the market in it rather than once without and once with. */
+  const insightsPending = insightsOk === null
+    || (marketWanted && loadedMarket?.key !== marketKey)
+    || (eraWanted && loadedEra?.key !== eraKey);
+
+  /**
    * What the knowledge base knows about this brand — injected, not imported.
    *
    * The table is ~113 kB and shares a chunk with `builtinBrandVocab`, which
@@ -263,8 +338,8 @@ export default function ResearchCard({
    * below rather than about cost.
    */
   const identification = useMemo(
-    () => identifyListing({ item, transcript, brandTerms, model, brandFacts }),
-    [item, transcript, brandTerms, model, brandFacts],
+    () => identifyListing({ item, transcript, brandTerms, model, brandFacts, eraSignals }),
+    [item, transcript, brandTerms, model, brandFacts, eraSignals],
   );
 
   /**
@@ -279,8 +354,8 @@ export default function ResearchCard({
   }, [item.price]);
 
   const price = useMemo(
-    () => computePrice({ comps, identification, item, spokenPriceCents }),
-    [comps, identification, item, spokenPriceCents],
+    () => computePrice({ comps, identification, item, spokenPriceCents, market }),
+    [comps, identification, item, spokenPriceCents, market],
   );
 
   // ── Capture ───────────────────────────────────────────────────────────────
@@ -306,7 +381,7 @@ export default function ResearchCard({
   const loggedRuns = useRef(new Set<string>());
 
   useEffect(() => {
-    if (!available || !productGroupId || compsLoading) return;
+    if (!available || !productGroupId || compsLoading || insightsPending) return;
     if (loggedRuns.current.has(runKey)) return;
     loggedRuns.current.add(runKey);
 
@@ -370,7 +445,7 @@ export default function ResearchCard({
       reviewReasons: price.reviewReasons,
     });
     void logEvents(events);
-  }, [available, productGroupId, batchId, compsLoading, runKey, identification, price]);
+  }, [available, productGroupId, batchId, compsLoading, insightsPending, runKey, identification, price]);
 
   /**
    * The corrections. A `corrected` / `accepted` event per tracked field whose
@@ -462,6 +537,19 @@ export default function ResearchCard({
   };
 
   if (!available) return null;
+
+  /* The market aggregate the price was built from, if any. The engine records
+     it as ONE comp with `source: 'market'` (its median as price_cents), which
+     is also what `savePrice` stores in `listing_prices.comps`. The support line
+     is drawn from the matching stat through `marketSupportLabel`, the one
+     phrase every surface uses; the comp's own note is the fallback. */
+  const marketComp = price.compsUsed.find(c => c.source === 'market') ?? null;
+  const marketStat = marketComp
+    ? market.find(m => m.kind === marketComp.kind && Math.round(m.medianCents) === marketComp.price_cents) ?? null
+    : null;
+  const marketLine = marketComp
+    ? (marketStat ? marketSupportLabel(marketStat) : (marketComp.note ?? ''))
+    : '';
 
   const { era: eraFacet, condition, rarity } = identification;
   const flagged = price.needsReview;
@@ -580,6 +668,14 @@ export default function ResearchCard({
           <ul className="rc-explain">
             {price.explanation.map((line, i) => <li key={i}>{line}</li>)}
           </ul>
+          {marketLine && (
+            <ul className="rc-why-list rc-market">
+              <li>
+                <span className="rc-why-kind">From other shops</span>
+                <span className="rc-why-text">{marketLine}</span>
+              </li>
+            </ul>
+          )}
           {compsUnavailable ? (
             <p className="rc-note">Could not read this workspace's sold history just now.</p>
           ) : (

@@ -20,6 +20,10 @@ export interface Organization {
   slug?: string | null;
   plan?: string;
   created_at?: string;
+  /** 071_shared_insights.sql: does this workspace contribute to and read the
+   *  k-anonymous cross-workspace aggregates? Default true. ABSENT (not false)
+   *  before 071 runs; every read here is `select('*')`, so it arrives with the row. */
+  share_insights?: boolean;
 }
 
 export type OrgRole = 'owner' | 'admin' | 'member';

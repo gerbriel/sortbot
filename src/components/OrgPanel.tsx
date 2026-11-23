@@ -31,6 +31,7 @@ import { filterUnreferencedStoragePaths } from '../lib/storageSafety';
 import { ConfirmAction, FieldCell, FieldGrid, FieldGroup } from './ui';
 import { fetchOrgUsage, planDisplayName, type OrgUsage } from '../lib/usageService';
 import { planUsageMeters } from '../lib/home';
+import { setShareInsights, K_ANON_ROWS, K_ANON_ORGS } from '../lib/insightsService';
 import {
   PLATFORM_PRESETS, ADJUSTMENT_TYPES, ROUNDING_MODES, MAX_PERCENT, MAX_FIXED,
   platformSlug, pricingExample, describePlatformRule, selectablePlatforms,
@@ -318,6 +319,38 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
     })();
     return () => { cancelled = true; };
   }, [org.id]);
+
+  /* Shared insights (071). The value comes with the org row (`select('*')`);
+     a row with no `share_insights` key means 071 has not run and the card
+     hides. A save is kept as an override KEYED by workspace, so a workspace
+     switch can never show one shop's choice under another's name. */
+  const [shareOverride, setShareOverride] = useState<{ orgId: string; on: boolean } | null>(null);
+  const [shareError, setShareError] = useState<{ orgId: string; message: string } | null>(null);
+  const [shareSaving, setShareSaving] = useState(false);
+  const hasShareColumn = typeof org.share_insights === 'boolean';
+  const shareOn = shareOverride?.orgId === org.id ? shareOverride.on : org.share_insights !== false;
+
+  const handleShareInsights = async (on: boolean) => {
+    if (shareSaving) return;
+    setShareSaving(true);
+    setShareError(null);
+    setNotice(null);
+    const res = await setShareInsights(org.id, on);
+    if (res.status === 'ok') {
+      setShareOverride({ orgId: org.id, on });
+      onOrgUpdated?.({ ...org, share_insights: on });
+      setNotice(on
+        ? 'Shared insights are on. This workspace adds to and reads market prices from other shops.'
+        : 'Shared insights are off. This workspace no longer adds to or reads market prices from other shops.');
+    } else if (res.status === 'forbidden') {
+      setShareError({ orgId: org.id, message: 'Only a workspace owner or admin can change this.' });
+    } else if (res.status === 'unavailable') {
+      setShareError({ orgId: org.id, message: 'Shared insights are not set up on this project yet.' });
+    } else {
+      setShareError({ orgId: org.id, message: `Save failed: ${res.message}` });
+    }
+    setShareSaving(false);
+  };
 
   const isAdmin = myRole === 'owner' || myRole === 'admin';
   const isOwner = myRole === 'owner';
@@ -1135,6 +1168,41 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
             )}
           </>
         ))}
+
+        {panelTab === 'settings' && isAdmin && hasShareColumn && (
+          <FieldGroup caption="Shared insights" className="org-share-insights">
+            <FieldGrid full>
+              <FieldCell
+                label="Share anonymised insights with other shops"
+                hint={
+                  <>
+                    Other shops see price ranges and era counts by brand and category, and only when
+                    at least {K_ANON_ROWS} listings from {K_ANON_ORGS} or more shops stand behind a
+                    number. Never shared: photos, titles, SKUs, customers, the price of any single
+                    listing, similar listings or your shop's name. Turning this off also stops this
+                    workspace from receiving market prices from other shops.
+                  </>
+                }
+                footer={shareError?.orgId === org.id
+                  ? <p className="bd-error org-share-error" role="alert">{shareError.message}</p>
+                  : undefined}
+              >
+                {(c) => (
+                  <span className="ui-fieldcell__check">
+                    <input
+                      {...c}
+                      type="checkbox"
+                      checked={shareOn}
+                      disabled={shareSaving}
+                      onChange={(e) => void handleShareInsights(e.target.checked)}
+                    />
+                    <span>{shareOn ? 'On' : 'Off'}</span>
+                  </span>
+                )}
+              </FieldCell>
+            </FieldGrid>
+          </FieldGroup>
+        )}
 
         {panelTab === 'settings' && isAdmin && !loading && shopifyConn && shopifyConn.status !== 'unavailable' && (
           <>

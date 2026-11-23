@@ -67,6 +67,12 @@ vi.mock('../lib/usageService', async (importOriginal) => {
   return { ...actual, fetchProjectUsage: vi.fn(), fetchPlanLimits: vi.fn(), setPlanLimits: vi.fn() };
 });
 
+vi.mock('../lib/insightsService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/insightsService')>();
+  return { ...actual, fetchFoundingInsightsSummary: vi.fn() };
+});
+
+import { fetchFoundingInsightsSummary } from '../lib/insightsService';
 import {
   fetchBetaSignups, fetchBetaOrgDirectory, setBetaStatus,
 } from '../lib/betaService';
@@ -224,6 +230,7 @@ beforeEach(() => {
   vi.mocked(fetchProjectUsage).mockResolvedValue({ status: 'unavailable' });
   vi.mocked(fetchPlanLimits).mockResolvedValue({ status: 'unavailable' });
   vi.mocked(setPlanLimits).mockResolvedValue({ status: 'unavailable' });
+  vi.mocked(fetchFoundingInsightsSummary).mockResolvedValue({ status: 'unavailable' });
 });
 
 afterEach(() => {
@@ -736,6 +743,40 @@ describe('FounderConsole: Usage tab (069)', () => {
     await flush();
     expect(fetchProjectUsage).toHaveBeenCalledTimes(2);
     expect(container.textContent).toContain('No workspaces yet');
+  });
+});
+
+describe('FounderConsole: Usage tab, shared insights (071)', () => {
+  const insightsSection = (container: HTMLElement) => one(container, '.fc-insights');
+
+  it('loads with the Usage tab and names 071 when it is missing', async () => {
+    const { container } = await render();
+    expect(fetchFoundingInsightsSummary).not.toHaveBeenCalled();
+    click(tab(container, 'Usage'));
+    expect(insightsSection(container).querySelector('.fc-skeleton')).toBeTruthy();
+    await flush();
+    expect(fetchFoundingInsightsSummary).toHaveBeenCalledTimes(1);
+    expect(insightsSection(container).textContent).toContain('071_shared_insights.sql');
+  });
+
+  it('shows the five counts as tiles', async () => {
+    vi.mocked(fetchFoundingInsightsSummary).mockResolvedValue({ status: 'ok', data: {
+      sharingOrgs: 3, totalOrgs: 4, soldListings: 1200, askingListings: 340, datedListings: 87, brands: 41,
+    } });
+    const { container } = await render();
+    click(tab(container, 'Usage'));
+    await flush();
+    const values = all(insightsSection(container), '.ui-stat__value').map(v => v.textContent);
+    expect(values).toEqual(['3 of 4', '1,200', '340', '87', '41']);
+    expect(insightsSection(container).textContent).toContain('at least 5 listings from 2 or more shops');
+  });
+
+  it('is founders only on forbidden', async () => {
+    vi.mocked(fetchFoundingInsightsSummary).mockResolvedValue({ status: 'forbidden' });
+    const { container } = await render();
+    click(tab(container, 'Usage'));
+    await flush();
+    expect(insightsSection(container).textContent).toContain('Founding Workspace admins only');
   });
 });
 

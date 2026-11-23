@@ -373,3 +373,6 @@
   .rc-use { width: 100%; justify-content: center; }
   .rc-actions .rc-use { width: auto; flex: 1 1 12rem; }
 }
+
+/* The market support line (071): one Why-style row under the explanation. */
+.rc-market { margin-top: 0.4rem; }

@@ -5,6 +5,7 @@ import {
   identifyListing, identifyEra, identifyCondition, identifyRarity,
   eraStartYear, confidenceLabel, IDENTIFICATION_ENGINE, loadBrandFacts,
   __resetBrandFactsForTests,
+  ERA_SIGNAL_PROPOSE_SHARE, ERA_SIGNAL_SUPPORT_SHARE, ERA_SIGNAL_PROPOSE_WEIGHT, ERA_SIGNAL_SUPPORT_WEIGHT,
   type IdentifyInput, type BrandFacts,
 } from './identification';
 
@@ -604,5 +605,117 @@ describe('loadBrandFacts', () => {
     const a = await loadBrandFacts('New York Yankees');
     const b = await loadBrandFacts('  new york yankees  ');
     expect(a).toBe(b);          // the very same cached object
+  });
+});
+
+// ── Other shops' era signals (071) ──────────────────────────────────────────
+
+describe("identifyEra: other shops' era signals", () => {
+  const sig = (era: string, n: number, orgs: number) => ({ era, n, orgs });
+
+  it('PROPOSES the top decade at or above 60% share, with a faithful evidence line', () => {
+    const r = identifyEra(input({ eraSignals: [sig('1990s', 23, 6), sig('1980s', 8, 3)] }));
+    expect(r.value).toBe('1990s');
+    const line = r.evidence.find(e => e.text.startsWith('Other shops date this brand'));
+    expect(line).toBeDefined();
+    expect(line!.text).toBe('Other shops date this brand to the 1990s (23 of 31 listings, 6 shops)');
+    expect(line!.weight).toBe(ERA_SIGNAL_PROPOSE_WEIGHT);
+    expect(line!.agrees).toBe(true);
+    // Numerically faithful: the numbers in the sentence are the inputs.
+    const [, n, total, orgs] = /\((\d+) of (\d+) listings, (\d+) shops\)/.exec(line!.text)!;
+    expect([Number(n), Number(total), Number(orgs)]).toEqual([23, 31, 6]);
+    expect(r.confidence).toBe(ERA_SIGNAL_PROPOSE_WEIGHT);
+  });
+
+  it('proposes at exactly the threshold and not below it', () => {
+    expect(ERA_SIGNAL_PROPOSE_SHARE).toBe(0.6);
+    const at = identifyEra(input({ eraSignals: [sig('1990s', 6, 2), sig('1980s', 4, 2)] }));
+    expect(at.value).toBe('1990s');
+    const below = identifyEra(input({ eraSignals: [sig('1990s', 10, 3), sig('1980s', 9, 3)] }));
+    expect(below.value).toBeNull();
+    expect(texts(below.evidence)).not.toMatch(/Other shops/);
+  });
+
+  it('below the threshold, a signal can only SUPPORT a decade something else proposed', () => {
+    const r = identifyEra(input({
+      transcript: 'nineties tee',
+      eraSignals: [sig('1990s', 10, 3), sig('1980s', 9, 3)],
+    }));
+    expect(r.value).toBe('1990s');
+    const support = r.evidence.find(e => e.text.startsWith('Other shops also date'));
+    expect(support).toBeDefined();
+    expect(support!.text).toBe('Other shops also date this brand to the 1990s (10 of 19 listings, 3 shops)');
+    expect(support!.weight).toBe(ERA_SIGNAL_SUPPORT_WEIGHT);
+    expect(r.confidence).toBeCloseTo(0.6 + ERA_SIGNAL_SUPPORT_WEIGHT, 10);
+  });
+
+  it('a signal under 15% share supports nothing', () => {
+    expect(ERA_SIGNAL_SUPPORT_SHARE).toBe(0.15);
+    const r = identifyEra(input({
+      transcript: 'eighties tee',
+      eraSignals: [sig('1990s', 90, 9), sig('1980s', 10, 3)],
+    }));
+    expect(r.value).toBe('1980s');
+    expect(texts(r.evidence)).not.toMatch(/Other shops also date this brand to the 1980s/);
+  });
+
+  it('the proposed decade is not also given a supporting cue: the same rows count once', () => {
+    const r = identifyEra(input({ eraSignals: [sig('1990s', 23, 6), sig('1980s', 8, 3)] }));
+    expect(r.evidence.filter(e => /Other shops/.test(e.text) && e.agrees !== false)).toHaveLength(1);
+  });
+
+  it('A SPOKEN DECADE STILL WINS, even when the market would tip a tie against it', () => {
+    // Without the signal: spoken 1990s 0.60 beats the model's 1980s 0.35.
+    // With it the 1980s reach 0.60 too and the earlier-decade tiebreak would
+    // pick them. The seller's own words must win anyway.
+    const base = { transcript: 'nineties', model: model({ year_introduced: 1985, model_name: 'Terminator' }) };
+    expect(identifyEra(input(base)).value).toBe('1990s');
+    const r = identifyEra(input({ ...base, eraSignals: [sig('1980s', 30, 6), sig('1990s', 5, 2)] }));
+    expect(r.value).toBe('1990s');
+    // And the market's disagreement is said out loud, with its numbers.
+    const dissent = r.evidence.find(e => e.agrees === false && /Other shops/.test(e.text));
+    expect(dissent?.text).toBe('Other shops date this brand to the 1980s (30 of 35 listings, 6 shops), which points at the 1980s instead');
+    expect(dissent!.text).not.toMatch(/—/);
+  });
+
+  it('a spoken decade beats a dominant market decade outright', () => {
+    const r = identifyEra(input({ transcript: 'eighties', eraSignals: [sig('1990s', 20, 5), sig('1980s', 10, 3)] }));
+    expect(r.value).toBe('1980s');
+    expect(texts(r.evidence)).toMatch(/Other shops also date this brand to the 1980s \(10 of 30 listings, 3 shops\)/);
+    expect(texts(r.evidence)).toMatch(/Other shops date this brand to the 1990s \(20 of 30 listings, 5 shops\), which points at the 1990s instead/);
+  });
+
+  it('a typed era wins and is not second-guessed by the market', () => {
+    const r = identifyEra(input({ item: item({ era: '1970s' }), eraSignals: [sig('1990s', 50, 9)] }));
+    expect(r.value).toBe('1970s');
+    expect(r.confidence).toBe(1);
+    expect(r.evidence.some(e => e.agrees === false)).toBe(false);
+  });
+
+  it('CANNOT RESURRECT a decade the hard constraint excluded', () => {
+    const m = model({ year_introduced: 1998, model_name: 'Air Max Plus' });
+    const r = identifyEra(input({ model: m, eraSignals: [sig('1980s', 90, 12)] }));
+    expect(r.value).toBe('1990s');
+    const dissent = r.evidence.find(e => e.agrees === false && /Other shops/.test(e.text));
+    expect(dissent?.text).toBe(
+      'Other shops date this brand to the 1980s (90 of 90 listings, 12 shops), but Air Max Plus did not exist until 1998, so the 1990s is used instead');
+    // Even with the seller saying it too.
+    const both = identifyEra(input({ model: m, transcript: 'eighties', eraSignals: [sig('1980s', 90, 12)] }));
+    expect(both.value).toBe('1990s');
+  });
+
+  it('ignores signals under the k-anonymity thresholds or not decade-shaped', () => {
+    for (const bad of [sig('1990s', 4, 3), sig('1990s', 20, 1), sig('nineties', 20, 5), sig('', 20, 5), sig('1990s', Number.NaN, 5)]) {
+      const r = identifyEra(input({ eraSignals: [bad] }));
+      expect(r.value, JSON.stringify(bad)).toBeNull();
+    }
+  });
+
+  it('flows through identifyListing, and no signals changes nothing', () => {
+    const without = identifyListing(input({ transcript: 'single stitch' }));
+    const empty = identifyListing(input({ transcript: 'single stitch', eraSignals: [] }));
+    expect(JSON.stringify(empty)).toBe(JSON.stringify(without));
+    const withSig = identifyListing(input({ transcript: 'single stitch', eraSignals: [sig('1990s', 23, 6)] }));
+    expect(withSig.era.value).toBe('1990s');
   });
 });

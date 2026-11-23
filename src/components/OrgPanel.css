@@ -2104,3 +2104,9 @@
 @media (max-width: 640px) {
   .org-usage .ui-fieldcell { min-height: 44px; }
 }
+
+/* ── Shared insights (071) ────────────────────────────────────────────────────
+   One FieldGroup on the Settings tab: the opt-out checkbox cell. Spacing only;
+   the cell, the hint and the error take the FieldGrid and .bd-error styles. */
+.org-share-insights { margin-bottom: 2rem; }
+.org-share-error { margin: 0 0 0.5rem; }

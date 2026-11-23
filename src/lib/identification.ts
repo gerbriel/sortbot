@@ -1,5 +1,6 @@
 import type { ClothingItem } from '../App';
 import type { ModelRow } from './vocabService';
+import { K_ANON_ORGS, K_ANON_ROWS, topEraShare, type BrandEraSignal } from './insightsService';
 
 /**
  * identification — dating a garment, judging its condition and guessing how
@@ -58,6 +59,21 @@ import type { ModelRow } from './vocabService';
  *   brand         BRAND_DNA.eras narrows to a single decade            0.30
  *   brand         BRAND_DNA.eras merely CONTAINS the candidate         0.15
  *   model         vocab_models.year_introduced brackets the candidate  0.35
+ *   market        other shops' top era for the brand holds >= 60% share 0.25
+ *                 (PROPOSES that decade; `eraSignals`, migration 071)
+ *   market        any other era signal with >= 15% share               0.08
+ *                 (SUPPORTS an existing candidate of that decade only;
+ *                 never the decade the market already proposed, which
+ *                 would count the same rows twice)
+ *
+ *   Market lines are recorded with kind `brand` (they are knowledge about the
+ *   brand, from other shops) and their text always names the support, e.g.
+ *   "Other shops date this brand to the 1990s (23 of 31 listings, 6 shops)".
+ *   THEY NEVER OUTWEIGH THE SELLER. If the best candidate WITHOUT any market
+ *   weight was proposed by a spoken decade or the typed field, it wins whatever
+ *   the market says; the market's own proposal is then carried onto it as
+ *   dissent, like a rejected spoken decade. And they never touch the hard
+ *   constraint: a decade the model rules out stays ruled out.
  *
  *   `year_introduced` is the one HARD constraint: a decade that ends before the
  *   model existed is ruled out, not marked down. Everything else is a weight.
@@ -154,7 +170,17 @@ export interface IdentifyInput {
   model?: ModelRow | null;
   /** What the knowledge base knows about this brand, if the caller has loaded it. */
   brandFacts?: BrandFacts | null;
+  /** How OTHER sharing workspaces dated this brand (071, k-anonymous). Rows
+   *  under the thresholds or not decade-shaped are ignored. */
+  eraSignals?: readonly BrandEraSignal[];
 }
+
+/** The top era signal proposes its decade at or above this share. */
+export const ERA_SIGNAL_PROPOSE_SHARE = 0.6;
+/** Any era signal at or above this share supports a candidate of its decade. */
+export const ERA_SIGNAL_SUPPORT_SHARE = 0.15;
+export const ERA_SIGNAL_PROPOSE_WEIGHT = 0.25;
+export const ERA_SIGNAL_SUPPORT_WEIGHT = 0.08;
 
 /** The engine's own version, stored in `listing_identifications.model` so two
  *  eras of suggestion can be compared on a held-out set later (plan step 7). */
@@ -293,6 +319,9 @@ interface EraCandidate {
   score: number;
   /** A decade that ENDS before the model existed. Not a low score — ruled out. */
   impossible?: boolean;
+  /** The part of `score` that came from other shops' era signals, kept apart
+   *  so the seller's own decade can be ranked without it. */
+  marketScore: number;
 }
 
 /**
@@ -314,8 +343,10 @@ export function identifyEra(input: IdentifyInput): Facet<string | null> {
   const add = (era: string, ev: Evidence) => {
     const hit = candidates.get(era);
     if (hit) { hit.evidence.push(ev); hit.score += ev.weight; return; }
-    candidates.set(era, { era, evidence: [ev], score: ev.weight });
+    candidates.set(era, { era, evidence: [ev], score: ev.weight, marketScore: 0 });
   };
+  /** Market proposals, by identity, so they can be carried as dissent. */
+  const marketProposals = new Set<Evidence>();
 
   // 1. The seller's own field. Nothing outranks it.
   const typed = (item.era ?? '').trim();
@@ -358,6 +389,26 @@ export function identifyEra(input: IdentifyInput): Facet<string | null> {
     });
   }
 
+  // 4b. Other shops' dating of this brand. A proposal only when one decade
+  //     clearly dominates; otherwise the signals can only support (step 5).
+  const signals = (input.eraSignals ?? []).filter(sig =>
+    !!sig && /^\d{4}s$/.test(sig.era)
+    && Number.isFinite(sig.n) && sig.n >= K_ANON_ROWS
+    && Number.isFinite(sig.orgs) && sig.orgs >= K_ANON_ORGS);
+  const signalTotal = signals.reduce((sum, sig) => sum + sig.n, 0);
+  const top = topEraShare(signals);
+  const proposedByMarket = top && top.share >= ERA_SIGNAL_PROPOSE_SHARE ? top.era : null;
+  if (top && proposedByMarket) {
+    const ev: Evidence = {
+      kind: 'brand', weight: ERA_SIGNAL_PROPOSE_WEIGHT, agrees: true,
+      text: `Other shops date this brand to the ${top.era} ` +
+        `(${top.n} of ${signalTotal} listings, ${top.orgs} shop${top.orgs === 1 ? '' : 's'})`,
+    };
+    add(top.era, ev);
+    candidates.get(top.era)!.marketScore += ev.weight;
+    marketProposals.add(ev);
+  }
+
   if (candidates.size === 0) {
     // Cues with no candidate to attach to are still worth SAYING — they are the
     // reason a seller can be asked "is this from before 1995?" — but they cannot
@@ -395,6 +446,21 @@ export function identifyEra(input: IdentifyInput): Facet<string | null> {
       });
       cand.score += inHistory ? 0.15 : -0.15;
     }
+    // Supporting market cues: a decade other shops also used, at a real share.
+    // They can only add to a candidate something else proposed.
+    if (signalTotal > 0) {
+      for (const sig of signals) {
+        if (sig.era !== cand.era || sig.era === proposedByMarket) continue;
+        if (sig.n / signalTotal < ERA_SIGNAL_SUPPORT_SHARE) continue;
+        cand.evidence.push({
+          kind: 'brand', weight: ERA_SIGNAL_SUPPORT_WEIGHT, agrees: true,
+          text: `Other shops also date this brand to the ${sig.era} ` +
+            `(${sig.n} of ${signalTotal} listings, ${sig.orgs} shop${sig.orgs === 1 ? '' : 's'})`,
+        });
+        cand.score += ERA_SIGNAL_SUPPORT_WEIGHT;
+        cand.marketScore += ERA_SIGNAL_SUPPORT_WEIGHT;
+      }
+    }
     if (model?.year_introduced && model.year_introduced > 1900 && start !== null) {
       // A DOCUMENTED INTRODUCTION YEAR IS A HARD CONSTRAINT, not a weight. A
       // garment cannot predate the model it is — so a decade that ends before
@@ -422,10 +488,19 @@ export function identifyEra(input: IdentifyInput): Facet<string | null> {
   // who said a decade out loud was looking at the garment.
   // A ruled-out candidate sorts last whatever it scored — but it stays in the
   // list, because its own evidence is carried onto the winner below.
-  const ranked = [...candidates.values()].sort((a, b) =>
+  const rank = (scoreOf: (c: EraCandidate) => number) => [...candidates.values()].sort((a, b) =>
     Number(a.impossible ?? false) - Number(b.impossible ?? false)
-    || b.score - a.score
+    || scoreOf(b) - scoreOf(a)
     || (eraStartYear(a.era) ?? 9999) - (eraStartYear(b.era) ?? 9999));
+  let ranked = rank(c => c.score);
+  // THE MARKET NEVER OUTWEIGHS THE SELLER. Rank once more without any market
+  // weight; if that winner is the seller's own spoken or typed decade, it wins.
+  const sellerBest = rank(c => c.score - c.marketScore)[0];
+  const sellerProposed = !sellerBest.impossible && sellerBest.evidence.some(e =>
+    e.agrees !== false && (e.kind === 'voice' || e.kind === 'field'));
+  if (sellerProposed && ranked[0] !== sellerBest) {
+    ranked = [sellerBest, ...ranked.filter(c => c !== sellerBest)];
+  }
   const best = ranked[0];
 
   // Everything was ruled out: say nothing rather than name a decade the evidence
@@ -463,8 +538,12 @@ export function identifyEra(input: IdentifyInput): Facet<string | null> {
   const bestIsTyped = best.evidence.some(e => e.kind === 'field' && e.agrees !== false);
   if (!bestIsTyped) {
     for (const rival of ranked.slice(1)) {
+      // A market proposal is carried too: unlike a brand-history or model
+      // line it is never scored against the winner in step 5, so this is the
+      // only place its disagreement is counted.
       const proposal = rival.evidence
-        .filter(e => e.agrees !== false && (e.kind === 'voice' || e.kind === 'field'))
+        .filter(e => e.agrees !== false
+          && (e.kind === 'voice' || e.kind === 'field' || marketProposals.has(e)))
         .sort((a, b) => b.weight - a.weight)[0];
       if (!proposal) continue;
       // The REASON the rival lost belongs in the same sentence. Carried as two
@@ -479,9 +558,13 @@ export function identifyEra(input: IdentifyInput): Facet<string | null> {
         kind: proposal.kind,
         weight: proposal.weight,
         agrees: false,
-        text: ruledOut
-          ? `${proposal.text} — but ${ruledOut.text}, so the ${best.era} is used instead`
-          : `${proposal.text} — which points at the ${rival.era} instead`,
+        text: marketProposals.has(proposal)
+          ? (ruledOut
+            ? `${proposal.text}, but ${ruledOut.text}, so the ${best.era} is used instead`
+            : `${proposal.text}, which points at the ${rival.era} instead`)
+          : ruledOut
+            ? `${proposal.text}, but ${ruledOut.text}, so the ${best.era} is used instead`
+            : `${proposal.text}, which points at the ${rival.era} instead`,
       });
       best.score -= proposal.weight;
     }

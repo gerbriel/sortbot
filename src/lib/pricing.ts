@@ -1,5 +1,9 @@
 import type { ClothingItem } from '../App';
 import type { Identification } from './identification';
+import {
+  K_ANON_ORGS, K_ANON_ROWS, marketSupportLabel,
+  type MarketMatchLevel, type MarketPriceStat,
+} from './insightsService';
 
 /**
  * pricing — the price engine. Comps in, one explainable number out.
@@ -24,13 +28,32 @@ import type { Identification } from './identification';
  * approximate; second-guessing them with a median of their own old sales is
  * both wrong and insulting, and it would burn a paid search to do it.
  *
- * Pure: no React, no Supabase, no Date, no randomness, no DOM.
+ * OTHER SHOPS' AGGREGATES COME AFTER THE SHOP'S OWN DATA, never before and
+ * never blended in. `market` carries k-anonymous aggregates of other sharing
+ * workspaces (`MarketPriceStat`, migration 071): a median, a quartile band, a
+ * row count and a workspace count. The ladder is
+ *   spoken > own sold > market sold > own asking > market asking > insufficient
+ * so a shop's own three sales always beat a thousand of someone else's, and a
+ * market SALE beats the shop's own ASKING (what sold elsewhere is better
+ * evidence than what is hoped for here). A market median is used as it is (it
+ * is already a median); it is never mixed with an own comp, and a market sold
+ * aggregate is never mixed with a market asking one. Every market figure in the
+ * explanation is the aggregate's own medianCents, lowCents or highCents, or
+ * arithmetic over them, and the line names the support ("14 sales across 4
+ * other shops").
+ *
+ * Pure: no React, no Date, no randomness, no DOM, no network. The one value
+ * import from `insightsService` is its pure copy helpers and thresholds; that
+ * module creates the Supabase client at import but this one never calls it.
  */
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export type CompKind = 'sold' | 'asking';
-export type CompSource = 'own_sales' | 'ebay_active' | 'web_sold';
+/** `market` is ONE aggregate of other shops (its `price_cents` is the
+ *  aggregate's median and its `note` the support label), never a single
+ *  listing of theirs: no single other-shop price ever crosses the line. */
+export type CompSource = 'own_sales' | 'ebay_active' | 'web_sold' | 'market';
 
 export interface PriceComp {
   /** The whole point. 'asking' is what somebody wants; 'sold' is what happened. */
@@ -44,7 +67,9 @@ export interface PriceComp {
   sold_at?: string;
 }
 
-export type PriceMethod = 'spoken' | 'own_sold_median' | 'asking_adjusted' | 'insufficient';
+export type PriceMethod =
+  | 'spoken' | 'own_sold_median' | 'market_sold_median'
+  | 'asking_adjusted' | 'market_asking_adjusted' | 'insufficient';
 
 export interface PriceSuggestion {
   /** NULL when we decline to name a number. NEVER 0 — the export price gate
@@ -58,7 +83,9 @@ export interface PriceSuggestion {
   confidence: number;
   needsReview: boolean;
   reviewReasons: string[];
-  /** Exactly the comps the number was built from, newest first. */
+  /** Exactly the comps the number was built from, newest first. For the two
+   *  market methods this is ONE comp with `source: 'market'`, the aggregate
+   *  that was used, so `listing_prices.comps` records it with no extra field. */
   compsUsed: PriceComp[];
 }
 
@@ -68,6 +95,9 @@ export interface ComputePriceInput {
   item: ClothingItem;
   /** A price the seller said out loud THIS session, in cents. Wins outright. */
   spokenPriceCents?: number | null;
+  /** Aggregates of OTHER sharing workspaces (071). Consulted only after the
+   *  shop's own sold comps, and malformed or under-threshold rows are ignored. */
+  market?: readonly MarketPriceStat[];
 }
 
 // ── Constants, all named ────────────────────────────────────────────────────
@@ -97,6 +127,38 @@ export const CONDITION_ADJUSTMENT: Readonly<Record<string, number>> = {
   New: 1.15,
   NWT: 1.15,
 };
+
+/**
+ * Market confidence, before the identification blend.
+ *
+ *   sourceConfidence = min(cap, LEVEL_BASE[level] + support)
+ *   support          = min(0.10, 0.004 * n + 0.01 * orgs)
+ *
+ * The caps sit strictly below the floor of the equivalent own tier (own sold
+ * starts at 0.60 with three comps, own asking at 0.37), so another shop's data
+ * can never look as sure as the shop's own, however many rows stand behind it.
+ * A brand match is worth more than a category-and-era match, which is worth
+ * more than a category-only match ("a jacket" is not "a Carhartt jacket").
+ * Support grows gently with rows and shops and stops at +0.10.
+ */
+export const MARKET_SOLD_LEVEL_BASE: Readonly<Record<MarketMatchLevel, number>> = {
+  brand_category: 0.45,
+  category_era: 0.4,
+  category: 0.35,
+};
+export const MARKET_ASKING_LEVEL_BASE: Readonly<Record<MarketMatchLevel, number>> = {
+  brand_category: 0.26,
+  category_era: 0.22,
+  category: 0.18,
+};
+export const MARKET_SOLD_CONFIDENCE_CAP = 0.55;
+export const MARKET_ASKING_CONFIDENCE_CAP = 0.34;
+export const MARKET_SUPPORT_CAP = 0.1;
+
+/** The support bonus above, exported so the tests state the formula once. */
+export function marketSupport(n: number, orgs: number): number {
+  return Math.min(MARKET_SUPPORT_CAP, 0.004 * n + 0.01 * orgs);
+}
 
 /** Confidence below this needs a human look whatever the price. */
 export const REVIEW_CONFIDENCE = 0.6;
@@ -208,7 +270,76 @@ const SOURCE_WORDS: Readonly<Record<CompSource, readonly [string, string]>> = {
   own_sales: ['of your own sales', 'of your own sales'],
   ebay_active: ['active eBay listing', 'active eBay listings'],
   web_sold: ['sold listing found on the web', 'sold listings found on the web'],
+  market: ['aggregate of other shops', 'aggregates of other shops'],
 };
+
+// ── Market aggregates ───────────────────────────────────────────────────────
+
+const LEVEL_RANK: Readonly<Record<MarketMatchLevel, number>> = {
+  brand_category: 0, category_era: 1, category: 2,
+};
+
+/** How the aggregate was matched, in words, for the explanation line. */
+export const MARKET_LEVEL_WORDS: Readonly<Record<MarketMatchLevel, string>> = {
+  brand_category: 'brand and category match',
+  category_era: 'category and era match',
+  category: 'category match only',
+};
+
+const positiveInt = (v: unknown): v is number =>
+  typeof v === 'number' && Number.isFinite(v) && v > 0;
+
+/**
+ * A market stat is usable when it meets the k-anonymity thresholds and its
+ * median is a positive finite number. The server enforces the thresholds and
+ * `normalizeMarketStat` enforces them again; the engine checks a third time
+ * because it is handed whatever the caller has, and a row that should never
+ * have existed must not become a price.
+ */
+function usableMarket(s: MarketPriceStat): boolean {
+  return !!s && (s.kind === 'sold' || s.kind === 'asking')
+    && s.level in LEVEL_RANK
+    && positiveInt(s.n) && s.n >= K_ANON_ROWS
+    && positiveInt(s.orgs) && s.orgs >= K_ANON_ORGS
+    && positiveInt(s.medianCents);
+}
+
+/** The most specific usable aggregate of one kind: brand_category, then
+ *  category_era, then category; more rows breaks a tie. */
+function pickMarket(market: readonly MarketPriceStat[] | undefined, kind: 'sold' | 'asking'): MarketPriceStat | null {
+  const ok = (market ?? []).filter(s => usableMarket(s) && s.kind === kind);
+  if (ok.length === 0) return null;
+  return [...ok].sort((a, b) => LEVEL_RANK[a.level] - LEVEL_RANK[b.level] || b.n - a.n)[0];
+}
+
+/** The aggregate's band, made safe: a missing or out-of-order quartile falls
+ *  back to the median rather than widening the range with a made-up figure. */
+function marketBand(s: MarketPriceStat): { low: number; high: number } {
+  const m = Math.round(s.medianCents);
+  const low = positiveInt(s.lowCents) && s.lowCents <= m ? Math.round(s.lowCents) : m;
+  const high = positiveInt(s.highCents) && s.highCents >= m ? Math.round(s.highCents) : m;
+  return { low, high };
+}
+
+/** The aggregate as one comp, so `listing_prices.comps` records what was used. */
+function marketComp(s: MarketPriceStat): PriceComp {
+  return {
+    kind: s.kind,
+    source: 'market',
+    price_cents: Math.round(s.medianCents),
+    note: `${marketSupportLabel(s)} (${MARKET_LEVEL_WORDS[s.level]})`,
+    ...(s.newestAt ? { sold_at: s.newestAt } : {}),
+  };
+}
+
+function marketConfidence(s: MarketPriceStat): number {
+  const sold = s.kind === 'sold';
+  const base = (sold ? MARKET_SOLD_LEVEL_BASE : MARKET_ASKING_LEVEL_BASE)[s.level];
+  const cap = sold ? MARKET_SOLD_CONFIDENCE_CAP : MARKET_ASKING_CONFIDENCE_CAP;
+  return Math.min(cap, base + marketSupport(s.n, s.orgs));
+}
+
+const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many);
 
 /** "5 of your own sales and 2 active eBay listings" — grouped, so a mixed set
  *  reads as one sentence instead of one line per comp. */
@@ -228,14 +359,16 @@ function describeSources(comps: readonly PriceComp[]): string {
  * ORDER IS THE DESIGN:
  *   1. a price said out loud            → `spoken`, confidence 1, no search needed
  *   2. ≥ MIN_COMPS sold comps           → `own_sold_median`
- *   3. ≥ MIN_COMPS asking comps         → `asking_adjusted`, discounted, and SAID so
- *   4. otherwise                        → `insufficient`, and we name no number
+ *   3. a usable market SOLD aggregate   → `market_sold_median`
+ *   4. ≥ MIN_COMPS asking comps         → `asking_adjusted`, discounted, and SAID so
+ *   5. a usable market ASKING aggregate → `market_asking_adjusted`, discounted the same
+ *   6. otherwise                        → `insufficient`, and we name no number
  *
- * Step 3 is never reached while step 2 is available, and step 2 never sees an
- * asking price. That is the guarantee, and it is tested exhaustively.
+ * No asking step is reached while a sold step is available, and no sold step
+ * ever sees an asking price. That is the guarantee, and it is tested exhaustively.
  */
 export function computePrice(input: ComputePriceInput): PriceSuggestion {
-  const { comps, identification, item, spokenPriceCents } = input;
+  const { comps, identification, item, spokenPriceCents, market } = input;
   const explanation: string[] = [];
 
   // ── 1. Already priced out loud ────────────────────────────────────────────
@@ -257,6 +390,9 @@ export function computePrice(input: ComputePriceInput): PriceSuggestion {
   const pool = comps.filter(usable);
   const sold = pool.filter(c => c.kind === 'sold').sort(newestFirst).slice(0, MAX_SOLD_COMPS);
   const asking = pool.filter(c => c.kind === 'asking').sort(newestFirst);
+  const marketSold = pickMarket(market, 'sold');
+  const marketAsking = pickMarket(market, 'asking');
+  let marketUsed: MarketPriceStat | null = null;
 
   const conditionKey = identification.condition.value ?? item.condition ?? null;
   const conditionFactor = conditionKey ? CONDITION_ADJUSTMENT[conditionKey] ?? 1 : 1;
@@ -285,7 +421,33 @@ export function computePrice(input: ComputePriceInput): PriceSuggestion {
     // 12 → 0.90. Capped below 1 because a comp is a different garment.
     sourceConfidence = Math.min(0.9, 0.45 + sold.length * 0.05);
 
-  // ── 3. Asking comps, and only now ─────────────────────────────────────────
+  // ── 3. Other shops' sales, before any asking price ───────────────────────
+  } else if (marketSold) {
+    const m = marketSold;
+    marketUsed = m;
+    base = Math.round(m.medianCents);
+    band = marketBand(m);
+    method = 'market_sold_median';
+    used = [marketComp(m)];
+    explanation.push(
+      `Priced from ${m.n} ${plural(m.n, 'sale', 'sales')} across ${m.orgs} other ` +
+      `${plural(m.orgs, 'shop', 'shops')} (${MARKET_LEVEL_WORDS[m.level]}): median ${formatCents(base)}.`,
+    );
+    if (band.low !== band.high) {
+      explanation.push(
+        `The middle half of those sales ran ${formatCents(band.low)} to ${formatCents(band.high)}.`,
+      );
+    }
+    if (sold.length > 0) {
+      explanation.push(
+        `${sold.length} of your own sales ${plural(sold.length, 'was', 'were')} found, fewer than ` +
+        `${MIN_COMPS}, so other shops' sales were used instead of mixing the two.`,
+      );
+    }
+    explanation.push('Other shops are only ever seen as totals: no single listing of theirs is used.');
+    sourceConfidence = marketConfidence(m);
+
+  // ── 4. Asking comps, and only now ─────────────────────────────────────────
   } else if (asking.length >= MIN_COMPS) {
     const values = asking.map(c => c.price_cents);
     const askingMedian = trimmedMedian(values);
@@ -315,7 +477,37 @@ export function computePrice(input: ComputePriceInput): PriceSuggestion {
     // Structurally weaker than a sold median, and it says so.
     sourceConfidence = Math.min(0.55, 0.25 + asking.length * 0.04);
 
-  // ── 4. Nothing usable ─────────────────────────────────────────────────────
+  // ── 5. Other shops' asking prices, discounted the same way ───────────────
+  } else if (marketAsking) {
+    const m = marketAsking;
+    marketUsed = m;
+    const askingMedian = Math.round(m.medianCents);
+    const rawBand = marketBand(m);
+    base = Math.round(askingMedian * ASKING_DISCOUNT);
+    band = {
+      low: Math.round(rawBand.low * ASKING_DISCOUNT),
+      high: Math.round(rawBand.high * ASKING_DISCOUNT),
+    };
+    method = 'market_asking_adjusted';
+    used = [marketComp(m)];
+    explanation.push(
+      `No sold comparables. Using ${m.n} asking ${plural(m.n, 'price', 'prices')} across ${m.orgs} other ` +
+      `${plural(m.orgs, 'shop', 'shops')} (${MARKET_LEVEL_WORDS[m.level]}), median ${formatCents(askingMedian)}.`,
+    );
+    explanation.push(
+      `Asking prices are what sellers want, not what buyers paid, so they are ` +
+      `discounted ${Math.round((1 - ASKING_DISCOUNT) * 100)}%: ${formatCents(base)}.`,
+    );
+    if (sold.length + asking.length > 0) {
+      explanation.push(
+        `Your own comparables (${[sold.length ? `${sold.length} sold` : '', asking.length ? `${asking.length} asking` : '']
+          .filter(Boolean).join(', ')}) were fewer than ${MIN_COMPS} of a kind, so they were not used.`,
+      );
+    }
+    explanation.push('Other shops are only ever seen as totals: no single listing of theirs is used.');
+    sourceConfidence = marketConfidence(m);
+
+  // ── 6. Nothing usable ─────────────────────────────────────────────────────
   } else {
     const parts: string[] = [];
     if (sold.length) parts.push(`${sold.length} sold`);
@@ -390,6 +582,15 @@ export function computePrice(input: ComputePriceInput): PriceSuggestion {
   if (method === 'asking_adjusted') {
     reviewReasons.push('Priced from asking prices, not sales — no sold history for this piece yet.');
   }
+  if (method === 'market_asking_adjusted') {
+    reviewReasons.push("Priced from other shops' asking prices, not sales: no sold history for this piece yet.");
+  }
+  if (marketUsed && pool.length === 0 && suggestedCents >= REVIEW_HIGH_VALUE_CENTS) {
+    reviewReasons.push(
+      `${formatCents(suggestedCents)} comes only from other shops (${marketSupportLabel(marketUsed)}), ` +
+      `with none of your own comparables behind it. Check it before it goes out.`,
+    );
+  }
 
   return {
     suggestedCents,
@@ -408,6 +609,8 @@ export function computePrice(input: ComputePriceInput): PriceSuggestion {
 export const METHOD_LABELS: Readonly<Record<PriceMethod, string>> = {
   spoken: 'You said it',
   own_sold_median: 'Median of sold comparables',
+  market_sold_median: "Other shops' sales",
   asking_adjusted: 'Asking prices, discounted',
+  market_asking_adjusted: "Other shops' asking, adjusted",
   insufficient: 'Not enough comparables',
 };

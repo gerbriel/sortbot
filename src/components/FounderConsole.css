@@ -468,3 +468,6 @@
   color: var(--danger);
   font-size: var(--fs-sm);
 }
+
+/* Shared insights (071) on the Usage tab, below the workspaces table. */
+.fc-insights { margin-top: 2rem; }

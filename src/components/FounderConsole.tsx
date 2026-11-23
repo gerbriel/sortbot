@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useBrand } from '../lib/brandStore';
 import {
   Award, Building2, Check, ChevronDown, ChevronRight, ClipboardList, CreditCard,
-  Gauge, History, LayoutDashboard, Mail, Pencil, PlusCircle, RotateCcw, Search, Trash2,
+  Gauge, History, Share2, LayoutDashboard, Mail, Pencil, PlusCircle, RotateCcw, Search, Trash2,
   UserCog, Users, X,
 } from 'lucide-react';
 import {
@@ -33,6 +33,10 @@ import {
   usageReadout, limitLabel, listingBasisCopy, planDisplayName, parseLimitInput, formatCount,
   type PlanLimits, type PlanLimitsRow, type ProjectUsage, type UsageResult, type UsageReadout,
 } from '../lib/usageService';
+import {
+  fetchFoundingInsightsSummary, K_ANON_ROWS, K_ANON_ORGS,
+  type FoundingInsightsSummary, type InsightsResult,
+} from '../lib/insightsService';
 import { safeMailto } from '../lib/mailto';
 import './OrgPanel.css';
 import './FounderConsole.css';
@@ -311,6 +315,8 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
   // opened rather than on mount: nothing else on the page needs them, and
   // project_usage walks storage.objects for the whole project.
   const [projectUsage, setProjectUsage] = useState<Async<ProjectUsage>>({ status: 'idle' });
+  // Shared insights (071): loaded with the Usage tab, on its first open.
+  const [insights, setInsights] = useState<{ status: 'idle' } | { status: 'loading' } | InsightsResult<FoundingInsightsSummary>>({ status: 'idle' });
   const [planLimits, setPlanLimitsState] = useState<Async<PlanLimitsRow[]>>({ status: 'idle' });
   const [limitEdits, setLimitEdits] = useState<Record<string, LimitDraft>>({});
 
@@ -726,6 +732,11 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
 
   // ── Usage + plan limits (069) ─────────────────────────────────────────────
 
+  const loadInsights = async () => {
+    setInsights({ status: 'loading' });
+    setInsights(await fetchFoundingInsightsSummary());
+  };
+
   const loadProjectUsage = async () => {
     setProjectUsage({ status: 'loading' });
     setProjectUsage(await fetchProjectUsage());
@@ -777,6 +788,7 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
     setTab(next);
     if (next === 'alumni' && alumniStatus === 'idle') void loadAlumni(alumniPlan);
     if (next === 'usage' && projectUsage.status === 'idle') void loadProjectUsage();
+    if (next === 'usage' && insights.status === 'idle') void loadInsights();
     if (next === 'plans' && planLimits.status === 'idle') void loadPlanLimits();
   };
 
@@ -1414,6 +1426,56 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
               </>
             );
           })()}
+
+          {/* ── Insights (071) ────────────────────────────────────────────
+               How much the k-anonymous shared aggregates have to go on. Counts
+               only; nothing here names a workspace or a listing. */}
+          <section className="fc-insights" aria-label="Insights">
+            <h3 className="org-section-title">Insights</h3>
+            {insights.status === 'idle' || insights.status === 'loading' ? (
+              <div className="fc-skeleton" aria-busy="true">
+                <Skeleton shape="text" height="6rem" />
+              </div>
+            ) : insights.status === 'unavailable' ? (
+              <EmptyState
+                icon={<Share2 size={22} />}
+                title="Shared insights need one migration"
+                description={<>Run <code>071_shared_insights.sql</code> in the Supabase SQL Editor. It adds the opt-out, the k-anonymous market reads and these counts.</>}
+              />
+            ) : insights.status === 'forbidden' ? (
+              <EmptyState
+                icon={<Share2 size={22} />}
+                title="Founding Workspace admins only"
+                description="These counts cover every workspace, so only founding admins can read them."
+              />
+            ) : insights.status === 'error' ? (
+              <EmptyState
+                error
+                icon={<Share2 size={22} />}
+                title="Could not read insights"
+                description={insights.message}
+                actions={<Button onClick={() => { void loadInsights(); }}>Try again</Button>}
+              />
+            ) : (
+              <>
+                <StatGrid className="fc-stats">
+                  <StatTile
+                    label="Sharing workspaces"
+                    value={`${formatCount(insights.data.sharingOrgs)} of ${formatCount(insights.data.totalOrgs)}`}
+                    hint="Workspaces with shared insights on"
+                  />
+                  <StatTile label="Sold listings" value={formatCount(insights.data.soldListings)} />
+                  <StatTile label="Asking listings" value={formatCount(insights.data.askingListings)} />
+                  <StatTile label="Dated listings" value={formatCount(insights.data.datedListings)} />
+                  <StatTile label="Brands" value={formatCount(insights.data.brands)} />
+                </StatGrid>
+                <p className="shopify-conn-help">
+                  A market number reaches a shop only when at least {K_ANON_ROWS} listings from{' '}
+                  {K_ANON_ORGS} or more shops stand behind it. Counts include only sharing workspaces.
+                </p>
+              </>
+            )}
+          </section>
         </TabPanel>
 
         {/* ── Onboard ──────────────────────────────────────────────────────── */}
