@@ -154,7 +154,7 @@ function AnalyticsBody({ summary, funnel, days }: { summary: AnalyticsSummary; f
         <div>
           <h4 className="an-h">Referrers</h4>
           {summary.referrers.length === 0 ? <p className="ft-help">Direct traffic only so far.</p> : (
-            <table className="an-table">
+            <table className="an-table x-scroll" tabIndex={0} aria-label="Referrers, scrolls sideways">
               <thead><tr><th>Source</th><th>Sessions</th></tr></thead>
               <tbody>
                 {summary.referrers.map(r => (
@@ -170,7 +170,7 @@ function AnalyticsBody({ summary, funnel, days }: { summary: AnalyticsSummary; f
 
         <div>
           <h4 className="an-h">Devices</h4>
-          <table className="an-table">
+          <table className="an-table x-scroll" tabIndex={0} aria-label="Devices, scrolls sideways">
             <thead><tr><th>Device</th><th>Sessions</th><th>Share</th></tr></thead>
             <tbody>
               {summary.devices.map(d => (
@@ -231,7 +231,7 @@ function DailyChart({ daily }: { daily: AnalyticsSummary['daily'] }) {
        90 days of bars in 340px is a grey smear. It wraps the WHOLE chart rather
        than the plot, because the y-axis tick labels are positioned outside
        .an-plot and would be clipped by a scrollport drawn any tighter. */
-    <div className="an-chart-scroll">
+    <div className="an-chart-scroll x-scroll" role="region" tabIndex={0} aria-label="Daily pageviews chart, scrolls sideways">
     <div className="an-chart" onPointerLeave={() => setHover(null)} onBlur={() => setHover(null)}>
       <div className="an-plot">
         {ticks.map(tk => (

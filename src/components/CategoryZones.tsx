@@ -727,7 +727,10 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
         {loading ? (
           <p>Loading categories...</p>
         ) : (
-          <div className={compactMode ? 'category-list' : 'category-grid'} data-step2-scroll-x="">
+          /* data-step2-scroll-y: a touch drag near the top or bottom edge of
+             the dock's chip area scrolls it vertically (step2TouchDrag.ts). The
+             chips wrap; nothing in the dock scrolls sideways (AGENTS.md section 1). */
+          <div className={compactMode ? 'category-list' : 'category-grid'} data-step2-scroll-y="">
             {(zonePresets.length > 0 ? zonePresets : []).map(preset => {
               const color = getPresetColor(preset.category_name);
               return (

@@ -13,8 +13,10 @@ import {
 } from '../lib/embeddingsService';
 import './SimilarListings.css';
 
-/** How many cards the strip shows. Eight is what fits on a desktop row without
- *  becoming a second grid, and it is a strip to glance at, not a page to study. */
+/** How many cards the grid shows. Eight is one row on a wide desktop card and
+ *  two rows of four on a phone (SimilarListings.css), and it is a set to glance
+ *  at, not a page to study. The `.sl-strip` class name is historical: it never
+ *  scrolls sideways (AGENTS.md section 1). */
 const MAX_CARDS = 8;
 
 /** Job polling: every 1.5 s, giving up after a minute. A 400-photo embed job takes

@@ -250,6 +250,33 @@ full in prose (§18 #30).
   there because iOS and iPadOS have no folder picker and Android webviews honour it
   unreliably; an iPad is wider than 640px and has the same limitation. It is the same query
   that disables the Step 3 magnifier (§10).
+- **On phones, one-dimensional content never scrolls sideways (22 Nov 2026).** Chip rails,
+  toolbars, tab rows, filter rows and thumbnail strips WRAP into rows or become a grid, and the
+  container scrolls vertically if it must. Only genuinely two-dimensional content (a wide data
+  table, a chart, a print sheet, a code block) may scroll inside its own box, and then it
+  carries the shared `.x-scroll` affordance so the cut edge is visible. A control past the right
+  edge of a phone is a control nobody finds; a sideways strip under a thumb also fights the
+  vertical page scroll. Converted in the workflow steps: the Step 2 category dock (wrapping
+  chips, scrolls down), the Step 2 grouper toolbar and the lightbox toolbar (grids of
+  equal-width 44px controls), `ui/Tabs` (wraps), `ui-chip-group--scroll` (retired, now wraps),
+  Step 3's Similar past listings (a 4-column grid) and the crop modal's ratio bar (wraps).
+  **Check:** `grep -rn -E "overflow-x: *(auto|scroll)|scroll-snap-type" src --include='*.css'`
+  must find only `.x-scroll` in `index.css` among the workflow stylesheets; a new hit needs a
+  reason it is two-dimensional.
+- **`.x-scroll` (index.css) is the one sanctioned sideways scroller.** `overflow-x: auto`,
+  `overflow-y: hidden`, momentum scrolling, `overscroll-behavior-x: contain`, a thin scrollbar
+  and `scrollbar-gutter: stable`. The "there is more" cue is the **scroll-shadow technique**, no
+  JS: two cover gradients in the box colour with `background-attachment: local` (they travel
+  with the content and hide a shadow once that end is reached) over two edge shadows with
+  `background-attachment: scroll`. Chosen over `mask-image` because it renders the same in
+  Safari and Chrome and never fades the content itself (a mask would fade a frozen first
+  column and a sticky header too). Rules for callers: set the box colour through
+  `--x-scroll-bg` (default `--ink-800`), **never `background`**, which wipes the shadow layers;
+  and because a scroller with no focusable children cannot be scrolled from the keyboard, add
+  `tabIndex={0}` and an `aria-label` that says it scrolls ("CSV preview, scrolls sideways").
+  Used by the Step 4 CSV preview (`.table-container`) and the marketplace matrix
+  (`.mkx-matrix-wrap`). Inline `overflow-y` on a caller (the CSV preview also scrolls down)
+  wins over the class, as it should.
 - **Phone gutters stay in rem.** `ToolView.css`'s phone padding is `1.5rem 1.8rem`: 1.8rem is
   16.2px on the 9px root, the 16px gutter asked for, written in rem so it moves with the
   spacing grid. The 44px touch floor is the only phone length written in px.
@@ -417,22 +444,22 @@ sortingapp/
 │   │   ├── GoogleSheetExporter.tsx / .css  # Step 4 shell: fetches existing titles, coalesces group fields, dedups titles/handles, price gate, 54-column preview, blob download (object URL revoked on a deferred tick). The pure CSV builder lives in `lib/csvExport.ts`. Exported as `memo(forwardRef(...))`.
 │   │   ├── Library.tsx / .css      # FULL-PAGE VIEW (was a modal overlay), ~2790 lines. Batches / groups / images tabs, rename, duplicate, delete (ownership claim + reference-counted storage guard), rubber-band select. Derivation is `lib/libraryData.ts`; thumbnails now use the SHARED `components/LazyImg` (its private copy was deleted, so Library finally gets the retry/backoff). Exported as `memo(LibraryInner)`. Library.css's hover overlay is `.batch-card .batch-actions`, SCOPED, because App.tsx's Step 4 reuses `.batch-actions` and the unscoped rule hid Save / Clear once the Library chunk had loaded (§18 #58).
 │   │   ├── CategoriesManager.tsx / .css      # Full-page view, CRUD on categories (editor left / list right). Lazy-loaded.
-│   │   ├── CategoryPresetsManager.tsx / .css # Full-page view, CRUD on category presets (list left / editor right — the editor was a modal stacked on a modal). Lazy-loaded.
-│   │   ├── OrgPanel.tsx / .css     # Workspace, full-page view (lazy-loaded): members (with the per-member detail expand), invites, Shopify connection, description-format settings, Marketplaces — the workspace you are IN, and nothing else. The beta-request queue, the workspace directory and the founding Users tab MOVED to FounderConsole (Sept 2026); for a founding admin one line on the Members tab links there (`onOpenFounder`). `.an-*` / `.crm-*` / `.ft-*` AND the `.beta-*` / `.org-dir-*` / `.fa-*` rules still live in OrgPanel.css — AnalyticsPanel, CrmPanel, ErrorsPanel and FounderConsole all import it themselves; page-scale overrides are scoped under `.tool-view`, whose ≤640px root list now includes `.fc-view`.
+│   │   ├── CategoryPresetsManager.tsx / .css # Full-page view, CRUD on category presets (list left / editor right — the editor was a modal stacked on a modal). Lazy-loaded. Phone (Nov 2026): the Men/Women/Kids filter is a three-column grid, never a sideways strip.
+│   │   ├── OrgPanel.tsx / .css     # Workspace, full-page view (lazy-loaded): members (with the per-member detail expand), invites, Shopify connection, description-format settings, Marketplaces — the workspace you are IN, and nothing else. The beta-request queue, the workspace directory and the founding Users tab MOVED to FounderConsole (Sept 2026); for a founding admin one line on the Members tab links there (`onOpenFounder`). `.an-*` / `.crm-*` / `.ft-*` AND the `.beta-*` / `.org-dir-*` / `.fa-*` rules still live in OrgPanel.css — AnalyticsPanel, CrmPanel, ErrorsPanel and FounderConsole all import it themselves; page-scale overrides are scoped under `.tool-view`, whose ≤640px root list now includes `.fc-view`. Phone (Nov 2026, no-sideways-strips pass): `.ft-chips` / `.beta-filter-chips` filter rows and the `.org-tabs` rail WRAP (items grow to fill each line, 44px floor, active tab keeps its accent fill); the daily chart wrapper and every non-card `.an-table` scroll through the shared `.x-scroll` class with `tabIndex={0}` + `aria-label` in the TSX, and this file keeps only their chart/table specifics (tooltip `padding-top`, `display: block` + load-bearing `nowrap`, sticky first column).
 │   │   ├── FounderConsole.tsx / .css  # 'founder' view (§6), founding owner/admin only. Running the BETA, as opposed to running a workspace: Overview (KPI tiles + the last 10 audit rows as sentences), Requests (the moved beta queue, plus "Create workspace now"), Workspaces (the moved directory, with a row expand that calls `founding_org_detail` for members/invites and offers plan, rename and invite), Onboard (create a workspace before its owner signs in), Users (→ FoundingUsersTab). Second real adopter of `src/components/ui/` — Tabs/Button/ConfirmAction/EmptyState/Badge/StatTile/Skeleton/TextField/SelectField, none of them edited. Its tabs render INSIDE the body, not in ToolView's `tabs` slot: that slot is wrapped in `role="tablist"` and `TabList` renders its own. Lazy-loaded (~28 kB).
 │   │   ├── FoundingUsersTab.tsx    # The cross-workspace user list, extracted from OrgPanel verbatim except that the confirmKey yes/no pair became `ConfirmAction`. Markup and class names are the originals, so the styling transferred with it.
 │   │   ├── AnalyticsPanel.tsx      # Analytics view, Overview tab. 7/30/90-day range, KPI tiles, HTML bar chart, funnel + tables.
 │   │   ├── CrmPanel.tsx            # CRM view. Stage chips, search, inline editing, notes, Add contact, Sync. Mail links go through `lib/mailto.ts`.
 │   │   ├── ErrorsPanel.tsx         # Analytics view, Errors tab (Sept 2026). Founding admins only. Range chips 7/30/90 (default 7), four KPI tiles, Top-issues table (untruncated message in `title` for copy/paste), Daily + By-screen tables. Deliberately table-only, no chart — an error list is read for its text. Shows a setup hint naming `046_app_errors.sql` when the table does not exist. Reuses existing OrgPanel.css classes only.
-│   │   ├── VocabDashboard.tsx / .css  # Founding-admin vocabulary CRUD (chips, brand keywords, models). Full-page view, takes no props. Lazy-loaded.
-│   │   ├── KanbanBoard.tsx / .css, KanbanCardDetail.tsx  # Founding-admin feature board (lanes + atlas views). Full-page view; owns Escape itself (closes the card drawer first), so ToolView is given `escapeToBack={false}`. Lazy-loaded.
+│   │   ├── VocabDashboard.tsx / .css  # Founding-admin vocabulary CRUD (chips, brand keywords, models). Full-page view, takes no props. Lazy-loaded. Phone (Nov 2026): the four tabs are a 2x2 grid, not a scrolling row.
+│   │   ├── KanbanBoard.tsx / .css, KanbanCardDetail.tsx  # Founding-admin feature board (lanes + atlas views). Full-page view; owns Escape itself (closes the card drawer first), so ToolView is given `escapeToBack={false}`. Lazy-loaded. Phone (Nov 2026): the lane strip (`.kanban-lanes.x-scroll`, `role="region"`, focusable) still pages one lane per screen with `scroll-snap-type: x mandatory`, the one deliberate sideways surface; above it `KanbanLaneChips` (exported, tested in `KanbanBoard.laneChips.test.tsx`) is a WRAPPING row naming every lane with its count, `aria-current` on the lane nearest the strip's snap line (tracked from the strip's scroll events, rAF-throttled), and a tap `scrollTo`s the strip to that lane (smooth unless reduced motion). Lanes carry `data-lane-id`; the add-lane placeholder does not. The chips are `display: none` above 640px. Atlas: the lane filter chips wrap; the pipeline map stays one left-to-right strip via `.x-scroll`.
 │   │   ├── SupportWidget.tsx / .css  # Floating Messages button + panel for every signed-in user; inbox for founding admins. Since Sept 2026 it owns only PANEL-LOCAL state (open/closed, active thread, that thread's messages, draft, busy, the Open/Closed filter) — the thread list, the Realtime channel and the 45 s poll all moved to `lib/supportStore.ts`, and the `userId` prop is gone. Behaviour unchanged. Exported as `memo(...)`.
 │   │   ├── MessagesView.tsx / .css  # 'messages' view (§6) — the full-page half of messaging: "Messages" for a user, "Inbox" for a founder. Searchable thread list beside a full-height conversation, founder Open/Closed/All chips with live counts, unread-first ordering with a real unread dot element (+ a visually-hidden "(unread)"), Up/Down keyboard walk over the list, Enter-to-send composer with an optional Subject on a new conversation, `EmptyState` for all four empty cases, and a one-column stack with a "All conversations" back control ≤1024px. Reads `supportStore` — it fetches nothing of its own.
-│   │   ├── FinanceView.tsx / .css  # 'finance' view (§6), Founding admins only. Sub-tabs Overview / Transactions / Customers / Reports, held in COMPONENT state so App's diff stays the same shape as the CRM's. Ledger CRUD with the two-step `org-confirm-yes/no` delete (no `confirm()`), a two-series monthly P&L chart in `--accent` + `--text-muted` (semantics reserved for the one real state: profit sign), plan-price editor, projected MRR list vs discounted, two CSV downloads and a printable statement. The Transactions tab lists TEMPLATES (what you edit); everything else shows expanded occurrences. FinanceView.css only adds what Finance needs on top of the `.tool-view` scale, plus the print stylesheet (the `visibility` technique — everything invisible, `.fin-print` painted back, so app chrome outside this component is free to change).
-│   │   ├── LabelPrintView.tsx / .css  # 'labels' view (§6), every member. Print sheet for the OPEN batch: one row per listing (rows come from `buildGroupArray`, the same builder Step 3 navigates with), three real label stocks from `lib/labelTemplates.ts`, a Code 128 SVG per label and the SKU underneath. READ-ONLY on the workflow store — its one mutation is `ensureSkus`, which writes `products.sku` and touches no in-memory item. Stores DEselection (so "print everything" is the empty set and late-arriving listings are never dropped); the print stylesheet hides everything but the sheet and drives `@page` from the same template.
+│   │   ├── FinanceView.tsx / .css  # 'finance' view (§6), Founding admins only. Sub-tabs Overview / Transactions / Customers / Reports, held in COMPONENT state so App's diff stays the same shape as the CRM's. Ledger CRUD with the two-step `org-confirm-yes/no` delete (no `confirm()`), a two-series monthly P&L chart in `--accent` + `--text-muted` (semantics reserved for the one real state: profit sign), plan-price editor, projected MRR list vs discounted, two CSV downloads and a printable statement. The Transactions tab lists TEMPLATES (what you edit); everything else shows expanded occurrences. FinanceView.css only adds what Finance needs on top of the `.tool-view` scale, plus the print stylesheet (the `visibility` technique — everything invisible, `.fin-print` painted back, so app chrome outside this component is free to change). Phone (Nov 2026): the four sub-tabs are a 2x2 grid; the monthly chart wrapper and the plain tables use `.x-scroll` (+ `tabIndex`/`aria-label`); the two `.fin-scroll` wrappers hold `--cards` tables, so `.fin-scroll.x-scroll` turns the scroll off at phone width (cards, not a sideways table); the print block resets `.x-scroll` so paper never scrolls or fades.
+│   │   ├── LabelPrintView.tsx / .css  # 'labels' view (§6), every member. Print sheet for the OPEN batch: one row per listing (rows come from `buildGroupArray`, the same builder Step 3 navigates with), three real label stocks from `lib/labelTemplates.ts`, a Code 128 SVG per label and the SKU underneath. READ-ONLY on the workflow store — its one mutation is `ensureSkus`, which writes `products.sku` and touches no in-memory item. Stores DEselection (so "print everything" is the empty set and late-arriving listings are never dropped); the print stylesheet hides everything but the sheet and drives `@page` from the same template. The sheet IS the printed surface: on a phone it is scaled to fit (`transform: scale(0.42)`, inside `@media screen and (max-width: 640px)` so print can never pick it up), and `.lpv-sheet-wrap` carries `.x-scroll` as the fallback for a template wider than letter; the print block resets it.
 │   │   ├── ResearchCard.tsx / .css  # Step 3 research card, under the preset controls. Era / condition + flaws / rarity / price, each with a confidence chip and an expandable "Why" list of evidence, plus a "Needs a look" flag and Mark reviewed. SUGGESTS, NEVER APPLIES — every value is behind a button and the button calls `onApplyField`, which PDG points at `handleTableFieldChange`, so an applied price inherits the group patch, the transcript line, the debounce and the saveStatusStore report and this component never touches the workflow store. Owns its own capture (one identification + one price row per RUN, keyed on the suggestion so a keystroke does not append a row; a `corrected`/`accepted` event per field on the way out). Renders nothing pre-migration. Carries an empty `.rc-similar-slot` for `SimilarListings`.
 │   │   ├── SimilarListings.tsx / .css / .test.tsx  # "Similar past listings" strip inside the research card (step 3 of the pricing plan): up to 8 nearest photos in THIS workspace by CLIP cosine, with title / price / sold line and a "near duplicate" chip at ≥ 0.92 (calibrated on a real re-shoot at 0.98 vs different garments at 0.84 / 0.77); a "Find similar" button embeds the listing's photos through the service when none exist yet. Renders NOTHING until `065_listing_embeddings.sql` has run and `VITE_MATTING_URL` is set. Takes a `product_images` id, never an item id.
-│   │   ├── ProductsView.tsx / .css  # 'products' view (§6), every member. THE ONE SURFACE THAT IS NOT BATCH-SHAPED: search every listing in the workspace, then edit its seven correction fields (through `syncGroupFieldsToDatabase`, the same writer Step 3 uses), its SKU/barcode, and its labels — plus a one-label print sheet and "Open in workflow". Never writes the workflow store; it writes `products` and reports the save to App via `onListingEdited`. Contains `LabelManager`, the workspace label-vocabulary CRUD.
+│   │   ├── ProductsView.tsx / .css  # 'products' view (§6), every member. THE ONE SURFACE THAT IS NOT BATCH-SHAPED: search every listing in the workspace, then edit its seven correction fields (through `syncGroupFieldsToDatabase`, the same writer Step 3 uses), its SKU/barcode, and its labels — plus a one-label print sheet and "Open in workflow". Never writes the workflow store; it writes `products` and reports the save to App via `onListingEdited`. Contains `LabelManager`, the workspace label-vocabulary CRUD. Phone (Nov 2026): the filter row is a two-column grid of chips (the SKU/label separator becomes a full-width hairline); the detail photos are a wrapping grid at every width (fixed 9rem tracks on desktop, four even columns on a phone); the barcode preview scales its SVG down to fit (`max-width: 100%; height: auto`, as LabelPrintView does) rather than scrolling.
 │   │   ├── BarcodeScannerView.tsx / .css  # 'scan' view (§6), every member. Three inputs: the phone camera via the browser's own `BarcodeDetector` (`code_128`, sampled every 160 ms — NO WASM polyfill; where the API is missing the view says so), a USB/Bluetooth scanner (it is a keyboard — it types the code and presses Enter), and a typed SKU. Every exit path goes through `stopCamera`, which stops every TRACK (pausing the <video> leaves the camera light on). A hit renders the listing card plus "Open in Step 3" when App supplies `onOpenListing`. In the native app with ML Kit linked (`usesNativeBarcodeScanner()`), "Scan with camera" opens ML Kit's full-screen scanner instead (`startNativeScan`, no `<video>`, no stream to stop) and an `@capacitor/app` `appRestoredResult` listener catches a scan whose webview Android killed (§10 Labels and Scan). Tested in `BarcodeScannerView.native.test.tsx`.
 │   │   ├── ToolView.tsx / .css    # THE full-page shell every header tool opens into (§6). Title row (icon + <h1> + one-line description + optional actions), "Back to workflow" first in tab order, Escape-to-back, optional `tabs` slot, `wide` (Library/Board), `escapeToBack` (Board). Focuses the <h1> and scrolls to top on open. ToolView.css owns THE spacing scale for all tool views — page padding `3rem clamp(2rem,4vw,6rem) 6rem`, 3rem section gaps, 2rem card padding, 4rem controls, 4.5rem table rows, 1400px measure — plus `--tv-sticky-top`, the header-clearance var the sticky editor columns and tab rails share. Per-tool CSS scopes its page overrides under `.tool-view` rather than rewriting 30 KB files. Tested in ToolView.test.tsx (8 tests).
 │   │   ├── responsiveGrid.ts / .test.ts  # PURE column-clamp helpers for the Step 2 grid (9 tests): PHONE_BREAKPOINT_PX = 640, gridColumnBounds(isPhone) (1-3 phone / 2-12 desktop), clampGridColumns, clampGroupGridColumns (group cards cap at 2). Exists because the grid applies its column count as an INLINE style that no media query can reach (§1); the stored slider preference is clamped for display, never mutated.
@@ -1266,8 +1293,11 @@ the shared focus ring, 44px on phones), and the drop zone keeps its dashed borde
   webviews fire `pointercancel` when they consider a pan; the touch stream carries on and ends
   the drag). A pill ghost (`.step2-drag-ghost`) follows the finger, the source carries
   `data-step2-source`, the hovered target `data-step2-over` (`before` / `after` / `on`),
-  `<html>` carries `step2-touch-dragging`, and the grid and a category rail auto-scroll near
-  their edges (`edgeScrollDelta`, rails marked `data-step2-scroll-x`). React owns none of those
+  `<html>` carries `step2-touch-dragging`, and the grid and the category dock auto-scroll near
+  their edges (`edgeScrollDelta`). A nested scroller declares its axis: the dock's chip area
+  carries `data-step2-scroll-y` and scrolls VERTICALLY when the finger nears its top or bottom
+  (`railScrollStep`, tested); `data-step2-scroll-x` remains for a genuinely wide box and
+  nothing in Step 2 uses it since the dock stopped being a sideways rail (Nov 2026). React owns none of those
   attributes, so a re-render cannot wipe them. Android's long-press context menu is
   suppressed for the drag. `navigator.vibrate(12)` marks pickup on Android; **there are no
   haptics on iOS** (WebKit has no `vibrate`, and no haptics plugin is installed).
@@ -1300,17 +1330,32 @@ the shared focus ring, 44px on phones), and the drop zone keeps its dashed borde
   only if a non-compact mount comes back. Hover-reveal controls stay pinned visible since
   nothing hovers.
 - `.step2-split` becomes `display: block` and `.step2-right-panel` becomes a **sticky
-  bottom dock** (`bottom: var(--tabbar-h, 0px)`), with CategoryZones' vertical list turned
-  into a horizontally scrolling rail of 44px category chips and the Group/Ungroup/Delete
-  actions as a 2-up grid. **Sticky, not fixed**: all four step sections are mounted at once
+  bottom dock** (`bottom: var(--tabbar-h, 0px)`). **Since 22 Nov 2026 the dock never scrolls
+  sideways** (§1): its 44px category chips WRAP (`flex-wrap`, `--space-2` gaps) and the chip
+  area scrolls VERTICALLY inside the capped dock, with the search input and the Men / Women /
+  Kids control pinned above it (the search is shown on phones again: with wrapping chips the
+  list is taller than the dock). CategoryZones.css mirrors App.css's cap as `--cz-dock-cap`
+  with identical selectors, and sizes the zones column to it minus the panel's padding and
+  border, so only the chip area scrolls and the panel never grows a second scrollbar. Change
+  a cap selector in App.css and you must change its twin in CategoryZones.css. **Sticky, not fixed**: all four step sections are mounted at once
   (§6), so two fixed bottom bars — this one and Step 3's — would stack permanently and float
   over Steps 1 and 4. The dock is capped at 26vh idle and 38vh with a selection, driven by a
   `has-selection` class read through `:not(:has(...))` so an engine without `:has()` drops
   the selector and leaves it expanded (the safe failure).
-- **The sidebar becomes a top toolbar with a "Sort, filter & group tools" disclosure**
-  (`toolsOpen`). Stats stay visible as a sideways-scrolling rail; everything else folds
-  away. It is deliberately **not** sticky — the app's own black nav is sticky at `top: 0`,
-  so a second sticky bar there slides underneath it and reads as having vanished.
+- **The grouper toolbar is a grid of equal-width controls on a phone (22 Nov 2026).** The
+  sideways scroll-snap strip with an edge fade is gone (§1). `.gtb-row--controls` is a
+  six-track grid, every control at the 44px floor, in the desktop order: Filter / View /
+  Backgrounds as thirds (halves when Backgrounds is not rendered, detected with `:has()`),
+  then full rows for Photos/item + Apply + Pick, Pick photos, the selected / Undo / Redo
+  cluster, and **Ungroup all last, full width**. The contextual `.photo-toolbar` row is a
+  three-across grid (Group N, Ungroup, Clear, Rotate, Rotate, Copy Rot, Copy Crop, Paste,
+  Revert, Delete), with the copied-state line and "Clear N selected originals"
+  (`.gtb-clear-originals`, was an inline `margin-left: auto`) on full rows. Popovers span the
+  toolbar (`.gtb-panel-wrap { position: static }` at phone width). The lightbox toolbar wraps
+  the same way: Rotate L / Rotate R / Crop as thirds, Copy Rotation / Copy Crop as halves,
+  Before / After as a full-row pair, placed below the close button; its selectors carry
+  `.lightbox-overlay` because PDG.css restates `.lightbox-toolbar` later in the cascade, and
+  the same rules lay out Step 3's three-button lightbox bar as one row of thirds.
 - **The grid clamps to 3 columns** (group cards to 2) via `responsiveGrid.ts`, with the
   slider still live over the phone range; the stored preference is not mutated.
 - `touch-action: pan-y pinch-zoom` on the grids — `pinch-zoom` is kept on purpose (dropping
@@ -1551,8 +1596,14 @@ the shared focus ring, 44px on phones), and the drop zone keeps its dashed borde
   textarea to anything inside `.product-description-container`: a nested scroller captures the
   wheel and latches, which is the bug report #36 fixed. And remember `overflow-x: auto` makes a box
   scrollable on BOTH axes — pin the other axis explicitly. The only scrollers that may stay are
-  ones that are not in page flow (the crop modal's ratio rail, the preset listbox, the shortcuts
-  panel body), and each must carry `overscroll-behavior: contain`.
+  ones that are not in page flow (the preset listbox, the shortcuts panel body), and each must
+  carry `overscroll-behavior: contain`. The crop modal's ratio bar is no longer one: since
+  22 Nov 2026 its pills wrap into centred rows (§1).
+- **Similar past listings is a grid, not a sideways strip (22 Nov 2026).** `.sl-strip` (the
+  name is historical) is `repeat(auto-fill, minmax(11rem, 1fr))`, so a wide Step 3 card still
+  shows all eight comps on one line and a narrower one folds to two rows; at `<= 640px` it is a
+  fixed four-column grid of square thumbnails, two rows for the eight results, the whole card
+  still the tap target.
 - **Keyboard shortcuts are DATA, in `src/lib/keyboardShortcuts.ts`.** Any handler that binds a key
   must add its row there or the shortcut is invisible to users — `ShortcutsPanel` is the only place
   the app lists them. Keys are written with `⌘`; `platformKeys()` substitutes `Ctrl`.
@@ -1580,7 +1631,11 @@ the shared focus ring, 44px on phones), and the drop zone keeps its dashed borde
 - **On a phone (Sept 2026):** the wide preview keeps its own contained scroll and gains a
   **frozen first column** (Handle) at `<= 1024px`, with the header cell at `z-index: 3` so it
   outranks both the inline sticky header row (z 2) and the sticky body cells (z 1);
-  `overscroll-behavior-x: contain` stops a sideways pan chaining into the page. The
+  `overscroll-behavior-x: contain` stops a sideways pan chaining into the page. **Both wide
+  Step 4 tables carry `.x-scroll` (22 Nov 2026, §1):** the CSV preview (`.table-container`)
+  and the listing by marketplace matrix (`.mkx-matrix-wrap`) are the two-dimensional boxes
+  allowed to scroll sideways; each has `tabIndex={0}` and an aria-label that says it scrolls,
+  and edge shadows that show there are more columns. The frozen Handle column stays. The
   price-gate banner moves up to `--fs-base` — it is the one thing here a user must be able
   to read and act on.
 - **Nov 2026 touch fixes:** the "Step 4: Review & Export" `<summary>` carries `.step4-summary`,
@@ -1710,6 +1765,12 @@ Two full-page views open from the header (and the phone More sheet), available t
 **Code 128 is ours** (`lib/barcode.ts`) — subsets B and C chosen automatically, subset A deliberately not implemented, and the 107-row table proved three ways (§3). Rejections are loud: empty input, anything outside ASCII 32–126, and >80 characters all throw, because dropping an unsupported character would print a barcode that scans as a *different product*.
 
 **Labels themselves** are assigned per listing in Step 3 (`ListingLabelsPicker`) and stored in `listing_labels` / `product_labels` (§7). Not built, deliberately: label assignment from Step 2, a label filter in Library, and writing labels or SKUs to Shopify (publishing is still CSV).
+
+**On a phone (Nov 2026, no-sideways-strips pass).** The sheet preview is the printed element,
+so its phone scale-to-fit lives in `@media screen` only and print geometry is untouched; the
+wrapper carries `.x-scroll` for a wider-than-letter template. In Products, the barcode preview
+scales down to fit the card (bars keep their ratio through the SVG's `viewBox`), and the
+filter row and photo strip are grids, never sideways strips (§5 lists the details).
 
 ### Products (Sept 2026, report: "pull individual products, and CRUD labels and barcodes")
 **Files:** `ProductsView.tsx` / `.css`, `lib/productSearchService.ts`, `lib/labelsService.ts` (`setProductCodes`, `countLabelUsage`), App's `openProductInWorkflow` / `handleListingEdited`

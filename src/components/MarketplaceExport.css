@@ -267,14 +267,14 @@
 
 /* ── The matrix ───────────────────────────────────────────────────────────── */
 
+/* The scroller is `.x-scroll` (index.css, added in the TSX): it owns the
+   overflow, the momentum scrolling and the edge shadows that show there are
+   more marketplace columns. Its box colour is the --x-scroll-bg token, never
+   `background`, which would wipe the shadow layers. */
 .mkx-matrix-wrap {
-  overflow-x: auto;
-  overflow-y: hidden;              /* overflow-x:auto makes BOTH axes scrollable */
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-x: contain;
+  --x-scroll-bg: var(--ink-800);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--ink-800);
 }
 
 .mkx-matrix {

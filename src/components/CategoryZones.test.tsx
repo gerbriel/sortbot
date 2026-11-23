@@ -53,12 +53,14 @@ describe('CategoryZones touch drop', () => {
   });
   afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-  it('marks every zone as a touch drop target and the rail as a sideways scroller', async () => {
+  it('marks every zone as a touch drop target and the chip area as a vertical scroller', async () => {
     const { container } = mount(<CategoryZones items={items} onCategorized={vi.fn()} compactMode />);
     await flush();
     expect(container.querySelector('[data-step2-drop="category"][data-drop-category="tees"]')).not.toBeNull();
     expect(container.querySelector('[data-step2-drop="clear"]')).not.toBeNull();
-    expect(container.querySelector('.category-list[data-step2-scroll-x]')).not.toBeNull();
+    expect(container.querySelector('.category-list[data-step2-scroll-y]')).not.toBeNull();
+    // The dock no longer scrolls sideways: no element in it carries the x-axis hook.
+    expect(container.querySelector('[data-step2-scroll-x]')).toBeNull();
   });
 
   it('a group dropped on a zone gets that category, every photo in it', async () => {

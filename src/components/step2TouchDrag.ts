@@ -54,7 +54,13 @@ export const STEP2_DROP_EVENT = 'step2:touchdrop';
 export const DROP_ATTR = 'data-step2-drop';
 export const OVER_ATTR = 'data-step2-over';
 export const SOURCE_ATTR = 'data-step2-source';
+/** A nested scroller that auto-scrolls SIDEWAYS when a drag nears its edge.
+ *  Nothing in Step 2 uses it since the dock stopped being a rail (Nov 2026);
+ *  kept for a genuinely two-dimensional box. */
 export const SCROLL_X_ATTR = 'data-step2-scroll-x';
+/** A nested scroller that auto-scrolls VERTICALLY when a drag nears its top or
+ *  bottom edge: the Step 2 category dock, whose chips wrap and scroll down. */
+export const SCROLL_Y_ATTR = 'data-step2-scroll-y';
 export const DRAGGING_CLASS = 'step2-touch-dragging';
 
 /** Hold this long without moving to pick something up. Long enough that a
@@ -94,6 +100,24 @@ export function edgeScrollDelta(pos: number, start: number, end: number, zone = 
   if (fromStart < zone) return -max * (1 - Math.max(0, fromStart) / zone);
   if (fromEnd < zone) return max * (1 - Math.max(0, fromEnd) / zone);
   return 0;
+}
+
+/**
+ * How far to scroll a nested scroller under the finger, on the axis it declares:
+ * `y` (the category dock) reads the finger's height against the box's top and
+ * bottom, `x` its position against the left and right. The finger must be
+ * inside the box. Pure, for tests.
+ */
+export function railScrollStep(
+  axis: 'x' | 'y',
+  x: number,
+  y: number,
+  r: { left: number; right: number; top: number; bottom: number },
+): { dx: number; dy: number } {
+  if (x < r.left || x > r.right || y < r.top || y > r.bottom) return { dx: 0, dy: 0 };
+  return axis === 'y'
+    ? { dx: 0, dy: edgeScrollDelta(y, r.top, r.bottom, 28, 10) }
+    : { dx: edgeScrollDelta(x, r.left, r.right, 40, 10), dy: 0 };
 }
 
 /**
@@ -265,11 +289,12 @@ export function beginLongPressDrag(start: PointerStart, opts: LongPressDragOptio
       }
     }
     const under = typeof doc.elementFromPoint === 'function' ? doc.elementFromPoint(x, y) : null;
-    const rail = under?.closest(`[${SCROLL_X_ATTR}]`) as HTMLElement | null;
+    const rail = under?.closest(`[${SCROLL_Y_ATTR}], [${SCROLL_X_ATTR}]`) as HTMLElement | null;
     if (rail) {
-      const r = rail.getBoundingClientRect();
-      const d = edgeScrollDelta(x, r.left, r.right, 40, 10);
-      if (d) rail.scrollLeft += d;
+      const axis = rail.hasAttribute(SCROLL_Y_ATTR) ? 'y' : 'x';
+      const { dx, dy } = railScrollStep(axis, x, y, rail.getBoundingClientRect());
+      if (dx) rail.scrollLeft += dx;
+      if (dy) rail.scrollTop += dy;
     }
   }
 

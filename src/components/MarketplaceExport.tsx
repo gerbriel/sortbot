@@ -650,7 +650,14 @@ function MarketplaceExportInner({
           </div>
 
           {/* ── The matrix ──────────────────────────────────────────────────── */}
-          <div className="mkx-matrix-wrap">
+          {/* .x-scroll (index.css): the matrix is genuinely two-dimensional
+              (listings by marketplaces), so it may scroll sideways inside its
+              own box, with edge shadows and a tab stop for the keyboard. */}
+          <div
+            className="mkx-matrix-wrap x-scroll"
+            tabIndex={0}
+            aria-label="Listing by marketplace matrix, scrolls sideways"
+          >
             <table className="mkx-matrix">
               <thead>
                 <tr>

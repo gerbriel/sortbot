@@ -101,6 +101,8 @@ export default function KanbanBoard({ orgId, userId, userEmail, onClose }: Kanba
   // and closes over that render's `busy` const, so a second call from the same
   // render scope reads a stale `false` and the mutex silently disarms itself.
   const busyRef = useRef(false);
+  /** The lane strip, so the phone lane chips can page it to a lane. */
+  const lanesRef = useRef<HTMLDivElement | null>(null);
 
   /** Fetch only — no setState, so effects can call it and apply the result in
    *  a callback (the house pattern; a setState-ing function invoked straight
@@ -410,10 +412,22 @@ export default function KanbanBoard({ orgId, userId, userEmail, onClose }: Kanba
             onMove={moveFromAtlas}
           />
         ) : (
-          <div className="kanban-lanes">
+          <>
+          {/* Phone only (hidden above 640px in the CSS): a wrapping row that
+              names every lane, marks the one in view, and pages the board to a
+              lane on tap, so the sideways board never feels like an accident. */}
+          <KanbanLaneChips lanes={tree} scrollerRef={lanesRef} />
+          <div
+            ref={lanesRef}
+            className="kanban-lanes x-scroll"
+            role="region"
+            tabIndex={0}
+            aria-label="Board lanes, scrolls sideways"
+          >
             {tree.map(column => (
               <div
                 key={column.id}
+                data-lane-id={column.id}
                 className={`kanban-lane ${dragOverColumn === column.id ? 'kanban-lane--drag-over' : ''}`}
                 onDragOver={(e) => { e.preventDefault(); setDragOverColumn(column.id); }}
                 onDragLeave={() => setDragOverColumn(null)}
@@ -535,6 +549,7 @@ export default function KanbanBoard({ orgId, userId, userEmail, onClose }: Kanba
               )}
             </div>
           </div>
+          </>
         )}
 
         {openCard && board && (
@@ -553,6 +568,96 @@ export default function KanbanBoard({ orgId, userId, userEmail, onClose }: Kanba
           />
         )}
     </div>
+  );
+}
+
+// ── Lane chips (phone) ──────────────────────────────────────────────────────
+
+/** The lane whose left edge sits nearest the strip's snap line. */
+function laneInView(scroller: HTMLElement): string | null {
+  const lanes = scroller.querySelectorAll<HTMLElement>('[data-lane-id]');
+  if (lanes.length === 0) return null;
+  const pad = parseFloat(getComputedStyle(scroller).scrollPaddingLeft) || 0;
+  const line = scroller.getBoundingClientRect().left + pad;
+  let best: string | null = null;
+  let bestDist = Infinity;
+  lanes.forEach(el => {
+    const d = Math.abs(el.getBoundingClientRect().left - line);
+    if (d < bestDist) { bestDist = d; best = el.dataset.laneId ?? null; }
+  });
+  return best;
+}
+
+interface KanbanLaneChipsProps {
+  lanes: Pick<ColumnNode, 'id' | 'name' | 'is_done' | 'cards'>[];
+  scrollerRef: React.RefObject<HTMLDivElement | null>;
+}
+
+/**
+ * The phone companion to the sideways lane strip. A board is two-dimensional,
+ * so on a phone the lanes still page left to right (one lane per screen, snap
+ * scrolling), but a strip whose other lanes are off screen reads as an
+ * accident. This row WRAPS, names every lane with its card count, marks the one
+ * in view (`aria-current`), and scrolls the strip to a lane on tap. It is
+ * `display: none` above 640px, where several lanes are visible at once.
+ */
+export function KanbanLaneChips({ lanes, scrollerRef }: KanbanLaneChipsProps) {
+  const [current, setCurrent] = useState<string | null>(null);
+  const shown = current && lanes.some(l => l.id === current) ? current : (lanes[0]?.id ?? null);
+
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    let frame = 0;
+    const onScroll = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const id = laneInView(scroller);
+        if (id) setCurrent(id);
+      });
+    };
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener('scroll', onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [scrollerRef, lanes.length]);
+
+  const goTo = (id: string) => {
+    setCurrent(id);
+    const scroller = scrollerRef.current;
+    const lane = scroller
+      ? Array.from(scroller.querySelectorAll<HTMLElement>('[data-lane-id]')).find(el => el.dataset.laneId === id)
+      : undefined;
+    if (!scroller || !lane) return;
+    const pad = parseFloat(getComputedStyle(scroller).scrollPaddingLeft) || 0;
+    const left = scroller.scrollLeft
+      + lane.getBoundingClientRect().left - scroller.getBoundingClientRect().left - pad;
+    const reduce = typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (typeof scroller.scrollTo === 'function') {
+      scroller.scrollTo({ left, behavior: reduce ? 'auto' : 'smooth' });
+    } else {
+      scroller.scrollLeft = left;
+    }
+  };
+
+  if (lanes.length < 2) return null;
+  return (
+    <nav className="kanban-lanechips" aria-label="Jump to lane">
+      {lanes.map(l => (
+        <button
+          key={l.id}
+          type="button"
+          className={`kanban-lanechip kanban-atlas-pill--${laneKey(l.name, l.is_done)}`}
+          aria-current={shown === l.id ? 'true' : undefined}
+          onClick={() => goTo(l.id)}
+        >
+          {l.name} <span className="kanban-lanechip-n">{l.cards.length}</span>
+        </button>
+      ))}
+    </nav>
   );
 }
 
@@ -713,7 +818,9 @@ function KanbanAtlasView({
         <span className="kanban-atlas-showing">{shown} / {total}</span>
       </div>
 
-      <div className="kanban-atlas-map">
+      {/* A left-to-right sequence, so on a phone it scrolls in its own box
+          (wrapping mid-arrow reads as a broken diagram). */}
+      <div className="kanban-atlas-map x-scroll" role="region" tabIndex={0} aria-label="Pipeline map, scrolls sideways">
         {filtered.filter(g => g.kind === 'step').map((g, i) => (
           <span key={g.key} className="kanban-atlas-map-step">
             {i > 0 && <span className="kanban-atlas-map-arrow">→</span>}

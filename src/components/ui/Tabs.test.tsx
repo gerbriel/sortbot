@@ -183,3 +183,39 @@ describe('Tabs — misuse', () => {
     expect(() => mount(<Tab value="x">Orphan</Tab>)).toThrow(/must be rendered inside <Tabs>/);
   });
 });
+
+describe('Tabs — phone layout (no sideways row)', () => {
+  const many = ['Members', 'Billing', 'Shopify', 'Labels', 'Presets', 'Vocab', 'Finance', 'Analytics', 'Messages', 'Danger zone'];
+
+  function Many() {
+    const [value, setValue] = useState('members');
+    return (
+      <Tabs value={value} onValueChange={setValue}>
+        <TabList label="Many sections">
+          {many.map((m) => <Tab key={m} value={m.toLowerCase()}>{m}</Tab>)}
+        </TabList>
+        <TabPanel value={value}>{value} panel</TabPanel>
+      </Tabs>
+    );
+  }
+
+  it('renders many tabs in one wrapping tablist with no overflow-x, keeping roving tabindex', () => {
+    const { container } = mount(<Many />);
+    const list = one(container, '[role="tablist"]');
+    const tabs = all(container, '[role="tab"]');
+    expect(tabs).toHaveLength(many.length);
+    // Nothing on the element makes it a sideways scroller: no inline overflow,
+    // and no scroller class (Tabs.css wraps the row at <= 640px; vitest does
+    // not load stylesheets, so the CSS itself is checked by the grep in
+    // AGENTS.md section 1).
+    expect(list.getAttribute('style') ?? '').not.toMatch(/overflow/);
+    expect(list.style.overflowX).toBe('');
+    expect(list.classList.contains('x-scroll')).toBe(false);
+    // Every tab is a direct child of the one list (wrapping, not a nested strip).
+    expect(tabs.every((t) => t.parentElement === list)).toBe(true);
+    // Roving tabindex survives the count: one tab stop for the whole set.
+    expect(tabs.filter((t) => t.getAttribute('tabindex') === '0')).toHaveLength(1);
+    keyDown('ArrowRight', tabs[0]);
+    expect(all(container, '[role="tab"]')[1].getAttribute('aria-selected')).toBe('true');
+  });
+});

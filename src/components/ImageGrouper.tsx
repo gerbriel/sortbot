@@ -3024,8 +3024,8 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
           The block sticks to the top of THIS scroll box, which is a position the
           black app nav can never cover (the reason the old phone toolbar could
-          not be sticky). ≤640px the row scrolls sideways with scroll-snap
-          instead of stacking into a wall of rows.
+          not be sticky). ≤640px both rows become grids of equal-width controls
+          that wrap; nothing in the toolbar scrolls sideways (AGENTS.md section 1).
 
           THE PANELS ARE RENDERED INSIDE .grouper-toolbar, NEVER PORTALED:
           that selector is on the click-outside-deselect safe list, so a portaled
@@ -3686,8 +3686,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
 
         {selectedItems.size > 0 && groupedItems.some(i => selectedItems.has(i.id) && i.originalStoragePath) && (
           <button
-            className="ptb-btn ptb-btn--ghost"
-            style={{ marginLeft: 'auto' }}
+            className="ptb-btn ptb-btn--ghost gtb-clear-originals"
             title="Free up storage by permanently deleting cached original images. Revert will no longer be possible."
             onClick={() => clearOriginalsCache('selected')}
           >

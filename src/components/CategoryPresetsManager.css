@@ -664,20 +664,22 @@
   }
 
   /* ── Toolbar ─────────────────────────────────────────────────────────────
-     The gender filter scrolls sideways rather than wrapping, same idiom as
-     every other filter row in the app on a phone. */
+     The gender filter (Men, Women, Kids) is three even columns: on a phone a
+     filter row never scrolls sideways (AGENTS.md section 1), and three short
+     labels fit one line with every option visible. */
   .presets-page .presets-toolbar { gap: 1.2rem; padding-bottom: 1.5rem; }
 
   .presets-page .presets-gender-tabs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-    margin-inline: -1.5rem;
-    padding-inline: 1.5rem;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
   }
-  .presets-page .presets-gender-tabs::-webkit-scrollbar { display: none; }
-  .presets-page .presets-gender-tab { flex: 0 0 auto; min-height: var(--tap, 44px); }
+  .presets-page .presets-gender-tab {
+    justify-content: center;
+    min-width: 0;
+    min-height: var(--tap, 44px);
+    padding-inline: var(--space-2);
+  }
 
   /* ── Controls ──────────────────────────────────────────────────────────────
      `.button` and `.button-sm` take the 44px floor from App.css's family. */

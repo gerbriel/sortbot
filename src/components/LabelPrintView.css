@@ -233,7 +233,12 @@
   color: var(--text-primary);
 }
 
-.lpv-sheet-wrap { overflow-x: auto; }
+/* The sheet is two-dimensional paper, so when it is wider than the box it
+   scrolls inside it, through the shared `.x-scroll` class on this element
+   (index.css). At phone width it is also scaled to fit, below, so the scroll
+   is only a fallback for a template wider than letter. The box colour is the
+   page's, so the edge covers match. */
+.lpv-sheet-wrap { --x-scroll-bg: var(--ink-950); }
 
 /* On screen this is a scaled-down facsimile of the paper: a white page of the
    template's real width, with the labels laid out on the template's grid. It
@@ -344,11 +349,15 @@
   .lpv-picklist,
   .lpv-sheet-heading { display: none !important; }
 
-  .lpv-sheet-wrap {
+  /* Doubled class so the print reset outranks the shared `.x-scroll` rule
+     whatever order the sheets load in: paper never scrolls or fades. */
+  .lpv-sheet-wrap,
+  .lpv-sheet-wrap.x-scroll {
     position: absolute;
     inset: 0 auto auto 0;
     width: 100%;
     overflow: visible;
+    background: none;
   }
 
   .lpv-sheet {
@@ -380,9 +389,14 @@
 @media (max-width: 640px) {
   .lpv-actions .lpv-btn { flex: 1 1 100%; }
   .lpv-pick-open { width: 100%; }
-  /* A letter-width sheet cannot fit a phone; shrink the preview rather than
-     forcing a horizontal scroll of the whole page. The printed output is
-     unaffected — transform is a screen concern only. */
+}
+
+/* A letter-width sheet cannot fit a phone; shrink the preview rather than
+   making the reader pan a sheet sideways. `.lpv-sheet` is ALSO the printed
+   surface, so the scale is scoped to `screen`: a narrow print page box can
+   never pick it up, and the paper's geometry is untouched. 816px x 0.42 is
+   343px, inside a 390px phone's content box. */
+@media screen and (max-width: 640px) {
   .lpv-sheet {
     transform: scale(0.42);
     transform-origin: top left;

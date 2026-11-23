@@ -975,7 +975,11 @@
      once there is a selection to act on. Written as :not(:has(…)) on purpose:
      an engine without :has() drops the whole selector as invalid and the dock
      stays in its expanded state — which is the safe failure. */
-  .step2-right-panel:not(:has(.category-zones-container.has-selection)) {
+  /* The :where() guard adds no specificity: this rule scores (0,3,0) because
+     :not(:has(...)) takes its argument's weight, which outranked the (0,2,1)
+     drag rule below, so a drag never expanded the dock. Idle cap applies only
+     while no touch drag is live. */
+  .step2-right-panel:not(:has(.category-zones-container.has-selection)):where(html:not(.step2-touch-dragging) *) {
     max-height: 26vh;
   }
 

@@ -254,7 +254,7 @@ function Overview({ summary, range }: { summary: FinanceSummary; range: DateRang
           <section className="ft-card">
             <h4 className="an-h">Income vs expenses by month</h4>
             <MonthlyChart monthly={summary.monthly} />
-            <table className="an-table fin-table">
+            <table className="an-table fin-table x-scroll" tabIndex={0} aria-label="Income and expenses by month, scrolls sideways">
               <thead>
                 <tr><th>Month</th><th className="an-num">Income</th><th className="an-num">Expenses</th><th className="an-num">Profit</th><th className="an-num">Margin</th></tr>
               </thead>
@@ -319,7 +319,7 @@ function CategoryTable({ title, rows, total }: {
     <section className="ft-card">
       <h4 className="an-h">{title}</h4>
       {rows.length === 0 ? <p className="ft-help">Nothing in this range.</p> : (
-        <table className="an-table fin-table">
+        <table className="an-table fin-table x-scroll" tabIndex={0} aria-label={`${title}, scrolls sideways`}>
           <thead><tr><th>Category</th><th className="an-num">Total</th><th>Share</th></tr></thead>
           <tbody>
             {rows.map(r => {
@@ -365,7 +365,7 @@ function MonthlyChart({ monthly }: { monthly: FinanceSummary['monthly'] }) {
         <span><i className="fin-swatch fin-swatch--income" /> Income</span>
         <span><i className="fin-swatch fin-swatch--expense" /> Expenses</span>
       </div>
-      <div className="fin-chart-scroll">
+      <div className="fin-chart-scroll x-scroll" role="region" tabIndex={0} aria-label="Income vs expenses chart, scrolls sideways">
       <div className="fin-chart" onPointerLeave={() => setHover(null)} onBlur={() => setHover(null)}>
       <div className="fin-plot">
         {ticks.map(tk => (
@@ -637,7 +637,7 @@ function Transactions({ transactions, workspaces, onChanged }: {
         {transactions.length > 0 && visible.length === 0 && <p className="org-panel-loading">Nothing matches this filter.</p>}
 
         {visible.length > 0 && (
-          <div className="fin-scroll">
+          <div className="fin-scroll x-scroll" role="region" tabIndex={0} aria-label="Ledger, scrolls sideways">
             <table className="an-table an-table--cards fin-table fin-ledger">
               <thead>
                 <tr>
@@ -754,7 +754,7 @@ function Customers({ summary, prices, range, onChanged }: {
 
       <section className="ft-card">
         <h4 className="an-h">Workspaces</h4>
-        <div className="fin-scroll">
+        <div className="fin-scroll x-scroll" role="region" tabIndex={0} aria-label="Workspaces, scrolls sideways">
           <table className="an-table an-table--cards fin-table">
             <thead>
               <tr>
@@ -786,7 +786,7 @@ function Customers({ summary, prices, range, onChanged }: {
       <div className="fin-two-up">
         <section className="ft-card">
           <h4 className="an-h">Plans in use</h4>
-          <table className="an-table fin-table">
+          <table className="an-table fin-table x-scroll" tabIndex={0} aria-label="Plans in use, scrolls sideways">
             <thead><tr><th>Plan</th><th className="an-num">Workspaces</th><th className="an-num">People</th><th className="an-num">List price</th></tr></thead>
             <tbody>
               {c.by_plan.map(p => (
@@ -804,7 +804,7 @@ function Customers({ summary, prices, range, onChanged }: {
         <section className="ft-card">
           <h4 className="an-h">Plan prices</h4>
           <p className="ft-help">What each plan is worth per month. Editing a price re-values every workspace on it.</p>
-          <table className="an-table fin-table">
+          <table className="an-table fin-table x-scroll" tabIndex={0} aria-label="Plan prices, scrolls sideways">
             <thead><tr><th>Plan</th><th className="an-num">Monthly (USD)</th><th aria-label="Actions" /></tr></thead>
             <tbody>
               {prices.map(p => {
@@ -900,7 +900,7 @@ function Reports({ summary, transactions, range, orgNames }: {
           <h3>Profit and loss</h3>
           <p>{range.from} to {range.to}</p>
         </header>
-        <table className="an-table fin-table fin-statement">
+        <table className="an-table fin-table fin-statement x-scroll" tabIndex={0} aria-label="Profit and loss by month, scrolls sideways">
           <thead>
             <tr><th>Month</th><th className="an-num">Income</th><th className="an-num">Expenses</th><th className="an-num">Profit</th></tr>
           </thead>
@@ -929,7 +929,7 @@ function Reports({ summary, transactions, range, orgNames }: {
         </table>
 
         <h4 className="an-h">By category</h4>
-        <table className="an-table fin-table fin-statement">
+        <table className="an-table fin-table fin-statement x-scroll" tabIndex={0} aria-label="Profit and loss by category, scrolls sideways">
           <thead><tr><th>Category</th><th>Kind</th><th className="an-num">Total</th></tr></thead>
           <tbody>
             {summary.by_category.map(r => (

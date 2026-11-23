@@ -121,6 +121,8 @@
 /* "Ungroup all" sits at the right end of the idle row, before the trailing
    selection/undo cluster, only while there is a group to ungroup. */
 .gtb-ungroup-all { margin-left: auto; }
+/* "Clear N selected originals" sits at the end of the photo-tools row. */
+.gtb-clear-originals { margin-left: auto; }
 .gtb-ungroup-all + .stats--trailing { margin-left: 0; }
 
 .grouper-actions {
@@ -1775,14 +1777,23 @@
 }
 
 @media (max-width: 640px) {
-  /* ── The toolbar scrolls sideways, it does not stack ───────────────────
-     Every control still exists at 390px; folding them into rows would push
-     the photo grid most of a screen down (that is what the old "Tools"
-     disclosure was working around). Instead each row is one horizontally
-     scrollable strip with scroll-snap, so a thumb flick moves cluster by
-     cluster and the grid keeps its vertical space.
+  /* ── The toolbar is a grid of equal-width controls, it never scrolls ───
+     Nov 2026: the sideways strip (scroll-snap, an edge fade) is gone. On a
+     phone one-dimensional content never scrolls sideways (AGENTS.md section 1):
+     a control off the right edge is a control nobody finds. The row becomes a
+     six-track grid so every control is in view at once, at the 44px floor, in
+     the desktop order:
+       Filter | View | Backgrounds   (three across; two across, halves, when
+                                      the Backgrounds trigger is not rendered)
+       Photos/item [n] Apply Pick    (one full row)
+       Pick photos                   (full row)
+       selected / Undo / Redo        (full row, when there is any)
+       Ungroup all                   (full row, LAST: the destructive one sits
+                                      at the bottom, away from the thumb's path)
+     It costs the grid a few rows of height; the toolbar is sticky inside the
+     grid's own scroll box, so it is a fixed price, not a moving one.
 
-     It stays STICKY here — unlike the old phone top-bar, which could not be,
+     It stays STICKY here, unlike the old phone top-bar, which could not be,
      because it sat outside this scroll box and the app's black nav (sticky,
      z-index 100) covered it. Inside .grouper-scroll-content there is nothing
      above it to slide under. */
@@ -1791,54 +1802,59 @@
   }
 
   .gtb-row {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    -webkit-overflow-scrolling: touch;
-    scroll-snap-type: x proximity;
-    gap: 0.35rem;
-    padding: 0.35rem 0.4rem;
-    /* The strip runs off the right edge, and a phone has no scrollbar to say
-       so — the fade is the affordance. `mask-image` degrades to "no fade" where
-       it is unsupported, which is the pre-fade state, not a broken one. */
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
-    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
+    gap: var(--space-2);
+    padding: var(--space-2);
   }
 
-  /* Scrolled to the end there is nothing more to hint at — but there is no
-     scroll-position selector in CSS, so the fade stays. It reads as a soft edge
-     rather than a cut-off control, which is the point. */
-
-  /* Each cluster snaps to the left edge as the strip is flicked. */
-  .gtb-row > .stats,
-  .gtb-row > .gtb-group,
-  .gtb-row > .gtb-panel-wrap,
-  .gtb-row > .ptb-btn,
-  .gtb-row > .gtb-divider {
-    flex: 0 0 auto;
-    scroll-snap-align: start;
+  .gtb-row--controls {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    align-items: stretch;
   }
 
-  .gtb-group,
-  .auto-group-control {
-    flex-wrap: nowrap;
+  .gtb-row--controls > * { grid-column: 1 / -1; min-width: 0; }
+
+  /* Filter / View: halves by default, thirds once the Backgrounds trigger is
+     a third panel trigger. `~` counts siblings of any element type, so the
+     grid adapts without a prop. */
+  .gtb-row--controls > .gtb-panel-wrap { grid-column: span 3; }
+  .gtb-row--controls:has(> .gtb-panel-wrap ~ .gtb-panel-wrap ~ .gtb-panel-wrap) > .gtb-panel-wrap {
+    grid-column: span 2;
+  }
+  .gtb-row--controls > .gtb-panel-wrap > .gtb-trigger { width: 100%; }
+
+  /* Dividers separate clusters on one line; in a grid the rows already do. */
+  .gtb-row--controls > .gtb-divider { display: none; }
+
+  /* Photos/item: the label sizes to itself, the input and both buttons share
+     the rest of the row. */
+  .gtb-row--controls > .auto-group-control {
+    display: grid;
+    grid-template-columns: auto repeat(3, minmax(0, 1fr));
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .auto-group-control .auto-group-input { width: 100%; }
+
+  .gtb-row--controls > .ptb-btn { width: 100%; }
+
+  /* Desktop pins these two to the row's end with margin-left: auto; in a
+     grid cell that would shrink them, so it is reset. */
+  .gtb-row--controls > .gtb-ungroup-all {
+    order: 1;
+    margin-left: 0;
+  }
+  .gtb-row--controls > .stats--trailing {
+    margin-left: 0;
+    flex-wrap: wrap;
   }
 
   /* ── The popovers span the toolbar, not the trigger ────────────────────
-     And they have to escape the row's own horizontal scroller. `position:
-     static` on the wrap makes .grouper-toolbar (sticky, therefore positioned)
-     the containing block, and an absolutely positioned box whose containing
-     block sits OUTSIDE an overflow ancestor is not clipped by it. The row's
-     edge-fade mask would still clip it — a mask groups every descendant,
-     including one positioned against an outer ancestor — so
-     .gtb-row--panel-open drops the mask (and the stacking context it creates)
-     for as long as a panel is open. */
+     A trigger is a third (or half) of the toolbar, so a popover anchored to
+     it would run off the screen. `position: static` on the wrap makes
+     .grouper-toolbar (sticky, therefore positioned) the containing block, and
+     the panel spans the whole toolbar instead. */
   .gtb-panel-wrap { position: static; }
-
-  .gtb-row--panel-open {
-    -webkit-mask-image: none;
-    mask-image: none;
-  }
 
   .gtb-panel {
     left: 0;
@@ -1879,12 +1895,10 @@
     width: 100%;
   }
 
-  /* The selection/undo cluster scrolls with the strip rather than owning a
-     scroller of its own (nested horizontal scrollers on touch are a coin flip
-     as to which one moves). In a scroll strip "margin-left: auto" is inert. */
+  /* The selection/undo cluster is one full grid row; it wraps inside itself
+     rather than scrolling. */
   .stats {
-    flex-wrap: nowrap;
-    gap: 0.3rem;
+    gap: var(--space-2);
     font-size: var(--fs-2xs);
   }
 
@@ -1982,11 +1996,16 @@
      "drag photos here" strip is dead weight on a phone. */
 
   /* ── Photo toolbar ─────────────────────────────────────────────────────
-     Stays sticky (inside the scroll container) and wraps rather than scrolling
-     sideways, so no action is ever hidden off-screen. */
+     The contextual row: a three-across grid of equal-width actions (the labels
+     are short: Group 4, Rotate, Copy Crop, Delete 4), in the desktop order, so
+     no action is ever hidden off-screen. The copied-state line and the
+     long "Clear N selected originals" take a full row each. */
   .photo-toolbar {
-    gap: 0.35rem;
-    padding: 0.4rem;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+    gap: var(--space-2);
+    padding: var(--space-2);
     border-radius: var(--radius-lg);
   }
 
@@ -1994,13 +2013,22 @@
     min-height: 44px;
   }
 
+  .photo-toolbar > .ptb-btn { width: 100%; min-width: 0; }
+
   .ptb-divider {
     display: none;
   }
 
+  .ptb-status,
+  .photo-toolbar > .gtb-clear-originals {
+    grid-column: 1 / -1;
+  }
+
+  .photo-toolbar > .gtb-clear-originals { margin-left: 0; }
+
   .ptb-status {
-    flex: 1 1 100%;
     font-size: var(--fs-xs);
+    align-self: center;
   }
 
   /* Hover-reveal controls never reveal on touch — pin them visible. */
@@ -2262,24 +2290,44 @@
    targets, and it clears the tab bar like every other bottom-anchored
    surface (§1 — one offset, `--tabbar-h`). */
 @media (max-width: 640px) {
-  /* The lightbox toolbar was already wider than a phone — Rotate L ran off the
+  /* The lightbox toolbar was already wider than a phone: Rotate L ran off the
      left and Copy Crop off the right, because it is centred with
-     `translateX(-50%)` and nothing bounded it. Adding Before/After made the one
-     control a reviewer actually needs on a phone the one furthest off screen.
-     Bounding it and letting it scroll sideways is the same treatment the Step-2
-     toolbar row gets, and it reaches the pre-existing buttons too. */
-  .lightbox-toolbar {
+     `translateX(-50%)` and nothing bounded it. Bounded to the screen, it now
+     WRAPS into rows of equal-width buttons instead of scrolling sideways, so
+     the control a reviewer needs is never the one off screen:
+       Rotate L | Rotate R | Crop        (thirds: short labels)
+       Copy Rotation | Copy Crop         (halves: longer labels)
+       Before | After                    (full row, the segmented pair)
+     A six-track grid gives both splits. It sits below the close button, which
+     a full-width bar would otherwise cover.
+     `.lightbox-overlay` is in the selectors on purpose: ProductDescriptionGenerator.css
+     is imported AFTER this file and restates `.lightbox-toolbar` (display:
+     flex) at (0,1,0), the same trap the segmented pair's comment above names. */
+  .lightbox-overlay .lightbox-toolbar {
+    top: calc(60px + var(--safe-t, 0px));
+    width: calc(100vw - 1rem);
     max-width: calc(100vw - 1rem);
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-    /* Only the horizontal axis: `overflow-x: auto` alone makes a box scrollable
-       on BOTH axes, and a vertically-scrollable pill would trap the swipe that
-       is meant to dismiss the lightbox. */
-    overflow-y: hidden;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: var(--space-2);
+    padding: var(--space-2);
   }
-  .lightbox-toolbar::-webkit-scrollbar { display: none; }
-  .lightbox-tool-btn { flex: 0 0 auto; }
+  .lightbox-overlay .lightbox-toolbar > .lightbox-tool-btn { grid-column: span 2; }
+  .lightbox-overlay .lightbox-toolbar > .lightbox-tool-btn:nth-child(n + 4) { grid-column: span 3; }
+  .lightbox-overlay .lightbox-toolbar > .lb-segmented {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .lightbox-overlay .lightbox-toolbar .lightbox-tool-btn {
+    min-width: 0;
+    min-height: 44px;
+    padding: 5px 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
 
   .lb-review {
     left: 0;

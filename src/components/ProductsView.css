@@ -273,16 +273,17 @@
   top: var(--tv-sticky-top, 8.5rem);
 }
 
+/* A grid that wraps, not a sideways strip: a thumbnail row is one-dimensional,
+   and one-dimensional content never scrolls sideways (AGENTS.md section 1).
+   Fixed 9rem tracks keep the desktop thumbnails their old size; the phone
+   block below switches to four even columns. */
 .pv-photos {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 9rem);
   gap: var(--space-2);
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  padding-bottom: var(--space-1);
 }
 
 .pv-photos img {
-  flex: 0 0 auto;
   width: 9rem;
   height: 11rem;
   object-fit: cover;
@@ -465,13 +466,17 @@
   background: #ffffff;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  overflow-x: auto;
-  overflow-y: hidden;
   font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 
-.pv-barcode-preview svg { display: block; }
+/* The barcode SCALES DOWN to fit rather than scrolling or wrapping, the same
+   way LabelPrintView sizes its label SVGs (`max-width: 100%; height: auto`).
+   The SVG carries a viewBox, so a narrower render keeps every bar's ratio and
+   stays scannable; a 10-character generated SKU is about 330px wide at
+   moduleWidth 2, so on a phone it shrinks by roughly a tenth. */
+.pv-barcode-preview > span { display: block; min-width: 0; max-width: 100%; }
+.pv-barcode-preview svg { display: block; max-width: 100%; height: auto; }
 
 .pv-disclosure {
   align-self: flex-start;
@@ -746,23 +751,28 @@
 
   .pv { gap: var(--space-5); }
 
-  /* The filter row scrolls sideways rather than wrapping into four lines that
-     push the results off the first screen. */
+  /* The filter row becomes a two-column grid of chips: on a phone a filter row
+     never scrolls sideways (AGENTS.md section 1), and two even columns is half
+     the lines of a ragged wrap. The SKU/label separator turns into a full-width
+     hairline between the two groups. */
   .pv-filters {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-    padding-bottom: var(--space-1);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .pv-filters::-webkit-scrollbar { display: none; }
-  .pv-filters > * { flex: 0 0 auto; }
+  .pv-filters .pv-chip { justify-content: center; min-width: 0; text-align: center; }
+  .pv-filters .pv-filter-sep {
+    grid-column: 1 / -1;
+    width: auto;
+    height: 1px;
+    min-height: 0;
+  }
 
   .pv-grid { grid-template-columns: minmax(0, 1fr); }
   .pv-card { padding: var(--space-4); }
   .pv-card-actions .pv-btn { flex: 1 1 14rem; }
-  .pv-photos img { width: 7.5rem; height: 9rem; }
+  .pv-photos { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .pv-photos img { width: 100%; height: auto; aspect-ratio: 9 / 11; }
   .pv-detail-title { flex: 1 1 100%; }
   .pv-open-btn { flex: 1 1 100%; }
 }

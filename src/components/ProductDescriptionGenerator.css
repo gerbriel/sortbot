@@ -790,17 +790,14 @@
 /* Aspect ratio pill bar */
 .crop-fs-ratiobar {
   display: flex; gap: 8px; align-items: center; justify-content: center;
+  /* WRAPS, never scrolls (Nov 2026; it was a sideways rail since report 36).
+     A ratio pill past the right edge is a ratio nobody picks, and on a phone
+     one-dimensional content never scrolls sideways (AGENTS.md section 1). The
+     pills fold into centred rows; the bar grows a row taller instead. */
+  flex-wrap: wrap;
   padding: 14px 16px;
   background: var(--ink-900);
   flex-shrink: 0;
-  /* KEPT scroller (report 36): a genuinely horizontal rail of ratio pills that
-     cannot fit a phone. It lives inside a full-screen modal, so it is never
-     competing with the page scroller — but `contain` still stops a fast swipe
-     from chaining out of it, and the y axis is pinned so it can never become an
-     accidental vertical scroll container. */
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior: contain;
 }
 .crop-fs-pill {
   background: var(--ink-750); color: var(--text-secondary);

@@ -85,9 +85,11 @@
   align-items: start;
 }
 
-/* Tables carry their own horizontal scroll so the page never scrolls sideways. */
+/* Tables carry their own horizontal scroll so the page never scrolls sideways.
+   The scrolling is the shared `.x-scroll` class on the element (index.css);
+   this rule only adds the small bleed. */
 .fin-scroll {
-  overflow-x: auto;
+  --x-scroll-bg: var(--ink-850); /* the .ft-card it sits in */
   margin: 0 -0.4rem;
   padding: 0 0.4rem;
 }
@@ -340,6 +342,14 @@
   /* Keep a month table from splitting mid-row across sheets. */
   .fin-print tr { break-inside: avoid; }
 
+  /* The statement tables carry the shared `.x-scroll` class for the phone
+     screen. Paper never scrolls or fades: the doubled class outranks the shared
+     rule whatever order the sheets load in. */
+  .fin-print .x-scroll {
+    overflow: visible;
+    background: none;
+  }
+
   @page { margin: 18mm; }
 }
 
@@ -358,29 +368,32 @@
    layouts into a PDF. Print stays on the desktop table rules.
 
    The shared founder-tool phone layer (touch floors, 16px controls, the
-   scrolling chip row, KPI tiles two-up, the generic table→card treatment) lives
+   wrapping chip row, KPI tiles two-up, the generic table→card treatment) lives
    in OrgPanel.css, which this file imports. Only Finance-specific work is here. */
+
+/* Off a phone screen the monthly chart fits, so its `.x-scroll` is switched
+   off: a scrollport would clip the tooltip translated above the plot. */
+@media not screen and (max-width: 640px) {
+  .fin-chart-scroll.x-scroll { overflow: visible; background: none; }
+}
 
 @media screen and (max-width: 640px) {
   .fin-view { gap: 2rem; }
 
-  /* ── Sub-tabs: one scrolling row ─────────────────────────────────────────
-     Four tabs wrap to two lines at 390px and the second line reads as orphaned
-     chrome. One no-wrap scrolling row instead, bled to the page edge so the
-     overflow is legible as "there is more this way". */
+  /* ── Sub-tabs: a wrapped 2x2 block ───────────────────────────────────────
+     On a phone a tab row never scrolls sideways (AGENTS.md section 1). Four
+     tabs as a two-column grid is two even lines rather than one full line and
+     an orphaned second one. Each tab keeps its accent underline when active,
+     and the grid gives every cell a 44px floor. */
   .fin-tabs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-    margin-inline: -1.5rem;
-    padding-inline: 1.5rem;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 0.4rem;
   }
-  .fin-tabs::-webkit-scrollbar { display: none; }
-  .fin-tab { flex: 0 0 auto; min-height: 44px; padding: 1.2rem 1.4rem; }
+  .fin-tab { min-height: 44px; padding: 1.2rem 1rem; text-align: center; }
 
   /* ── Range picker ────────────────────────────────────────────────────────
-     The presets are `.ft-chips`, already a scrolling row from OrgPanel.css. The
+     The presets are `.ft-chips`, already a wrapping row from OrgPanel.css. The
      two custom date fields each take a full line — a date input squeezed to
      half of 390px shows "mm/dd/…". */
   .fin-range-field { width: 100%; justify-content: space-between; gap: 1.2rem; }
@@ -391,8 +404,9 @@
      grey band and the x labels overprint. The plot keeps a readable minimum and
      the wrapper scrolls. See the .an-chart-scroll note in OrgPanel.css for why
      the scrollport is a wrapper element and why it needs padding-top (the
-     tooltip is translated ABOVE the plot and `overflow-x: auto` clips the other
-     axis too). */
+     tooltip is translated ABOVE the plot and a sideways scrollport clips the
+     other axis too). The scrolling itself is the shared `.x-scroll` class on the
+     wrapper. */
   .fin-chart-wrap > .fin-legend {
     padding-left: 0;
     margin-bottom: 0;
@@ -401,11 +415,9 @@
   }
 
   .fin-chart-scroll {
-    overflow-x: auto;
+    --x-scroll-bg: var(--ink-850);
     overflow-y: hidden;
     padding-top: 6rem;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
   }
 
   .fin-chart-scroll > .fin-chart {
@@ -456,7 +468,10 @@
      Specificity note: `.an-table.fin-ledger` (0,4,1) is deliberately one class
      above the generic (0,3,1) rules in OrgPanel.css, so this wins regardless of
      which of the two files a lazy chunk happens to inject first. */
-  .fin-scroll { overflow-x: visible; margin: 0; padding: 0; }
+  /* The two `.fin-scroll` wrappers hold `.an-table--cards` tables, so on a phone
+     there is nothing to scroll: cards, not a sideways table. The doubled class
+     outranks the shared `.x-scroll` rule whatever order the sheets load in. */
+  .fin-scroll.x-scroll { overflow: visible; background: none; margin: 0; padding: 0; }
   .fin-ledger { min-width: 0; }
 
   .tool-view .an-table.fin-ledger tbody tr {

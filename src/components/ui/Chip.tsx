@@ -3,6 +3,16 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import './base.css';
 import './Chip.css';
 
+/*
+ * Chip rows are laid out by the `ui-chip-group` class (ui/Chip.css), which
+ * WRAPS at every width. There is no group component and no prop for it.
+ *
+ * @deprecated `ui-chip-group--scroll`: the sideways-scrolling phone variant
+ * was retired in Nov 2026 (AGENTS.md section 1: on phones one-dimensional
+ * content never scrolls sideways). The class now wraps exactly like
+ * `ui-chip-group`; nothing in the app uses it, and new markup must not.
+ */
+
 export type ChipSize = 'sm' | 'md';
 
 interface ChipVisualProps {

@@ -282,6 +282,55 @@ body {
 }
 *::-webkit-scrollbar-thumb:hover { background: #a8a8a8; background-clip: content-box; }
 
+/* ── .x-scroll: the ONE sanctioned sideways scroller ─────────────────────────
+   AGENTS.md section 1: on phones one-dimensional content (chip rails, toolbars,
+   tab rows, filter rows, thumbnail strips) never scrolls sideways; it wraps or
+   becomes a grid. Only genuinely two-dimensional content (a wide data table, a
+   chart, a print sheet, a code block) may scroll inside its own box, and then
+   it wears this class so the cut edge is visible.
+
+   THE AFFORDANCE is the scroll-shadow technique (four background layers, no
+   JS), chosen over mask-image because it behaves the same in Safari and
+   Chrome and never fades the content itself (a mask would also fade a frozen
+   first column and any sticky header):
+     - two "cover" gradients in the box's own colour, attachment `local`, so
+       they travel WITH the content and sit over each shadow when that end is
+       reached;
+     - two soft shadows, attachment `scroll`, pinned to the box's left and
+       right edges.
+   At rest only the right shadow shows (there is more that way); scrolled to
+   the middle both show; at the end only the left. Opaque cells paint over the
+   shadow (a sticky header, a frozen column); a frozen column is itself the
+   visible left edge, so nothing is lost.
+
+   THE BOX COLOUR is `--x-scroll-bg` (default --ink-800). Callers set that
+   token, NEVER `background`, or the shorthand wipes the shadow layers.
+
+   KEYBOARD: a scroller with no focusable children cannot be scrolled from the
+   keyboard. Callers MUST add `tabIndex={0}` and an `aria-label` that says it
+   scrolls, e.g. aria-label="CSV preview, scrolls sideways"; the focus ring
+   below is for that tab stop. */
+.x-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  /* Reserves the vertical scrollbar's gutter in a box that also scrolls down
+     (the CSV preview), so content does not jump when it appears. A no-op on a
+     box that only scrolls sideways; ignored where unsupported. */
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-700) transparent;
+  background:
+    linear-gradient(to right, var(--x-scroll-bg, var(--ink-800)) 30%, transparent) left center / 2.4rem 100% no-repeat local,
+    linear-gradient(to left, var(--x-scroll-bg, var(--ink-800)) 30%, transparent) right center / 2.4rem 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.16), transparent) left center / 1rem 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.16), transparent) right center / 1rem 100% no-repeat scroll,
+    var(--x-scroll-bg, var(--ink-800));
+}
+.x-scroll::-webkit-scrollbar { height: 6px; width: 6px; }
+.x-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* Lucide icons replaced the emoji in the Step 1-4 UI. Emoji sat on the text
    baseline for free; SVGs do not — without this they hang low in inline
    contexts (list items, headings, table cells) and squash in flex rows. */

@@ -524,7 +524,17 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
 
           <div className="export-preview">
             <h3>Preview (Shopify Format)</h3>
-            <div className="table-container" style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '420px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+            {/* .x-scroll (index.css): the one sanctioned sideways scroller, with
+                edge shadows that show there are more columns. The 54-column CSV
+                is genuinely two-dimensional, so it scrolls inside its own box
+                (down as well, under the sticky header) and is a tab stop so the
+                keyboard can scroll it. */}
+            <div
+              className="table-container x-scroll"
+              tabIndex={0}
+              aria-label="CSV preview, scrolls sideways"
+              style={{ overflowY: 'auto', maxHeight: '420px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}
+            >
               <table className="preview-table" style={{ minWidth: '4800px', borderCollapse: 'collapse', fontSize: 'var(--fs-xs)', whiteSpace: 'nowrap' }}>
                 <thead>
                   {/* Sticky header sits one surface step above the --ink-850 table

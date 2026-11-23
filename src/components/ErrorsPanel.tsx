@@ -138,7 +138,7 @@ function ErrorsBody({ summary, days }: { summary: ErrorSummary; days: number }) 
       <div className="an-tables">
         <div>
           <h4 className="an-h">Daily</h4>
-          <table className="an-table">
+          <table className="an-table x-scroll" tabIndex={0} aria-label="Errors by day, scrolls sideways">
             <thead><tr><th>Day</th><th className="an-num">Errors</th><th className="an-num">Issues</th></tr></thead>
             <tbody>
               {summary.daily.map(d => (
@@ -155,7 +155,7 @@ function ErrorsBody({ summary, days }: { summary: ErrorSummary; days: number }) 
         <div>
           <h4 className="an-h">By screen</h4>
           {summary.views.length === 0 ? <p className="ft-help">Nothing to break down yet.</p> : (
-            <table className="an-table">
+            <table className="an-table x-scroll" tabIndex={0} aria-label="Errors by screen, scrolls sideways">
               <thead><tr><th>Screen</th><th className="an-num">Errors</th><th className="an-num">Sessions</th></tr></thead>
               <tbody>
                 {summary.views.map(v => (

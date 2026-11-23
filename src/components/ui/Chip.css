@@ -134,15 +134,12 @@
 
   .ui-chip__remove { width: 44px; }
 
-  /* A chip row that is a FILTER, not a form: scrolls sideways inside itself
-     rather than stacking into four ragged lines. Opt-in — the default chip
-     group keeps wrapping. */
+  /* DEPRECATED (Nov 2026): `ui-chip-group--scroll` used to turn a filter row
+     into a sideways-scrolling strip. On a phone one-dimensional content never
+     scrolls sideways (AGENTS.md section 1), so the modifier is now a plain
+     wrapping group, identical to `ui-chip-group`. It is kept only so any
+     markup still carrying the class renders correctly; do not add it. */
   .ui-chip-group--scroll {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
+    flex-wrap: wrap;
   }
-  .ui-chip-group--scroll::-webkit-scrollbar { display: none; }
-  .ui-chip-group--scroll > * { flex: 0 0 auto; }
 }

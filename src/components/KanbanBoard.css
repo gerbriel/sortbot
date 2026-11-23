@@ -94,11 +94,14 @@
 
 /* ── Lanes ──────────────────────────────────────────────────────────────── */
 
+/* A board is two-dimensional, so the strip scrolls sideways inside its own box
+   through the shared `.x-scroll` class on the element (index.css: fading
+   edges, thin scrollbar; tabIndex and aria-label are on the element). */
 .kanban-lanes {
+  --x-scroll-bg: var(--ink-950); /* the tool-view page behind the lanes */
   display: flex;
   gap: 0.6rem;
   align-items: flex-start;
-  overflow-x: auto;
   overflow-y: hidden;
   flex: 1;
   padding-bottom: 0.4rem;
@@ -115,6 +118,16 @@
   display: flex;
   flex-direction: column;
 }
+
+/* Above phone width the pipeline map wraps, so its `.x-scroll` is switched
+   off (no scrollport to clip a node's focus ring, no box fill). */
+@media not screen and (max-width: 640px) {
+  .kanban-atlas-map.x-scroll { overflow: visible; background: none; }
+}
+
+/* Phone-only lane chips (KanbanLaneChips). Hidden here so desktop, where
+   several lanes are visible at once, is unchanged; the phone block shows them. */
+.kanban-lanechips { display: none; }
 
 .kanban-lane--drag-over { background: var(--accent-dim); border-color: var(--accent-line); }
 .kanban-lane--new { background: none; border-style: dashed; }
@@ -668,6 +681,7 @@
 
 /* pipeline map strip */
 .kanban-atlas-map {
+  --x-scroll-bg: var(--ink-950);
   display: flex;
   align-items: center;
   gap: 0.3rem;
@@ -897,12 +911,46 @@
 @media (max-width: 640px) {
   .kanban-page { height: auto; min-height: 0; }
 
+  /* The lane chips: a WRAPPING row above the board that names every lane, so
+     the lanes off screen are never a guess. The chip for the lane in view
+     carries `aria-current` and a solid ring; a tap pages the board to that
+     lane (KanbanLaneChips in KanbanBoard.tsx). Colours are the lane-status
+     pills the Atlas chips already use. */
+  .tool-view .kanban-lanechips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    margin-bottom: 1.2rem;
+  }
+
+  .tool-view .kanban-lanechip {
+    flex: 1 1 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 44px;
+    padding-inline: 1.2rem;
+    border: 2px solid transparent;
+    border-radius: 20px;
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .tool-view .kanban-lanechip-n { opacity: 0.75; font-weight: 600; }
+  .tool-view .kanban-lanechip[aria-current='true'] {
+    border-color: currentColor;
+    box-shadow: 0 0 0 2px var(--ink-950);
+  }
+
+  /* Snap paging is kept on purpose: the board is the one 2D surface allowed to
+     move sideways on a phone, and snapping is what lands a swipe (or a chip
+     tap) on exactly one lane. The scrolling itself is `.x-scroll`. */
   .tool-view .kanban-lanes {
     max-height: 70vh;
     max-height: 70dvh;
     gap: 1.2rem;
     scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
     /* Bled to the page edge and padded back, so a snapped lane sits flush with
        the gutter instead of starting under it. */
     margin-inline: -1.5rem;
@@ -979,29 +1027,22 @@
   .kanban-atlas-search { flex: 1 1 100%; min-width: 0; min-height: 44px; padding-inline: 1rem; }
   .kanban-atlas-showing { margin-left: 0; flex: 1 1 100%; }
 
+  /* The lane filter chips WRAP (one-dimensional, AGENTS.md section 1) and
+     grow to fill each line. */
   .kanban-atlas-lanechips {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
     flex: 1 1 100%;
-    margin-inline: -1.5rem;
-    padding-inline: 1.5rem;
   }
-  .kanban-atlas-lanechips::-webkit-scrollbar { display: none; }
-  .kanban-atlas-lanechip { flex: 0 0 auto; min-height: 44px; padding-inline: 1.2rem; }
+  .kanban-atlas-lanechip { flex: 1 1 auto; justify-content: center; min-height: 44px; padding-inline: 1.2rem; }
 
   /* The pipeline map is a left-to-right sequence; wrapping it mid-arrow reads
-     as a broken diagram, so it scrolls as one strip instead. */
+     as a broken diagram, so it scrolls as one strip inside its own box, through
+     the shared `.x-scroll` class on the element. */
   .kanban-atlas-map {
     flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-    margin-inline: -1.5rem;
-    padding-inline: 1.5rem;
   }
-  .kanban-atlas-map::-webkit-scrollbar { display: none; }
   .kanban-atlas-map-step,
   .kanban-atlas-map-divider { flex: 0 0 auto; }
   .kanban-atlas-map-node { min-height: 44px; padding-inline: 1rem; }

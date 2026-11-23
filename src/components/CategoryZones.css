@@ -493,8 +493,11 @@
    The desktop interaction is "drag a group card onto a zone". HTML5 drag-and-
    drop does not exist on touch, so the phone path is the OTHER one that already
    works today: select photos in the grid, then tap a category. This turns the
-   right-hand panel into a horizontally scrolling chip row; the dock positioning
-   itself lives in App.css (it wraps .step2-right-panel, which owns the panel).
+   right-hand panel into a dock of WRAPPING chips that scrolls vertically inside
+   its capped height, with the search and the Men / Women / Kids control pinned
+   above the scrolling area. Nothing in it scrolls sideways (AGENTS.md section 1,
+   "one-dimensional content never scrolls sideways"). The dock positioning itself
+   lives in App.css (it wraps .step2-right-panel, which owns the panel).
    ≤640px = phone. Additive — desktop is unchanged.
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -510,12 +513,41 @@
     background: none;
   }
 
-  /* The free-text search is the first thing to go: in a bottom dock a text
-     field summons the keyboard straight over the dock it belongs to, and the
-     chip row is already scrollable. Gender pills stay — they change WHICH
-     categories are listed, so they are navigation, not decoration. */
+  /* The dock's height cap, mirrored from App.css (.step2-right-panel: 38vh,
+     26vh while idle, 38vh again for a live touch drag) so the column below
+     can size itself to it. IDENTICAL selectors on purpose, so the same rule
+     wins here as there and the two heights can never disagree (if they did,
+     the panel would grow a second scrollbar around this one). Same :has()
+     fallback: an engine without :has() keeps 38vh, as the panel does.
+     If you change one of the App.css selectors, change its twin here.
+     Note: as written in App.css the idle rule, (0,3,0) through :not(:has()),
+     outranks the drag rule at (0,2,1), so a drag with NO selection keeps the
+     26vh cap; this mirror follows the panel either way. */
+  .step2-right-panel { --cz-dock-cap: 38vh; }
+  .step2-right-panel:not(:has(.category-zones-container.has-selection)):where(html:not(.step2-touch-dragging) *) { --cz-dock-cap: 26vh; }
+  html.step2-touch-dragging .step2-right-panel { --cz-dock-cap: 38vh; }
+
+  /* A column that exactly fills the dock: the search, the gender control and
+     the selection hint keep their height, and the chip area takes what is left
+     and scrolls inside itself. Subtracting the panel's own vertical padding
+     (0.5rem twice) and its 1px top border is what keeps the panel itself from
+     ever growing a scrollbar of its own, so only ONE box scrolls. */
+  .step2-right-panel .category-zones-container.compact .category-zones {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(var(--cz-dock-cap) - 1rem - 1px);
+  }
+
+  .category-zones-container.compact .cz-search,
+  .category-zones-container.compact .cz-gender-row,
+  .category-zones-container.compact .cz-selection-hint {
+    flex: none;
+  }
+
+  /* The search stays: with wrapping chips the list is taller than the dock,
+     and typing three letters is faster than scrolling it. */
   .category-zones-container.compact .cz-search {
-    display: none;
+    margin-bottom: var(--space-2);
   }
 
   .cz-gender-row { margin-bottom: var(--space-2); }
@@ -530,29 +562,39 @@
     margin-bottom: var(--space-2);
   }
 
-  /* Vertical list → horizontal chip rail. */
+  /* Vertical list → wrapping chips that scroll DOWN, never sideways. A touch
+     drag near the top or bottom edge auto-scrolls it (data-step2-scroll-y,
+     step2TouchDrag.ts). */
   .category-zones-container.compact .category-list {
+    flex: 1 1 auto;
+    min-height: 0;
     flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: var(--space-2);
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
-    gap: 0.4rem;
-    padding-bottom: 0.25rem;
   }
 
   .category-zones-container.compact .category-zone {
-    flex: 0 0 auto;
+    flex: 0 1 auto;
+    max-width: 100%;
     min-height: 44px;
     padding: var(--space-1) var(--space-3);
     white-space: nowrap;
-    /* A dashed edge reads as "drop target"; at rest the rail is tap-to-assign,
+    /* A dashed edge reads as "drop target"; at rest the dock is tap-to-assign,
        so it is solid until a touch drag is live (see the block below). */
     border-style: solid;
   }
 
+  /* A very long display name truncates inside its chip rather than forcing the
+     row wider than the screen. */
   .category-zones-container.compact .category-zone .category-name {
-    flex: 0 0 auto;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   /* Group list (non-compact) stacks — it is not rendered in Step 2, but the
@@ -566,7 +608,7 @@
    On a touch screen a long press in the grid now picks a photo or a group up
    (step2TouchDrag.ts), and these zones are where it lands. While a drag is
    live, every zone goes back to the dashed "drop target" border the phone
-   rail otherwise drops, and the zone under the finger takes the same fill
+   dock otherwise drops, and the zone under the finger takes the same fill
    the mouse .drag-over uses. Keyed on attributes React does not own, so none
    of this can match during a mouse drag. Not width-scoped: a tablet is touch
    too. */

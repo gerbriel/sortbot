@@ -611,7 +611,12 @@
   background: var(--ink-950);
   color: var(--success);
   border-radius: var(--radius-md);
-  overflow-x: auto;
+  /* No markup renders `.drive-example` today (grep the TSX), so there is no
+     element to carry the shared `.x-scroll` class. Until one does, the block
+     wraps instead of scrolling; whoever brings it back should put `.x-scroll`,
+     tabIndex={0} and an aria-label on the <code> and drop these two lines. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
   font-size: var(--fs-xs);
   line-height: 1.5;

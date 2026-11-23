@@ -87,29 +87,29 @@
 .ui-tabpanel:focus { outline: none; }
 .ui-tabpanel:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* ── Phone: one scrolling row, never four stacked lines ─────────────────────
-   `flex-wrap: wrap` is right on a desktop, where a 6-tab set fits on one line
-   and a 12-tab set folds to two. At 390px it folds EVERY set to four or five
-   lines and pushes the panel below the fold. A single no-wrap row that scrolls
-   sideways keeps the tablist one row tall at any count, and the roving-tabindex
-   keyboard model is unaffected (arrow keys still move selection; the browser
-   scrolls the focused tab into view for free).
-
-   The scrollbar is hidden because this row is finger-scrolled, and a painted
-   bar would eat 8px of a 44px target. */
+/* ── Phone: the row WRAPS, it never scrolls sideways ────────────────────────
+   Nov 2026 (AGENTS.md section 1: on phones one-dimensional content never
+   scrolls sideways). The sideways-scrolling row it replaces hid every tab past
+   the right edge, and nothing said they were there. Wrapped, every tab is in
+   view: a 3-tab set stays one line, a 10-tab set folds to two or three short
+   rows. Each tab keeps the 44px floor. The selected look still reads on a
+   wrapped row because it lives on the tab itself (the pill fill, or the
+   underline variant's own bottom border), not on the row. Roving tabindex is
+   untouched: the arrow keys move through the tabs in DOM order across rows. */
 @media (max-width: 640px) {
   .ui-tablist {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
   }
-  .ui-tablist::-webkit-scrollbar { display: none; }
 
   .ui-tab {
     min-height: 44px;
-    flex: 0 0 auto;   /* no shrinking: a squeezed tab label is unreadable */
+    max-width: 100%;
+    /* A long label wraps inside its own tab rather than widening the row past
+       the screen. */
+    white-space: normal;
+    text-align: center;
   }
 
-  .ui-tablist--underline { gap: var(--space-3); }
+  .ui-tablist--underline { column-gap: var(--space-4); row-gap: var(--space-1); }
 }

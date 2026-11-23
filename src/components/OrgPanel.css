@@ -1036,6 +1036,18 @@
       roots to land at (0,6,1) and win. Selects and textareas only need two
       classes to beat `.tool-view select` (0,1,1). */
 
+/* Off a phone screen (wider screens AND print) the founder charts and plain
+   tables fit, so the shared `.x-scroll` they carry is switched off: no
+   scrollport (it would clip the chart tooltip, which is translated above the
+   plot) and no box fill. Two classes outrank the shared one-class rule. */
+@media not screen and (max-width: 640px) {
+  .an-chart-scroll.x-scroll,
+  .an-table.x-scroll {
+    overflow: visible;
+    background: none;
+  }
+}
+
 @media screen and (max-width: 640px) {
 
   /* `.fc-view` (the Founder console) is in the root list for the same reason
@@ -1094,13 +1106,13 @@
 
   .tool-view .beta-search { min-height: 44px; padding-inline: 1.2rem; }
 
-  /* ── Toolbars: wrap, and let the chip row scroll ─────────────────────────
-     `.ft-chips` is a filter row (ranges, stages, kinds). Wrapping it turns a
-     one-line control into three ragged lines that push the content off screen;
-     a single sideways-scrolling row keeps it one row tall at any chip count. */
-  /* 1.5rem to match ToolView's own `.tv-card` phone padding — which is also
-     what the -1.5rem bleeds below are measured against, so a scrolling chip row
-     ends exactly on the card edge rather than 4px short of it. */
+  /* ── Toolbars: wrap, and so does the chip row ────────────────────────────
+     `.ft-chips` is a filter row (ranges, stages, kinds). It used to be one
+     sideways-scrolling row; the standing rule now (AGENTS.md section 1: on a
+     phone, one-dimensional content never scrolls sideways) is that it WRAPS.
+     Chips grow to fill each line, so a wrapped row reads as a block of
+     buttons rather than a ragged tail, and every chip is visible at once. */
+  /* 1.5rem to match ToolView's own `.tv-card` phone padding. */
   .tool-view .ft-card { padding: 1.5rem; }
 
   .tool-view :is(.ft-toolbar, .beta-toolbar) {
@@ -1109,17 +1121,10 @@
   }
 
   .tool-view :is(.ft-chips, .beta-filter-chips) {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-    /* Bleed to the card edge so the row reads as scrollable rather than
-       clipped, then pad the content back to the original inset. */
-    margin-inline: -1.5rem;
-    padding-inline: 1.5rem;
+    flex-wrap: wrap;
+    gap: 0.8rem;
   }
-  .tool-view :is(.ft-chips, .beta-filter-chips)::-webkit-scrollbar { display: none; }
-  .tool-view :is(.ft-chips, .beta-filter-chips) > * { flex: 0 0 auto; }
+  .tool-view :is(.ft-chips, .beta-filter-chips) > * { flex: 1 1 auto; }
 
   .tool-view .ft-toolbar .beta-search { flex: 1 1 100%; min-width: 0; }
   .tool-view .ft-toolbar > .org-icon-btn { flex: 0 0 auto; }
@@ -1153,16 +1158,19 @@
      labels are positioned at `left: -2.4rem` — inside `.an-chart`'s left
      padding but OUTSIDE `.an-plot`. Scrolling the chart element would clip them.
 
-     `padding-top` is load-bearing: `overflow-x: auto` computes the other axis to
-     `auto` too, so the tooltip — `top: -0.5rem` then translated up 100% of its
-     own height — would be clipped by the scrollport. The padding gives it room
+     The scrolling itself comes from the shared `.x-scroll` class on the wrapper
+     (index.css: fading edges, thin scrollbar; the wrapper carries tabIndex and
+     an aria-label). This rule only adds what is chart-specific.
+
+     `padding-top` is load-bearing: a sideways scrollport computes the other axis
+     to `auto` too, so the tooltip (`top: -0.5rem` then translated up 100% of its
+     own height) would be clipped by the scrollport. The padding gives it room
      INSIDE the box. The legend's bottom margin is zeroed to pay for it. */
   .an-chart-scroll {
-    overflow-x: auto;
+    /* The `.ft-card` surface it sits on, so `.x-scroll`'s edge covers match. */
+    --x-scroll-bg: var(--ink-850);
     overflow-y: hidden;
     padding-top: 5rem;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
   }
 
   .an-chart-scroll > .an-chart { min-width: 52rem; }
@@ -1173,22 +1181,23 @@
      (a) DEFAULT — stays a table, scrolls inside itself. `display: block` makes
          the <table> its own scrollport; the rows keep working because the
          browser re-wraps them in an anonymous table box that sizes to its
-         content and overflows. The first column is sticky so a row never loses
-         the thing it is about while its numbers scroll past.
+         content and overflows. The sideways scroll comes from the shared
+         `.x-scroll` class, which every such <table> carries in the TSX along
+         with tabIndex={0} and an aria-label. The first column is sticky so a
+         row never loses the thing it is about while its numbers scroll past.
 
      (b) `.an-table--cards` — stops being a table. For rows with more facts than
          a 390px line can hold, or whose first column is prose rather than a key.
          Each <td> carries a `data-label` and renders as one label/value line. */
   .tool-view .an-table:not(.an-table--cards) {
     display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    --x-scroll-bg: var(--ink-850);
   }
 
   /* `white-space: nowrap` is LOAD-BEARING, not cosmetic. With `display: block`
      the rows are re-wrapped in an anonymous table box whose auto layout clamps
      it to the available width — so the table would squeeze to fit and never
-     overflow, and `overflow-x: auto` would have nothing to scroll. Refusing to
+     overflow, and `.x-scroll` would have nothing to scroll. Refusing to
      wrap raises the min-content width past the scrollport, which is what
      produces the scroll. Remove it and the treatment silently stops working. */
   .tool-view .an-table:not(.an-table--cards) :is(th, td) {
@@ -1272,24 +1281,20 @@
   /* (.an-tables already drops to one column in the ≤640 block above.) */
   .tool-view .an-meter { width: 48px; }
 
-  /* ── OrgPanel: the tab RAIL becomes a scrolling top row ──────────────────
-     The ≤1024px rule above already turns the rail back into a wrapped chip row.
-     At phone width wrapping is the wrong answer again — nine tabs wrap to four
-     lines — so it becomes one sideways-scrolling row, same as the chip filters. */
+  /* ── OrgPanel: the tab RAIL becomes a wrapped block of tabs ──────────────
+     The ≤1024px rule above already turns the rail back into a wrapped chip row,
+     and at phone width it stays wrapped (AGENTS.md section 1: one-dimensional
+     content never scrolls sideways). Tabs grow to fill each line so the rows
+     read as one block; each is at least 44px, and the active tab keeps the
+     accent fill and border from the base rule, so it is findable on any line. */
   .tool-view .org-page-body .org-tabs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
+    flex-wrap: wrap;
     gap: 0.8rem;
     padding-bottom: 1.2rem;
-    margin-inline: -1.5rem;
-    padding-inline: 1.5rem;
   }
-  .tool-view .org-page-body .org-tabs::-webkit-scrollbar { display: none; }
 
   .tool-view .org-page-body .org-tab {
-    flex: 0 0 auto;
+    flex: 1 1 auto;
     width: auto;
     min-height: 44px;
     justify-content: center;

@@ -282,7 +282,7 @@ export default function LabelPrintView({ onOpenListing }: LabelPrintViewProps) {
 
       {/* ── The sheet. On screen it is a preview; at print time this is the
              ONLY thing on the page (see the @media print block). ────────── */}
-      <div className="lpv-sheet-wrap">
+      <div className="lpv-sheet-wrap x-scroll" role="region" tabIndex={0} aria-label="Sheet preview, scrolls sideways">
         <h2 className="lpv-sheet-heading">Sheet preview</h2>
         <div className="lpv-sheet">
           {printable.map(r => {

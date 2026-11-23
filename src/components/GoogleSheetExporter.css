@@ -153,9 +153,11 @@
   color: var(--text-primary);
 }
 
+/* The scroller itself is `.x-scroll` (index.css, added in the TSX), which owns
+   overflow and the edge shadows; the box colour is passed as its token, never
+   as `background`, or the shorthand would wipe the shadow layers. */
 .table-container {
-  overflow-x: auto;
-  background: var(--ink-850);
+  --x-scroll-bg: var(--ink-850);
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
 }
@@ -239,17 +241,15 @@
    MOBILE-FIRST STEP 4
    The 54-column preview is intentionally wider than any screen — it is a
    faithful picture of the CSV. It must therefore scroll inside its OWN box and
-   never push the page sideways; the container already sets overflow:auto inline,
-   so what is added here is the frozen Handle column that makes a sideways scroll
-   readable, plus phone sizing. Additive; ≤1024px only for the frozen column so
+   never push the page sideways; the container is `.x-scroll` (index.css: its
+   edge shadows show there are more columns), so what is added here is the
+   frozen Handle column that makes a sideways scroll readable, plus phone sizing. Additive; ≤1024px only for the frozen column so
    desktop rendering is unchanged.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .table-container {
-  /* Momentum scrolling + no scroll-chaining into the page while panning the
-     table sideways. */
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-x: contain;
+  /* Momentum scrolling and no scroll-chaining come from .x-scroll; this keeps
+     both pan axes for a box that scrolls down as well as across. */
   touch-action: pan-x pan-y;
 }
 

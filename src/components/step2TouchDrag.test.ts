@@ -2,8 +2,8 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import {
   acceptsDrop, beginLongPressDrag, dragLabel, edgeScrollDelta, guardTouchMove,
   installTouchMoveGuard, isInteractiveTarget, isReorderDrop, isStep2DragActive, isTouchPointer,
-  noteStep2PointerDown, shouldBlockHtml5Drag, sideOf,
-  DRAGGING_CLASS, LONG_PRESS_MS, MOVE_TOLERANCE_PX, OVER_ATTR, SOURCE_ATTR, STEP2_DROP_EVENT,
+  noteStep2PointerDown, railScrollStep, shouldBlockHtml5Drag, sideOf,
+  DRAGGING_CLASS, SCROLL_Y_ATTR, LONG_PRESS_MS, MOVE_TOLERANCE_PX, OVER_ATTR, SOURCE_ATTR, STEP2_DROP_EVENT,
 } from './step2TouchDrag';
 import type { Step2DragPayload, Step2DropDetail } from './step2TouchDrag';
 
@@ -70,6 +70,23 @@ describe('pure helpers', () => {
     expect(edgeScrollDelta(0, 0, 600)).toBeLessThan(0);
     expect(edgeScrollDelta(600, 0, 600)).toBeGreaterThan(0);
     expect(Math.abs(edgeScrollDelta(10, 0, 600))).toBeGreaterThan(Math.abs(edgeScrollDelta(40, 0, 600)));
+  });
+
+  it('railScrollStep scrolls the category dock vertically, never sideways', () => {
+    const r = { left: 0, right: 390, top: 600, bottom: 800 };
+    // Near the bottom edge: down. Near the top edge: up. Middle: idle.
+    expect(railScrollStep('y', 200, 795, r)).toEqual({ dx: 0, dy: expect.any(Number) });
+    expect(railScrollStep('y', 200, 795, r).dy).toBeGreaterThan(0);
+    expect(railScrollStep('y', 200, 605, r).dy).toBeLessThan(0);
+    expect(railScrollStep('y', 200, 700, r)).toEqual({ dx: 0, dy: 0 });
+    // A finger at the dock's left or right edge does NOT scroll it sideways.
+    expect(railScrollStep('y', 2, 700, r).dx).toBe(0);
+    expect(railScrollStep('y', 388, 700, r).dx).toBe(0);
+    // Outside the box: nothing.
+    expect(railScrollStep('y', 200, 900, r)).toEqual({ dx: 0, dy: 0 });
+    // The x axis is still available to a genuinely wide box.
+    expect(railScrollStep('x', 388, 700, r).dx).toBeGreaterThan(0);
+    expect(railScrollStep('x', 388, 700, r).dy).toBe(0);
   });
 
   it('a whole group only lands on a category or Clear', () => {
@@ -169,6 +186,30 @@ describe('beginLongPressDrag', () => {
     expect(document.querySelector('.step2-drag-ghost')).toBeNull();
     expect(document.documentElement.classList.contains(DRAGGING_CLASS)).toBe(false);
     expect(isStep2DragActive()).toBe(false);
+  });
+
+  it('a drag held near the bottom of the category dock scrolls it down, not sideways', () => {
+    const frames: FrameRequestCallback[] = [];
+    const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { frames.push(cb); return frames.length; });
+    const caf = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+    const dock = document.createElement('div');
+    dock.setAttribute(SCROLL_Y_ATTR, '');
+    dock.getBoundingClientRect = () => ({ left: 0, right: 390, top: 600, bottom: 800, width: 390, height: 200, x: 0, y: 600, toJSON: () => ({}) });
+    const chip = target('category', { 'data-drop-category': 'tees' });
+    dock.appendChild(chip);
+    document.body.appendChild(dock);
+
+    const cancel = beginLongPressDrag(start, { payload: group, sourceEl: source });
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    under = chip;
+    touch('touchmove', 200, 796, source);
+    const before = dock.scrollTop;
+    frames.at(-1)?.(0);
+    expect(dock.scrollTop).toBeGreaterThan(before);
+    expect(dock.scrollLeft).toBe(0);
+    cancel?.();
+    raf.mockRestore();
+    caf.mockRestore();
   });
 
   it('a target that does not take the payload neither lights up nor receives the drop', () => {
