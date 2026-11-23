@@ -307,3 +307,88 @@ export const DEFAULT_MEASUREMENT_TEMPLATES: Record<string, MeasurementTemplate> 
     rise: false,
   },
 };
+
+// ---------------------------------------------------------------------------
+// The real column list of public.category_presets, and the payload whitelist
+// ---------------------------------------------------------------------------
+//
+// Built from the migrations, not from the interfaces above (the interfaces
+// carry fields the table never had, and PostgREST rejects the WHOLE write with
+// PGRST204 / 42703 for one unknown key):
+//   003_category_presets.sql                 the base table
+//   database_migration_csv_fields.sql (root) the CSV-export columns; live
+//                                            since 004 indexes them and 017
+//                                            writes them
+//   006_extend_category_presets.sql          pricing, details, SKU, SEO, status
+//   016_sync_category_presets_with_products  subculture .. charge_tax
+//   031_multi_org_tenancy.sql                org_id
+//   075_category_presets_custom_sections.sql custom_sections (jsonb). The
+//                                            editor has sent it since March
+//                                            2026 with no migration behind it.
+// A new column is added HERE in the same change as its migration.
+
+export const CATEGORY_PRESET_COLUMNS = [
+  // 003
+  'id', 'user_id', 'category_name', 'display_name', 'description',
+  'default_weight_value', 'default_weight_unit', 'requires_shipping',
+  'product_type', 'vendor', 'suggested_price_min', 'suggested_price_max',
+  'default_material', 'default_care_instructions', 'measurement_template',
+  'seo_title_template', 'seo_keywords', 'shopify_product_type', 'shopify_collection_id',
+  'default_tags', 'typical_condition', 'is_active', 'created_at', 'updated_at',
+  // database_migration_csv_fields.sql
+  'package_dimensions', 'parcel_size', 'ships_from', 'continue_selling_out_of_stock',
+  'size_type', 'style', 'gender', 'age_group',
+  'policies', 'renewal_options', 'who_made_it', 'what_is_it', 'listing_type', 'discounted_shipping',
+  'custom_label_0',
+  // 006
+  'compare_at_price', 'cost_per_item', 'color', 'secondary_color', 'model_name', 'model_number', 'era',
+  'sku_prefix', 'barcode_prefix', 'default_inventory_quantity', 'default_measurements',
+  'seo_description', 'mpn_prefix', 'default_status', 'default_published', 'is_default',
+  'tax_code', 'unit_price_total_measure', 'unit_price_total_measure_unit',
+  'unit_price_base_measure', 'unit_price_base_measure_unit',
+  // 016
+  'subculture', 'brand_category', 'inventory_tracker', 'charge_tax',
+  // 031
+  'org_id',
+  // 075
+  'custom_sections',
+] as const;
+
+export type CategoryPresetColumn = (typeof CATEGORY_PRESET_COLUMNS)[number];
+
+const COLUMN_SET: ReadonlySet<string> = new Set(CATEGORY_PRESET_COLUMNS);
+
+/** Never sent on UPDATE: identity, tenancy and the trigger-owned timestamps. */
+export const CATEGORY_PRESET_UPDATE_STRIPPED = ['id', 'org_id', 'user_id', 'created_at', 'updated_at'] as const;
+
+/** Never sent on INSERT: the database (or the service) owns them. */
+export const CATEGORY_PRESET_INSERT_STRIPPED = ['id', 'user_id', 'created_at', 'updated_at'] as const;
+
+/**
+ * Columns where an empty string is not a value: a CHECK list (parcel_size,
+ * size_type, gender, default_status, inventory_tracker) rejects '' with 23514,
+ * and a numeric column rejects it with 22P02. They go as NULL.
+ */
+const EMPTY_IS_NULL: ReadonlySet<string> = new Set([
+  'parcel_size', 'size_type', 'gender', 'default_status', 'inventory_tracker',
+  'suggested_price_min', 'suggested_price_max', 'compare_at_price', 'cost_per_item',
+  'default_inventory_quantity',
+]);
+
+/**
+ * The payload that may leave the client for `category_presets`: only real
+ * columns, never the stripped keys for this mode, `undefined` dropped and an
+ * empty string turned into NULL where the column cannot hold one.
+ */
+export function toCategoryPresetPayload(
+  input: object,
+  mode: 'insert' | 'update',
+): Record<string, unknown> {
+  const stripped: readonly string[] = mode === 'update' ? CATEGORY_PRESET_UPDATE_STRIPPED : CATEGORY_PRESET_INSERT_STRIPPED;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (!COLUMN_SET.has(key) || stripped.includes(key) || value === undefined) continue;
+    out[key] = value === '' && EMPTY_IS_NULL.has(key) ? null : value;
+  }
+  return out;
+}

@@ -1,8 +1,8 @@
 /* ════════════════════════════════════════════════════════════════════════════
-   Category presets — full page (was a modal, with the editor as a SECOND
-   modal stacked on top of it). List left, editor right; both visible at once.
-   Spacing follows ToolView's scale against the 9px root: 2rem card padding,
-   2rem grid gap, 4rem minimum control height.
+   Category presets: a full page. List left, the selected preset right (on a
+   phone they stack, the editor first). The editor has no submit and nothing
+   to close: every field saves itself (CategoryPresetsManager.tsx). Its cells
+   are ui/FieldGrid; this file spaces the page, the list and the save line.
    ════════════════════════════════════════════════════════════════════════════ */
 
 .presets-page-loading {
@@ -75,7 +75,7 @@
   outline-offset: 2px;
 }
 
-/* One column until an edit is open, then list + editor side by side. */
+/* One column with no preset to show, then list + editor side by side. */
 .presets-body { grid-template-columns: minmax(0, 1fr); }
 
 .presets-page--editing .presets-body {
@@ -260,166 +260,147 @@
   justify-content: center;
 }
 
-.presets-page .form-section {
-  margin-bottom: 2rem;
-  padding-bottom: 2rem;
-  border-bottom: 1px solid var(--border-subtle);
+
+/* ── The editor head: the preset's saved name and the quiet save line ──── */
+.presets-page .preset-editor-title {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
-.presets-page .form-section:last-of-type {
-  border-bottom: none;
-}
-
-/* The ten editor sections are <details>/<summary>, not <div>/<h4>. On a DESKTOP
-   they are indistinguishable from what they replaced: `open` is set in the JSX,
-   the disclosure marker is removed, and the summary is made inert — so it cannot
-   be collapsed and cannot take a caret. The element only starts behaving like a
-   disclosure at phone width (see the phone block at the bottom of this file),
-   where a ~45-field form in one unbroken column is otherwise unnavigable.
-
-   `display: block` on the summary is required to drop the ▶ marker in WebKit,
-   which is why it is set rather than relying on `list-style: none` alone. */
-.presets-page .form-section > summary {
-  display: block;
-  margin-top: 0;
-  margin-bottom: 1rem;
-  font-size: var(--fs-md);
-  font-weight: 600;
-  line-height: var(--lh-tight);
-  color: var(--text-primary);
-  list-style: none;
-}
-
-.presets-page .form-section > summary::-webkit-details-marker { display: none; }
-.presets-page .form-section > summary::marker { content: ''; }
-
-/* Inert on desktop: the sections stay open, exactly as the <div>s were. */
-@media (min-width: 641px) {
-  .presets-page .form-section > summary { pointer-events: none; }
-}
-
-.presets-page .form-group {
-  margin-bottom: 1.75rem;
-}
-
-.presets-page .form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
-  color: var(--text-secondary);
+/* "Saving…", "Saved" (fades after 1.5s), or a persistent --danger line with
+   Retry. The slot keeps its height so the head never jumps. */
+.presets-page .preset-save {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 2.7rem;
   font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  transition: opacity var(--dur-fast) var(--ease);
 }
 
-.presets-page .form-group input[type="text"],
-.presets-page .form-group input[type="number"],
-.presets-page .form-group select,
-.presets-page .form-group textarea {
-  /* The `.ui-input` look (components/ui/Field.css). */
-  width: 100%;
-  min-height: 3.6rem;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border-control);
-  border-radius: var(--radius-md);
-  font-size: var(--fs-base);
-  line-height: var(--lh-snug);
-  background: var(--ink-800);
-  color: var(--text-primary);
-  transition: border-color var(--dur-fast) var(--ease),
-              box-shadow var(--dur-fast) var(--ease);
+.presets-page .preset-save--idle { opacity: 0; }
+.presets-page .preset-save--saved { color: var(--success); }
+
+.presets-page .preset-save--error {
+  flex-wrap: wrap;
+  color: var(--danger);
 }
 
-.presets-page .form-group input:focus,
-.presets-page .form-group select:focus,
-.presets-page .form-group textarea:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-dim);
+.presets-page .preset-save-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
-.presets-page .form-group input::placeholder,
-.presets-page .form-group textarea::placeholder {
-  color: var(--text-faint);
-  font-style: italic;
+@media (prefers-reduced-motion: reduce) {
+  .presets-page .preset-save { transition: none; }
 }
 
-.presets-page .form-group small {
+/* ── The five groups (ui/FieldGrid cells, ComprehensiveProductForm's pattern) */
+.presets-page .preset-editor-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* Required: an asterisk on the label, a rule and "Needed" while empty. Same
+   anatomy as ComprehensiveProductForm.css. */
+.presets-page .ui-fieldcell:has(.field-required-empty) {
+  box-shadow: inset 2px 0 0 var(--warning);
+}
+
+.presets-page .field-required-star {
+  margin-left: 0.2em;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--danger);
+}
+
+.presets-page .field-required-note {
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  color: var(--warning);
+}
+
+.presets-page .preset-hint {
   display: block;
-  margin-top: 0.25rem;
-  font-size: var(--fs-xs);
+  padding: 0;
+}
+
+/* Custom fields and small actions sit under a group's grid, inside its frame. */
+.presets-page .preset-group-custom,
+.presets-page .preset-group-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.presets-page .preset-group-actions { flex-direction: row; flex-wrap: wrap; }
+
+.presets-page .preset-group-custom:not(:has(.custom-field-row, .custom-field-add)) { display: none; }
+
+/* ── The list: a row is selected, the editor shows it ───────────────────── */
+.presets-page .preset-card { cursor: pointer; }
+
+.presets-page .preset-card--selected,
+.presets-page .preset-card--selected:hover {
+  border-color: var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.presets-page .preset-card-select {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.presets-page .preset-card-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.presets-page .presets-list-message {
+  margin: 0;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
 }
+
+.presets-page .presets-list-message--error { color: var(--danger); }
 
 .presets-page .form-hint {
+  margin: 0;
   font-size: var(--fs-sm);
   color: var(--text-secondary);
-  margin-bottom: 1rem;
 }
 
-.presets-page .form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-}
-
-.presets-page .checkbox-group label {
+/* FieldModal (a ui Dialog): its fields stacked with the form rhythm. */
+.preset-field-form {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
-.presets-page .checkbox-group input[type="checkbox"] {
-  width: auto;
-  cursor: pointer;
-}
-
-/* Measurement Checkboxes */
-.presets-page .measurement-checkboxes {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 1rem;
-}
-
-.presets-page .checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  min-height: 4rem;
-  padding: 0.6rem 1rem;
-  background: var(--ink-850);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background-color var(--dur-fast) var(--ease);
-}
-
-.presets-page .checkbox-label:hover {
-  background: var(--ink-750);
-}
-
-.presets-page .checkbox-label input[type="checkbox"] {
-  cursor: pointer;
-}
-
-/* Form Actions */
-.presets-page .form-actions {
-  display: flex;
-  gap: 1rem;
-  justify-content: flex-end;
-  margin-top: 2rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.presets-page .form-actions button {
-  min-width: 120px;
-  justify-content: center;
-}
 
 /* Buttons: App.css's `.button` family (the ui Button metrics) styles every
    `.button`, `.button-secondary`, `.button-danger` and `.button-sm` here. This
    file used to restate them UNSCOPED, and because this chunk is lazy it loaded
    last and restyled every `.button` in the app once the page had been opened
    (AGENTS.md section 18). */
+
 
 /* Responsive */
 @media (max-width: 1024px) {
@@ -438,135 +419,89 @@
   .presets-grid {
     grid-template-columns: 1fr;
   }
-
-  .presets-page .form-row {
-    grid-template-columns: 1fr;
-  }
-  
-  .presets-page .form-actions {
-    flex-direction: column;
-  }
-  
-  .presets-page .form-actions button {
-    width: 100%;
-  }
 }
 
-/* ── Custom Sections & Fields ───────────────────────────────────────────── */
+/* ── Custom sections and fields ─────────────────────────────────────────── */
 
 .presets-page .custom-sections-wrapper {
-  border: 2px dashed var(--accent-line);
-  background: var(--accent-dim);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
 
 .presets-page .custom-sections-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.75rem;
+  gap: var(--space-3);
 }
 
-.presets-page .custom-sections-header h4 {
+.presets-page .custom-sections-header h3 {
   margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--text-muted);
 }
 
 .presets-page .custom-section-block {
-  background: var(--ink-850);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--ink-800);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 1rem;
-  margin-bottom: 0.75rem;
+  padding: var(--space-2);
 }
 
 .presets-page .section-header-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.75rem;
+  gap: var(--space-2);
 }
 
-.presets-page .section-header-row h4 {
-  margin: 0;
-  font-size: var(--fs-base);
-  color: var(--text-primary);
+.presets-page .preset-section-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
 }
 
 .presets-page .section-controls {
   display: flex;
-  gap: 0.25rem;
-}
-
-/* Dense row icons: ui IconButton sm (a 2.7rem square, --radius-md, the
-   --border-control edge). Kept compact on purpose: four of them sit in each
-   custom field row. */
-.presets-page .btn-icon {
-  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-width: 2.7rem;
-  height: 2.7rem;
-  padding: 0 var(--space-1);
-  background: var(--ink-800);
-  border: 1px solid var(--border-control);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: var(--fs-xs);
-  color: var(--text-secondary);
-  transition: background-color var(--dur-fast) var(--ease),
-              border-color var(--dur-fast) var(--ease),
-              color var(--dur-fast) var(--ease);
+  gap: var(--space-1);
 }
-
-.presets-page .btn-icon:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.presets-page .btn-icon:hover {
-  background: var(--ink-750);
-  border-color: var(--border-strong);
-  color: var(--text-primary);
-}
-
-.presets-page .btn-icon.btn-danger {
-  color: var(--danger);
-  border-color: var(--danger);
-}
-
-.presets-page .btn-icon.btn-danger:hover {
-  background: var(--danger-dim);
-  border-color: var(--danger);
-}
-
-/* Custom fields block */
 
 .presets-page .custom-fields-block {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  align-items: flex-start;
+  gap: var(--space-1);
 }
 
 .presets-page .custom-field-row {
   display: flex;
   align-items: center;
-  gap: 0.8rem;
+  gap: var(--space-2);
+  align-self: stretch;
   background: var(--ink-900);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   min-height: 4.5rem;
-  padding: 0.8rem 1.2rem;
+  padding: var(--space-1) var(--space-3);
   font-size: var(--fs-sm);
 }
 
 .presets-page .custom-field-label {
+  flex: 1;
+  min-width: 0;
   font-weight: 600;
   color: var(--text-primary);
-  flex: 1;
+  overflow-wrap: anywhere;
 }
 
 .presets-page .custom-field-type {
-  background: var(--accent-dim);
-  color: var(--accent);
+  background: var(--ink-750);
+  color: var(--text-secondary);
   border-radius: var(--radius-sm);
   padding: 0.1rem 0.55rem;
   font-size: var(--fs-xs);
@@ -576,151 +511,26 @@
 .presets-page .custom-field-default {
   color: var(--text-secondary);
   font-size: var(--fs-xs);
-  font-style: italic;
 }
 
 .presets-page .custom-field-actions {
   display: flex;
-  gap: 0.2rem;
+  align-items: center;
+  gap: var(--space-1);
   margin-left: auto;
 }
-
-/* ── Field Modal ─────────────────────────────────────────────────────────── */
-
-.presets-page .field-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.72);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1100;
-  padding: 1rem;
-}
-
-.presets-page .field-modal {
-  background: var(--ink-800);
-  border-radius: var(--radius-lg);
-  padding: 1.75rem;
-  width: 100%;
-  max-width: 480px;
-  box-shadow: var(--shadow-xl);
-}
-
-.presets-page .field-modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.25rem;
-}
-
-/* Still used by FieldModal, which stays a real modal (it edits one row of the
-   preset editor and must sit above it). */
-.presets-page .button-close {
-  background: none;
-  border: none;
-  font-size: var(--fs-lg);
-  color: var(--text-secondary);
-  cursor: pointer;
-  width: 3.6rem;
-  height: 3.6rem;
-  padding: 0;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color var(--dur-fast) var(--ease),
-              color var(--dur-fast) var(--ease);
-}
-
-.presets-page .button-close:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.presets-page .button-close:hover {
-  background: var(--ink-750);
-  color: var(--text-primary);
-}
-
-.presets-page .field-modal-header h4 {
-  margin: 0;
-  font-size: var(--fs-md);
-  color: var(--text-primary);
-}
-
-
 
 /* ════════════════════════════════════════════════════════════════════════════
    PHONE (≤ 640px)
    ════════════════════════════════════════════════════════════════════════════
 
-   The ≤1024px and ≤768px rules above already stack the split, un-stick the
-   editor, put the toolbar in a column and drop `.form-row` to one track. What
-   is left is the touch layer and the accordion.
-
-   SCOPED TO `.presets-page` THROUGHOUT. `.button`, `.button-sm`, `.form-group`,
-   `.form-actions`, `.empty-state` and `.button-close` are global class names
-   this file re-declares on top of App.css and CategoriesManager.css — a known
-   collision (docs/reviews/07-full-views.md §4 flags it). An unscoped touch-size
-   rule here would reach into the workflow steps, which this pass does not own. */
+   The ≤1024px and ≤768px rules above already stack the split (editor first),
+   un-stick the editor and put the toolbar in a column. The editor's cells are
+   ui/FieldGrid, which is two columns with 44px cells and 16px controls on a
+   phone by itself; what is left here is the touch layer for the page's own
+   controls. Scoped to `.presets-page` throughout. Nothing scrolls sideways. */
 
 @media (max-width: 640px) {
-
-  /* ── The editor becomes an accordion ─────────────────────────────────────
-     Ten sections and roughly forty-five fields in one column is about eight
-     screens of scrolling with no way to skip. As <details> the summaries
-     collapse into a table of contents you can fold down to the two sections you
-     actually came for.
-
-     SECTIONS START OPEN, NOT CLOSED. Shipping them closed on phones only would
-     mean either a matchMedia-driven `open` prop — synchronous setState in an
-     effect, which react-hooks v7 forbids and the brief calls out — or
-     overriding the UA's closed-<details> behaviour from CSS, which is not
-     guaranteed by the spec and breaks differently in each engine. Collapsible
-     is the honest, portable half of the win; the reader folds what they do not
-     need and it stays folded while they work. */
-  .presets-page .form-section > summary {
-    pointer-events: auto;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    min-height: 44px;
-    margin-bottom: 0;
-    padding: 0.4rem 0;
-    cursor: pointer;
-    list-style: none;
-  }
-
-  /* A caret drawn from a border pair: no icon import, no emoji, and it rotates
-     with the open state so the affordance is unambiguous. */
-  .presets-page .form-section > summary::after {
-    content: '';
-    flex: 0 0 auto;
-    width: 0.9rem;
-    height: 0.9rem;
-    border-right: 2px solid var(--text-muted);
-    border-bottom: 2px solid var(--text-muted);
-    transform: rotate(45deg) translate(-0.2rem, -0.2rem);
-    transition: transform var(--dur-fast) var(--ease);
-  }
-
-  .presets-page .form-section[open] > summary::after {
-    transform: rotate(-135deg) translate(-0.2rem, -0.2rem);
-  }
-
-  .presets-page .form-section[open] > summary { margin-bottom: 1rem; }
-
-  .presets-page .form-section {
-    margin-bottom: 1.2rem;
-    padding-bottom: 1.2rem;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .presets-page .form-section > summary::after { transition: none; }
-  }
-
   /* ── Toolbar ─────────────────────────────────────────────────────────────
      The gender filter (Men, Women, Kids) is three even columns: on a phone a
      filter row never scrolls sideways (AGENTS.md section 1), and three short
@@ -738,28 +548,14 @@
     min-height: var(--tap, 44px);
     padding-inline: var(--space-2);
   }
+  .presets-page .presets-toolbar > .ui-btn { min-height: var(--tap, 44px); justify-content: center; }
 
-  /* ── Controls ──────────────────────────────────────────────────────────────
-     `.button` and `.button-sm` take the 44px floor from App.css's family. */
-  .presets-page .form-actions button,
-  .presets-page .preset-actions button {
-    justify-content: center;
-    min-width: 0;
-  }
-
-  .presets-page .btn-icon,
-  .presets-page .button-close {
-    width: var(--tap, 44px);
-    height: var(--tap, 44px);
-    min-width: var(--tap, 44px);
-  }
-
-  .presets-page .form-actions { flex-direction: column; gap: 0.8rem; }
-  .presets-page .form-actions button { width: 100%; }
+  .presets-page .preset-editor-inner { padding: 1.5rem; }
 
   .presets-page .preset-actions { flex-wrap: wrap; gap: 0.8rem; }
-
+  .presets-page .preset-actions .ui-btn { min-height: var(--tap, 44px); }
   .presets-page .preset-card { padding: 1.5rem; }
+  .presets-page .preset-card-select { min-height: var(--tap, 44px); }
 
   /* Ship-from row: field over a full-width button, both on the 44px floor. */
   .presets-page .presets-shipfrom { padding: 1.5rem; }
@@ -770,22 +566,19 @@
   .presets-page .presets-shipfrom .ui-confirm .ui-btn { flex: 1 1 0; }
   .presets-page .preset-header { flex-wrap: wrap; gap: 0.8rem; }
 
-  /* ── Measurement template checkboxes ─────────────────────────────────────
-     `minmax(150px, 1fr)` leaves two cramped tracks at 390px; one full-width row
-     per measurement gives each a 44px band and its label room to breathe. */
-  .presets-page .measurement-checkboxes { grid-template-columns: 1fr; gap: 0.8rem; }
-  .presets-page .checkbox-label { min-height: 44px; padding: 0.8rem 1.2rem; }
-  .presets-page .checkbox-label input[type="checkbox"] { width: 22px; height: 22px; }
-  .presets-page .checkbox-group label { min-height: 44px; }
-
+  /* Custom fields: the row wraps, its icon buttons on the 44px floor. */
   .presets-page .custom-field-row { flex-wrap: wrap; padding: 1rem 1.2rem; }
-  .presets-page .custom-field-actions { margin-left: auto; gap: 0.8rem; }
+  .presets-page .custom-field-actions { gap: 0.8rem; }
+  .presets-page :is(.custom-field-actions, .section-controls) .ui-btn,
+  .presets-page :is(.custom-field-actions, .section-controls) .ui-icon-btn,
+  .presets-page .preset-save .ui-btn {
+    min-width: var(--tap, 44px);
+    min-height: var(--tap, 44px);
+  }
+  .presets-page .section-header-row { flex-wrap: wrap; }
 
-  /* ── Controls at 16px ────────────────────────────────────────────────────
-     These inputs are --fs-sm (13px) today, which is well under the 16px line at
-     which mobile Safari zooms the page on focus and leaves it zoomed. The
-     :not() chain is what out-specifies ToolView.css's (0,5,1) blanket rule;
-     see the note in ui/Field.css. */
+  /* Controls at 16px: the :not() chain out-specifies ToolView.css's (0,5,1)
+     blanket rule (see the note in ui/Field.css), so Safari never zooms. */
   .tool-view .presets-page input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']) {
     min-height: 44px;
     font-size: var(--fs-md);
@@ -793,23 +586,5 @@
   .tool-view .presets-page :is(select, textarea) {
     min-height: 44px;
     font-size: var(--fs-md);
-  }
-  .tool-view .presets-page textarea { min-height: 9rem; }
-
-  /* ── FieldModal: a bottom sheet, like every other dialog on a phone ───────
-     It stays a real modal (it edits one row OF the editor), but a centred card
-     with a 1rem gutter puts its controls mid-screen. Flush to the bottom edge
-     instead, capped at the DYNAMIC viewport — `vh` on iOS measures the viewport
-     with the toolbars retracted, so a vh-capped sheet hides its own footer
-     behind the browser chrome. */
-  .presets-page .field-modal-overlay { padding: 0; align-items: flex-end; }
-
-  .presets-page .field-modal {
-    max-width: none;
-    max-height: 92vh;
-    max-height: 92dvh;
-    overflow-y: auto;
-    padding: 1.5rem 1.5rem calc(1.5rem + var(--safe-b));
-    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   }
 }

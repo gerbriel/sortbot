@@ -1,6 +1,7 @@
 // Category Presets Database Service
 import { supabase } from './supabase';
 import type { CategoryPreset, CategoryPresetInput } from './categoryPresets';
+import { toCategoryPresetPayload } from './categoryPresets';
 
 /**
  * Fetch all category presets for the current user
@@ -52,10 +53,12 @@ export async function createCategoryPreset(preset: CategoryPresetInput): Promise
     throw new Error('User must be authenticated to create category presets');
   }
 
+  // Only real columns leave the client (CATEGORY_PRESET_COLUMNS): one unknown
+  // key fails the whole insert with PGRST204.
   const { data, error } = await supabase
     .from('category_presets')
     .insert({
-      ...preset,
+      ...toCategoryPresetPayload(preset, 'insert'),
       user_id: user.id,
     })
     .select()
@@ -69,15 +72,25 @@ export async function createCategoryPreset(preset: CategoryPresetInput): Promise
 }
 
 /**
- * Update an existing category preset
+ * Update an existing category preset. Send only the keys that changed.
+ *
+ * The patch goes through `toCategoryPresetPayload(.., 'update')`: keys that are
+ * not columns are dropped (PostgREST would reject the whole write with
+ * PGRST204), and `id`, `org_id`, `user_id`, `created_at`, `updated_at` are
+ * never sent (identity, tenancy, trigger-owned). The error thrown is the
+ * PostgREST error as is, so callers can show its `code` and `message`.
  */
 export async function updateCategoryPreset(
   id: string,
   updates: Partial<CategoryPresetInput>
 ): Promise<CategoryPreset> {
+  const payload = toCategoryPresetPayload(updates, 'update');
+  if (Object.keys(payload).length === 0) {
+    throw new Error('Nothing to save: the change has no preset column in it');
+  }
   const { data, error } = await supabase
     .from('category_presets')
-    .update(updates)
+    .update(payload)
     .eq('id', id)
     .select()
     .single();

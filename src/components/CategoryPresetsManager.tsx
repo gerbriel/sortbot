@@ -1,11 +1,15 @@
-import { useState, useEffect } from 'react';
-import { Users, UserRound, Baby, X, Pencil, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import type { ReactNode, RefObject } from 'react';
+import {
+  Users, UserRound, Baby, Pencil, Plus, Copy, Trash2, ChevronUp, ChevronDown, RotateCcw,
+} from 'lucide-react';
 import type {
   CategoryPreset,
   CategoryPresetInput,
   CustomFieldDefinition,
   CustomSection,
   CustomFieldType,
+  MeasurementTemplate,
 } from '../lib/categoryPresets';
 import { DEFAULT_MEASUREMENT_TEMPLATES } from '../lib/categoryPresets';
 import {
@@ -16,12 +20,43 @@ import {
 } from '../lib/categoryPresetsService';
 import { getCategories } from '../lib/categoriesService';
 import type { Category } from '../lib/categories';
-import { Badge, ConfirmAction, TextField } from './ui';
+import { createPresetWriteQueue, describeSaveError } from '../lib/presetWriteQueue';
+import type { PresetPatch, PresetWriteQueue } from '../lib/presetWriteQueue';
+import { saveStatus } from '../lib/saveStatusStore';
+import { log } from '../lib/debugLogger';
+import {
+  Badge, Button, ConfirmAction, Dialog, IconButton, TextField, TextareaField, SelectField,
+  FieldGroup, FieldGrid, FieldCell,
+} from './ui';
+import type { FieldCellControlProps } from './ui';
 import './CategoryPresetsManager.css';
 
 interface CategoryPresetsManagerProps {
   onClose: () => void;
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   THE AUTOSAVE MODEL (owner report, Nov 2026: "I want to type in it and have
+   it apply, or as soon as I click out of it. No X or close button.")
+
+   The editor is simply "the selected preset". There is no submit, no Cancel
+   and nothing to close. Every field saves itself:
+     text, number, textarea   on blur AND on a 600 ms typing debounce,
+                              whichever comes first; one write per changed
+                              value, nothing when the value is unchanged
+     select, checkbox, the    immediately on change
+     measurement toggles
+     custom sections/fields   on each structural change
+   All of them go through ONE per-preset write queue (lib/presetWriteQueue.ts):
+   writes are serialised per preset, patches coalesce while one is in flight,
+   and only the changed keys reach updateCategoryPreset. Every write reports
+   into saveStatusStore and into the editor's own status line; a failed field
+   keeps what was typed and the status line offers Retry.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+const TYPING_DEBOUNCE_MS = 600;
+const SAVED_FADE_MS = 1500;
+const ANNOUNCE_DEBOUNCE_MS = 400;
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -29,16 +64,25 @@ function uid(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
+/** A unique category_name: the slug of the display name plus a uid suffix,
+ *  so a create or a duplicate never trips 061's (org_id, category_name) index. */
+function uniqueCategoryName(displayName: string): string {
+  const slug = (displayName || 'preset')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').substring(0, 40);
+  return `${slug || 'preset'}_${uid()}`;
+}
+
 const FIELD_TYPES: { value: CustomFieldType; label: string }[] = [
   { value: 'text', label: 'Text' },
   { value: 'number', label: 'Number' },
-  { value: 'textarea', label: 'Text Area' },
+  { value: 'textarea', label: 'Text area' },
   { value: 'select', label: 'Dropdown' },
   { value: 'checkbox', label: 'Checkbox' },
 ];
 
-// Fixed IDs for the 9 built-in sections so their custom fields persist in the
-// same customSections array but cannot be renamed/deleted/reordered.
+// Fixed IDs for the built-in sections. Their custom fields persist in the same
+// custom_sections array; the ids are data and must not change. The editor now
+// shows five groups, so several ids render inside one group.
 const BUILTIN_SECTIONS: { id: string; title: string }[] = [
   { id: '__basic__',           title: 'Basic Information' },
   { id: '__shipping__',        title: 'Shipping & Physical Attributes' },
@@ -51,19 +95,26 @@ const BUILTIN_SECTIONS: { id: string; title: string }[] = [
   { id: '__measurements__',    title: 'Measurement Template' },
   { id: '__tags__',            title: 'Tags & SEO' },
 ];
-
-function initBuiltinSections(existing: CustomSection[]): CustomSection[] {
-  return BUILTIN_SECTIONS.map((bs, i) => {
-    const found = existing.find(s => s.id === bs.id);
-    return found ?? { id: bs.id, title: bs.title, order: i, fields: [] };
-  });
-}
+const isBuiltin = (id: string) => BUILTIN_SECTIONS.some(b => b.id === id);
 
 function mergeAllSections(existing: CustomSection[]): CustomSection[] {
-  const builtins = initBuiltinSections(existing);
-  const customs = existing.filter(s => !BUILTIN_SECTIONS.some(b => b.id === s.id));
+  const builtins = BUILTIN_SECTIONS.map((bs, i) => existing.find(s => s.id === bs.id) ?? { id: bs.id, title: bs.title, order: i, fields: [] });
+  const customs = existing.filter(s => !isBuiltin(s.id));
   return [...builtins, ...customs];
 }
+
+/** What is stored: a built-in section only when it holds a field; a section
+ *  the person made always (an empty one is still theirs to fill). */
+function persistableSections(sections: CustomSection[]): CustomSection[] {
+  return sections.filter(s => !isBuiltin(s.id) || s.fields.length > 0);
+}
+
+const MEASURE_KEYS = ['width', 'length', 'sleeve', 'shoulder', 'waist', 'inseam', 'rise'] as const;
+const MEASURE_LABEL: Record<string, string> = { pitToPit: 'Pit to pit' };
+const measureLabel = (k: string) => MEASURE_LABEL[k] ?? k.charAt(0).toUpperCase() + k.slice(1);
+const EMPTY_TEMPLATE: MeasurementTemplate = {
+  width: false, length: false, sleeve: false, shoulder: false, waist: false, inseam: false, rise: false,
+};
 
 // ─── Ship-from ───────────────────────────────────────────────────────────────
 // The ship-from address belongs to ONE workspace. A new workspace is seeded with
@@ -95,7 +146,111 @@ function mostCommonShipFrom(presets: readonly CategoryPreset[]): string {
   return best;
 }
 
-// ─── Field modal ─────────────────────────────────────────────────────────────
+// ─── Field values: what the input shows, what the column stores ─────────────
+
+type TextKind = 'text' | 'textarea' | 'number' | 'list';
+
+/** Every typed field and how its text maps onto its column. */
+const TEXT_KIND = {
+  display_name: 'text',
+  description: 'textarea',
+  suggested_price_min: 'number',
+  suggested_price_max: 'number',
+  default_material: 'text',
+  default_care_instructions: 'textarea',
+  default_weight_value: 'text',
+  package_dimensions: 'text',
+  ships_from: 'text',
+  discounted_shipping: 'text',
+  vendor: 'text',
+  shopify_product_type: 'text',
+  style: 'text',
+  age_group: 'text',
+  who_made_it: 'text',
+  what_is_it: 'text',
+  listing_type: 'text',
+  renewal_options: 'text',
+  policies: 'text',
+  custom_label_0: 'text',
+  default_tags: 'list',
+  seo_keywords: 'list',
+  seo_title_template: 'text',
+  seo_description: 'textarea',
+} as const satisfies Record<string, TextKind>;
+type TextKey = keyof typeof TEXT_KIND;
+
+const SELECT_KEYS = [
+  'product_type', 'default_weight_unit', 'typical_condition', 'parcel_size', 'size_type', 'gender', 'default_status',
+] as const;
+type SelectKey = (typeof SELECT_KEYS)[number];
+
+type FlagKey = 'requires_shipping' | 'continue_selling_out_of_stock';
+
+/** Not a value to send: an empty required field, or a number that is not one. */
+const SKIP = Symbol('skip');
+
+function showText(kind: TextKind, v: unknown): string {
+  if (kind === 'list') return Array.isArray(v) ? v.join(', ') : '';
+  return v === null || v === undefined ? '' : String(v);
+}
+
+function parseText(key: TextKey, raw: string): unknown {
+  const kind: TextKind = TEXT_KIND[key];
+  if (key === 'display_name') return raw.trim() === '' ? SKIP : raw.trim();
+  if (kind === 'list') return raw.split(',').map(t => t.trim()).filter(Boolean);
+  if (kind === 'number') {
+    if (raw.trim() === '') return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : SKIP;
+  }
+  return raw === '' ? null : raw;
+}
+
+function parseSelect(key: SelectKey, raw: string): unknown {
+  if (raw !== '') return raw;
+  return key === 'product_type' || key === 'default_weight_unit' ? SKIP : null;
+}
+
+const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+function selectInitial(p: CategoryPreset, key: SelectKey): string {
+  const v = (p as unknown as Record<string, unknown>)[key];
+  if (key === 'default_weight_unit') return typeof v === 'string' && v ? v : 'lb';
+  if (key === 'default_status') return typeof v === 'string' && v ? v : 'Active';
+  return typeof v === 'string' ? v : '';
+}
+
+// ─── Save status (per preset) ───────────────────────────────────────────────
+
+type SaveView =
+  | { state: 'idle' }
+  | { state: 'saving' }
+  | { state: 'saved' }
+  | { state: 'error'; message: string };
+
+const IDLE: SaveView = { state: 'idle' };
+
+/** Header status: "Saving…", "Saved" (fades), or a persistent error + Retry. */
+function SaveLine({ view, onRetry }: { view: SaveView; onRetry: () => void }) {
+  if (view.state === 'error') {
+    return (
+      <div className="preset-save preset-save--error" role="alert">
+        <span className="preset-save-text">Could not save: {view.message}</span>
+        <Button size="sm" variant="secondary" icon={<RotateCcw size={14} />} onClick={onRetry}>Retry</Button>
+      </div>
+    );
+  }
+  return (
+    <div
+      className={`preset-save${view.state === 'saved' ? ' preset-save--saved' : ''}${view.state === 'idle' ? ' preset-save--idle' : ''}`}
+      role="status"
+    >
+      {view.state === 'saving' ? 'Saving…' : view.state === 'saved' ? 'Saved' : ''}
+    </div>
+  );
+}
+
+// ─── Field modal (a sub-form: adds or edits ONE custom field) ───────────────
 
 interface FieldModalProps {
   initial?: CustomFieldDefinition;
@@ -124,8 +279,7 @@ const FieldModal: React.FC<FieldModalProps> = ({ initial, onSave, onClose }) => 
     setKey(v.toLowerCase().replace(/[^a-z0-9_]/g, ''));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const submit = () => {
     if (!label.trim() || !key.trim()) return;
     onSave({
       id: initial?.id ?? uid(),
@@ -139,114 +293,109 @@ const FieldModal: React.FC<FieldModalProps> = ({ initial, onSave, onClose }) => 
   };
 
   return (
-    <div className="field-modal-overlay" data-tv-modal>
-      <div className="field-modal">
-        <div className="field-modal-header">
-          <h4>{initial ? 'Edit Field' : 'Add Field'}</h4>
-          <button type="button" className="button-close" onClick={onClose}><X size={14} /></button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>Label *</label>
-            <input
-              type="text"
-              value={label}
-              onChange={e => handleLabelChange(e.target.value)}
-              placeholder="e.g., Graphic Theme"
-              required
-              autoFocus
-            />
-          </div>
-          <div className="form-group">
-            <label>Key *</label>
-            <input
-              type="text"
-              value={key}
-              onChange={e => handleKeyChange(e.target.value)}
-              placeholder="e.g., graphic_theme"
-              required
-            />
-            <small>Used as a data identifier. Lowercase letters, numbers, underscores only.</small>
-          </div>
-          <div className="form-group">
-            <label>Field Type</label>
-            <select value={type} onChange={e => setType(e.target.value as CustomFieldType)}>
-              {FIELD_TYPES.map(ft => (
-                <option key={ft.value} value={ft.value}>{ft.label}</option>
-              ))}
-            </select>
-          </div>
+    /* data-tv-modal parks ToolView's Escape-to-back while the sub-form is up. */
+    <div data-tv-modal>
+      <Dialog
+        open
+        onClose={onClose}
+        title={initial ? 'Edit field' : 'Add field'}
+        size="sm"
+        hideCloseButton
+        className="preset-field-dialog"
+        footer={(
+          <>
+            <Button variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button variant="primary" onClick={submit} disabled={!label.trim() || !key.trim()}>Save field</Button>
+          </>
+        )}
+      >
+        <form
+          className="preset-field-form"
+          onSubmit={e => { e.preventDefault(); submit(); }}
+        >
+          <TextField
+            label="Label"
+            required
+            value={label}
+            onChange={e => handleLabelChange(e.target.value)}
+            placeholder="e.g., Graphic theme"
+            autoFocus
+          />
+          <TextField
+            label="Key"
+            required
+            value={key}
+            onChange={e => handleKeyChange(e.target.value)}
+            placeholder="e.g., graphic_theme"
+            hint="Used as a data identifier. Lowercase letters, numbers and underscores only."
+          />
+          <SelectField
+            label="Field type"
+            value={type}
+            onChange={e => setType(e.target.value as CustomFieldType)}
+            options={FIELD_TYPES}
+          />
           {type === 'select' && (
-            <div className="form-group">
-              <label>Options (one per line)</label>
-              <textarea
-                value={optionsText}
-                onChange={e => setOptionsText(e.target.value)}
-                placeholder={"Vintage\nModern\nStreetWear"}
-                rows={4}
-              />
-            </div>
+            <TextareaField
+              label="Options (one per line)"
+              value={optionsText}
+              onChange={e => setOptionsText(e.target.value)}
+              placeholder={'Vintage\nModern\nStreetwear'}
+              rows={4}
+            />
           )}
           {type !== 'checkbox' && (
-            <div className="form-group">
-              <label>Default Value</label>
-              <input
-                type={type === 'number' ? 'number' : 'text'}
-                value={defaultValue}
-                onChange={e => setDefaultValue(e.target.value)}
-                placeholder="Optional default value"
-              />
-            </div>
+            <TextField
+              label="Default value"
+              type={type === 'number' ? 'number' : 'text'}
+              value={defaultValue}
+              onChange={e => setDefaultValue(e.target.value)}
+              placeholder="Optional"
+            />
           )}
-          <div className="form-actions">
-            <button type="button" className="button button-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="button">Save Field</button>
-          </div>
+          {/* Enter in a field submits, like any form. */}
+          <button type="submit" hidden aria-hidden="true" tabIndex={-1} />
         </form>
-      </div>
+      </Dialog>
     </div>
   );
 };
 
-// ─── Section header with CRUD ─────────────────────────────────────────────────
+// ─── Section title: an inline input that saves itself ───────────────────────
 
-interface SectionHeaderProps {
-  title: string;
-  isCustom: boolean;
-  canMoveUp: boolean;
-  canMoveDown: boolean;
-  onMoveUp?: () => void;
-  onMoveDown?: () => void;
-  onRename?: () => void;
-  onDelete?: () => void;
-}
-
-const SectionHeader: React.FC<SectionHeaderProps> = ({
-  title, isCustom, canMoveUp, canMoveDown,
-  onMoveUp, onMoveDown, onRename, onDelete,
-}) => (
-  <div className="section-header-row">
-    <h4>{title}</h4>
-    {isCustom && (
-      <div className="section-controls">
-        {canMoveUp && (
-          <button type="button" className="btn-icon" title="Move section up" onClick={onMoveUp}>↑</button>
-        )}
-        {canMoveDown && (
-          <button type="button" className="btn-icon" title="Move section down" onClick={onMoveDown}>↓</button>
-        )}
-        <button type="button" className="btn-icon" title="Rename section" onClick={onRename}><Pencil size={13} /></button>
-        <button type="button" className="btn-icon btn-danger" title="Delete section" onClick={onDelete}><Trash2 size={13} /></button>
-      </div>
-    )}
-  </div>
-);
+const SectionTitle: React.FC<{ value: string; onCommit: (title: string) => void }> = ({ value, onCommit }) => {
+  const [draft, setDraft] = useState(value);
+  const timer = useRef<number | null>(null);
+  const committed = useRef(value);
+  const commit = (raw: string) => {
+    if (timer.current !== null) { window.clearTimeout(timer.current); timer.current = null; }
+    const t = raw.trim();
+    if (!t || t === committed.current) return;
+    committed.current = t;
+    onCommit(t);
+  };
+  return (
+    <input
+      type="text"
+      className="ui-input preset-section-title"
+      aria-label="Section name"
+      value={draft}
+      onChange={e => {
+        const v = e.target.value;
+        setDraft(v);
+        if (timer.current !== null) window.clearTimeout(timer.current);
+        timer.current = window.setTimeout(() => commit(v), TYPING_DEBOUNCE_MS);
+      }}
+      onBlur={e => commit(e.target.value)}
+    />
+  );
+};
 
 // ─── Custom fields block ──────────────────────────────────────────────────────
 
 interface CustomFieldsBlockProps {
   fields: CustomFieldDefinition[];
-  onAdd: () => void;
+  onAdd?: () => void;
   onEdit: (f: CustomFieldDefinition) => void;
   onDelete: (id: string) => void;
   onMoveUp: (id: string) => void;
@@ -255,57 +404,564 @@ interface CustomFieldsBlockProps {
 
 const CustomFieldsBlock: React.FC<CustomFieldsBlockProps> = ({
   fields, onAdd, onEdit, onDelete, onMoveUp, onMoveDown,
-}) => (
-  <div className="custom-fields-block">
-    {fields.map((f, idx) => (
-      <div key={f.id} className="custom-field-row">
-        <span className="custom-field-label">{f.label}</span>
-        <span className="custom-field-type">{FIELD_TYPES.find(t => t.value === f.type)?.label}</span>
-        {f.defaultValue && <span className="custom-field-default">default: {f.defaultValue}</span>}
-        <div className="custom-field-actions">
-          {idx > 0 && (
-            <button type="button" className="btn-icon" onClick={() => onMoveUp(f.id)}>↑</button>
-          )}
-          {idx < fields.length - 1 && (
-            <button type="button" className="btn-icon" onClick={() => onMoveDown(f.id)}>↓</button>
-          )}
-          <button type="button" className="btn-icon" onClick={() => onEdit(f)}><Pencil size={13} /></button>
-          <button type="button" className="btn-icon btn-danger" onClick={() => onDelete(f.id)}><Trash2 size={13} /></button>
+}) => {
+  if (fields.length === 0 && !onAdd) return null;
+  return (
+    <div className="custom-fields-block">
+      {fields.map((f, idx) => (
+        <div key={f.id} className="custom-field-row">
+          <span className="custom-field-label">{f.label}</span>
+          <span className="custom-field-type">{FIELD_TYPES.find(t => t.value === f.type)?.label}</span>
+          {f.defaultValue && <span className="custom-field-default">Default: {f.defaultValue}</span>}
+          <div className="custom-field-actions">
+            {idx > 0 && (
+              <IconButton size="sm" variant="ghost" label={`Move ${f.label} up`} icon={<ChevronUp size={14} />} onClick={() => onMoveUp(f.id)} />
+            )}
+            {idx < fields.length - 1 && (
+              <IconButton size="sm" variant="ghost" label={`Move ${f.label} down`} icon={<ChevronDown size={14} />} onClick={() => onMoveDown(f.id)} />
+            )}
+            <IconButton size="sm" variant="ghost" label={`Edit ${f.label}`} icon={<Pencil size={13} />} onClick={() => onEdit(f)} />
+            <ConfirmAction
+              label="Delete"
+              icon={<Trash2 size={13} />}
+              confirmLabel="Delete"
+              prompt={`Delete the field "${f.label}"?`}
+              onConfirm={() => onDelete(f.id)}
+            />
+          </div>
         </div>
+      ))}
+      {onAdd && (
+        <Button size="sm" variant="ghost" icon={<Plus size={14} />} onClick={onAdd} className="custom-field-add">
+          Add custom field
+        </Button>
+      )}
+    </div>
+  );
+};
+
+// ─── The editor: the selected preset, every field saving itself ─────────────
+
+interface PresetEditorProps {
+  preset: CategoryPreset;
+  categories: Category[];
+  queue: PresetWriteQueue;
+  status: SaveView;
+  autoFocusName: boolean;
+}
+
+/** The five groups' custom fields: the built-in section ids each one shows. */
+const GROUP_SECTIONS = {
+  basics: ['__basic__', '__pricing__', '__attributes__'],
+  shipping: ['__shipping__', '__shipping_csv__'],
+  classification: ['__classification__', '__classification_csv__', '__policies__'],
+  measurements: ['__measurements__'],
+  seo: ['__tags__'],
+} as const;
+
+/* Keyed by preset id in the parent, so its state starts from the preset on
+   mount and a different selection is a fresh editor: no effect copies props
+   into state. */
+const PresetEditor: React.FC<PresetEditorProps> = ({ preset, categories, queue, status, autoFocusName }) => {
+  const id = preset.id;
+  const row = preset as unknown as Record<string, unknown>;
+
+  const [init] = useState(() => {
+    const text = {} as Record<TextKey, string>;
+    const committed: Record<string, unknown> = {};
+    for (const k of Object.keys(TEXT_KIND) as TextKey[]) {
+      text[k] = showText(TEXT_KIND[k], row[k]);
+      committed[k] = parseText(k, text[k]);
+    }
+    const selects = {} as Record<SelectKey, string>;
+    for (const k of SELECT_KEYS) {
+      selects[k] = selectInitial(preset, k);
+      committed[k] = parseSelect(k, selects[k]);
+    }
+    return { text, selects, committed };
+  });
+
+  const [text, setText] = useState(init.text);
+  const [selects, setSelects] = useState(init.selects);
+  const [flags, setFlags] = useState<Record<FlagKey, boolean>>(() => ({
+    requires_shipping: preset.requires_shipping ?? true,
+    continue_selling_out_of_stock: preset.continue_selling_out_of_stock ?? false,
+  }));
+  const [measure, setMeasure] = useState<Record<string, boolean>>(() => ({
+    ...EMPTY_TEMPLATE, ...((preset.measurement_template as unknown as Record<string, boolean>) ?? {}),
+  }));
+  const [sections, setSections] = useState<CustomSection[]>(() => mergeAllSections(preset.custom_sections ?? []));
+
+  // What has been handed to the queue per key, so an unchanged value (a blur
+  // right after the debounce fired) is never written twice.
+  const committedRef = useRef<Record<string, unknown>>(init.committed);
+  const draftRef = useRef<Record<string, string>>({ ...init.text });
+  const timersRef = useRef<Map<string, number>>(new Map());
+  const sectionsRef = useRef<CustomSection[]>(sections);
+  const nameRef = useRef<HTMLInputElement | null>(null);
+
+  const [fieldModal, setFieldModal] = useState<{ sectionId: string; editing?: CustomFieldDefinition } | null>(null);
+
+  const send = (patch: PresetPatch) => queue.enqueue(id, patch);
+
+  const commitText = (key: TextKey) => {
+    const t = timersRef.current.get(key);
+    if (t !== undefined) { window.clearTimeout(t); timersRef.current.delete(key); }
+    const value = parseText(key, draftRef.current[key] ?? '');
+    if (value === SKIP || same(committedRef.current[key], value)) return;
+    committedRef.current[key] = value;
+    send({ [key]: value });
+  };
+
+  const typeText = (key: TextKey, raw: string) => {
+    draftRef.current[key] = raw;
+    setText(prev => ({ ...prev, [key]: raw }));
+    const t = timersRef.current.get(key);
+    if (t !== undefined) window.clearTimeout(t);
+    timersRef.current.set(key, window.setTimeout(() => commitText(key), TYPING_DEBOUNCE_MS));
+  };
+
+  const changeSelect = (key: SelectKey, raw: string) => {
+    setSelects(prev => ({ ...prev, [key]: raw }));
+    const value = parseSelect(key, raw);
+    if (value === SKIP || same(committedRef.current[key], value)) return;
+    committedRef.current[key] = value;
+    send({ [key]: value });
+  };
+
+  const changeFlag = (key: FlagKey, checked: boolean) => {
+    setFlags(prev => ({ ...prev, [key]: checked }));
+    send({ [key]: checked });
+  };
+
+  const setTemplate = (next: Record<string, boolean>) => {
+    setMeasure(next);
+    send({ measurement_template: next });
+  };
+
+  const changeSections = (fn: (prev: CustomSection[]) => CustomSection[]) => {
+    const next = fn(sectionsRef.current);
+    if (next === sectionsRef.current) return;
+    sectionsRef.current = next;
+    setSections(next);
+    send({ custom_sections: persistableSections(next) });
+  };
+
+  // Leaving the preset (another row selected, the page closed) flushes any
+  // value still waiting on its debounce, so nothing typed is dropped.
+  useEffect(() => {
+    const timers = timersRef.current;
+    const committed = committedRef.current;
+    const drafts = draftRef.current;
+    return () => {
+      for (const [key, t] of timers) {
+        window.clearTimeout(t);
+        const value = parseText(key as TextKey, drafts[key] ?? '');
+        if (value !== SKIP && !same(committed[key], value)) queue.enqueue(id, { [key]: value });
+      }
+      timers.clear();
+    };
+  }, [queue, id]);
+
+  // A preset made by "Add preset" or "Duplicate" opens with its name selected,
+  // so the person just types.
+  useEffect(() => {
+    if (!autoFocusName) return;
+    const el = nameRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }, [autoFocusName]);
+
+  // ── custom sections and fields ────────────────────────────────────────────
+
+  const addSection = () => {
+    changeSections(prev => [...prev, { id: uid(), title: 'New section', order: prev.length, fields: [] }]);
+  };
+  const renameSection = (sid: string, title: string) => {
+    changeSections(prev => prev.map(s => s.id === sid ? { ...s, title } : s));
+  };
+  const deleteSection = (sid: string) => {
+    changeSections(prev => prev.filter(s => s.id !== sid));
+  };
+  const moveSection = (sid: string, dir: -1 | 1) => {
+    changeSections(prev => {
+      const idx = prev.findIndex(s => s.id === sid);
+      const to = idx + dir;
+      if (idx < 0 || to < 0 || to >= prev.length || isBuiltin(prev[to].id)) return prev;
+      const next = [...prev];
+      [next[idx], next[to]] = [next[to], next[idx]];
+      return next.map((s, i) => ({ ...s, order: i }));
+    });
+  };
+  const saveField = (sectionId: string, f: CustomFieldDefinition) => {
+    changeSections(prev => prev.map(s => {
+      if (s.id !== sectionId) return s;
+      const existing = s.fields.find(fl => fl.id === f.id);
+      const fields = existing
+        ? s.fields.map(fl => fl.id === f.id ? { ...f, order: fl.order } : fl)
+        : [...s.fields, { ...f, order: s.fields.length }];
+      return { ...s, fields };
+    }));
+    setFieldModal(null);
+  };
+  const deleteField = (sectionId: string, fieldId: string) => {
+    changeSections(prev => prev.map(s => s.id !== sectionId ? s
+      : { ...s, fields: s.fields.filter(f => f.id !== fieldId).map((f, i) => ({ ...f, order: i })) }));
+  };
+  const moveField = (sectionId: string, fieldId: string, dir: -1 | 1) => {
+    changeSections(prev => prev.map(s => {
+      if (s.id !== sectionId) return s;
+      const idx = s.fields.findIndex(f => f.id === fieldId);
+      const to = idx + dir;
+      if (idx < 0 || to < 0 || to >= s.fields.length) return s;
+      const fields = [...s.fields];
+      [fields[idx], fields[to]] = [fields[to], fields[idx]];
+      return { ...s, fields: fields.map((f, i) => ({ ...f, order: i })) };
+    }));
+  };
+
+  const fieldsBlock = (sectionId: string, withAdd: boolean) => (
+    <CustomFieldsBlock
+      key={sectionId}
+      fields={sections.find(s => s.id === sectionId)?.fields ?? []}
+      onAdd={withAdd ? () => setFieldModal({ sectionId }) : undefined}
+      onEdit={f => setFieldModal({ sectionId, editing: f })}
+      onDelete={fid => deleteField(sectionId, fid)}
+      onMoveUp={fid => moveField(sectionId, fid, -1)}
+      onMoveDown={fid => moveField(sectionId, fid, 1)}
+    />
+  );
+  const groupFields = (ids: readonly string[]) => (
+    <div className="preset-group-custom">
+      {ids.map((sid, i) => fieldsBlock(sid, i === 0))}
+    </div>
+  );
+
+  // ── cell renderers (plain helpers, not components: react-hooks purity) ────
+
+  const reqLabel = (label: string) => (
+    <>
+      {label}
+      <span className="field-required-star" aria-hidden="true">*</span>
+      <span className="ui-sr-only"> (required)</span>
+    </>
+  );
+  const needed = <span className="field-required-note">Needed</span>;
+
+  const textCell = (
+    key: TextKey,
+    label: ReactNode,
+    opts: { placeholder?: string; hint?: ReactNode; span?: 2 | 'full'; meta?: ReactNode; controlId?: string;
+      required?: boolean; inputRef?: RefObject<HTMLInputElement | null>; hintId?: string } = {},
+  ) => {
+    const kind = TEXT_KIND[key];
+    const value = text[key];
+    const empty = opts.required && value.trim() === '';
+    const controlProps = (c: FieldCellControlProps) => ({
+      id: c.id,
+      className: `${c.className}${empty ? ' field-required-empty' : ''}`,
+      'aria-describedby': opts.hintId ?? c['aria-describedby'],
+      'aria-required': opts.required || undefined,
+      'data-field': key,
+      value,
+      placeholder: opts.placeholder,
+      onBlur: () => commitText(key),
+    });
+    return (
+      <FieldCell
+        key={key}
+        label={label}
+        span={opts.span ?? (kind === 'textarea' ? 2 : undefined)}
+        meta={empty ? needed : opts.meta}
+        controlId={opts.controlId}
+        hint={opts.hintId ? undefined : opts.hint}
+        footer={opts.hintId ? <span id={opts.hintId} className="ui-fieldcell__hint preset-hint">{opts.hint}</span> : undefined}
+      >
+        {(c) => kind === 'textarea' ? (
+          <textarea {...controlProps(c)} rows={3} onChange={e => typeText(key, e.target.value)} />
+        ) : (
+          <input
+            {...controlProps(c)}
+            ref={opts.inputRef}
+            type={kind === 'number' ? 'number' : 'text'}
+            step={kind === 'number' ? '0.01' : undefined}
+            inputMode={kind === 'number' ? 'decimal' : undefined}
+            onChange={e => typeText(key, e.target.value)}
+          />
+        )}
+      </FieldCell>
+    );
+  };
+
+  const selectCell = (
+    key: SelectKey,
+    label: ReactNode,
+    options: { value: string; label: string }[],
+    opts: { placeholder?: string; required?: boolean } = {},
+  ) => {
+    const value = selects[key];
+    const empty = opts.required && value === '';
+    return (
+      <FieldCell key={key} label={label} meta={empty ? needed : undefined}>
+        {(c) => (
+          <select
+            {...c}
+            className={`${c.className}${empty ? ' field-required-empty' : ''}`}
+            aria-required={opts.required || undefined}
+            data-field={key}
+            value={value}
+            onChange={e => changeSelect(key, e.target.value)}
+          >
+            {opts.placeholder !== undefined && (
+              <option value="" disabled={opts.required && value !== ''}>{opts.placeholder}</option>
+            )}
+            {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        )}
+      </FieldCell>
+    );
+  };
+
+  const flagCell = (key: FlagKey, label: string, valueText: string) => (
+    <FieldCell key={key} label={label}>
+      {(c) => (
+        <label className="ui-fieldcell__check">
+          <input
+            {...c}
+            type="checkbox"
+            data-field={key}
+            checked={flags[key]}
+            onChange={e => changeFlag(key, e.target.checked)}
+          />
+          <span>{valueText}</span>
+        </label>
+      )}
+    </FieldCell>
+  );
+
+  // The category list, plus the preset's current product_type when it is not
+  // one of this workspace's categories, so the select never drops a value.
+  const categoryOptions = categories.map(c => ({ value: c.name, label: `${c.emoji ? `${c.emoji} ` : ''}${c.display_name}` }));
+  if (selects.product_type && !categoryOptions.some(o => o.value === selects.product_type)) {
+    categoryOptions.unshift({ value: selects.product_type, label: selects.product_type });
+  }
+
+  const measureKeys = [...new Set([...MEASURE_KEYS, ...Object.keys(measure)])];
+  const defaultTemplate = DEFAULT_MEASUREMENT_TEMPLATES[selects.product_type] ?? DEFAULT_MEASUREMENT_TEMPLATES[preset.category_name];
+  const customSections = sections.filter(s => !isBuiltin(s.id));
+
+  return (
+    <div className="preset-editor-inner">
+      <div className="preset-editor-head">
+        <h2 className="tv-section-title preset-editor-title">{preset.display_name || 'Untitled preset'}</h2>
+        <SaveLine view={status} onRetry={() => queue.retry(id)} />
       </div>
-    ))}
-    <button type="button" className="button button-secondary button-sm" onClick={onAdd}>
-      + Add Custom Field
-    </button>
-  </div>
-);
+
+      <div className="preset-editor-groups">
+        <FieldGroup caption="Basics">
+          <FieldGrid columns={3}>
+            {textCell('display_name', reqLabel('Display name'), {
+              placeholder: 'e.g., Sweatshirts and hoodies', required: true, span: 2,
+              inputRef: nameRef,
+            })}
+            {selectCell('product_type', reqLabel('Category'), categoryOptions, { placeholder: 'Choose a category', required: true })}
+            {textCell('description', 'Description')}
+            {textCell('suggested_price_min', 'Min price ($)', { placeholder: '25.00' })}
+            {textCell('suggested_price_max', 'Max price ($)', { placeholder: '75.00' })}
+            {textCell('default_material', 'Default material', { placeholder: 'e.g., Cotton, polyester' })}
+            {selectCell('typical_condition', 'Typical condition', [
+              { value: 'NWT', label: 'NWT' }, { value: 'Like New', label: 'Like new' },
+              { value: 'Excellent', label: 'Excellent' }, { value: 'Good', label: 'Good' }, { value: 'Fair', label: 'Fair' },
+            ], { placeholder: 'None' })}
+            {textCell('default_care_instructions', 'Care instructions')}
+          </FieldGrid>
+          {groupFields(GROUP_SECTIONS.basics)}
+        </FieldGroup>
+
+        <FieldGroup caption="Shipping and packaging">
+          <FieldGrid columns={3}>
+            {textCell('default_weight_value', 'Default weight', { placeholder: 'e.g., 1.2' })}
+            {selectCell('default_weight_unit', 'Weight unit', [
+              { value: 'lb', label: 'Pounds (lb)' }, { value: 'oz', label: 'Ounces (oz)' },
+              { value: 'kg', label: 'Kilograms (kg)' }, { value: 'g', label: 'Grams (g)' },
+            ])}
+            {flagCell('requires_shipping', 'Shipping', 'Requires shipping')}
+            {textCell('package_dimensions', 'Package dimensions', { placeholder: '12 in x 10 in x 4 in' })}
+            {selectCell('parcel_size', 'Parcel size', [
+              { value: 'Small', label: 'Small' }, { value: 'Medium', label: 'Medium' },
+              { value: 'Large', label: 'Large' }, { value: 'Extra Large', label: 'Extra large' },
+            ], { placeholder: 'Not set' })}
+            {flagCell('continue_selling_out_of_stock', 'Out of stock', 'Keep selling')}
+            {textCell('ships_from', 'Ships from', {
+              span: 2,
+              placeholder: 'Street, city, state and ZIP',
+              hintId: 'preset-ships-from-hint',
+              hint: 'Used on every listing made from this preset. This workspace’s only; never shared with other shops.',
+            })}
+            {textCell('discounted_shipping', 'Discounted shipping', { placeholder: 'No discount' })}
+          </FieldGrid>
+          {groupFields(GROUP_SECTIONS.shipping)}
+        </FieldGroup>
+
+        <FieldGroup caption="Classification">
+          <FieldGrid columns={3}>
+            {selectCell('gender', 'Gender', [
+              { value: 'Men', label: 'Men' }, { value: 'Women', label: 'Women' },
+              { value: 'Unisex', label: 'Unisex' }, { value: 'Kids', label: 'Kids' },
+            ], { placeholder: 'Not set' })}
+            {selectCell('size_type', 'Size type', [
+              { value: 'Regular', label: 'Regular' }, { value: 'Big & Tall', label: 'Big and tall' },
+              { value: 'Petite', label: 'Petite' }, { value: 'Plus Size', label: 'Plus size' }, { value: 'One Size', label: 'One size' },
+            ], { placeholder: 'Not set' })}
+            {textCell('style', 'Style', { placeholder: 'Vintage, modern, streetwear' })}
+            {textCell('age_group', 'Age group', { placeholder: 'Adult (13+ years old)' })}
+            {textCell('shopify_product_type', 'Shopify product type', { placeholder: 'For Shopify' })}
+            {textCell('vendor', 'Default vendor', { placeholder: 'Optional' })}
+            {textCell('who_made_it', 'Who made it', { placeholder: 'Another company or person' })}
+            {textCell('what_is_it', 'What is it', { placeholder: 'A finished product' })}
+            {textCell('listing_type', 'Listing type', { placeholder: 'Physical item' })}
+            {textCell('renewal_options', 'Renewal options', { placeholder: 'Automatic' })}
+            {textCell('custom_label_0', 'Custom label (Google Shopping)', { placeholder: 'Top seller' })}
+            {textCell('policies', 'Policies', { placeholder: 'No returns; no exchanges' })}
+          </FieldGrid>
+          {groupFields(GROUP_SECTIONS.classification)}
+        </FieldGroup>
+
+        <FieldGroup caption="Measurements">
+          <FieldGrid columns={4}>
+            {measureKeys.map(k => (
+              <FieldCell key={k} label={measureLabel(k)}>
+                {(c) => (
+                  <label className="ui-fieldcell__check">
+                    <input
+                      {...c}
+                      type="checkbox"
+                      data-field={`measure-${k}`}
+                      checked={!!measure[k]}
+                      onChange={e => setTemplate({ ...measure, [k]: e.target.checked })}
+                    />
+                    <span>Measured</span>
+                  </label>
+                )}
+              </FieldCell>
+            ))}
+          </FieldGrid>
+          {defaultTemplate && (
+            <div className="preset-group-actions">
+              <Button size="sm" variant="ghost" onClick={() => setTemplate({ ...measure, ...defaultTemplate })}>
+                Use the default template for {selects.product_type || preset.category_name}
+              </Button>
+            </div>
+          )}
+          {groupFields(GROUP_SECTIONS.measurements)}
+        </FieldGroup>
+
+        <FieldGroup caption="SEO and defaults">
+          <FieldGrid columns={3}>
+            {textCell('default_tags', 'Default tags', { placeholder: 'sweatshirt, pullover, vintage', hint: 'Separate with commas.' })}
+            {textCell('seo_keywords', 'SEO keywords', { placeholder: 'vintage, retro, streetwear', hint: 'Separate with commas.' })}
+            {selectCell('default_status', 'Default status', [
+              { value: 'Active', label: 'Active' }, { value: 'Draft', label: 'Draft' }, { value: 'Archived', label: 'Archived' },
+            ])}
+            {textCell('seo_title_template', 'SEO title template', {
+              span: 2,
+              placeholder: '{size} {brand} {category} {color}',
+              hint: 'Placeholders: {size}, {brand}, {category}, {color}, {era}',
+            })}
+            {textCell('seo_description', 'SEO description', {
+              span: 'full',
+              placeholder: 'Default meta description for every product in this category',
+              hint: 'Applied to new products made from this preset. A value already on the item wins.',
+            })}
+          </FieldGrid>
+          {groupFields(GROUP_SECTIONS.seo)}
+        </FieldGroup>
+
+        {/* ── Sections the person made ──────────────────────────────────── */}
+        <section className="custom-sections-wrapper" aria-labelledby={`custom-sections-${id}`}>
+          <div className="custom-sections-header">
+            <h3 id={`custom-sections-${id}`}>Custom sections</h3>
+            <Button size="sm" variant="secondary" icon={<Plus size={14} />} onClick={addSection}>Add section</Button>
+          </div>
+          {customSections.length === 0 && (
+            <p className="form-hint">No custom sections yet. Add one to group fields of your own.</p>
+          )}
+          {customSections.map((section, i) => (
+            <div key={section.id} className="custom-section-block">
+              <div className="section-header-row">
+                <SectionTitle value={section.title} onCommit={t => renameSection(section.id, t)} />
+                <div className="section-controls">
+                  {i > 0 && (
+                    <IconButton size="sm" variant="ghost" label="Move section up" icon={<ChevronUp size={14} />} onClick={() => moveSection(section.id, -1)} />
+                  )}
+                  {i < customSections.length - 1 && (
+                    <IconButton size="sm" variant="ghost" label="Move section down" icon={<ChevronDown size={14} />} onClick={() => moveSection(section.id, 1)} />
+                  )}
+                  <ConfirmAction
+                    label="Delete"
+                    icon={<Trash2 size={13} />}
+                    confirmLabel="Delete"
+                    prompt={`Delete "${section.title}" and its fields?`}
+                    onConfirm={() => deleteSection(section.id)}
+                  />
+                </div>
+              </div>
+              {fieldsBlock(section.id, true)}
+            </div>
+          ))}
+        </section>
+      </div>
+
+      {fieldModal && (
+        <FieldModal
+          initial={fieldModal.editing}
+          onSave={f => saveField(fieldModal.sectionId, f)}
+          onClose={() => setFieldModal(null)}
+        />
+      )}
+    </div>
+  );
+};
 
 // ─── Main component ───────────────────────────────────────────────────────────
+
+type ListMessage = { tone: 'error' | 'info'; text: string } | null;
 
 const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
   const [presets, setPresets] = useState<CategoryPreset[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingPreset, setEditingPreset] = useState<CategoryPreset | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState<Partial<CategoryPresetInput>>({
-    default_weight_unit: 'lb',
-    requires_shipping: true,
-    is_active: true,
-  });
+  const [listMessage, setListMessage] = useState<ListMessage>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [focusNameFor, setFocusNameFor] = useState<string | null>(null);
+  const [statusById, setStatusById] = useState<Record<string, SaveView>>({});
+  const [busy, setBusy] = useState(false);
+  // Bumped when the list is reloaded from the server (apply-to-all), so the
+  // editor re-reads the preset instead of keeping drafts of the old values.
+  const [epoch, setEpoch] = useState(0);
 
-  // Gender filter toggle — persisted in localStorage
+  // Gender filter toggle, persisted in localStorage
   const [genderFilter, setGenderFilter] = useState<'Men' | 'Women' | 'Kids'>(() => {
-    return (localStorage.getItem('presets_gender_filter') as 'Men' | 'Women' | 'Kids') || 'Men';
+    try {
+      return (localStorage.getItem('presets_gender_filter') as 'Men' | 'Women' | 'Kids') || 'Men';
+    } catch {
+      return 'Men';
+    }
   });
 
   const setGender = (g: 'Men' | 'Women' | 'Kids') => {
     setGenderFilter(g);
-    localStorage.setItem('presets_gender_filter', g);
+    setSelectedId(null);
+    try { localStorage.setItem('presets_gender_filter', g); } catch { /* private mode */ }
   };
 
-  // Filtered presets by active gender
-  const filteredPresets = presets.filter(p => (p as any).gender === genderFilter);
+  const filteredPresets = presets.filter(p => p.gender === genderFilter);
+  // The editor is "the selected preset": the chosen row, otherwise the tab's
+  // first row. Derived, never synced in an effect. The chosen row stays open
+  // even when an edit to its Gender moves it off this tab; changing the tab
+  // clears the choice.
+  const selected = presets.find(p => p.id === selectedId) ?? filteredPresets[0] ?? null;
 
   // Apply-to-all ship-from. `null` = untouched, so the field shows the most
   // common existing value (derived at render, never copied in an effect).
@@ -314,42 +970,111 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
   const bulkValue = bulkShipFrom ?? mostCommonShipFrom(presets);
 
-  // Custom sections state
-  const [customSections, setCustomSections] = useState<CustomSection[]>([]);
+  // ── the write queue ───────────────────────────────────────────────────────
 
-  // Field modal state
-  const [fieldModalOpen, setFieldModalOpen] = useState(false);
-  const [fieldModalSectionId, setFieldModalSectionId] = useState<string>('');
-  const [fieldModalEditing, setFieldModalEditing] = useState<CustomFieldDefinition | undefined>(undefined);
+  const fadeTimers = useRef<Map<string, number>>(new Map());
+  const announceTimer = useRef<number | null>(null);
+  const announceNames = useRef<Set<string>>(new Set());
 
-  useEffect(() => { loadData(); }, []);
+  const [queue] = useState<PresetWriteQueue>(() => {
+    const setView = (pid: string, view: SaveView) => setStatusById(prev => ({ ...prev, [pid]: view }));
+    const clearFade = (pid: string) => {
+      const t = fadeTimers.current.get(pid);
+      if (t !== undefined) { window.clearTimeout(t); fadeTimers.current.delete(pid); }
+    };
+    // One presetsUpdated per burst of saves: items already in the workflow
+    // re-read their preset once, not once per keystroke-debounce.
+    const announce = (categoryName: string | undefined) => {
+      if (categoryName) announceNames.current.add(categoryName);
+      if (announceTimer.current !== null) window.clearTimeout(announceTimer.current);
+      announceTimer.current = window.setTimeout(() => {
+        announceTimer.current = null;
+        const names = [...announceNames.current];
+        announceNames.current.clear();
+        window.dispatchEvent(new CustomEvent('presetsUpdated', {
+          detail: names.length === 1 ? { categoryName: names[0] } : {},
+        }));
+      }, ANNOUNCE_DEBOUNCE_MS);
+    };
 
-  const loadData = async () => {
+    const q = createPresetWriteQueue<CategoryPreset>({
+      write: (pid, patch) => updateCategoryPreset(pid, patch as Partial<CategoryPresetInput>),
+      onStart: (pid) => {
+        saveStatus.begin();
+        clearFade(pid);
+        setView(pid, { state: 'saving' });
+      },
+      onSuccess: (pid, saved, patch, stillFailing) => {
+        saveStatus.end(true);
+        let categoryName: string | undefined = saved?.category_name;
+        setPresets(prev => prev.map(p => {
+          if (p.id !== pid) return p;
+          categoryName = categoryName ?? p.category_name;
+          return { ...p, ...patch, ...(saved ?? {}) } as CategoryPreset;
+        }));
+        announce(categoryName);
+        if (stillFailing || q.busy(pid)) return;
+        setView(pid, { state: 'saved' });
+        clearFade(pid);
+        fadeTimers.current.set(pid, window.setTimeout(() => {
+          fadeTimers.current.delete(pid);
+          setStatusById(prev => prev[pid]?.state === 'saved' ? { ...prev, [pid]: IDLE } : prev);
+        }, SAVED_FADE_MS));
+      },
+      onError: (pid, error, patch) => {
+        const message = describeSaveError(error);
+        log.error(`Preset save failed (${Object.keys(patch).join(', ')}): ${message}`, error);
+        console.error('Error saving preset:', error);
+        saveStatus.end(false, `Preset not saved: ${message}`);
+        clearFade(pid);
+        setView(pid, { state: 'error', message });
+      },
+    });
+    return q;
+  });
+
+  useEffect(() => {
+    const fades = fadeTimers.current;
+    return () => {
+      for (const t of fades.values()) window.clearTimeout(t);
+      fades.clear();
+      if (announceTimer.current !== null) window.clearTimeout(announceTimer.current);
+    };
+  }, []);
+
+  // ── loading ───────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const [presetsData, categoriesData] = await Promise.all([getCategoryPresets(), getCategories()]);
+        if (!alive) return;
+        setPresets(presetsData);
+        setCategories(categoriesData);
+      } catch (error) {
+        if (!alive) return;
+        const message = describeSaveError(error);
+        log.error(`Loading presets failed: ${message}`, error);
+        console.error('Error loading data:', error);
+        setListMessage({ tone: 'error', text: `Could not load presets: ${message}` });
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const reloadPresets = async () => {
     try {
-      setLoading(true);
-      const [presetsData, categoriesData] = await Promise.all([
-        getCategoryPresets(),
-        getCategories(),
-      ]);
-      setPresets(presetsData);
-      setCategories(categoriesData);
-    } catch (error) {
-      console.error('Error loading data:', error);
-      alert('Failed to load category presets');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadPresets = async () => {
-    try {
-      setLoading(true);
       const data = await getCategoryPresets();
       setPresets(data);
+      setEpoch(e => e + 1);
     } catch (error) {
+      const message = describeSaveError(error);
+      log.error(`Reloading presets failed: ${message}`, error);
       console.error('Error loading presets:', error);
-    } finally {
-      setLoading(false);
+      setListMessage({ tone: 'error', text: `Could not reload presets: ${message}` });
     }
   };
 
@@ -362,11 +1087,14 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
     setBulkBusy(true);
     setBulkMessage(null);
     let failed = 0;
+    let lastError = '';
     for (const p of presets) {
       try {
         await updateCategoryPreset(p.id, { ships_from: value });
       } catch (error) {
         failed++;
+        lastError = describeSaveError(error);
+        log.error(`Setting ship-from failed: ${lastError}`, error);
         console.error('Error setting ship-from on preset:', error);
       }
     }
@@ -375,288 +1103,83 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
     setBulkShipFrom(value);
     setBulkMessage(failed === 0
       ? `Ship-from set on ${total} preset${total === 1 ? '' : 's'}.`
-      : `Ship-from set on ${total - failed} of ${total} presets. ${failed} could not be saved; try again.`);
+      : `Ship-from set on ${total - failed} of ${total} presets. ${failed} could not be saved: ${lastError}`);
     // No category in the detail: every listing built from a preset re-reads it.
     window.dispatchEvent(new CustomEvent('presetsUpdated', { detail: {} }));
-    await loadPresets();
+    await reloadPresets();
   };
 
-  // ── form open helpers ──────────────────────────────────────────────────────
+  // ── list actions ──────────────────────────────────────────────────────────
 
-  const handleCreate = () => {
-    setEditingPreset(null);
-    setFormData({
-      default_weight_unit: 'lb',
-      requires_shipping: true,
+  const selectPreset = (pid: string) => {
+    setSelectedId(pid);
+    setFocusNameFor(null);
+  };
+
+  /** Inserts a row, puts it in the list and opens it with the name selected. */
+  const insertAndSelect = async (input: CategoryPresetInput, what: string) => {
+    setBusy(true);
+    setListMessage(null);
+    saveStatus.begin();
+    try {
+      const created = await createCategoryPreset(input);
+      saveStatus.end(true);
+      setPresets(prev => [...prev, created]);
+      // A duplicate keeps its gender; show the tab it lives on.
+      const g = created.gender;
+      if ((g === 'Men' || g === 'Women' || g === 'Kids') && g !== genderFilter) setGender(g);
+      setSelectedId(created.id);
+      setFocusNameFor(created.id);
+    } catch (error) {
+      const message = describeSaveError(error);
+      log.error(`${what} failed: ${message}`, error);
+      console.error(`Error (${what}):`, error);
+      saveStatus.end(false, `${what} failed: ${message}`);
+      setListMessage({ tone: 'error', text: `${what} failed: ${message}` });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleAdd = () => {
+    void insertAndSelect({
+      category_name: uniqueCategoryName('New preset'),
+      display_name: 'New preset',
+      gender: genderFilter,
       is_active: true,
-      measurement_template: {
-        width: false, length: false, sleeve: false,
-        shoulder: false, waist: false, inseam: false, rise: false,
-      },
-    });
-    setCustomSections(mergeAllSections([]));
-    setShowForm(true);
+      requires_shipping: true,
+      default_weight_unit: 'lb',
+      measurement_template: { ...EMPTY_TEMPLATE },
+    }, 'Adding a preset');
   };
 
-  const handleEdit = (preset: CategoryPreset) => {
-    setEditingPreset(preset);
-    setFormData({
-      category_name: preset.category_name,
-      display_name: preset.display_name,
-      description: preset.description,
-      default_weight_value: preset.default_weight_value,
-      default_weight_unit: preset.default_weight_unit,
-      requires_shipping: preset.requires_shipping,
-      product_type: preset.product_type,
-      vendor: preset.vendor,
-      suggested_price_min: preset.suggested_price_min,
-      suggested_price_max: preset.suggested_price_max,
-      default_material: preset.default_material,
-      default_care_instructions: preset.default_care_instructions,
-      measurement_template: preset.measurement_template,
-      seo_title_template: preset.seo_title_template,
-      seo_keywords: preset.seo_keywords,
-      shopify_product_type: preset.shopify_product_type,
-      shopify_collection_id: preset.shopify_collection_id,
-      default_tags: preset.default_tags,
-      typical_condition: preset.typical_condition,
-      is_active: preset.is_active,
-      package_dimensions: (preset as any).package_dimensions,
-      parcel_size: (preset as any).parcel_size,
-      ships_from: (preset as any).ships_from,
-      continue_selling_out_of_stock: (preset as any).continue_selling_out_of_stock,
-      size_type: (preset as any).size_type,
-      style: (preset as any).style,
-      gender: (preset as any).gender,
-      age_group: (preset as any).age_group,
-      policies: (preset as any).policies,
-      renewal_options: (preset as any).renewal_options,
-      who_made_it: (preset as any).who_made_it,
-      what_is_it: (preset as any).what_is_it,
-      listing_type: (preset as any).listing_type,
-      discounted_shipping: (preset as any).discounted_shipping,
-      custom_label_0: (preset as any).custom_label_0,
-      default_status: (preset as any).default_status ?? 'Active',
-      seo_description: (preset as any).seo_description,
-    });
-    setCustomSections(mergeAllSections(preset.custom_sections ?? []));
-    setShowForm(true);
+  const handleDuplicate = (preset: CategoryPreset) => {
+    const displayName = `${preset.display_name} (copy)`;
+    // The whitelist in the service drops id, user_id and the timestamps, and
+    // anything that is not a column; is_default stays with the original.
+    void insertAndSelect({
+      ...(preset as unknown as CategoryPresetInput),
+      category_name: uniqueCategoryName(displayName),
+      display_name: displayName,
+      is_default: false,
+    }, 'Duplicating');
   };
 
-  const handleDelete = async (id: string, displayName: string) => {
-    if (!confirm(`Delete "${displayName}"?`)) return;
+  const handleDelete = async (preset: CategoryPreset) => {
+    setListMessage(null);
+    saveStatus.begin();
     try {
-      await deleteCategoryPreset(id);
-      await loadPresets();
+      await deleteCategoryPreset(preset.id);
+      saveStatus.end(true);
+      setPresets(prev => prev.filter(p => p.id !== preset.id));
+      window.dispatchEvent(new CustomEvent('presetsUpdated', { detail: { categoryName: preset.category_name } }));
     } catch (error) {
+      const message = describeSaveError(error);
+      log.error(`Deleting preset failed: ${message}`, error);
       console.error('Error deleting preset:', error);
-      alert('Failed to delete preset');
+      saveStatus.end(false, `Delete failed: ${message}`);
+      setListMessage({ tone: 'error', text: `Could not delete "${preset.display_name}": ${message}` });
     }
-  };
-
-  const handleDuplicate = async (preset: CategoryPreset) => {
-    const newDisplayName = prompt('Enter display name for the duplicated preset:', `${preset.display_name} (Copy)`);
-    if (!newDisplayName) return;
-    const suffix = uid();
-    const newCategoryName = newDisplayName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').substring(0, 40) + '_' + suffix;
-    const duplicateData: CategoryPresetInput = {
-      category_name: newCategoryName,
-      display_name: newDisplayName,
-      description: preset.description,
-      default_weight_value: preset.default_weight_value,
-      default_weight_unit: preset.default_weight_unit,
-      requires_shipping: preset.requires_shipping,
-      product_type: preset.product_type,
-      vendor: preset.vendor,
-      suggested_price_min: preset.suggested_price_min,
-      suggested_price_max: preset.suggested_price_max,
-      default_material: preset.default_material,
-      default_care_instructions: preset.default_care_instructions,
-      measurement_template: preset.measurement_template,
-      seo_title_template: preset.seo_title_template,
-      seo_keywords: preset.seo_keywords,
-      shopify_product_type: preset.shopify_product_type,
-      shopify_collection_id: preset.shopify_collection_id,
-      default_tags: preset.default_tags,
-      typical_condition: preset.typical_condition,
-      is_active: preset.is_active,
-      custom_sections: preset.custom_sections,
-      ...(preset as any),
-      id: undefined,
-      user_id: undefined,
-      created_at: undefined,
-      updated_at: undefined,
-    };
-    try {
-      await createCategoryPreset(duplicateData);
-      await loadPresets();
-      alert(`Duplicated: "${newDisplayName}"`);
-    } catch (error) {
-      console.error('Error duplicating preset:', error);
-      alert('Failed to duplicate preset');
-    }
-  };
-
-  // ── submit ─────────────────────────────────────────────────────────────────
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.display_name) { alert('Display name is required'); return; }
-    if (!editingPreset && !formData.product_type) { alert('Please select a category'); return; }
-
-    const dataToSave: Partial<CategoryPresetInput> = {
-      ...formData,
-      // Only persist sections that have at least one field
-      custom_sections: customSections.filter(s => s.fields.length > 0),
-    };
-
-    try {
-      if (editingPreset) {
-        await updateCategoryPreset(editingPreset.id, dataToSave);
-        // Notify the rest of the app so items already in state get the updated preset fields
-        window.dispatchEvent(new CustomEvent('presetsUpdated', {
-          detail: { categoryName: editingPreset.category_name }
-        }));
-        alert('Preset updated');
-      } else {
-        const suffix = uid();
-        const uniqueName = (formData.display_name || 'preset')
-          .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').substring(0, 40) + '_' + suffix;
-        await createCategoryPreset({ ...dataToSave, category_name: uniqueName } as CategoryPresetInput);
-        alert('Preset created');
-      }
-      await loadPresets();
-      setShowForm(false);
-      setEditingPreset(null);
-    } catch (error) {
-      console.error('Error saving preset:', error);
-      alert('Failed to save preset');
-    }
-  };
-
-  // ── measurement helpers ────────────────────────────────────────────────────
-
-  const handleMeasurementToggle = (field: string) => {
-    setFormData(prev => ({
-      ...prev,
-      measurement_template: {
-        ...prev.measurement_template!,
-        [field]: !(prev.measurement_template as any)?.[field],
-      },
-    }));
-  };
-
-  const handleTagsChange = (value: string) => {
-    setFormData(prev => ({ ...prev, default_tags: value.split(',').map(t => t.trim()).filter(Boolean) }));
-  };
-
-  const handleKeywordsChange = (value: string) => {
-    setFormData(prev => ({ ...prev, seo_keywords: value.split(',').map(k => k.trim()).filter(Boolean) }));
-  };
-
-  const loadDefaultTemplate = (categoryName: string) => {
-    const template = DEFAULT_MEASUREMENT_TEMPLATES[categoryName];
-    if (template) setFormData(prev => ({ ...prev, measurement_template: template }));
-  };
-
-  // ── custom sections CRUD ──────────────────────────────────────────────────
-
-  const addSection = () => {
-    const title = prompt('Section name:');
-    if (!title?.trim()) return;
-    setCustomSections(prev => [
-      ...prev,
-      { id: uid(), title: title.trim(), order: prev.length, fields: [] },
-    ]);
-  };
-
-  const renameSection = (id: string) => {
-    const section = customSections.find(s => s.id === id);
-    if (!section) return;
-    const title = prompt('New section name:', section.title);
-    if (!title?.trim()) return;
-    setCustomSections(prev => prev.map(s => s.id === id ? { ...s, title: title.trim() } : s));
-  };
-
-  const deleteSection = (id: string) => {
-    if (!confirm('Delete this section and all its fields?')) return;
-    setCustomSections(prev => prev.filter(s => s.id !== id));
-  };
-
-  const moveSectionUp = (id: string) => {
-    setCustomSections(prev => {
-      const idx = prev.findIndex(s => s.id === id);
-      if (idx <= 0) return prev;
-      const next = [...prev];
-      [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-      return next.map((s, i) => ({ ...s, order: i }));
-    });
-  };
-
-  const moveSectionDown = (id: string) => {
-    setCustomSections(prev => {
-      const idx = prev.findIndex(s => s.id === id);
-      if (idx < 0 || idx >= prev.length - 1) return prev;
-      const next = [...prev];
-      [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
-      return next.map((s, i) => ({ ...s, order: i }));
-    });
-  };
-
-  // ── custom field CRUD ─────────────────────────────────────────────────────
-
-  const openAddField = (sectionId: string) => {
-    setFieldModalSectionId(sectionId);
-    setFieldModalEditing(undefined);
-    setFieldModalOpen(true);
-  };
-
-  const openEditField = (sectionId: string, field: CustomFieldDefinition) => {
-    setFieldModalSectionId(sectionId);
-    setFieldModalEditing(field);
-    setFieldModalOpen(true);
-  };
-
-  const handleFieldSave = (f: CustomFieldDefinition) => {
-    setCustomSections(prev => prev.map(s => {
-      if (s.id !== fieldModalSectionId) return s;
-      const existing = s.fields.find(fl => fl.id === f.id);
-      const fields = existing
-        ? s.fields.map(fl => fl.id === f.id ? { ...f, order: fl.order } : fl)
-        : [...s.fields, { ...f, order: s.fields.length }];
-      return { ...s, fields };
-    }));
-    setFieldModalOpen(false);
-  };
-
-  const deleteField = (sectionId: string, fieldId: string) => {
-    if (!confirm('Delete this field?')) return;
-    setCustomSections(prev => prev.map(s => {
-      if (s.id !== sectionId) return s;
-      return { ...s, fields: s.fields.filter(f => f.id !== fieldId).map((f, i) => ({ ...f, order: i })) };
-    }));
-  };
-
-  const moveFieldUp = (sectionId: string, fieldId: string) => {
-    setCustomSections(prev => prev.map(s => {
-      if (s.id !== sectionId) return s;
-      const idx = s.fields.findIndex(f => f.id === fieldId);
-      if (idx <= 0) return s;
-      const fields = [...s.fields];
-      [fields[idx - 1], fields[idx]] = [fields[idx], fields[idx - 1]];
-      return { ...s, fields: fields.map((f, i) => ({ ...f, order: i })) };
-    }));
-  };
-
-  const moveFieldDown = (sectionId: string, fieldId: string) => {
-    setCustomSections(prev => prev.map(s => {
-      if (s.id !== sectionId) return s;
-      const idx = s.fields.findIndex(f => f.id === fieldId);
-      if (idx < 0 || idx >= s.fields.length - 1) return s;
-      const fields = [...s.fields];
-      [fields[idx], fields[idx + 1]] = [fields[idx + 1], fields[idx]];
-      return { ...s, fields: fields.map((f, i) => ({ ...f, order: i })) };
-    }));
   };
 
   // ── render ─────────────────────────────────────────────────────────────────
@@ -666,10 +1189,9 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
   }
 
   return (
-    /* Page layout: the preset list is the left column and the editor — a
-       full-screen modal until now — is the right one, so you can see what you
-       are editing next to everything else. */
-    <div className={`presets-page${showForm ? ' presets-page--editing' : ''}`}>
+    /* Page layout: the preset list is the left column and the selected preset
+       is the right one; on a phone they stack, the editor first. */
+    <div className={`presets-page${selected ? ' presets-page--editing' : ''}`}>
       <div className="presets-toolbar">
         {/* ──────────── Gender Toggle ──────────── */}
         <div className="presets-gender-tabs">
@@ -686,450 +1208,34 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
             </button>
           ))}
         </div>
-        <button className="button" onClick={handleCreate}>+ Create new preset</button>
+        <Button variant="primary" icon={<Plus size={16} />} onClick={handleAdd} disabled={busy}>Add preset</Button>
       </div>
 
+      {listMessage && (
+        <p
+          className={`presets-list-message${listMessage.tone === 'error' ? ' presets-list-message--error' : ''}`}
+          role={listMessage.tone === 'error' ? 'alert' : 'status'}
+        >
+          {listMessage.text}
+        </p>
+      )}
+
       <div className="presets-body tv-cols">
-        {/* ──────────── Preset editor ──────────── */}
-        {showForm && (
-          /* data-tv-modal parks ToolView's Escape-to-workflow while an edit is
-             open, so a stray Escape can never throw away a half-written preset. */
-          <div className="preset-editor" data-tv-modal>
-            <div className="preset-editor-inner">
-              <div className="preset-editor-head">
-                <h2 className="tv-section-title" style={{ margin: 0 }}>{editingPreset ? 'Edit' : 'Create'} preset</h2>
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                  <button type="button" className="button button-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-                  <button form="preset-form" type="submit" className="button">{editingPreset ? 'Update' : 'Create'} Preset</button>
-                </div>
-              </div>
-
-              <form id="preset-form" onSubmit={handleSubmit}>
-
-                {/* Basic Info */}
-                <details className="form-section" open>
-                  <summary>Basic Information</summary>
-                  <div className="form-group">
-                    <label>Category *</label>
-                    {editingPreset ? (
-                      <input type="text" value={formData.category_name || ''} disabled />
-                    ) : (
-                      <select
-                        value={formData.product_type || ''}
-                        onChange={e => {
-                          const sel = categories.find(c => c.name === e.target.value);
-                          setFormData(prev => ({
-                            ...prev,
-                            product_type: e.target.value,
-                            category_name: e.target.value,
-                            display_name: sel?.display_name || e.target.value,
-                          }));
-                        }}
-                        required
-                      >
-                        <option value="">-- Select a Category --</option>
-                        {categories.map(cat => (
-                          <option key={cat.id} value={cat.name}>{cat.emoji} {cat.display_name}</option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                  <div className="form-group">
-                    <label>Display Name *</label>
-                    <input type="text" value={formData.display_name || ''} onChange={e => setFormData(prev => ({ ...prev, display_name: e.target.value }))} placeholder="e.g., Sweatshirts & Hoodies" required />
-                  </div>
-                  <div className="form-group">
-                    <label>Description</label>
-                    <textarea value={formData.description || ''} onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))} rows={2} />
-                  </div>
-                  <CustomFieldsBlock
-                    fields={customSections.find(s => s.id === '__basic__')?.fields ?? []}
-                    onAdd={() => openAddField('__basic__')}
-                    onEdit={f => openEditField('__basic__', f)}
-                    onDelete={fieldId => deleteField('__basic__', fieldId)}
-                    onMoveUp={fieldId => moveFieldUp('__basic__', fieldId)}
-                    onMoveDown={fieldId => moveFieldDown('__basic__', fieldId)}
-                  />
-                </details>
-
-                {/* Shipping */}
-                <details className="form-section" open>
-                  <summary>Shipping & Physical Attributes</summary>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label>Default Weight</label>
-                      <input type="text" value={formData.default_weight_value || ''} onChange={e => setFormData(prev => ({ ...prev, default_weight_value: e.target.value }))} placeholder="e.g., 1.2" />
-                    </div>
-                    <div className="form-group">
-                      <label>Weight Unit</label>
-                      <select value={formData.default_weight_unit || 'lb'} onChange={e => setFormData(prev => ({ ...prev, default_weight_unit: e.target.value as any }))}>
-                        <option value="lb">Pounds (lb)</option>
-                        <option value="oz">Ounces (oz)</option>
-                        <option value="kg">Kilograms (kg)</option>
-                        <option value="g">Grams (g)</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="form-group checkbox-group">
-                    <label>
-                      <input type="checkbox" checked={formData.requires_shipping ?? true} onChange={e => setFormData(prev => ({ ...prev, requires_shipping: e.target.checked }))} />
-                      Requires Shipping
-                    </label>
-                  </div>
-                  <CustomFieldsBlock
-                    fields={customSections.find(s => s.id === '__shipping__')?.fields ?? []}
-                    onAdd={() => openAddField('__shipping__')}
-                    onEdit={f => openEditField('__shipping__', f)}
-                    onDelete={fieldId => deleteField('__shipping__', fieldId)}
-                    onMoveUp={fieldId => moveFieldUp('__shipping__', fieldId)}
-                    onMoveDown={fieldId => moveFieldDown('__shipping__', fieldId)}
-                  />
-                </details>
-
-                {/* Classification */}
-                <details className="form-section" open>
-                  <summary>Product Classification</summary>
-                  <div className="form-group">
-                    <label>Product Type</label>
-                    <input type="text" value={formData.product_type || ''} onChange={e => setFormData(prev => ({ ...prev, product_type: e.target.value }))} placeholder="e.g., Apparel" />
-                  </div>
-                  <div className="form-group">
-                    <label>Default Vendor/Brand</label>
-                    <input type="text" value={formData.vendor || ''} onChange={e => setFormData(prev => ({ ...prev, vendor: e.target.value }))} placeholder="Optional" />
-                  </div>
-                  <div className="form-group">
-                    <label>Shopify Product Type</label>
-                    <input type="text" value={formData.shopify_product_type || ''} onChange={e => setFormData(prev => ({ ...prev, shopify_product_type: e.target.value }))} placeholder="For Shopify integration" />
-                  </div>
-                  <CustomFieldsBlock
-                    fields={customSections.find(s => s.id === '__classification__')?.fields ?? []}
-                    onAdd={() => openAddField('__classification__')}
-                    onEdit={f => openEditField('__classification__', f)}
-                    onDelete={fieldId => deleteField('__classification__', fieldId)}
-                    onMoveUp={fieldId => moveFieldUp('__classification__', fieldId)}
-                    onMoveDown={fieldId => moveFieldDown('__classification__', fieldId)}
-                  />
-                </details>
-
-                {/* Pricing */}
-                <details className="form-section" open>
-                  <summary>Pricing Guidance</summary>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label>Min Price ($)</label>
-                      <input type="number" step="0.01" value={formData.suggested_price_min || ''} onChange={e => setFormData(prev => ({ ...prev, suggested_price_min: parseFloat(e.target.value) || undefined }))} placeholder="25.00" />
-                    </div>
-                    <div className="form-group">
-                      <label>Max Price ($)</label>
-                      <input type="number" step="0.01" value={formData.suggested_price_max || ''} onChange={e => setFormData(prev => ({ ...prev, suggested_price_max: parseFloat(e.target.value) || undefined }))} placeholder="75.00" />
-                    </div>
-                  </div>
-                  <CustomFieldsBlock
-                    fields={customSections.find(s => s.id === '__pricing__')?.fields ?? []}
-                    onAdd={() => openAddField('__pricing__')}
-                    onEdit={f => openEditField('__pricing__', f)}
-                    onDelete={fieldId => deleteField('__pricing__', fieldId)}
-                    onMoveUp={fieldId => moveFieldUp('__pricing__', fieldId)}
-                    onMoveDown={fieldId => moveFieldDown('__pricing__', fieldId)}
-                  />
-                </details>
-
-                {/* Attributes */}
-                <details className="form-section" open>
-                  <summary>Product Attributes</summary>
-                  <div className="form-group">
-                    <label>Default Material</label>
-                    <input type="text" value={formData.default_material || ''} onChange={e => setFormData(prev => ({ ...prev, default_material: e.target.value }))} placeholder="e.g., Cotton, Polyester" />
-                  </div>
-                  <div className="form-group">
-                    <label>Default Care Instructions</label>
-                    <textarea value={formData.default_care_instructions || ''} onChange={e => setFormData(prev => ({ ...prev, default_care_instructions: e.target.value }))} rows={2} />
-                  </div>
-                  <div className="form-group">
-                    <label>Typical Condition</label>
-                    <select value={formData.typical_condition || ''} onChange={e => setFormData(prev => ({ ...prev, typical_condition: e.target.value }))}>
-                      <option value="">None</option>
-                      <option value="NWT">NWT</option>
-                      <option value="Like New">Like New</option>
-                      <option value="Excellent">Excellent</option>
-                      <option value="Good">Good</option>
-                      <option value="Fair">Fair</option>
-                    </select>
-                  </div>
-                  <CustomFieldsBlock
-                    fields={customSections.find(s => s.id === '__attributes__')?.fields ?? []}
-                    onAdd={() => openAddField('__attributes__')}
-                    onEdit={f => openEditField('__attributes__', f)}
-                    onDelete={fieldId => deleteField('__attributes__', fieldId)}
-                    onMoveUp={fieldId => moveFieldUp('__attributes__', fieldId)}
-                    onMoveDown={fieldId => moveFieldDown('__attributes__', fieldId)}
-                  />
-                </details>
-
-                {/* Shipping CSV */}
-                <details className="form-section" open>
-                  <summary>Shipping & Packaging (CSV Export)</summary>
-                  <div className="form-group">
-                    <label>Package Dimensions</label>
-                    <input type="text" value={(formData as any).package_dimensions || ''} onChange={e => setFormData(prev => ({ ...prev, package_dimensions: e.target.value } as any))} placeholder="12 in - 10 in - 4 in" />
-                  </div>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label>Parcel Size</label>
-                      <select value={(formData as any).parcel_size || ''} onChange={e => setFormData(prev => ({ ...prev, parcel_size: e.target.value } as any))}>
-                        <option value="">-- Select --</option>
-                        <option value="Small">Small</option>
-                        <option value="Medium">Medium</option>
-                        <option value="Large">Large</option>
-                        <option value="Extra Large">Extra Large</option>
-                      </select>
-                    </div>
-                    <div className="form-group checkbox-group">
-                      <label>
-                        <input type="checkbox" checked={(formData as any).continue_selling_out_of_stock ?? false} onChange={e => setFormData(prev => ({ ...prev, continue_selling_out_of_stock: e.target.checked } as any))} />
-                        Continue Selling OOS
-                      </label>
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label>Ships From</label>
-                    <input type="text" value={(formData as any).ships_from || ''} onChange={e => setFormData(prev => ({ ...prev, ships_from: e.target.value } as any))} placeholder="Street, city, state and ZIP" aria-describedby="preset-ships-from-hint" />
-                    <small id="preset-ships-from-hint">Used on every listing made from this preset. This workspace’s only; never shared with other shops.</small>
-                  </div>
-                  <CustomFieldsBlock
-                    fields={customSections.find(s => s.id === '__shipping_csv__')?.fields ?? []}
-                    onAdd={() => openAddField('__shipping_csv__')}
-                    onEdit={f => openEditField('__shipping_csv__', f)}
-                    onDelete={fieldId => deleteField('__shipping_csv__', fieldId)}
-                    onMoveUp={fieldId => moveFieldUp('__shipping_csv__', fieldId)}
-                    onMoveDown={fieldId => moveFieldDown('__shipping_csv__', fieldId)}
-                  />
-                </details>
-
-                {/* Classification CSV */}
-                <details className="form-section" open>
-                  <summary>Product Classification (CSV Export)</summary>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label>Size Type</label>
-                      <select value={(formData as any).size_type || ''} onChange={e => setFormData(prev => ({ ...prev, size_type: e.target.value } as any))}>
-                        <option value="">-- Select --</option>
-                        <option value="Regular">Regular</option>
-                        <option value="Big & Tall">Big & Tall</option>
-                        <option value="Petite">Petite</option>
-                        <option value="Plus Size">Plus Size</option>
-                        <option value="One Size">One Size</option>
-                      </select>
-                    </div>
-                    <div className="form-group">
-                      <label>Gender</label>
-                      <select value={(formData as any).gender || ''} onChange={e => setFormData(prev => ({ ...prev, gender: e.target.value } as any))}>
-                        <option value="">-- Select --</option>
-                        <option value="Men">Men</option>
-                        <option value="Women">Women</option>
-                        <option value="Unisex">Unisex</option>
-                        <option value="Kids">Kids</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label>Style</label>
-                      <input type="text" value={(formData as any).style || ''} onChange={e => setFormData(prev => ({ ...prev, style: e.target.value } as any))} placeholder="Vintage, Modern, Streetwear" />
-                    </div>
-                    <div className="form-group">
-                      <label>Age Group</label>
-                      <input type="text" value={(formData as any).age_group || ''} onChange={e => setFormData(prev => ({ ...prev, age_group: e.target.value } as any))} placeholder="Adult (13+ years old)" />
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label>Default Status</label>
-                    <select value={(formData as any).default_status || 'Active'} onChange={e => setFormData(prev => ({ ...prev, default_status: e.target.value } as any))}>
-                      <option value="Active">Active</option>
-                      <option value="Draft">Draft</option>
-                      <option value="Archived">Archived</option>
-                    </select>
-                  </div>
-                  <CustomFieldsBlock
-                    fields={customSections.find(s => s.id === '__classification_csv__')?.fields ?? []}
-                    onAdd={() => openAddField('__classification_csv__')}
-                    onEdit={f => openEditField('__classification_csv__', f)}
-                    onDelete={fieldId => deleteField('__classification_csv__', fieldId)}
-                    onMoveUp={fieldId => moveFieldUp('__classification_csv__', fieldId)}
-                    onMoveDown={fieldId => moveFieldDown('__classification_csv__', fieldId)}
-                  />
-                </details>
-
-                {/* Policies */}
-                <details className="form-section" open>
-                  <summary>Policies & Marketplace (CSV Export)</summary>
-                  <div className="form-group">
-                    <label>Policies</label>
-                    <input type="text" value={(formData as any).policies || ''} onChange={e => setFormData(prev => ({ ...prev, policies: e.target.value } as any))} placeholder="No Returns; No Exchanges" />
-                  </div>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label>Who Made It</label>
-                      <input type="text" value={(formData as any).who_made_it || ''} onChange={e => setFormData(prev => ({ ...prev, who_made_it: e.target.value } as any))} placeholder="Another Company Or Person" />
-                    </div>
-                    <div className="form-group">
-                      <label>What Is It</label>
-                      <input type="text" value={(formData as any).what_is_it || ''} onChange={e => setFormData(prev => ({ ...prev, what_is_it: e.target.value } as any))} placeholder="A Finished Product" />
-                    </div>
-                  </div>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label>Listing Type</label>
-                      <input type="text" value={(formData as any).listing_type || ''} onChange={e => setFormData(prev => ({ ...prev, listing_type: e.target.value } as any))} placeholder="Physical Item" />
-                    </div>
-                    <div className="form-group">
-                      <label>Renewal Options</label>
-                      <input type="text" value={(formData as any).renewal_options || ''} onChange={e => setFormData(prev => ({ ...prev, renewal_options: e.target.value } as any))} placeholder="Automatic" />
-                    </div>
-                  </div>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label>Discounted Shipping</label>
-                      <input type="text" value={(formData as any).discounted_shipping || ''} onChange={e => setFormData(prev => ({ ...prev, discounted_shipping: e.target.value } as any))} placeholder="No Discount" />
-                    </div>
-                    <div className="form-group">
-                      <label>Custom Label (Google Shopping)</label>
-                      <input type="text" value={(formData as any).custom_label_0 || ''} onChange={e => setFormData(prev => ({ ...prev, custom_label_0: e.target.value } as any))} placeholder="Top Seller" />
-                    </div>
-                  </div>
-                  <CustomFieldsBlock
-                    fields={customSections.find(s => s.id === '__policies__')?.fields ?? []}
-                    onAdd={() => openAddField('__policies__')}
-                    onEdit={f => openEditField('__policies__', f)}
-                    onDelete={fieldId => deleteField('__policies__', fieldId)}
-                    onMoveUp={fieldId => moveFieldUp('__policies__', fieldId)}
-                    onMoveDown={fieldId => moveFieldDown('__policies__', fieldId)}
-                  />
-                </details>
-
-                {/* Measurements */}
-                <details className="form-section" open>
-                  <summary>Measurement Template</summary>
-                  <p className="form-hint">Select which measurements apply to this category</p>
-                  {formData.category_name && DEFAULT_MEASUREMENT_TEMPLATES[formData.category_name] && (
-                    <button type="button" className="button button-secondary" onClick={() => loadDefaultTemplate(formData.category_name!)} style={{ marginBottom: '1rem' }}>
-                      Load Default Template for {formData.category_name}
-                    </button>
-                  )}
-                  <div className="measurement-checkboxes">
-                    {Object.keys(formData.measurement_template || {}).map(field => (
-                      <label key={field} className="checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={formData.measurement_template?.[field as keyof typeof formData.measurement_template] || false}
-                          onChange={() => handleMeasurementToggle(field)}
-                        />
-                        {field.charAt(0).toUpperCase() + field.slice(1)}
-                      </label>
-                    ))}
-                  </div>
-                  <CustomFieldsBlock
-                    fields={customSections.find(s => s.id === '__measurements__')?.fields ?? []}
-                    onAdd={() => openAddField('__measurements__')}
-                    onEdit={f => openEditField('__measurements__', f)}
-                    onDelete={fieldId => deleteField('__measurements__', fieldId)}
-                    onMoveUp={fieldId => moveFieldUp('__measurements__', fieldId)}
-                    onMoveDown={fieldId => moveFieldDown('__measurements__', fieldId)}
-                  />
-                </details>
-
-                {/* Tags & SEO */}
-                <details className="form-section" open>
-                  <summary>Tags & SEO</summary>
-                  <div className="form-group">
-                    <label>Default Tags (comma-separated)</label>
-                    <input type="text" value={formData.default_tags?.join(', ') || ''} onChange={e => handleTagsChange(e.target.value)} placeholder="sweatshirt, pullover, vintage" />
-                  </div>
-                  <div className="form-group">
-                    <label>SEO Keywords (comma-separated)</label>
-                    <input type="text" value={formData.seo_keywords?.join(', ') || ''} onChange={e => handleKeywordsChange(e.target.value)} placeholder="vintage, retro, streetwear" />
-                  </div>
-                  <div className="form-group">
-                    <label>SEO Title Template</label>
-                    <input type="text" value={formData.seo_title_template || ''} onChange={e => setFormData(prev => ({ ...prev, seo_title_template: e.target.value }))} placeholder="{size} {brand} {category} {color}" />
-                    <small>Placeholders: {'{size}'}, {'{brand}'}, {'{category}'}, {'{color}'}, {'{era}'}</small>
-                  </div>
-                  <div className="form-group">
-                    <label>SEO Description (default)</label>
-                    <textarea
-                      value={(formData as any).seo_description || ''}
-                      onChange={e => setFormData(prev => ({ ...prev, seo_description: e.target.value } as any))}
-                      rows={3}
-                      placeholder="Default meta description applied to every product in this category…"
-                    />
-                    <small>Applied to new products when this preset is used. Overridden by any value already on the item.</small>
-                  </div>
-                  <CustomFieldsBlock
-                    fields={customSections.find(s => s.id === '__tags__')?.fields ?? []}
-                    onAdd={() => openAddField('__tags__')}
-                    onEdit={f => openEditField('__tags__', f)}
-                    onDelete={fieldId => deleteField('__tags__', fieldId)}
-                    onMoveUp={fieldId => moveFieldUp('__tags__', fieldId)}
-                    onMoveDown={fieldId => moveFieldDown('__tags__', fieldId)}
-                  />
-                </details>
-
-                {/* ── Custom Sections ─────────────────────────────────────── */}
-                <div className="form-section custom-sections-wrapper">
-                  <div className="custom-sections-header">
-                    <h4>Custom Sections</h4>
-                    <button type="button" className="button button-secondary button-sm" onClick={addSection}>
-                      + Add Section
-                    </button>
-                  </div>
-
-                  {customSections.length === 0 && (
-                    <p className="form-hint">No custom sections yet. Click "+ Add Section" to create one.</p>
-                  )}
-
-                  {customSections.map((section, sIdx) => (
-                    <div key={section.id} className="custom-section-block">
-                      <SectionHeader
-                        title={section.title}
-                        isCustom={true}
-                        canMoveUp={sIdx > 0}
-                        canMoveDown={sIdx < customSections.length - 1}
-                        onMoveUp={() => moveSectionUp(section.id)}
-                        onMoveDown={() => moveSectionDown(section.id)}
-                        onRename={() => renameSection(section.id)}
-                        onDelete={() => deleteSection(section.id)}
-                      />
-                      <CustomFieldsBlock
-                        fields={section.fields}
-                        onAdd={() => openAddField(section.id)}
-                        onEdit={f => openEditField(section.id, f)}
-                        onDelete={fieldId => deleteField(section.id, fieldId)}
-                        onMoveUp={fieldId => moveFieldUp(section.id, fieldId)}
-                        onMoveDown={fieldId => moveFieldDown(section.id, fieldId)}
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                <div className="form-actions" style={{ display: 'none' }}>
-                  <button type="button" className="button button-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-                  <button type="submit" className="button">{editingPreset ? 'Update' : 'Create'} Preset</button>
-                </div>
-              </form>
-            </div>
+        {/* ──────────── The selected preset ──────────── */}
+        {selected && (
+          <div className="preset-editor">
+            <PresetEditor
+              key={`${selected.id}:${epoch}`}
+              preset={selected}
+              categories={categories}
+              queue={queue}
+              status={statusById[selected.id] ?? IDLE}
+              autoFocusName={focusNameFor === selected.id}
+            />
           </div>
         )}
 
-        {/* Field Modal */}
-        {fieldModalOpen && (
-          <FieldModal
-            initial={fieldModalEditing}
-            onSave={handleFieldSave}
-            onClose={() => setFieldModalOpen(false)}
-          />
-        )}
-
-        {/* ──────────── Preset Cards ──────────── */}
+        {/* ──────────── Preset list ──────────── */}
         <div className="presets-grid">
           {/* Every preset, not just the gender tab on screen: the address is
               the workspace's, so one write covers the lot. */}
@@ -1162,51 +1268,74 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
           )}
           {filteredPresets.length === 0 ? (
             <div className="empty-state">
-              <p>No {genderFilter} presets yet. Create one or use the seed SQL to add defaults.</p>
+              <p>No {genderFilter} presets yet. Add one to get started.</p>
             </div>
           ) : (
-            filteredPresets.map(preset => (
-              <div key={preset.id} className="preset-card">
-                <div className="preset-header">
-                  <h3>{preset.display_name}</h3>
-                  <span className="preset-category">{preset.product_type || preset.category_name}</span>
-                </div>
-                {presetNeedsShipFrom(preset) && (
-                  <div className="preset-flags">
-                    <Badge tone="warning">No ship-from</Badge>
+            filteredPresets.map(preset => {
+              const isSelected = selected?.id === preset.id;
+              return (
+                <div
+                  key={preset.id}
+                  className={`preset-card${isSelected ? ' preset-card--selected' : ''}`}
+                  onClick={e => {
+                    if ((e.target as HTMLElement).closest('button, a, input, select, textarea')) return;
+                    selectPreset(preset.id);
+                  }}
+                >
+                  <div className="preset-header">
+                    <h3>
+                      <button
+                        type="button"
+                        className="preset-card-select"
+                        aria-pressed={isSelected}
+                        onClick={() => selectPreset(preset.id)}
+                      >
+                        {preset.display_name}
+                      </button>
+                    </h3>
+                    <span className="preset-category">{preset.product_type || preset.category_name}</span>
                   </div>
-                )}
-                {preset.description && <p className="preset-description">{preset.description}</p>}
-                <div className="preset-details">
-                  {preset.default_weight_value && (
-                    <div className="preset-detail"><strong>Weight:</strong> {preset.default_weight_value} {preset.default_weight_unit}</div>
-                  )}
-                  {preset.product_type && (
-                    <div className="preset-detail"><strong>Type:</strong> {preset.product_type}</div>
-                  )}
-                  {preset.suggested_price_min && preset.suggested_price_max && (
-                    <div className="preset-detail"><strong>Price:</strong> ${preset.suggested_price_min} – ${preset.suggested_price_max}</div>
-                  )}
-                  {preset.default_tags && preset.default_tags.length > 0 && (
-                    <div className="preset-detail"><strong>Tags:</strong> {preset.default_tags.join(', ')}</div>
-                  )}
-                  <div className="preset-detail">
-                    <strong>Measurements:</strong>{' '}
-                    {Object.entries(preset.measurement_template).filter(([, v]) => v).map(([k]) => k).join(', ') || 'None'}
-                  </div>
-                  {preset.custom_sections && preset.custom_sections.length > 0 && (
-                    <div className="preset-detail">
-                      <strong>Custom Sections:</strong> {preset.custom_sections.map(s => `${s.title} (${s.fields.length} field${s.fields.length !== 1 ? 's' : ''})`).join(', ')}
+                  {presetNeedsShipFrom(preset) && (
+                    <div className="preset-flags">
+                      <Badge tone="warning">No ship-from</Badge>
                     </div>
                   )}
+                  {preset.description && <p className="preset-description">{preset.description}</p>}
+                  <div className="preset-details">
+                    {preset.default_weight_value && (
+                      <div className="preset-detail"><strong>Weight:</strong> {preset.default_weight_value} {preset.default_weight_unit}</div>
+                    )}
+                    {preset.suggested_price_min && preset.suggested_price_max && (
+                      <div className="preset-detail"><strong>Price:</strong> ${preset.suggested_price_min} to ${preset.suggested_price_max}</div>
+                    )}
+                    {preset.default_tags && preset.default_tags.length > 0 && (
+                      <div className="preset-detail"><strong>Tags:</strong> {preset.default_tags.join(', ')}</div>
+                    )}
+                    <div className="preset-detail">
+                      <strong>Measurements:</strong>{' '}
+                      {Object.entries(preset.measurement_template ?? {}).filter(([, v]) => v).map(([k]) => measureLabel(k).toLowerCase()).join(', ') || 'None'}
+                    </div>
+                    {preset.custom_sections && preset.custom_sections.length > 0 && (
+                      <div className="preset-detail">
+                        <strong>Custom fields:</strong> {preset.custom_sections.reduce((n, s) => n + s.fields.length, 0)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="preset-actions">
+                    <Button size="sm" variant="secondary" icon={<Copy size={14} />} onClick={() => handleDuplicate(preset)} disabled={busy}>
+                      Duplicate
+                    </Button>
+                    <ConfirmAction
+                      label="Delete"
+                      icon={<Trash2 size={14} />}
+                      confirmLabel="Delete"
+                      prompt={`Delete "${preset.display_name}"?`}
+                      onConfirm={() => { void handleDelete(preset); }}
+                    />
+                  </div>
                 </div>
-                <div className="preset-actions">
-                  <button className="button button-secondary" onClick={() => handleEdit(preset)}>Edit</button>
-                  <button className="button" onClick={() => handleDuplicate(preset)}>Duplicate</button>
-                  <button className="button button-danger" onClick={() => handleDelete(preset.id, preset.display_name)}>Delete</button>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
