@@ -288,25 +288,68 @@
   line-height: var(--lh-snug);
 }
 
-/* ── Storage meter ────────────────────────────────────────────────────────── */
+/* ── Plan usage meters (069) ──────────────────────────────────────────────
+   Quiet by default: an --accent bar on an --ink-700 track. Semantics only for
+   the two real states, --warning from 85% and --danger at or over the limit. */
 
-.home-meter {
-  height: 0.8rem;
+.home-usage {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+}
+
+.home-usage-row {
+  --home-usage-tone: var(--accent);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.home-usage-row--warn { --home-usage-tone: var(--warning); }
+.home-usage-row--over { --home-usage-tone: var(--danger); }
+
+.home-usage-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.2rem;
+  font-size: var(--fs-sm);
+}
+
+.home-usage-label { color: var(--text-secondary); }
+
+.home-usage-value {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.home-usage-row--warn .home-usage-value,
+.home-usage-row--over .home-usage-value { color: var(--home-usage-tone); }
+
+.home-usage-track {
+  height: 0.6rem;
   background: var(--ink-700);
   border-radius: 999px;
   overflow: hidden;
 }
 
-.home-meter-bar {
+.home-usage-fill {
   height: 100%;
   min-width: 0.4rem;
-  background: var(--accent);
+  background: var(--home-usage-tone);
   border-radius: 999px;
   transition: width var(--dur) var(--ease);
 }
 
-/* Semantics are spent only on the one real state: a bucket about to fill up. */
-.home-meter-bar--warn { background: var(--warning); }
+.home-usage-hint {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
 
 .home-note {
   margin: 0;
@@ -363,6 +406,9 @@
   .home-link {
     min-height: 44px;
   }
+
+  /* Each meter row is a 44px band so the list reads at thumb size. */
+  .home-usage-row { min-height: 44px; justify-content: center; }
 
   .home-link { padding: 0 0.8rem; margin: 0 -0.8rem; }
 

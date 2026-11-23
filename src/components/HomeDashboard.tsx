@@ -13,9 +13,10 @@ import type { ClothingItem } from '../App';
 import type { OrgRole } from '../lib/orgService';
 import type { DescriptionSettings } from '../lib/descriptionSettings';
 import {
-  batchSummary, publicationCounts, recentBatchRows, storageReadout,
-  type PublicationCounts, type RecentBatchRow,
+  batchSummary, planUsageMeters, publicationCounts, recentBatchRows,
+  type PlanUsageMeter, type PublicationCounts, type RecentBatchRow,
 } from '../lib/home';
+import { fetchOrgUsage, planDisplayName, type OrgUsage } from '../lib/usageService';
 import { getWorkflowBatch, fetchWorkflowBatchesMeta } from '../lib/workflowBatchService';
 import type { WorkflowBatch } from '../lib/workflowBatchService';
 import {
@@ -58,13 +59,6 @@ import './HomeDashboard.css';
    a new shop sees. Widgets whose feature is not installed hide entirely.
    ════════════════════════════════════════════════════════════════════════════ */
 
-export interface HomeDashboardStorage {
-  usedBytes: number;
-  fileCount: number;
-  loading: boolean;
-  limitGb: number;
-}
-
 export interface HomeDashboardProps {
   /** Shown in the greeting line. */
   userEmail: string | null;
@@ -93,7 +87,6 @@ export interface HomeDashboardProps {
   items: ClothingItem[];
   /** App increments this on upload / group / save; the widgets re-read on it. */
   refreshTrigger: number;
-  storage: HomeDashboardStorage | null;
   /** Reveal the workflow on `step`. Also the "Upload photos" action, with 1. */
   onResume: (step: WorkflowStep) => void;
   /** Ends the session without a window.confirm — App's `startNewBatch`. */
@@ -140,6 +133,37 @@ function CardSkeleton({ lines = 3 }: { lines?: number }) {
   );
 }
 
+/**
+ * One plan meter: label left, "used of limit" right, a thin bar under them.
+ * Unlimited hides the bar and keeps the value. Tints: `--warning` from 85%,
+ * `--danger` at or over the limit. Module scope for the same reason HomeCard is.
+ */
+function UsageMeterRow({ meter }: { meter: PlanUsageMeter }) {
+  const r = meter.readout;
+  return (
+    <li className={`home-usage-row home-usage-row--${r.tone}`}>
+      <div className="home-usage-line">
+        <span className="home-usage-label">{meter.label}</span>
+        <span className="home-usage-value">{r.text}</span>
+      </div>
+      {!r.unlimited && (
+        <div
+          className="home-usage-track"
+          role="meter"
+          aria-label={meter.label}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={r.percent}
+          aria-valuetext={r.text}
+        >
+          <div className="home-usage-fill" style={{ width: `${r.percent}%` }} />
+        </div>
+      )}
+      {meter.hint && <span className="home-usage-hint">{meter.hint}</span>}
+    </li>
+  );
+}
+
 /* ── Async widget state ─────────────────────────────────────────────────────
    Four independent pieces rather than one, so a slow marketplaces read cannot
    hold the recent-batches list behind it. `hidden` is a real state: it means
@@ -161,7 +185,7 @@ interface MarketplacesData {
 
 function HomeDashboard({
   userEmail, userId, orgName, orgId, isFounder, orgPlan, orgRole, descriptionSettings,
-  navItems, activeBatchId, activeBatchNumber, items, refreshTrigger, storage,
+  navItems, activeBatchId, activeBatchNumber, items, refreshTrigger,
   onResume, onStartNewBatch, onOpenBatch, onNavigate, onOpenMarketplaces,
 }: HomeDashboardProps) {
   const [recent, setRecent] = useState<Settling<RecentBatchRow[]>>(LOADING);
@@ -169,6 +193,8 @@ function HomeDashboard({
   const [activeName, setActiveName] = useState<string | null>(null);
   const [markets, setMarkets] = useState<Loadable<MarketplacesData>>(LOADING);
   const [pulse, setPulse] = useState<Loadable<AnalyticsSummary>>(LOADING);
+  /** The workspace's plan meters (069). Hidden on anything but 'ok'. */
+  const [usage, setUsage] = useState<Loadable<OrgUsage>>(LOADING);
   /** Founder-only counts for the pulse widget's beta line. Zero is the honest
    *  answer when a read fails — this widget is not where a founder learns that
    *  a migration is missing. */
@@ -227,6 +253,19 @@ function HomeDashboard({
           if (pubs.status === 'ok') counts = publicationCounts(pubs.rows);
         }
         setMarkets({ status: 'ok', data: { enabled, counts } });
+      })();
+    }
+
+    /* Plan usage. FAILS QUIET in every way it can fail: 'unavailable' (069 not
+       run), 'forbidden' and 'error' all hide the widget. A member must never
+       land on an error about a meter. */
+    if (!orgId) {
+      setUsage(HIDDEN);
+    } else {
+      void (async () => {
+        const res = await fetchOrgUsage(orgId);
+        if (cancelled) return;
+        setUsage(res.status === 'ok' ? { status: 'ok', data: res.data } : HIDDEN);
       })();
     }
 
@@ -298,7 +337,10 @@ function HomeDashboard({
     return tiles;
   }, [navItems, onNavigate, onOpenMarketplaces]);
 
-  const store = storage ? storageReadout(storage.usedBytes, storage.limitGb) : null;
+  const meters = useMemo(
+    () => (usage.status === 'ok' ? planUsageMeters(usage.data) : []),
+    [usage],
+  );
   const greetingName = userEmail ? userEmail.split('@')[0] : null;
 
   return (
@@ -500,33 +542,24 @@ function HomeDashboard({
             </div>
           </HomeCard>
 
-          {/* ── 5. Storage ────────────────────────────────────────────────── */}
-          {store && (
-            <HomeCard title="Storage" icon={<Boxes size={16} />}>
-              <StatGrid className="home-stats">
-                <StatTile
-                  quiet compact
-                  label="Used"
-                  value={`${store.usedGb} GB`}
-                  hint={store.limitGb > 0 ? `of ${store.limitGb} GB` : undefined}
-                />
-                <StatTile quiet compact label="Photos stored" value={storage?.fileCount ?? 0} />
-              </StatGrid>
-              {store.limitGb > 0 && (
-                <div className="home-meter">
-                  <div
-                    className={`home-meter-bar${store.nearLimit ? ' home-meter-bar--warn' : ''}`}
-                    style={{ width: `${store.percent}%` }}
-                  />
-                </div>
+          {/* ── 5. Plan usage (069). The WORKSPACE's meters, not this person's:
+                 the per-person uploads figure stays in the account menu. Hidden
+                 entirely until the migration has run, and on any failure. ── */}
+          {usage.status !== 'hidden' && (
+            <HomeCard
+              title="Plan usage"
+              icon={<Boxes size={16} />}
+              action={usage.status === 'ok'
+                ? <Badge tone="neutral">{planDisplayName(usage.data.plan || orgPlan)}</Badge>
+                : undefined}
+            >
+              {usage.status === 'loading' ? (
+                <CardSkeleton lines={3} />
+              ) : (
+                <ul className="home-usage">
+                  {meters.map(m => <UsageMeterRow key={m.key} meter={m} />)}
+                </ul>
               )}
-              <p className="home-note">
-                {storage?.loading
-                  ? 'Re-reading…'
-                  : store.limitGb > 0
-                    ? `${store.percent}% of your plan${store.nearLimit ? ' — nearly full' : ''}`
-                    : 'No plan limit set'}
-              </p>
             </HomeCard>
           )}
 

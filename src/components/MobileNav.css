@@ -42,6 +42,16 @@
 
 @media (max-width: 640px) {
   .tabbar { display: flex; }
+
+  /* While the on-screen keyboard is open over Step 2's category dock
+     (html.kb-open, set by CategoryZones) the bar is hidden: on the web it would
+     sit behind the keyboard anyway, and inside the native shell, where the
+     webview shrinks, it would ride up and take a row from the dock. With the
+     bar gone --tabbar-h contributes nothing, so this is the one exception to
+     the .app-container value in index.css, and the dock's
+     calc(var(--tabbar-h) + var(--kb)) offset is the keyboard alone. */
+  html.kb-open .tabbar { display: none; }
+  html.kb-open .app-container { --tabbar-h: 0px; }
 }
 
 .tabbar-btn {

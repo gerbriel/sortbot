@@ -4,6 +4,7 @@ import './index.css'
 import App from './App.tsx'
 import { log } from './lib/debugLogger'
 import { isNative } from './lib/platform'
+import { initKeyboard } from './lib/native/keyboard'
 
 // Register the image-caching Service Worker.
 // The SW intercepts all Supabase Storage image requests and caches them for
@@ -25,6 +26,10 @@ if ('serviceWorker' in navigator && !isNative()) {
       });
   });
 }
+
+// Native only: undo the Keyboard plugin's one iOS side effect (it hides the
+// keyboard's Done / previous / next bar for every input). No-op on the web.
+void initKeyboard();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

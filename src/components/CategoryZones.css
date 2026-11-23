@@ -514,7 +514,8 @@
   }
 
   /* The dock's height cap, mirrored from App.css (.step2-right-panel: 38vh,
-     26vh while idle, 38vh again for a live touch drag) so the column below
+     26vh while idle, 38vh again for a live touch drag and while searching
+     with the keyboard open, html.kb-open) so the column below
      can size itself to it. IDENTICAL selectors on purpose, so the same rule
      wins here as there and the two heights can never disagree (if they did,
      the panel would grow a second scrollbar around this one). Same :has()
@@ -524,8 +525,9 @@
      outranks the drag rule at (0,2,1), so a drag with NO selection keeps the
      26vh cap; this mirror follows the panel either way. */
   .step2-right-panel { --cz-dock-cap: 38vh; }
-  .step2-right-panel:not(:has(.category-zones-container.has-selection)):where(html:not(.step2-touch-dragging) *) { --cz-dock-cap: 26vh; }
+  .step2-right-panel:not(:has(.category-zones-container.has-selection)):where(html:not(.step2-touch-dragging):not(.kb-open) *) { --cz-dock-cap: 26vh; }
   html.step2-touch-dragging .step2-right-panel { --cz-dock-cap: 38vh; }
+  html.kb-open .step2-right-panel { --cz-dock-cap: 38vh; }
 
   /* A column that exactly fills the dock: the search, the gender control and
      the selection hint keep their height, and the chip area takes what is left

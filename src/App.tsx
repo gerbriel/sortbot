@@ -3457,11 +3457,11 @@ function App() {
               onDeleteAccount={openDeleteAccount}
               open={navMenuOpen}
               onOpenChange={setNavMenuOpen}
-              /* The storage meter (was a bar under the header) is a row in the
-                 menu now. Clicking the row forces a re-read — one RPC. */
+              /* This person's uploads, as one menu row (no denominator since
+                 Nov 2026: the plan ceiling is the workspace's, on the Home and
+                 Workspace meters). Clicking the row forces a re-read, one RPC. */
               storage={storageInfo && user ? {
                 ...storageInfo,
-                limitGb: parseFloat(import.meta.env.VITE_STORAGE_LIMIT_GB || '100'),
                 onRefresh: () => { void fetchStorageUsage(user.id, true); },
               } : null}
             />
@@ -3790,10 +3790,6 @@ function App() {
             activeBatchNumber={currentBatchNumber}
             items={processedItems}
             refreshTrigger={libraryRefreshTrigger}
-            storage={storageInfo ? {
-              ...storageInfo,
-              limitGb: parseFloat(import.meta.env.VITE_STORAGE_LIMIT_GB || '100'),
-            } : null}
             onResume={onHomeResumeStable}
             onStartNewBatch={onStartNewBatchStable}
             onOpenBatch={onHomeOpenBatchStable}

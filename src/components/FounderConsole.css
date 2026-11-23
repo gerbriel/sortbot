@@ -331,6 +331,49 @@
    16px (var(--fs-md)) restatement is what stops mobile Safari zooming into a
    focused control and never zooming back out. */
 
+/* ── Usage tab + plan limits (069_plan_limits_and_usage.sql) ────────────────
+   One tint rule for the tiles and the table: --warning from 85% of a limit,
+   --danger at or over it. The bar is quiet (--accent on --ink-700) otherwise. */
+.fc-usage--ok   { --fc-usage-tone: var(--accent); }
+.fc-usage--warn { --fc-usage-tone: var(--warning); }
+.fc-usage--over { --fc-usage-tone: var(--danger); }
+
+.fc-usage--warn .ui-stat__value,
+.fc-usage--over .ui-stat__value,
+.fc-usage--warn .fc-usage-value,
+.fc-usage--over .fc-usage-value { color: var(--fc-usage-tone); }
+
+.fc-usage-table { margin-top: 0.4rem; }
+.fc-usage-table td { vertical-align: middle; }
+.fc-usage-name { font-weight: 600; color: var(--text-primary); }
+
+.fc-usage-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 12rem;
+}
+
+.fc-usage-value { font-variant-numeric: tabular-nums; }
+
+.fc-usage-track {
+  display: block;
+  height: 0.6rem;
+  background: var(--ink-700);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.fc-usage-fill {
+  display: block;
+  height: 100%;
+  min-width: 0.4rem;
+  background: var(--fc-usage-tone, var(--accent));
+  border-radius: 999px;
+}
+
+.fc-limit-table .fc-plan-why { max-width: 24rem; }
+
 @media (max-width: 640px) {
   .fc-view { gap: 1.2rem; }
 
@@ -365,6 +408,12 @@
   .fc-plan-add > *:first-child,
   .fc-plan-add > *:nth-child(2),
   .fc-plan-add > *:nth-child(3) { flex: none; }
+
+  /* Usage: the shared `.an-table--cards` rules stack each workspace into a
+     card (no sideways scroll); every line is a 44px band and the storage bar
+     takes the full value side. */
+  .fc-usage-table tbody tr > td { min-height: 44px; }
+  .fc-usage-meter { min-width: 0; width: 100%; }
 
   .fc-alumni-toolbar { flex-direction: column; align-items: stretch; }
   .fc-alumni-summary { font-size: var(--fs-base); max-width: none; }

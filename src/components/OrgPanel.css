@@ -2061,3 +2061,46 @@
   .bd-mode { min-height: 44px; font-size: var(--fs-md); }
   .bd-add-hint { flex-basis: 100%; }
 }
+
+/* ── Plan and usage (069_plan_limits_and_usage.sql) ─────────────────────────
+   Read-only labelled cells (the FieldGrid language) with a thin meter under the
+   value. Quiet by default; --warning from 85% of a limit, --danger at or over
+   it. An unlimited meter has no bar, only its value. */
+.org-usage { margin-bottom: 2rem; }
+
+.org-usage-cell { --org-usage-tone: var(--accent); }
+.org-usage-cell--warn { --org-usage-tone: var(--warning); }
+.org-usage-cell--over { --org-usage-tone: var(--danger); }
+
+.org-usage-value {
+  display: block;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.org-usage-cell--warn .org-usage-value,
+.org-usage-cell--over .org-usage-value { color: var(--org-usage-tone); }
+
+.org-usage-track {
+  display: block;
+  height: 0.6rem;
+  margin-top: 0.6rem;
+  background: var(--ink-700);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.org-usage-fill {
+  display: block;
+  height: 100%;
+  min-width: 0.4rem;
+  background: var(--org-usage-tone);
+  border-radius: 999px;
+}
+
+/* Phones: each cell is at least a 44px band (the literal-px touch floor, §1). */
+@media (max-width: 640px) {
+  .org-usage .ui-fieldcell { min-height: 44px; }
+}

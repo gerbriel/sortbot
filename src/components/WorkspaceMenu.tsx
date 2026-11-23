@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Users, ChevronDown, LogOut, ArrowLeft, Check, Cloud, RefreshCw, AlertTriangle, Trash2 } from 'lucide-react';
+import { Users, ChevronDown, LogOut, ArrowLeft, Check, Cloud, RefreshCw, Trash2 } from 'lucide-react';
+import { formatGb } from '../lib/usageService';
 import './WorkspaceMenu.css';
 
 /** The three bands the menu is divided into, in render order. */
@@ -29,17 +30,21 @@ export interface WorkspaceNavItem {
 }
 
 /**
- * The storage meter's inputs. It used to be a full-width bar under the header
- * on every page; it is account status, so it is a row in this menu now. The
- * whole row is the Refresh action, which is how it joins the arrow-key order.
+ * The "Your uploads" row's inputs: this PERSON's files under their storage
+ * prefix (`storage_usage_bytes`). It used to be a full-width bar under the
+ * header; it is account status, so it is a row in this menu. The whole row is
+ * the Refresh action, which is how it joins the arrow-key order.
+ *
+ * NO DENOMINATOR since Nov 2026. The ceiling is the WORKSPACE's plan storage
+ * (069_plan_limits_and_usage.sql), shown on the Home and Workspace meters; a
+ * per-person "of 100 GB" read from VITE_STORAGE_LIMIT_GB measured one person
+ * against a number that was never theirs.
  */
 export interface WorkspaceStorage {
   usedBytes: number;
   fileCount: number;
-  /** A re-read is in flight — the row keeps its last figures and spins. */
+  /** A re-read is in flight: the row keeps its last figures and spins. */
   loading: boolean;
-  /** The denominator (VITE_STORAGE_LIMIT_GB). */
-  limitGb: number;
   onRefresh: () => void;
 }
 
@@ -259,51 +264,37 @@ export default function WorkspaceMenu({
     .map(g => ({ group: g, list: items.filter(i => i.group === g) }))
     .filter(g => g.list.length > 0);
 
-  /* The storage meter as ONE menu row. Label + figures, a track, the file
-     count and the almost-full flag; clicking the row re-reads the number
-     (one RPC — 057_perf_storage_usage.sql) and the menu stays open so the update
-     is seen. The visual figures are aria-hidden and restated in the row's
-     accessible name so a screen reader hears one sentence, not five spans. */
+  /* This person's uploads as ONE menu row: "Your uploads: 3.2 GB, 8,546 files".
+     No track and no "almost full": there is no per-person ceiling to be near
+     (the plan limit is the workspace's, on the Home and Workspace meters).
+     Clicking the row re-reads the number (one RPC, 057_perf_storage_usage.sql)
+     and the menu stays open so the update is seen. The visual figures are
+     aria-hidden and restated in the row's accessible name so a screen reader
+     hears one sentence. */
   const renderStorage = () => {
     if (!storage) return null;
-    const limitBytes = storage.limitGb * 1024 ** 3;
     const calculating = storage.loading && storage.usedBytes === 0;
-    const pct = limitBytes > 0 ? storage.usedBytes / limitBytes : 0;
-    const tone = pct > 0.85 ? 'danger' : pct > 0.6 ? 'warning' : 'success';
-    const gb = (storage.usedBytes / 1024 ** 3).toFixed(2);
-    const pctText = `${(pct * 100).toFixed(0)}%`;
-    const files = storage.fileCount.toLocaleString();
-    const spoken = calculating
-      ? 'calculating'
-      : `${gb} GB of ${storage.limitGb} GB used (${pctText}), ${files} files${pct > 0.85 ? ', almost full' : ''}`;
+    const files = `${storage.fileCount.toLocaleString('en-US')} file${storage.fileCount === 1 ? '' : 's'}`;
+    const figures = `${formatGb(storage.usedBytes)}, ${files}`;
     return (
       <>
         <button
           type="button"
           role="menuitem"
           tabIndex={-1}
-          className={`wsmenu-item wsmenu-storage wsmenu-storage--${tone}${storage.loading ? ' wsmenu-storage--busy' : ''}`}
-          aria-label={`Storage: ${spoken}. Refresh`}
+          className={`wsmenu-item wsmenu-storage${storage.loading ? ' wsmenu-storage--busy' : ''}`}
+          aria-label={`Your uploads: ${calculating ? 'calculating' : figures}. Refresh`}
           aria-busy={storage.loading || undefined}
-          title="Refresh storage usage"
+          title="Refresh your upload total"
           onClick={() => { if (!storage.loading) storage.onRefresh(); }}
         >
           <span className="wsmenu-item-icon"><Cloud size={16} /></span>
           <span className="wsmenu-storage-body" aria-hidden="true">
             <span className="wsmenu-storage-line">
-              <span className="wsmenu-item-label">Storage</span>
+              <span className="wsmenu-item-label">Your uploads</span>
               <span className="wsmenu-storage-figures">
-                {calculating ? 'Calculating…' : <>{gb} / {storage.limitGb} GB <b>{pctText}</b></>}
+                {calculating ? 'Calculating…' : figures}
               </span>
-            </span>
-            <span className="wsmenu-storage-track">
-              <span className="wsmenu-storage-fill" style={{ width: `${Math.min(100, pct * 100).toFixed(1)}%` }} />
-            </span>
-            <span className="wsmenu-storage-meta">
-              {!calculating && <span>{files} files</span>}
-              {pct > 0.85 && (
-                <span className="wsmenu-storage-warn"><AlertTriangle size={11} /> Almost full</span>
-              )}
             </span>
           </span>
           <RefreshCw size={14} className="wsmenu-storage-refresh" aria-hidden="true" />

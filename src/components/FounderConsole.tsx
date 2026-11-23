@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Award, Building2, Check, ChevronDown, ChevronRight, ClipboardList, CreditCard,
-  History, LayoutDashboard, Mail, Pencil, PlusCircle, RotateCcw, Search, Trash2,
+  Gauge, History, LayoutDashboard, Mail, Pencil, PlusCircle, RotateCcw, Search, Trash2,
   UserCog, Users, X,
 } from 'lucide-react';
 import {
@@ -26,6 +26,11 @@ import {
 } from '../lib/foundingAdminService';
 import type { OrgRole } from '../lib/orgService';
 import { syncCrmContacts } from '../lib/crmService';
+import {
+  fetchProjectUsage, fetchPlanLimits, setPlanLimits,
+  usageReadout, limitLabel, listingBasisCopy, planDisplayName, parseLimitInput, formatCount,
+  type PlanLimits, type PlanLimitsRow, type ProjectUsage, type UsageResult, type UsageReadout,
+} from '../lib/usageService';
 import { safeMailto } from '../lib/mailto';
 import './OrgPanel.css';
 import './FounderConsole.css';
@@ -60,7 +65,7 @@ import './FounderConsole.css';
    runs for that person.
    ════════════════════════════════════════════════════════════════════════════ */
 
-type ConsoleTab = 'overview' | 'requests' | 'workspaces' | 'onboard' | 'plans' | 'alumni' | 'users';
+type ConsoleTab = 'overview' | 'requests' | 'workspaces' | 'usage' | 'onboard' | 'plans' | 'alumni' | 'users';
 type BetaFilter = 'pending' | 'approved' | 'denied' | 'all';
 /** 'unknown' until the first 060_founder_console.sql RPC answers. Only
  *  'unavailable' renders the setup line — 'error' and 'forbidden' are already
@@ -100,6 +105,50 @@ const fmtDollars = (cents: number) =>
  *  062_plan_management.sql has been run. Never a filter on what the user may pick;
  *  that was the bug (a tier added in Finance could never be assigned). */
 const FALLBACK_PLAN_OPTIONS: SelectOption[] = ORG_PLANS.map(p => ({ value: p, label: p }));
+
+/** A read that has not been asked for yet, is in flight, or has answered. */
+type Async<T> = { status: 'idle' } | { status: 'loading' } | UsageResult<T>;
+
+const USAGE_SETUP_TEXT = 'Run supabase/migrations/069_plan_limits_and_usage.sql in the Supabase SQL Editor to turn this on.';
+
+/** The three limit cells of one plan, as the strings the inputs hold. Blank is
+ *  unlimited. Saved by their own Save (a separate RPC from the price row). */
+interface LimitDraft {
+  listings: string;
+  storage: string;
+  seats: string;
+}
+
+const limitText = (v: number | null) => (v === null ? '' : String(v));
+
+function limitDraftOf(l: PlanLimits): LimitDraft {
+  return { listings: limitText(l.listings_per_month), storage: limitText(l.storage_gb), seats: limitText(l.seats) };
+}
+
+/** The draft as RPC values, or null when a cell is not a valid limit. Listings
+ *  and seats are whole numbers (int columns); storage may be fractional GB. */
+function limitDraftParse(d: LimitDraft): PlanLimits | null {
+  const listings = parseLimitInput(d.listings);
+  const storage = parseLimitInput(d.storage);
+  const seats = parseLimitInput(d.seats);
+  if (listings === undefined || storage === undefined || seats === undefined) return null;
+  if (listings !== null && !Number.isInteger(listings)) return null;
+  if (seats !== null && !Number.isInteger(seats)) return null;
+  return { listings_per_month: listings, storage_gb: storage, seats };
+}
+
+function limitDraftChanged(l: PlanLimits, d: LimitDraft): boolean {
+  const parsed = limitDraftParse(d);
+  if (!parsed) return true;
+  return parsed.listings_per_month !== l.listings_per_month
+    || parsed.storage_gb !== l.storage_gb
+    || parsed.seats !== l.seats;
+}
+
+const NO_LIMITS: PlanLimits = { listings_per_month: null, storage_gb: null, seats: null };
+
+/** A readout's tint as a class suffix, shared by the tiles and the table. */
+const toneClass = (r: UsageReadout) => `fc-usage--${r.tone}`;
 
 /** Mirrors the server's key rule so the reason is visible BEFORE the click. The
  *  server is still the gate: this key lands in `organizations.plan`, is compared
@@ -253,6 +302,13 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
   const [alumniPlan, setAlumniPlan] = useState('beta');
   const [alumni, setAlumni] = useState<PlanAlumniRow[]>([]);
   const [alumniStatus, setAlumniStatus] = useState<'idle' | 'loading' | 'ok' | FounderFailure>('idle');
+
+  // Usage tab + the plan limits editor (069). Both load when their tab is first
+  // opened rather than on mount: nothing else on the page needs them, and
+  // project_usage walks storage.objects for the whole project.
+  const [projectUsage, setProjectUsage] = useState<Async<ProjectUsage>>({ status: 'idle' });
+  const [planLimits, setPlanLimitsState] = useState<Async<PlanLimitsRow[]>>({ status: 'idle' });
+  const [limitEdits, setLimitEdits] = useState<Record<string, LimitDraft>>({});
 
   /* The four lists, applied in one place so the mount effect and every
      post-write refresh cannot drift apart. `loading` is never set back to true:
@@ -664,10 +720,60 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
     }
   };
 
+  // ── Usage + plan limits (069) ─────────────────────────────────────────────
+
+  const loadProjectUsage = async () => {
+    setProjectUsage({ status: 'loading' });
+    setProjectUsage(await fetchProjectUsage());
+  };
+
+  const loadPlanLimits = async () => {
+    setPlanLimitsState({ status: 'loading' });
+    const res = await fetchPlanLimits();
+    setPlanLimitsState(res);
+    if (res.status === 'ok') setLimitEdits({});
+  };
+
+  const limitsByPlan = useMemo(() => {
+    const m = new Map<string, PlanLimits>();
+    if (planLimits.status === 'ok') for (const r of planLimits.data) m.set(r.plan, r);
+    return m;
+  }, [planLimits]);
+
+  const handleSaveLimits = async (plan: string, d: LimitDraft) => {
+    const parsed = limitDraftParse(d);
+    if (busy || !parsed) return;
+    setBusy(true);
+    setNotice(null);
+    const res = await setPlanLimits({
+      plan,
+      listingsPerMonth: parsed.listings_per_month,
+      storageGb: parsed.storage_gb,
+      seats: parsed.seats,
+    });
+    if (res.status === 'ok') {
+      setNotice(`Saved the ${plan} plan's limits. Every workspace on it reads them straight away.`);
+      setPlanLimitsState(prev => prev.status === 'ok'
+        ? { status: 'ok', data: [...prev.data.filter(r => r.plan !== plan), res.data] }
+        : prev);
+      setLimitEdits(e => { const n = { ...e }; delete n[plan]; return n; });
+      // The Usage tab's caps are now stale; it re-reads on its next open.
+      setProjectUsage({ status: 'idle' });
+    } else if (res.status === 'unavailable') {
+      setPlanLimitsState({ status: 'unavailable' });
+      setNotice(USAGE_SETUP_TEXT);
+    } else {
+      setNotice(res.status === 'forbidden' ? 'Founding Workspace admins only.' : res.message);
+    }
+    setBusy(false);
+  };
+
   const handleTabChange = (value: string) => {
     const next = value as ConsoleTab;
     setTab(next);
     if (next === 'alumni' && alumniStatus === 'idle') void loadAlumni(alumniPlan);
+    if (next === 'usage' && projectUsage.status === 'idle') void loadProjectUsage();
+    if (next === 'plans' && planLimits.status === 'idle') void loadPlanLimits();
   };
 
   const handleAlumniPlan = (plan: string) => {
@@ -763,6 +869,7 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
           <Tab value="overview" icon={<LayoutDashboard size={14} />}>Overview</Tab>
           <Tab value="requests" icon={<ClipboardList size={14} />} count={betaCounts.pending}>Requests</Tab>
           <Tab value="workspaces" icon={<Building2 size={14} />} count={orgs.length}>Workspaces</Tab>
+          <Tab value="usage" icon={<Gauge size={14} />}>Usage</Tab>
           <Tab value="onboard" icon={<PlusCircle size={14} />}>Onboard</Tab>
           <Tab value="plans" icon={<CreditCard size={14} />} count={plans.length}>Plans</Tab>
           <Tab value="alumni" icon={<Award size={14} />}>Alumni</Tab>
@@ -1179,6 +1286,130 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
           )}
         </TabPanel>
 
+        {/* ── Usage (069) ──────────────────────────────────────────────────
+             The project against its Supabase storage quota, then every
+             workspace against its plan. EmptyState on 'unavailable' rather than
+             hiding: founders are the ones who can run the migration. The quota
+             itself is finance_settings.project_storage_gb (SQL Editor only). */}
+        <TabPanel value="usage">
+          {projectUsage.status === 'idle' || projectUsage.status === 'loading' ? (
+            <div className="fc-skeleton" aria-busy="true">
+              <Skeleton shape="text" height="6rem" />
+              <Skeleton shape="text" height="4rem" />
+              <Skeleton shape="text" height="4rem" />
+            </div>
+          ) : projectUsage.status === 'unavailable' ? (
+            <EmptyState
+              icon={<Gauge size={22} />}
+              title="Usage needs one migration"
+              description={<>Run <code>069_plan_limits_and_usage.sql</code> in the Supabase SQL Editor. It adds the plan limits, the per-workspace usage reads and this page. Nothing else here changes meanwhile.</>}
+            />
+          ) : projectUsage.status === 'forbidden' ? (
+            <EmptyState
+              icon={<Gauge size={22} />}
+              title="Founding Workspace admins only"
+              description="Project usage covers every workspace, so only founding admins can read it."
+            />
+          ) : projectUsage.status === 'error' ? (
+            <EmptyState
+              error
+              icon={<Gauge size={22} />}
+              title="Could not read usage"
+              description={projectUsage.message}
+              actions={<Button onClick={() => { void loadProjectUsage(); }}>Try again</Button>}
+            />
+          ) : (() => {
+            const { project, orgs: usageOrgs } = projectUsage.data;
+            const storage = usageReadout(project.storage_bytes_total, project.storage_gb_quota, 'bytes');
+            return (
+              <>
+                <StatGrid className="fc-stats">
+                  <StatTile
+                    label="Storage"
+                    value={storage.usedText}
+                    className={toneClass(storage)}
+                    hint={storage.unlimited
+                      ? 'No project quota set'
+                      : `${storage.percent}% of the ${storage.limitText} Supabase quota`}
+                  />
+                  <StatTile label="Files" value={formatCount(project.files_total)} />
+                  <StatTile label="Workspaces" value={formatCount(project.orgs)} />
+                  <StatTile label="Members" value={formatCount(project.members_total)} />
+                  <StatTile
+                    label="Listings this month"
+                    value={formatCount(project.listings_this_month_total)}
+                    hint={`Counts ${listingBasisCopy(project.listing_basis)}`}
+                  />
+                </StatGrid>
+
+                <h3 className="org-section-title">Workspaces by storage</h3>
+                {usageOrgs.length === 0 ? (
+                  <EmptyState
+                    inline
+                    icon={<Building2 size={22} />}
+                    title="No workspaces yet"
+                    description="Every workspace shows up here with its storage, listings and seats against its plan."
+                  />
+                ) : (
+                  <table className="an-table an-table--cards fc-usage-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Workspace</th>
+                        <th scope="col">Plan</th>
+                        <th scope="col">Storage</th>
+                        <th scope="col" className="an-num">Listings</th>
+                        <th scope="col" className="an-num">Members</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {usageOrgs.map(o => {
+                        const st = usageReadout(o.storage_bytes, o.limits.storage_gb, 'bytes');
+                        const li = usageReadout(o.listings_this_month, o.limits.listings_per_month);
+                        const me = usageReadout(o.members, o.limits.seats);
+                        return (
+                          <tr key={o.org_id} className="fc-usage-row">
+                            <td data-label="Workspace" className="fc-usage-name">{o.name || o.org_id.slice(0, 8)}</td>
+                            <td data-label="Plan"><Badge tone="neutral">{planDisplayName(o.plan)}</Badge></td>
+                            <td data-label="Storage" className={toneClass(st)}>
+                              <span className="fc-usage-meter">
+                                <span className="fc-usage-value">{st.text}</span>
+                                {!st.unlimited && (
+                                  <span
+                                    className="fc-usage-track"
+                                    role="meter"
+                                    aria-label={`${o.name} storage`}
+                                    aria-valuemin={0}
+                                    aria-valuemax={100}
+                                    aria-valuenow={st.percent}
+                                    aria-valuetext={st.text}
+                                  >
+                                    <span className="fc-usage-fill" style={{ width: `${st.percent}%` }} />
+                                  </span>
+                                )}
+                              </span>
+                            </td>
+                            <td data-label="Listings" className={`an-num ${toneClass(li)}`}>
+                              <span className="fc-usage-value">{li.text}</span>
+                            </td>
+                            <td data-label="Members" className={`an-num ${toneClass(me)}`}>
+                              <span className="fc-usage-value">{me.text}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+                <p className="shopify-conn-help">
+                  Listings {listingBasisCopy(project.listing_basis).replace(/^listings /, '')}, counted from{' '}
+                  {project.month_start || 'the first of the month'} (UTC). The Supabase quota is{' '}
+                  <code>finance_settings.project_storage_gb</code>; change it in the SQL Editor.
+                </p>
+              </>
+            );
+          })()}
+        </TabPanel>
+
         {/* ── Onboard ──────────────────────────────────────────────────────── */}
         <TabPanel value="onboard">
           <h3 className="org-section-title">Onboard a workspace</h3>
@@ -1436,6 +1667,121 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
                 })}
               </tbody>
             </table>
+          )}
+
+          {/* ── Plan limits (069). Its own Save: a separate RPC from the price
+               row, so a limit edit can never re-send a stale price. Blank is
+               unlimited. Hidden quietly until the catalog has plans. ── */}
+          {plans.length > 0 && (
+            <>
+              <h4 className="fc-sub">Limits</h4>
+              {planLimits.status === 'idle' || planLimits.status === 'loading' ? (
+                <div className="fc-skeleton" aria-busy="true">
+                  <Skeleton shape="text" height="4rem" />
+                </div>
+              ) : planLimits.status === 'unavailable' ? (
+                <p className="fc-setup" role="status">
+                  Plan limits need one more migration: {USAGE_SETUP_TEXT.replace(/^Run /, 'run ')}
+                </p>
+              ) : planLimits.status !== 'ok' ? (
+                <p className="fc-setup" role="status">
+                  {planLimits.status === 'forbidden' ? 'Founding Workspace admins only.' : planLimits.message}
+                </p>
+              ) : (
+                <>
+                  <p className="shopify-conn-help">
+                    What each plan allows. Blank means unlimited. Storage is in GB; listings
+                    and seats are whole numbers. The Home and Workspace meters read these.
+                  </p>
+                  <table className="an-table an-table--cards fc-plan-table fc-limit-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Plan</th>
+                        <th scope="col" className="an-num">Listings / month</th>
+                        <th scope="col" className="an-num">Storage (GB)</th>
+                        <th scope="col" className="an-num">Seats</th>
+                        <th scope="col"><span className="ui-sr-only">Actions</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {plans.map(p => {
+                        const saved = limitsByPlan.get(p.plan) ?? NO_LIMITS;
+                        const d = limitEdits[p.plan] ?? limitDraftOf(saved);
+                        const changed = limitDraftChanged(saved, d);
+                        const valid = limitDraftParse(d) !== null;
+                        const setD = (patch: Partial<LimitDraft>) =>
+                          setLimitEdits(e => ({ ...e, [p.plan]: { ...d, ...patch } }));
+                        return (
+                          <tr key={p.plan} className="fc-limit-row">
+                            <td data-label="Plan"><code>{p.plan}</code></td>
+                            <td data-label="Listings / month" className="an-num">
+                              <input
+                                className="fc-plan-input fc-plan-input--num"
+                                inputMode="numeric"
+                                placeholder="Unlimited"
+                                aria-label={`Listings per month for the ${p.plan} plan`}
+                                value={d.listings}
+                                disabled={busy}
+                                onChange={(e) => setD({ listings: e.target.value })}
+                              />
+                            </td>
+                            <td data-label="Storage (GB)" className="an-num">
+                              <input
+                                className="fc-plan-input fc-plan-input--num"
+                                inputMode="decimal"
+                                placeholder="Unlimited"
+                                aria-label={`Storage in GB for the ${p.plan} plan`}
+                                value={d.storage}
+                                disabled={busy}
+                                onChange={(e) => setD({ storage: e.target.value })}
+                              />
+                            </td>
+                            <td data-label="Seats" className="an-num">
+                              <input
+                                className="fc-plan-input fc-plan-input--num"
+                                inputMode="numeric"
+                                placeholder="Unlimited"
+                                aria-label={`Seats for the ${p.plan} plan`}
+                                value={d.seats}
+                                disabled={busy}
+                                onChange={(e) => setD({ seats: e.target.value })}
+                              />
+                            </td>
+                            <td>
+                              <span className="fc-plan-actions">
+                                {changed ? (
+                                  <>
+                                    <Button size="sm" variant="primary" disabled={busy || !valid}
+                                      onClick={() => handleSaveLimits(p.plan, d)}>
+                                      Save limits
+                                    </Button>
+                                    <Button size="sm" variant="ghost" disabled={busy}
+                                      onClick={() => setLimitEdits(e => {
+                                        const n = { ...e }; delete n[p.plan]; return n;
+                                      })}>
+                                      Cancel
+                                    </Button>
+                                    {!valid && (
+                                      <span className="fc-plan-why" role="alert">
+                                        Leave a cell blank for unlimited, or type a number: whole numbers for listings and seats.
+                                      </span>
+                                    )}
+                                  </>
+                                ) : (
+                                  <span className="fc-plan-why">
+                                    Listings {limitLabel(saved.listings_per_month)}, storage {limitLabel(saved.storage_gb, 'GB')}, seats {limitLabel(saved.seats)}
+                                  </span>
+                                )}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </>
+              )}
+            </>
           )}
 
           <h4 className="fc-sub">Add a plan</h4>

@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
-  batchSummary, recentBatchRows, publicationCounts, storageReadout,
+  batchSummary, recentBatchRows, publicationCounts, storageReadout, planUsageMeters,
   type BatchMeta,
 } from './home';
+import type { OrgUsage } from './usageService';
 import type { ClothingItem } from '../App';
 import type { PublicationRow } from './marketplaceService';
 
@@ -226,5 +227,42 @@ describe('storageReadout', () => {
   it('treats a negative or non-finite byte count as zero', () => {
     expect(storageReadout(-1, 100).usedGb).toBe('0.0');
     expect(storageReadout(Number.NaN, 100).percent).toBe(0);
+  });
+});
+
+describe('planUsageMeters', () => {
+  const gb = 1024 ** 3;
+  const usage = (over: Partial<OrgUsage> = {}): OrgUsage => ({
+    org_id: 'o', plan: 'pro',
+    limits: { listings_per_month: 100, storage_gb: 10, seats: 3 },
+    usage: { storage_bytes: 9 * gb, files: 10, listings_this_month: 120, members: 1, month_start: '2026-11-01' },
+    listing_basis: 'exported',
+    ...over,
+  });
+
+  it('is empty without a reading', () => {
+    expect(planUsageMeters(null)).toEqual([]);
+    expect(planUsageMeters(undefined)).toEqual([]);
+  });
+
+  it('builds storage, listings and members in that order with their tones', () => {
+    const [storage, listings, members] = planUsageMeters(usage());
+    expect(storage.key).toBe('storage');
+    expect(storage.readout.text).toBe('9.0 GB of 10 GB');
+    expect(storage.readout.tone).toBe('warn');
+    expect(listings.label).toBe('Listings this month');
+    expect(listings.readout.tone).toBe('over');
+    expect(listings.hint).toBe('Counts listings exported this month');
+    expect(members.readout.text).toBe('1 of 3');
+    expect(members.readout.tone).toBe('ok');
+  });
+
+  it('marks null limits unlimited and carries the created basis', () => {
+    const m = planUsageMeters(usage({
+      limits: { listings_per_month: null, storage_gb: null, seats: null },
+      listing_basis: 'created',
+    }));
+    expect(m.every(x => x.readout.unlimited)).toBe(true);
+    expect(m[1].hint).toBe('Counts listings created this month');
   });
 });

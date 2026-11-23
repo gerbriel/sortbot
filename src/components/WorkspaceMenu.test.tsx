@@ -182,7 +182,7 @@ describe('WorkspaceMenu', () => {
   describe('storage row', () => {
     const GB = 1024 ** 3;
     const base: WorkspaceStorage = {
-      usedBytes: 3.23 * GB, fileCount: 8546, loading: false, limitGb: 100, onRefresh: () => {},
+      usedBytes: 3.23 * GB, fileCount: 8546, loading: false, onRefresh: () => {},
     };
 
     it('is absent without the prop and first in the menu with it', () => {
@@ -196,11 +196,12 @@ describe('WorkspaceMenu', () => {
       const row = one(document, '.wsmenu-storage');
       expect(menuitems()[0]).toBe(row);
       expect(menuitems()[1].textContent).toContain('Back to workflow');
-      expect(row.getAttribute('aria-label')).toBe('Storage: 3.23 GB of 100 GB used (3%), 8,546 files. Refresh');
-      expect(row.className).toContain('wsmenu-storage--success');
-      expect(one(row, '.wsmenu-storage-fill').getAttribute('style')).toContain('width: 3.2%');
-      expect(row.textContent).toContain('8,546 files');
-      expect(row.textContent).not.toContain('Almost full');
+      // Per person, and no denominator: the plan ceiling is the workspace's.
+      expect(row.getAttribute('aria-label')).toBe('Your uploads: 3.2 GB, 8,546 files. Refresh');
+      expect(row.textContent).toContain('Your uploads');
+      expect(row.textContent).toContain('3.2 GB, 8,546 files');
+      expect(row.textContent).not.toContain('of 100');
+      expect(row.querySelector('.wsmenu-storage-track')).toBeNull();
     });
 
     it('clicking refreshes and keeps the menu open; a read in flight is not re-fired', () => {
@@ -219,27 +220,25 @@ describe('WorkspaceMenu', () => {
       expect(row.getAttribute('aria-busy')).toBe('true');
       expect(row.className).toContain('wsmenu-storage--busy');
       // Figures are kept while it re-reads — no "Calculating…" flash.
-      expect(row.getAttribute('aria-label')).toContain('3.23 GB of 100 GB');
+      expect(row.getAttribute('aria-label')).toContain('3.2 GB, 8,546 files');
       press(row, 1);
       expect(again).not.toHaveBeenCalled();
     });
 
-    it('states calculating on the first read and flags almost-full past 85%', () => {
+    it('states calculating on the first read, and never says almost full', () => {
       const a = mount(<Harness storage={{ ...base, usedBytes: 0, fileCount: 0, loading: true }} />);
       press(one(a.container, '.wsmenu-trigger'), 1);
       let row = one(document, '.wsmenu-storage');
-      expect(row.getAttribute('aria-label')).toBe('Storage: calculating. Refresh');
+      expect(row.getAttribute('aria-label')).toBe('Your uploads: calculating. Refresh');
       expect(row.textContent).toContain('Calculating…');
       expect(row.textContent).not.toContain('files');
       a.unmount();
 
-      const b = mount(<Harness storage={{ ...base, usedBytes: 91 * GB }} />);
+      const b = mount(<Harness storage={{ ...base, usedBytes: 910 * GB, fileCount: 1 }} />);
       press(one(b.container, '.wsmenu-trigger'), 1);
       row = one(document, '.wsmenu-storage');
-      expect(row.className).toContain('wsmenu-storage--danger');
-      expect(row.textContent).toContain('Almost full');
-      expect(row.getAttribute('aria-label')).toContain('(91%), 8,546 files, almost full');
-      expect(one(row, '.wsmenu-storage-fill').getAttribute('style')).toContain('width: 91.0%');
+      expect(row.textContent).toContain('910.0 GB, 1 file');
+      expect(row.textContent).not.toContain('Almost full');
     });
   });
 });

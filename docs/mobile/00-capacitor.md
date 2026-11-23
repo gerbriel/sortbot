@@ -102,7 +102,7 @@ that URL instead of the bundled files.
 - **Service worker:** not registered. Service workers do not run in WKWebView, so the image cache in `public/sw.js` is web only. `sw.js` itself is unchanged.
 - **Auth session:** stored with `@capacitor/preferences` (iOS UserDefaults, Android SharedPreferences) under the same supabase-js key. That is app-private storage that the OS will not clear along with webview data. It is not encrypted; a Keychain or Keystore backed store would be a separate dependency decision.
 - **Step 1 photos:** Take photos and Choose from library open `@capacitor/camera` (`src/lib/native/photos.ts`). `null` from the adapter means "no native picker, click the input"; `[]` means the user cancelled. `File.lastModified` is set to the capture time, because the plugin's re-encode can drop EXIF.
-- **Step 2:** long press drags on touch (`step2TouchDrag.ts`); select then tap a category still works. Same in a phone browser.
+- **Step 2:** long press drags on touch (`step2TouchDrag.ts`); select then tap a category still works. Same in a phone browser. With the dock's search focused, the Keyboard plugin shrinks the webview, so the dock sits on top of the keyboard and the tab bar is hidden (a phone browser gets the same result from `visualViewport`, AGENTS.md §10 Step 2).
 - **Step 3 dictation:** `@capacitor-community/speech-recognition` through `createSpeechRecognizer` (`src/lib/native/speech.ts`). The native recogniser stops after every pause, so PDG restarts it; a session that ends within 1 s having heard nothing backs the restart off 600 / 1200 / 2400 / 4800 ms (capped at 5 s), and the fifth such end in a row stops dictation. The adapter also guards against the Android plugin itself: `stop()` is never awaited (the plugin never resolves it), a 12 s idle watchdog ends a silent session, a 300 ms settle window lets the trailing final result land, and start failures surface as `onError` with browser-style codes.
 - **Scan:** Google ML Kit's full-screen scanner (`src/lib/native/barcode.ts`). Android first installs the Google code scanner module from Play services if it is missing (no camera permission needed); iOS asks for the camera permission. A scan whose webview Android killed comes back as `@capacitor/app`'s `appRestoredResult`, which the Scan view listens for.
 - **Everything else** is the web app. The `sortbot_*` localStorage keys (AGENTS.md §1) live in the webview's localStorage as they do in a browser.
@@ -136,8 +136,9 @@ plugins are either missing or fall back to a web stub, so:
 | `@capacitor/browser` | 8.0.5 | Open external links in an in-app browser |
 | `@capacitor/status-bar` | 8.0.4 | Match the status bar to the light theme |
 | `@capacitor/splash-screen` | 8.0.2 | Control when the launch screen hides |
+| `@capacitor/keyboard` | 8.0.6 | Step 2's category dock rises above the on-screen keyboard while its search is focused (wired up, `src/lib/native/keyboard.ts`). Config `plugins.Keyboard`: `resize: 'native'` (iOS, resizes the webview frame; `'body'` would not move a sticky-bottom dock because the document, not the body, scrolls) and `resizeOnFullScreen: true` (Android full-screen workaround). `initKeyboard()` in `main.tsx` re-shows the iOS accessory bar the plugin hides. No permissions. |
 
-Used by app code: `preferences`, `camera`, `app`, speech recognition and barcode
+Used by app code: `preferences`, `camera`, `app`, `keyboard`, speech recognition and barcode
 scanning. Installed and unused: `filesystem`, `share`, `browser`, `status-bar`,
 `splash-screen`.
 
@@ -145,6 +146,7 @@ Permissions:
 
 - **iOS** (`ios/App/App/Info.plist`): `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`, `NSMicrophoneUsageDescription`, `NSSpeechRecognitionUsageDescription`. A missing usage string crashes the app the first time the feature is used.
 - **Android** (`android/app/src/main/AndroidManifest.xml`): `android:allowBackup="false"` so the preferences file that holds the Supabase refresh token is excluded from Google Drive auto-backup and `adb backup`; permissions `CAMERA`, `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`, and the `com.google.mlkit.vision.DEPENDENCIES` meta-data set to `barcode_ui`, which has Play services fetch the Google code scanner module at install time (the app also installs it on demand). No media-read permission is declared, because the gallery goes through the system Photo Picker and Google Play restricts `READ_MEDIA_IMAGES`.
+- **`@capacitor/keyboard` needs none** on either platform: no usage string, no manifest permission, and its README documents no plist or manifest entry.
 
 ## Icons and splash screens
 

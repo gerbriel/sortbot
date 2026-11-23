@@ -27,7 +27,9 @@ import {
 } from '../lib/descriptionSettings';
 import { publicImageUrl } from '../lib/storageUrls';
 import { filterUnreferencedStoragePaths } from '../lib/storageSafety';
-import { ConfirmAction } from './ui';
+import { ConfirmAction, FieldCell, FieldGrid, FieldGroup } from './ui';
+import { fetchOrgUsage, planDisplayName, type OrgUsage } from '../lib/usageService';
+import { planUsageMeters } from '../lib/home';
 import {
   PLATFORM_PRESETS, ADJUSTMENT_TYPES, ROUNDING_MODES, MAX_PERCENT, MAX_FIXED,
   platformSlug, pricingExample, describePlatformRule, selectablePlatforms,
@@ -229,6 +231,52 @@ const fmtDate = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : null;
 
 /**
+ * "Plan and usage" (069_plan_limits_and_usage.sql): the workspace's plan and
+ * its three meters as labelled cells. The same `planUsageMeters` list the Home
+ * widget draws, so the two pages cannot disagree. Read-only cells: each value
+ * is an `<output>` so the cell's label still names something. Tints follow the
+ * meter: `--warning` from 85%, `--danger` at or over the limit; an unlimited
+ * meter shows its value with no bar.
+ */
+export function PlanUsageGroup({ usage }: { usage: OrgUsage }) {
+  const meters = planUsageMeters(usage);
+  return (
+    <FieldGroup caption="Plan and usage" className="org-usage">
+      <FieldGrid columns={4}>
+        <FieldCell label="Plan">
+          {(c) => (
+            <output id={c.id} aria-describedby={c['aria-describedby']} className="org-usage-value">
+              {planDisplayName(usage.plan)}
+            </output>
+          )}
+        </FieldCell>
+        {meters.map(m => (
+          <FieldCell
+            key={m.key}
+            label={m.label}
+            hint={m.hint}
+            className={`org-usage-cell org-usage-cell--${m.readout.tone}`}
+          >
+            {(c) => (
+              <>
+                <output id={c.id} aria-describedby={c['aria-describedby']} className="org-usage-value">
+                  {m.readout.text}
+                </output>
+                {!m.readout.unlimited && (
+                  <span className="org-usage-track" aria-hidden="true">
+                    <span className="org-usage-fill" style={{ width: `${m.readout.percent}%` }} />
+                  </span>
+                )}
+              </>
+            )}
+          </FieldCell>
+        ))}
+      </FieldGrid>
+    </FieldGroup>
+  );
+}
+
+/**
  * Workspace panel — members with role management, email invites (join on next
  * sign-in), workspace rename, leave workspace, and (Founding admins only) the
  * beta request queue with approve/deny/reopen/delete, filtering, and search.
@@ -253,6 +301,21 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(org.name);
   useEffect(() => { setDisplayName(org.name); }, [org.name]);
+
+  /* Plan and usage (069). Every member sees it: it is their workspace's usage.
+     Hidden on anything but 'ok' ('unavailable' before the migration, and a
+     failed read is not worth an error on this page). Cleared on a workspace
+     switch so one shop's meters never sit under another's name. */
+  const [orgUsage, setOrgUsage] = useState<{ orgId: string; data: OrgUsage } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await fetchOrgUsage(org.id);
+      if (cancelled) return;
+      setOrgUsage(res.status === 'ok' ? { orgId: org.id, data: res.data } : null);
+    })();
+    return () => { cancelled = true; };
+  }, [org.id]);
 
   const isAdmin = myRole === 'owner' || myRole === 'admin';
   const isOwner = myRole === 'owner';
@@ -962,6 +1025,10 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
               Invite
             </button>
           </div>
+        )}
+
+        {panelTab === 'members' && orgUsage?.orgId === org.id && (
+          <PlanUsageGroup usage={orgUsage.data} />
         )}
 
         {panelTab === 'members' && (loading ? (

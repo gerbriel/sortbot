@@ -15,12 +15,13 @@ import { getCategories } from '../lib/categoriesService';
 import { getCategoryPresets } from '../lib/categoryPresetsService';
 import { getShopifyConnection } from '../lib/shopifyConnectionService';
 import { fetchOrgMembers } from '../lib/orgService';
+import { fetchOrgUsage, type OrgUsage } from '../lib/usageService';
 
 /**
  * The home dashboard is the first thing a signed-in user sees and the only
  * place several of these numbers are assembled, so the render path needs a test
  * of its own. Only the NETWORK functions are mocked; every pure helper
- * (`batchSummary`, `recentBatchRows`, `storageReadout`) runs for real, which is
+ * (`batchSummary`, `recentBatchRows`, `planUsageMeters`) runs for real, which is
  * what makes the assertions below mean something.
  *
  * What is deliberately locked here: the two states of the batch widget, that
@@ -65,6 +66,11 @@ vi.mock('../lib/categoryPresetsService', async (importOriginal) => {
 vi.mock('../lib/shopifyConnectionService', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/shopifyConnectionService')>();
   return { ...actual, getShopifyConnection: vi.fn() };
+});
+
+vi.mock('../lib/usageService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/usageService')>();
+  return { ...actual, fetchOrgUsage: vi.fn() };
 });
 
 vi.mock('../lib/orgService', async (importOriginal) => {
@@ -117,7 +123,6 @@ function props(over: Partial<HomeDashboardProps> = {}): HomeDashboardProps {
     activeBatchNumber: null,
     items: [],
     refreshTrigger: 0,
-    storage: null,
     onResume: vi.fn(),
     onStartNewBatch: vi.fn(),
     onOpenBatch: vi.fn(),
@@ -146,6 +151,7 @@ beforeEach(() => {
   vi.mocked(getCategoryPresets).mockResolvedValue([]);
   vi.mocked(getShopifyConnection).mockResolvedValue({ status: 'unavailable' });
   vi.mocked(fetchOrgMembers).mockResolvedValue([]);
+  vi.mocked(fetchOrgUsage).mockResolvedValue({ status: 'unavailable' });
   vi.mocked(useSupportThreads).mockReturnValue({
     threads: [], sorted: [], available: false, teamAvailable: false,
     unreadCount: 0, supportUnreadCount: 0, revision: 0, refresh: async () => {},
@@ -380,22 +386,53 @@ describe('HomeDashboard — widgets that hide themselves', () => {
   });
 });
 
-describe('HomeDashboard — storage', () => {
-  it('hides the widget when App has no reading yet', async () => {
-    const { container } = await render();
-    expect(container.textContent).not.toContain('Photos stored');
+describe('HomeDashboard: plan usage', () => {
+  const gb = 1024 ** 3;
+  const usage = (over: Partial<OrgUsage> = {}): OrgUsage => ({
+    org_id: 'org-1',
+    plan: 'founding_pro',
+    limits: { listings_per_month: 100, storage_gb: 10, seats: null },
+    usage: { storage_bytes: 9 * gb, files: 12, listings_this_month: 120, members: 2, month_start: '2026-11-01' },
+    listing_basis: 'created',
+    ...over,
   });
 
-  it('shows used / limit / files and a clamped meter', async () => {
-    const gb = 1024 * 1024 * 1024;
-    const { container } = await render({
-      storage: { usedBytes: 310 * gb, fileCount: 4854, loading: false, limitGb: 100 },
-    });
-    expect(container.textContent).toContain('310 GB');
-    expect(container.textContent).toContain('of 100 GB');
-    expect(container.textContent).toContain('4854');
-    // An over-plan bucket must not draw a 310%-wide bar.
-    expect(one(container, '.home-meter-bar').style.width).toBe('100%');
-    expect(one(container, '.home-meter-bar').className).toContain('home-meter-bar--warn');
+  it('hides entirely when 069 has not been run', async () => {
+    const { container } = await render();
+    expect(fetchOrgUsage).toHaveBeenCalledWith('org-1');
+    expect(container.textContent).not.toContain('Plan usage');
+  });
+
+  it.each(['forbidden', 'error'] as const)('fails quiet on %s', async (status) => {
+    vi.mocked(fetchOrgUsage).mockResolvedValue(
+      status === 'error' ? { status, message: 'boom' } : { status },
+    );
+    const { container } = await render();
+    expect(container.textContent).not.toContain('Plan usage');
+    expect(container.textContent).not.toContain('boom');
+  });
+
+  it('does not ask without a workspace', async () => {
+    const { container } = await render({ orgId: null });
+    expect(fetchOrgUsage).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain('Plan usage');
+  });
+
+  it('draws three meters with tints, the plan badge, and no bar when unlimited', async () => {
+    vi.mocked(fetchOrgUsage).mockResolvedValue({ status: 'ok', data: usage() });
+    const { container } = await render();
+    expect(container.textContent).toContain('Plan usage');
+    expect(container.textContent).toContain('Founding pro');
+    const rows = all(container, '.home-usage-row');
+    expect(rows).toHaveLength(3);
+    expect(rows[0].textContent).toContain('9.0 GB of 10 GB');
+    expect(rows[0].className).toContain('home-usage-row--warn');
+    expect(rows[1].textContent).toContain('120 of 100');
+    expect(rows[1].textContent).toContain('Counts listings created this month');
+    expect(rows[1].className).toContain('home-usage-row--over');
+    // An over-cap count must not draw a 120%-wide bar.
+    expect(one(rows[1], '.home-usage-fill').style.width).toBe('100%');
+    expect(rows[2].textContent).toContain('Unlimited');
+    expect(rows[2].querySelector('.home-usage-track')).toBeNull();
   });
 });

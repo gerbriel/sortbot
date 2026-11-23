@@ -952,8 +952,12 @@
     position: sticky;
     /* --tabbar-h (index.css) is the shared offset every bottom-anchored surface
        subtracts, and it already carries the home-indicator inset. It is 0px
-       above this breakpoint, so the calc is correct everywhere. */
-    bottom: var(--tabbar-h, 0px);
+       above this breakpoint, so the calc is correct everywhere. --kb is the
+       on-screen keyboard's inset, set on <html> by CategoryZones only while
+       focus is in the dock and the keyboard is open (0 otherwise, and always 0
+       inside the native shell, whose Keyboard plugin shrinks the webview
+       itself). See AGENTS.md §10 Step 2, "The dock and the keyboard". */
+    bottom: calc(var(--tabbar-h, 0px) + var(--kb, 0px));
     z-index: 80;
     height: auto;
     max-height: 38vh;
@@ -978,8 +982,10 @@
   /* The :where() guard adds no specificity: this rule scores (0,3,0) because
      :not(:has(...)) takes its argument's weight, which outranked the (0,2,1)
      drag rule below, so a drag never expanded the dock. Idle cap applies only
-     while no touch drag is live. */
-  .step2-right-panel:not(:has(.category-zones-container.has-selection)):where(html:not(.step2-touch-dragging) *) {
+     while no touch drag is live and the keyboard is not open over the dock.
+     If you change this selector, change its --cz-dock-cap twin in
+     CategoryZones.css the same way. */
+  .step2-right-panel:not(:has(.category-zones-container.has-selection)):where(html:not(.step2-touch-dragging):not(.kb-open) *) {
     max-height: 26vh;
   }
 
@@ -992,6 +998,15 @@
     max-height: 38vh;
     border-color: var(--accent);
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.18), 0 0 0 2px var(--accent);
+  }
+
+  /* Searching with the on-screen keyboard open (html.kb-open, CategoryZones):
+     the same 38vh as a drag, so the typed matches have room right above the
+     keyboard, but no accent edge, since nothing is being dropped. The offset
+     comes from the bottom calc above (--kb, with --tabbar-h zeroed by
+     MobileNav.css while the tab bar is hidden). Twin in CategoryZones.css. */
+  html.kb-open .step2-right-panel {
+    max-height: 38vh;
   }
 
   /* ── Step 4 ────────────────────────────────────────────────────────────── */

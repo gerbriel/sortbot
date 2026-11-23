@@ -13,6 +13,8 @@ import './ui/Field.css';
 import './CategoryZones.css';
 import { DROP_ATTR, STEP2_DROP_EVENT } from './step2TouchDrag';
 import type { Step2DropDetail } from './step2TouchDrag';
+import { subscribeKeyboard, keyboardResizesWebview } from '../lib/native/keyboard';
+import type { KeyboardState } from '../lib/native/keyboard';
 
 // Map icon names or category names to icon components
 const getCategoryIcon = (iconNameOrCategory: string, size: number = 24) => {
@@ -673,27 +675,105 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
     return () => el.removeEventListener(STEP2_DROP_EVENT, onDrop);
   }, []);
 
+  // ── The dock and the on-screen keyboard (AGENTS.md §10 Step 2) ─────────
+  // While focus is inside the dock AND the keyboard is open, <html> carries
+  // `kb-open` (App.css lifts and expands the dock, MobileNav.css hides the tab
+  // bar and zeroes --tabbar-h) and `--kb`, the pixels to lift the dock by. On
+  // the web that is the covered part of the layout viewport; inside the native
+  // shell the Keyboard plugin shrinks the webview itself, so it is 0. Neither is
+  // React state: the subscription fires on every visual viewport scroll, and
+  // re-rendering the dock for that would be wasted work.
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const chipListRef = useRef<HTMLDivElement | null>(null);
+  const dockFocusedRef = useRef(false);
+  const kbStateRef = useRef<KeyboardState>({ open: false, height: 0 });
+  const applyKeyboardRef = useRef<() => void>(() => {});
+  applyKeyboardRef.current = () => {
+    const html = document.documentElement;
+    const kb = kbStateRef.current;
+    if (compactMode && dockFocusedRef.current && kb.open) {
+      html.classList.add('kb-open');
+      html.style.setProperty('--kb', `${keyboardResizesWebview() ? 0 : kb.height}px`);
+    } else {
+      html.classList.remove('kb-open');
+      html.style.removeProperty('--kb');
+    }
+  };
+  useEffect(() => {
+    if (!compactMode) return;
+    const off = subscribeKeyboard(state => {
+      kbStateRef.current = state;
+      applyKeyboardRef.current();
+    });
+    return () => {
+      off();
+      dockFocusedRef.current = false;
+      kbStateRef.current = { open: false, height: 0 };
+      applyKeyboardRef.current();
+    };
+  }, [compactMode]);
+
+  const handleDockFocus = () => {
+    dockFocusedRef.current = true;
+    applyKeyboardRef.current();
+  };
+  const handleDockBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+    const next = e.relatedTarget as Node | null;
+    if (next && e.currentTarget.contains(next)) return; // focus moved within the dock
+    dockFocusedRef.current = false;
+    applyKeyboardRef.current();
+  };
+  // A tap on a chip, the gender control or the clear button while the search is
+  // focused must not take focus away from it: on a phone that would dismiss the
+  // keyboard and drop the dock back down before the tap even lands. Cancelling
+  // mousedown keeps focus where it is; the click still fires.
+  const keepSearchFocus = (e: React.MouseEvent<HTMLDivElement>) => {
+    const input = searchInputRef.current;
+    if (input && document.activeElement === input && e.target !== input) e.preventDefault();
+  };
+  // Escape, or the clear button, ends the search: empty field, keyboard down,
+  // dock back to idle.
+  const endSearch = () => {
+    setCategorySearch('');
+    searchInputRef.current?.blur();
+  };
+  // Typed matches start at the top of the chip area, directly under the field.
+  useEffect(() => {
+    if (chipListRef.current) chipListRef.current.scrollTop = 0;
+  }, [categorySearch]);
+
   return (
-    <div ref={rootRef} className={`category-zones-container${compactMode ? ' compact' : ''}${hasSelection ? ' has-selection' : ''}`}>
+    <div
+      ref={rootRef}
+      className={`category-zones-container${compactMode ? ' compact' : ''}${hasSelection ? ' has-selection' : ''}`}
+      onFocus={handleDockFocus}
+      onBlur={handleDockBlur}
+    >
       {/* Category Zones */}
-      <div className="category-zones">
+      <div className="category-zones" onMouseDown={keepSearchFocus}>
         {/* Category search */}
         {/* The search field IS the ui Field input (ui/Field.css): same radius,
             height, border, placeholder colour and the 16px phone size. */}
         <div className="cz-search">
           <input
+            ref={searchInputRef}
             type="text"
             className="ui-input cz-search-input"
             value={categorySearch}
             onChange={e => setCategorySearch(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); endSearch(); } }}
             placeholder="Search categories…"
             aria-label="Search categories"
+            enterKeyHint="search"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
           />
           {categorySearch && (
             <button
               type="button"
               className="cz-search-clear"
-              onClick={() => setCategorySearch('')}
+              onClick={endSearch}
               aria-label="Clear search"
             ><X size={14} aria-hidden="true" /></button>
           )}
@@ -730,7 +810,7 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
           /* data-step2-scroll-y: a touch drag near the top or bottom edge of
              the dock's chip area scrolls it vertically (step2TouchDrag.ts). The
              chips wrap; nothing in the dock scrolls sideways (AGENTS.md section 1). */
-          <div className={compactMode ? 'category-list' : 'category-grid'} data-step2-scroll-y="">
+          <div ref={chipListRef} className={compactMode ? 'category-list' : 'category-grid'} data-step2-scroll-y="">
             {(zonePresets.length > 0 ? zonePresets : []).map(preset => {
               const color = getPresetColor(preset.category_name);
               return (

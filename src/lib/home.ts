@@ -17,6 +17,7 @@ import { makeBatchName } from './libraryData';
 import type { WorkflowBatch } from './workflowBatchService';
 import type { PublicationRow, PublicationStatus } from './marketplaceService';
 import { PUBLICATION_STATUSES } from './marketplaceService';
+import { listingBasisCopy, usageReadout, type OrgUsage, type UsageReadout } from './usageService';
 
 /* ── The open batch ───────────────────────────────────────────────────────── */
 
@@ -179,10 +180,11 @@ export interface StorageReadout {
 const GB = 1024 * 1024 * 1024;
 
 /**
- * The same figures the workspace menu's storage row shows, formatted once.
- * `limitGb` comes from VITE_STORAGE_LIMIT_GB and may be anything, including 0
- * in a misconfigured env — which is why the percentage is guarded rather than
- * divided straight through.
+ * One person's uploads, formatted once: the account menu's "Your uploads" row
+ * reads `usedGb` with a limit of 0 (no denominator since Nov 2026; the plan
+ * ceiling lives on the workspace meters, `planUsageMeters` below). A limit is
+ * still accepted and guarded, so a 0 or junk value never divides straight
+ * through.
  */
 export function storageReadout(usedBytes: number, limitGb: number): StorageReadout {
   const used = Number.isFinite(usedBytes) && usedBytes > 0 ? usedBytes : 0;
@@ -198,4 +200,34 @@ export function storageReadout(usedBytes: number, limitGb: number): StorageReado
     // say "nearly full", and 100 is also a legitimate exactly-full reading.
     nearLimit: limit > 0 && raw >= 85,
   };
+}
+
+/* ── Plan usage meters (069_plan_limits_and_usage.sql) ────────────────────── */
+
+export interface PlanUsageMeter {
+  key: 'storage' | 'listings' | 'members';
+  label: string;
+  readout: UsageReadout;
+  /** Quiet context under the meter: what the listings count counts. */
+  hint?: string;
+}
+
+/**
+ * The workspace's three plan meters, in display order: storage against the
+ * plan's GB, listings this month against the monthly cap, members against
+ * seats. The Home widget and the Workspace page both render THIS list, so the
+ * two can never disagree about what "nearly full" means.
+ */
+export function planUsageMeters(usage: OrgUsage | null | undefined): PlanUsageMeter[] {
+  if (!usage) return [];
+  const { limits, usage: u } = usage;
+  return [
+    { key: 'storage', label: 'Storage', readout: usageReadout(u.storage_bytes, limits.storage_gb, 'bytes') },
+    {
+      key: 'listings', label: 'Listings this month',
+      readout: usageReadout(u.listings_this_month, limits.listings_per_month),
+      hint: `Counts ${listingBasisCopy(usage.listing_basis)}`,
+    },
+    { key: 'members', label: 'Members', readout: usageReadout(u.members, limits.seats) },
+  ];
 }

@@ -14,6 +14,8 @@ PODS:
   - CapacitorFilesystem (8.1.5):
     - Capacitor
     - IONFilesystemLib (= 2.0.1)
+  - CapacitorKeyboard (8.0.6):
+    - Capacitor
   - CapacitorMlkitBarcodeScanning (8.2.2):
     - Capacitor
     - GoogleMLKit/BarcodeScanning (~> 8.0.0)
@@ -82,6 +84,7 @@ DEPENDENCIES:
   - "CapacitorCommunitySpeechRecognition (from `../../node_modules/@capacitor-community/speech-recognition`)"
   - "CapacitorCordova (from `../../node_modules/@capacitor/ios`)"
   - "CapacitorFilesystem (from `../../node_modules/@capacitor/filesystem`)"
+  - "CapacitorKeyboard (from `../../node_modules/@capacitor/keyboard`)"
   - "CapacitorMlkitBarcodeScanning (from `../../node_modules/@capacitor-mlkit/barcode-scanning`)"
   - "CapacitorPreferences (from `../../node_modules/@capacitor/preferences`)"
   - "CapacitorShare (from `../../node_modules/@capacitor/share`)"
@@ -119,6 +122,8 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/ios"
   CapacitorFilesystem:
     :path: "../../node_modules/@capacitor/filesystem"
+  CapacitorKeyboard:
+    :path: "../../node_modules/@capacitor/keyboard"
   CapacitorMlkitBarcodeScanning:
     :path: "../../node_modules/@capacitor-mlkit/barcode-scanning"
   CapacitorPreferences:
@@ -138,6 +143,7 @@ SPEC CHECKSUMS:
   CapacitorCommunitySpeechRecognition: 3e03566c44c2bb3b52391a33d4518b1adbdeb38f
   CapacitorCordova: 8e68a712e47128cf5b97e88b9c2b406b9b956b22
   CapacitorFilesystem: e3bc7123acb1554df1b7b099fa5847064b9e1bd4
+  CapacitorKeyboard: f9e85e685082e9f63404de15db4a4291448b0912
   CapacitorMlkitBarcodeScanning: 43ac9fce0c369f823f364e3cc0f8012024cf6f6a
   CapacitorPreferences: cca2021f386efb75947c850334447d9ff22b14f1
   CapacitorShare: 5b5e53347556bee89ae6163ed20b5b3c25fe75f1
@@ -157,6 +163,6 @@ SPEC CHECKSUMS:
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   PromisesObjC: 752c3227f599e3467650e47ea36f433eeb10c273
 
-PODFILE CHECKSUM: 0c1376165d90c706d5ae8cf7ee400155ec14aa26
+PODFILE CHECKSUM: 4a025102874b64a7630a925360f68996e5e68749
 
 COCOAPODS: 1.17.0

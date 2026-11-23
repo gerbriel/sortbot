@@ -55,6 +55,11 @@ vi.mock('../lib/foundingAdminService', async (importOriginal) => {
 
 vi.mock('../lib/crmService', () => ({ syncCrmContacts: vi.fn().mockResolvedValue(undefined) }));
 
+vi.mock('../lib/usageService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/usageService')>();
+  return { ...actual, fetchProjectUsage: vi.fn(), fetchPlanLimits: vi.fn(), setPlanLimits: vi.fn() };
+});
+
 import {
   fetchBetaSignups, fetchBetaOrgDirectory, setBetaStatus,
 } from '../lib/betaService';
@@ -63,6 +68,9 @@ import {
   fetchPlanDirectory, upsertPlan, renamePlan, deletePlan, fetchOrgPlanHistory,
   fetchPlanAlumni, ORG_PLANS,
 } from '../lib/foundingAdminService';
+import {
+  fetchProjectUsage, fetchPlanLimits, setPlanLimits, type ProjectUsage,
+} from '../lib/usageService';
 
 const signup = (over: Partial<BetaSignupRow> = {}): BetaSignupRow => ({
   id: 's1',
@@ -206,6 +214,9 @@ beforeEach(() => {
   vi.mocked(upsertPlan).mockResolvedValue({ ok: true });
   vi.mocked(renamePlan).mockResolvedValue({ ok: true, moved: 0 });
   vi.mocked(deletePlan).mockResolvedValue({ ok: true });
+  vi.mocked(fetchProjectUsage).mockResolvedValue({ status: 'unavailable' });
+  vi.mocked(fetchPlanLimits).mockResolvedValue({ status: 'unavailable' });
+  vi.mocked(setPlanLimits).mockResolvedValue({ status: 'unavailable' });
 });
 
 afterEach(() => {
@@ -646,5 +657,136 @@ describe('FounderConsole — plan history and alumni', () => {
     click(tab(container, 'Alumni'));
     await flush();
     expect(fetchPlanAlumni).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('FounderConsole: Usage tab (069)', () => {
+  const GB = 1024 ** 3;
+  const project = (over: Partial<ProjectUsage> = {}): ProjectUsage => ({
+    project: {
+      storage_gb_quota: 100, storage_bytes_total: 90 * GB, files_total: 12345, orgs: 2,
+      members_total: 5, listings_this_month_total: 77, month_start: '2026-11-01', listing_basis: 'created',
+    },
+    orgs: [
+      { org_id: 'org-1', name: 'Shop A', plan: 'pro', storage_bytes: 9.5 * GB, files: 10, listings_this_month: 120, members: 2,
+        limits: { listings_per_month: 100, storage_gb: 10, seats: null } },
+      { org_id: 'org-2', name: 'Shop B', plan: 'beta', storage_bytes: 1 * GB, files: 2, listings_this_month: 3, members: 1,
+        limits: { listings_per_month: null, storage_gb: null, seats: 3 } },
+    ],
+    ...over,
+  });
+
+  it('loads only when the tab is opened, and names 069 when it is missing', async () => {
+    const { container } = await render();
+    expect(fetchProjectUsage).not.toHaveBeenCalled();
+    click(tab(container, 'Usage'));
+    expect(container.querySelector('.fc-skeleton')).toBeTruthy();
+    await flush();
+    expect(fetchProjectUsage).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('Run 069_plan_limits_and_usage.sql');
+  });
+
+  it('shows the project tiles and a workspace table with tinted bars', async () => {
+    vi.mocked(fetchProjectUsage).mockResolvedValue({ status: 'ok', data: project() });
+    const { container } = await render();
+    click(tab(container, 'Usage'));
+    await flush();
+    const panel = one(container, '[role="tabpanel"]:not([hidden])');
+    const values = all(panel, '.ui-stat__value').map(v => v.textContent);
+    expect(values).toEqual(['90.0 GB', '12,345', '2', '5', '77']);
+    expect(panel.textContent).toContain('90% of the 100 GB Supabase quota');
+    expect(panel.textContent).toContain('Counts listings created this month');
+    expect(one(panel, '.fc-usage--warn .ui-stat__value')).toBeTruthy();
+
+    const rows = all(panel, '.fc-usage-row');
+    expect(rows.map(r => one(r, '.fc-usage-name').textContent)).toEqual(['Shop A', 'Shop B']);
+    expect(rows[0].textContent).toContain('9.5 GB of 10 GB');
+    expect(one(rows[0], 'td[data-label="Storage"]').className).toContain('fc-usage--warn');
+    expect(one(rows[0], 'td[data-label="Listings"]').className).toContain('fc-usage--over');
+    expect(rows[0].textContent).toContain('2 · Unlimited');
+    expect(one(rows[0], '.fc-usage-fill').style.width).toBe('95%');
+    // Unlimited storage has no bar.
+    expect(rows[1].querySelector('.fc-usage-track')).toBeNull();
+    expect(rows[1].textContent).toContain('1 of 3');
+  });
+
+  it('says why on forbidden and offers a retry on error', async () => {
+    vi.mocked(fetchProjectUsage).mockResolvedValue({ status: 'forbidden' });
+    const a = await render();
+    click(tab(a.container, 'Usage'));
+    await flush();
+    expect(a.container.textContent).toContain('Founding Workspace admins only');
+    cleanup();
+    vi.mocked(fetchProjectUsage).mockClear();
+
+    vi.mocked(fetchProjectUsage).mockResolvedValue({ status: 'error', message: 'storage walk timed out' });
+    const { container } = await render();
+    click(tab(container, 'Usage'));
+    await flush();
+    expect(container.textContent).toContain('storage walk timed out');
+    vi.mocked(fetchProjectUsage).mockResolvedValue({ status: 'ok', data: project({ orgs: [] }) });
+    click(buttonByText(container, 'Try again'));
+    await flush();
+    expect(fetchProjectUsage).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain('No workspaces yet');
+  });
+});
+
+describe('FounderConsole: plan limits editor (069)', () => {
+  const limitRow = (container: HTMLElement, key: string): HTMLElement => {
+    const row = all(container, '.fc-limit-row').find(r => one(r, 'code').textContent === key);
+    if (!row) throw new Error(`limitRow(): no row for "${key}"`);
+    return row;
+  };
+
+  it('names 069 when the limit columns are missing', async () => {
+    const { container } = await render();
+    click(tab(container, 'Plans'));
+    await flush();
+    expect(fetchPlanLimits).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('.fc-limit-row')).toBeNull();
+    expect(container.textContent).toContain('069_plan_limits_and_usage.sql');
+  });
+
+  it('shows saved limits, blank meaning unlimited, and saves through setPlanLimits', async () => {
+    vi.mocked(fetchPlanLimits).mockResolvedValue({
+      status: 'ok',
+      data: [{ plan: 'growth', listings_per_month: 500, storage_gb: 25, seats: 3 }],
+    });
+    vi.mocked(setPlanLimits).mockResolvedValue({
+      status: 'ok', data: { plan: 'growth', listings_per_month: null, storage_gb: 2.5, seats: 3 },
+    });
+    const { container } = await render();
+    click(tab(container, 'Plans'));
+    await flush();
+
+    // A plan with no saved limits reads as unlimited.
+    expect(limitRow(container, 'studio').textContent).toContain('Listings Unlimited, storage Unlimited, seats Unlimited');
+
+    const row = limitRow(container, 'growth');
+    expect(row.textContent).toContain('Listings 500, storage 25 GB, seats 3');
+    const inputs = all(row, 'input');
+    expect(inputs.map(i => (i as HTMLInputElement).value)).toEqual(['500', '25', '3']);
+
+    setValue(inputs[0], '');
+    setValue(inputs[1], '2.5');
+    click(buttonByText(limitRow(container, 'growth'), 'Save limits'));
+    await flush();
+    expect(setPlanLimits).toHaveBeenCalledWith({ plan: 'growth', listingsPerMonth: null, storageGb: 2.5, seats: 3 });
+    expect(limitRow(container, 'growth').textContent).toContain('Listings Unlimited, storage 2.5 GB, seats 3');
+    expect(container.textContent).toContain("Saved the growth plan's limits");
+  });
+
+  it('refuses a fractional seat count before the round trip', async () => {
+    vi.mocked(fetchPlanLimits).mockResolvedValue({ status: 'ok', data: [] });
+    const { container } = await render();
+    click(tab(container, 'Plans'));
+    await flush();
+    const row = limitRow(container, 'studio');
+    setValue(all(row, 'input')[2], '1.5');
+    const save = buttonByText(limitRow(container, 'studio'), 'Save limits') as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    expect(limitRow(container, 'studio').textContent).toContain('whole numbers for listings and seats');
+    expect(setPlanLimits).not.toHaveBeenCalled();
   });
 });
