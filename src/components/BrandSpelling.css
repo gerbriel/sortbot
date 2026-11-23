@@ -1,7 +1,10 @@
 /* ── BrandSpelling — inline brand-correction surface (report 14) ────────────
    Tokens only; no literal colours. It sits INSIDE the Step 3 form, directly
    under the Brand field, so everything here is sized off --fs-2xs/--fs-xs and
-   stays quiet until it has something to say. */
+   stays quiet until it has something to say. Notices are --radius-md tints;
+   every button (Use, Undo, Remember, Add) takes ui Button sm metrics
+   (2.7rem, --radius-md, 1px --border-control, --ink-800 with an --ink-750
+   hover) and floors at 44px on a phone (Nov 2026). */
 
 .brand-spelling {
   display: flex;
@@ -17,11 +20,11 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 0.4rem;
-  padding: 0.35rem 0.5rem;
-  border-radius: 0.5rem;
-  border: 1px solid var(--ink-700);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
   background: var(--ink-850);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   line-height: var(--lh-snug);
   color: var(--text-secondary);
 }
@@ -49,36 +52,52 @@
 }
 
 .bs-link {
-  background: none;
-  border: none;
-  padding: 0.15rem 0.3rem;
-  border-radius: 0.35rem;
-  font-size: var(--fs-2xs);
+  min-height: 2.7rem;
+  padding: var(--space-1) var(--space-3);
+  font-family: inherit;
+  font-size: var(--fs-xs);
   font-weight: 600;
-  color: var(--text-secondary);
+  line-height: var(--lh-snug);
+  color: var(--text-primary);
+  background: var(--ink-800);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 0.2rem;
+  justify-content: center;
+  gap: var(--space-1);
   flex-shrink: 0;
 }
 
-.bs-link:hover:not(:disabled) { background: var(--ink-750); color: var(--text-primary); }
-.bs-link:disabled { opacity: 0.5; cursor: default; }
-.bs-link--primary { color: var(--accent); }
+.bs-link:hover:not(:disabled) { background: var(--ink-750); border-color: var(--border-strong); }
+.bs-link:disabled { opacity: 0.45; cursor: default; }
+.bs-link:focus-visible,
+.bs-add-btn:focus-visible,
+.bs-close:focus-visible,
+.bs-icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Solid accent: --ink-950 is white on this palette (AGENTS.md §1). */
+.bs-link--primary { background: var(--accent); border-color: var(--accent); color: var(--ink-950); }
+.bs-link--primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
 .bs-link--danger  { color: var(--danger); }
 
 .bs-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.7rem;
+  min-height: 2.7rem;
   background: none;
   border: none;
+  border-radius: var(--radius-md);
   color: var(--text-muted);
   cursor: pointer;
-  padding: 0.1rem;
+  padding: 0;
   line-height: 0;
   flex-shrink: 0;
 }
 
-.bs-close:hover { color: var(--text-primary); }
+.bs-close:hover { color: var(--text-primary); background: var(--ink-750); }
 
 /* ── Toggle + panel ──────────────────────────────────────────────────────── */
 
@@ -100,8 +119,8 @@
 .bs-toggle:hover { color: var(--text-primary); }
 
 .bs-panel {
-  border: 1px solid var(--ink-700);
-  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   background: var(--ink-900);
   padding: 0.5rem;
   display: flex;
@@ -141,7 +160,7 @@
   gap: 0.35rem;
   font-size: var(--fs-2xs);
   padding: 0.2rem 0.25rem;
-  border-radius: 0.35rem;
+  border-radius: var(--radius-sm);
 }
 
 .bs-row:hover { background: var(--ink-850); }
@@ -166,7 +185,7 @@
   cursor: pointer;
   padding: 0.15rem;
   line-height: 0;
-  border-radius: 0.3rem;
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
 }
 
@@ -182,25 +201,33 @@
 .bs-input {
   flex: 1 1 8rem;
   min-width: 0;
-  font-size: var(--fs-2xs);
-  padding: 0.25rem 0.4rem;
-  border: 1px solid var(--ink-700);
-  border-radius: 0.35rem;
-  background: var(--ink-950);
+  /* ui-input--sm */
+  min-height: 2.7rem;
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+  padding: 0.2rem var(--space-2);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  background: var(--ink-800);
   color: var(--text-primary);
 }
 
-.bs-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.bs-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
 
 .bs-add-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.2rem;
-  font-size: var(--fs-2xs);
+  justify-content: center;
+  gap: var(--space-1);
+  min-height: 2.7rem;
+  font-family: inherit;
+  font-size: var(--fs-xs);
   font-weight: 600;
-  padding: 0.25rem 0.5rem;
-  border: none;
-  border-radius: 0.35rem;
+  line-height: var(--lh-snug);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
   background: var(--accent);
   color: var(--ink-950);
   cursor: pointer;
@@ -215,9 +242,13 @@
 @media (max-width: 768px) {
   .bs-link,
   .bs-add-btn,
-  .bs-icon-btn {
+  .bs-icon-btn,
+  .bs-close,
+  .bs-input {
     min-height: var(--tap, 44px);
   }
+  .bs-close { min-width: var(--tap, 44px); }
+  .bs-input { font-size: var(--fs-md); }
 
   .bs-add { flex-direction: column; align-items: stretch; }
   .bs-add .bs-arrow { display: none; }

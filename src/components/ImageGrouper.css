@@ -22,20 +22,33 @@
 
 /* .sort-btn is still the toolbar's button shape — the Filter/View triggers, the
    Apply/Pick buttons, Undo/Redo, and every chip inside the two popovers. (The
-   .sort-control cluster it used to sit in is gone with the sort button row.) */
+   .sort-control cluster it used to sit in is gone with the sort button row.)
+
+   THE WHOLE TOOLBAR IS ui Button sm (ui/Button.css, the secondary variant):
+   2.7rem tall, space-1 by space-3, --fs-xs, --radius-md, a 1px
+   --border-control edge, the --ink-800 surface and the --ink-750 hover. .sort-btn
+   and .ptb-btn are the same box; a toggle that is ON takes the solid accent
+   fill with the --ink-950 label, like the selected segment of a segmented
+   control. The phone floor is 44px (the max-width: 640px block below). */
 .sort-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
+  justify-content: center;
+  gap: var(--space-1);
+  min-height: 2.7rem;
   background: var(--ink-800);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-control);
   color: var(--text-secondary);
-  border-radius: 6px;
-  padding: 0.32rem 0.7rem;
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-3);
   font-size: var(--fs-xs);
   font-weight: 600;
+  line-height: var(--lh-snug);
+  white-space: nowrap;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition: background-color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
 }
 
 .sort-btn:hover {
@@ -44,10 +57,20 @@
   color: var(--text-primary);
 }
 
-.sort-btn.active {
-  background: var(--accent-dim);
-  border-color: var(--accent-line);
-  color: var(--accent);
+.sort-btn:active { background: var(--ink-700); }
+
+.sort-btn:focus-visible,
+.ptb-btn:focus-visible,
+.gtb-opt:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sort-btn.active,
+.sort-btn.active:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--ink-950);
 }
 
 /* .stats — what is left of the old stats block: the "N selected" chip plus
@@ -69,10 +92,11 @@
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
+  min-height: 2.7rem;
   background: var(--ink-800);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 0.28rem 0.5rem;
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-3);
   white-space: nowrap;
   line-height: var(--lh-tight);
 }
@@ -235,7 +259,7 @@
   background: var(--accent);
   color: var(--ink-950);
   padding: 0.15rem 0.45rem;
-  border-radius: 20px;
+  border-radius: var(--radius-sm);
   font-size: var(--fs-2xs);
   font-weight: 600;
   white-space: nowrap;
@@ -245,11 +269,10 @@
   background: linear-gradient(135deg, var(--success) 0%, var(--shopify-green-dark) 100%);
   color: var(--ink-950);
   padding: 0.15rem 0.45rem;
-  border-radius: 20px;
+  border-radius: var(--radius-sm);
   font-size: var(--fs-2xs);
   font-weight: 700;
   text-transform: capitalize;
-  box-shadow: var(--shadow-sm);
   /* Group cards can be ~135px wide at 8 columns — the category name is the one
      variable-length thing on the select bar, so it is what gives way. */
   flex: 0 1 auto;
@@ -381,7 +404,7 @@
 .image-controls { position: absolute; right: 6px; bottom: 6px; display: flex; gap: 6px; }
 /* Stays a literal black scrim, not a surface token: this control floats ON TOP
    of the photo, so it must stay translucent to keep the image readable. */
-.rotate-btn { background: rgba(0, 0, 0, 0.5); color: var(--text-primary); border: none; padding: 4px 6px; border-radius: 4px; cursor: pointer; font-size: var(--fs-lg); }
+.rotate-btn { background: rgba(0, 0, 0, 0.5); color: var(--text-primary); border: none; padding: 4px 6px; border-radius: var(--radius-md); cursor: pointer; font-size: var(--fs-lg); }
 .rotate-btn:hover { background: rgba(0, 0, 0, 0.7); }
 
 .item-info {
@@ -414,24 +437,33 @@
   margin-bottom: 0.1rem;
 }
 
-/* Date dropdown — lives inside the Filter popover */
+/* Date dropdown, inside the Filter popover. The ui Field input at
+   its sm size (.ui-input--sm in ui/Field.css), so it lines up with the buttons. */
 .filter-select {
+  min-height: 2.7rem;
   background: var(--ink-800);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-control);
   color: var(--text-primary);
-  border-radius: 5px;
-  padding: 0.22rem 0.6rem;
+  border-radius: var(--radius-md);
+  padding: 0.2rem var(--space-2);
   font-size: var(--fs-xs);
   font-weight: 600;
+  line-height: var(--lh-snug);
   cursor: pointer;
   outline: none;
   appearance: auto;
-  transition: background 0.15s, border-color 0.15s;
+  transition: border-color var(--dur-fast) var(--ease),
+              box-shadow var(--dur-fast) var(--ease);
 }
 
 .filter-select:hover {
-  background: var(--ink-750);
   border-color: var(--border-strong);
+}
+
+.filter-select:focus,
+.filter-select:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 /* Native option list paints light unless told otherwise. */
@@ -465,19 +497,25 @@
   white-space: nowrap;
 }
 
+/* The ui Field input at the toolbar's sm height (.ui-input--sm): --radius-md,
+   a 1px --border-control edge, the --ink-800 surface, the same focus ring. */
 .auto-group-input {
-  width: 3.2rem;
-  padding: 0.28rem 0.4rem;
+  width: 4.4rem;
+  min-height: 2.7rem;
+  padding: 0.2rem var(--space-2);
   background: var(--ink-800);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: var(--fs-xs);
   font-weight: 700;
+  line-height: var(--lh-snug);
   text-align: center;
   outline: none;
   appearance: textfield;
   -moz-appearance: textfield;
+  transition: border-color var(--dur-fast) var(--ease),
+              box-shadow var(--dur-fast) var(--ease);
 }
 
 .auto-group-input::-webkit-inner-spin-button,
@@ -486,43 +524,17 @@
 }
 
 .auto-group-input:focus {
-  border-color: var(--accent-line);
-  background: var(--ink-750);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
-/* Tinted-at-rest, solid-on-hover: the dark-theme equivalent of the old
-   pale-fill/darker-fill pair, since the palette has no darker green step. */
-.auto-group-btn {
-  background: var(--success-dim) !important;
-  border-color: var(--success) !important;
-  color: var(--success) !important;
-  font-weight: 700 !important;
-}
-
-.auto-group-btn:hover {
-  background: var(--success) !important;
-  border-color: var(--success) !important;
-  color: var(--ink-950) !important;
-}
-
-.pick-mode-btn {
-  background: var(--accent-dim) !important;
-  border-color: var(--accent-line) !important;
-  color: var(--accent) !important;
-  font-weight: 700 !important;
-}
-
-.pick-mode-btn:hover {
-  background: var(--accent) !important;
-  border-color: var(--accent) !important;
-  color: var(--ink-950) !important;
-}
-
-.pick-mode-active {
-  background: var(--accent) !important;
-  border-color: var(--accent-hover) !important;
-  color: var(--ink-950) !important;
-  box-shadow: 0 0 0 2px var(--accent-line);
+/* Apply and Pick are plain toolbar buttons (.sort-btn) at rest. Pick is a
+   toggle, so ON is the solid accent fill, like every other toggle here. */
+.pick-mode-active,
+.pick-mode-active:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--ink-950);
 }
 
 /* The keyboard cheat sheet that used to sit at the bottom of the sidebar is
@@ -685,7 +697,7 @@
   background: var(--accent);
   color: var(--ink-950);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: var(--fs-lg);
   padding: 1px 5px;
   line-height: 1.4;
@@ -762,7 +774,7 @@
   background: var(--danger);
   color: var(--ink-950);
   border: none;
-  border-radius: 50%;
+  border-radius: var(--radius-md);
   font-size: var(--fs-2xl);
   line-height: 1;
   cursor: pointer;
@@ -783,8 +795,7 @@
    and the ring adds the emphasis the old #dc2626 fill used to. */
 .delete-image-btn:hover {
   background: var(--danger);
-  box-shadow: 0 0 0 3px var(--danger-dim);
-  transform: scale(1.1);
+  box-shadow: inset 0 0 0 100vmax var(--accent-line);
 }
 
 /* New Group Drop Zone */
@@ -872,10 +883,9 @@
   background: linear-gradient(135deg, var(--success) 0%, var(--shopify-green-dark) 100%);
   color: var(--ink-950);
   padding: 0.5rem 1rem;
-  border-radius: 20px;
+  border-radius: var(--radius-sm);
   font-size: var(--fs-sm);
   font-weight: 600;
-  box-shadow: 0 4px 12px var(--success-dim);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -1008,7 +1018,7 @@
   transition: transform 0.2s ease;
 }
 
-/* Toolbar pill — top-center */
+/* Toolbar, top-center */
 .lightbox-toolbar {
   position: absolute;
   top: 16px;
@@ -1020,7 +1030,7 @@
   background: rgba(0, 0, 0, 0.72);
   backdrop-filter: blur(6px);
   padding: 8px 14px;
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
   z-index: 10000;
 }
 
@@ -1030,7 +1040,7 @@
   color: var(--text-primary);
   font-size: var(--fs-sm);
   padding: 5px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.15s;
@@ -1047,7 +1057,7 @@
   font-size: var(--fs-lg);
   width: 36px;
   height: 36px;
-  border-radius: 50%;
+  border-radius: var(--radius-md);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1070,7 +1080,7 @@
   line-height: 1;
   width: 48px;
   height: 64px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1165,7 +1175,7 @@
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--accent-dim);
   color: var(--accent);
   font-size: var(--fs-base);
@@ -1187,7 +1197,7 @@
   min-width: 130px;
   background: var(--ink-800);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   padding: 0.25rem;
   display: flex;
@@ -1200,7 +1210,7 @@
   text-align: left;
   padding: 0.4rem 0.6rem;
   border: none;
-  border-radius: 5px;
+  border-radius: var(--radius-md);
   background: none;
   color: var(--text-primary);
   font-size: var(--fs-xs);
@@ -1251,7 +1261,7 @@
   margin-bottom: 0.75rem;
   background: var(--ink-850);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
 }
 
@@ -1315,7 +1325,8 @@
   gap: 0.3rem;
 }
 
-/* How many filters are on, read without opening the panel. */
+/* How many filters are on, read without opening the panel. A small square
+   badge (--radius-sm), the same shape as the stepper's step number. */
 .gtb-count {
   display: inline-flex;
   align-items: center;
@@ -1323,7 +1334,7 @@
   min-width: 16px;
   height: 16px;
   padding: 0 0.25rem;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--accent);
   color: var(--ink-950);
   font-size: var(--fs-2xs);
@@ -1344,7 +1355,7 @@
   overscroll-behavior: contain;
   background: var(--ink-800);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   padding: 0.6rem;
   display: flex;
@@ -1381,9 +1392,10 @@
   justify-content: flex-start;
   gap: 0.4rem;
   width: 100%;
-  padding: 0.38rem 0.45rem;
+  min-height: 2.7rem;
+  padding: var(--space-1) var(--space-2);
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: none;
   color: var(--text-primary);
   font-size: var(--fs-xs);
@@ -1431,37 +1443,51 @@
   padding: 0.45rem 0.6rem;
 }
 
+/* Same box as .sort-btn: ui Button sm, secondary variant. */
 .ptb-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
+  justify-content: center;
+  gap: var(--space-1);
+  min-height: 2.7rem;
   font-size: var(--fs-xs);
   font-weight: 600;
-  padding: 0.32rem 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--ink-750);
+  line-height: var(--lh-snug);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  background: var(--ink-800);
   color: var(--text-secondary);
   cursor: pointer;
   white-space: nowrap;
+  transition: background-color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
 }
 
-.ptb-btn:hover:not(:disabled) { background: var(--ink-700); }
-.ptb-btn:disabled { opacity: 0.4; cursor: default; }
+.ptb-btn:hover:not(:disabled) {
+  background: var(--ink-750);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.ptb-btn:active:not(:disabled) { background: var(--ink-700); }
+.ptb-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* Filled variants flip their label to the canvas colour — every semantic token
    in this palette is a LIGHT tint, so white-on-fill would be unreadable.
    Warn/danger sit tinted at rest and go solid on hover, since the palette has
    no darker step to hover into. */
-.ptb-btn--active  { background: var(--accent); border-color: var(--accent); color: var(--ink-950); }
+.ptb-btn--active,
+.ptb-btn--active:hover:not(:disabled)  { background: var(--accent); border-color: var(--accent); color: var(--ink-950); }
 .ptb-btn--primary { background: var(--accent); border-color: var(--accent); color: var(--ink-950); }
-.ptb-btn--primary:hover:not(:disabled) { background: var(--accent-hover); }
+.ptb-btn--primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--ink-950); }
 .ptb-btn--warn    { background: var(--warning-dim); border-color: var(--warning); color: var(--warning); }
 .ptb-btn--warn:hover:not(:disabled) { background: var(--warning); color: var(--ink-950); }
 .ptb-btn--danger  { background: var(--danger-dim); border-color: var(--danger); color: var(--danger); }
 .ptb-btn--danger:hover:not(:disabled) { background: var(--danger); color: var(--ink-950); }
-.ptb-btn--ghost   { background: transparent; border-color: var(--danger-dim); color: var(--danger); font-size: var(--fs-2xs); }
-.ptb-btn--ghost:hover:not(:disabled) { background: var(--danger-dim); }
+/* ui Button danger-quiet: outline at rest, the danger tint on hover. */
+.ptb-btn--ghost   { background: transparent; border-color: var(--danger); color: var(--danger); }
+.ptb-btn--ghost:hover:not(:disabled) { background: var(--danger-dim); border-color: var(--danger); color: var(--danger); }
 
 .ptb-divider {
   width: 1px;
@@ -1488,11 +1514,12 @@
   text-decoration: none;
 }
 
-.photo-pick-toggle--on {
-  background: var(--success) !important;
-  border-color: var(--success) !important;
-  color: var(--ink-950) !important;
-  box-shadow: 0 0 0 2px var(--success-dim);
+/* Pick photos is a toggle: ON is the solid accent fill, no extra ring. */
+.photo-pick-toggle--on,
+.photo-pick-toggle--on:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--ink-950);
 }
 
 /* Photo selected via pick mode — visible ring on photos inside group cards */
@@ -1619,7 +1646,7 @@
   font-weight: 700;
   line-height: 1;
   padding: 0.2rem 0.4rem;
-  border-radius: 20px;
+  border-radius: var(--radius-sm);
   pointer-events: none;
 }
 
@@ -1658,12 +1685,13 @@
   gap: 0.3rem;
   width: 100%;
   margin-top: 0.3rem;
-  padding: 0.3rem 0.5rem;
+  min-height: 2.7rem;
+  padding: var(--space-1) var(--space-3);
   background: var(--ink-800);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   font-weight: 700;
   cursor: pointer;
   touch-action: manipulation;
@@ -1671,6 +1699,7 @@
 
 .gs-collapse:hover {
   background: var(--ink-750);
+  border-color: var(--border-strong);
   color: var(--text-primary);
 }
 
@@ -1758,7 +1787,7 @@
      z-index 100) covered it. Inside .grouper-scroll-content there is nothing
      above it to slide under. */
   .grouper-toolbar {
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
   }
 
   .gtb-row {
@@ -1824,24 +1853,24 @@
      and select as descendants; these are the two shapes they do not cover. */
   .gtb-panel .gtb-opt,
   .gtb-panel .ptb-btn {
-    min-height: var(--tap, 44px);
+    min-height: 44px;
   }
 
   /* Thumb-sized controls. --tap is a literal 44px on purpose (AGENTS.md §1);
      the type is --fs-md (16px) on the two focusable form controls so mobile
      Safari does not zoom the page and refuse to zoom back. */
+  /* Only the BOX grows on a phone (the ui/Button.css rule): the sm padding
+     and --fs-xs label stay, so the toolbar is still one size. */
   .gtb-row .sort-btn,
   .gtb-row .auto-group-btn,
   .gtb-row .pick-mode-btn,
   .gtb-row .filter-clear-btn {
-    min-height: var(--tap, 44px);
-    padding-inline: 0.7rem;
-    font-size: var(--fs-sm);
+    min-height: 44px;
   }
 
   .gtb-row .filter-select,
   .gtb-row .auto-group-input {
-    min-height: var(--tap, 44px);
+    min-height: 44px;
     font-size: var(--fs-md);
   }
 
@@ -1867,8 +1896,7 @@
 
   /* Undo / Redo inside .stats are real buttons — give them a full target. */
   .stats .sort-btn {
-    min-height: var(--tap, 44px);
-    padding-inline: 0.7rem;
+    min-height: 44px;
   }
 
   /* ── Photo grid ────────────────────────────────────────────────────────
@@ -1959,17 +1987,11 @@
   .photo-toolbar {
     gap: 0.35rem;
     padding: 0.4rem;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
   }
 
   .ptb-btn {
-    min-height: var(--tap, 44px);
-    padding: 0.4rem 0.7rem;
-    font-size: var(--fs-sm);
-  }
-
-  .ptb-btn--ghost {
-    font-size: var(--fs-xs);
+    min-height: 44px;
   }
 
   .ptb-divider {
@@ -2151,8 +2173,8 @@
 }
 
 .lb-segmented .lightbox-tool-btn { border-radius: 0; }
-.lb-segmented .lightbox-tool-btn:first-child { border-radius: 6px 0 0 6px; }
-.lb-segmented .lightbox-tool-btn:last-child  { border-radius: 0 6px 6px 0; }
+.lb-segmented .lightbox-tool-btn:first-child { border-radius: var(--radius-md) 0 0 var(--radius-md); }
+.lb-segmented .lightbox-tool-btn:last-child  { border-radius: 0 var(--radius-md) var(--radius-md) 0; }
 
 /* (0,3,0), and it has to be. `ProductDescriptionGenerator.css` is imported AFTER
    this file (the crop-fs-* styles are shared with Step 3) and redefines
@@ -2284,8 +2306,9 @@
    Capacitor tablet build is touch at 1024px too.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* The pill that follows the finger. Positioned by a transform from JS; the
-   offset lifts it above the fingertip so the target stays visible. */
+/* The chip that follows the finger. Positioned by a transform from JS; the
+   offset lifts it above the fingertip so the target stays visible. Shaped
+   like the toolbar's buttons (--radius-md), not a pill. */
 .step2-drag-ghost {
   position: fixed;
   top: 0;
@@ -2294,7 +2317,7 @@
   pointer-events: none;
   margin: -56px 0 0 -40px;
   padding: 0.8rem 1.4rem;
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   background: var(--accent);
   color: var(--ink-950);
   font-size: var(--fs-sm);

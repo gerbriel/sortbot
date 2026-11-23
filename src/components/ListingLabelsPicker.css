@@ -6,8 +6,10 @@
  * to survive being printed on a 2"×1.25" thermal label, where a themed token
  * would not resolve at all.
  *
- * Mobile-first: every chip is a 44px-tall touch target at every width, and the
- * name field is 16px so iOS does not zoom the page on focus.
+ * Metrics (Nov 2026): chips are ui Chip sm (2.7rem, --radius-md), the buttons
+ * are ui Button sm (2.7rem, --radius-md, 1px --border-control, --ink-800 with
+ * an --ink-750 hover), the name field is .ui-input. On a phone every control
+ * floors at 44px and the name field steps up to 16px so iOS does not zoom.
  */
 
 .llp {
@@ -15,27 +17,27 @@
   padding: 0.7rem 0.8rem;
   background: var(--ink-850);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .llp-head {
   display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  margin-bottom: 0.5rem;
-  color: var(--text-secondary);
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
 }
 
+/* The quiet caption of ui FieldGroup: sentence case, no icon. */
 .llp-title {
   font-size: var(--fs-xs);
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-weight: 500;
+  line-height: var(--lh-snug);
+  color: var(--text-muted);
 }
 
 .llp-scope {
   margin-left: auto;
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 
@@ -49,13 +51,13 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  min-height: 44px;                 /* touch target, phone and desktop alike */
-  padding: 0.3rem 0.7rem;
-  font-size: var(--fs-sm);
+  min-height: 2.7rem;               /* ui Chip sm; 44px on a phone, below */
+  padding: 0.1rem 0.55rem;
+  font-size: var(--fs-2xs);
   font-weight: 600;
-  line-height: var(--lh-tight);
+  line-height: var(--lh-snug);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   background: var(--ink-800);
   color: var(--text-secondary);
   cursor: pointer;
@@ -92,10 +94,7 @@
   opacity: 0.8;
 }
 
-.llp-chip--add {
-  border-style: dashed;
-  color: var(--text-muted);
-}
+.llp-btn--add { color: var(--text-secondary); }
 
 .llp-spin { animation: llp-spin 0.9s linear infinite; }
 
@@ -121,14 +120,22 @@
 .llp-new-name {
   /* 16px minimum — below it iOS Safari zooms the viewport on focus and throws
      the user out of Step 3. */
-  font-size: var(--fs-md);
-  min-height: 44px;
-  padding: 0.45rem 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  font-family: inherit;
+  font-size: var(--fs-base);
+  line-height: var(--lh-snug);
+  min-height: 3.6rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
   background: var(--ink-800);
   color: var(--text-primary);
   width: 100%;
+}
+
+.llp-new-name:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 .llp-new-colors {
@@ -182,18 +189,22 @@
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  min-height: 44px;
-  padding: 0.35rem 0.8rem;
-  font-size: var(--fs-sm);
+  min-height: 2.7rem;
+  padding: var(--space-1) var(--space-3);
+  font-family: inherit;
+  font-size: var(--fs-xs);
   font-weight: 600;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  line-height: var(--lh-snug);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
   background: var(--ink-800);
   color: var(--text-primary);
   cursor: pointer;
 }
 
-.llp-btn:hover:not(:disabled) { background: var(--ink-750); }
+.llp-btn:hover:not(:disabled) { background: var(--ink-750); border-color: var(--border-strong); }
+.llp-btn:focus-visible,
+.llp-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .llp-btn:disabled { opacity: 0.45; cursor: default; }
 
 /* Solid accent fill. --ink-950 is white on this palette, which is what makes a
@@ -204,12 +215,20 @@
   color: var(--ink-950);
 }
 
-.llp-btn--primary:hover:not(:disabled) { opacity: 0.88; background: var(--accent); }
+.llp-btn--primary:hover:not(:disabled) { opacity: 0.88; background: var(--accent); border-color: var(--accent); }
 
 .llp-error {
   margin: 0.5rem 0 0;
   font-size: var(--fs-xs);
   color: var(--danger);
+}
+
+@media (max-width: 640px) {
+  .llp-chip,
+  .llp-btn,
+  .llp-new-name { min-height: 44px; }
+  .llp-chip { padding-inline: var(--space-4); }
+  .llp-new-name { font-size: var(--fs-md); }
 }
 
 @media (max-width: 480px) {

@@ -13,40 +13,48 @@
 
 .summary-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--space-2);
 }
 
+/* The ui StatTile surface (components/ui/StatTile.css): --ink-800 on the grey
+   step card, a --border-subtle hairline, --radius-md, the value in
+   --text-primary over a --text-secondary label. It was a solid black gradient
+   tile, which read as three buttons. */
 .stat-card {
-  /* The old indigo→purple brand gradient, restated in the violet accent.
-     Text flips to the canvas ink because the accent is a LIGHT violet — white
-     on it would fall under 3:1. */
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-press) 100%);
-  color: var(--ink-950);
-  padding: 1.5rem;
-  border-radius: 8px;
-  text-align: center;
+  background: var(--ink-800);
+  color: var(--text-primary);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.15rem;
+  min-width: 0;
 }
 
 .stat-number {
   font-size: var(--fs-xl);
-  font-weight: bold;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
 }
 
 .stat-label {
-  font-size: var(--fs-sm);
-  opacity: 0.9;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  line-height: var(--lh-snug);
+  color: var(--text-secondary);
 }
 
 .google-sheets-input-section {
   /* Panel sits one step below the cards inside it, so the inputs (--ink-850
      from the global input rule) read as raised rather than flush. */
   background: var(--ink-900);
-  border: 2px solid var(--border);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   padding: 1.5rem;
   margin-bottom: 2rem;
 }
@@ -64,20 +72,24 @@
 }
 
 .sheet-url-input {
+  /* The `.ui-input` look (components/ui/Field.css). */
   flex: 1;
-  padding: 0.75rem;
-  background: var(--ink-850);
+  min-height: 3.6rem;
+  padding: var(--space-2) var(--space-3);
+  background: var(--ink-800);
   color: var(--text-primary);
-  border: 2px solid var(--border);
-  border-radius: 6px;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
   font-size: var(--fs-base);
+  line-height: var(--lh-snug);
   font-family: monospace;
-  transition: border-color 0.2s;
+  transition: border-color var(--dur-fast) var(--ease),
+              box-shadow var(--dur-fast) var(--ease);
 }
 
 .sheet-url-input:focus {
   outline: none;
-  border-color: var(--accent-line);
+  border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
@@ -89,10 +101,10 @@
 
 .sheet-url-saved {
   background: var(--success-dim);
-  border: 2px solid var(--success);
+  border: 1px solid var(--success);
   color: var(--success);
   padding: 0.75rem;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   margin-bottom: 1rem;
   font-weight: 500;
 }
@@ -111,7 +123,7 @@
 .sheet-url-help {
   background: var(--ink-850);
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 1rem;
   font-size: var(--fs-sm);
 }
@@ -144,7 +156,7 @@
 .table-container {
   overflow-x: auto;
   background: var(--ink-850);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
 }
 
@@ -195,7 +207,7 @@
 .export-instructions {
   background: var(--accent-dim);
   padding: 1.5rem;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border-left: 4px solid var(--accent);
 }
 
@@ -273,8 +285,8 @@
   }
 
   .stat-card {
-    padding: 0.75rem 0.4rem;
-    gap: 0.2rem;
+    padding: var(--space-2) var(--space-2);
+    gap: 0.15rem;
   }
 
   .stat-number {
@@ -298,7 +310,7 @@
 
   .export-actions button {
     width: 100%;
-    min-height: 48px;
+    min-height: var(--tap, 44px);
   }
 
   /* The frozen Handle column held a 50-character handle on one line, ~330px:
@@ -340,7 +352,7 @@
   padding: 0.9rem 1rem;
   background: var(--ink-850);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .export-platform-label {
@@ -353,15 +365,32 @@
 }
 
 .export-platform-select {
-  /* 16px on phones: anything smaller makes iOS Safari zoom the whole page on
-     focus, which throws the user out of the preview table. */
+  /* The `.ui-input` look (components/ui/Field.css): md min-height, --ink-800,
+     the --border-control edge, --radius-md and the --accent focus ring. Type
+     stays at --fs-md (16px) everywhere: smaller makes iOS Safari zoom the
+     whole page on focus, which throws the user out of the preview table. */
+  font-family: inherit;
   font-size: var(--fs-md);
-  padding: 0.5rem 0.7rem;
-  min-height: 44px;          /* touch target */
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  line-height: var(--lh-snug);
+  padding: var(--space-2) var(--space-3);
+  min-height: 3.6rem;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
   background: var(--ink-800);
   color: var(--text-primary);
+  transition: border-color var(--dur-fast) var(--ease),
+              box-shadow var(--dur-fast) var(--ease);
+}
+
+.export-platform-select:focus,
+.export-platform-select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+@media (max-width: 640px) {
+  .export-platform-select { min-height: var(--tap, 44px); }
 }
 
 .export-platform-note {
@@ -392,7 +421,7 @@
   padding: 0.6rem 0.8rem;
   background: var(--ink-850);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .export-research-head {
@@ -456,24 +485,36 @@
 }
 
 .export-research-open {
+  /* ui Button sm, secondary: 2.7rem, --radius-md, --ink-800 with an --ink-750
+     hover. The phone block below floors it at the 44px touch target. */
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  min-height: 44px;                 /* touch floor (AGENTS.md §1) */
-  padding: 0.2rem 0.6rem;
+  min-height: 2.7rem;
+  padding: var(--space-1) var(--space-3);
   font: inherit;
   font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-primary);
   background: var(--ink-800);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  /* Buttons inherit white-space: nowrap from index.css, which is right here —
+  transition: background-color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease);
+  /* Buttons inherit white-space: nowrap from index.css, which is right here:
      the label is two words and must not break mid-phrase. */
 }
 
-.export-research-open:hover { background: var(--ink-750); }
+.export-research-open:hover {
+  background: var(--ink-750);
+  border-color: var(--border-strong);
+}
+
+.export-research-open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 .export-research-more { color: var(--text-muted); font-size: var(--fs-xs); }
 
@@ -488,5 +529,5 @@
      full-width, rather than three things fighting for 390px. */
   .export-research-list li { flex-direction: column; align-items: flex-start; }
   .export-research-why { flex: none; }
-  .export-research-open { width: 100%; justify-content: center; }
+  .export-research-open { width: 100%; justify-content: center; min-height: var(--tap, 44px); }
 }

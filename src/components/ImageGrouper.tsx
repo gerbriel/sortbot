@@ -2923,7 +2923,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         <div style={{
           position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
           zIndex: 99999, background: 'var(--ink-800)',
-          border: '1.5px solid var(--accent-line)', borderRadius: 14,
+          border: '1.5px solid var(--accent-line)', borderRadius: 'var(--radius-lg)',
           padding: '14px 22px 12px', minWidth: 320, maxWidth: 420,
           boxShadow: '0 8px 32px var(--accent-glow)',
           display: 'flex', flexDirection: 'column', gap: 8, fontFamily: 'inherit',
@@ -2967,13 +2967,16 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
                   const ids = [...cropPasteProgress.failed];
                   await runCropBatchPaste(ids, copiedCrop!, copiedRotation, copiedCropAspect);
                 }}
-                style={{ flex: 1, background: 'var(--warning)', color: 'var(--ink-950)', border: 'none', borderRadius: 8, padding: '0.4rem 0.7rem', cursor: 'pointer', fontWeight: 600, fontSize: 'var(--fs-xs)' }}
+                type="button"
+                className="ptb-btn ptb-btn--warn"
+                style={{ flex: 1 }}
               >
                 <RotateCcw size={12} style={{ flexShrink: 0 }} /> Retry {cropPasteProgress.failed.length} failed
               </button>
               <button
+                type="button"
+                className="ptb-btn"
                 onClick={() => setCropPasteProgress(null)}
-                style={{ background: 'none', border: '1px solid var(--accent-line)', color: 'var(--accent)', borderRadius: 8, padding: '0.4rem 0.7rem', cursor: 'pointer', fontSize: 'var(--fs-xs)' }}
               >
                 Dismiss
               </button>
@@ -2987,7 +2990,7 @@ const ImageGrouper: React.FC<ImageGrouperProps> = ({ items, onGrouped, onStatsCh
         <div style={{
           position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
           zIndex: 99999, background: 'var(--ink-800)',
-          border: '1.5px solid var(--accent-line)', borderRadius: 14,
+          border: '1.5px solid var(--accent-line)', borderRadius: 'var(--radius-lg)',
           padding: '12px 22px', minWidth: 260,
           boxShadow: '0 8px 32px var(--accent-glow)',
           display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'inherit',

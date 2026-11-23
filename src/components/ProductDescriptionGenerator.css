@@ -804,7 +804,7 @@
 }
 .crop-fs-pill {
   background: var(--ink-750); color: var(--text-secondary);
-  border: 1.5px solid transparent; border-radius: 20px;
+  border: 1px solid transparent; border-radius: var(--radius-md);
   padding: 6px 16px; font-size: var(--fs-xs); font-weight: 600;
   cursor: pointer; white-space: nowrap; transition: all 0.15s;
 }
@@ -1118,7 +1118,7 @@
   background: var(--ink-800);
   backdrop-filter: blur(6px);
   padding: 8px 14px;
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
   z-index: 10;
 }
 
@@ -1499,4 +1499,75 @@
   .preview-save-btn {
     min-height: var(--tap, 44px);
   }
+}
+
+/* ── Override preset (Step 3, Nov 2026) ─────────────────────────────────────
+   A quiet caption in the FieldGroup style over a search box that IS a
+   .ui-input (radius, 1px --border-control, 3.6rem / 44px, focus ring, --fs-md
+   on phones). The icon and clear button sit over the input's padding, so the
+   input box itself is untouched. */
+.pdg-preset-override {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.pdg-preset-override__caption {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  line-height: var(--lh-snug);
+  color: var(--text-muted);
+}
+
+.pdg-preset-override__combo { position: relative; }
+
+.pdg-preset-override__box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.pdg-preset-override__icon {
+  position: absolute;
+  left: var(--space-3);
+  display: inline-flex;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.pdg-preset-override .pdg-preset-override__input {
+  padding-left: calc(var(--space-3) + 12px + var(--space-2));
+  padding-right: calc(var(--space-3) + 12px + var(--space-2));
+}
+
+.pdg-preset-override__input--applied { font-weight: 600; }
+
+.pdg-preset-override__clear {
+  position: absolute;
+  right: var(--space-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.7rem;
+  min-height: 2.7rem;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.pdg-preset-override__clear:hover { background: var(--ink-750); color: var(--text-primary); }
+.pdg-preset-override__clear:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.pdg-preset-override__hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-snug);
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  .pdg-preset-override__clear { min-width: 44px; min-height: 44px; }
 }

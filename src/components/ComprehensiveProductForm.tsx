@@ -64,23 +64,25 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
     );
   };
 
-  // The control class every cell hands out, plus the empty-field class. The
-  // class stays on the control; FieldGrid.css draws the marker on its cell.
-  const cls = (c: FieldCellControlProps, value?: unknown) => `${c.className}${req(value)}`;
+  // Props every required control takes after the cell's own: the control
+  // class plus the empty-field class (the cell's --warning rule keys on it),
+  // and aria-required. The class stays on the control; the CSS draws the
+  // marker on its cell.
+  const rq = (c: FieldCellControlProps, value?: unknown) => ({
+    className: `${c.className}${req(value)}`,
+    'aria-required': true as const,
+  });
 
-  // Meta slot for a field that carries the empty-field class: any badge first,
-  // then the quiet "Required" word while the value is empty. Every required
-  // cell renders its marker this way, so the word never moves.
-  const need = (value: unknown, extra?: React.ReactNode) => {
-    const empty = !value;
-    if (!extra && !empty) return null;
-    return (
-      <>
-        {extra}
-        {empty && <span className="field-required-note">Required</span>}
-      </>
-    );
-  };
+  // A required field's label: the text, then a red asterisk (decorative) and
+  // a visually hidden " (required)" so the accessible name says it in words.
+  // Shown whether or not the field is filled; the empty state is the rule.
+  const reqLabel = (text: string) => (
+    <>
+      {text}
+      <span className="field-required-star" aria-hidden="true">*</span>
+      <span className="ui-sr-only"> (required)</span>
+    </>
+  );
 
   // The preset's measurement template marks which measurements this category
   // expects (the checkbox grid in the Presets manager). Flagged-and-empty gets
@@ -90,10 +92,9 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
     | undefined;
 
   // A measurement's meta: the preset's "Needed" badge when the template flags
-  // it, otherwise the same "Required" word every other empty field shows
-  // (never both: "Needed" already says it).
+  // it and it is empty, otherwise nothing (the asterisk is on the label).
   const measurementNeeded = (field: string, value?: string) => {
-    if (!measurementTemplate?.[field] || value) return need(value);
+    if (!measurementTemplate?.[field] || value) return null;
     return (
       <span title={`The "${currentItem._presetData?.displayName}" preset expects this measurement`}>
         <Badge tone="warning">Needed</Badge>
@@ -106,8 +107,8 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
 
       <FieldGroup caption="Pricing" data-section="pricing">
         <FieldGrid columns={3}>
-          <FieldCell label="Price ($)" meta={need(currentItem.price)}>
-            {(c) => <input {...c} type="number" value={currentItem.price || ''} onChange={(e) => updateGroupField('price', e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="e.g., 49.99" className={cls(c, currentItem.price)} step="0.01" min="0" />}
+          <FieldCell label={reqLabel("Price ($)")}>
+            {(c) => <input {...c} type="number" value={currentItem.price || ''} onChange={(e) => updateGroupField('price', e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="e.g., 49.99" {...rq(c, currentItem.price)} step="0.01" min="0" />}
           </FieldCell>
           <FieldCell label="Compare-at price ($)">
             {(c) => <input {...c} type="number" value={currentItem.compareAtPrice || ''} onChange={(e) => updateGroupField('compareAtPrice', e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="Original price" step="0.01" min="0" />}
@@ -120,15 +121,15 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
 
       <FieldGroup caption="Core details" data-section="core">
         <FieldGrid columns={3}>
-          <FieldCell label="Brand" meta={need(currentItem.brand, presetBadge('brand'))} footer={brandExtra}>
-            {(c) => <input {...c} type="text" value={currentItem.brand || ''} onChange={(e) => updateGroupField('brand', e.target.value)} onBlur={(e) => onBrandEdited?.(e.target.value)} placeholder="e.g., Nike, Levi's" className={cls(c, currentItem.brand)} />}
+          <FieldCell label={reqLabel("Brand")} meta={presetBadge('brand')} footer={brandExtra}>
+            {(c) => <input {...c} type="text" value={currentItem.brand || ''} onChange={(e) => updateGroupField('brand', e.target.value)} onBlur={(e) => onBrandEdited?.(e.target.value)} placeholder="e.g., Nike, Levi's" {...rq(c, currentItem.brand)} />}
           </FieldCell>
-          <FieldCell label="Size" meta={need(currentItem.size)}>
-            {(c) => <input {...c} type="text" value={currentItem.size || ''} onChange={(e) => updateGroupField('size', e.target.value)} onBlur={(e) => { const norm = normalizeSizeValue(e.target.value, { keepFitsLike: true }); if (norm && norm !== e.target.value) updateGroupField('size', norm); }} placeholder="M · 1X · 32x34 · YM · PS" className={cls(c, currentItem.size)} />}
+          <FieldCell label={reqLabel("Size")}>
+            {(c) => <input {...c} type="text" value={currentItem.size || ''} onChange={(e) => updateGroupField('size', e.target.value)} onBlur={(e) => { const norm = normalizeSizeValue(e.target.value, { keepFitsLike: true }); if (norm && norm !== e.target.value) updateGroupField('size', norm); }} placeholder="M, 1X, 32x34, YM, PS" {...rq(c, currentItem.size)} />}
           </FieldCell>
-          <FieldCell label="Condition" meta={need(currentItem.condition)}>
+          <FieldCell label={reqLabel("Condition")}>
             {(c) => (
-            <select {...c} value={currentItem.condition || ''} onChange={(e) => updateGroupField('condition', e.target.value)} className={cls(c, currentItem.condition)}>
+            <select {...c} value={currentItem.condition || ''} onChange={(e) => updateGroupField('condition', e.target.value)} {...rq(c, currentItem.condition)}>
               <option value="">Select condition...</option>
               <option value="New">New</option>
               <option value="NWT">NWT (New With Tags)</option>
@@ -139,24 +140,24 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
             </select>
             )}
           </FieldCell>
-          <FieldCell label="Color" meta={need(currentItem.color)}>
-            {(c) => <input {...c} type="text" value={currentItem.color || ''} onChange={(e) => updateGroupField('color', e.target.value)} placeholder="e.g., Black, Blue" className={cls(c, currentItem.color)} />}
+          <FieldCell label={reqLabel("Color")}>
+            {(c) => <input {...c} type="text" value={currentItem.color || ''} onChange={(e) => updateGroupField('color', e.target.value)} placeholder="e.g., Black, Blue" {...rq(c, currentItem.color)} />}
           </FieldCell>
           <FieldCell label="Secondary color">
             {(c) => <input {...c} type="text" value={currentItem.secondaryColor || ''} onChange={(e) => updateGroupField('secondaryColor', e.target.value)} placeholder="Additional color" />}
           </FieldCell>
-          <FieldCell label="Material" meta={need(currentItem.material, presetBadge('material'))}>
-            {(c) => <input {...c} type="text" value={currentItem.material || ''} onChange={(e) => updateGroupField('material', e.target.value)} placeholder="e.g., 100% Cotton" className={cls(c, currentItem.material)} />}
+          <FieldCell label={reqLabel("Material")} meta={presetBadge('material')}>
+            {(c) => <input {...c} type="text" value={currentItem.material || ''} onChange={(e) => updateGroupField('material', e.target.value)} placeholder="e.g., 100% Cotton" {...rq(c, currentItem.material)} />}
           </FieldCell>
-          <FieldCell label="Era or vibe" meta={need(currentItem.era)}>
-            {(c) => <input {...c} type="text" value={currentItem.era || ''} onChange={(e) => updateGroupField('era', e.target.value)} placeholder="e.g., 90s, Y2K, vintage" className={cls(c, currentItem.era)} />}
+          <FieldCell label={reqLabel("Era or vibe")}>
+            {(c) => <input {...c} type="text" value={currentItem.era || ''} onChange={(e) => updateGroupField('era', e.target.value)} placeholder="e.g., 90s, Y2K, vintage" {...rq(c, currentItem.era)} />}
           </FieldCell>
-          <FieldCell label="Style" meta={need(currentItem.style, presetBadge('style'))}>
-            {(c) => <input {...c} type="text" value={currentItem.style || ''} onChange={(e) => updateGroupField('style', e.target.value)} placeholder="e.g., Streetwear, Preppy" className={cls(c, currentItem.style)} />}
+          <FieldCell label={reqLabel("Style")} meta={presetBadge('style')}>
+            {(c) => <input {...c} type="text" value={currentItem.style || ''} onChange={(e) => updateGroupField('style', e.target.value)} placeholder="e.g., Streetwear, Preppy" {...rq(c, currentItem.style)} />}
           </FieldCell>
-          <FieldCell label="Gender" meta={need(currentItem.gender, presetBadge('gender'))}>
+          <FieldCell label={reqLabel("Gender")} meta={presetBadge('gender')}>
             {(c) => (
-            <select {...c} value={currentItem.gender || ''} onChange={(e) => updateGroupField('gender', e.target.value)} className={cls(c, currentItem.gender)}>
+            <select {...c} value={currentItem.gender || ''} onChange={(e) => updateGroupField('gender', e.target.value)} {...rq(c, currentItem.gender)}>
               <option value="">Select gender...</option>
               <option value="Men">Men</option>
               <option value="Women">Women</option>
@@ -165,70 +166,70 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
             </select>
             )}
           </FieldCell>
-          <FieldCell label="Type (garment)" meta={need(currentItem.productType, presetBadge('productType'))}>
-            {(c) => <input {...c} type="text" value={currentItem.productType || ''} onChange={(e) => updateGroupField('productType', e.target.value)} placeholder="e.g., Sweater, Hoodie, Pants" className={cls(c, currentItem.productType)} />}
+          <FieldCell label={reqLabel("Type (garment)")} meta={presetBadge('productType')}>
+            {(c) => <input {...c} type="text" value={currentItem.productType || ''} onChange={(e) => updateGroupField('productType', e.target.value)} placeholder="e.g., Sweater, Hoodie, Pants" {...rq(c, currentItem.productType)} />}
           </FieldCell>
-          <FieldCell label="Model name" meta={need(currentItem.modelName)}>
-            {(c) => <input {...c} type="text" value={currentItem.modelName || ''} onChange={(e) => updateGroupField('modelName', e.target.value)} placeholder="e.g., Air Force 1, 501" className={cls(c, currentItem.modelName)} />}
+          <FieldCell label={reqLabel("Model name")}>
+            {(c) => <input {...c} type="text" value={currentItem.modelName || ''} onChange={(e) => updateGroupField('modelName', e.target.value)} placeholder="e.g., Air Force 1, 501" {...rq(c, currentItem.modelName)} />}
           </FieldCell>
-          <FieldCell label="Flaws (if any)" meta={need(currentItem.flaws)}>
-            {(c) => <input {...c} type="text" value={currentItem.flaws || ''} onChange={(e) => updateGroupField('flaws', e.target.value)} placeholder="e.g., minor pilling" className={cls(c, currentItem.flaws)} />}
+          <FieldCell label={reqLabel("Flaws (if any)")}>
+            {(c) => <input {...c} type="text" value={currentItem.flaws || ''} onChange={(e) => updateGroupField('flaws', e.target.value)} placeholder="e.g., minor pilling" {...rq(c, currentItem.flaws)} />}
           </FieldCell>
-          <FieldCell label="Tags (comma-separated)" meta={need(currentItem.tags?.length, presetBadge('tags'))}>
-            {(c) => <input {...c} type="text" value={currentItem.tags?.join(', ') || ''} onChange={(e) => updateGroupField('tags', e.target.value ? e.target.value.split(',').map(t => t.trim()).filter(t => t) : [])} placeholder="e.g., vintage, tees, black" className={cls(c, currentItem.tags?.length)} />}
+          <FieldCell label={reqLabel("Tags (comma-separated)")} meta={presetBadge('tags')}>
+            {(c) => <input {...c} type="text" value={currentItem.tags?.join(', ') || ''} onChange={(e) => updateGroupField('tags', e.target.value ? e.target.value.split(',').map(t => t.trim()).filter(t => t) : [])} placeholder="e.g., vintage, tees, black" {...rq(c, currentItem.tags?.length)} />}
           </FieldCell>
-          <FieldCell label="SEO title" meta={need(currentItem.seoTitle)}>
-            {(c) => <input {...c} type="text" value={currentItem.seoTitle || ''} onChange={(e) => updateGroupField('seoTitle', e.target.value)} placeholder="e.g., Vintage Black Rolling Stones Tee" className={cls(c, currentItem.seoTitle)} />}
+          <FieldCell label={reqLabel("SEO title")}>
+            {(c) => <input {...c} type="text" value={currentItem.seoTitle || ''} onChange={(e) => updateGroupField('seoTitle', e.target.value)} placeholder="e.g., Vintage Black Rolling Stones Tee" {...rq(c, currentItem.seoTitle)} />}
           </FieldCell>
-          <FieldCell label="Care instructions" meta={need(currentItem.care, presetBadge('care'))}>
-            {(c) => <input {...c} type="text" value={currentItem.care || ''} onChange={(e) => updateGroupField('care', e.target.value)} placeholder="e.g., Machine wash cold" className={cls(c, currentItem.care)} />}
+          <FieldCell label={reqLabel("Care instructions")} meta={presetBadge('care')}>
+            {(c) => <input {...c} type="text" value={currentItem.care || ''} onChange={(e) => updateGroupField('care', e.target.value)} placeholder="e.g., Machine wash cold" {...rq(c, currentItem.care)} />}
           </FieldCell>
         </FieldGrid>
       </FieldGroup>
 
       <FieldGroup caption="Measurements (inches)" data-section="measurements">
         <FieldGrid columns={3}>
-          <FieldCell label="Width" meta={measurementNeeded('width', currentItem.measurements?.width)}>
-            {(c) => <input {...c} type="text" value={currentItem.measurements?.width || ''} onChange={(e) => updateGroupField('measurements.width', e.target.value)} placeholder="e.g., 22" className={cls(c, currentItem.measurements?.width)} />}
+          <FieldCell label={reqLabel("Width")} meta={measurementNeeded('width', currentItem.measurements?.width)}>
+            {(c) => <input {...c} type="text" value={currentItem.measurements?.width || ''} onChange={(e) => updateGroupField('measurements.width', e.target.value)} placeholder="e.g., 22" {...rq(c, currentItem.measurements?.width)} />}
           </FieldCell>
-          <FieldCell label="Length" meta={measurementNeeded('length', currentItem.measurements?.length)}>
-            {(c) => <input {...c} type="text" value={currentItem.measurements?.length || ''} onChange={(e) => updateGroupField('measurements.length', e.target.value)} placeholder="e.g., 28" className={cls(c, currentItem.measurements?.length)} />}
+          <FieldCell label={reqLabel("Length")} meta={measurementNeeded('length', currentItem.measurements?.length)}>
+            {(c) => <input {...c} type="text" value={currentItem.measurements?.length || ''} onChange={(e) => updateGroupField('measurements.length', e.target.value)} placeholder="e.g., 28" {...rq(c, currentItem.measurements?.length)} />}
           </FieldCell>
-          <FieldCell label="Sleeve" meta={measurementNeeded('sleeve', currentItem.measurements?.sleeve)}>
-            {(c) => <input {...c} type="text" value={currentItem.measurements?.sleeve || ''} onChange={(e) => updateGroupField('measurements.sleeve', e.target.value)} placeholder="e.g., 24" className={cls(c, currentItem.measurements?.sleeve)} />}
+          <FieldCell label={reqLabel("Sleeve")} meta={measurementNeeded('sleeve', currentItem.measurements?.sleeve)}>
+            {(c) => <input {...c} type="text" value={currentItem.measurements?.sleeve || ''} onChange={(e) => updateGroupField('measurements.sleeve', e.target.value)} placeholder="e.g., 24" {...rq(c, currentItem.measurements?.sleeve)} />}
           </FieldCell>
-          <FieldCell label="Shoulder" meta={measurementNeeded('shoulder', currentItem.measurements?.shoulder)}>
-            {(c) => <input {...c} type="text" value={currentItem.measurements?.shoulder || ''} onChange={(e) => updateGroupField('measurements.shoulder', e.target.value)} placeholder="e.g., 18" className={cls(c, currentItem.measurements?.shoulder)} />}
+          <FieldCell label={reqLabel("Shoulder")} meta={measurementNeeded('shoulder', currentItem.measurements?.shoulder)}>
+            {(c) => <input {...c} type="text" value={currentItem.measurements?.shoulder || ''} onChange={(e) => updateGroupField('measurements.shoulder', e.target.value)} placeholder="e.g., 18" {...rq(c, currentItem.measurements?.shoulder)} />}
           </FieldCell>
-          <FieldCell label="Waist" meta={measurementNeeded('waist', currentItem.measurements?.waist)}>
-            {(c) => <input {...c} type="text" value={currentItem.measurements?.waist || ''} onChange={(e) => updateGroupField('measurements.waist', e.target.value)} placeholder="e.g., 32" className={cls(c, currentItem.measurements?.waist)} />}
+          <FieldCell label={reqLabel("Waist")} meta={measurementNeeded('waist', currentItem.measurements?.waist)}>
+            {(c) => <input {...c} type="text" value={currentItem.measurements?.waist || ''} onChange={(e) => updateGroupField('measurements.waist', e.target.value)} placeholder="e.g., 32" {...rq(c, currentItem.measurements?.waist)} />}
           </FieldCell>
-          <FieldCell label="Inseam" meta={measurementNeeded('inseam', currentItem.measurements?.inseam)}>
-            {(c) => <input {...c} type="text" value={currentItem.measurements?.inseam || ''} onChange={(e) => updateGroupField('measurements.inseam', e.target.value)} placeholder="e.g., 30" className={cls(c, currentItem.measurements?.inseam)} />}
+          <FieldCell label={reqLabel("Inseam")} meta={measurementNeeded('inseam', currentItem.measurements?.inseam)}>
+            {(c) => <input {...c} type="text" value={currentItem.measurements?.inseam || ''} onChange={(e) => updateGroupField('measurements.inseam', e.target.value)} placeholder="e.g., 30" {...rq(c, currentItem.measurements?.inseam)} />}
           </FieldCell>
-          <FieldCell label="Rise" meta={measurementNeeded('rise', currentItem.measurements?.rise)}>
-            {(c) => <input {...c} type="text" value={currentItem.measurements?.rise || ''} onChange={(e) => updateGroupField('measurements.rise', e.target.value)} placeholder="e.g., 11" className={cls(c, currentItem.measurements?.rise)} />}
+          <FieldCell label={reqLabel("Rise")} meta={measurementNeeded('rise', currentItem.measurements?.rise)}>
+            {(c) => <input {...c} type="text" value={currentItem.measurements?.rise || ''} onChange={(e) => updateGroupField('measurements.rise', e.target.value)} placeholder="e.g., 11" {...rq(c, currentItem.measurements?.rise)} />}
           </FieldCell>
         </FieldGrid>
       </FieldGroup>
 
       <FieldGroup caption="Inventory and shipping" data-section="inventory">
         <FieldGrid columns={3}>
-          <FieldCell label="SKU" meta={need(currentItem.sku)}>
-            {(c) => <input {...c} type="text" value={currentItem.sku || ''} onChange={(e) => updateGroupField('sku', e.target.value)} placeholder="Stock keeping unit" className={cls(c, currentItem.sku)} />}
+          <FieldCell label={reqLabel("SKU")}>
+            {(c) => <input {...c} type="text" value={currentItem.sku || ''} onChange={(e) => updateGroupField('sku', e.target.value)} placeholder="Stock keeping unit" {...rq(c, currentItem.sku)} />}
           </FieldCell>
           <FieldCell label="Inventory quantity">
             {(c) => <input {...c} type="number" value={currentItem.inventoryQuantity || ''} onChange={(e) => updateGroupField('inventoryQuantity', e.target.value ? parseInt(e.target.value) : undefined)} placeholder="Stock level" min="0" />}
           </FieldCell>
-          <FieldCell label="Weight (grams)" meta={need(currentItem.weightValue, presetBadge('weightValue'))}>
-            {(c) => <input {...c} type="text" value={currentItem.weightValue || ''} onChange={(e) => updateGroupField('weightValue', e.target.value)} placeholder="e.g., 350" className={cls(c, currentItem.weightValue)} />}
+          <FieldCell label={reqLabel("Weight (grams)")} meta={presetBadge('weightValue')}>
+            {(c) => <input {...c} type="text" value={currentItem.weightValue || ''} onChange={(e) => updateGroupField('weightValue', e.target.value)} placeholder="e.g., 350" {...rq(c, currentItem.weightValue)} />}
           </FieldCell>
-          <FieldCell label="Ships from" meta={need(currentItem.shipsFrom, presetBadge('shipsFrom'))}>
-            {(c) => <input {...c} type="text" value={currentItem.shipsFrom || ''} onChange={(e) => updateGroupField('shipsFrom', e.target.value)} placeholder="Shipping location" className={cls(c, currentItem.shipsFrom)} />}
+          <FieldCell label={reqLabel("Ships from")} meta={presetBadge('shipsFrom')}>
+            {(c) => <input {...c} type="text" value={currentItem.shipsFrom || ''} onChange={(e) => updateGroupField('shipsFrom', e.target.value)} placeholder="Shipping location" {...rq(c, currentItem.shipsFrom)} />}
           </FieldCell>
-          <FieldCell label="Parcel size" meta={need(currentItem.parcelSize, presetBadge('parcelSize'))}>
+          <FieldCell label={reqLabel("Parcel size")} meta={presetBadge('parcelSize')}>
             {(c) => (
-            <select {...c} value={currentItem.parcelSize || ''} onChange={(e) => updateGroupField('parcelSize', e.target.value)} className={cls(c, currentItem.parcelSize)}>
+            <select {...c} value={currentItem.parcelSize || ''} onChange={(e) => updateGroupField('parcelSize', e.target.value)} {...rq(c, currentItem.parcelSize)}>
               <option value="">Select size...</option>
               <option value="Small">Small</option>
               <option value="Medium">Medium</option>
@@ -237,8 +238,8 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
             </select>
             )}
           </FieldCell>
-          <FieldCell label="Package dimensions" meta={need(currentItem.packageDimensions, presetBadge('packageDimensions'))}>
-            {(c) => <input {...c} type="text" value={currentItem.packageDimensions || ''} onChange={(e) => updateGroupField('packageDimensions', e.target.value)} placeholder="e.g., 14 x 10 x 1 in" className={cls(c, currentItem.packageDimensions)} />}
+          <FieldCell label={reqLabel("Package dimensions")} meta={presetBadge('packageDimensions')}>
+            {(c) => <input {...c} type="text" value={currentItem.packageDimensions || ''} onChange={(e) => updateGroupField('packageDimensions', e.target.value)} placeholder="e.g., 14 x 10 x 1 in" {...rq(c, currentItem.packageDimensions)} />}
           </FieldCell>
           <FieldCell label="Requires shipping" meta={presetBadge('requiresShipping')}>
             {(c) => (
@@ -271,11 +272,11 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
             </select>
             )}
           </FieldCell>
-          <FieldCell label="Age group" meta={need(currentItem.ageGroup, presetBadge('ageGroup'))}>
-            {(c) => <input {...c} type="text" value={currentItem.ageGroup || ''} onChange={(e) => updateGroupField('ageGroup', e.target.value)} placeholder="e.g., Adult (13+ years)" className={cls(c, currentItem.ageGroup)} />}
+          <FieldCell label={reqLabel("Age group")} meta={presetBadge('ageGroup')}>
+            {(c) => <input {...c} type="text" value={currentItem.ageGroup || ''} onChange={(e) => updateGroupField('ageGroup', e.target.value)} placeholder="e.g., Adult (13+ years)" {...rq(c, currentItem.ageGroup)} />}
           </FieldCell>
-          <FieldCell label="SEO description" span={2} meta={need(currentItem.seoDescription)}>
-            {(c) => <textarea {...c} value={currentItem.seoDescription || ''} onChange={(e) => updateGroupField('seoDescription', e.target.value)} placeholder="Meta description for search engines" className={`${c.className} js-autogrow${req(currentItem.seoDescription)}`} rows={2} />}
+          <FieldCell label={reqLabel("SEO description")} span={2}>
+            {(c) => <textarea {...c} value={currentItem.seoDescription || ''} onChange={(e) => updateGroupField('seoDescription', e.target.value)} placeholder="Meta description for search engines" className={`${c.className} js-autogrow${req(currentItem.seoDescription)}`} aria-required="true" rows={2} />}
           </FieldCell>
           <FieldCell label="Size type" meta={presetBadge('sizeType')}>
             {(c) => (

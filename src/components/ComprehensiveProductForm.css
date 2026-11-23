@@ -9,47 +9,24 @@
   gap: var(--space-5);
 }
 
-/* Button Styles */
-.button {
-  padding: 0.3rem 0.7rem;
-  border-radius: 4px;
-  font-size: var(--fs-xs);
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.button-secondary {
-  background: var(--ink-750);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-}
-
-.button-secondary:hover {
-  background: var(--ink-700);
-  border-color: var(--border-strong);
-}
-
-/* ── Required and empty: a quiet in-cell marker ──────────────────────
-   `.field-required-empty` stays on the control exactly where the form's
-   req() logic puts it; the marker is drawn on the CELL that holds it: a 2px
-   --warning rule on the left, the same geometry as the dictation table's
-   --accent highlight (.vct-col--active), plus the word "Required" that the
-   form renders in the cell's meta slot. The control itself keeps the
+/* ── Required: an asterisk on the label, a rule when empty ────────────
+   Every required field's label ends in a red asterisk (aria-hidden; a
+   visually hidden " (required)" and aria-required on the control carry it
+   for screen readers), filled or not. The EMPTY state is the cell's 2px
+   --warning left rule, the same geometry as the dictation table's --accent
+   highlight (.vct-col--active), keyed on `.field-required-empty`, which
+   stays on the control where req() puts it. The control keeps the
    plain-text-at-rest look: no border, no ring, no !important. */
 .comprehensive-product-form .ui-fieldcell:has(.field-required-empty) {
   box-shadow: inset 2px 0 0 var(--warning);
 }
 
-.comprehensive-product-form .field-required-note {
+.comprehensive-product-form .field-required-star {
+  margin-left: 0.2em;
   font-size: var(--fs-2xs);
-  font-weight: 500;
-  line-height: var(--lh-snug);
-  color: var(--warning);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--danger);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -60,15 +37,6 @@
    a sticky caption slides under the app's own sticky nav.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-.comprehensive-product-form .ui-fieldcell__control,
-.comprehensive-product-form .button {
+.comprehensive-product-form .ui-fieldcell__control {
   touch-action: manipulation;
-}
-
-@media (max-width: 640px) {
-  .comprehensive-product-form .button {
-    min-height: var(--tap, 44px);
-    font-size: var(--fs-sm);
-    justify-content: center;
-  }
 }

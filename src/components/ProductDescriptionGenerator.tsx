@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
 import type { ClothingItem } from '../App';
 import { Target, AlertTriangle, Check, Download, Search, Hourglass, Square, Mic, Trash2,
-         Brush, ClipboardPaste, Crop, X, Brain, RefreshCw, Palette, ClipboardList,
-         Lightbulb, Copy, CircleDot, Save } from 'lucide-react';
+         Brush, ClipboardPaste, Crop, X, Brain, RefreshCw, ClipboardList,
+         Copy, CircleDot, Save } from 'lucide-react';
+import './ui/Field.css';
 import { ComprehensiveProductForm } from './ComprehensiveProductForm';
 import { KeywordPicker } from './KeywordPicker';
 import { getCategoryPresets } from '../lib/categoryPresetsService';
@@ -3465,37 +3466,21 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
             {/* Manual Preset Override Dropdown */}
             {availablePresets.length > 0 && (
-              <div style={{
-                marginBottom: '1.5rem',
-                padding: '1rem',
-                background: 'var(--ink-800)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                  <label style={{
-                    fontWeight: 600,
-                    color: 'var(--text-primary)'
-                  }}>
-                    <Palette size={11} style={{ flexShrink: 0 }} /> Override Preset (Optional):
-                  </label>
-                </div>
-                {/* Searchable preset combobox */}
-                <div style={{ position: 'relative' }}>
-                  <div
-                    style={{
-                      display: 'flex', alignItems: 'center',
-                      border: `1px solid ${presetSearchOpen ? 'var(--accent)' : 'var(--border-control)'}`,
-                      /* Field surface — a literal white here would override the
-                         global input rule and leave white-on-white typing. */
-                      borderRadius: '4px', background: 'var(--ink-850)',
-                      boxShadow: presetSearchOpen ? '0 0 0 2px var(--accent-dim)' : 'none',
-                      transition: 'border-color 0.15s, box-shadow 0.15s',
-                    }}
-                  >
-                    <span style={{ padding: '0 0.5rem', color: 'var(--text-muted)', fontSize: 'var(--fs-sm)', display: 'inline-flex' }}><Search size={11} /></span>
+              <div className="pdg-preset-override">
+                {/* A quiet caption in the FieldGroup style (no icon). */}
+                <label htmlFor="pdg-preset-search" className="pdg-preset-override__caption">
+                  Override preset (optional)
+                </label>
+                {/* Searchable preset combobox. The input IS a .ui-input (radius,
+                    1px border, height, focus ring); the search icon and the
+                    clear button sit over its padding. */}
+                <div className="pdg-preset-override__combo">
+                  <div className="pdg-preset-override__box">
+                    <span className="pdg-preset-override__icon" aria-hidden="true"><Search size={12} /></span>
                     <input
+                      id="pdg-preset-search"
                       type="text"
+                      className={`ui-input pdg-preset-override__input${!presetSearchOpen && appliedPresetLabel ? ' pdg-preset-override__input--applied' : ''}`}
                       placeholder={
                         currentItem._presetData ? `Keep Current: ${currentItem._presetData.displayName}` : 'Search presets…'
                       }
@@ -3504,17 +3489,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       onChange={e => { setPresetSearchQuery(e.target.value); setPresetSearchOpen(true); }}
                       onBlur={() => setTimeout(() => setPresetSearchOpen(false), 150)}
                       onKeyDown={e => e.stopPropagation()}
-                      style={{
-                        flex: 1, border: 'none', outline: 'none',
-                        padding: '0.5rem 0.25rem', fontSize: 'var(--fs-base)', background: 'transparent',
-                        color: !presetSearchOpen && appliedPresetLabel ? 'var(--accent)' : 'var(--text-primary)',
-                        fontWeight: !presetSearchOpen && appliedPresetLabel ? 600 : 400,
-                      }}
                     />
                     {(presetSearchQuery || appliedPresetLabel) && (
                       <button
+                        type="button"
+                        className="pdg-preset-override__clear"
+                        aria-label="Clear preset search"
                         onMouseDown={e => { e.preventDefault(); setPresetSearchQuery(''); setAppliedPresetLabel(''); setPresetSearchOpen(true); }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 0.5rem', color: 'var(--text-muted)', fontSize: 'var(--fs-base)', lineHeight: 1 }}
                       ><X size={12} /></button>
                     )}
                   </div>
@@ -3576,13 +3557,8 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     );
                   })()}
                 </div>
-                <p style={{ 
-                  fontSize: 'var(--fs-sm)', 
-                  color: 'var(--text-muted)',
-                  marginTop: '0.5rem',
-                  marginBottom: 0
-                }}>
-                  <Lightbulb size={11} style={{ flexShrink: 0 }} /> Select a different preset to override the current one. Voice dictation always takes precedence.
+                <p className="pdg-preset-override__hint">
+                  Select a different preset to override the current one. Voice dictation always takes precedence.
                 </p>
               </div>
             )}

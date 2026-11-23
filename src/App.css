@@ -171,32 +171,41 @@
   gap: 0.5rem;
   flex-shrink: 0;
 }
+/* Import Folder / Import ZIP: the `.button-secondary` look (ui Button md,
+   secondary). They were two gradient fills, black and gold, which read as the
+   step's primary actions; the drop zone is the primary action here. Both
+   modifiers now share one surface, and `.step1-folder-btn` stays only as the
+   hook the touch-device rule at the bottom of this file hides. */
 .step1-import-btn {
-  padding: 0.5rem 1rem;
-  border: none;
-  border-radius: var(--radius-md);
-  font-weight: 600;
-  font-size: var(--fs-sm);
-  cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--space-2);
+  min-height: 3.6rem;
+  padding: var(--space-2) var(--space-5);
+  font-family: inherit;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  line-height: var(--lh-snug);
   white-space: nowrap;
-  transition: opacity 0.15s;
+  color: var(--text-primary);
+  background: var(--ink-800);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease);
+}
+.step1-import-btn:hover:not(:disabled) {
+  background: var(--ink-750);
+  border-color: var(--border-strong);
+}
+.step1-import-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .step1-import-btn:disabled {
-  opacity: 0.55;
+  opacity: 0.45;
   cursor: not-allowed;
-}
-.step1-folder-btn {
-  /* Was the old indigo brand gradient — now the violet accent ramp. Dark ink
-     for the label: white on a light violet fill fails AA. */
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-press) 100%);
-  color: var(--ink-950);
-}
-.step1-zip-btn {
-  background: linear-gradient(135deg, var(--gold) 0%, var(--warning) 100%);
-  color: var(--ink-950);
 }
 
 .step-description {
@@ -225,65 +234,114 @@
   font-weight: bold;
 }
 
-/* Buttons - Shopify Polaris Style */
+/* ── The legacy `.button` family, in the ui Button language (Nov 2026) ───────
+   Same metrics and shape as `.ui-btn` (components/ui/Button.css): --radius-md,
+   a 1px border, the md step (3.6rem min-height, --space-2 / --space-5 padding,
+   --fs-base, 600) and the sm step for `.button-small` / `.button-sm` (2.7rem,
+   --space-1 / --space-3, --fs-xs). Which elements carry these classes is
+   unchanged; only how they look moved.
+
+   Variants map one to one: bare `.button` and `.button-primary` are the solid
+   --accent fill with --ink-950 text (black fill, white label on this palette),
+   `.button-secondary` is the --ink-800 surface with an --ink-750 hover, and
+   `.button-danger` keeps its solid --danger fill, darkened on hover by the same
+   token-valued inset wash as `.ui-btn--danger` (there is no --danger-hover
+   token, and a literal would break the swap-the-palette property).
+
+   NO LAYOUT-MOVING HOVER: no transform, no scale, no lifted shadow.
+   NO :active fills on purpose: an `.button:active` rule at (0,3,0) would outrank
+   the inverted nav's `.app-header button` and repaint the workspace trigger on
+   press. Touch press feedback is index.css's inset wash. */
 .button {
-  background: var(--shopify-green);
-  /* Dark ink on the light semantic fills — white label on --success/--accent/
-     --danger sits around 2:1 and fails AA. */
-  color: var(--ink-950);
-  border: none;
-  padding: var(--space-3) var(--space-5);
-  border-radius: var(--radius-md);
-  font-size: var(--fs-base);
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  min-height: 3.6rem;
+  padding: var(--space-2) var(--space-5);
+  font-family: inherit;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  letter-spacing: -0.005em;
+  background: var(--accent);
+  color: var(--ink-950);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease),
+              box-shadow var(--dur-fast) var(--ease);
 }
 
 .button:hover:not(:disabled) {
-  background: var(--shopify-green-dark);
-  box-shadow: var(--shadow-md);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
-.button:active:not(:disabled) {
-  transform: translateY(1px);
+/* The base.css ring, restated at class specificity. */
+.button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .button:disabled {
-  background: var(--gray-300);
-  color: var(--gray-500);
+  opacity: 0.45;
   cursor: not-allowed;
-  opacity: 0.6;
+  box-shadow: none;
 }
 
+/* --border-control, not --border, exactly as `.ui-btn--secondary`: WCAG 1.4.11
+   wants 3:1 on an interactive boundary and the decorative border tokens do not
+   reach it. */
 .button-secondary {
-  background: var(--ink-850);
-  color: var(--gray-700);
-  border: 1px solid var(--gray-300);
+  background: var(--ink-800);
+  color: var(--text-primary);
+  border-color: var(--border-control);
 }
 
 .button-secondary:hover:not(:disabled) {
-  background: var(--gray-50);
-  border-color: var(--gray-400);
+  background: var(--ink-750);
+  border-color: var(--border-strong);
 }
 
 .button-primary {
-  background: var(--shopify-blue);
+  background: var(--accent);
+  color: var(--ink-950);
+  border-color: var(--accent);
 }
 
 .button-primary:hover:not(:disabled) {
-  background: var(--shopify-blue-dark);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .button-danger {
-  background: var(--shopify-red);
+  background: var(--danger);
+  color: var(--ink-950);
+  border-color: var(--danger);
 }
 
 .button-danger:hover:not(:disabled) {
-  background: var(--shopify-red-dark);
+  background: var(--danger);
+  border-color: var(--danger);
+  box-shadow: inset 0 0 0 100vmax var(--accent-glow);
+}
+
+.button-small,
+.button-sm {
+  min-height: 2.7rem;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--fs-xs);
+}
+
+/* Phone: every step floors at the 44px touch target, as `.ui-btn` does. This
+   restates index.css's floor because the min-height above is the same
+   specificity and loads later, so it would otherwise win. */
+@media (max-width: 640px) {
+  .button,
+  .button-small,
+  .button-sm { min-height: var(--tap); }
 }
 
 /* The floating debug toggle used to live here (.button-debug-toggle /
@@ -304,6 +362,43 @@
   flex: 1;
   min-width: 200px;
   justify-content: center;
+}
+
+/* Step 4's "Review & Export" disclosure. A full-width row in the ui control
+   language (the `.ui-btn--secondary` surface and md metrics) rather than bare
+   bold text, so it reads as the thing to press. The phone block below lifts
+   it to the 44px floor. The label carries its own caret glyph, so the native
+   marker is hidden. */
+.step4-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 3.6rem;
+  padding: var(--space-2) var(--space-5);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  color: var(--text-primary);
+  background: var(--ink-800);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  transition: background-color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease);
+}
+
+.step4-summary::-webkit-details-marker { display: none; }
+
+.step4-summary:hover {
+  background: var(--ink-750);
+  border-color: var(--border-strong);
+}
+
+.step4-summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .export-section {
@@ -656,7 +751,7 @@
 .app-header .nav-badge {
   min-width: 1.6em;
   padding: 0.1em 0.45em;
-  border-radius: 999px;
+  border-radius: 999px; /* count badge, not a control: matches ui Badge and .sw-badge */
   background: var(--danger);
   color: #ffffff;
   font-size: var(--fs-2xs);
@@ -904,7 +999,7 @@
   .batch-actions .button {
     width: 100%;
     min-width: 0;
-    min-height: 48px;
+    min-height: var(--tap, 44px);
   }
 
   /* The Review & Export disclosure was a 22px-tall target (its padding is

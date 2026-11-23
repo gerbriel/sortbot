@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Images, Copy, Loader2, Search } from 'lucide-react';
+import { Copy, Loader2, Search } from 'lucide-react';
 import {
   embeddingsAvailable,
   ensureEmbeddings,
@@ -152,7 +152,7 @@ export default function SimilarListings({
       if (!progress.ok) { await load(); return; }
       if (progress.value.status === 'done') { await load(); return; }
       if (++polls >= POLL_LIMIT) {
-        setPhase({ kind: 'failed', message: 'That is taking longer than expected — try again.' });
+        setPhase({ kind: 'failed', message: 'That is taking longer than expected. Try again.' });
         return;
       }
       setPhase({
@@ -172,7 +172,6 @@ export default function SimilarListings({
   return (
     <section className="sl-root" aria-labelledby="sl-head">
       <div className="sl-head" id="sl-head">
-        <Images size={14} aria-hidden="true" />
         <span className="sl-head-text">Similar past listings</span>
         {duplicates.length > 0 && (
           <span className="sl-dup-chip">

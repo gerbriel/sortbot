@@ -20,20 +20,110 @@
   gap: 0.5rem;
 }
 
+/* Compact zones are chips with ui Button sm metrics (ui/Button.css): 2.7rem
+   tall, --radius-md, a 1px edge. The edge stays dashed, because a zone is a
+   drop target; its colour is the category's own (set inline from data). */
 .category-zones-container.compact .category-zone {
   flex-direction: row;
   justify-content: flex-start;
-  min-height: auto;
-  padding: 0.6rem 0.75rem;
-  gap: 0.5rem;
-  border-radius: 8px;
-  border-width: 2px;
+  min-height: 2.7rem;
+  padding: var(--space-1) var(--space-3);
+  gap: var(--space-2);
+  border-radius: var(--radius-md);
+  border-width: 1px;
 }
 
 .category-zones-container.compact .category-zone .category-name {
-  font-size: var(--fs-sm);
+  font-size: var(--fs-xs);
   flex: 1;
   text-align: left;
+}
+
+.category-zones-container.compact .category-zone .category-icon {
+  margin-bottom: 0;
+  line-height: 0;
+}
+
+/* ── Search: the ui Field input, with room for its clear button ──────── */
+.cz-search {
+  position: relative;
+  margin-bottom: var(--space-2);
+}
+
+.cz-search .cz-search-input { padding-right: 3.6rem; }
+
+.cz-search-clear {
+  position: absolute;
+  top: 50%;
+  right: var(--space-1);
+  transform: translateY(-50%);
+  width: 2.7rem;
+  min-height: 2.7rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.cz-search-clear:hover {
+  background: var(--ink-750);
+  color: var(--text-primary);
+}
+
+/* ── Gender: a segmented control of ui Button sm segments ────────────────
+   Adjacent buttons share one border (each pulls 1px left over its
+   neighbour), only the outer corners round, and the selected one takes the
+   solid accent fill with the --ink-950 label. */
+.cz-gender-row {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--space-3);
+}
+
+.cz-gender-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 2.7rem;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-control);
+  border-radius: 0;
+  background: var(--ink-800);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+}
+
+.cz-gender-btn + .cz-gender-btn { margin-left: -1px; }
+.cz-gender-btn:first-child { border-radius: var(--radius-md) 0 0 var(--radius-md); }
+.cz-gender-btn:last-child  { border-radius: 0 var(--radius-md) var(--radius-md) 0; }
+
+.cz-gender-btn:hover:not(.cz-gender-btn--on) {
+  background: var(--ink-750);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  z-index: 1;
+}
+
+/* Lift the ring and the selected edge above the neighbour's shared border. */
+.cz-gender-btn:focus-visible { z-index: 2; }
+
+.cz-gender-btn--on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--ink-950);
+  z-index: 1;
+}
+
+.cz-selection-hint {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  text-align: center;
 }
 
 .category-zones-container.compact .category-zone .category-count {
@@ -47,7 +137,7 @@
      a surface step, not a hue. */
   background: linear-gradient(135deg, var(--ink-850) 0%, var(--ink-900) 100%);
   padding: 2rem;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   margin-bottom: 2rem;
 }
 
@@ -66,14 +156,19 @@
   margin: 0 auto;
 }
 
+/* Zones keep the dashed drop-target edge, on the control language of the ui
+   buttons: --radius-md corners, the --ink-800 surface, the --ink-750 hover.
+   No hover lift and no glow; feedback is the surface and the edge colour. */
 .category-zone {
   background: var(--ink-800);
-  border: 3px dashed var(--border-strong);
-  border-radius: 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
   padding: 1.5rem 1rem;
   text-align: center;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background-color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
   min-height: 120px;
   display: flex;
   flex-direction: column;
@@ -83,24 +178,14 @@
 }
 
 .category-zone:hover {
-  border-color: var(--accent);
   background: var(--ink-750);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px var(--accent-glow);
+  border-color: var(--category-color, var(--accent));
 }
 
 .category-zone.drag-over {
   border-color: var(--category-color, var(--success));
   background: var(--success-dim);
   border-style: solid;
-  transform: scale(1.05);
-  box-shadow: 0 8px 20px var(--success-dim);
-}
-
-.category-zone:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--category-color, var(--accent));
 }
 
 /* ── Clear Category zone ─────────────────────────────────────────── */
@@ -122,7 +207,6 @@
   border-color: var(--danger) !important;
   background: var(--danger-dim) !important;
   color: var(--danger);
-  box-shadow: 0 4px 12px var(--danger-dim) !important;
 }
 
 .category-zone-clear:hover .category-name {
@@ -133,8 +217,6 @@
   border-color: var(--danger) !important;
   border-style: solid !important;
   background: var(--danger-dim) !important;
-  transform: scale(1.05);
-  box-shadow: 0 8px 20px var(--danger-dim) !important;
 }
 
 .category-icon {
@@ -173,7 +255,7 @@
 .product-group-card {
   background: var(--ink-850);
   border: 2px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 1rem;
   transition: all 0.3s ease;
   cursor: default;
@@ -186,8 +268,6 @@
 
 .product-group-card:hover {
   border-color: var(--accent-line);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
 }
 
 .group-header {
@@ -203,7 +283,7 @@
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-press) 100%);
   color: var(--ink-950);
   padding: 0.25rem 0.75rem;
-  border-radius: 20px;
+  border-radius: var(--radius-sm);
   font-size: var(--fs-sm);
   font-weight: 600;
 }
@@ -212,11 +292,10 @@
   background: linear-gradient(135deg, var(--success) 0%, var(--shopify-green-dark) 100%);
   color: var(--ink-950);
   padding: 0.35rem 0.85rem;
-  border-radius: 20px;
+  border-radius: var(--radius-sm);
   font-size: var(--fs-sm);
   font-weight: 700;
   text-transform: capitalize;
-  box-shadow: 0 2px 6px var(--success-dim);
 }
 
 .group-images {
@@ -228,7 +307,7 @@
 .group-image-item {
   position: relative;
   aspect-ratio: 1;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   border: 2px solid var(--border);
   background: var(--ink-800);
@@ -238,14 +317,14 @@
 .group-image-item .lazy-skeleton {
   position: absolute;
   inset: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .group-image-item img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .group-image-item img.lazy-img {
@@ -285,7 +364,7 @@
   color: var(--text-muted);
   cursor: grab;
   padding: 4px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   transition: color 0.15s ease, background 0.15s ease;
   z-index: 20;
   line-height: 0;
@@ -323,7 +402,7 @@
   font-size: var(--fs-2xs);
   font-weight: 700;
   padding: 2px 7px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   z-index: 20;
   letter-spacing: 0.02em;
 }
@@ -335,7 +414,7 @@
   margin: -0.5rem 0 1rem;
   padding: 0.4rem 0.75rem;
   background: var(--ink-850);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   display: inline-block;
 }
@@ -368,10 +447,9 @@
   background: linear-gradient(135deg, var(--success) 0%, var(--shopify-green-dark) 100%);
   color: var(--ink-950);
   padding: 0.5rem 1rem;
-  border-radius: 20px;
+  border-radius: var(--radius-sm);
   font-size: var(--fs-sm);
   font-weight: 600;
-  box-shadow: 0 4px 12px var(--success-dim);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -440,22 +518,16 @@
     display: none;
   }
 
-  .cz-gender-row {
-    margin-bottom: 0.4rem !important;
-    gap: 0.35rem !important;
-  }
+  .cz-gender-row { margin-bottom: var(--space-2); }
 
-  .cz-gender-row button {
-    /* Was 40px, under the 44px touch floor (AGENTS.md §1). */
-    min-height: var(--tap, 44px);
-    padding: 0.3rem 0.9rem !important;
-    font-size: var(--fs-sm) !important;
-  }
+  /* The 44px touch floor (AGENTS.md §1); padding and type stay the sm ones,
+     the same rule ui/Button.css applies to its own sm size on a phone. */
+  .cz-gender-btn { min-height: 44px; }
 
   .cz-selection-hint {
-    font-size: var(--fs-sm) !important;
-    color: var(--text-secondary) !important;
-    margin-bottom: 0.35rem !important;
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-2);
   }
 
   /* Vertical list → horizontal chip rail. */
@@ -471,17 +543,16 @@
 
   .category-zones-container.compact .category-zone {
     flex: 0 0 auto;
-    min-height: var(--tap, 44px);
-    padding: 0.5rem 0.85rem;
+    min-height: 44px;
+    padding: var(--space-1) var(--space-3);
     white-space: nowrap;
-    /* Dashed 3px borders read as "drop target"; there is no dropping here. */
+    /* A dashed edge reads as "drop target"; at rest the rail is tap-to-assign,
+       so it is solid until a touch drag is live (see the block below). */
     border-style: solid;
-    border-width: 2px;
   }
 
   .category-zones-container.compact .category-zone .category-name {
     flex: 0 0 auto;
-    font-size: var(--fs-sm);
   }
 
   /* Group list (non-compact) stacks — it is not rendered in Step 2, but the
@@ -507,13 +578,11 @@ html.step2-touch-dragging .category-zones-container.compact .category-zone {
   border-color: var(--category-color, var(--success));
   border-style: solid !important;
   background: var(--success-dim);
-  box-shadow: 0 8px 20px var(--success-dim);
 }
 
 .category-zone-clear[data-step2-over] {
   border-color: var(--danger) !important;
   background: var(--danger-dim) !important;
-  box-shadow: 0 8px 20px var(--danger-dim) !important;
 }
 
 /* The selection hint is the only words the dock shows a touch user; keep it

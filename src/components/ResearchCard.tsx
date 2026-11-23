@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  Microscope, ChevronDown, ChevronRight, RefreshCw, Check, Eye,
+  ChevronDown, ChevronRight, RefreshCw, Check, Eye,
   AlertTriangle, Loader2, CircleDot,
 } from 'lucide-react';
 import type { ClothingItem } from '../App';
@@ -126,7 +126,7 @@ function ConfidenceChip({ value }: { value: number }) {
   const band = confidenceLabel(value);
   return (
     <span className={`rc-conf rc-conf--${band.toLowerCase()}`}>
-      {band} · {Math.round(value * 100)}%
+      {band} {Math.round(value * 100)}%
     </span>
   );
 }
@@ -471,7 +471,6 @@ export default function ResearchCard({
   return (
     <section className="rc" aria-label="Research">
       <header className="rc-head">
-        <Microscope size={13} aria-hidden="true" />
         <h4 className="rc-title">Research</h4>
         <ConfidenceChip value={identification.confidence} />
         {flagged && !reviewed && (
@@ -565,7 +564,7 @@ export default function ResearchCard({
           </div>
           {price.suggestedCents != null && price.lowCents != null && price.highCents != null && (
             <p className="rc-range">
-              {formatCents(price.lowCents)} – {formatCents(price.highCents)} ·{' '}
+              {formatCents(price.lowCents)} to {formatCents(price.highCents)},{' '}
               <span className="rc-method">{METHOD_LABELS[price.method]}</span>
             </p>
           )}
@@ -586,7 +585,7 @@ export default function ResearchCard({
           ) : (
             <p className="rc-note">
               {comps.length === 0
-                ? 'No sold history for this kind of piece yet — mark pieces sold in Products and the next one has comparables.'
+                ? 'No sold history for this kind of piece yet. Mark pieces sold in Products and the next one has comparables.'
                 : `Read ${comps.length} of your own recorded sale${comps.length === 1 ? '' : 's'}.`}
             </p>
           )}

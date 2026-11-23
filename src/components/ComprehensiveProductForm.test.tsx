@@ -30,9 +30,16 @@ function render(item = makeItem()) {
   return { ...m, item, setProcessedItems, onBrandEdited };
 }
 
+/** A label's own text, without the required asterisk and its hidden words. */
+function labelText(label: Element): string {
+  const copy = label.cloneNode(true) as Element;
+  copy.querySelectorAll('.field-required-star, .ui-sr-only').forEach(n => n.remove());
+  return copy.textContent ?? '';
+}
+
 /** The control a visible label points at. */
 function controlFor(container: HTMLElement, text: string): HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement {
-  const label = all(container, 'label').find(l => l.textContent === text);
+  const label = all(container, 'label').find(l => labelText(l) === text);
   if (!label) throw new Error(`no label "${text}"`);
   const id = label.getAttribute('for');
   if (!id) throw new Error(`label "${text}" has no for`);
@@ -122,9 +129,9 @@ describe('ComprehensiveProductForm layout', () => {
   it('every label reaches a control inside its own cell', () => {
     const { container } = render();
     const labels = all(container, 'label.ui-fieldcell__label');
-    expect(labels.map(l => l.textContent)).toEqual(FIELDS.map(f => f[0]));
+    expect(labels.map(labelText)).toEqual(FIELDS.map(f => f[0]));
     for (const label of labels) {
-      const control = controlFor(container, label.textContent ?? '');
+      const control = controlFor(container, labelText(label));
       expect(control.classList.contains('ui-fieldcell__control')).toBe(true);
       expect(label.closest('.ui-fieldcell')?.contains(control)).toBe(true);
     }
@@ -140,29 +147,53 @@ describe('ComprehensiveProductForm layout', () => {
     const brandCell = controlFor(container, 'Brand').closest('.ui-fieldcell') as HTMLElement;
     expect(one(brandCell, '.ui-fieldcell__meta .ui-badge').textContent).toContain('Preset');
     expect(one(brandCell, '.ui-fieldcell__footer [data-k="brand-extra"]').textContent).toBe('spelling');
-    // Width is filled, Length is flagged by the preset and empty (Needed, not
-    // also Required), Sleeve is empty and not flagged (Required).
+    // Width is filled, Length is flagged by the preset and empty (Needed),
+    // Sleeve is empty and not flagged (no meta at all: the asterisk and the
+    // rule carry it).
     const meta = (label: string) => controlFor(container, label).closest('.ui-fieldcell')?.querySelector('.ui-fieldcell__meta');
     expect(meta('Width')).toBeNull();
     expect(meta('Length')?.textContent).toBe('Needed');
-    expect(meta('Sleeve')?.textContent).toBe('Required');
+    expect(meta('Sleeve')).toBeNull();
   });
 
-  it('marks an empty required field quietly: the class on its control and "Required" in the meta slot', () => {
+  it('marks every required field with a red asterisk and words for screen readers, filled or not', () => {
+    const { container } = render(makeItem({ brand: '' }));
+    const required = new Set(['Price ($)', 'Brand', 'Size', 'Condition', 'Color', 'Material', 'Era or vibe', 'Style',
+      'Gender', 'Type (garment)', 'Model name', 'Flaws (if any)', 'Tags (comma-separated)', 'SEO title',
+      'Care instructions', 'Width', 'Length', 'Sleeve', 'Shoulder', 'Waist', 'Inseam', 'Rise', 'SKU',
+      'Weight (grams)', 'Ships from', 'Parcel size', 'Package dimensions', 'Age group', 'SEO description']);
+    for (const [label] of FIELDS) {
+      const el = all(container, 'label.ui-fieldcell__label').find(l => labelText(l) === label) as HTMLElement;
+      const star = el.querySelector('.field-required-star');
+      const control = controlFor(container, label);
+      if (required.has(label)) {
+        expect(star?.textContent).toBe('*');
+        expect(star?.getAttribute('aria-hidden')).toBe('true');
+        expect(el.querySelector('.ui-sr-only')?.textContent).toBe(' (required)');
+        expect(control.getAttribute('aria-required')).toBe('true');
+      } else {
+        expect(star).toBeNull();
+        expect(control.hasAttribute('aria-required')).toBe(false);
+      }
+    }
+    // Filled (Color) and empty (Brand) required fields both carry the star.
+    expect(controlFor(container, 'Color').closest('.ui-fieldcell')?.querySelector('.field-required-star')).not.toBeNull();
+    expect(controlFor(container, 'Brand').closest('.ui-fieldcell')?.querySelector('.field-required-star')).not.toBeNull();
+  });
+
+  it('marks an empty required field with the class on its control and no "Required" word', () => {
     const { container } = render(makeItem({ brand: '', material: '' }));
     const brand = controlFor(container, 'Brand');
     expect(brand.classList.contains('field-required-empty')).toBe(true);
-    expect(brand.closest('.ui-fieldcell')?.querySelector('.ui-fieldcell__meta .field-required-note')?.textContent).toBe('Required');
-    // A filled field carries neither.
-    const color = controlFor(container, 'Color');
-    expect(color.classList.contains('field-required-empty')).toBe(false);
-    expect(color.closest('.ui-fieldcell')?.querySelector('.field-required-note')).toBeNull();
-    // A field outside the required set never shows the word, even empty.
-    const compare = controlFor(container, 'Compare-at price ($)');
-    expect(compare.closest('.ui-fieldcell')?.querySelector('.field-required-note')).toBeNull();
-    // A preset badge needs a value, so an empty preset field shows only the word.
+    expect(container.querySelector('.field-required-note')).toBeNull();
+    expect(container.textContent).not.toContain('Required');
+    // A filled field does not carry the empty class.
+    expect(controlFor(container, 'Color').classList.contains('field-required-empty')).toBe(false);
+    // A field outside the required set never carries it, even empty.
+    expect(controlFor(container, 'Compare-at price ($)').classList.contains('field-required-empty')).toBe(false);
+    // A preset badge needs a value, so an empty preset field has no meta.
     const material = controlFor(container, 'Material').closest('.ui-fieldcell') as HTMLElement;
-    expect(one(material, '.ui-fieldcell__meta').textContent).toBe('Required');
+    expect(material.querySelector('.ui-fieldcell__meta')).toBeNull();
   });
 });
 

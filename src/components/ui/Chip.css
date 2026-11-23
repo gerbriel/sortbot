@@ -11,9 +11,10 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  /* Chips sit in dense toolbars. min-height keeps a 22px target without
-     inflating the row the way Button's 24px step would. */
-  min-height: 2.4rem;
+  /* The same 24px floor and --radius-md as ui Button sm, so a chip row
+     lines up with the buttons beside it (Nov 2026: chips are no longer
+     pills). */
+  min-height: 2.7rem;
   padding: 0.2rem 0.7rem;
   font-family: inherit;
   font-size: var(--fs-xs);
@@ -23,7 +24,7 @@
   background: var(--ink-750);
   color: var(--text-secondary);
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: background-color var(--dur-fast) var(--ease),
               border-color var(--dur-fast) var(--ease),
@@ -39,7 +40,8 @@
 
 .ui-chip:disabled { opacity: 0.45; cursor: not-allowed; }
 
-.ui-chip--sm { min-height: 2rem; padding: 0.1rem 0.55rem; font-size: var(--fs-2xs); }
+/* sm keeps Button sm's 2.7rem height; only the type and padding shrink. */
+.ui-chip--sm { min-height: 2.7rem; padding: 0.1rem 0.55rem; font-size: var(--fs-2xs); }
 
 /* THE ON STATE IS SELECTED BY THE ARIA ATTRIBUTE, NOT A CLASS. Deleting the
    attribute therefore also deletes the highlight, which makes the bug visible
@@ -71,7 +73,7 @@
 }
 .ui-chip--quiet:hover:not(:disabled) { background: var(--ink-750); }
 
-/* Removable chip: TWO SIBLING controls joined into one pill shape. The label
+/* Removable chip: TWO SIBLING controls joined into one chip shape. The label
    half and the dismiss half each keep their own tab stop and focus ring; the
    radius is split so they read as a single object. */
 .ui-chip-group {
@@ -101,7 +103,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.4rem;
+  width: 2.7rem;
   padding: 0;
   font-family: inherit;
   font-size: var(--fs-sm);
@@ -110,7 +112,7 @@
   color: var(--text-muted);
   border: 1px solid transparent;
   border-left: 1px solid var(--border-subtle);
-  border-radius: 0 999px 999px 0;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
   cursor: pointer;
   transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
@@ -121,9 +123,9 @@
 /* ── Phone ──────────────────────────────────────────────────────────────────
    Chips are floored at 44px like every other control rather than given an
    invisible ::after hit target. An overlay hit area was the tempting option —
-   it keeps the pill visually small — but chips sit in rows with ~4px gaps, so
+   it keeps the chip visually small — but chips sit in rows with ~4px gaps, so
    two 44px overlays would overlap and the row would start handing taps to the
-   wrong chip. A taller pill is honest: what you can see is what you can press.
+   wrong chip. A taller chip is honest: what you can see is what you can press.
 
    ui-chip-group already wraps, so a row of them reflows instead of overflowing. */
 @media (max-width: 640px) {

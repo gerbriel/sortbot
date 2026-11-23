@@ -1,5 +1,6 @@
 /* ── Badge ──────────────────────────────────────────────────────────────────
-   Static, non-interactive pill. Replaces .org-role-badge / .org-role-owner /
+   Static, non-interactive tag (--radius-sm since Nov 2026, matching the
+   Step 3 status tags; only CountBadge stays round). Replaces .org-role-badge / .org-role-owner /
    .org-role-admin, .org-plan-badge, .sw-badge (count), .crm-tag, .crm-source
    and the assorted inline status pills.
 
@@ -11,7 +12,7 @@
   align-items: center;
   gap: var(--space-1);
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   font-weight: 700;
   line-height: var(--lh-snug);
   white-space: nowrap;
@@ -37,8 +38,11 @@
 .ui-badge--info    { background: var(--info-dim);    color: var(--info); }
 .ui-badge--gold    { background: var(--gold-dim);    color: var(--gold); }
 
-/* Solid counter — unread marks, where the pill itself has to carry the weight. */
+/* Solid counter — unread marks, where the shape itself has to carry the
+   weight. A count is a different object from a tag, so it keeps its own
+   round radius. */
 .ui-badge--count {
+  border-radius: 999px;
   background: var(--danger);
   color: var(--ink-950);
   min-width: 1.7em;

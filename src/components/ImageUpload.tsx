@@ -964,7 +964,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
             marginTop: '0.75rem',
             background: 'var(--danger-dim)',
             border: '1.5px solid var(--danger)',
-            borderRadius: '8px',
+            borderRadius: 'var(--radius-md)',
             padding: '0.7rem 1rem',
             fontSize: 'var(--fs-sm)',
             color: 'var(--danger)',
@@ -976,28 +976,16 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
               <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
                 <button
                   type="button"
+                  className="iu-btn iu-btn--sm iu-btn--danger"
                   onClick={retryFailedUploads}
                   disabled={isUploading}
-                  style={{
-                    padding: '0.35rem 0.9rem',
-                    background: 'var(--danger)',
-                    // Solid semantic fill needs a dark label — --text-primary on
-                    // --danger is only ~2.6:1.
-                    color: 'var(--ink-950)',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: 600,
-                    fontSize: 'var(--fs-xs)',
-                    cursor: isUploading ? 'not-allowed' : 'pointer',
-                    opacity: isUploading ? 0.6 : 1,
-                  }}
                 >
                   <RefreshCw size={12} /> Retry All
                 </button>
                 <button
                   type="button"
+                  className="iu-btn iu-btn--sm iu-btn--ghost"
                   onClick={() => setFailedUploads([])}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 'var(--fs-xs)', color: 'var(--danger)' }}
                 >
                   <X size={11} /> dismiss
                 </button>
@@ -1031,23 +1019,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                       type="button"
                       onClick={recompressExisting}
                       title="Re-download and recompress existing images to save storage space. URLs stay the same, so nothing is re-uploaded. Each image is only compressed once."
-                      style={{
-                        width: '100%',
-                        padding: '0.6rem 1rem',
-                        background: 'linear-gradient(135deg, var(--success) 0%, var(--shopify-green-dark) 100%)',
-                        // Solid semantic fill needs a dark label — --text-primary
-                        // on --success is only ~1.9:1.
-                        color: 'var(--ink-950)',
-                        border: 'none',
-                        borderRadius: '8px',
-                        fontWeight: 600,
-                        fontSize: 'var(--fs-sm)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.4rem',
-                      }}
+                      className="iu-btn iu-btn--md iu-btn--secondary iu-btn--full"
                     >
                       <Archive size={12} style={{ flexShrink: 0 }} /> Compress {needsWorkCount} Image{needsWorkCount !== 1 ? 's' : ''}
                     </button>
@@ -1057,7 +1029,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                 <div style={{
                   background: 'var(--success-dim)',
                   border: '1px solid var(--success)',
-                  borderRadius: '8px',
+                  borderRadius: 'var(--radius-md)',
                   padding: '0.6rem 1rem',
                   fontSize: 'var(--fs-sm)',
                   color: 'var(--success)',
@@ -1076,7 +1048,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                 <div style={{
                   background: 'var(--success-dim)',
                   border: '1px solid var(--success)',
-                  borderRadius: '8px',
+                  borderRadius: 'var(--radius-md)',
                   padding: '0.6rem 1rem',
                   fontSize: 'var(--fs-sm)',
                   color: 'var(--success)',
@@ -1091,8 +1063,10 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                       {recompressState.skipped > 0 && ` · ${recompressState.skipped} too-small/skipped`}
                     </span>
                     <button
+                      type="button"
+                      className="iu-btn iu-btn--sm iu-btn--ghost"
+                      style={{ flexShrink: 0 }}
                       onClick={() => setRecompressState(null)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 'var(--fs-xs)', color: 'var(--success)', flexShrink: 0 }}
                     >
                       <X size={11} /> dismiss
                     </button>

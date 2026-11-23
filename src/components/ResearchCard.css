@@ -7,8 +7,9 @@
  *
  * Mobile-first within the workflow's existing shape: the facet grid is
  * auto-fitting, so it is two columns on a desktop and one on a phone with no
- * media query at all, and every control is a 44px touch target at every width
- * (§1's touch floor — a literal px on purpose, against the 9px root).
+ * media query at all. Controls take ui Button sm metrics (2.7rem, --radius-md,
+ * 1px --border-control, --ink-800 with an --ink-750 hover) and floor at 44px on
+ * a phone; tags take ui Badge sm metrics at --radius-sm (Nov 2026).
  *
  * THERE IS NO SCROLLER IN HERE. Step 3 has exactly one scroller, the page
  * (§10); a nested one captures the wheel and latches, which is the bug report
@@ -20,7 +21,7 @@
   padding: 0.7rem 0.8rem;
   background: var(--ink-850);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 /* ── Head ─────────────────────────────────────────────────────────────────── */
@@ -31,48 +32,57 @@
   flex-wrap: wrap;
   gap: 0.4rem;
   margin-bottom: 0.6rem;
-  color: var(--text-secondary);
 }
 
+/* The quiet caption of ui FieldGroup: sentence case, no icon. */
 .rc-title {
   margin: 0;
   font-size: var(--fs-xs);
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-weight: 500;
+  line-height: var(--lh-snug);
+  color: var(--text-muted);
 }
 
+/* Status tags ("Needs a look", the confidence tag): ui Badge sm metrics at
+   --radius-sm, tone from the semantic tokens. */
 .rc-flag {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.15rem 0.45rem;
+  padding: 0.1rem 0.5rem;
   font-size: var(--fs-2xs);
   font-weight: 700;
-  border-radius: 999px;
+  line-height: var(--lh-snug);
+  white-space: nowrap;
+  border-radius: var(--radius-sm);
   background: var(--warning-dim);
   color: var(--warning);
 }
 
+/* ui Button sm, secondary. */
 .rc-refresh {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: var(--space-2);
   margin-left: auto;
-  min-height: 44px;                 /* touch floor — see the header note */
-  padding: 0.2rem 0.6rem;
+  min-height: 2.7rem;
+  padding: var(--space-1) var(--space-3);
   font: inherit;
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   font-weight: 600;
-  color: var(--text-muted);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  line-height: var(--lh-snug);
+  color: var(--text-primary);
+  background: var(--ink-800);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
   cursor: pointer;
 }
 
-.rc-refresh:hover:not(:disabled) { background: var(--ink-750); color: var(--text-secondary); }
-.rc-refresh:disabled { opacity: 0.55; cursor: default; }
+.rc-refresh:hover:not(:disabled) { background: var(--ink-750); border-color: var(--border-strong); }
+.rc-refresh:disabled { opacity: 0.45; cursor: default; }
+.rc-refresh:focus-visible,
+.rc-use:focus-visible,
+.rc-why-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .rc-spin { animation: rc-spin 0.9s linear infinite; }
 @keyframes rc-spin { to { transform: rotate(360deg); } }
@@ -85,16 +95,17 @@
 
 /* ── Confidence ───────────────────────────────────────────────────────────── */
 
-/* The chip is the one place a number is coloured, and only LOW is semantic:
+/* The tag is the one place a number is coloured, and only LOW is semantic:
    "medium" and "high" are neutral because colouring three bands turns a signal
    into a decoration. */
 .rc-conf {
-  padding: 0.1rem 0.4rem;
+  padding: 0.1rem 0.5rem;
   font-size: var(--fs-2xs);
   font-weight: 700;
+  line-height: var(--lh-snug);
   white-space: nowrap;
-  border-radius: 999px;
-  background: var(--ink-700);
+  border-radius: var(--radius-sm);
+  background: var(--ink-750);
   color: var(--text-secondary);
 }
 
@@ -120,7 +131,7 @@
   padding: 0.55rem 0.6rem;
   background: var(--ink-800);
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   min-width: 0;                     /* a grid item defaults to min-content */
 }
 
@@ -173,10 +184,10 @@
 }
 
 .rc-flaws li {
-  padding: 0.1rem 0.4rem;
+  padding: 0.1rem 0.5rem;
   font-size: var(--fs-2xs);
   font-weight: 600;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--ink-750);
   color: var(--text-secondary);
 }
@@ -195,22 +206,23 @@
   align-items: center;
   gap: 0.3rem;
   margin-top: 0.4rem;
-  min-height: 44px;
-  padding: 0.25rem 0.7rem;
+  min-height: 2.7rem;               /* ui Button sm; 44px on a phone */
+  padding: var(--space-1) var(--space-3);
   font: inherit;
-  font-size: var(--fs-sm);
+  font-size: var(--fs-xs);
   font-weight: 600;
+  line-height: var(--lh-snug);
   color: var(--text-primary);
   background: var(--ink-800);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
   cursor: pointer;
 }
 
 .rc-actions .rc-use { margin-top: 0; }
 
-.rc-use:hover:not(:disabled) { background: var(--ink-750); }
-.rc-use:disabled { opacity: 0.6; cursor: default; }
+.rc-use:hover:not(:disabled) { background: var(--ink-750); border-color: var(--border-strong); }
+.rc-use:disabled { opacity: 0.45; cursor: default; }
 
 /* The accent is black (§1) and every solid-accent fill already sets
    color: var(--ink-950), which is white — so this falls out for free. */
@@ -221,8 +233,8 @@
 }
 
 .rc-use--primary:hover:not(:disabled) {
-  background: var(--accent);
-  opacity: 0.88;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 /* ── The explanation ──────────────────────────────────────────────────────── */
@@ -251,7 +263,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  min-height: 44px;
+  min-height: 2.7rem;
   padding: 0.15rem 0.35rem 0.15rem 0;
   font: inherit;
   font-size: var(--fs-xs);
@@ -308,9 +320,10 @@
 .rc-review {
   margin-top: 0.6rem;
   padding: 0.5rem 0.6rem;
+  /* Warning tint, no heavy border: the tint is the signal. */
   background: var(--warning-dim);
-  border: 1px solid var(--warning);
-  border-radius: 6px;
+  border: 0;
+  border-radius: var(--radius-md);
 }
 
 .rc-review-head {
@@ -348,6 +361,11 @@
 /* ── Phone ────────────────────────────────────────────────────────────────── */
 
 @media (max-width: 640px) {
+  /* The 44px touch floor (§1), a literal px on purpose against the 9px root. */
+  .rc-refresh,
+  .rc-use,
+  .rc-why-toggle { min-height: 44px; }
+
   /* Step 3's own scale, and the evidence "kind" column stops being a column —
      at 390px a 7.5rem label plus a sentence leaves nothing for the sentence. */
   .rc-why-list li { flex-direction: column; gap: 0.1rem; }

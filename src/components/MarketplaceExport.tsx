@@ -547,6 +547,7 @@ function MarketplaceExportInner({
         {enabled.map(key => (
           <ToggleChip
             key={key}
+            strong
             pressed={targets.includes(key)}
             onPressedChange={() => { void toggleTarget(key); }}
           >

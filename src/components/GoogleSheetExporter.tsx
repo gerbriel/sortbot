@@ -463,7 +463,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
 
             {pendingBackgroundPhotos.length > 0 && (
               <div className="export-price-gate" style={{
-                marginTop: '0.75rem', padding: '0.75rem 1rem', borderRadius: 8,
+                marginTop: '0.75rem', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)',
                 background: 'var(--danger-dim)', border: '1px solid var(--danger)', color: 'var(--danger)',
                 fontSize: 'var(--fs-sm)', fontWeight: 600,
               }}>
@@ -477,7 +477,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
 
             {invalidPricedProducts.length > 0 && (
               <div className="export-price-gate" style={{
-                marginTop: '0.75rem', padding: '0.75rem 1rem', borderRadius: 8,
+                marginTop: '0.75rem', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)',
                 background: 'var(--danger-dim)', border: '1px solid var(--danger)', color: 'var(--danger)',
                 fontSize: 'var(--fs-sm)', fontWeight: 600,
               }}>
@@ -524,7 +524,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
 
           <div className="export-preview">
             <h3>Preview (Shopify Format)</h3>
-            <div className="table-container" style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '420px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+            <div className="table-container" style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '420px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
               <table className="preview-table" style={{ minWidth: '4800px', borderCollapse: 'collapse', fontSize: 'var(--fs-xs)', whiteSpace: 'nowrap' }}>
                 <thead>
                   {/* Sticky header sits one surface step above the --ink-850 table
@@ -670,7 +670,7 @@ const GoogleSheetExporter = forwardRef<GoogleSheetExporterHandle, GoogleSheetExp
           {/* Nested info box inside the accent-tinted .export-instructions panel —
               the translucent info fill keeps it distinct without a second opaque
               surface. Text inherits --text-primary from the page. */}
-          <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--info-dim)', borderRadius: '8px', fontSize: 'var(--fs-sm)' }}>
+          <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--info-dim)', borderRadius: 'var(--radius-md)', fontSize: 'var(--fs-sm)' }}>
             <strong><CheckCircle2 size={12} style={{ flexShrink: 0 }} /> Includes all fields:</strong>
             <ul style={{ marginTop: '0.5rem', marginBottom: 0, paddingLeft: '1.5rem' }}>
               <li>Product details (title, description, brand, category)</li>

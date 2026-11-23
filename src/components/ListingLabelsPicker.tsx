@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Tag, Plus, X, Check, Loader2 } from 'lucide-react';
+import { Plus, X, Check, Loader2 } from 'lucide-react';
 import {
   fetchLabels, fetchLabelsForProducts, createLabel, assignLabel, unassignLabel,
   LABEL_COLORS, LABEL_NAME_MAX, labelSwatch, sortLabels,
@@ -134,7 +134,6 @@ export default function ListingLabelsPicker({ productIds, readOnly, onChanged }:
   return (
     <div className="llp">
       <div className="llp-head">
-        <Tag size={13} aria-hidden="true" />
         <span className="llp-title">Labels</span>
         {!readOnly && total > 1 && (
           <span className="llp-scope">{total} photos in this listing</span>
@@ -171,7 +170,7 @@ export default function ListingLabelsPicker({ productIds, readOnly, onChanged }:
         })}
 
         {!readOnly && !adding && (
-          <button type="button" className="llp-chip llp-chip--add" onClick={() => setAdding(true)}>
+          <button type="button" className="llp-btn llp-btn--add" onClick={() => setAdding(true)}>
             <Plus size={12} aria-hidden="true" /> New label
           </button>
         )}

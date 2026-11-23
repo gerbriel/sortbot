@@ -13,7 +13,7 @@
   padding: 1.5rem;
   background: var(--ink-850);
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
 }
 
 .mkx--setup {
@@ -51,7 +51,7 @@
 .mkx-setup code {
   font-size: var(--fs-xs);
   padding: 0.15rem 0.35rem;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--ink-800);
   color: var(--text-secondary);
 }
@@ -86,6 +86,16 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
+/* Target chips are ToggleChip `strong`: a selected marketplace is the solid
+   --accent fill with --ink-950 text. Chip.css's pressed hover (0,3,0) repaints
+   any pressed chip with the pale --accent-dim tint, which would make a selected
+   target look unselected under the pointer, so the fill is held here. */
+.mkx-targets .ui-chip--strong[aria-pressed='true']:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--ink-950);
+}
+
 .mkx-targets-label {
   font-size: var(--fs-sm);
   font-weight: 600;
@@ -109,7 +119,7 @@
   padding: 1rem 1.1rem;
   background: var(--ink-800);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .mkx-check-head {
@@ -184,7 +194,7 @@
   text-align: center;
   font-size: var(--fs-2xs);
   font-weight: 600;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--warning-dim, var(--ink-750));
   color: var(--warning);
 }
@@ -231,15 +241,28 @@
 .mkx-fix-label strong { color: var(--text-primary); }
 
 .mkx-fix-input {
+  /* The `.ui-input` look (components/ui/Field.css): md min-height, --ink-800
+     surface, --border-control edge, --radius-md, the --accent focus ring. */
   flex: 1 1 14rem;
   min-width: 0;
+  min-height: 3.6rem;
   font: inherit;
-  font-size: var(--fs-sm);
-  padding: 0.4rem 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--ink-950);
+  font-size: var(--fs-base);
+  line-height: var(--lh-snug);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  background: var(--ink-800);
   color: var(--text-primary);
+  transition: border-color var(--dur-fast) var(--ease),
+              box-shadow var(--dur-fast) var(--ease);
+}
+
+.mkx-fix-input:focus,
+.mkx-fix-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 /* ── The matrix ───────────────────────────────────────────────────────────── */
@@ -250,7 +273,7 @@
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--ink-800);
 }
 
@@ -370,7 +393,7 @@
   padding: 1rem 1.1rem;
   background: var(--ink-800);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .mkx-pack-head {
@@ -415,7 +438,7 @@
   padding: 0.6rem 0.7rem;
   background: var(--ink-850);
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 
 .mkx-pack-field dt {
@@ -441,24 +464,35 @@
 }
 
 .mkx-copy {
+  /* ui Button sm, secondary: 2.7rem, --radius-md, --ink-800 surface with an
+     --ink-750 hover and the --border-control edge. */
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.2rem 0.45rem;
+  min-height: 2.7rem;
+  padding: var(--space-1) var(--space-3);
   font: inherit;
   font-size: var(--fs-2xs);
+  font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   background: var(--ink-800);
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
   cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease);
 }
 
 .mkx-copy:hover {
   background: var(--ink-750);
-  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.mkx-copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .mkx-pack-photos {
@@ -481,7 +515,7 @@
   width: 5rem;
   height: 5rem;
   object-fit: cover;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
   background: var(--ink-850);
 }
@@ -498,7 +532,7 @@
      on focus and never zoom back (§1, form controls on phones). */
   .mkx-fix-input {
     font-size: var(--fs-md);
-    min-height: 44px;
+    min-height: var(--tap, 44px);
   }
 
   /* The label takes its own line; the input and Save stay side by side, so one
@@ -506,7 +540,10 @@
   .mkx-fix-label { flex: 1 0 100%; }
   .mkx-fix-input { flex: 1 1 8rem; }
 
-  .mkx-copy { min-height: 44px; padding-inline: 0.7rem; }
+  .mkx-copy { min-height: var(--tap, 44px); padding-inline: var(--space-3); }
+
+  /* The target chips are the panel's main control: thumb-sized on a phone. */
+  .mkx-targets .ui-chip { min-height: var(--tap, 44px); }
 
   /* The grid is wider than any phone by construction — it scrolls inside its
      own box, with the listing column frozen so a row is still identifiable

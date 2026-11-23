@@ -9,6 +9,7 @@ import { resolvePreset } from '../lib/presetResolver';
 import LazyImg from './LazyImg';
 import { log } from '../lib/debugLogger';
 import { Shirt, Wind, User, Package, Box, ShoppingBag, Footprints, Glasses, Watch, Headphones, Briefcase, Heart, Star, Zap, GripVertical, X, Users, UserRound, Baby, Crown, Layers, Columns2, Dumbbell, Gem, Medal, PersonStanding, Ribbon, Sparkles, Menu, Check } from 'lucide-react';
+import './ui/Field.css';
 import './CategoryZones.css';
 import { DROP_ATTR, STEP2_DROP_EVENT } from './step2TouchDrag';
 import type { Step2DropDetail } from './step2TouchDrag';
@@ -677,50 +678,29 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
       {/* Category Zones */}
       <div className="category-zones">
         {/* Category search */}
-        <div className="cz-search" style={{ position: 'relative', marginBottom: '0.5rem' }}>
+        {/* The search field IS the ui Field input (ui/Field.css): same radius,
+            height, border, placeholder colour and the 16px phone size. */}
+        <div className="cz-search">
           <input
             type="text"
-            className="cz-search-input"
+            className="ui-input cz-search-input"
             value={categorySearch}
             onChange={e => setCategorySearch(e.target.value)}
             placeholder="Search categories…"
-            style={{
-              width: '100%',
-              padding: '0.4rem 2rem 0.4rem 0.75rem',
-              borderRadius: '8px',
-              border: '1.5px solid var(--border-control)',
-              fontSize: 'var(--fs-xs)',
-              outline: 'none',
-              boxSizing: 'border-box',
-              // Was '#fff', which overrode the global dark input rule and left
-              // --text-primary typed text on a white field.
-              background: 'var(--ink-850)',
-              color: 'var(--text-primary)',
-            }}
+            aria-label="Search categories"
           />
           {categorySearch && (
             <button
+              type="button"
+              className="cz-search-clear"
               onClick={() => setCategorySearch('')}
-              style={{
-                position: 'absolute',
-                right: '0.5rem',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: 'var(--text-muted)',
-                padding: 0,
-                lineHeight: 1,
-                fontSize: 'var(--fs-base)',
-              }}
               aria-label="Clear search"
-            >×</button>
+            ><X size={14} aria-hidden="true" /></button>
           )}
         </div>
 
-        {/* Gender filter toggles */}
-        <div className="cz-gender-row" style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', justifyContent: 'center' }}>
+        {/* Gender filter: one segmented control of --radius-md buttons. */}
+        <div className="cz-gender-row" role="group" aria-label="Gender">
           {([
             { key: 'Men',   label: 'Men',   Icon: Users },
             { key: 'Women', label: 'Women', Icon: UserRound },
@@ -728,32 +708,19 @@ const CategoryZones: React.FC<CategoryZonesProps> = ({ items, onCategorized, com
           ] as const).map(({ key: g, label, Icon }) => (
             <button
               key={g}
+              type="button"
+              className={`cz-gender-btn${genderFilter === g ? ' cz-gender-btn--on' : ''}`}
+              aria-pressed={genderFilter === g}
               onClick={() => setZoneGender(g)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                padding: '0.3rem 1rem',
-                borderRadius: '999px',
-                border: '2px solid',
-                // Solid --accent needs a dark label (--text-primary on it is 2.46:1).
-                borderColor: genderFilter === g ? 'var(--accent)' : 'var(--border-control)',
-                background: genderFilter === g ? 'var(--accent)' : 'var(--ink-850)',
-                color: genderFilter === g ? 'var(--ink-950)' : 'var(--text-secondary)',
-                fontWeight: 600,
-                fontSize: 'var(--fs-xs)',
-                cursor: 'pointer',
-                transition: 'all 0.15s',
-              }}
             >
-              <Icon size={14} />
+              <Icon size={14} aria-hidden="true" />
               {label}
             </button>
           ))}
         </div>
 
         {compactMode && selectedItemIds && selectedItemIds.size > 0 && (
-          <p className="cz-selection-hint" style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', margin: '0 0 0.5rem', textAlign: 'center' }}>
+          <p className="cz-selection-hint">
             {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} selected. Tap or click a category to assign.
           </p>
         )}

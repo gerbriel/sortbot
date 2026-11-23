@@ -80,7 +80,7 @@ light to read as text on white. Use the `--*-dim` tints as banner fills.
 `--ink-*` tokens and everything inside them sets a literal light foreground. That
 includes `.ld-logo`, `.ld-nav-link`, `.ld-nav-cta`, `.ld-nav-login` (the app's only
 white button) and the `.app-header` overrides. If you add anything to a nav, give it
-an explicit light colour or it will inherit page-black and vanish. The account menu popover (`WorkspaceMenu.tsx`) is PORTALED to `<body>` (Sept 2026) precisely so it never inherits the nav's forced light foreground — if you ever render a light surface INSIDE the nav again it must opt back out with higher-specificity rules or its buttons/icons vanish white-on-white; and `.button-secondary` hover/focus inside the nav is pinned in App.css because the page-level hover rule (0,3,0) outranks the header rule (Sept 2026 fix).
+an explicit light colour or it will inherit page-black and vanish. The account menu popover (`WorkspaceMenu.tsx`) is PORTALED to `<body>` (Sept 2026) precisely so it never inherits the nav's forced light foreground — if you ever render a light surface INSIDE the nav again it must opt back out with higher-specificity rules or its buttons/icons vanish white-on-white; and `.button-secondary` hover/focus inside the nav is pinned in App.css because the page-level hover rule (0,3,0) outranks the header rule (Sept 2026 fix). **The legacy `.button` family in App.css has the `.ui-btn` metrics since 22 Nov 2026:** `--radius-md`, 1px border, md 3.6rem / `--space-2` `--space-5` / `--fs-base` / 600, `.button-small` and `.button-sm` at the sm step (2.7rem, `--space-1` `--space-3`, `--fs-xs`), 44px at phone width; bare `.button` and `.button-primary` are the `--accent` fill, `.button-secondary` the `--ink-800` surface with `--ink-750` hover, `.button-danger` the solid `--danger` fill with an inset-wash hover. It deliberately has no `:active` fills, which would outrank `.app-header button` on the nav trigger. No component stylesheet may redeclare the family unscoped (§18 #58); CategoriesManager.css and CategoryPresetsManager.css did until 22 Nov 2026 and are now scoped to their page roots. The Step 1 Import Folder / Import ZIP buttons take the `.button-secondary` look (no gradients).
 
 Because everything else resolves through tokens, **swapping the whole palette is a
 ~45-line edit in `:root`.** This app has already shipped violet-on-dark, bone-on-dark
@@ -438,7 +438,7 @@ sortingapp/
 │   │   ├── responsiveGrid.ts / .test.ts  # PURE column-clamp helpers for the Step 2 grid (9 tests): PHONE_BREAKPOINT_PX = 640, gridColumnBounds(isPhone) (1-3 phone / 2-12 desktop), clampGridColumns, clampGroupGridColumns (group cards cap at 2). Exists because the grid applies its column count as an INLINE style that no media query can reach (§1); the stored slider preference is clamped for display, never mutated.
 │   │   ├── LazyImg.tsx            # Shared image component: skeleton shimmer, 3× retry with exponential backoff + `?t=` cache-bust (works around ERR_QUIC_PROTOCOL_ERROR). Used by Step 2/3/4 AND Library.
 │   │   ├── LoadingProgress.tsx / .css  # Upload progress bar shown in Step 2.
-│   │   └── ui/                    # PRIMITIVE SYSTEM (Sept 2026) — built, tested, NOT YET ADOPTED (§16). index.ts (components + types only, so react-refresh stays happy), base.css (focus ring, .ui-sr-only), Button, IconButton (accessible `label` REQUIRED at the type level), Chip/ToggleChip/RemovableChip, Badge/CountBadge, Tabs (roving tabindex, manual activation mode), Dialog (focus trap + restore, Escape stack, reference-counted scroll lock, portal-free), ConfirmAction (the `confirm()` replacement, §18 #12), InfoDisclosure (22 Nov 2026: a header row of `heading` + an Info `IconButton` with a required `label`, the caller's `actions` on the right, and an INLINE help panel directly under the row; `aria-expanded`/`aria-controls`, the panel stays mounted with `hidden` while closed, a second click or Escape from inside closes it and focus returns to the button; `--ink-850` card surface, `--radius-lg`, opacity fade off under reduced motion, 44px button on phones; props `label`, `heading`, `actions?`, `children`, `defaultOpen?`, `onOpenChange?`, `className?`, `headClassName?`, `panelClassName?`; first used by Step 3's voice header), Field/TextField/TextareaField/SelectField, FieldGroup/FieldGrid/FieldCell (22 Nov 2026, `FieldGrid.tsx` / `.css` / `.test.tsx`: the Step 3 labelled-cell language defined once. `FieldGroup` = optional quiet caption (`--fs-xs`, `--text-muted`, labels the section) over a frame (1px `--border`, `--radius-md`, `--ink-800`, `overflow: clip`), props `caption?`, `captionClassName?`, `frameClassName?` plus section attributes; `FieldGrid` = `repeat(auto-fit, minmax(12rem, 1fr))` with hairlines only between cells, props `columns?` (a cap on wide screens, via `--ui-fieldgrid-cols`) and `full?` (one column); `FieldCell` = small label above the control, props `label`, `controlId?` (else generated), `meta?` (trailing label-row slot: counter, badge, small action), `hint?` (wired by `aria-describedby`), `footer?`, `span?: 2 | 'full'`, `labelClassName?`, and `children` as a render callback receiving `{ id, className, 'aria-describedby' }`, the same contract as `Field`; a click on the cell that is not on something interactive focuses the control. Checkbox anatomy: wrap the box and a short value text in `.ui-fieldcell__check`. Phones: two columns, 44px cells and controls, controls `--fs-md`. Used by VoiceCommandTable, PDG's Title and Generated description cells and ComprehensiveProductForm), EmptyState, Spinner/Skeleton, Toast/ToastViewport (state-free — App keeps owning the queue), StatTile/StatGrid, testUtils.tsx (mount/click/keyDown harness), *.test.tsx (76 tests). NO hex literal anywhere except one documented scrim in Dialog.css.
+│   │   └── ui/                    # PRIMITIVE SYSTEM (Sept 2026) — built, tested, NOT YET ADOPTED (§16). index.ts (components + types only, so react-refresh stays happy), base.css (focus ring, .ui-sr-only), Button, IconButton (accessible `label` REQUIRED at the type level), Chip/ToggleChip/RemovableChip (22 Nov 2026: NOT a pill any more, `--radius-md` like Button, and both sizes floor at Button sm's 2.7rem so a chip row lines up with sm buttons; sm only shrinks type and padding; the remove half is 2.7rem wide with the split `--radius-md` corners; 44px on phones as before), Badge/CountBadge (22 Nov 2026: `.ui-badge` is a `--radius-sm` tag, not a pill, matching the Step 3 status tags; `.ui-badge--count`, i.e. CountBadge, keeps its own 999px round shape because a count is a different object from a tag), Tabs (roving tabindex, manual activation mode), Dialog (focus trap + restore, Escape stack, reference-counted scroll lock, portal-free), ConfirmAction (the `confirm()` replacement, §18 #12), InfoDisclosure (22 Nov 2026: a header row of `heading` + an Info `IconButton` with a required `label`, the caller's `actions` on the right, and an INLINE help panel directly under the row; `aria-expanded`/`aria-controls`, the panel stays mounted with `hidden` while closed, a second click or Escape from inside closes it and focus returns to the button; `--ink-850` card surface, `--radius-lg`, opacity fade off under reduced motion, 44px button on phones; props `label`, `heading`, `actions?`, `children`, `defaultOpen?`, `onOpenChange?`, `className?`, `headClassName?`, `panelClassName?`; first used by Step 3's voice header), Field/TextField/TextareaField/SelectField, FieldGroup/FieldGrid/FieldCell (22 Nov 2026, `FieldGrid.tsx` / `.css` / `.test.tsx`: the Step 3 labelled-cell language defined once. `FieldGroup` = optional quiet caption (`--fs-xs`, `--text-muted`, labels the section) over a frame (1px `--border`, `--radius-md`, `--ink-800`, `overflow: clip`), props `caption?`, `captionClassName?`, `frameClassName?` plus section attributes; `FieldGrid` = `repeat(auto-fit, minmax(12rem, 1fr))` with hairlines only between cells, props `columns?` (a cap on wide screens, via `--ui-fieldgrid-cols`) and `full?` (one column); `FieldCell` = small label above the control, props `label`, `controlId?` (else generated), `meta?` (trailing label-row slot: counter, badge, small action), `hint?` (wired by `aria-describedby`), `footer?`, `span?: 2 | 'full'`, `labelClassName?`, and `children` as a render callback receiving `{ id, className, 'aria-describedby' }`, the same contract as `Field`; a click on the cell that is not on something interactive focuses the control. Checkbox anatomy: wrap the box and a short value text in `.ui-fieldcell__check`. Phones: two columns, 44px cells and controls, controls `--fs-md`. Used by VoiceCommandTable, PDG's Title and Generated description cells and ComprehensiveProductForm), EmptyState, Spinner/Skeleton, Toast/ToastViewport (state-free — App keeps owning the queue), StatTile/StatGrid, testUtils.tsx (mount/click/keyDown harness), *.test.tsx (76 tests). NO hex literal anywhere except one documented scrim in Dialog.css.
 │   ├── constants/
 │   │   └── fieldLimits.ts         # Shopify character limits (SEO_TITLE=70, DESCRIPTION=5000, etc.) and helpers.
 │   ├── lib/
@@ -1198,6 +1198,12 @@ own `onClick` would otherwise open the generic picker behind the camera sheet. F
 ZIP import stay in App.tsx's Step 1 header (restacked full-width at 44px), and the phone
 copy points at them.
 
+**Control language (22 Nov 2026).** Every Step 1 button in `ImageUpload.css` (Take photos /
+Choose from library as `.dz-action`, Retry / dismiss / Compress as the `.iu-btn` sm and md
+classes) uses the ui Button anatomy from `ui/Button.css` (`--radius-md`, a 1px
+`--border-control` edge, `--ink-800` surface and `--ink-750` hover, 2.7 / 3.6 / 4.4rem heights,
+the shared focus ring, 44px on phones), and the drop zone keeps its dashed border; no pills.
+
 **Touch-only devices and the native app (Nov 2026).**
 - **Import Folder is hidden under `(hover: none) and (pointer: coarse)`** (App.css,
   `.step1-header-actions .step1-folder-btn`): iOS has no folder picker for
@@ -1223,6 +1229,8 @@ copy points at them.
 
 ### Step 2: Group & Categorize
 **Files:** `ImageGrouper.tsx`, `CategoryZones.tsx`, `App.tsx:handleImagesGrouped`, `App.tsx:handleImagesSorted`
+
+**Control language (22 Nov 2026).** The whole Step 2 toolbar (`.sort-btn`, `.ptb-btn`, `.gtb-opt`, the Photos/item input, the date select) is one size, ui Button sm (`--radius-md`, 2.7rem, 1px `--border-control`, `--ink-800` surface, `--ink-750` hover, 44px on phones), a toggle that is ON is the solid `--accent` fill with the `--ink-950` label, and CategoryZones follows the same rules: Men / Women / Kids is a segmented control (`.cz-gender-btn`, `aria-pressed`), the search box is a real `.ui-input`, and the zones are dashed `--radius-md` sm chips with no hover lift or glow. The stepper above all four steps (`PhoneStepper.css`) uses the same md segments with a `--radius-sm` square step badge.
 
 **Grouping (ImageGrouper):**
 - Items start as singles. User selects items (click, Shift+click range, rubber-band drag) and clicks "Group Selected".
@@ -1506,11 +1514,33 @@ copy points at them.
   `ComprehensiveProductForm`'s five groups ("Pricing", "Core details", "Measurements
   (inches)", "Inventory and shipping", "Status and SEO", captions with no icons). Selects keep
   a quiet caret drawn with token gradients so they still read as a choice at rest. The old
-  title counter's amber step above 50 characters was dropped: only over 60 is flagged. An
-  empty required field is marked in the cell, not on the control: a 2px `--warning` left rule
-  (the dictation highlight's geometry) and "Required" in `--fs-2xs` `--warning` in the meta
-  slot; the old red `!important` border and pulse are gone. A new
-  Step 3 field is a `FieldCell`, not a hand-rolled label and input.
+  title counter's amber step above 50 characters was dropped: only over 60 is flagged.
+  **Required fields (22 Nov 2026):** every field in the form's `req()` set, filled or not, ends
+  its label in a red asterisk (`.field-required-star`, `--danger`, `--fs-2xs`, `aria-hidden`)
+  followed by a `.ui-sr-only` " (required)", and its control carries `aria-required="true"`
+  (the form's `rq(c, value)` helper hands out the class and the attribute; `reqLabel(text)` builds
+  the label). The EMPTY state is only the cell's 2px `--warning` left rule (the dictation
+  highlight's geometry, keyed on `.field-required-empty`); the "Required" word and
+  `.field-required-note` are gone, so the meta slot holds only the Preset and Needed badges. The
+  old red `!important` border and pulse are gone too. A new Step 3 field is a `FieldCell`, not a
+  hand-rolled label and input.
+
+- **Captions and controls below the form (22 Nov 2026).** The Override preset block, Labels,
+  Research and Similar past listings all head with the FieldGroup caption (`--fs-xs`,
+  `--text-muted`, weight 500, sentence case, no icon): "Override preset (optional)", "Labels",
+  "Research", "Similar past listings". The preset search is a real `.ui-input`
+  (`#pdg-preset-search`, `.pdg-preset-override__*` in PDG.css, search icon and clear button over
+  its padding) with an `--fs-xs` `--text-muted` hint and no lightbulb. Every button in
+  ListingLabelsPicker ("New label" is now `.llp-btn llp-btn--add`, was `.llp-chip--add`),
+  ResearchCard (Refresh comps, Use ..., Mark reviewed), SimilarListings (Find similar) and
+  BrandSpelling (Use, Undo, Remember, Add) takes ui Button sm metrics (2.7rem, `--radius-md`,
+  1px `--border-control`, `--ink-800`, `--ink-750` hover; primary actions are the solid accent),
+  44px on phones. Label chips are ui Chip sm metrics at `--radius-md`; status tags (the
+  confidence tag "Low 0%", "Needs a look", flaws, "Possible duplicate") are Badge sm metrics at
+  `--radius-sm`; facet and result tiles are `--radius-md`; the "Worth a look" panel is a
+  `--warning-dim` tint with no border. No pill radius (`999px` and friends) remains in these
+  files or in ui `Chip.css`. Separators in this copy are plain punctuation ("Low 0%",
+  "$12 to $20, Median of sold comparables").
 
 - **Step 3 has exactly one scroller: the page.** `.product-preview` is a transparent
   content-height column (the card chrome lives on `.preview-scroll-area`), `.preview-nav-dock` is
@@ -1559,6 +1589,7 @@ copy points at them.
   the whole 360px table box; and Step 4's Save / Clear row (`.batch-actions` in App.tsx) no
   longer vanishes once the Library chunk has loaded (Library.css's rule is now scoped,
   §18 #58).
+- **Control language (22 Nov 2026):** every Step 4 control speaks the ui Button / Field language: `--radius-md`, a 1px `--border-control` edge, md (3.6rem) or sm (2.7rem) min-height floored at `--tap` on phones, no pills and no transform hovers; the Review & Export `<summary>` is an `--ink-800` row with an `--ink-750` hover (styles moved from inline to `.step4-summary`), the three summary stats use the StatTile surface, the marketplace target chips are `ToggleChip strong` (a selected target is the solid `--accent` fill), and the pricing `<select>` and the vocabulary fix input take the `.ui-input` look.
 
 **Marketplaces (Sept 2026) — `MarketplaceExport.tsx`, ABOVE the exporter's `<details>`.**
 The other nine marketplaces live in their own panel at the top of Step 4: the batch's
@@ -2916,6 +2947,15 @@ npm run lint
     rule is now `.batch-card .batch-actions`. Before adding a component rule, `grep -n
     'className="<name>' src/App.tsx`; if App uses the name, scope the rule under the component's
     own root class (or rename one side).
+    **The same rule covers the shared `.button` family (22 Nov 2026).** App.css owns `.button`,
+    `.button-primary`, `.button-secondary`, `.button-danger`, `.button-small` and `.button-sm`;
+    a component stylesheet must never declare them, or any other generic name App.css also styles,
+    unscoped. CategoriesManager.css and CategoryPresetsManager.css did (6px radius, their own
+    padding, `!important` on `.button-sm`), and because both chunks are lazy and load last, opening
+    Categories or Presets once restyled every button in the app for the rest of the session. Both
+    files are now scoped under `.categories-page` / `.presets-page` throughout, with the duplicate
+    button rules deleted. Check with `grep -n "^\.button" src/components/*.css`, which should
+    return nothing outside `ui/`.
 
 59. **Do not statically import a Capacitor plugin into app code, and do not call one without
     `hasNativePlugin(name)`.** Native capabilities go through an adapter in `src/lib/native/`, whose

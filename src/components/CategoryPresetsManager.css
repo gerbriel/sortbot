@@ -34,7 +34,46 @@
   flex-wrap: wrap;
 }
 
-.presets-gender-tabs button { min-height: 4rem; }
+/* Gender filter: ToggleChip language (Chip.css), at Button md height. A
+   selected tab is the solid --accent fill with --ink-950 text, the state is
+   read from aria-pressed, and the shape is --radius-md, never a pill. */
+.presets-gender-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 3.6rem;
+  padding: var(--space-2) var(--space-5);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  color: var(--text-secondary);
+  background: var(--ink-800);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
+}
+
+.presets-gender-tab:hover:not(:disabled) {
+  background: var(--ink-750);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.presets-gender-tab[aria-pressed='true'],
+.presets-gender-tab[aria-pressed='true']:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--ink-950);
+}
+
+.presets-gender-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 /* One column until an edit is open, then list + editor side by side. */
 .presets-body { grid-template-columns: minmax(0, 1fr); }
@@ -47,9 +86,9 @@
 /* Source order puts the editor first (it is conditional); reading order puts
    the list on the left, where the spec wants it. */
 .presets-grid { order: 1; }
-.preset-editor { order: 2; min-width: 0; }
+.presets-page .preset-editor { order: 2; min-width: 0; }
 
-.preset-editor-inner {
+.presets-page .preset-editor-inner {
   position: sticky;
   top: var(--tv-sticky-top, 8.5rem);
   background: var(--ink-850);
@@ -62,7 +101,7 @@
   overflow-y: auto;
 }
 
-.preset-editor-head {
+.presets-page .preset-editor-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -82,57 +121,57 @@
   min-width: 0;
 }
 
-.empty-state {
+.presets-page .empty-state {
   grid-column: 1 / -1;
   text-align: center;
   padding: 3rem;
   background: var(--ink-850);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
 }
 
 /* Preset Card */
-.preset-card {
+.presets-page .preset-card {
   background: var(--ink-850);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 2rem;
-  transition: box-shadow 0.2s;
+  transition: border-color var(--dur-fast) var(--ease);
 }
 
-.preset-card:hover {
-  box-shadow: var(--shadow-md);
+.presets-page .preset-card:hover {
+  border-color: var(--border-strong);
 }
 
-.preset-header {
+.presets-page .preset-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 1rem;
 }
 
-.preset-header h3 {
+.presets-page .preset-header h3 {
   margin: 0;
   font-size: var(--fs-md);
   color: var(--text-primary);
 }
 
-.preset-category {
+.presets-page .preset-category {
   background: var(--info-dim);
   color: var(--info);
   padding: 0.25rem 0.75rem;
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   font-size: var(--fs-sm);
   font-weight: 500;
 }
 
-.preset-description {
+.presets-page .preset-description {
   color: var(--text-secondary);
   margin-bottom: 1rem;
   font-size: var(--fs-sm);
 }
 
-.preset-details {
+.presets-page .preset-details {
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
@@ -140,39 +179,36 @@
   padding: 1.5rem;
   /* Recessed panel inside the --ink-850 card, so it steps DOWN not up. */
   background: var(--ink-900);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 
-.preset-detail {
+.presets-page .preset-detail {
   font-size: var(--fs-sm);
   color: var(--text-secondary);
 }
 
-.preset-detail strong {
+.presets-page .preset-detail strong {
   color: var(--text-primary);
   margin-right: 0.5rem;
 }
 
-.preset-actions {
+.presets-page .preset-actions {
   display: flex;
   gap: 0.8rem;
 }
 
-.preset-actions button {
+.presets-page .preset-actions button {
   flex: 1;
-  min-height: 4rem;
-  padding: 0.6rem 1rem;
-  font-size: var(--fs-sm);
   justify-content: center;
 }
 
-.form-section {
+.presets-page .form-section {
   margin-bottom: 2rem;
   padding-bottom: 2rem;
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.form-section:last-of-type {
+.presets-page .form-section:last-of-type {
   border-bottom: none;
 }
 
@@ -185,7 +221,7 @@
 
    `display: block` on the summary is required to drop the ▶ marker in WebKit,
    which is why it is set rather than relying on `list-style: none` alone. */
-.form-section > summary {
+.presets-page .form-section > summary {
   display: block;
   margin-top: 0;
   margin-bottom: 1rem;
@@ -196,19 +232,19 @@
   list-style: none;
 }
 
-.form-section > summary::-webkit-details-marker { display: none; }
-.form-section > summary::marker { content: ''; }
+.presets-page .form-section > summary::-webkit-details-marker { display: none; }
+.presets-page .form-section > summary::marker { content: ''; }
 
 /* Inert on desktop: the sections stay open, exactly as the <div>s were. */
 @media (min-width: 641px) {
-  .form-section > summary { pointer-events: none; }
+  .presets-page .form-section > summary { pointer-events: none; }
 }
 
-.form-group {
+.presets-page .form-group {
   margin-bottom: 1.75rem;
 }
 
-.form-group label {
+.presets-page .form-group label {
   display: block;
   margin-bottom: 0.5rem;
   font-weight: 500;
@@ -216,94 +252,98 @@
   font-size: var(--fs-sm);
 }
 
-.form-group input[type="text"],
-.form-group input[type="number"],
-.form-group select,
-.form-group textarea {
+.presets-page .form-group input[type="text"],
+.presets-page .form-group input[type="number"],
+.presets-page .form-group select,
+.presets-page .form-group textarea {
+  /* The `.ui-input` look (components/ui/Field.css). */
   width: 100%;
-  padding: 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: var(--fs-sm);
-  background: var(--ink-850);
+  min-height: 3.6rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-base);
+  line-height: var(--lh-snug);
+  background: var(--ink-800);
   color: var(--text-primary);
-  transition: border-color 0.2s;
+  transition: border-color var(--dur-fast) var(--ease),
+              box-shadow var(--dur-fast) var(--ease);
 }
 
-.form-group input:focus,
-.form-group select:focus,
-.form-group textarea:focus {
+.presets-page .form-group input:focus,
+.presets-page .form-group select:focus,
+.presets-page .form-group textarea:focus {
   outline: none;
-  border-color: var(--accent-line);
+  border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
-.form-group input::placeholder,
-.form-group textarea::placeholder {
+.presets-page .form-group input::placeholder,
+.presets-page .form-group textarea::placeholder {
   color: var(--text-faint);
   font-style: italic;
 }
 
-.form-group small {
+.presets-page .form-group small {
   display: block;
   margin-top: 0.25rem;
   font-size: var(--fs-xs);
   color: var(--text-secondary);
 }
 
-.form-hint {
+.presets-page .form-hint {
   font-size: var(--fs-sm);
   color: var(--text-secondary);
   margin-bottom: 1rem;
 }
 
-.form-row {
+.presets-page .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
 }
 
-.checkbox-group label {
+.presets-page .checkbox-group label {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   cursor: pointer;
 }
 
-.checkbox-group input[type="checkbox"] {
+.presets-page .checkbox-group input[type="checkbox"] {
   width: auto;
   cursor: pointer;
 }
 
 /* Measurement Checkboxes */
-.measurement-checkboxes {
+.presets-page .measurement-checkboxes {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 1rem;
 }
 
-.checkbox-label {
+.presets-page .checkbox-label {
   display: flex;
   align-items: center;
   gap: 0.6rem;
   min-height: 4rem;
   padding: 0.6rem 1rem;
   background: var(--ink-850);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background-color var(--dur-fast) var(--ease);
 }
 
-.checkbox-label:hover {
+.presets-page .checkbox-label:hover {
   background: var(--ink-750);
 }
 
-.checkbox-label input[type="checkbox"] {
+.presets-page .checkbox-label input[type="checkbox"] {
   cursor: pointer;
 }
 
 /* Form Actions */
-.form-actions {
+.presets-page .form-actions {
   display: flex;
   gap: 1rem;
   justify-content: flex-end;
@@ -312,57 +352,23 @@
   border-top: 1px solid var(--border-subtle);
 }
 
-.form-actions button {
-  padding: 0.75rem 1.5rem;
-  font-size: var(--fs-sm);
+.presets-page .form-actions button {
   min-width: 120px;
+  justify-content: center;
 }
 
-/* Button Styles */
-.button {
-  background: var(--accent);
-  /* Accent is a light violet — solid fills take dark ink, not white. */
-  color: var(--ink-950);
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px;
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.button:hover {
-  background: var(--accent-hover);
-}
-
-/* Neutral variants sit on dark surfaces, so they re-assert light text. */
-.button-secondary {
-  background: var(--ink-750);
-  color: var(--text-primary);
-}
-
-.button-secondary:hover {
-  background: var(--ink-700);
-}
-
-.button-danger {
-  background: var(--danger);
-  color: var(--ink-950);
-}
-
-/* No --danger-hover token exists; hover inverts to the translucent tint. */
-.button-danger:hover {
-  background: var(--danger-dim);
-  color: var(--danger);
-}
+/* Buttons: App.css's `.button` family (the ui Button metrics) styles every
+   `.button`, `.button-secondary`, `.button-danger` and `.button-sm` here. This
+   file used to restate them UNSCOPED, and because this chunk is lazy it loaded
+   last and restyled every `.button` in the app once the page had been opened
+   (AGENTS.md section 18). */
 
 /* Responsive */
 @media (max-width: 1024px) {
   .presets-page--editing .presets-body { grid-template-columns: minmax(0, 1fr); }
   /* Stacked, the editor belongs above the list it is editing. */
-  .preset-editor { order: 0; }
-  .preset-editor-inner { position: static; max-height: none; }
+  .presets-page .preset-editor { order: 0; }
+  .presets-page .preset-editor-inner { position: static; max-height: none; }
 }
 
 @media (max-width: 768px) {
@@ -375,137 +381,147 @@
     grid-template-columns: 1fr;
   }
 
-  .form-row {
+  .presets-page .form-row {
     grid-template-columns: 1fr;
   }
   
-  .form-actions {
+  .presets-page .form-actions {
     flex-direction: column;
   }
   
-  .form-actions button {
+  .presets-page .form-actions button {
     width: 100%;
   }
 }
 
 /* ── Custom Sections & Fields ───────────────────────────────────────────── */
 
-.custom-sections-wrapper {
+.presets-page .custom-sections-wrapper {
   border: 2px dashed var(--accent-line);
   background: var(--accent-dim);
 }
 
-.custom-sections-header {
+.presets-page .custom-sections-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 0.75rem;
 }
 
-.custom-sections-header h4 {
+.presets-page .custom-sections-header h4 {
   margin: 0;
 }
 
-.custom-section-block {
+.presets-page .custom-section-block {
   background: var(--ink-850);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 1rem;
   margin-bottom: 0.75rem;
 }
 
-.section-header-row {
+.presets-page .section-header-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 0.75rem;
 }
 
-.section-header-row h4 {
+.presets-page .section-header-row h4 {
   margin: 0;
   font-size: var(--fs-base);
   color: var(--text-primary);
 }
 
-.section-controls {
+.presets-page .section-controls {
   display: flex;
   gap: 0.25rem;
 }
 
-.btn-icon {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+/* Dense row icons: ui IconButton sm (a 2.7rem square, --radius-md, the
+   --border-control edge). Kept compact on purpose: four of them sit in each
+   custom field row. */
+.presets-page .btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.7rem;
+  height: 2.7rem;
+  padding: 0 var(--space-1);
+  background: var(--ink-800);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  padding: 0.2rem 0.4rem;
   font-size: var(--fs-xs);
   color: var(--text-secondary);
-  transition: all 0.15s;
+  transition: background-color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
 }
 
-.btn-icon:hover {
+.presets-page .btn-icon:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.presets-page .btn-icon:hover {
   background: var(--ink-750);
   border-color: var(--border-strong);
   color: var(--text-primary);
 }
 
-.btn-icon.btn-danger {
+.presets-page .btn-icon.btn-danger {
   color: var(--danger);
-  border-color: var(--danger-dim);
+  border-color: var(--danger);
 }
 
-.btn-icon.btn-danger:hover {
+.presets-page .btn-icon.btn-danger:hover {
   background: var(--danger-dim);
   border-color: var(--danger);
 }
 
-.button-sm {
-  padding: 0.35rem 0.75rem !important;
-  font-size: var(--fs-xs) !important;
-}
-
 /* Custom fields block */
 
-.custom-fields-block {
+.presets-page .custom-fields-block {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
 }
 
-.custom-field-row {
+.presets-page .custom-field-row {
   display: flex;
   align-items: center;
   gap: 0.8rem;
   background: var(--ink-900);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   min-height: 4.5rem;
   padding: 0.8rem 1.2rem;
   font-size: var(--fs-sm);
 }
 
-.custom-field-label {
+.presets-page .custom-field-label {
   font-weight: 600;
   color: var(--text-primary);
   flex: 1;
 }
 
-.custom-field-type {
+.presets-page .custom-field-type {
   background: var(--accent-dim);
   color: var(--accent);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   padding: 0.1rem 0.55rem;
   font-size: var(--fs-xs);
   font-weight: 500;
 }
 
-.custom-field-default {
+.presets-page .custom-field-default {
   color: var(--text-secondary);
   font-size: var(--fs-xs);
   font-style: italic;
 }
 
-.custom-field-actions {
+.presets-page .custom-field-actions {
   display: flex;
   gap: 0.2rem;
   margin-left: auto;
@@ -513,7 +529,7 @@
 
 /* ── Field Modal ─────────────────────────────────────────────────────────── */
 
-.field-modal-overlay {
+.presets-page .field-modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.72);
@@ -524,16 +540,16 @@
   padding: 1rem;
 }
 
-.field-modal {
+.presets-page .field-modal {
   background: var(--ink-800);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 1.75rem;
   width: 100%;
   max-width: 480px;
   box-shadow: var(--shadow-xl);
 }
 
-.field-modal-header {
+.presets-page .field-modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -542,27 +558,34 @@
 
 /* Still used by FieldModal, which stays a real modal (it edits one row of the
    preset editor and must sit above it). */
-.button-close {
+.presets-page .button-close {
   background: none;
   border: none;
   font-size: var(--fs-lg);
   color: var(--text-secondary);
   cursor: pointer;
-  width: 4rem;
-  height: 4rem;
-  border-radius: 50%;
+  width: 3.6rem;
+  height: 3.6rem;
+  padding: 0;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  transition: background-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
 }
 
-.button-close:hover {
+.presets-page .button-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.presets-page .button-close:hover {
   background: var(--ink-750);
   color: var(--text-primary);
 }
 
-.field-modal-header h4 {
+.presets-page .field-modal-header h4 {
   margin: 0;
   font-size: var(--fs-md);
   color: var(--text-primary);
@@ -654,25 +677,22 @@
     padding-inline: 1.5rem;
   }
   .presets-page .presets-gender-tabs::-webkit-scrollbar { display: none; }
-  .presets-page .presets-gender-tabs button { flex: 0 0 auto; min-height: 44px; }
+  .presets-page .presets-gender-tab { flex: 0 0 auto; min-height: var(--tap, 44px); }
 
-  /* ── Controls ────────────────────────────────────────────────────────────── */
-  .presets-page .button,
+  /* ── Controls ──────────────────────────────────────────────────────────────
+     `.button` and `.button-sm` take the 44px floor from App.css's family. */
   .presets-page .form-actions button,
   .presets-page .preset-actions button {
-    min-height: 44px;
-    display: inline-flex;
-    align-items: center;
     justify-content: center;
     min-width: 0;
   }
 
-  /* `.button-sm` ships with !important padding, so the height floor has to be
-     stated separately rather than folded into the rule above. */
-  .presets-page .button-sm { min-height: 44px; padding-inline: 1.2rem !important; }
-
   .presets-page .btn-icon,
-  .presets-page .button-close { width: 44px; height: 44px; min-width: 44px; }
+  .presets-page .button-close {
+    width: var(--tap, 44px);
+    height: var(--tap, 44px);
+    min-width: var(--tap, 44px);
+  }
 
   .presets-page .form-actions { flex-direction: column; gap: 0.8rem; }
   .presets-page .form-actions button { width: 100%; }
@@ -714,9 +734,9 @@
      instead, capped at the DYNAMIC viewport — `vh` on iOS measures the viewport
      with the toolbars retracted, so a vh-capped sheet hides its own footer
      behind the browser chrome. */
-  .field-modal-overlay { padding: 0; align-items: flex-end; }
+  .presets-page .field-modal-overlay { padding: 0; align-items: flex-end; }
 
-  .field-modal {
+  .presets-page .field-modal {
     max-width: none;
     max-height: 92vh;
     max-height: 92dvh;

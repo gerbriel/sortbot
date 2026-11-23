@@ -40,7 +40,7 @@
   gap: 1.2rem;
 }
 
-.category-item {
+.categories-page .category-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -49,143 +49,158 @@
   min-height: 8rem;
   background: var(--ink-850);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  transition: all 0.2s ease;
+  border-radius: var(--radius-md);
+  transition: border-color var(--dur-fast) var(--ease);
 }
 
-.category-item:hover {
-  border-color: var(--accent-line);
-  box-shadow: 0 2px 8px var(--accent-glow);
+.categories-page .category-item:hover {
+  border-color: var(--border-strong);
 }
 
-.category-info {
+.categories-page .category-info {
   display: flex;
   align-items: center;
   gap: 1.5rem;
   min-width: 0;
 }
 
-.category-emoji {
+.categories-page .category-emoji {
   font-size: var(--fs-xl);
   width: 56px;
   height: 56px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--ink-750);
 }
 
-.category-details {
+.categories-page .category-details {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 }
 
-.category-details strong {
+.categories-page .category-details strong {
   font-size: var(--fs-md);
   color: var(--text-primary);
 }
 
-.category-details small {
+.categories-page .category-details small {
   color: var(--text-secondary);
   font-size: var(--fs-sm);
 }
 
-.category-actions {
+.categories-page .category-actions {
   display: flex;
   gap: 0.8rem;
   align-items: center;
   flex-shrink: 0;
 }
 
-.button-icon {
-  background: var(--ink-750);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  width: 36px;
-  height: 36px;
+/* The move up / down icon buttons: ui IconButton, secondary, md (a 3.6rem
+   square, --radius-md, --ink-800 with an --ink-750 hover). */
+.categories-page .button-icon {
+  background: var(--ink-800);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  width: 3.6rem;
+  height: 3.6rem;
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   font-size: var(--fs-md);
   color: var(--text-secondary);
-  transition: all 0.2s ease;
+  transition: background-color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
 }
 
-/* Accent is a light violet, so text sitting on a solid accent fill must be
-   dark ink — white on --accent fails contrast. */
-.button-icon:hover:not(:disabled) {
-  background: var(--accent);
-  color: var(--ink-950);
-  border-color: var(--accent);
+.categories-page .button-icon:hover:not(:disabled) {
+  background: var(--ink-750);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
 }
 
-.button-icon:disabled {
-  opacity: 0.3;
+.categories-page .button-icon:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
-.button-small {
-  padding: 0.5rem 1rem;
-  font-size: var(--fs-sm);
+/* A bare `.button` on this page (Cancel, Edit) has always been the NEUTRAL
+   action, where App.css's bare `.button` is the solid accent fill. Restated
+   as the `.button-secondary` surface so Cancel never competes with Save. */
+.categories-page .button:not(.button-primary):not(.button-danger) {
+  background: var(--ink-800);
+  color: var(--text-primary);
+  border-color: var(--border-control);
 }
 
-.empty-state {
+.categories-page .button:not(.button-primary):not(.button-danger):hover:not(:disabled) {
+  background: var(--ink-750);
+  border-color: var(--border-strong);
+}
+
+.categories-page .empty-state {
   text-align: center;
   padding: 3rem;
   background: var(--ink-850);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
 }
 
-.form-group {
+.categories-page .form-group {
   margin-bottom: 2rem;
 }
 
-.form-group label {
+.categories-page .form-group label {
   display: block;
   margin-bottom: 0.5rem;
   font-weight: 500;
   color: var(--text-secondary);
 }
 
-.form-group input[type="text"],
-.form-group input[type="color"] {
+.categories-page .form-group input[type="text"],
+.categories-page .form-group input[type="color"] {
+  /* The `.ui-input` look (components/ui/Field.css). */
   width: 100%;
-  padding: 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  min-height: 3.6rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
   font-size: var(--fs-base);
-  background: var(--ink-850);
+  line-height: var(--lh-snug);
+  background: var(--ink-800);
   color: var(--text-primary);
-  transition: all 0.2s ease;
+  transition: border-color var(--dur-fast) var(--ease),
+              box-shadow var(--dur-fast) var(--ease);
 }
 
-.form-group input[type="color"] {
+.categories-page .form-group input[type="color"] {
   height: 50px;
   cursor: pointer;
 }
 
-.form-group input:focus {
+.categories-page .form-group input:focus {
   outline: none;
-  border-color: var(--accent-line);
+  border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
-.form-group input:disabled {
+.categories-page .form-group input:disabled {
   background: var(--ink-900);
   color: var(--text-faint);
   cursor: not-allowed;
 }
 
-.form-group input::placeholder {
+.categories-page .form-group input::placeholder {
   color: var(--text-faint);
   font-style: italic;
 }
 
-.form-group small {
+.categories-page .form-group small {
   display: block;
   margin-top: 0.25rem;
   color: var(--text-secondary);
@@ -193,7 +208,7 @@
 }
 
 /* Emoji Picker */
-.emoji-picker {
+.categories-page .emoji-picker {
   display: grid;
   /* Auto-fit instead of a hard 10 columns: the editor column is narrower than
      the old 500px modal, and 10 fixed tracks squeezed the icons to slivers. */
@@ -201,15 +216,15 @@
   gap: 0.8rem;
   padding: 1.5rem;
   background: var(--ink-900);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   max-height: 30rem;
   overflow-y: auto;
 }
 
-.emoji-option {
+.categories-page .emoji-option {
   background: var(--ink-750);
   border: 2px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: var(--fs-lg);
   width: 48px;
   height: 48px;
@@ -217,92 +232,57 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease);
 }
 
-.emoji-option:hover {
+/* No scale on hover: a control that grows under the pointer moves the
+   edges of its neighbours. */
+.categories-page .emoji-option:hover {
   background: var(--ink-700);
-  transform: scale(1.1);
 }
 
-.emoji-option.selected {
+.categories-page .emoji-option.selected {
   border-color: var(--accent);
   background: var(--accent-dim);
 }
 
 /* Form Actions */
-.form-actions {
+.categories-page .form-actions {
   display: flex;
   gap: 1rem;
   margin-top: 2rem;
 }
 
-.form-actions .button {
+.categories-page .form-actions .button {
   flex: 1;
+  justify-content: center;
 }
 
-/* Buttons */
-.button {
-  padding: 0.75rem 1.5rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: var(--fs-base);
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  background: var(--ink-750);
-  color: var(--text-primary);
-}
-
-.button:hover {
-  background: var(--ink-700);
-  border-color: var(--border-strong);
-}
-
-.button-primary {
-  background: var(--accent);
-  color: var(--ink-950);
-  border-color: var(--accent);
-}
-
-.button-primary:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-}
-
-/* Destructive: --danger is a light red, so the solid fill takes dark ink.
-   There is no --danger-hover token, so hover inverts to the translucent
-   --danger-dim tint — still unmistakably destructive, and contrast-safe. */
-.button-danger {
-  background: var(--danger);
-  color: var(--ink-950);
-  border-color: var(--danger);
-}
-
-.button-danger:hover {
-  background: var(--danger-dim);
-  color: var(--danger);
-  border-color: var(--danger);
-}
+/* Buttons: App.css's `.button` family (the ui Button metrics) styles every
+   `.button`, `.button-primary`, `.button-danger` and `.button-small` here.
+   This file used to restate them UNSCOPED, and because this chunk is lazy it
+   loaded last and restyled every `.button` in the app once the page had been
+   opened (AGENTS.md section 18). Only the neutral bare `.button` differs, below. */
 
 /* Responsive */
 @media (max-width: 768px) {
-  .category-item {
+  .categories-page .category-item {
     flex-direction: column;
     align-items: flex-start;
     gap: 1rem;
   }
 
-  .category-actions {
+  .categories-page .category-actions {
     width: 100%;
     justify-content: flex-end;
   }
 
-  .emoji-picker {
+  .categories-page .emoji-picker {
     grid-template-columns: repeat(6, 1fr);
   }
 
-  .form-actions {
+  .categories-page .form-actions {
     flex-direction: column;
   }
 }
@@ -329,7 +309,7 @@
    would silently resize buttons in the workflow steps, which this pass does not
    own. The page-root prefix keeps the blast radius at exactly this view. */
 @media (max-width: 640px) {
-  .category-item {
+  .categories-page .category-item {
     flex-direction: column;
     align-items: stretch;
     gap: 1.2rem;
@@ -348,17 +328,14 @@
   }
 
   .categories-page .button-icon {
-    width: 44px;
-    height: 44px;
+    width: var(--tap, 44px);
+    height: var(--tap, 44px);
   }
 
+  /* Height comes from App.css's family (the 44px phone floor). */
   .categories-page .button,
   .categories-page .button-small {
-    min-height: 44px;
-    display: inline-flex;
-    align-items: center;
     justify-content: center;
-    padding-inline: 1.6rem;
   }
 
   /* ── Icon picker ─────────────────────────────────────────────────────────

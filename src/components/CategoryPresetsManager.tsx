@@ -610,23 +610,10 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
           {(['Men', 'Women', 'Kids'] as const).map(g => (
             <button
               key={g}
+              type="button"
+              className="presets-gender-tab"
+              aria-pressed={genderFilter === g}
               onClick={() => setGender(g)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                padding: '0.4rem 1.4rem',
-                borderRadius: '999px',
-                border: '2px solid',
-                // Solid --accent needs a dark label (--text-primary on it is 2.46:1).
-                borderColor: genderFilter === g ? 'var(--accent)' : 'var(--border-control)',
-                background: genderFilter === g ? 'var(--accent)' : 'var(--ink-800)',
-                color: genderFilter === g ? 'var(--ink-950)' : 'var(--text-secondary)',
-                fontWeight: 600,
-                fontSize: 'var(--fs-sm)',
-                cursor: 'pointer',
-                transition: 'all 0.15s',
-              }}
             >
               {g === 'Men' ? <Users size={14} /> : g === 'Women' ? <UserRound size={14} /> : <Baby size={14} />}
               <span>{g}</span>

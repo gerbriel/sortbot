@@ -3716,9 +3716,10 @@ function App() {
               />
             )}
             <details>
-              {/* `.step4-summary` (App.css) lifts this to the 44px touch floor
-                  on phones; the inline padding alone made it a 22px target. */}
-              <summary className="step4-summary" style={{ cursor: 'pointer', fontWeight: 600, fontSize: 'var(--fs-md)', userSelect: 'none', padding: '0.25rem 0' }}>
+              {/* `.step4-summary` (App.css) owns this row's look: the ui control
+                  surface at md metrics, lifted to the 44px touch floor on
+                  phones. No inline style, so the stylesheet can reach it. */}
+              <summary className="step4-summary">
                 Step 4: Review &amp; Export ▾
               </summary>
 

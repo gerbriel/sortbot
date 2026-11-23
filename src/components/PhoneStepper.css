@@ -43,31 +43,41 @@
   min-width: 0;
 }
 
+/* The step chips are ui Button segments (ui/Button.css, the secondary
+   variant): --radius-md corners, a 1px --border-control edge, the --ink-800
+   surface and the --ink-750 hover. On a phone the box is the 44px floor and the
+   padding is tight, because four chips share a 360px row; from 641px up it is
+   the md size exactly. */
 .phone-stepper-btn {
   width: 100%;
   min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.35rem;
-  padding: 0.3rem 0.35rem;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
   border: 1px solid var(--border-control);
-  border-radius: 999px;
-  /* The stepper sits on the page canvas (--ink-950, white), so a chip filled
-     with --ink-800 (also white, because elevation on this light theme moves
-     TOWARD white) would be a border and nothing else. The grey section tone
-     gives "not here" a body; the active chip takes the white. */
-  background: var(--ink-850);
+  border-radius: var(--radius-md);
+  background: var(--ink-800);
   color: var(--text-secondary);
   font: inherit;
   font-size: var(--fs-sm);
   font-weight: 600;
-  line-height: var(--lh-tight);
+  line-height: var(--lh-snug);
   cursor: pointer;
-  /* The label is the first thing that gives at 360px; the disc never shrinks. */
+  transition: background-color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
+  /* The label is the first thing that gives at 360px; the badge never shrinks. */
   overflow: hidden;
 }
 
+.phone-stepper-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The step number is a small square badge (--radius-sm), not a disc. */
 .phone-stepper-disc {
   flex: 0 0 auto;
   width: 1.6em;
@@ -75,7 +85,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   background: var(--ink-700);
   color: var(--text-secondary);
   font-size: var(--fs-xs);
@@ -89,19 +99,20 @@
   white-space: nowrap;
 }
 
-/* The active step: solid accent disc, and the chip itself outlined so the row
-   still reads as four equal chips rather than one black slab. */
+/* The active step is the selected segment: the solid accent fill with the
+   --ink-950 label (the ui Button primary pair), the same 1px edge as the rest.
+   Its badge inverts so the number still reads on the fill. */
 .phone-stepper-btn--on {
   border-color: var(--accent);
-  color: var(--text-primary);
-  background: var(--ink-950);
+  color: var(--ink-950);
+  background: var(--accent);
 }
 
 .phone-stepper-btn--on .phone-stepper-disc {
-  background: var(--accent);
-  /* Solid accent fill always carries the --ink-950 label — that convention is
-     what makes black-on-white and white-on-black both fall out for free. */
-  color: var(--ink-950);
+  background: var(--ink-950);
+  /* The inverse of the solid-accent convention: --ink-950 ground, accent
+     number, so the pair still swaps with the palette. */
+  color: var(--accent);
 }
 
 .phone-stepper-btn--done .phone-stepper-disc {
@@ -114,8 +125,13 @@
   opacity: 0.45;
 }
 
-.phone-stepper-btn:not(:disabled):active {
-  background: var(--ink-750);
+.phone-stepper-btn:not(:disabled):not(.phone-stepper-btn--on):active {
+  background: var(--ink-700);
+}
+
+.phone-stepper-btn--on:not(:disabled):active {
+  background: var(--accent-press);
+  border-color: var(--accent-press);
 }
 
 /* Visually hidden, still announced. There is no global sr-only class in this
@@ -156,19 +172,27 @@
   padding-bottom: 0;
 }
 
+/* Back and Continue are ui Button md (secondary and primary). */
 .psc-btn {
   min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.35rem;
-  padding: 0.5rem 0.9rem;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
   border-radius: var(--radius-md);
   font: inherit;
   font-size: var(--fs-base);
   font-weight: 600;
-  line-height: var(--lh-tight);
+  line-height: var(--lh-snug);
   cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease);
+}
+
+.psc-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .psc-back {
@@ -178,7 +202,7 @@
   color: var(--text-primary);
 }
 
-.psc-back:active { background: var(--ink-750); }
+.psc-back:active { background: var(--ink-700); }
 
 .psc-next {
   /* Continue takes the rest of the row — it is the forward action. */
@@ -189,7 +213,7 @@
   color: var(--ink-950);
 }
 
-.psc-next:active { opacity: 0.85; }
+.psc-next:active { background: var(--accent-press); border-color: var(--accent-press); }
 
 .psc-hint {
   flex: 1 1 auto;
@@ -221,24 +245,31 @@
 
   .phone-stepper-item { flex: 0 1 auto; }
 
+  /* ui Button md: 3.6rem tall, space-2 by space-5, --fs-base. */
   .phone-stepper-btn {
     width: auto;
-    min-height: 40px;
-    padding: 0.35rem 1.1rem;
+    min-height: 3.6rem;
+    padding: var(--space-2) var(--space-5);
     font-size: var(--fs-base);
   }
 
   .phone-stepper-label { overflow: visible; text-overflow: clip; }
 
-  .phone-stepper-btn:not(:disabled):hover { background: var(--ink-750); }
-  .phone-stepper-btn--on:not(:disabled):hover { background: var(--ink-950); }
+  .phone-stepper-btn:not(:disabled):not(.phone-stepper-btn--on):hover {
+    background: var(--ink-750);
+    border-color: var(--border-strong);
+  }
+  .phone-stepper-btn--on:not(:disabled):hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+  }
 
   .phone-step-continue {
     justify-content: space-between;
     margin-top: var(--space-5);
   }
 
-  .psc-btn { min-height: 40px; }
+  .psc-btn { min-height: 3.6rem; }
 
   /* Clearance for the two fixed corner buttons (shortcuts gear bottom-left,
      Inbox bottom-right): their 1.75rem offset + 44px + breathing room, so the
@@ -251,8 +282,8 @@
     margin-left: auto;
   }
 
-  .psc-next:hover { opacity: 0.9; }
-  .psc-back:hover { background: var(--ink-750); }
+  .psc-next:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .psc-back:hover { background: var(--ink-750); border-color: var(--border-strong); }
 
   .psc-hint { text-align: right; }
 }
