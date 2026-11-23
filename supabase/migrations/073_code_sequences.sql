@@ -8,7 +8,7 @@
 --     031_multi_org_tenancy.sql   (organizations, org_members)
 --     053_listing_labels.sql      (products.sku, products_org_sku_uidx)
 --
--- IDEMPOTENT. Additive: one new table (`create table if not exists`), one
+-- IDEMPOTENT. Additive: one new table (`create table if not exists`, RLS on, no policies), one
 -- function pair (`create or replace`), grants re-stated on every run. No
 -- existing table, policy, function or row is changed. Safe to run any number
 -- of times. Rollback at the bottom.
@@ -101,6 +101,13 @@ create table if not exists app_private.org_code_sequences (
 
 comment on table app_private.org_code_sequences is
   'Per-workspace counter for sequential SKUs and in-store EAN-13 numbers (073). Written only by app_private.next_code_numbers.';
+
+-- RLS on, with no policies: every row is denied to every role but the table's
+-- owner. The definer body below runs as the owner, which bypasses RLS (the
+-- table is not FORCE ROW LEVEL SECURITY), so the function still works and the
+-- SQL Editor's "table without RLS" warning and the advisor stay quiet. Belt
+-- and braces over the revoked grants and the private schema.
+alter table app_private.org_code_sequences enable row level security;
 
 -- No client role reads or writes it directly, whatever default privileges say.
 do $$
