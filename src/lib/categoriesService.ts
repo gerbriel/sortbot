@@ -194,17 +194,22 @@ export async function reorderCategories(categoryIds: string[]): Promise<void> {
 /**
  * Initialize default categories for a new user
  */
-export async function initializeDefaultCategories(): Promise<void> {
+export async function initializeDefaultCategories(orgId: string): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   
   if (!user) {
     throw new Error('User not authenticated');
   }
 
-  // Check if any categories exist (shared across all users)
+  // Scoped to THIS workspace. Without the filter a member of two workspaces
+  // saw the other one's categories and never seeded this one, and the
+  // inserts below landed in default_org_id() (the first-joined workspace)
+  // instead of orgId. RLS (org_id in user_org_ids()) allows any workspace
+  // the caller belongs to.
   const { data: existing, error: checkError } = await supabase
     .from('categories')
     .select('id')
+    .eq('org_id', orgId)
     .eq('is_active', true)
     .limit(1);
 
@@ -241,6 +246,7 @@ export async function initializeDefaultCategories(): Promise<void> {
         .from('categories')
         .insert({
           user_id: user.id,
+          org_id: orgId,
           name: cat.name,
           display_name: cat.display_name,
           emoji: cat.emoji,
@@ -256,7 +262,10 @@ export async function initializeDefaultCategories(): Promise<void> {
     // so a brand-new workspace's Step 2 preset buttons work out of the box.
     // Best-effort — a missing preset never blocks category creation.
     try {
+      // Never add ships_from, vendor or policies here: they belong to one
+      // shop (its address, its own name, its terms); 074 blanks them too.
       const preset: CategoryPresetInput = {
+        org_id: orgId,
         category_name: `${cat.name}_default`,
         display_name: `${cat.display_name} (Default)`,
         description: `Default preset for ${cat.display_name}`,

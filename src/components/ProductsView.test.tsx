@@ -7,6 +7,12 @@ import {
   fetchLabels, fetchLabelsForProducts, countLabelUsage, ensureSkus, setProductCodes,
 } from '../lib/labelsService';
 import { syncGroupFieldsToDatabase } from '../lib/productService';
+import { supabase } from '../lib/supabase';
+import type { MockedSupabaseClient } from '../lib/testing/supabaseMock';
+import { getOrgDescriptionSettings, DEFAULT_DESCRIPTION_SETTINGS } from '../lib/descriptionSettings';
+import { DEFAULT_CODE_SETTINGS } from '../lib/codeSettings';
+
+const sb = supabase as unknown as MockedSupabaseClient;
 
 /**
  * ProductsView is where a listing is edited from OUTSIDE the workflow, so the
@@ -42,6 +48,18 @@ vi.mock('../lib/labelsService', async (importOriginal) => {
 });
 
 vi.mock('../lib/productService', () => ({ syncGroupFieldsToDatabase: vi.fn() }));
+
+/* The listing's workspace is read off its row (`products.org_id`), then that
+   workspace's settings. Both are stubbed: the row through the chainable mock,
+   the settings through getOrgDescriptionSettings. */
+vi.mock('../lib/supabase', async () => {
+  const { createSupabaseMock } = await import('../lib/testing/supabaseMock');
+  return { supabase: createSupabaseMock() };
+});
+vi.mock('../lib/descriptionSettings', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/descriptionSettings')>();
+  return { ...actual, getOrgDescriptionSettings: vi.fn() };
+});
 
 /* The picker owns its own fetching and its own three-state chip logic, both of
    which are covered by labelsService.test.ts. Stubbing it keeps this file about
@@ -137,6 +155,10 @@ beforeEach(() => {
   vi.mocked(fetchLabelsForProducts).mockResolvedValue({ status: 'ok', byProduct: {} });
   vi.mocked(countLabelUsage).mockResolvedValue({ status: 'ok', counts: {}, complete: true });
   vi.mocked(syncGroupFieldsToDatabase).mockResolvedValue(true);
+  sb.__mock.reset();
+  sb.__mock.responder = (call) =>
+    call.table === 'products' && call.columns === 'org_id' ? { data: { org_id: 'org-1' }, error: null } : undefined;
+  vi.mocked(getOrgDescriptionSettings).mockResolvedValue(DEFAULT_DESCRIPTION_SETTINGS);
 });
 
 afterEach(() => {
@@ -285,12 +307,36 @@ describe('ProductsView — barcodes', () => {
     vi.mocked(ensureSkus).mockResolvedValue({ status: 'ok', skus: { lead: 'ACD-7H2K9M' } });
     const { container } = await render();
     await openFirstRow(container);
-    await act(async () => { click(buttonByText(container, 'Generate SKU')); await Promise.resolve(); });
+    await act(async () => { click(buttonByText(container, 'Generate')); await Promise.resolve(); });
     // The leader is the row the scanner and the printed label read.
-    expect(ensureSkus).toHaveBeenCalledWith(['lead']);
+    expect(ensureSkus).toHaveBeenCalledWith(['lead'], {
+      settings: DEFAULT_CODE_SETTINGS, orgId: 'org-1', categories: { lead: 'outerwear' },
+    });
     expect((field(container, 'SKU') as HTMLInputElement).value).toBe('ACD-7H2K9M');
     // And the barcode preview is now a real Code 128 drawn from it.
     expect(one(container, '.pv-barcode-preview').innerHTML).toContain('<svg');
+  });
+
+  it('Generate passes the listing workspace convention and its own workspace', async () => {
+    const codes = { ...DEFAULT_CODE_SETTINGS, skuPrefix: 'RCK', skuScheme: 'sequential' as const, barcodeMode: 'ean13_store' as const };
+    vi.mocked(getOrgDescriptionSettings).mockResolvedValue({ ...DEFAULT_DESCRIPTION_SETTINGS, codes });
+    vi.mocked(ensureSkus).mockResolvedValue({ status: 'ok', skus: { lead: 'RCK-00012' } });
+    vi.mocked(fetchListing)
+      .mockResolvedValueOnce({ status: 'ok', listing: listing() })
+      .mockResolvedValue({ status: 'ok', listing: listing({ sku: 'RCK-00012', barcode: '2000000000123' }) });
+    const { container } = await render();
+    await openFirstRow(container);
+    await settle();
+    expect(getOrgDescriptionSettings).toHaveBeenCalledWith('org-1');
+    // EAN-13 mode puts a second Generate beside the barcode.
+    const generates = all(container, 'button').filter(b => (b.textContent ?? '').trim() === 'Generate');
+    expect(generates).toHaveLength(2);
+    await act(async () => { click(generates[0]); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    expect(ensureSkus).toHaveBeenCalledWith(['lead'], {
+      settings: codes, orgId: 'org-1', categories: { lead: 'outerwear' },
+    });
+    expect((field(container, 'SKU') as HTMLInputElement).value).toBe('RCK-00012');
+    expect((field(container, 'Barcode') as HTMLInputElement).value).toBe('2000000000123');
   });
 
   it('a duplicate SKU is shown in words, not swallowed', async () => {

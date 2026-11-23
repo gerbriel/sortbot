@@ -42,6 +42,9 @@ import { buildGroupArray } from '../lib/grouping';
 import { fetchActiveChips, getBrandTerms, getAllBrandKeywordEntries, termMatchesChip, wordsRelated } from '../lib/vocabService';
 import { requestProse } from '../lib/proseService';
 import type { DescriptionSettings } from '../lib/descriptionSettings';
+import { DEFAULT_CODE_SETTINGS } from '../lib/codeSettings';
+import { ensureSkus } from '../lib/labelsService';
+import { fetchListing } from '../lib/productSearchService';
 import './ProductDescriptionGenerator.css';
 
 // The field reference in the "How dictation works" panel: the same fields and
@@ -203,7 +206,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   const reportedSync = (group: ClothingItem[], label: string): Promise<boolean> => {
     saveStatus.begin();
     return syncGroupFieldsToDatabase(group, batchId ?? null, userIdRef.current)
-      .then((ok) => { saveStatus.end(ok, ok ? undefined : 'Could not save this listing'); return ok; })
+      .then((ok) => {
+        saveStatus.end(ok, ok ? undefined : 'Could not save this listing');
+        if (ok) void assignCodesRef.current(group, false);
+        return ok;
+      })
       .catch((e) => {
         console.error(`[PDG] ${label} syncGroupFields threw:`, e);
         saveStatus.end(false, e instanceof Error ? e.message : 'Save failed');
@@ -213,6 +220,13 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // The [processedItems] effect must not re-subscribe when this identity changes.
   const reportedSyncRef = useRef(reportedSync);
   reportedSyncRef.current = reportedSync;
+
+  /* Codes on first save (`codes.autoAssign === 'on_save'`). Set further down,
+     once handleTableFieldChange exists; a ref so reportedSync can call it. */
+  const assignCodesRef = useRef<(group: ClothingItem[], manual: boolean) => Promise<void>>(async () => {});
+  /** Leaders already tried this session, so a failed or refused assign is
+   *  not retried on every keystroke's save. */
+  const codesTriedRef = useRef<Set<string>>(new Set());
 
   const debouncedDirectSave = (group: ClothingItem[]) => {
     // Routed through the debug logger (debugging finding 18): these fired
@@ -1519,6 +1533,52 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
 
   // Keep applyTableFieldRef current every render
   applyTableFieldRef.current = handleTableFieldChange;
+
+  /**
+   * Give a listing with no SKU its codes under the workspace convention, then
+   * fill the SKU (and barcode) cells through the ordinary field-change path,
+   * so the store, the transcript rule and the save all behave as if typed.
+   * `manual` is the form's Generate button; otherwise it runs once per group
+   * per session after a successful save, only when the setting asks for it.
+   * Fail quiet: a refused or missing migration just leaves the cell empty.
+   */
+  const assignCodesForGroup = async (group: ClothingItem[], manual: boolean): Promise<void> => {
+    const codes = descriptionSettings?.codes ?? DEFAULT_CODE_SETTINGS;
+    if (!manual && codes.autoAssign !== 'on_save') return;
+    const leader = group.find(i => i.productGroup === i.id) ?? group[0];
+    if (!leader) return;
+    const live = processedItemsRef.current.filter(i => group.some(g => g.id === i.id));
+    if (live.some(i => (i.sku ?? '').trim())) return;
+    if (!manual) {
+      if (codesTriedRef.current.has(leader.id)) return;
+      codesTriedRef.current.add(leader.id);
+    }
+    try {
+      const res = await ensureSkus([leader.id], {
+        settings: codes,
+        orgId: orgId ?? undefined,
+        categories: { [leader.id]: leader.category || leader.productType || null },
+      });
+      if (res.status !== 'ok') return;
+      const sku = res.skus[leader.id];
+      if (!sku) return;
+      let barcode: string | undefined;
+      if (codes.barcodeMode === 'sku') {
+        barcode = (leader.barcode ?? '').trim() ? undefined : sku;
+      } else if (codes.barcodeMode === 'ean13_store') {
+        // The number comes from the workspace counter; read it back.
+        const back = await fetchListing(leader.id);
+        if (back.status === 'ok' && back.listing.barcode) barcode = back.listing.barcode;
+      }
+      const idx = buildGroupArray(processedItemsRef.current).findIndex(g => g.some(i => i.id === leader.id));
+      if (idx === -1) return;
+      applyTableFieldRef.current('sku', sku, idx);
+      if (barcode) applyTableFieldRef.current('barcode', barcode, idx);
+    } catch (err) {
+      log.pdg(`assignCodesForGroup | ${String(err)}`);
+    }
+  };
+  assignCodesRef.current = assignCodesForGroup;
 
   // ── Brand spelling memory (report 14) ────────────────────────────────────
 
@@ -3604,6 +3664,7 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
               processedItems={processedItems}
               setProcessedItems={setProcessedItems}
               onBrandEdited={noteBrandEdited}
+              onGenerateSku={() => void assignCodesForGroup(currentGroup, true)}
               brandExtra={
                 <BrandSpelling
                   available={aliasesAvailable}

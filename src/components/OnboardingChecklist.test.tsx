@@ -112,7 +112,7 @@ describe('OnboardingChecklist — a brand-new workspace', () => {
     const { container } = await render();
     expect(titles(container)).toEqual([
       'Name your shop',
-      'Review your categories and presets',
+      'Make the categories and presets yours',
       'Choose where you sell',
       'Connect your Shopify storeOptional',
       'Invite your teamOptional',
@@ -232,7 +232,7 @@ describe('OnboardingChecklist — steps that hide, and reads that fail', () => {
     // reads behind them are never made.
     const { container } = await render({ role: 'member', canInvite: false });
     expect(titles(container)).toEqual([
-      'Review your categories and presets',
+      'Make the categories and presets yours',
       'Upload your first batch',
       'Export your first listings',
     ]);
@@ -268,5 +268,49 @@ describe('OnboardingChecklist — steps that hide, and reads that fail', () => {
     vi.mocked(fetchWorkflowBatchesMeta).mockResolvedValue([batch({ current_step: 4 })]);
     await render();
     expect(fetchPublications).not.toHaveBeenCalled();
+  });
+});
+
+describe('OnboardingChecklist: ship-from, read off the presets', () => {
+  const preset = (over: Record<string, unknown> = {}) => ({
+    id: 'p1', category_name: 'tees', display_name: 'Tees',
+    requires_shipping: true, is_active: true, ships_from: '',
+    measurement_template: {},
+    ...over,
+  }) as never;
+  const shipStep = (container: HTMLElement) =>
+    all(container, '.onb-step').find(s => (s.textContent ?? '').includes('Set where you ship from'));
+
+  it('lists it, undone, while a shipping preset has no ship-from', async () => {
+    vi.mocked(getCategoryPresets).mockResolvedValue([preset(), preset({ id: 'p2', ships_from: 'Somewhere' })]);
+    const { container, p } = await render();
+    const step = shipStep(container);
+    expect(step?.className).not.toContain('onb-step--done');
+    click(buttonByText(container, 'Open presets'));
+    expect(p.onNavigate).toHaveBeenCalledWith('presets');
+  });
+
+  it('ticks it once every shipping preset has one (blank whitespace does not count)', async () => {
+    vi.mocked(getCategoryPresets).mockResolvedValue([
+      preset({ ships_from: '12 Main St, Town, ST 00000' }),
+      // Does not ship, so its blank address does not matter.
+      preset({ id: 'p2', requires_shipping: false, ships_from: '   ' }),
+    ]);
+    const { container } = await render();
+    expect(shipStep(container)?.className).toContain('onb-step--done');
+  });
+
+  it('omits it when no preset ships', async () => {
+    vi.mocked(getCategoryPresets).mockResolvedValue([preset({ requires_shipping: false })]);
+    const { container } = await render();
+    expect(shipStep(container)).toBeUndefined();
+  });
+
+  it('keeps it on the list, undone, when the presets read fails', async () => {
+    vi.mocked(getCategoryPresets).mockRejectedValue(new Error('offline'));
+    const { container } = await render();
+    const step = shipStep(container);
+    expect(step).toBeDefined();
+    expect(step?.className).not.toContain('onb-step--done');
   });
 });

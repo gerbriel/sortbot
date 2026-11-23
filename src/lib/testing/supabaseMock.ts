@@ -78,6 +78,10 @@ export interface SupabaseMockControls {
   authSession: unknown;
   getSessionThrows: boolean;
   responder: Responder;
+  /** `rpc(fn, args)` calls, in order. */
+  rpcCalls: Array<{ fn: string; args: unknown }>;
+  /** Answer an rpc call; undefined falls through to `{ data: [], error: null }`. */
+  rpcResponder: (fn: string, args: unknown) => QueryResult | undefined;
   reset(): void;
   /** Calls whose table + op match, in order. */
   callsFor(table: string, op: MockCall['op']): MockCall[];
@@ -104,6 +108,7 @@ export interface MockedSupabaseClient {
       getPublicUrl(path: string): { data: { publicUrl: string } };
     };
   };
+  rpc(fn: string, args?: unknown): Promise<QueryResult>;
   /** Realtime stub — enough for subscribe/unsubscribe accounting, no events. */
   channel(name: string): MockChannel;
   removeChannel(channel: MockChannel): Promise<'ok'>;
@@ -121,6 +126,8 @@ export function createSupabaseMock(): MockedSupabaseClient {
     authSession: { access_token: 'test-token' },
     getSessionThrows: false,
     responder: () => undefined,
+    rpcCalls: [],
+    rpcResponder: () => undefined,
     reset() {
       controls.calls = [];
       controls.channels = [];
@@ -131,6 +138,8 @@ export function createSupabaseMock(): MockedSupabaseClient {
       controls.authSession = { access_token: 'test-token' };
       controls.getSessionThrows = false;
       controls.responder = () => undefined;
+      controls.rpcCalls = [];
+      controls.rpcResponder = () => undefined;
     },
     callsFor(table, op) {
       return controls.calls.filter(c => c.table === table && c.op === op);
@@ -201,6 +210,10 @@ export function createSupabaseMock(): MockedSupabaseClient {
       onAuthStateChange() {
         return { data: { subscription: { unsubscribe() { /* no-op */ } } } };
       },
+    },
+    async rpc(fn: string, args?: unknown) {
+      controls.rpcCalls.push({ fn, args });
+      return controls.rpcResponder(fn, args) ?? { data: [], error: null };
     },
     channel(name: string): MockChannel {
       controls.channels.push(name);

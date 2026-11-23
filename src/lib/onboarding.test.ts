@@ -33,7 +33,7 @@ const owner: Partial<OnboardingFacts> = {
 describe('deriveOnboardingSteps — which steps appear', () => {
   it('gives a fresh owner the full list, in order', () => {
     expect(ids(owner)).toEqual([
-      'shop-name', 'categories', 'marketplaces', 'shopify',
+      'shop-name', 'categories', 'ship-from', 'marketplaces', 'shopify',
       'team', 'first-batch', 'first-export',
     ]);
   });
@@ -56,7 +56,7 @@ describe('deriveOnboardingSteps — which steps appear', () => {
     // organizations, org_marketplaces and org_shopify_connections are all
     // admin/owner on write — a member shown these could only fail at them.
     const list = ids({ role: 'member', canInvite: false, marketplaces: 2, shopify: true });
-    expect(list).toEqual(['categories', 'first-batch', 'first-export']);
+    expect(list).toEqual(['categories', 'ship-from', 'first-batch', 'first-export']);
   });
 
   it('shows them to an admin, not only an owner', () => {
@@ -125,6 +125,63 @@ describe('deriveOnboardingSteps — the done rules', () => {
   });
 });
 
+describe('deriveOnboardingSteps: ship-from', () => {
+  it('sits directly after the categories step', () => {
+    const list = ids(owner);
+    expect(list.indexOf('ship-from')).toBe(list.indexOf('categories') + 1);
+  });
+
+  it('is on the list, undone, while the counts are unknown', () => {
+    const s = step(owner, 'ship-from');
+    expect(s.done).toBe(false);
+    expect(s.optional).toBeUndefined();
+    expect(UNKNOWN_FACTS.presetsThatShip).toBeNull();
+    expect(UNKNOWN_FACTS.presetsNeedingShipFrom).toBeNull();
+  });
+
+  it('is undone while any shipping preset lacks one', () => {
+    expect(step({ ...owner, presetsThatShip: 5, presetsNeedingShipFrom: 2 }, 'ship-from').done).toBe(false);
+  });
+
+  it('is undone when only one of the two counts is known', () => {
+    expect(step({ ...owner, presetsThatShip: null, presetsNeedingShipFrom: 0 }, 'ship-from').done).toBe(false);
+    expect(step({ ...owner, presetsThatShip: 3, presetsNeedingShipFrom: null }, 'ship-from').done).toBe(false);
+  });
+
+  it('is done once every shipping preset has one', () => {
+    expect(step({ ...owner, presetsThatShip: 5, presetsNeedingShipFrom: 0 }, 'ship-from').done).toBe(true);
+  });
+
+  it('is ABSENT when no preset ships: there is nothing to set', () => {
+    expect(ids({ ...owner, presetsThatShip: 0, presetsNeedingShipFrom: 0 })).not.toContain('ship-from');
+  });
+
+  it('is offered to a plain member too, since presets are any member\'s', () => {
+    expect(ids({ role: 'member', canInvite: false })).toContain('ship-from');
+  });
+
+  it('opens the presets view and says the address is never shared', () => {
+    const s = step(owner, 'ship-from');
+    expect(s.title).toBe('Set where you ship from');
+    expect(s.action).toEqual({ kind: 'navigate', label: 'Open presets', view: 'presets' });
+    expect(s.why).toContain('never copied to another shop');
+  });
+});
+
+describe('deriveOnboardingSteps: the categories copy', () => {
+  it('asks the shop to make the starter set its own', () => {
+    const s = step(owner, 'categories');
+    expect(s.title).toBe('Make the categories and presets yours');
+    expect(s.why).toMatch(/^We loaded a starter set\./);
+  });
+
+  it('leads with the counts when they are known, without an em dash', () => {
+    const s = step({ ...owner, categoryCount: 9, presetCount: 4 }, 'categories');
+    expect(s.why).toMatch(/^You have 9 categories and 4 presets\. We loaded a starter set\./);
+    expect(s.why).not.toContain('\u2014');
+  });
+});
+
 describe('deriveOnboardingSteps — where each button goes', () => {
   it('routes every step somewhere reachable', () => {
     for (const s of deriveOnboardingSteps(owner)) {
@@ -147,28 +204,40 @@ describe('deriveOnboardingSteps — where each button goes', () => {
 describe('onboardingProgress', () => {
   it('counts every step for the readout, required steps for completeness', () => {
     const steps = deriveOnboardingSteps(owner);
-    expect(onboardingProgress(steps)).toEqual({ done: 0, total: 7, complete: false });
+    expect(onboardingProgress(steps)).toEqual({ done: 0, total: 8, complete: false });
   });
 
   it('is complete when the REQUIRED steps are done, with optionals outstanding', () => {
     const steps = deriveOnboardingSteps({
       ...owner,
       hasVendorName: true, visitedCategories: true, marketplaces: 2,
+      presetsThatShip: 4, presetsNeedingShipFrom: 0,
       batchCount: 1, exportedCount: 1,
       // Both optional steps left undone.
       shopify: false, memberCount: 1,
     });
     const p = onboardingProgress(steps);
     expect(p.complete).toBe(true);
-    expect(p.done).toBe(5);
-    expect(p.total).toBe(7);
+    expect(p.done).toBe(6);
+    expect(p.total).toBe(8);
   });
 
   it('is not complete while any required step is outstanding', () => {
     const steps = deriveOnboardingSteps({
       ...owner, hasVendorName: true, visitedPresets: true, marketplaces: 2,
+      presetsThatShip: 4, presetsNeedingShipFrom: 0,
       shopify: true, memberCount: 4, batchCount: 1,
       // first-export outstanding.
+    });
+    expect(onboardingProgress(steps).complete).toBe(false);
+  });
+
+  it('a shipping preset with no ship-from holds the checklist open', () => {
+    // Required, not optional: an export without a ship-from is the failure.
+    const steps = deriveOnboardingSteps({
+      ...owner, hasVendorName: true, visitedPresets: true, marketplaces: 2,
+      presetsThatShip: 4, presetsNeedingShipFrom: 1,
+      batchCount: 1, exportedCount: 1,
     });
     expect(onboardingProgress(steps).complete).toBe(false);
   });

@@ -130,6 +130,64 @@
   color: var(--text-secondary);
 }
 
+/* Ship-from for every preset: the first row of the list, full width. The
+   address belongs to this workspace alone, so one write covers every preset. */
+.presets-page .presets-shipfrom {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 2rem;
+  background: var(--ink-850);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.presets-page .presets-shipfrom-title {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.presets-page .presets-shipfrom-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.presets-page .presets-shipfrom-field {
+  flex: 1 1 32rem;
+}
+
+/* The armed confirm carries a full sentence; let it wrap inside the row
+   rather than run off it, and keep the house radius rather than a pill. */
+.presets-page .presets-shipfrom .ui-confirm {
+  flex-wrap: wrap;
+  max-width: 100%;
+  border-radius: var(--radius-md);
+}
+
+.presets-page .presets-shipfrom .ui-confirm__prompt {
+  flex-basis: 100%;
+  white-space: normal;
+  padding: var(--space-1) var(--space-2) 0;
+}
+
+.presets-page .presets-shipfrom-status {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.presets-page .preset-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: 1rem;
+}
+
 /* Preset Card */
 .presets-page .preset-card {
   background: var(--ink-850);
@@ -702,6 +760,14 @@
   .presets-page .preset-actions { flex-wrap: wrap; gap: 0.8rem; }
 
   .presets-page .preset-card { padding: 1.5rem; }
+
+  /* Ship-from row: field over a full-width button, both on the 44px floor. */
+  .presets-page .presets-shipfrom { padding: 1.5rem; }
+  .presets-page .presets-shipfrom-row { flex-direction: column; align-items: stretch; }
+  .presets-page .presets-shipfrom-field { flex-basis: auto; }
+  .presets-page .presets-shipfrom .ui-btn { min-height: var(--tap, 44px); justify-content: center; }
+  .presets-page .presets-shipfrom-row > .ui-btn { width: 100%; }
+  .presets-page .presets-shipfrom .ui-confirm .ui-btn { flex: 1 1 0; }
   .presets-page .preset-header { flex-wrap: wrap; gap: 0.8rem; }
 
   /* ── Measurement template checkboxes ─────────────────────────────────────

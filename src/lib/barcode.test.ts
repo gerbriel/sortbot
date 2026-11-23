@@ -5,6 +5,7 @@ import {
   SKU_ALPHABET, SKU_PREFIX, SKU_BODY_LENGTH,
   generateSkuCandidate, isGeneratedSku, normalizeSkuInput, skuLookupCandidates,
 } from './barcode';
+import { DEFAULT_CODE_SETTINGS, generatedSkuPattern } from './codeSettings';
 
 /**
  * Code 128 is a lookup table plus a modulo — which means a single mistyped
@@ -289,6 +290,42 @@ describe('scanner input normalization', () => {
   });
 
   it('never folds the prefix, only the body', () => {
-    expect(skuLookupCandidates('LOT-I')[1]).toBe('LOT-1');
+    expect(skuLookupCandidates('LOT-I', /^LOT-[0-9]+$/)[1]).toBe('LOT-1');
+  });
+});
+
+describe('confusable fold gated by the workspace pattern', () => {
+  it('does not fold a SKU that could not be ours under the default pattern', () => {
+    // A manufacturer SKU with I/L/O is only ever looked up by its exact spelling.
+    expect(skuLookupCandidates('LOT-IL0')).toEqual(['LOT-IL0']);
+    expect(skuLookupCandidates('ACD-HELLO')).toEqual(['ACD-HELLO']);   // 5 body chars, not ours
+    expect(skuLookupCandidates('XYZ-7HIK9O')).toEqual(['XYZ-7HIK9O']); // foreign prefix
+  });
+
+  it('folds a sequential body under a sequential pattern', () => {
+    const seq = generatedSkuPattern({ ...DEFAULT_CODE_SETTINGS, skuPrefix: 'SHOP', skuScheme: 'sequential', sequenceDigits: 5 });
+    expect(skuLookupCandidates('shop-OO12I', seq)).toEqual(['SHOP-OO12I', 'SHOP-00121']);
+    // The same input under the default pattern is not ours, so no fold.
+    expect(skuLookupCandidates('shop-OO12I')).toEqual(['SHOP-OO12I']);
+  });
+
+  it('folds the tail when the workspace uses no separator', () => {
+    const noSep = generatedSkuPattern({ ...DEFAULT_CODE_SETTINGS, skuSeparator: '' });
+    expect(skuLookupCandidates('acd7hIk9O', noSep)).toEqual(['ACD7HIK9O', 'ACD7H1K90']);
+    const seqNoSep = generatedSkuPattern({ ...DEFAULT_CODE_SETTINGS, skuPrefix: 'LO', skuSeparator: '', skuScheme: 'sequential', sequenceDigits: 4 });
+    // The prefix LO is never folded even though it is made of confusables.
+    expect(skuLookupCandidates('LOOO42', seqNoSep)).toEqual(['LOOO42', 'LO0042']);
+  });
+
+  it('never folds a category code segment', () => {
+    const cat = generatedSkuPattern({ ...DEFAULT_CODE_SETTINGS, categoryCode: true, skuScheme: 'sequential' });
+    expect(skuLookupCandidates('ACD-OIL-OOO12', cat)).toEqual(['ACD-OIL-OOO12', 'ACD-OIL-00012']);
+  });
+
+  it('isGeneratedSku follows the pattern it is given', () => {
+    const seq = generatedSkuPattern({ ...DEFAULT_CODE_SETTINGS, skuScheme: 'sequential', sequenceDigits: 5 });
+    expect(isGeneratedSku('ACD-00042', seq)).toBe(true);
+    expect(isGeneratedSku('ACD-00042')).toBe(false);
+    expect(isGeneratedSku('ACD-7H2K9M', seq)).toBe(false);
   });
 });

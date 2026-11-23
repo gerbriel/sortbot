@@ -3,6 +3,7 @@ import { ArrowLeft } from 'lucide-react';
 import type { ClothingItem } from '../App';
 import { normalizeSizeValue } from '../lib/textAIService';
 import { Badge } from './ui/Badge';
+import { Button } from './ui/Button';
 import { FieldCell, FieldGrid, FieldGroup } from './ui/FieldGrid';
 import type { FieldCellControlProps } from './ui/FieldGrid';
 import './ComprehensiveProductForm.css';
@@ -16,6 +17,9 @@ interface ComprehensiveProductFormProps {
   brandExtra?: React.ReactNode;
   /** Fired when the seller types over the Brand field (report 14's "remember"). */
   onBrandEdited?: (value: string) => void;
+  /** Assign this listing's codes under the workspace convention. Shown in the
+   *  SKU cell's meta slot only while the SKU is empty. */
+  onGenerateSku?: () => void;
 }
 
 export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> = ({
@@ -25,6 +29,7 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
   setProcessedItems,
   brandExtra,
   onBrandEdited,
+  onGenerateSku,
 }) => {
   // Always highlight empty fields: visible on load, after voice, after reload
   const req = (value: any): string =>
@@ -215,7 +220,12 @@ export const ComprehensiveProductForm: React.FC<ComprehensiveProductFormProps> =
 
       <FieldGroup caption="Inventory and shipping" data-section="inventory">
         <FieldGrid columns={3}>
-          <FieldCell label={reqLabel("SKU")}>
+          <FieldCell
+            label={reqLabel("SKU")}
+            meta={onGenerateSku && !(currentItem.sku || '').trim()
+              ? <Button variant="ghost" size="sm" className="cpf-generate-sku" onClick={onGenerateSku}>Generate</Button>
+              : undefined}
+          >
             {(c) => <input {...c} type="text" value={currentItem.sku || ''} onChange={(e) => updateGroupField('sku', e.target.value)} placeholder="Stock keeping unit" {...rq(c, currentItem.sku)} />}
           </FieldCell>
           <FieldCell label="Inventory quantity">

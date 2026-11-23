@@ -324,6 +324,22 @@
 
 .lpv-barcode svg { display: block; max-width: 100%; height: auto; }
 
+/* EAN-13: the bars carry the digits, so the SKU prints on its own line under
+   them (a person reads the SKU, a till reads the number). */
+.lpv-barcode--ean {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 100%;
+}
+.lpv-barcode--ean > span:first-child { display: block; max-width: 100%; }
+.lpv-label-sku {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 8pt;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
 .lpv-nosku {
   font-size: 7pt;
   font-style: italic;

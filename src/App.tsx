@@ -3830,7 +3830,7 @@ function App() {
             onBack={goBack}
             backLabel={backLabel}
           >
-            <CategoriesManager onClose={goBack} />
+            <CategoriesManager onClose={goBack} orgId={currentOrg?.id ?? null} />
           </ToolView>
         </Suspense>
       )}
@@ -4096,7 +4096,7 @@ function App() {
             backLabel={backLabel}
             wide
           >
-            <LabelPrintView onOpenListing={openListingInStep3} />
+            <LabelPrintView onOpenListing={openListingInStep3} orgId={currentOrg?.id ?? null} />
           </ToolView>
         </Suspense>
       )}

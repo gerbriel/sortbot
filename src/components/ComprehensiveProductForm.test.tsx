@@ -228,3 +228,33 @@ describe('ComprehensiveProductForm writes', () => {
     expect(onBrandEdited).toHaveBeenCalledWith('Nike');
   });
 });
+
+describe('ComprehensiveProductForm SKU Generate', () => {
+  function renderWith(item: ClothingItem, onGenerateSku?: () => void) {
+    return mount(
+      <ComprehensiveProductForm
+        currentItem={item}
+        currentGroup={[item]}
+        processedItems={[item]}
+        setProcessedItems={vi.fn()}
+        onGenerateSku={onGenerateSku}
+      />,
+    );
+  }
+  const generate = (root: HTMLElement) => all(root, '.cpf-generate-sku');
+
+  it('shows Generate in the SKU cell while the SKU is empty, and calls back', () => {
+    const onGenerateSku = vi.fn();
+    const { container } = renderWith(makeItem({ sku: '' }), onGenerateSku);
+    const [btn] = generate(container);
+    expect(btn.textContent).toBe('Generate');
+    act(() => { btn.click(); });
+    expect(onGenerateSku).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides it once a SKU is present, and without a callback', () => {
+    expect(generate(renderWith(makeItem({ sku: 'ACD-7K3Q9M' }), vi.fn()).container)).toHaveLength(0);
+    cleanup();
+    expect(generate(renderWith(makeItem({ sku: '' })).container)).toHaveLength(0);
+  });
+});

@@ -1,3 +1,4 @@
+import { DEFAULT_CODE_SETTINGS } from './codeSettings';
 import { describe, it, expect } from 'vitest';
 import {
   BACKDROPS_MAX,
@@ -440,5 +441,28 @@ describe('presetHash — the three shared vectors', () => {
   it('a different preset hashes differently', async () => {
     const other = { ...DEFAULT_BACKGROUND_PRESET, color: '#111111' };
     expect(await presetHash(other)).not.toBe(await presetHash(DEFAULT_BACKGROUND_PRESET));
+  });
+});
+
+describe('codes and labelTemplates in the settings seam', () => {
+  it('defaults reproduce the pre-conventions behaviour and an empty stock list', () => {
+    const d = resolveDescriptionSettings({});
+    expect(d.codes).toEqual(DEFAULT_CODE_SETTINGS);
+    expect(d.labelTemplates).toEqual([]);
+    expect(DEFAULT_DESCRIPTION_SETTINGS.codes).toEqual(DEFAULT_CODE_SETTINGS);
+  });
+
+  it('normalises both on every read', () => {
+    const d = resolveDescriptionSettings({
+      codes: { skuPrefix: 'shop!', skuScheme: 'sequential', barcodeMode: 'qr' } as never,
+      labelTemplates: [null, { id: 'x' }, {
+        id: 'roll', name: 'Roll', note: '', page: { width: '3in', height: '2in', margin: '0in' },
+        columns: 1, label: { width: '3in', height: '2in' }, gap: { x: '0in', y: '0in' }, moduleWidth: 2, barHeight: 40,
+      }] as never,
+    });
+    expect(d.codes.skuPrefix).toBe('SHOP');
+    expect(d.codes.skuScheme).toBe('sequential');
+    expect(d.codes.barcodeMode).toBe('sku');
+    expect(d.labelTemplates.map(t => t.id)).toEqual(['roll']);
   });
 });

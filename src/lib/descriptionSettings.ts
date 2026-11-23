@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
 import { log } from './debugLogger';
 import { normalizePlatformRules, type PlatformPricingRule } from './platformPricing';
+import { DEFAULT_CODE_SETTINGS, normalizeCodeSettings, type CodeSettings } from './codeSettings';
+import { normalizeLabelTemplates, type LabelTemplate } from './labelTemplates';
 
 /**
  * descriptionSettings — per-workspace control over how the generated listing
@@ -382,6 +384,14 @@ export interface DescriptionSettings {
    *  chosen from, and it is what lets the UI name a backdrop rather than print
    *  a uuid path at the seller. */
   backdrops: WorkspaceBackdrop[];
+  /** The workspace's SKU and barcode conventions (codeSettings.ts). Defaults
+   *  reproduce the app before the setting existed (random `ACD-XXXXXX`,
+   *  barcode = SKU, assigned at label time). Nothing in the description engine
+   *  reads it, so the golden description snapshot is untouched. */
+  codes: CodeSettings;
+  /** The workspace's own label stocks, shown after the built-ins
+   *  (labelTemplates.ts `allLabelTemplates`). Empty by default. */
+  labelTemplates: LabelTemplate[];
 }
 
 export const DEFAULT_DESCRIPTION_SETTINGS: DescriptionSettings = {
@@ -395,6 +405,8 @@ export const DEFAULT_DESCRIPTION_SETTINGS: DescriptionSettings = {
   platformPricing: [],
   background: { ...DEFAULT_BACKGROUND_PRESET },
   backdrops: [],
+  codes: { ...DEFAULT_CODE_SETTINGS },
+  labelTemplates: [],
   disclaimerLines: [
     '* We note major imperfections—minor signs of age or wear may not be listed, adding to the vintage character.',
     '* High-quality piece, perfect for streetwear.',
@@ -404,10 +416,11 @@ export const DEFAULT_DESCRIPTION_SETTINGS: DescriptionSettings = {
 };
 
 /** Merge a stored partial over the defaults (tolerates old/missing keys).
- *  platformPricing and background are additionally NORMALIZED rather than
- *  trusted: both are free-form JSONB, one feeds the money path and the other an
- *  image pipeline, so a malformed value is dropped here once instead of being
- *  defended against at every use. */
+ *  platformPricing, background, backdrops, codes and labelTemplates are
+ *  additionally NORMALIZED rather than trusted: all are free-form JSONB that
+ *  feed the money path, an image pipeline, the SKU writer or the print sheet,
+ *  so a malformed value is dropped here once instead of being defended
+ *  against at every use. */
 export function resolveDescriptionSettings(partial?: Partial<DescriptionSettings> | null): DescriptionSettings {
   const merged = { ...DEFAULT_DESCRIPTION_SETTINGS, ...(partial ?? {}) };
   return {
@@ -415,6 +428,8 @@ export function resolveDescriptionSettings(partial?: Partial<DescriptionSettings
     platformPricing: normalizePlatformRules(merged.platformPricing),
     background: normalizeBackgroundPreset(merged.background),
     backdrops: normalizeBackdropLibrary(merged.backdrops),
+    codes: normalizeCodeSettings(merged.codes),
+    labelTemplates: normalizeLabelTemplates(merged.labelTemplates),
   };
 }
 

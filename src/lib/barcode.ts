@@ -265,11 +265,15 @@ export const SKU_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 export const SKU_PREFIX = 'ACD';
 export const SKU_BODY_LENGTH = 6;
 
-const SKU_RE = new RegExp(`^${SKU_PREFIX}-[${SKU_ALPHABET}]{${SKU_BODY_LENGTH}}$`);
+/** The DEFAULT generated-SKU shape (`ACD-` + 6 Crockford characters). A
+ *  workspace with its own convention passes `generatedSkuPattern(settings)`
+ *  from codeSettings.ts instead; this constant is the default, not the rule. */
+export const DEFAULT_GENERATED_SKU_PATTERN = new RegExp(`^${SKU_PREFIX}-[${SKU_ALPHABET}]{${SKU_BODY_LENGTH}}$`);
 
-/** True for a SKU this app generated (prefix, separator, alphabet and length). */
-export function isGeneratedSku(sku: string | null | undefined): boolean {
-  return !!sku && SKU_RE.test(sku);
+/** True for a SKU this app generated under `pattern` (default: the `ACD-`
+ *  convention). */
+export function isGeneratedSku(sku: string | null | undefined, pattern: RegExp = DEFAULT_GENERATED_SKU_PATTERN): boolean {
+  return !!sku && pattern.test(sku);
 }
 
 /**
@@ -287,6 +291,14 @@ export function isGeneratedSku(sku: string | null | undefined): boolean {
  * already holds, and pretending otherwise is how duplicate SKUs ship.
  */
 export function generateSkuCandidate(): string {
+  return `${SKU_PREFIX}-${generateSkuBody()}`;
+}
+
+/** The random half of `generateSkuCandidate`: six Crockford characters, no
+ *  prefix. labelsService formats it through the workspace's convention
+ *  (codeSettings.ts `formatSku`). Same randomness and the same caveat: a
+ *  candidate, never a promise of uniqueness. */
+export function generateSkuBody(): string {
   const n = SKU_BODY_LENGTH;
   let body = '';
   const g = typeof globalThis.crypto?.getRandomValues === 'function' ? globalThis.crypto : null;
@@ -297,7 +309,7 @@ export function generateSkuCandidate(): string {
   } else {
     for (let i = 0; i < n; i++) body += SKU_ALPHABET[Math.floor(Math.random() * SKU_ALPHABET.length)];
   }
-  return `${SKU_PREFIX}-${body}`;
+  return body;
 }
 
 /**
@@ -310,23 +322,35 @@ export function normalizeSkuInput(raw: string): string {
   return String(raw ?? '').trim().toUpperCase().replace(/\s+/g, '');
 }
 
+/** I/L -> 1 and O -> 0. */
+const foldConfusables = (x: string): string => x.replace(/[IL]/g, '1').replace(/O/g, '0');
+
 /**
  * The SKU spellings worth looking up for a typed/scanned string, best first.
  *
  * A generated SKU's body cannot contain I, L or O, so when a human keys one off
  * a printed label those letters are always a mistype for 1, 1 and 0. Folding
- * them is therefore free ACCURACY on our own codes — but it would silently
+ * them is therefore free ACCURACY on our own codes, but it would silently
  * corrupt a manufacturer SKU that legitimately contains them, so the fold is a
- * SECOND candidate rather than an edit to the first. The caller tries them in
- * order and stops at the first hit.
+ * SECOND candidate rather than an edit to the first, and it is offered ONLY
+ * when the folded spelling matches `pattern`, the shape this workspace
+ * generates (codeSettings.ts `generatedSkuPattern`; default the `ACD-`
+ * convention). The caller tries them in order and stops at the first hit.
+ *
+ * Which part is folded: the prefix (and a category code) is ours and must
+ * never be folded, but `pattern` is all this function knows of the convention,
+ * so it folds the SHORTEST tail whose fold makes the whole spelling match.
+ * Any I/L/O left unfolded in a body cannot match (neither the Crockford body
+ * nor a digit body contains them), so the shortest matching fold is exactly
+ * the body, and a prefix like `LO` survives.
  */
-export function skuLookupCandidates(raw: string): string[] {
+export function skuLookupCandidates(raw: string, pattern: RegExp = DEFAULT_GENERATED_SKU_PATTERN): string[] {
   const exact = normalizeSkuInput(raw);
   if (!exact) return [];
-  const dash = exact.indexOf('-');
-  // Fold the body only; the prefix is ours and contains none of these letters.
-  const head = dash >= 0 ? exact.slice(0, dash + 1) : '';
-  const body = dash >= 0 ? exact.slice(dash + 1) : exact;
-  const folded = head + body.replace(/[IL]/g, '1').replace(/O/g, '0');
-  return folded === exact ? [exact] : [exact, folded];
+  for (let at = exact.length - 1; at >= 1; at--) {
+    if (!/[ILO]/.test(exact[at])) continue;             // the tail grows only where a fold changes it
+    const folded = exact.slice(0, at) + foldConfusables(exact.slice(at));
+    if (pattern.test(folded)) return [exact, folded];
+  }
+  return [exact];
 }

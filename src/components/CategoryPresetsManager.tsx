@@ -16,6 +16,7 @@ import {
 } from '../lib/categoryPresetsService';
 import { getCategories } from '../lib/categoriesService';
 import type { Category } from '../lib/categories';
+import { Badge, ConfirmAction, TextField } from './ui';
 import './CategoryPresetsManager.css';
 
 interface CategoryPresetsManagerProps {
@@ -62,6 +63,36 @@ function mergeAllSections(existing: CustomSection[]): CustomSection[] {
   const builtins = initBuiltinSections(existing);
   const customs = existing.filter(s => !BUILTIN_SECTIONS.some(b => b.id === s.id));
   return [...builtins, ...customs];
+}
+
+// ─── Ship-from ───────────────────────────────────────────────────────────────
+// The ship-from address belongs to ONE workspace. A new workspace is seeded with
+// the founding set of presets minus this field, so every shop sets its own, and
+// these rules are the same ones the onboarding checklist counts with
+// (OnboardingChecklist.tsx): a preset ships unless it says it does not, and it
+// needs a ship-from when it ships, is active and has a blank one.
+
+function presetShips(p: CategoryPreset): boolean {
+  return p.requires_shipping !== false && p.is_active !== false;
+}
+
+function presetNeedsShipFrom(p: CategoryPreset): boolean {
+  return presetShips(p) && (p.ships_from ?? '').trim() === '';
+}
+
+/** The ship-from most presets already carry, to prefill the apply-to-all field. */
+function mostCommonShipFrom(presets: readonly CategoryPreset[]): string {
+  const counts = new Map<string, number>();
+  for (const p of presets) {
+    const v = (p.ships_from ?? '').trim();
+    if (v) counts.set(v, (counts.get(v) ?? 0) + 1);
+  }
+  let best = '';
+  let bestCount = 0;
+  for (const [v, n] of counts) {
+    if (n > bestCount) { best = v; bestCount = n; }
+  }
+  return best;
 }
 
 // ─── Field modal ─────────────────────────────────────────────────────────────
@@ -276,6 +307,13 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
   // Filtered presets by active gender
   const filteredPresets = presets.filter(p => (p as any).gender === genderFilter);
 
+  // Apply-to-all ship-from. `null` = untouched, so the field shows the most
+  // common existing value (derived at render, never copied in an effect).
+  const [bulkShipFrom, setBulkShipFrom] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  const bulkValue = bulkShipFrom ?? mostCommonShipFrom(presets);
+
   // Custom sections state
   const [customSections, setCustomSections] = useState<CustomSection[]>([]);
 
@@ -313,6 +351,34 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  /* Writes the one address onto every preset through the same update the
+     editor uses, one at a time: a workspace has tens of presets, not
+     thousands, and sequential writes keep a partial failure countable. */
+  const applyShipFromToAll = async () => {
+    const value = bulkValue.trim();
+    if (!value || presets.length === 0) return;
+    setBulkBusy(true);
+    setBulkMessage(null);
+    let failed = 0;
+    for (const p of presets) {
+      try {
+        await updateCategoryPreset(p.id, { ships_from: value });
+      } catch (error) {
+        failed++;
+        console.error('Error setting ship-from on preset:', error);
+      }
+    }
+    const total = presets.length;
+    setBulkBusy(false);
+    setBulkShipFrom(value);
+    setBulkMessage(failed === 0
+      ? `Ship-from set on ${total} preset${total === 1 ? '' : 's'}.`
+      : `Ship-from set on ${total - failed} of ${total} presets. ${failed} could not be saved; try again.`);
+    // No category in the detail: every listing built from a preset re-reads it.
+    window.dispatchEvent(new CustomEvent('presetsUpdated', { detail: {} }));
+    await loadPresets();
   };
 
   // ── form open helpers ──────────────────────────────────────────────────────
@@ -827,7 +893,8 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
                   </div>
                   <div className="form-group">
                     <label>Ships From</label>
-                    <input type="text" value={(formData as any).ships_from || ''} onChange={e => setFormData(prev => ({ ...prev, ships_from: e.target.value } as any))} placeholder="601 W. Lincoln Ave, Fresno CA 93706" />
+                    <input type="text" value={(formData as any).ships_from || ''} onChange={e => setFormData(prev => ({ ...prev, ships_from: e.target.value } as any))} placeholder="Street, city, state and ZIP" aria-describedby="preset-ships-from-hint" />
+                    <small id="preset-ships-from-hint">Used on every listing made from this preset. This workspace’s only; never shared with other shops.</small>
                   </div>
                   <CustomFieldsBlock
                     fields={customSections.find(s => s.id === '__shipping_csv__')?.fields ?? []}
@@ -1064,6 +1131,35 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
 
         {/* ──────────── Preset Cards ──────────── */}
         <div className="presets-grid">
+          {/* Every preset, not just the gender tab on screen: the address is
+              the workspace's, so one write covers the lot. */}
+          {presets.length > 0 && (
+            <section className="presets-shipfrom" aria-labelledby="presets-shipfrom-title">
+              <h2 className="presets-shipfrom-title" id="presets-shipfrom-title">Ship-from for every preset</h2>
+              <div className="presets-shipfrom-row">
+                <TextField
+                  label="Ship-from address"
+                  labelHidden
+                  className="presets-shipfrom-field"
+                  value={bulkValue}
+                  onChange={e => setBulkShipFrom(e.target.value)}
+                  placeholder="Street, city, state and ZIP"
+                  hint="This workspace’s only; never shared with other shops."
+                  disabled={bulkBusy}
+                />
+                <ConfirmAction
+                  label={bulkBusy ? 'Applying…' : 'Apply to all presets'}
+                  tone="neutral"
+                  size="md"
+                  confirmLabel="Apply"
+                  prompt={`Set the ship-from on ${presets.length} preset${presets.length === 1 ? '' : 's'}? Presets that already have one are overwritten.`}
+                  disabled={bulkBusy || bulkValue.trim() === ''}
+                  onConfirm={() => { void applyShipFromToAll(); }}
+                />
+              </div>
+              {bulkMessage && <p className="presets-shipfrom-status" role="status">{bulkMessage}</p>}
+            </section>
+          )}
           {filteredPresets.length === 0 ? (
             <div className="empty-state">
               <p>No {genderFilter} presets yet. Create one or use the seed SQL to add defaults.</p>
@@ -1075,6 +1171,11 @@ const CategoryPresetsManager: React.FC<CategoryPresetsManagerProps> = () => {
                   <h3>{preset.display_name}</h3>
                   <span className="preset-category">{preset.product_type || preset.category_name}</span>
                 </div>
+                {presetNeedsShipFrom(preset) && (
+                  <div className="preset-flags">
+                    <Badge tone="warning">No ship-from</Badge>
+                  </div>
+                )}
                 {preset.description && <p className="preset-description">{preset.description}</p>}
                 <div className="preset-details">
                   {preset.default_weight_value && (

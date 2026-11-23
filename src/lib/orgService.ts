@@ -59,21 +59,60 @@ export type OrgBootstrapResult =
    signed in, so it has no categories: Step 2 would open with nothing to drag
    onto and the preset buttons would do nothing. The seed therefore runs on
    every branch that RESOLVES a workspace, not only on the branch that creates
-   one — which also heals any workspace that ended up empty for another reason.
+   one, which also heals any workspace that ended up empty for another reason.
 
-   `initializeDefaultCategories()` IS the cheap check: it reads ONE category row
-   (RLS-scoped, so "none" means "none in MY workspace") and returns immediately
-   when the workspace already has some. The Set keeps that to at most one read
-   per workspace per session. The default list lives in categoriesService and
-   must never grow a second copy here. */
+   Two sources, in order (AGENTS.md section 7 "Workspace defaults"):
+   1. `seed_workspace_from_founding` (074): the founding workspace's active
+      categories and presets, COPIED into this workspace with `ships_from`,
+      `vendor`, `shopify_collection_id` and `policies` blanked (one shop's facts).
+      The server refuses a non-admin (42501) and does nothing to a workspace
+      that already has any category or preset ('skipped').
+   2. The hard-coded list in `initializeDefaultCategories(orgId)`, as before,
+      whenever 1 did not run: function missing (074 not applied), a plain
+      member opened the empty workspace first, no founding workspace, or any
+      other error. That function IS its own cheap check: it reads ONE category
+      row of THIS workspace and returns at once when it has some, and writes
+      every row with `org_id: orgId`.
+   'skipped' also falls through to 2, which then finds the rows and returns.
+   The Set keeps all of this to one attempt per workspace per session. */
 const seedChecked = new Set<string>();
 
-/** Exported for the test — the call sites below all go through it. */
+type SeedSource = 'founding' | 'skipped' | 'none';
+
+/** Ask the server to copy the founding defaults. 'error' covers every failure. */
+async function seedFromFounding(orgId: string): Promise<SeedSource | 'error'> {
+  let data: unknown;
+  let error: unknown;
+  try {
+    ({ data, error } = await supabase.rpc('seed_workspace_from_founding', { p_org: orgId }));
+  } catch (err) {
+    log.service(`seedWorkspaceIfEmpty | founding copy threw: ${String(err)}`);
+    return 'error';
+  }
+  if (error) {
+    const code = (error as { code?: string }).code ?? '';
+    const why = code === '42883' || code === 'PGRST202' ? 'function missing (074 not applied)'
+      : code === '42501' ? 'not an owner or admin here'
+      : `${code} ${(error as { message?: string }).message ?? ''}`.trim();
+    log.service(`seedWorkspaceIfEmpty | founding copy unavailable: ${why}`);
+    return 'error';
+  }
+  const source = (data as { source?: unknown } | null)?.source;
+  return source === 'founding' || source === 'skipped' || source === 'none' ? source : 'error';
+}
+
+/** Exported for the test. The call sites below all go through it. */
 export async function seedWorkspaceIfEmpty(orgId: string | null | undefined): Promise<void> {
   if (!orgId || seedChecked.has(orgId)) return;
   seedChecked.add(orgId);
   try {
-    await initializeDefaultCategories();
+    const source = await seedFromFounding(orgId);
+    if (source === 'founding') {
+      log.service('seedWorkspaceIfEmpty | seeded from the founding workspace');
+      return;
+    }
+    log.service(`seedWorkspaceIfEmpty | built-in defaults (founding copy: ${source})`);
+    await initializeDefaultCategories(orgId);
   } catch (err) {
     // Best-effort, exactly like the create branch it came from: a workspace
     // with no categories is still usable (you can add your own); a sign-in

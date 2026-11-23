@@ -2110,3 +2110,78 @@
    the cell, the hint and the error take the FieldGrid and .bd-error styles. */
 .org-share-insights { margin-bottom: 2rem; }
 .org-share-error { margin: 0 0 0.5rem; }
+
+/* ── SKUs and barcodes, Label sizes (Settings tab) ─────────────────────────
+   Same FieldGroup cell language as Shared insights; these rules only space
+   the groups and style the preview line, the error hint and the stock list. */
+.org-codes,
+.org-labelsizes { margin-bottom: var(--space-8); }
+
+.org-codes-preview {
+  margin: var(--space-2) 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.org-codes-error { color: var(--danger); }
+
+.org-codes-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.org-codes-note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.org-labelsizes-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.org-labelsizes-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+.org-labelsizes-row:first-child { border-top: 0; }
+
+.org-labelsizes-name {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.org-labelsizes-note {
+  flex: 1 1 14rem;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.org-labelsizes-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.org-labelsizes-form { margin-top: var(--space-4); }
+
+@media (max-width: 640px) {
+  .org-labelsizes-row { padding: var(--space-3); }
+  .org-labelsizes-actions { width: 100%; margin-left: 0; }
+  .org-labelsizes-actions > * { flex: 1 1 0; }
+  .org-codes-actions > .ui-btn { min-height: 44px; }
+}

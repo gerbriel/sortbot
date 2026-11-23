@@ -50,6 +50,16 @@ export interface OnboardingFacts {
   visitedCategories: boolean;
   /** The Category presets view has been opened at least once. */
   visitedPresets: boolean;
+  /**
+   * Active presets that ship (`requires_shipping !== false`) and have no
+   * `ships_from` yet. `null` when the presets read failed: unknown, so undone.
+   */
+  presetsNeedingShipFrom: number | null;
+  /**
+   * Active presets that ship at all. `0` makes the ship-from step ABSENT (there
+   * is nothing to set); `null` (unknown) keeps it on the list, undone.
+   */
+  presetsThatShip: number | null;
   /** How many marketplaces are ENABLED, or `'unavailable'` pre-migration. */
   marketplaces: 'unavailable' | number;
   /** Whether a connection row exists, or `'unavailable'` pre-migration. */
@@ -74,6 +84,8 @@ export const UNKNOWN_FACTS: OnboardingFacts = {
   presetCount: 0,
   visitedCategories: false,
   visitedPresets: false,
+  presetsNeedingShipFrom: null,
+  presetsThatShip: null,
   marketplaces: 'unavailable',
   shopify: 'unavailable',
   memberCount: 0,
@@ -86,7 +98,7 @@ export const UNKNOWN_FACTS: OnboardingFacts = {
 /* ── Steps ────────────────────────────────────────────────────────────────── */
 
 export type OnboardingStepId =
-  | 'shop-name' | 'categories' | 'marketplaces' | 'shopify'
+  | 'shop-name' | 'categories' | 'ship-from' | 'marketplaces' | 'shopify'
   | 'team' | 'first-batch' | 'first-export';
 
 /**
@@ -139,22 +151,42 @@ export function deriveOnboardingSteps(input: Partial<OnboardingFacts>): Onboardi
     });
   }
 
-  // 2. Categories and presets. A VISIT is the whole signal, deliberately:
-  //    "reviewed" is a human judgement and the database cannot observe it, and
-  //    gating on a count instead would deadlock a workspace whose preset seed
-  //    failed. The counts go in the sentence, where they are information rather
-  //    than a lock.
+  // 2. Categories and presets. A new workspace is seeded with the founding
+  //    workspace's set (minus the ship-from address, the vendor and the Shopify
+  //    ids), so this step is "make the starter set yours". A VISIT is the whole
+  //    signal, deliberately: "made it yours" is a human judgement and the
+  //    database cannot observe it, and gating on a count instead would deadlock
+  //    a workspace whose preset seed failed. The counts go in the sentence,
+  //    where they are information rather than a lock.
+  const categoriesWhy = 'We loaded a starter set. Fill in what fits your shop, add what is missing and remove what you will not use. Step 2 drags photos onto these, and a preset fills shipping, measurements and the SEO title in one click.';
   steps.push({
     id: 'categories',
-    title: 'Review your categories and presets',
+    title: 'Make the categories and presets yours',
     why: f.categoryCount > 0
-      ? `You have ${f.categoryCount} categor${f.categoryCount === 1 ? 'y' : 'ies'} and ${f.presetCount} preset${f.presetCount === 1 ? '' : 's'} — Step 2 drags photos onto these, and a preset fills shipping, measurements and the SEO title in one click.`
-      : 'Step 2 drags photos onto these, and a preset fills shipping, measurements and the SEO title in one click.',
+      ? `You have ${f.categoryCount} categor${f.categoryCount === 1 ? 'y' : 'ies'} and ${f.presetCount} preset${f.presetCount === 1 ? '' : 's'}. ${categoriesWhy}`
+      : categoriesWhy,
     done: f.visitedCategories || f.visitedPresets,
     action: { kind: 'navigate', label: 'Review categories', view: 'categories' },
   });
 
-  // 3. Where you sell. Absent — not undone — before 059_marketplaces.sql has run.
+  // 3. Ship-from. Every role: presets are any member's to edit. The seed never
+  //    copies an address between workspaces, so a new shop starts with none.
+  //    REQUIRED, not optional: an export whose listings carry no ship-from (or,
+  //    worse, someone else's) is exactly the failure this step exists to
+  //    prevent, so it holds `complete` until every shipping preset has one.
+  //    Rule 2: with no preset that ships there is nothing to set, so the step is
+  //    ABSENT. Rule 1: an unknown count keeps it on the list, undone.
+  if (f.presetsThatShip !== 0) {
+    steps.push({
+      id: 'ship-from',
+      title: 'Set where you ship from',
+      why: 'Every preset that ships needs your ship-from address. It is this workspace’s only and is never copied to another shop.',
+      done: f.presetsThatShip !== null && f.presetsNeedingShipFrom === 0 && f.presetsThatShip > 0,
+      action: { kind: 'navigate', label: 'Open presets', view: 'presets' },
+    });
+  }
+
+  // 4. Where you sell. Absent, not undone, before 059_marketplaces.sql has run.
   if (admin && f.marketplaces !== 'unavailable') {
     steps.push({
       id: 'marketplaces',
@@ -165,7 +197,7 @@ export function deriveOnboardingSteps(input: Partial<OnboardingFacts>): Onboardi
     });
   }
 
-  // 4. Shopify. Optional: the CSV import works without it. What connecting buys
+  // 5. Shopify. Optional: the CSV import works without it. What connecting buys
   //    is the dedup against the live catalogue at export time.
   if (admin && f.shopify !== 'unavailable') {
     steps.push({
@@ -178,7 +210,7 @@ export function deriveOnboardingSteps(input: Partial<OnboardingFacts>): Onboardi
     });
   }
 
-  // 5. The team. Only shown to someone who can actually send an invite.
+  // 6. The team. Only shown to someone who can actually send an invite.
   if (f.canInvite) {
     steps.push({
       id: 'team',

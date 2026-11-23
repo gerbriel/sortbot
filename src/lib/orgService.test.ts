@@ -141,3 +141,122 @@ describe('seedWorkspaceIfEmpty', () => {
     expect(mock.callsFor('categories', 'insert')).toHaveLength(0);
   });
 });
+
+/**
+ * The founding copy (074_seed_workspace_from_founding.sql) runs first; the
+ * hard-coded list is the fallback whenever the server did not copy anything.
+ * The server owns the privacy rule (ships_from, vendor and Shopify ids are
+ * blanked), so what is tested here is only which path runs.
+ */
+describe('seedWorkspaceIfEmpty: founding copy first, built-in list as fallback', () => {
+  beforeEach(() => { mock.reset(); });
+
+  it('stops after a successful founding copy: no category read, no insert', async () => {
+    const { seedWorkspaceIfEmpty } = await import('./orgService');
+    mock.rpcResponder = (fn) => (fn === 'seed_workspace_from_founding'
+      ? { data: { categories: 7, presets: 9, source: 'founding' }, error: null }
+      : undefined);
+    await seedWorkspaceIfEmpty('org-rpc-ok');
+    expect(mock.rpcCalls).toEqual([{ fn: 'seed_workspace_from_founding', args: { p_org: 'org-rpc-ok' } }]);
+    expect(mock.callsFor('categories', 'select')).toHaveLength(0);
+    expect(mock.callsFor('categories', 'insert')).toHaveLength(0);
+  });
+
+  it.each([
+    ['42883', 'function public.seed_workspace_from_founding(uuid) does not exist'],
+    ['PGRST202', 'Could not find the function'],
+  ])('falls back to the built-in list when the function is missing (%s)', async (code, message) => {
+    const { seedWorkspaceIfEmpty } = await import('./orgService');
+    mock.rpcResponder = () => ({ data: null, error: { code, message } });
+    await seedWorkspaceIfEmpty(`org-missing-${code}`);
+    expect(mock.rpcCalls).toHaveLength(1);
+    expect(mock.callsFor('categories', 'select')).toHaveLength(1);
+    expect(mock.callsFor('categories', 'insert').length).toBeGreaterThan(0);
+  });
+
+  it('falls back when a plain member opened the empty workspace first (42501)', async () => {
+    const { seedWorkspaceIfEmpty } = await import('./orgService');
+    mock.rpcResponder = () => ({ data: null, error: { code: '42501', message: 'only an owner or admin' } });
+    await seedWorkspaceIfEmpty('org-member-first');
+    expect(mock.callsFor('categories', 'select')).toHaveLength(1);
+    expect(mock.callsFor('categories', 'insert').length).toBeGreaterThan(0);
+  });
+
+  it("falls back when there is no founding workspace ('none')", async () => {
+    const { seedWorkspaceIfEmpty } = await import('./orgService');
+    mock.rpcResponder = () => ({ data: { categories: 0, presets: 0, source: 'none' }, error: null });
+    await seedWorkspaceIfEmpty('org-no-founding');
+    expect(mock.callsFor('categories', 'insert').length).toBeGreaterThan(0);
+  });
+
+  it('the fallback never writes ships_from or vendor', async () => {
+    const { seedWorkspaceIfEmpty } = await import('./orgService');
+    mock.rpcResponder = () => ({ data: null, error: { code: '42883', message: 'missing' } });
+    await seedWorkspaceIfEmpty('org-fallback-fields');
+    const presetInserts = mock.callsFor('category_presets', 'insert');
+    expect(presetInserts.length).toBeGreaterThan(0);
+    for (const c of presetInserts) {
+      const rows = Array.isArray(c.payload) ? c.payload : [c.payload];
+      for (const row of rows as Array<Record<string, unknown>>) {
+        expect(row).not.toHaveProperty('ships_from');
+        expect(row).not.toHaveProperty('vendor');
+      }
+    }
+  });
+
+  it('calls the RPC at most once per workspace per session', async () => {
+    const { seedWorkspaceIfEmpty } = await import('./orgService');
+    mock.rpcResponder = () => ({ data: { categories: 0, presets: 0, source: 'skipped' }, error: null });
+    mock.responder = (c) => (c.table === 'categories' && c.op === 'select'
+      ? { data: [{ id: 'cat-1' }], error: null }
+      : undefined);
+    await seedWorkspaceIfEmpty('org-rpc-once');
+    await seedWorkspaceIfEmpty('org-rpc-once');
+    expect(mock.rpcCalls).toHaveLength(1);
+    expect(mock.callsFor('categories', 'insert')).toHaveLength(0);
+  });
+});
+
+/**
+ * The fallback seeds the workspace it was asked to seed. Before, it read
+ * "any active category I can see" and inserted with the default_org_id()
+ * column default, so a member of A (first joined) and B never got B seeded,
+ * and a seed meant for B landed in A.
+ */
+describe('seedWorkspaceIfEmpty fallback: scoped to the target workspace', () => {
+  beforeEach(() => {
+    mock.reset();
+    mock.rpcResponder = () => ({ data: null, error: { code: '42883', message: 'missing' } });
+  });
+
+  const rowsOf = (c: MockCall) =>
+    (Array.isArray(c.payload) ? c.payload : [c.payload]) as Array<Record<string, unknown>>;
+
+  it('writes org_id: orgId on every category and preset insert', async () => {
+    const { seedWorkspaceIfEmpty } = await import('./orgService');
+    await seedWorkspaceIfEmpty('org-B-ids');
+    const inserts = [...mock.callsFor('categories', 'insert'), ...mock.callsFor('category_presets', 'insert')];
+    expect(mock.callsFor('categories', 'insert').length).toBeGreaterThan(0);
+    expect(mock.callsFor('category_presets', 'insert').length).toBeGreaterThan(0);
+    for (const c of inserts) {
+      for (const row of rowsOf(c)) expect(row.org_id).toBe('org-B-ids');
+    }
+  });
+
+  it("seeding B for a user whose default is A does not read A's categories", async () => {
+    const { seedWorkspaceIfEmpty } = await import('./orgService');
+    // A has categories; B has none. Answer by the org_id filter the read sends.
+    mock.responder = (c) => {
+      if (c.table !== 'categories' || c.op !== 'select') return undefined;
+      const org = c.filters.find(f => f.kind === 'eq' && f.column === 'org_id')?.value;
+      return org === 'org-A' || org === undefined
+        ? { data: [{ id: 'cat-in-A' }], error: null }
+        : { data: [], error: null };
+    };
+    await seedWorkspaceIfEmpty('org-B-read');
+    const reads = mock.callsFor('categories', 'select');
+    expect(reads).toHaveLength(1);
+    expect(reads[0].filters).toContainEqual(expect.objectContaining({ kind: 'eq', column: 'org_id', value: 'org-B-read' }));
+    expect(mock.callsFor('categories', 'insert').length).toBeGreaterThan(0);
+  });
+});

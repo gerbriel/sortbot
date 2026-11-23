@@ -10,8 +10,10 @@ import {
   LABEL_COLORS, labelSwatch, sortLabels,
   fetchLabels, fetchLabelsForProducts, createLabel, updateLabel,
   assignLabel, unassignLabel, ensureSkus, findProductBySku,
+  regenerateMissingCodes, countMissingCodes, CODE_NUMBERS_MAX,
   type ListingLabel,
 } from './labelsService';
+import { DEFAULT_CODE_SETTINGS, generatedSkuPattern, isValidEan13, type CodeSettings } from './codeSettings';
 import { isGeneratedSku } from './barcode';
 import type { MockedSupabaseClient } from './testing/supabaseMock';
 
@@ -334,5 +336,232 @@ describe('findProductBySku', () => {
   it('reports unavailable pre-migration', async () => {
     mock.responder = () => ({ data: null, error: { code: '42703', message: 'no column' } });
     expect(await findProductBySku('ACD-7H2K9M')).toEqual({ status: 'unavailable' });
+  });
+});
+
+// ── Conventions (codeSettings) ──────────────────────────────────────────────
+
+const SEQ: CodeSettings = { ...DEFAULT_CODE_SETTINGS, skuPrefix: 'SHOP', skuScheme: 'sequential', sequenceDigits: 5 };
+
+/** A counter that behaves like next_code_numbers: consecutive, never reused. */
+function counterFrom(start: number) {
+  let last = start - 1;
+  return (fn: string, args: unknown) => {
+    if (fn !== 'next_code_numbers') return undefined;
+    const { p_count } = args as { p_count: number };
+    const rows = Array.from({ length: p_count }, (_, i) => ({ n: last + 1 + i }));
+    last += p_count;
+    return { data: rows, error: null };
+  };
+}
+
+const updates = (): Array<Record<string, string>> => mock.callsFor('products', 'update').map(c => ({
+  id: String(c.filters.find(f => f.column === 'id')?.value),
+  ...(c.payload as Record<string, string>),
+}));
+
+describe('ensureSkus with conventions', () => {
+  it('sequential: ONE rpc for every listing, then a formatted SKU per number', async () => {
+    mock.rpcResponder = counterFrom(41);
+    mock.responder = (c) => (c.op === 'select'
+      ? { data: [{ id: 'p1', sku: null }, { id: 'p2', sku: 'KEEP-1' }, { id: 'p3', sku: null }], error: null }
+      : { data: [{ id: 'x' }], error: null });
+    const res = await ensureSkus(['p1', 'p2', 'p3'], { settings: SEQ, orgId: 'org-1' });
+    expect(res).toEqual({ status: 'ok', skus: { p1: 'SHOP-00041', p2: 'KEEP-1', p3: 'SHOP-00042' } });
+    expect(mock.rpcCalls).toEqual([{ fn: 'next_code_numbers', args: { p_org: 'org-1', p_count: 2 } }]);
+    expect(updates()).toEqual([
+      { id: 'p1', sku: 'SHOP-00041', barcode: 'SHOP-00041' },
+      { id: 'p3', sku: 'SHOP-00042', barcode: 'SHOP-00042' },
+    ]);
+  });
+
+  it('sequential: a 23505 draws a NEW number from a second rpc call', async () => {
+    mock.rpcResponder = counterFrom(7);
+    let n = 0;
+    mock.responder = (c) => {
+      if (c.op === 'select') return { data: [{ id: 'p1', sku: null }], error: null };
+      n++;
+      return n === 1
+        ? { data: null, error: { code: '23505', message: 'duplicate key' } }   // someone typed SHOP-00007
+        : { data: [{ id: 'p1' }], error: null };
+    };
+    const res = await ensureSkus(['p1'], { settings: SEQ, orgId: 'org-1' });
+    expect(res).toEqual({ status: 'ok', skus: { p1: 'SHOP-00008' } });
+    expect(mock.rpcCalls.map(c => (c.args as { p_count: number }).p_count)).toEqual([1, 1]);
+    expect(updates().map(u => u.sku)).toEqual(['SHOP-00007', 'SHOP-00008']);
+  });
+
+  it('sequential: the retry budget still ends in an error', async () => {
+    mock.rpcResponder = counterFrom(1);
+    mock.responder = (c) => (c.op === 'select'
+      ? { data: [{ id: 'p1', sku: null }], error: null }
+      : { data: null, error: { code: '23505', message: 'duplicate key' } });
+    const res = await ensureSkus(['p1'], { settings: SEQ, orgId: 'org-1' });
+    expect(res.status).toBe('error');
+    expect(mock.rpcCalls).toHaveLength(6);   // the first draw plus five redraws
+  });
+
+  it('draws in slices of 500, the function bound', async () => {
+    mock.rpcResponder = counterFrom(1);
+    const ids = Array.from({ length: 501 }, (_, i) => `p${i}`);
+    mock.responder = (c) => {
+      if (c.op === 'select') {
+        const batch = c.filters.find(f => f.kind === 'in')!.value as string[];
+        return { data: batch.map(id => ({ id, sku: null })), error: null };
+      }
+      return { data: [{ id: 'x' }], error: null };
+    };
+    const res = await ensureSkus(ids, { settings: SEQ, orgId: 'org-1' });
+    expect(res.status).toBe('ok');
+    expect(mock.rpcCalls.map(c => (c.args as { p_count: number }).p_count)).toEqual([CODE_NUMBERS_MAX, 1]);
+  });
+
+  it('manual mode never writes the barcode column', async () => {
+    mock.responder = (c) => (c.op === 'select'
+      ? { data: [{ id: 'p1', sku: null }], error: null }
+      : { data: [{ id: 'p1' }], error: null });
+    const res = await ensureSkus(['p1'], { settings: { ...DEFAULT_CODE_SETTINGS, barcodeMode: 'manual' }, orgId: 'org-1' });
+    expect(res.status).toBe('ok');
+    const [u] = updates();
+    expect(Object.keys(u).sort()).toEqual(['id', 'sku']);
+    expect(mock.rpcCalls).toHaveLength(0);   // random + manual needs no number
+  });
+
+  it('ean13_store: one number serves both the sequential body and a valid barcode', async () => {
+    mock.rpcResponder = counterFrom(12);
+    mock.responder = (c) => (c.op === 'select'
+      ? { data: [{ id: 'p1', sku: null }, { id: 'p2', sku: null }], error: null }
+      : { data: [{ id: 'x' }], error: null });
+    const s: CodeSettings = { ...SEQ, barcodeMode: 'ean13_store', ean13Prefix: '24' };
+    const res = await ensureSkus(['p1', 'p2'], { settings: s, orgId: 'org-1' });
+    expect(res.status).toBe('ok');
+    const [a, b] = updates();
+    expect(a.sku).toBe('SHOP-00012');
+    expect(a.barcode.slice(0, 12)).toBe('240000000012');
+    expect(b.barcode.slice(0, 12)).toBe('240000000013');
+    for (const u of [a, b]) expect(isValidEan13(u.barcode)).toBe(true);
+    expect(mock.rpcCalls).toHaveLength(1);
+  });
+
+  it('ean13_store with random SKUs still takes the counter from the rpc', async () => {
+    mock.rpcResponder = counterFrom(5);
+    mock.responder = (c) => (c.op === 'select'
+      ? { data: [{ id: 'p1', sku: null }], error: null }
+      : { data: [{ id: 'p1' }], error: null });
+    const res = await ensureSkus(['p1'], { settings: { ...DEFAULT_CODE_SETTINGS, barcodeMode: 'ean13_store' }, orgId: 'org-1' });
+    if (res.status !== 'ok') throw new Error('expected ok');
+    expect(isGeneratedSku(res.skus.p1)).toBe(true);
+    const [u] = updates();
+    expect(u.barcode.slice(0, 12)).toBe('200000000005');
+    expect(isValidEan13(u.barcode)).toBe(true);
+  });
+
+  it('keeps a barcode a person typed, replaces one this app generated', async () => {
+    mock.responder = (c) => (c.op === 'select'
+      ? { data: [{ id: 'p1', sku: null, barcode: '0012345678905' }, { id: 'p2', sku: null, barcode: 'ACD-7H2K9M' }], error: null }
+      : { data: [{ id: 'x' }], error: null });
+    await ensureSkus(['p1', 'p2']);
+    const [a, b] = updates();
+    expect(a.barcode).toBeUndefined();
+    expect(b.barcode).toBe(b.sku);
+  });
+
+  it('formats the category code from the map, falling back to the row', async () => {
+    mock.responder = (c) => (c.op === 'select'
+      ? { data: [{ id: 'p1', sku: null, product_category: 'Tees' }, { id: 'p2', sku: null, product_category: 'Tees' }], error: null }
+      : { data: [{ id: 'x' }], error: null });
+    const s: CodeSettings = { ...DEFAULT_CODE_SETTINGS, categoryCode: true };
+    const res = await ensureSkus(['p1', 'p2'], { settings: s, categories: { p2: 'Denim jackets' } });
+    if (res.status !== 'ok') throw new Error('expected ok');
+    expect(res.skus.p1).toMatch(/^ACD-TEE-/);
+    expect(res.skus.p2).toMatch(/^ACD-DEN-/);
+    expect(generatedSkuPattern(s).test(res.skus.p1)).toBe(true);
+    expect(mock.callsFor('products', 'select')[0].columns).toContain('product_category');
+  });
+
+  it('words for a missing 073, a non-member and a missing org id', async () => {
+    mock.responder = (c) => (c.op === 'select' ? { data: [{ id: 'p1', sku: null }], error: null } : undefined);
+    mock.rpcResponder = () => ({ data: null, error: { code: 'PGRST202', message: 'not found' } });
+    const missing = await ensureSkus(['p1'], { settings: SEQ, orgId: 'org-1' });
+    expect(missing.status === 'error' && missing.error).toContain('073_code_sequences.sql');
+    mock.rpcResponder = () => ({ data: null, error: { code: '42501', message: 'no' } });
+    const denied = await ensureSkus(['p1'], { settings: SEQ, orgId: 'org-1' });
+    expect(denied.status === 'error' && denied.error).toContain('members');
+    const noOrg = await ensureSkus(['p1'], { settings: SEQ });
+    expect(noOrg.status).toBe('error');
+    expect(mock.callsFor('products', 'update')).toHaveLength(0);
+  });
+});
+
+describe('regenerateMissingCodes / countMissingCodes', () => {
+  const rows = [
+    { id: 'a', product_group: null, product_category: 'Tees' },
+    { id: 'b', product_group: 'b', product_category: null },
+    { id: 'c', product_group: 'a', product_category: 'Tees' },   // a member photo: skipped
+    { id: 'd', product_group: '', product_category: null },
+  ];
+
+  it('counts leaders only, narrowed to the workspace, projected', async () => {
+    mock.responder = (c) => (c.op === 'select' ? { data: rows, error: null } : undefined);
+    expect(await countMissingCodes('org-1')).toEqual({ status: 'ok', count: 3 });
+    const call = mock.callsFor('products', 'select')[0];
+    expect(call.columns).toBe('id, product_group, product_category');
+    expect(call.filters).toEqual(expect.arrayContaining([
+      { kind: 'eq', column: 'org_id', value: 'org-1' },
+      { kind: 'is', column: 'sku', value: null },
+    ]));
+    expect(call.range).toEqual({ from: 0, to: 999 });
+  });
+
+  it('walks every page of 1000', async () => {
+    const page = (from: number, n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${from + i}`, product_group: null, product_category: null }));
+    mock.responder = (c) => {
+      if (c.op !== 'select' || !c.range) return undefined;
+      return { data: c.range.from === 0 ? page(0, 1000) : page(1000, 3), error: null };
+    };
+    expect(await countMissingCodes('org-1')).toEqual({ status: 'ok', count: 1003 });
+    expect(mock.callsFor('products', 'select').map(c => c.range?.from)).toEqual([0, 1000]);
+  });
+
+  it('assigns codes to every leader without one, with one counter draw', async () => {
+    mock.rpcResponder = counterFrom(100);
+    mock.responder = (c) => {
+      if (c.op === 'select' && c.range) return { data: rows, error: null };
+      if (c.op === 'select') {
+        const batch = c.filters.find(f => f.kind === 'in')!.value as string[];
+        return { data: batch.map(id => ({ id, sku: null })), error: null };
+      }
+      return { data: [{ id: 'x' }], error: null };
+    };
+    const res = await regenerateMissingCodes('org-1', SEQ);
+    expect(res).toEqual({ status: 'ok', assigned: 3 });
+    expect(mock.rpcCalls).toEqual([{ fn: 'next_code_numbers', args: { p_org: 'org-1', p_count: 3 } }]);
+    expect(updates().map(u => `${u.id}:${u.sku}`)).toEqual(['a:SHOP-00100', 'b:SHOP-00101', 'd:SHOP-00102']);
+  });
+
+  it('nothing to do, unavailable and error shapes', async () => {
+    mock.responder = () => ({ data: [], error: null });
+    expect(await regenerateMissingCodes('org-1', SEQ)).toEqual({ status: 'ok', assigned: 0 });
+    expect(mock.rpcCalls).toHaveLength(0);
+    mock.responder = () => ({ data: null, error: { code: '42703', message: 'no column' } });
+    expect(await regenerateMissingCodes('org-1', SEQ)).toEqual({ status: 'unavailable' });
+    expect(await countMissingCodes('org-1')).toEqual({ status: 'unavailable' });
+    mock.responder = () => ({ data: null, error: { code: 'XX000', message: 'boom' } });
+    expect(await countMissingCodes('org-1')).toEqual({ status: 'error', error: 'boom' });
+  });
+});
+
+describe('findProductBySku with a workspace pattern', () => {
+  it('folds a sequential code only under the sequential pattern', async () => {
+    const tried: unknown[] = [];
+    mock.responder = (c) => {
+      if (c.table === 'products') tried.push(c.filters.find(f => f.column === 'sku')?.value);
+      return { data: [], error: null };
+    };
+    await findProductBySku('shop-OOO4I', generatedSkuPattern(SEQ));
+    expect(tried).toEqual(['SHOP-OOO4I', 'SHOP-00041']);
+    tried.length = 0;
+    await findProductBySku('shop-OOO4I');
+    expect(tried).toEqual(['SHOP-OOO4I']);
   });
 });

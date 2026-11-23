@@ -344,6 +344,17 @@
   gap: var(--space-3);
 }
 
+/* A code field with its Generate action on the same line, bottom-aligned
+   with the input. */
+.pv-code-field {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.pv-code-field > .pv-field { flex: 1 1 auto; min-width: 0; }
+.pv-code-generate { flex: 0 0 auto; }
+
 .pv-field {
   display: flex;
   flex-direction: column;
@@ -714,6 +725,11 @@
 
   .pv-print-code { margin-top: auto; }
   .pv-print-code svg { display: block; max-width: 100%; }
+  .pv-print-sku {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 8pt;
+    text-align: center;
+  }
 }
 
 /* ── Tablet ─────────────────────────────────────────────────────────────── */
@@ -769,6 +785,7 @@
   }
 
   .pv-grid { grid-template-columns: minmax(0, 1fr); }
+  .pv-code-generate { min-height: 44px; }
   .pv-card { padding: var(--space-4); }
   .pv-card-actions .pv-btn { flex: 1 1 14rem; }
   .pv-photos { grid-template-columns: repeat(4, minmax(0, 1fr)); }

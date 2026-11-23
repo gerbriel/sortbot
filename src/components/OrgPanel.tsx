@@ -32,6 +32,9 @@ import { ConfirmAction, FieldCell, FieldGrid, FieldGroup } from './ui';
 import { fetchOrgUsage, planDisplayName, type OrgUsage } from '../lib/usageService';
 import { planUsageMeters } from '../lib/home';
 import { setShareInsights, K_ANON_ROWS, K_ANON_ORGS } from '../lib/insightsService';
+import { DEFAULT_CODE_SETTINGS, type CodeSettings } from '../lib/codeSettings';
+import type { LabelTemplate } from '../lib/labelTemplates';
+import { CodesSettingsGroup, LabelSizesGroup } from './WorkspaceCodeSettings';
 import {
   PLATFORM_PRESETS, ADJUSTMENT_TYPES, ROUNDING_MODES, MAX_PERCENT, MAX_FIXED,
   platformSlug, pricingExample, describePlatformRule, selectablePlatforms,
@@ -387,6 +390,12 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   // is loaded and saved with the block above — one write, never two that can
   // half-apply.
   const [descPlatforms, setDescPlatforms] = useState<PlatformPricingRule[]>([]);
+  /* SKU and barcode convention + custom label stocks, the same JSONB. The
+     saved copy of `codes` is kept so Assign codes always uses what is
+     stored, never an unsaved draft. */
+  const [descCodes, setDescCodes] = useState<CodeSettings>({ ...DEFAULT_CODE_SETTINGS });
+  const [savedCodes, setSavedCodes] = useState<CodeSettings>({ ...DEFAULT_CODE_SETTINGS });
+  const [descLabelTemplates, setDescLabelTemplates] = useState<LabelTemplate[]>([]);
   /* ── Photo backgrounds (description_settings.background) ──────────────────
      One recipe per workspace, edited here and applied by the matting service
      to photos processed FROM NOW ON. */
@@ -439,6 +448,9 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
       setDescPlatforms(s.platformPricing);
       setDescBackground(s.background);
       setDescBackdrops(s.backdrops);
+      setDescCodes(s.codes);
+      setSavedCodes(s.codes);
+      setDescLabelTemplates(s.labelTemplates);
       setDescLoaded(true);
     });
     return () => { cancelled = true; };
@@ -498,6 +510,8 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
     platformPricing: descPlatforms,
     background: descBackground,
     backdrops: descBackdrops,
+    codes: descCodes,
+    labelTemplates: descLabelTemplates,
     disclaimerLines: descDisclaimers.split('\n').map(l => l.trim()).filter(Boolean),
     ...override,
   });
@@ -513,6 +527,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
     const res = await saveOrgDescriptionSettings(org.id, settings);
     if (res.ok) {
       setNotice(okMessage);
+      setSavedCodes(settings.codes);
       onDescriptionSettingsChanged?.(settings);
     } else {
       setNotice(`Save failed: ${res.error}`);
@@ -1202,6 +1217,32 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
               </FieldCell>
             </FieldGrid>
           </FieldGroup>
+        )}
+
+        {panelTab === 'settings' && isAdmin && descLoaded && (
+          <>
+            <CodesSettingsGroup
+              orgId={org.id}
+              value={descCodes}
+              saved={savedCodes}
+              onChange={setDescCodes}
+              busy={busy}
+              onNotice={setNotice}
+              onSave={() => void persistDescSettings(
+                undefined,
+                'SKU and barcode settings saved. New codes follow them from now on.',
+              )}
+            />
+            <LabelSizesGroup
+              templates={descLabelTemplates}
+              busy={busy}
+              onSave={async (next, message) => {
+                const ok = await persistDescSettings({ labelTemplates: next }, message);
+                if (ok) setDescLabelTemplates(next);
+                return ok;
+              }}
+            />
+          </>
         )}
 
         {panelTab === 'settings' && isAdmin && !loading && shopifyConn && shopifyConn.status !== 'unavailable' && (

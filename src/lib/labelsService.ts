@@ -1,7 +1,11 @@
 import { supabase } from './supabase';
 import { log } from './debugLogger';
 import { chunked } from './chunk';
-import { generateSkuCandidate, isGeneratedSku, skuLookupCandidates } from './barcode';
+import { DEFAULT_GENERATED_SKU_PATTERN, generateSkuBody, isGeneratedSku, skuLookupCandidates } from './barcode';
+import {
+  DEFAULT_CODE_SETTINGS, barcodeFor, formatSku, generatedSkuPattern, isValidEan13, sequentialBody,
+  type CodeSettings,
+} from './codeSettings';
 
 /**
  * labelsService — colour/word/vendor labels on listings, and the SKU a label's
@@ -315,60 +319,167 @@ export async function countLabelUsage(): Promise<LabelUsageResult> {
 
 /** How many fresh codes to try before giving up on a collision. At 32⁶ codes
  *  per workspace, reaching 2 is already astronomically unlikely; 6 exists so a
- *  genuinely broken RNG surfaces as an error instead of an infinite loop. */
+ *  genuinely broken RNG surfaces as an error instead of an infinite loop. The
+ *  sequential scheme spends the same budget: each 23505 there means a person
+ *  typed that number by hand, and the next number is drawn from the database. */
 const SKU_ATTEMPTS = 6;
+
+/** `next_code_numbers` (073) hands out at most this many per call. */
+export const CODE_NUMBERS_MAX = 500;
 
 export type SkuAssignment = { status: 'ok'; skus: Record<string, string> }
   | { status: 'unavailable' }
   | { status: 'error'; error: string };
 
+export interface EnsureSkusOptions {
+  /** The workspace's conventions (`description_settings.codes`). Default:
+   *  DEFAULT_CODE_SETTINGS, the behaviour before conventions existed. */
+  settings?: CodeSettings;
+  /** The workspace the listings belong to. Required when a number comes from
+   *  the database (scheme 'sequential' or barcode 'ean13_store'). */
+  orgId?: string;
+  /** productId -> category, for the category code. A listing missing here
+   *  falls back to its row's `product_category`. */
+  categories?: Record<string, string | null>;
+}
+
+/** Does this convention need numbers from `next_code_numbers`? */
+function needsCounter(s: CodeSettings): boolean {
+  return s.skuScheme === 'sequential' || s.barcodeMode === 'ean13_store';
+}
+
+/** RPC missing (073 not run): PostgREST says PGRST202, Postgres 42883. */
+function isMissingFunction(error: { code?: string | null } | null): boolean {
+  return error?.code === 'PGRST202' || error?.code === '42883';
+}
+
+type NumbersResult = { ok: true; numbers: number[] } | { ok: false; error: string };
+
 /**
- * Make sure each of `productIds` has a SKU, minting one where it is missing.
+ * `count` consecutive numbers from the workspace counter. The database is the
+ * only source (AGENTS.md section 18): two people assigning at once never draw
+ * the same number, and the client never computes max + 1. Calls in slices of
+ * CODE_NUMBERS_MAX, the function's own bound.
+ */
+async function drawCodeNumbers(orgId: string, count: number): Promise<NumbersResult> {
+  const numbers: number[] = [];
+  for (let left = count; left > 0; left -= CODE_NUMBERS_MAX) {
+    const take = Math.min(left, CODE_NUMBERS_MAX);
+    const { data, error } = await supabase.rpc('next_code_numbers', { p_org: orgId, p_count: take });
+    if (error) {
+      if (isMissingFunction(error)) {
+        return { ok: false, error: 'Numbered codes need the 073_code_sequences.sql migration, which has not been run yet.' };
+      }
+      if (error.code === '42501') return { ok: false, error: 'Only members of this workspace can assign its codes.' };
+      log.error(`drawCodeNumbers | ${error.message}`);
+      return { ok: false, error: error.message };
+    }
+    const rows = (Array.isArray(data) ? data : []) as Array<{ n: number | string }>;
+    const got = rows.map(r => Number(r.n)).filter(n => Number.isSafeInteger(n) && n > 0);
+    if (got.length !== take) return { ok: false, error: 'The workspace counter answered with the wrong count. Try again.' };
+    numbers.push(...got);
+  }
+  return { ok: true, numbers };
+}
+
+/** A barcode already on the row that is safe to replace: empty, or one this
+ *  app generated (a generated SKU under either the default or the current
+ *  convention, or a GS1 in-store number). A manufacturer barcode someone typed
+ *  is never overwritten. */
+function barcodeIsReplaceable(existing: string | null | undefined, s: CodeSettings): boolean {
+  const b = (existing ?? '').trim();
+  if (!b) return true;
+  if (isGeneratedSku(b, DEFAULT_GENERATED_SKU_PATTERN) || isGeneratedSku(b, generatedSkuPattern(s))) return true;
+  return /^2\d{12}$/.test(b) && isValidEan13(b);
+}
+
+/**
+ * Make sure each of `productIds` has a SKU, minting one where it is missing,
+ * under the workspace's conventions (`opts.settings`, codeSettings.ts).
  *
- * Existing SKUs are never overwritten — a SKU that is already on a printed
+ * Existing SKUs are never overwritten: a SKU that is already on a printed
  * label, in a spreadsheet, or in someone's Shopify catalogue is not ours to
  * change. Returns the SKU for every requested product (old or new).
+ *
+ * THE BODY. Scheme 'random': a Crockford body per listing, retried on 23505.
+ * Scheme 'sequential': ONE `next_code_numbers` call for every listing that
+ * needs a code, then each gets `formatSku(settings, sequentialBody(n))`; a
+ * 23505 (someone typed that SKU by hand) draws the next number with another
+ * call, under the same attempt budget.
+ *
+ * THE BARCODE. `barcodeFor(settings, sku, n)`: mode 'sku' mirrors the SKU (the
+ * pre-conventions behaviour), 'ean13_store' writes a GS1 in-store EAN-13 from
+ * the SAME number as a sequential body (one number per listing serves both;
+ * under the random scheme the number is drawn only for the barcode), and
+ * 'manual' never writes the barcode column. A barcode a person typed is kept
+ * (`barcodeIsReplaceable`).
  *
  * UNIQUENESS IS THE DATABASE'S JOB. `products_org_sku_uidx` is the authority;
  * this loop just retries on 23505. Checking "is it taken?" with a SELECT first
  * would be a race, not a check.
  */
-export async function ensureSkus(productIds: readonly string[]): Promise<SkuAssignment> {
+export async function ensureSkus(productIds: readonly string[], opts: EnsureSkusOptions = {}): Promise<SkuAssignment> {
+  const settings = opts.settings ?? DEFAULT_CODE_SETTINGS;
   const ids = [...new Set(productIds.filter(Boolean))];
   if (ids.length === 0) return { status: 'ok', skus: {} };
 
   const skus: Record<string, string> = {};
-  const needed: string[] = [];
+  const needed: Array<{ id: string; barcode: string | null; category: string | null }> = [];
+  const columns = settings.categoryCode ? 'id, sku, barcode, product_category' : 'id, sku, barcode';
   try {
     for (const batch of chunked(ids)) {
-      const { data, error } = await supabase.from('products').select('id, sku').in('id', batch);
+      const { data, error } = await supabase.from('products').select(columns).in('id', batch);
       if (error) {
         if (isMissingSchema(error)) return { status: 'unavailable' };
         return { status: 'error', error: error.message };
       }
-      for (const row of (data ?? []) as Array<{ id: string; sku: string | null }>) {
-        if (row.sku && row.sku.trim()) skus[row.id] = row.sku.trim();
-        else needed.push(row.id);
+      for (const row of (data ?? []) as unknown as Array<{ id: string; sku: string | null; barcode?: string | null; product_category?: string | null }>) {
+        if (row.sku && row.sku.trim()) { skus[row.id] = row.sku.trim(); continue; }
+        const category = opts.categories && row.id in opts.categories
+          ? opts.categories[row.id] ?? null
+          : row.product_category ?? null;
+        needed.push({ id: row.id, barcode: row.barcode ?? null, category });
       }
     }
   } catch (err) {
     log.error(`ensureSkus | unexpected: ${String(err)}`);
     return { status: 'error', error: String(err) };
   }
+  if (needed.length === 0) return { status: 'ok', skus };
 
-  for (const id of needed) {
+  let counters: number[] = [];
+  if (needsCounter(settings)) {
+    if (!opts.orgId) return { status: 'error', error: 'Which workspace are these listings in?' };
+    const drawn = await drawCodeNumbers(opts.orgId, needed.length);
+    if (!drawn.ok) return { status: 'error', error: drawn.error };
+    counters = drawn.numbers;
+  }
+
+  for (let i = 0; i < needed.length; i++) {
+    const { id, barcode: existingBarcode, category } = needed[i];
+    let counter: number | undefined = counters[i];
     let assigned = '';
     for (let attempt = 0; attempt < SKU_ATTEMPTS && !assigned; attempt++) {
-      const candidate = generateSkuCandidate();
-      // barcode carries the same value: the printed code IS the SKU, so there
-      // is never a second identifier to keep in step.
+      if (attempt > 0 && settings.skuScheme === 'sequential') {
+        // The number collided with a hand-typed SKU: draw a fresh one.
+        const next = await drawCodeNumbers(opts.orgId as string, 1);
+        if (!next.ok) return { status: 'error', error: next.error };
+        counter = next.numbers[0];
+      }
+      const body = settings.skuScheme === 'sequential'
+        ? sequentialBody(settings, counter as number)
+        : generateSkuBody();
+      const candidate = formatSku(settings, { body, category });
+      const patch: Record<string, string> = { sku: candidate };
+      const barcode = barcodeFor(settings, candidate, counter);
+      if (barcode !== undefined && barcodeIsReplaceable(existingBarcode, settings)) patch.barcode = barcode;
       const { data, error } = await supabase
         .from('products')
-        .update({ sku: candidate, barcode: candidate })
+        .update(patch)
         .eq('id', id)
         .select('id');
       if (error) {
-        if (error.code === '23505') continue;             // collision — draw again
+        if (error.code === '23505') continue;             // collision: draw again
         if (isMissingSchema(error)) return { status: 'unavailable' };
         return { status: 'error', error: error.message };
       }
@@ -377,11 +488,97 @@ export async function ensureSkus(productIds: readonly string[]): Promise<SkuAssi
       }
       assigned = candidate;
     }
-    if (!assigned) return { status: 'error', error: 'Could not generate a unique SKU — try again.' };
+    if (!assigned) return { status: 'error', error: 'Could not generate a unique SKU. Try again.' };
     skus[id] = assigned;
   }
 
   return { status: 'ok', skus };
+}
+
+// ── Listings with no code yet ───────────────────────────────────────────────
+
+const MISSING_PAGE = 1000;
+const MISSING_MAX_PAGES = 50;
+
+type MissingLeaders =
+  | { status: 'ok'; ids: string[]; categories: Record<string, string | null> }
+  | { status: 'unavailable' }
+  | { status: 'error'; error: string };
+
+/**
+ * Every LEADER row in the workspace with no SKU (a listing's photos are
+ * separate rows; the leader is the one the scanner and the label read, §11).
+ * Paginated 1000 a page (PostgREST truncates silently, §18 #23), projected,
+ * RLS-scoped, and narrowed to `orgId` so a person in two workspaces never
+ * numbers one workspace's listings under the other's convention. A leader is
+ * a row with no `product_group` or whose `product_group` is its own id; a
+ * legacy group with no leader row is left for its Products page.
+ */
+async function listMissingCodeLeaders(orgId: string): Promise<MissingLeaders> {
+  const ids: string[] = [];
+  const categories: Record<string, string | null> = {};
+  try {
+    for (let page = 0; page < MISSING_MAX_PAGES; page++) {
+      const from = page * MISSING_PAGE;
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, product_group, product_category')
+        .eq('org_id', orgId)
+        .is('sku', null)
+        .order('id', { ascending: true })
+        .range(from, from + MISSING_PAGE - 1);
+      if (error) {
+        if (isMissingSchema(error)) return { status: 'unavailable' };
+        log.error(`listMissingCodeLeaders | ${error.message}`);
+        return { status: 'error', error: error.message };
+      }
+      const rows = (data ?? []) as Array<{ id: string; product_group: string | null; product_category: string | null }>;
+      for (const r of rows) {
+        const group = (r.product_group ?? '').trim();
+        if (group && group !== r.id) continue;
+        ids.push(r.id);
+        categories[r.id] = r.product_category ?? null;
+      }
+      if (rows.length < MISSING_PAGE) break;
+    }
+    return { status: 'ok', ids, categories };
+  } catch (err) {
+    log.error(`listMissingCodeLeaders | unexpected: ${String(err)}`);
+    return { status: 'error', error: String(err) };
+  }
+}
+
+export type MissingCodesCount =
+  | { status: 'ok'; count: number }
+  | { status: 'unavailable' }
+  | { status: 'error'; error: string };
+
+/** How many listings in the workspace have no SKU yet (for the confirm copy
+ *  of "Assign codes to listings without one"). */
+export async function countMissingCodes(orgId: string): Promise<MissingCodesCount> {
+  const res = await listMissingCodeLeaders(orgId);
+  return res.status === 'ok' ? { status: 'ok', count: res.ids.length } : res;
+}
+
+export type RegenerateResult =
+  | { status: 'ok'; assigned: number }
+  | { status: 'unavailable' }
+  | { status: 'error'; error: string };
+
+/**
+ * "Assign codes to listings without one": every leader in the workspace with
+ * no SKU gets one under `settings`, through `ensureSkus` (so the same
+ * retries, the same counter and the same never-overwrite rule apply). The ids
+ * are collected FIRST: paging over `sku is null` while writing SKUs would
+ * shift the pages under the walk.
+ */
+export async function regenerateMissingCodes(orgId: string, settings: CodeSettings): Promise<RegenerateResult> {
+  const missing = await listMissingCodeLeaders(orgId);
+  if (missing.status !== 'ok') return missing;
+  if (missing.ids.length === 0) return { status: 'ok', assigned: 0 };
+  const res = await ensureSkus(missing.ids, { settings, orgId, categories: missing.categories });
+  if (res.status !== 'ok') return res;
+  return { status: 'ok', assigned: missing.ids.filter(id => res.skus[id]).length };
 }
 
 export type CodeWriteResult = { ok: true } | { ok: false; error: string };
@@ -446,13 +643,15 @@ export type ScanResult =
  * Look a listing up by a scanned or typed SKU.
  *
  * Tries the exact spelling first, then the confusable fold (I/L→1, O→0) that a
- * human keying our own codes off a printed label needs — see
+ * human keying our own codes off a printed label needs, offered only when the
+ * fold matches `pattern` (the workspace's `generatedSkuPattern`; default the
+ * `ACD-` convention). See
  * barcode.skuLookupCandidates for why that is a second attempt and not an edit
  * to the first. RLS scopes the search to the caller's workspace; there is no
  * `.eq('org_id')` here on purpose (AGENTS.md §18.1).
  */
-export async function findProductBySku(raw: string): Promise<ScanResult> {
-  const candidates = skuLookupCandidates(raw);
+export async function findProductBySku(raw: string, pattern?: RegExp): Promise<ScanResult> {
+  const candidates = skuLookupCandidates(raw, pattern);
   if (candidates.length === 0) return { status: 'not_found', tried: [] };
 
   for (const sku of candidates) {

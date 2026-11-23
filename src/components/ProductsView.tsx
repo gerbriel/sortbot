@@ -17,7 +17,11 @@ import {
 import { syncGroupFieldsToDatabase } from '../lib/productService';
 import { saveStatus } from '../lib/saveStatusStore';
 import { code128Svg } from '../lib/barcode';
-import { LABEL_TEMPLATES } from '../lib/labelTemplates';
+import { ean13Svg } from '../lib/ean13';
+import { isValidEan13 } from '../lib/codeSettings';
+import { allLabelTemplates } from '../lib/labelTemplates';
+import { getOrgDescriptionSettings, DEFAULT_DESCRIPTION_SETTINGS, type DescriptionSettings } from '../lib/descriptionSettings';
+import { supabase } from '../lib/supabase';
 import { baseSize } from '../lib/csvExport';
 import {
   recordSale, fetchSales, deleteSale, daysToSell, researchAvailable,
@@ -26,7 +30,7 @@ import {
 import { formatCents } from '../lib/pricing';
 import { MARKETPLACE_KEYS } from '../lib/marketplaces/types';
 import { parseAmountToCents, todayKey } from '../lib/financeService';
-import { ConfirmAction } from './ui';
+import { Button, ConfirmAction } from './ui';
 import ListingLabelsPicker from './ListingLabelsPicker';
 import './ProductsView.css';
 
@@ -70,6 +74,23 @@ interface Draft {
   price: string;
   condition: string;
   category: string;
+}
+
+/**
+ * The workspace a listing belongs to, read off its own row (RLS-scoped).
+ * The page is not handed the open workspace, and the listing's own workspace
+ * is the right convention for its codes anyway. Null on any failure: the
+ * page then uses the default convention, as it did before conventions.
+ */
+async function orgIdOfProduct(productId: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.from('products').select('org_id').eq('id', productId).maybeSingle();
+    if (error) return null;
+    const org = (data as { org_id?: string | null } | null)?.org_id;
+    return typeof org === 'string' && org ? org : null;
+  } catch {
+    return null;
+  }
 }
 
 const CONDITIONS = ['New', 'NWT', 'Excellent', 'Good', 'Used', 'Fair'] as const;
@@ -147,7 +168,10 @@ export default function ProductsView({
   const [barcodeDraft, setBarcodeDraft] = useState('');
   const [codeBusy, setCodeBusy] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
-  const [templateId, setTemplateId] = useState(LABEL_TEMPLATES[0].id);
+  /* The open listing's workspace and its settings (code convention, custom
+     label stocks). Keyed by listing so a stale read never lands on another. */
+  const [orgCtx, setOrgCtx] = useState<{ productId: string; orgId: string | null; settings: DescriptionSettings } | null>(null);
+  const [templateId, setTemplateId] = useState('');
 
   /** Bumped whenever the label vocabulary or an assignment changes, so the
    *  picker (which keys its fetch on the id list) is remounted and re-reads. */
@@ -247,7 +271,27 @@ export default function ProductsView({
   const detailIdKey = detail ? detail.memberIds.join(',') : '';
   const detailIds = useMemo(() => (detailIdKey ? detailIdKey.split(',') : []), [detailIdKey]);
 
-  const template = LABEL_TEMPLATES.find(t => t.id === templateId) ?? LABEL_TEMPLATES[0];
+  const ctx = orgCtx && detail && orgCtx.productId === detail.id ? orgCtx : null;
+  const workspaceSettings = ctx?.settings ?? DEFAULT_DESCRIPTION_SETTINGS;
+  const codeSettings = workspaceSettings.codes;
+  const templates = useMemo(() => allLabelTemplates(workspaceSettings.labelTemplates), [workspaceSettings.labelTemplates]);
+  const template = templates.find(t => t.id === templateId) ?? templates[0];
+
+  /* EAN-13 symbology when the workspace prints in-store numbers and this
+     listing has a valid one; Code 128 of the SKU otherwise (as before). */
+  const printEan = codeSettings.barcodeMode === 'ean13_store' && isValidEan13(barcodeDraft.trim());
+
+  const detailId = detail?.id ?? null;
+  useEffect(() => {
+    if (!detailId) return;
+    let cancelled = false;
+    void (async () => {
+      const orgId = await orgIdOfProduct(detailId);
+      const settings = orgId ? await getOrgDescriptionSettings(orgId) : DEFAULT_DESCRIPTION_SETTINGS;
+      if (!cancelled) setOrgCtx({ productId: detailId, orgId, settings });
+    })();
+    return () => { cancelled = true; };
+  }, [detailId]);
 
   const openDetail = (listing: ProductListing) => {
     setSelectedId(listing.id);
@@ -336,12 +380,29 @@ export default function ProductsView({
     if (!detail || codeBusy) return;
     setCodeBusy(true);
     setCodeError(null);
-    const res = await ensureSkus([detail.id]);
+    const res = await ensureSkus([detail.id], {
+      settings: codeSettings,
+      orgId: ctx?.orgId ?? undefined,
+      categories: { [detail.id]: detail.category || detail.productType || null },
+    });
     if (res.status === 'ok') {
       const sku = res.skus[detail.id] ?? '';
       setSkuDraft(sku);
-      setBarcodeDraft(prev => prev || sku);
-      applyLocalPatch(detail.groupId, { sku, barcode: detail.barcode || sku });
+      if (codeSettings.barcodeMode === 'sku') {
+        setBarcodeDraft(prev => prev || sku);
+        applyLocalPatch(detail.groupId, { sku, barcode: detail.barcode || sku });
+      } else {
+        // An in-store EAN-13 comes from the workspace counter, so the barcode
+        // is read back rather than guessed; 'manual' leaves it untouched.
+        applyLocalPatch(detail.groupId, { sku });
+        if (codeSettings.barcodeMode === 'ean13_store') {
+          const back = await fetchListing(detail.id);
+          if (back.status === 'ok') {
+            setBarcodeDraft(back.listing.barcode);
+            applyLocalPatch(detail.groupId, { barcode: back.listing.barcode });
+          }
+        }
+      }
     } else if (res.status === 'unavailable') {
       setCodeError('SKUs need the listing_labels migration to be run first.');
     } else {
@@ -620,41 +681,63 @@ export default function ProductsView({
             <div className="pv-card">
               <h3 className="pv-card-title"><QrCode size={13} aria-hidden="true" /> Barcode</h3>
               <div className="pv-grid">
-                <label className="pv-field">
-                  <span>SKU</span>
-                  <input
-                    value={skuDraft}
-                    autoCapitalize="characters"
-                    spellCheck={false}
-                    placeholder="ACD-7H2K9M"
-                    onChange={(e) => setSkuDraft(e.target.value)}
-                  />
-                </label>
-                <label className="pv-field">
-                  <span>Barcode</span>
-                  <input
-                    value={barcodeDraft}
-                    spellCheck={false}
-                    placeholder="Manufacturer UPC / EAN"
-                    onChange={(e) => setBarcodeDraft(e.target.value)}
-                  />
-                </label>
+                <div className="pv-code-field">
+                  <label className="pv-field">
+                    <span>SKU</span>
+                    <input
+                      value={skuDraft}
+                      autoCapitalize="characters"
+                      spellCheck={false}
+                      placeholder="ACD-7H2K9M"
+                      onChange={(e) => setSkuDraft(e.target.value)}
+                    />
+                  </label>
+                  <Button
+                    variant="ghost" size="sm"
+                    className="pv-code-generate"
+                    onClick={() => void handleGenerateSku()}
+                    loading={codeBusy}
+                    disabled={codeBusy || !!skuDraft.trim()}
+                    title={skuDraft.trim() ? 'This listing already has a SKU' : undefined}
+                  >
+                    Generate
+                  </Button>
+                </div>
+                <div className="pv-code-field">
+                  <label className="pv-field">
+                    <span>Barcode</span>
+                    <input
+                      value={barcodeDraft}
+                      spellCheck={false}
+                      placeholder="Manufacturer UPC / EAN"
+                      onChange={(e) => setBarcodeDraft(e.target.value)}
+                    />
+                  </label>
+                  {codeSettings.barcodeMode === 'ean13_store' && (
+                    <Button
+                      variant="ghost" size="sm"
+                      className="pv-code-generate"
+                      onClick={() => void handleGenerateSku()}
+                      loading={codeBusy}
+                      disabled={codeBusy || !!skuDraft.trim() || !!barcodeDraft.trim()}
+                      title={skuDraft.trim() ? 'Barcode numbers are assigned with the SKU' : undefined}
+                    >
+                      Generate
+                    </Button>
+                  )}
+                </div>
               </div>
+              {codeSettings.barcodeMode === 'ean13_store' && !!skuDraft.trim() && !barcodeDraft.trim() && (
+                <p className="pv-hint">
+                  Barcode numbers are assigned with the SKU; clear the SKU and Generate to get both.
+                </p>
+              )}
               <p className="pv-hint">
                 The CSV's <code>Variant Barcode</code> falls back to the SKU when the barcode
                 is empty, so a listing is always scannable with one code or the other.
               </p>
 
               <div className="pv-card-actions">
-                <button
-                  type="button" className="pv-btn"
-                  onClick={() => void handleGenerateSku()}
-                  disabled={codeBusy || !!skuDraft.trim()}
-                  title={skuDraft.trim() ? 'This listing already has a SKU' : undefined}
-                >
-                  {codeBusy ? <Loader2 size={14} className="pv-spin" aria-hidden="true" /> : <QrCode size={14} aria-hidden="true" />}
-                  Generate SKU
-                </button>
                 <button
                   type="button" className="pv-btn pv-btn--primary"
                   onClick={() => void handleSaveCodes()}
@@ -672,8 +755,8 @@ export default function ProductsView({
                 </button>
                 <label className="pv-field pv-field--inline">
                   <span>Stock</span>
-                  <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-                    {LABEL_TEMPLATES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  <select value={template.id} onChange={(e) => setTemplateId(e.target.value)}>
+                    {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </label>
               </div>
@@ -688,9 +771,11 @@ export default function ProductsView({
                     /* Generated by our own encoder from a code in this field —
                        never user HTML, and never a remote SVG. */
                     dangerouslySetInnerHTML={{
-                      __html: code128Svg(skuDraft.trim().toUpperCase(), {
-                        moduleWidth: 2, height: 48, quietZone: 10, showText: true, fontSize: 11,
-                      }),
+                      __html: printEan
+                        ? ean13Svg(barcodeDraft.trim(), { moduleWidth: 2, height: 48, showText: true, fontSize: 11 })
+                        : code128Svg(skuDraft.trim().toUpperCase(), {
+                          moduleWidth: 2, height: 48, quietZone: 10, showText: true, fontSize: 11,
+                        }),
                     }}
                   />
                 ) : (
@@ -787,15 +872,23 @@ export default function ProductsView({
               <div
                 className="pv-print-code"
                 dangerouslySetInnerHTML={{
-                  __html: code128Svg(skuDraft.trim().toUpperCase(), {
-                    moduleWidth: template.moduleWidth,
-                    height: template.barHeight,
-                    quietZone: 10,
-                    showText: true,
-                    fontSize: 9,
-                  }),
+                  __html: printEan
+                    ? ean13Svg(barcodeDraft.trim(), {
+                      moduleWidth: template.moduleWidth,
+                      height: template.barHeight,
+                      showText: true,
+                      fontSize: 9,
+                    })
+                    : code128Svg(skuDraft.trim().toUpperCase(), {
+                      moduleWidth: template.moduleWidth,
+                      height: template.barHeight,
+                      quietZone: 10,
+                      showText: true,
+                      fontSize: 9,
+                    }),
                 }}
               />
+              {printEan && <div className="pv-print-sku">{skuDraft.trim().toUpperCase()}</div>}
             </div>
           </div>
         </div>

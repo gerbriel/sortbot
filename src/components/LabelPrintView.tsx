@@ -3,12 +3,17 @@ import { Printer, QrCode, CheckSquare, Square, Loader2, AlertTriangle } from 'lu
 import { useStoreItemArray } from '../lib/workflowStore';
 import { buildGroupArray } from '../lib/grouping';
 import { code128Svg } from '../lib/barcode';
+import { ean13Svg } from '../lib/ean13';
+import { isValidEan13 } from '../lib/codeSettings';
+import { getOrgDescriptionSettings, DEFAULT_DESCRIPTION_SETTINGS, type DescriptionSettings } from '../lib/descriptionSettings';
+import { fetchListing } from '../lib/productSearchService';
+import { chunked } from '../lib/chunk';
 import {
   ensureSkus, fetchLabelsForProducts, labelSwatch,
   type ListingLabel, type LabelsByProduct,
 } from '../lib/labelsService';
 import { baseSize } from '../lib/csvExport';
-import { LABEL_TEMPLATES } from '../lib/labelTemplates';
+import { allLabelTemplates } from '../lib/labelTemplates';
 import './LabelPrintView.css';
 
 /**
@@ -39,6 +44,9 @@ interface LabelRow {
   size: string;
   price: string;
   sku: string;
+  barcode: string;
+  /** For the SKU's category code (`codes.categoryCode`). */
+  category: string;
   photos: number;
 }
 
@@ -52,12 +60,30 @@ export interface LabelPrintViewProps {
   /** Optional: jump to a listing in Step 3. Supplied by App; without it the
    *  view is purely a printer. */
   onOpenListing?: (productId: string) => void;
+  /** The open workspace, for its code convention and custom label stocks.
+   *  Without it the sheet uses the defaults (the built-in stocks, Code 128). */
+  orgId?: string | null;
 }
 
-export default function LabelPrintView({ onOpenListing }: LabelPrintViewProps) {
+export default function LabelPrintView({ onOpenListing, orgId }: LabelPrintViewProps) {
   // Read-only view of the same list Step 3 edits. Never written back.
   const [processedItems] = useStoreItemArray('processedItems');
-  const [templateId, setTemplateId] = useState<string>(LABEL_TEMPLATES[0].id);
+  /* The workspace's settings, keyed by org so a switch never shows one shop's
+     stocks under another's name. Defaults until the read lands (fail quiet:
+     getOrgDescriptionSettings answers the defaults on any error). */
+  const [loaded, setLoaded] = useState<{ orgId: string; settings: DescriptionSettings } | null>(null);
+  useEffect(() => {
+    if (!orgId) return;
+    let cancelled = false;
+    void getOrgDescriptionSettings(orgId).then(settings => {
+      if (!cancelled) setLoaded({ orgId, settings });
+    });
+    return () => { cancelled = true; };
+  }, [orgId]);
+  const settings = loaded && loaded.orgId === orgId ? loaded.settings : DEFAULT_DESCRIPTION_SETTINGS;
+  const templates = useMemo(() => allLabelTemplates(settings.labelTemplates), [settings.labelTemplates]);
+  const useEan13 = settings.codes.barcodeMode === 'ean13_store';
+  const [templateId, setTemplateId] = useState<string>(templates[0].id);
   /* DESELECTION, not selection. The default is "print the whole batch", and
      storing that as a set of ids needs an effect to re-seed it whenever the
      batch changes — the cascading-render pattern react-hooks warns about, and
@@ -67,11 +93,14 @@ export default function LabelPrintView({ onOpenListing }: LabelPrintViewProps) {
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [labelsBy, setLabelsBy] = useState<LabelsByProduct>({});
   const [skus, setSkus] = useState<Record<string, string>>({});
+  /* Barcodes read back after Assign: an EAN-13 is minted by the database
+     counter, so ensureSkus answers only the SKU. */
+  const [barcodes, setBarcodes] = useState<Record<string, string>>({});
   const [assigning, setAssigning] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [labelsUnavailable, setLabelsUnavailable] = useState(false);
 
-  const template = LABEL_TEMPLATES.find(t => t.id === templateId) ?? LABEL_TEMPLATES[0];
+  const template = templates.find(t => t.id === templateId) ?? templates[0];
 
   /* One row per LISTING, not per photo. buildGroupArray is the same builder
      Step 3 navigates with (leader-convention tolerant, §11), so a label sheet
@@ -96,6 +125,8 @@ export default function LabelPrintView({ onOpenListing }: LabelPrintViewProps) {
         size: baseSize(pick('size')),
         price: Number.isFinite(priceNum) && priceNum > 0 ? `$${priceNum.toFixed(2)}` : '',
         sku: pick('sku'),
+        barcode: pick('barcode'),
+        category: pick('category') || pick('productType'),
         photos: group.length,
       };
     });
@@ -139,6 +170,7 @@ export default function LabelPrintView({ onOpenListing }: LabelPrintViewProps) {
   /** The rows that will actually print, in list order. */
   const printable = rows.filter(r => isSelected(r.productId));
   const skuFor = (r: LabelRow) => skus[r.productId] || r.sku;
+  const barcodeFor = (r: LabelRow) => barcodes[r.productId] || r.barcode;
   const missingSku = printable.filter(r => !skuFor(r)).length;
 
   const handleAssignSkus = async () => {
@@ -146,12 +178,23 @@ export default function LabelPrintView({ onOpenListing }: LabelPrintViewProps) {
     if (need.length === 0 || assigning) return;
     setAssigning(true);
     setNotice(null);
-    const res = await ensureSkus(need);
+    const categories: Record<string, string | null> = {};
+    for (const r of printable) if (need.includes(r.productId)) categories[r.productId] = r.category || null;
+    const res = await ensureSkus(need, { settings: settings.codes, orgId: orgId ?? undefined, categories });
     if (res.status === 'ok') {
       // Held in local state rather than written back into the workflow store:
       // this view is read-only on the batch by design, and the value is
       // already durable in `products`.
       setSkus(prev => ({ ...prev, ...res.skus }));
+      if (useEan13) {
+        // Five at a time: one read per listing, and a sheet can be long.
+        const read: Record<string, string> = {};
+        for (const ids of chunked(Object.keys(res.skus), 5)) {
+          const got = await Promise.all(ids.map(id => fetchListing(id)));
+          got.forEach((g, i) => { if (g.status === 'ok' && g.listing.barcode) read[ids[i]] = g.listing.barcode; });
+        }
+        setBarcodes(prev => ({ ...prev, ...read }));
+      }
       setNotice(`Assigned ${Object.keys(res.skus).length} SKU${Object.keys(res.skus).length === 1 ? '' : 's'}.`);
       setReloadKey(k => k + 1);
     } else if (res.status === 'unavailable') {
@@ -192,11 +235,12 @@ export default function LabelPrintView({ onOpenListing }: LabelPrintViewProps) {
       <div className="lpv-controls">
         <label className="lpv-control">
           <span>Label stock</span>
-          <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-            {LABEL_TEMPLATES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          <select value={template.id} onChange={(e) => setTemplateId(e.target.value)}>
+            {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </label>
         <p className="lpv-template-note">{template.note}</p>
+        <p className="lpv-template-note">Codes follow the workspace convention. Change it in Workspace settings.</p>
 
         <div className="lpv-actions">
           <button type="button" className="lpv-btn" onClick={toggleAll}>
@@ -314,7 +358,23 @@ export default function LabelPrintView({ onOpenListing }: LabelPrintViewProps) {
                   </div>
                 )}
                 <div className="lpv-label-code">
-                  {sku ? (
+                  {sku && useEan13 && isValidEan13(barcodeFor(r)) ? (
+                    <span className="lpv-barcode lpv-barcode--ean">
+                      <span
+                        /* Our own encoder over a checked 13-digit number,
+                           never user HTML. */
+                        dangerouslySetInnerHTML={{
+                          __html: ean13Svg(barcodeFor(r), {
+                            moduleWidth: template.moduleWidth,
+                            height: template.barHeight,
+                            showText: true,
+                            fontSize: 9,
+                          }),
+                        }}
+                      />
+                      <span className="lpv-label-sku">{sku}</span>
+                    </span>
+                  ) : sku ? (
                     <span
                       className="lpv-barcode"
                       /* The SVG is generated by our own encoder from a SKU we

@@ -58,9 +58,12 @@ interface CategoriesManagerProps {
   /** Kept so App's call site is unchanged; ToolView's "Back to workflow"
    *  button is what closes the view now, and App wires it to the same fn. */
   onClose: () => void;
+  /** The workspace to seed if it has no categories; null in legacy mode,
+   *  where nothing is seeded from here (sign-in seeding already ran). */
+  orgId?: string | null;
 }
 
-const CategoriesManager: React.FC<CategoriesManagerProps> = () => {
+const CategoriesManager: React.FC<CategoriesManagerProps> = ({ orgId }) => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -74,10 +77,13 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = () => {
   });
 
   useEffect(() => {
-    loadCategories();
-  }, []);
+    loadCategories(orgId);
+    // Re-run only when the workspace changes; loadCategories reads no props.
+  }, [orgId]);
 
-  const loadCategories = async () => {
+  /** `seedOrg`: the workspace to seed when it has no categories. Passed on
+   *  the first load only, so deleting the last category never re-seeds. */
+  const loadCategories = async (seedOrg?: string | null) => {
     try {
       setLoading(true);
       
@@ -85,8 +91,8 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = () => {
       let data = await getCategories();
       
       // If no categories exist, initialize default ones
-      if (!data || data.length === 0) {
-        await initializeDefaultCategories();
+      if ((!data || data.length === 0) && seedOrg) {
+        await initializeDefaultCategories(seedOrg);
         // Fetch again after initialization
         data = await getCategories();
       }

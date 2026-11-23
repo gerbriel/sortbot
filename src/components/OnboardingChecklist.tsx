@@ -72,6 +72,7 @@ export interface OnboardingChecklistProps {
 type FetchedFacts = Pick<
   OnboardingFacts,
   'categoryCount' | 'presetCount' | 'visitedCategories' | 'visitedPresets'
+  | 'presetsNeedingShipFrom' | 'presetsThatShip'
   | 'marketplaces' | 'shopify' | 'memberCount' | 'batchCount' | 'exportedCount'
 >;
 
@@ -121,7 +122,10 @@ function OnboardingChecklist({
 
       const [cats, presets, markets, shop, members, meta] = await Promise.all([
         settle('categories', getCategories, [] as Awaited<ReturnType<typeof getCategories>>),
-        settle('presets', getCategoryPresets, [] as Awaited<ReturnType<typeof getCategoryPresets>>),
+        // `null`, not `[]`: a failed read must leave the ship-from counts
+        // unknown (undone), where an empty list would read as "nothing ships"
+        // and hide that step.
+        settle('presets', getCategoryPresets, null as Awaited<ReturnType<typeof getCategoryPresets>> | null),
         admin
           ? settle('marketplaces', () => fetchOrgMarketplaces(orgId), { status: 'unavailable' } as const)
           : Promise.resolve({ status: 'unavailable' } as const),
@@ -158,9 +162,22 @@ function OnboardingChecklist({
         if (pubs.status === 'ok') exportedCount = pubs.rows.length;
       }
 
+      /* Ship-from, per preset. A preset "ships" unless it says it does not
+         (`requires_shipping !== false`) and is still active; it "needs" one
+         when it ships and its `ships_from` is blank. */
+      const shipping = presets
+        ? presets.filter(p => p.requires_shipping !== false && p.is_active !== false)
+        : null;
+      const presetsThatShip = shipping ? shipping.length : null;
+      const presetsNeedingShipFrom = shipping
+        ? shipping.filter(p => (p.ships_from ?? '').trim() === '').length
+        : null;
+
       setSettled({ orgId, facts: {
         categoryCount: cats.length,
-        presetCount: presets.length,
+        presetCount: presets ? presets.length : 0,
+        presetsThatShip,
+        presetsNeedingShipFrom,
         visitedCategories: local.visitedCategories === true,
         visitedPresets: local.visitedPresets === true,
         marketplaces,

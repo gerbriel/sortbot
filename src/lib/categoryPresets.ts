@@ -168,6 +168,9 @@ export interface CategoryPreset {
 }
 
 export interface CategoryPresetInput {
+  /** Target workspace. Omit to fall back to the column DEFAULT
+   *  (default_org_id(), the caller's first-joined workspace). */
+  org_id?: string;
   category_name: string;
   display_name: string;
   description?: string;
