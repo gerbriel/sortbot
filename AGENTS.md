@@ -495,7 +495,8 @@ sortingapp/
 │   │   │                          # opens WorkspaceMenu. NavRail (tablet) and the More sheet were
 │   │   │                          # deleted — they re-rendered a list the menu now owns.
 │   │   ├── MobileNav.css
-│   │   ├── ImageUpload.tsx / .css  # Step 1. Drag-drop, folder, ZIP (lazy `loadJSZip`), EXIF (lazy `loadExifr`), canvas compression, TUS upload with a TUS_TIMEOUT_MS = 5 min watchdog that falls through to the plain PUT. `forwardRef` → `ImageUploadHandle` (`triggerFolder()`, `triggerZip()`, `isBusy`). Writes product_images via `buildProductImageRow`. The compressed-paths registry is an in-memory Set flushed once (`flushCompressedPaths`) instead of a per-image localStorage write. Cancel deletes the rows/files it already created (`onUploadCancelled`). Take photos / Choose from library try `lib/native/photos.ts` first in the native app (`handleTakePhotos` / `handleChooseFromLibrary`) and click the hidden input SYNCHRONOUSLY otherwise (§10 Step 1). Tested in `ImageUpload.native.test.tsx`.
+│   │   ├── ImageUpload.tsx / .css  # Step 1. Drag-drop, folder, ZIP (lazy `loadJSZip`), EXIF (lazy `loadExifr`), canvas compression, TUS upload with a TUS_TIMEOUT_MS = 5 min watchdog that falls through to the plain PUT. `forwardRef` → `ImageUploadHandle` (`triggerFolder()`, `triggerZip()`, `isBusy`). Writes product_images via `buildProductImageRow`. The compressed-paths registry is an in-memory Set flushed once (`flushCompressedPaths`) instead of a per-image localStorage write. Cancel deletes the rows/files it already created (`onUploadCancelled`). Take photos opens `CameraCapture` (the in-app multi-shot camera) on the web and in the native shell; its fallback `handleSystemCamera` is `takePhoto()` from `lib/native/photos.ts` on native and the hidden capture input, clicked SYNCHRONOUSLY, on the web. Choose from library tries `pickPhotos` first in the native app and clicks the hidden input otherwise (§10 Step 1). Tested in `ImageUpload.native.test.tsx`.
+│   │   ├── CameraCapture.tsx / .css / .test.tsx  # Step 1's in-app camera (22 Nov 2026). A ui `Dialog` (size xl, class `camcap`; desktop a centred large dialog, phone the full screen under `--safe-t/-l/-r` with the footer on `--safe-b`) with a live `<video>` from `getUserMedia({ video: { facingMode: 'environment', width: { ideal: 3024 }, height: { ideal: 4032 } }, audio: false })`, a 72px round shutter (the one deliberate circle), a "Switch camera" IconButton only when `enumerateDevices` reports two or more videoinputs, the Dialog's close IconButton, and an "N photos" Badge. Each press draws the frame to a fresh canvas → `toBlob('image/jpeg', 0.92)` → `File` named `camera-<yyyymmdd-hhmmss>-<n>.jpg` with `lastModified` = the press time (strictly increasing). A 120 ms shutter flash (none under reduced motion). The thumbnail strip WRAPS (columns from a ResizeObserver), shows two rows, folds older shots into "+N more" (which expands to a vertically scrolling strip); each thumb has a 44px-on-phones remove control. Thumbnails are a separate ~192px JPEG, so the strip never decodes full-size frames; every thumbnail URL is revoked on remove and on unmount. "Use N photos" (disabled while `busy`) → `onUse(files)` in capture order; Cancel, Escape or close with shots pending arm a `ConfirmAction` ("Discard N photos?"). Props `onUse`, `onCancel`, `onUseSystemCamera`, `busy?`. The parent mounts it only while open. Lifecycle and fallback: §10 Step 1.
 │   │   ├── ImageGrouper.tsx / .css  # Step 2 left panel, ~3226 lines. Multi-select, rubber-band, group/ungroup, delete, sidebar sort/filter, pick mode, auto-group, photo toolbar, keyboard shortcuts. Module-scope Intl formatters + a timestamp-keyed label cache; the rubber-band rect lives in a ref and is flushed to state at most once per rAF; the actions bundle is useMemo'd on the selection SIZE and delegates through a per-render ref. Exported as `memo(ImageGrouper)`. Touch drag (Nov 2026): cards carry `data-step2-drop` + `onPointerDown` → `startTouchDrag`, and the `step2:touchdrop` listener on `.grouper-scroll-content` routes into the same `moveItemIntoGroup` / `reorderSingles` / `reorderPhotoInGroup` the HTML5 handlers call (§10 Step 2). Tested in `ImageGrouper.touchDrag.test.tsx`.
 │   │   ├── CategoryZones.tsx / .css / .test.tsx # Step 2 right panel. Drag/click groups onto categories; resolves presets through `lib/presetResolver.ts` with `allowDefaultPrefix: true`. Exported as `memo(CategoryZones)`. Zones carry `data-step2-drop="category"` / `"clear"`; a touch drop on its root ends in `assignGroupToCategory` / `clearCategory`, the commit halves the mouse drop also calls.
 │   │   ├── step2TouchDrag.ts / .test.ts # Step 2's long-press touch drag (Nov 2026), framework-free. `beginLongPressDrag` (350 ms hold, 10 px cancel), `installTouchMoveGuard` / `guardTouchMove`, `STEP2_DROP_EVENT` (`'step2:touchdrop'`), the `data-step2-*` attribute contract, and pure helpers (`sideOf`, `edgeScrollDelta`, `isReorderDrop`, `acceptsDrop`, `dropTargetAt`). Touch and pen only; a mouse never reaches it. Contract in its header comment and §10 Step 2.
@@ -1315,9 +1316,9 @@ GitHub Pages cannot send response headers, so a `<meta http-equiv="Content-Secur
 9. **Side effect:** `libraryRefreshTrigger` incremented — Library reloads.
 
 **On a phone (Sept 2026).** The drop zone becomes a 260px tap target and the drag copy
-is replaced by two buttons: **Take photos** (`<input type="file" accept="image/*"
-capture="environment" multiple>`) and **Choose from library** (the same input without
-`capture`). A reseller's photos live on their phone, so this is the most natural mobile
+is replaced by two buttons: **Take photos** (since 22 Nov 2026 the in-app camera below; its
+web fallback is `<input type="file" accept="image/*" capture="environment" multiple>`) and
+**Choose from library** (the same input without `capture`). A reseller's photos live on their phone, so this is the most natural mobile
 action in the product. Both inputs feed the **exact same `processFiles` pipeline** —
 compression, EXIF, chunked TUS upload, DB writes are untouched. Two separate inputs
 rather than one with a toggled attribute, deliberately: `capture` is only a *hint*, and
@@ -1340,7 +1341,7 @@ the shared focus ring, 44px on phones), and the drop zone keeps its dashed borde
   Import ZIP stays and takes the row. The phone hint now reads "To add a ZIP, use Import ZIP
   above."
 - **In the native app the two buttons open `@capacitor/camera`** through
-  `lib/native/photos.ts`. `handleTakePhotos` calls `takePhoto()`, `handleChooseFromLibrary`
+  `lib/native/photos.ts`. `handleSystemCamera` (the in-app camera's fallback, below) calls `takePhoto()`, `handleChooseFromLibrary`
   calls `pickPhotos({ limit: 0 })`, and the Files go into the same `processFiles` pipeline.
   The contract is three-valued: **`null` = no native picker here, click the input**; **`[]`
   = the user cancelled, do nothing**; otherwise the photos. `takePhoto()` returns `null` for
@@ -1353,8 +1354,37 @@ the shared focus ring, 44px on phones), and the drop zone keeps its dashed borde
   time (EXIF `DateTimeOriginal` from the plugin's metadata, else `creationDate`, else now)
   and `getCapturedAt`'s `lastModified` fallback (`ImageUpload.tsx`) keeps the sort right. Orientation is left to
   the plugin: the pixels arrive upright (§18 #34).
-- **Native "Take photos" is ONE photo per tap** (the plugin's `takePhoto` has no burst mode);
-  the web input with `capture` + `multiple` is unchanged.
+- **The native plugin's `takePhoto` is ONE photo per tap** (no burst mode), which is why it is
+  now only the native FALLBACK behind the in-app camera below.
+
+**The in-app camera (22 Nov 2026, `CameraCapture.tsx`).** "Take photos" opens a multi-shot
+camera dialog on the web AND in the native shell (the webview already has camera permission
+through `NSCameraUsageDescription` and the manifest's `CAMERA`). The seller shoots as many
+photos as they like, removes any from the strip, then "Use N photos" hands the Files to the
+**same `processFiles` intake** as the file inputs (same compression, upload and capture-time
+path). Canvas JPEGs carry no EXIF, so `getCapturedAt` falls through to `File.lastModified`,
+which CameraCapture sets to the press time (strictly increasing, so the grid order is the press
+order). Names are `camera-<yyyymmdd-hhmmss>-<n>.jpg`, local time. Nothing else was added to the
+drop zone; Choose from library, Import Folder and Import ZIP are unchanged. The dialog renders
+as a SIBLING of the drop zone, never inside it (React events bubble through the component tree
+to react-dropzone's root onClick).
+- **Lifecycle rule (same as the Scan view): every exit stops every TRACK, never just the
+  video.** Use, Cancel, close, unmount (the parent mounts the dialog only while open), the page
+  going hidden (restarted on the same device when visible again), a flip (old stream stopped
+  before the new request), a track that ends on its own (shown as "The camera stopped" with Try
+  again), and every error. A `getUserMedia` that resolves after close or after a newer request
+  stops its stream at once (`requestIdRef`). `closeOnOverlayClick` is off; Cancel, Escape or the
+  close button with shots pending ask once through `ConfirmAction`.
+- **Fallback order.** Web: in-app camera → (getUserMedia missing, denied, no camera, busy or
+  failed) the dialog explains and offers "Use the system camera instead" → the hidden
+  `capture="environment"` input, clicked synchronously inside that tap. Native: in-app camera →
+  same button → `takePhoto()` from `lib/native/photos.ts` (`null` = cancelled, a throw = the
+  "Could not open the camera" toast). The CSP needs nothing: a MediaStream on a `<video>` is not
+  a fetch, and the thumbnails are `blob:` (allowed by `img-src`).
+- **Unverified:** nothing here has run in a real browser or on a device. In particular the
+  Android webview must grant the page's camera request (Capacitor's bridge client asks for the
+  `CAMERA` runtime permission), iOS WKWebView needs 14.3+ for getUserMedia, and whether a phone
+  honours the 3024x4032 ideal or hands back a smaller stream is device by device.
 
 ### Step 2: Group & Categorize
 **Files:** `ImageGrouper.tsx`, `CategoryZones.tsx`, `App.tsx:handleImagesGrouped`, `App.tsx:handleImagesSorted`

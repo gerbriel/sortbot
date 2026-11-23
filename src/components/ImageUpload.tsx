@@ -7,6 +7,7 @@ import { log, isDebugEnabled } from '../lib/debugLogger';
 import { buildProductImageRow, stage4ColumnsAvailable } from '../lib/imageRowSync';
 import { publicImageUrl } from '../lib/storageUrls';
 import { nativePhotosAvailable, pickPhotos, takePhoto } from '../lib/native/photos';
+import CameraCapture from './CameraCapture';
 import './ImageUpload.css';
 import { XCircle, RefreshCw, X, Archive, CheckCircle2, AlertTriangle, Camera, Images } from 'lucide-react';
 
@@ -782,14 +783,30 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
     e.target.value = '';
   };
 
-  /* "Take photos" / "Choose from library". In the native app these open the
-   * camera plugin (lib/native/photos.ts) and its Files go into the SAME
-   * processFiles pipeline as the inputs (EXIF capture time first, then
-   * lastModified, which the adapter sets to the capture time). On the web the
-   * hidden input is clicked SYNCHRONOUSLY, inside the tap, exactly as before:
-   * an await in front of .click() can lose the user activation the browser
-   * needs to open a file picker. */
-  const handleTakePhotos = async () => {
+  /* "Take photos" opens CameraCapture, the in-app multi-shot camera
+   * (getUserMedia), on the web AND in the native shell. Its Files go into the
+   * SAME processFiles pipeline as the inputs (EXIF capture time first, then
+   * lastModified, which CameraCapture sets to the capture moment).
+   *
+   * When the live camera cannot start, the dialog's "Use the system camera
+   * instead" lands in handleSystemCamera: native = the camera plugin
+   * (lib/native/photos.ts takePhoto), web = the hidden capture input, clicked
+   * SYNCHRONOUSLY inside that tap (an await in front of .click() can lose the
+   * user activation the browser needs to open a file picker).
+   * "Choose from library" is unchanged: the native picker first, else the input. */
+  const [cameraOpen, setCameraOpen] = useState(false);
+
+  const handleTakePhotos = () => setCameraOpen(true);
+
+  const handleCameraCancel = useCallback(() => setCameraOpen(false), []);
+
+  const handleCameraUse = (files: File[]) => {
+    setCameraOpen(false);
+    if (files.length > 0) void processFiles(files);
+  };
+
+  const handleSystemCamera = async () => {
+    setCameraOpen(false);
     if (!nativePhotosAvailable()) { cameraInputRef.current?.click(); return; }
     try {
       const file = await takePhoto();
@@ -935,7 +952,7 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
                       <button
                         type="button"
                         className="dz-action dz-action--primary"
-                        onClick={(e) => { e.stopPropagation(); void handleTakePhotos(); }}
+                        onClick={(e) => { e.stopPropagation(); handleTakePhotos(); }}
                       >
                         <Camera size={18} /> Take photos
                       </button>
@@ -957,6 +974,19 @@ const ImageUpload = forwardRef<ImageUploadHandle, ImageUploadProps>(({ onImagesU
             )}
           </div>
         </div>
+
+        {/* In-app camera. A SIBLING of the drop zone, never a child: React
+            events bubble through the component tree, and a click inside the
+            dialog would otherwise reach react-dropzone's root onClick. Mounted
+            only while open, so unmount is the close and stops the camera. */}
+        {cameraOpen && (
+          <CameraCapture
+            onUse={handleCameraUse}
+            onCancel={handleCameraCancel}
+            onUseSystemCamera={() => { void handleSystemCamera(); }}
+            busy={isUploading || extractingZip}
+          />
+        )}
 
         {/* ── Failed uploads banner ────────────────────────────────────────── */}
         {failedUploads.length > 0 && (

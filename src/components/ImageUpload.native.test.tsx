@@ -23,6 +23,19 @@ vi.mock('../lib/native/photos', () => ({
   takePhoto: vi.fn(async () => null),
 }));
 
+/* "Take photos" opens the in-app camera (CameraCapture.test.tsx covers the
+ * dialog itself). Stubbed here so the wiring is what is under test: its three
+ * callbacks become three plain buttons. */
+vi.mock('./CameraCapture', () => ({
+  default: (props: { onUse: (f: File[]) => void; onCancel: () => void; onUseSystemCamera: () => void }) => (
+    <div data-testid="camera-capture">
+      <button type="button" onClick={() => props.onUse([new File(['x'], 'camera-1.jpg', { type: 'text/plain', lastModified: 1 })])}>stub use</button>
+      <button type="button" onClick={props.onCancel}>stub cancel</button>
+      <button type="button" onClick={props.onUseSystemCamera}>stub system camera</button>
+    </div>
+  ),
+}));
+
 async function flush() {
   await act(async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); });
 }
@@ -59,12 +72,39 @@ describe('ImageUpload phone capture buttons', () => {
   });
   afterEach(() => cleanup());
 
-  it('web: keeps the capture="environment" input and clicks it synchronously', () => {
+  it('"Take photos" opens the in-app camera, not the input or the plugin', () => {
     const s = setup();
     click(buttonByText(s.container, 'Take photos'));
-    expect(s.cameraClick).toHaveBeenCalledTimes(1);   // no await before the click
+    expect(s.container.querySelector('[data-testid="camera-capture"]')).not.toBeNull();
+    expect(s.cameraClick).not.toHaveBeenCalled();
     expect(takePhoto).not.toHaveBeenCalled();
     expect(s.onUploadStart).not.toHaveBeenCalled();
+  });
+
+  it('the camera\'s Files enter the processFiles intake and the dialog closes', async () => {
+    const s = setup();
+    click(buttonByText(s.container, 'Take photos'));
+    click(buttonByText(s.container, 'stub use'));
+    await flush();
+    expect(s.container.querySelector('[data-testid="camera-capture"]')).toBeNull();
+    expect(s.onUploadStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancel closes the camera and uploads nothing', () => {
+    const s = setup();
+    click(buttonByText(s.container, 'Take photos'));
+    click(buttonByText(s.container, 'stub cancel'));
+    expect(s.container.querySelector('[data-testid="camera-capture"]')).toBeNull();
+    expect(s.onUploadStart).not.toHaveBeenCalled();
+  });
+
+  it('web fallback: the system camera is the capture="environment" input, clicked synchronously', () => {
+    const s = setup();
+    click(buttonByText(s.container, 'Take photos'));
+    click(buttonByText(s.container, 'stub system camera'));
+    expect(s.cameraClick).toHaveBeenCalledTimes(1);   // no await before the click
+    expect(takePhoto).not.toHaveBeenCalled();
+    expect(s.container.querySelector('[data-testid="camera-capture"]')).toBeNull();
   });
 
   it('web: "Choose from library" clicks the library input and never calls the plugin', () => {
@@ -87,11 +127,12 @@ describe('ImageUpload phone capture buttons', () => {
     expect(s.onImagesUploaded).toHaveBeenCalledWith([]);
   });
 
-  it('native: takePhoto feeds its one File into the same intake', async () => {
+  it('native fallback: takePhoto feeds its one File into the same intake', async () => {
     vi.mocked(nativePhotosAvailable).mockReturnValue(true);
     vi.mocked(takePhoto).mockResolvedValue(fakeFile('photo.jpg'));
     const s = setup();
     click(buttonByText(s.container, 'Take photos'));
+    click(buttonByText(s.container, 'stub system camera'));
     await flush();
     expect(takePhoto).toHaveBeenCalledTimes(1);
     expect(s.cameraClick).not.toHaveBeenCalled();
@@ -105,7 +146,9 @@ describe('ImageUpload phone capture buttons', () => {
     const s = setup();
     click(buttonByText(s.container, 'Choose from library'));
     click(buttonByText(s.container, 'Take photos'));
+    click(buttonByText(s.container, 'stub system camera'));
     await flush();
+    expect(takePhoto).toHaveBeenCalledTimes(1);
     expect(s.onUploadStart).not.toHaveBeenCalled();
     expect(s.libraryClick).not.toHaveBeenCalled();
     expect(s.cameraClick).not.toHaveBeenCalled();
