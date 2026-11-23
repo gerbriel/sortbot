@@ -320,7 +320,7 @@ Coverage by area:
 
 **Deployment:** GitHub Actions deploys to GitHub Pages, served at `https://arcadian.ltd` (custom domain; `gerbriel.github.io/sortbot` redirects) on every push to `main` (`.github/workflows/deploy.yml`). `vite.config.ts` detects `process.env.GITHUB_ACTIONS` to set `base: '/sortbot/'`.
 
-**CI (Sept 2026):** `.github/workflows/ci.yml` runs on every pull request and on every push to a non-`main` branch, with `permissions: contents: read` only — it never deploys. Steps: `npm ci` → `npm test` → `npm run build` (with dummy `VITE_*` values) → **verify build output** (`dist/index.html` exists, contains `<title>Arcadian</title>`, and its asset URLs are under `/sortbot/` — the base path §1 forbids changing) → **bundle secret-leak guard** (greps `dist/` for `shpat_`, `service_role`, `eyJhbGciOi`, `sk-…` shapes; every `VITE_*` var is inlined into the public bundle, so this is the one mistake that cannot be walked back) → **lint ratchet** (fails only if the problem count GREW past `LINT_BASELINE`) → **migration hygiene** (every migration *changed in the PR* must contain a ROLLBACK section and an "idempotent"/"if not exists" note; the repo-wide pass rate is reported as informational debt). A second job type-checks the Edge Functions with `deno check` (`continue-on-error` while the gate is new). A third job, `matting` (Sept 20 2026), installs `services/matting[test]` on Python 3.12 and runs its pytest suite (157 tests, no network — Replicate and Supabase are both driven through `httpx.MockTransport`). **`LINT_BASELINE` in that file still reads `311`; the tree is at 252** (§17) — lowering it is a one-line change that locks the win in.
+**CI (Sept 2026):** `.github/workflows/ci.yml` runs on every pull request and on every push to a non-`main` branch, with `permissions: contents: read` only — it never deploys. Steps: `npm ci` → `npm test` → `npm run build` (with dummy `VITE_*` values) → **verify build output** (`dist/index.html` exists, contains `<title>Arcadian</title>`, and its asset URLs are under `/sortbot/` — the base path §1 forbids changing) → **bundle secret-leak guard** (greps `dist/` for `shpat_`, `service_role`, `eyJhbGciOi`, `sk-…` shapes; every `VITE_*` var is inlined into the public bundle, so this is the one mistake that cannot be walked back) → **lint ratchet** (fails only if the problem count GREW past `LINT_BASELINE`) → **migration hygiene** (every migration *changed in the PR* must contain a ROLLBACK section and an "idempotent"/"if not exists" note; the repo-wide pass rate is reported as informational debt). A second job type-checks the Edge Functions with `deno check` (`continue-on-error` while the gate is new). A third job, `matting` (Sept 20 2026), installs `services/matting[test]` on Python 3.12 and runs its pytest suite (157 tests, no network — Replicate and Supabase are both driven through `httpx.MockTransport`). **`LINT_BASELINE` in that file is `233`, matching the tree (22 Nov 2026)**; lower it again whenever the count drops.
 
 **Uptime (Sept 2026):** `.github/workflows/uptime.yml` — a first-party 15-minute cron probe (`contents: read`, `issues: write`): the deployed page must contain `<title>Arcadian</title>`, and `${VITE_SUPABASE_URL}/auth/v1/health` must return 200. Failures open/comment on ONE GitHub issue titled "Uptime check failed" (matched by exact title via `--jq`, deliberately NOT `gh issue list --search`, whose index lags minutes and would duplicate issues on a 15-minute cron) and a recovery closes it. Honest limits are written into the file: `schedule` is best-effort, so a missing run means *unknown*, not healthy; the probe cannot see a partial outage that only affects signed-in users, nor a broken RLS policy. The real end-to-end signal remains `CSV Exported` per day in the Analytics panel.
 
@@ -408,8 +408,8 @@ sortingapp/
 │   │   ├── ImageGrouper.tsx / .css  # Step 2 left panel, ~3226 lines. Multi-select, rubber-band, group/ungroup, delete, sidebar sort/filter, pick mode, auto-group, photo toolbar, keyboard shortcuts. Module-scope Intl formatters + a timestamp-keyed label cache; the rubber-band rect lives in a ref and is flushed to state at most once per rAF; the actions bundle is useMemo'd on the selection SIZE and delegates through a per-render ref. Exported as `memo(ImageGrouper)`. Touch drag (Nov 2026): cards carry `data-step2-drop` + `onPointerDown` → `startTouchDrag`, and the `step2:touchdrop` listener on `.grouper-scroll-content` routes into the same `moveItemIntoGroup` / `reorderSingles` / `reorderPhotoInGroup` the HTML5 handlers call (§10 Step 2). Tested in `ImageGrouper.touchDrag.test.tsx`.
 │   │   ├── CategoryZones.tsx / .css / .test.tsx # Step 2 right panel. Drag/click groups onto categories; resolves presets through `lib/presetResolver.ts` with `allowDefaultPrefix: true`. Exported as `memo(CategoryZones)`. Zones carry `data-step2-drop="category"` / `"clear"`; a touch drop on its root ends in `assignGroupToCategory` / `clearCategory`, the commit halves the mouse drop also calls.
 │   │   ├── step2TouchDrag.ts / .test.ts # Step 2's long-press touch drag (Nov 2026), framework-free. `beginLongPressDrag` (350 ms hold, 10 px cancel), `installTouchMoveGuard` / `guardTouchMove`, `STEP2_DROP_EVENT` (`'step2:touchdrop'`), the `data-step2-*` attribute contract, and pure helpers (`sideOf`, `edgeScrollDelta`, `isReorderDrop`, `acceptsDrop`, `dropTargetAt`). Touch and pen only; a mouse never reaches it. Contract in its header comment and §10 Step 2.
-│   │   ├── ProductDescriptionGenerator.tsx / .css  # Step 3, ~3675 lines. Recogniser LIFECYCLE + writes only — the dictation LANGUAGE lives in `lib/voiceGrammar.ts` (the ~230-line parser that used to sit inside `recognition.onresult` is gone). Also: description generation, field editing, crop/zoom + copy-paste crop, magnifier, group navigation. Reads/writes `workflowStore` directly (no local copy). Two separate save timers — 500 ms store-driven + 800 ms direct — plus a `flushProductPatchKeepalive` drain on pagehide/beforeunload; both save paths read the group back out of `processedItemsRef`, never render-captured state. Exported as `memo(...)`. Since Nov 2026 it never touches `window.SpeechRecognition`: dictation goes through `createSpeechRecognizer` (`lib/native/speech.ts`) via the module-level `startDictation` helper (§10 Step 3). Tested in `ProductDescriptionGenerator.speech.test.tsx`.
-│   │   ├── VoiceCommandTable.tsx  # Step 3 keyword→field reference table with inline cell editing. RE-EXPORTS VOICE_KEYWORD_TO_FIELD from `lib/voiceGrammar.ts` (the vocabulary moved next to the parser; existing imports are unchanged).
+│   │   ├── ProductDescriptionGenerator.tsx / .css  # Step 3, ~3675 lines. Recogniser LIFECYCLE + writes only — the dictation LANGUAGE lives in `lib/voiceGrammar.ts` (the ~230-line parser that used to sit inside `recognition.onresult` is gone). Also: description generation, field editing, crop/zoom + copy-paste crop, magnifier, group navigation. Reads/writes `workflowStore` directly (no local copy). Two separate save timers — 500 ms store-driven + 800 ms direct — plus a `flushProductPatchKeepalive` drain on pagehide/beforeunload; both save paths read the group back out of `processedItemsRef`, never render-captured state. Exported as `memo(...)`. Since Nov 2026 it never touches `window.SpeechRecognition`: dictation goes through `createSpeechRecognizer` (`lib/native/speech.ts`) via the module-level `startDictation` helper (§10 Step 3). The voice section is one view: the `VoiceCommandTable`, with the dictation help and the editable transcript textarea (and its typed-edit parser `parseVoiceTextToFields`) inside the "How dictation works" `InfoDisclosure` panel; there is no `voiceMode` state any more. Tested in `ProductDescriptionGenerator.speech.test.tsx` and `.voiceHelp.test.tsx`.
+│   │   ├── VoiceCommandTable.tsx  # Step 3 voice field table, the one main view of the voice section (no Table / Text toggle since 22 Nov 2026). Labelled cells (small label over the value) in an `auto-fit` grid per group, under quiet captions: Title + Description (full width, no caption), "Core info", "Style and details", "Measurements" (one merged group, chest to leg opening). Click or tap a cell to edit in place: a local draft, Enter or leaving the cell commits (`onChange` only when changed), Escape reverts. `activeField` + `interimValue` mark the dictated cell (`--ink-750` fill, 2px `--accent` left rule) and show the interim words in its value slot. Styles in `ProductDescriptionGenerator.css` (`.vct-*`); tested in `VoiceCommandTable.test.tsx`. RE-EXPORTS VOICE_KEYWORD_TO_FIELD from `lib/voiceGrammar.ts` (the vocabulary moved next to the parser; existing imports are unchanged).
 │   │   ├── ComprehensiveProductForm.tsx / .css  # Sub-form within Step 3 for all ~50 product fields. No local state. Takes a `brandExtra` slot (rendered under the Brand field) and an `onBrandEdited` callback; the size input's onBlur routes through `normalizeSizeValue(v, { keepFitsLike: true })`, so it inherits every size family for free.
 │   │   ├── BrandSpelling.tsx / .css  # Step 3 brand-spelling memory (report 14). Three notices — "Corrected … · Undo" (an exact hit on a saved alias), "Did you mean …?" (strong phonetic match, field UNTOUCHED until Use is clicked), and "Remember 'echo unlimited' → 'Ecko Unltd' for this workspace" — plus an inline manager (list / add / edit / two-step delete) reachable by ANY member. `variant="full"` renders the same manager as the Vocabulary dashboard's Brand spellings tab, where the scope badge flips to "this workspace only".
 │   │   ├── KeywordPicker.tsx / .css / .test.tsx  # Step 3 "Keywords" combobox (replaced the Quick keywords pill row, Nov 2026, §10 Step 3). Props `entries`, `isSuggested`, `isApplied`, `onToggle`; owns only its query/open/highlight state and the session's custom words. PDG keeps the vocabulary, brand suggestions and the description toggle. Built on ui `Field` + `RemovableChip`.
@@ -1407,10 +1407,11 @@ copy points at them.
   it — and its settings control is removed too, rather than left as a toggle that does
   nothing.
 - Start/Stop Recording becomes a full-width 56px primary button (it is *the* phone action in
-  this step); fields stack to one column; measurements go 2-up; the voice command table
-  becomes a 2-up card list, which also **fixed a real horizontal-page-scroll bug** — its
-  grid template is set inline as `repeat(N, minmax(90px, 1fr))`, so a 5-column row demanded
-  450px on a 390px screen (`!important` is the only way to beat an inline style).
+  this step); fields stack to one column; measurements go 2-up; the voice field table goes
+  to two equal `minmax(0, 1fr)` columns (Title and Description stay full width) with cells
+  at least 44px tall and inputs at `--fs-md`. The old inline `repeat(N, minmax(90px, 1fr))`
+  template that once pushed the page sideways (and needed `!important` to beat) is gone; the
+  grid template now lives in CSS only.
 - **Form section sub-headers are deliberately NOT sticky** — see §14.
 - **Nov 2026 touch fixes:** the top-sticky `.preview-nav-dock` (the base rule, above the phone
   block, where it sticks to the top rather than the bottom) adds `--safe-t` to its `top` (it
@@ -1442,20 +1443,57 @@ copy points at them.
   calls the vocabulary "quick keyword chips" (`VocabDashboard.tsx`); only Step 3 changed.
 
 - **Voice help lives behind an info button (22 Nov 2026).** The header row reads "Voice
-  description" plus a ui `InfoDisclosure` button ("How dictation works"), with Clear Fields and
-  the Table / Text toggle on the right as before. The old one-line hint after the title and the
-  Text view's left "VOICE COMMANDS" column are gone; the expanded panel (inline, under the
-  header row, above Keywords) holds the rule, two monospace examples ("brand Nike size large
-  price forty", "description super soft faded boxy fit period") and a two-column field
-  reference. That reference is `VOICE_HELP_FIELDS` in PDG: the old column's fields and example
-  values, each spoken name read from `FIELD_TO_VOICE_LABEL`. The old "Say period to end each
-  field" footnote was dropped: the grammar ends a field at the next field title, and only the
-  description needs "period". The Text view is now the transcript textarea at full width with
-  the one-line placeholder "Start Recording and speak. The field names you say become the fields
-  below."; the Table view is unchanged. Tested in `ProductDescriptionGenerator.voiceHelp.test.tsx`
-  and `ui/InfoDisclosure.test.tsx`. **Known mismatch:** the Text view's typed-edit parser
-  (`parseVoiceTextToFields` inside the textarea's onChange) still needs a closing "period" (or
-  ".") for non-measurement fields, unlike the live grammar.
+  description" plus a ui `InfoDisclosure` button ("How dictation works"), with Clear Fields on
+  the right. **There is no Table / Text toggle (removed 22 Nov 2026) and no `voiceMode` state;**
+  nothing was persisted for it. The expanded panel (inline, under the header row, above
+  Keywords) holds the rule, two monospace examples ("brand Nike size large price forty",
+  "description super soft faded boxy fit period"), a two-column field reference, and then the
+  **transcript**: a "Transcript" caption, the line "What was heard, in order. You can edit it
+  here; a field name followed by its value updates the table.", and the old Text view's
+  textarea at full panel width (`rows={6}`, still `js-autogrow`, so it grows with the text
+  instead of scrolling; `.voice-help .voice-transcript` drops `.description-textarea`'s 200px
+  floor). Its onChange parser and its `voiceDescription || interimTranscript` value are
+  unchanged, so opening the panel mid-recording shows the live words; with the panel closed
+  the table's active cell is the live feedback. The reference is `VOICE_HELP_FIELDS` in PDG,
+  each spoken name read from `FIELD_TO_VOICE_LABEL`. Only the description needs "period"; the
+  grammar ends any other field at the next field title. Tested in
+  `ProductDescriptionGenerator.voiceHelp.test.tsx` and `ui/InfoDisclosure.test.tsx`.
+  **Known mismatch:** the transcript's typed-edit parser (`parseVoiceTextToFields` inside the
+  textarea's onChange) still needs a closing "period" (or ".") for non-measurement fields,
+  unlike the live grammar.
+
+- **The voice field table is labelled cells (22 Nov 2026).** `VoiceCommandTable` is the voice
+  section's only main view. Each field is one cell: a small label (`--fs-2xs`,
+  `--text-muted`, 0.04em tracking, sentence case) above its value (`--fs-base`,
+  `--text-primary`; an empty value shows the example placeholder in `--text-faint`), with no
+  rule between them. A group is a quiet caption (`--fs-xs`, `--text-muted`: "Core info",
+  "Style and details", "Measurements") over a `.vct-frame` (one 1px `--border` outline,
+  `--radius-md`, `--ink-800` fill, `overflow: clip`, never a scroller) holding a
+  `repeat(auto-fit, minmax(12rem, 1fr))` grid. Hairlines run only BETWEEN cells: every cell
+  draws a top and left rule and the grid is pulled 1px up and left so the frame clips the outer
+  ones, which works at any column count with no empty-track fill. Title and Description sit
+  first in one captionless full-width frame. The two old measurement rows are one
+  "Measurements" group ordered chest, width, length, sleeve, shoulder, waist, hip, rise,
+  inseam, outseam, leg opening; the field keys (`meas_*`, `meas_leg` to `leg_opening`) are
+  unchanged. **Editing:** every value is a real `<input>` (label `htmlFor` it, a click
+  anywhere in the cell focuses it) that reads as plain text at rest and takes the `.ui-input`
+  radius and focus ring when focused, with a constant 1px border so nothing shifts. A focused
+  cell holds a local draft: Enter commits and leaves the cell, leaving it any other way (Tab,
+  which moves to the next cell natively, or a click elsewhere) commits, Escape restores the
+  value it had on focus; `onChange` fires only on a commit that changed something, so a
+  keystroke is no longer a write. **A draft is never lost without a blur:** a layout-effect
+  unmount cleanup commits a dirty draft (it runs before PDG's passive unmount flush, so that
+  flush sees the scheduled save), and when `currentItem.id` changes under a focused cell the
+  draft is committed through the PREVIOUS render's `onChange` before paint, then ignored so
+  the new listing's values show. LIMIT: `onChange(field, value)` cannot name an item, so this
+  relies on the caller's handler closing over the listing it rendered for (PDG's
+  `handleTableFieldChange` reads its render's `currentGroupIndex`); a handler that read "the
+  current item" from a ref at call time would misdirect that write. Key events stop at the cell, so the "." boundary key stands
+  down. **Dictation:** the `activeField` cell gets `.vct-col--active` (`--ink-750` fill plus a
+  2px `--accent` left rule) while recording and shows `interimValue` in its value slot in
+  `--text-secondary`, unless the user is typing in that cell. The "Listening for ..." status
+  line under the table stays. Phones: two columns, cells and inputs at least 44px, inputs
+  `--fs-md`. Tested in `VoiceCommandTable.test.tsx`.
 
 - **Step 3 has exactly one scroller: the page.** `.product-preview` is a transparent
   content-height column (the card chrome lives on `.preview-scroll-area`), `.preview-nav-dock` is

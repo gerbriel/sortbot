@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import type { ClothingItem } from '../App';
 
 interface VoiceCommandTableProps {
@@ -10,48 +10,90 @@ interface VoiceCommandTableProps {
 }
 
 // ── Field definitions ──────────────────────────────────────────────────────
-const TITLE_FIELD = { label: 'title', key: 'seoTitle', placeholder: 'Vintage Nike Tee…', getValue: (i: ClothingItem) => i.seoTitle || '' };
-const DESCRIPTION_FIELD = { label: 'description', key: 'customDescription', placeholder: 'e.g. Great for layering, rare colourway…', getValue: (i: ClothingItem) => (i as any).customDescription || '' };
+interface VoiceTableField {
+  label: string;
+  key: string;
+  placeholder: string;
+  getValue: (item: ClothingItem) => string;
+}
 
-// Three rows of columns, grouped by category
-const ROWS: { label: string; key: string; placeholder: string; getValue: (item: ClothingItem) => string }[][] = [
-  // Row 1 — Core info (title moved to its own row above)
-  [
-    { label: 'brand',     key: 'brand',           placeholder: 'Nike',              getValue: i => i.brand || '' },
-    { label: 'size',      key: 'size',            placeholder: 'XL',                getValue: i => i.size || '' },
-    { label: 'color',     key: 'color',           placeholder: 'Blue',              getValue: i => i.color || '' },
-    { label: '2nd color', key: 'secondaryColor',  placeholder: 'White',             getValue: i => i.secondaryColor || '' },
-    { label: 'condition', key: 'condition',       placeholder: 'Excellent',         getValue: i => i.condition || '' },
-    { label: 'price',     key: 'price',           placeholder: '$25',               getValue: i => i.price != null ? String(i.price) : '' },
-  ],
-  // Row 2 — Style & details
-  [
-    { label: 'era',       key: 'era',             placeholder: '2000s',             getValue: i => i.era || '' },
-    { label: 'style',     key: 'style',           placeholder: 'Casual',            getValue: i => i.style || '' },
-    { label: 'gender',    key: 'gender',          placeholder: "Men's",             getValue: i => i.gender || '' },
-    { label: 'material',  key: 'material',        placeholder: 'Cotton',            getValue: i => i.material || '' },
-    { label: 'tags',      key: 'tags',            placeholder: 'y2k streetwear…',   getValue: i => (i.tags || []).join(', ') },
-    { label: 'flaws',     key: 'flaws',           placeholder: 'small hole',        getValue: i => i.flaws || '' },
-    { label: 'care',      key: 'care',            placeholder: 'hand wash',         getValue: i => i.care || '' },
-  ],
-  // Row 3 — Measurements (upper body / flat-lay)
-  [
-    { label: 'chest',      key: 'meas_chest',     placeholder: '38"', getValue: i => (i.measurements as any)?.chest || '' },
-    { label: 'width',      key: 'meas_width',     placeholder: '18"', getValue: i => (i.measurements as any)?.width || '' },
-    { label: 'length',     key: 'meas_length',    placeholder: '28"', getValue: i => (i.measurements as any)?.length || '' },
-    { label: 'sleeve',     key: 'meas_sleeve',    placeholder: '24"', getValue: i => (i.measurements as any)?.sleeve || '' },
-    { label: 'shoulder',   key: 'meas_shoulder',  placeholder: '17"', getValue: i => (i.measurements as any)?.shoulder || '' },
-  ],
-  // Row 4 — Measurements (lower body)
-  [
-    { label: 'waist',      key: 'meas_waist',     placeholder: '32"', getValue: i => (i.measurements as any)?.waist || '' },
-    { label: 'hip',        key: 'meas_hip',       placeholder: '40"', getValue: i => (i.measurements as any)?.hip || '' },
-    { label: 'rise',       key: 'meas_rise',      placeholder: '10"', getValue: i => (i.measurements as any)?.rise || '' },
-    { label: 'inseam',     key: 'meas_inseam',    placeholder: '30"', getValue: i => (i.measurements as any)?.inseam || '' },
-    { label: 'outseam',    key: 'meas_outseam',   placeholder: '40"', getValue: i => (i.measurements as any)?.outseam || '' },
-    { label: 'leg opening',key: 'meas_leg',       placeholder: '18"', getValue: i => (i.measurements as any)?.leg_opening || '' },
-  ],
+interface VoiceTableGroup {
+  id: string;
+  /** Quiet caption above the group's grid. Omitted for the lead block. */
+  caption?: string;
+  /** One column at every width (Title, Description). */
+  full?: boolean;
+  fields: VoiceTableField[];
+}
+
+const meas = (i: ClothingItem, k: string): string =>
+  ((i.measurements as Record<string, string | undefined> | undefined)?.[k]) || '';
+
+// Field keys are what PDG's handleTableFieldChange and the dictation grammar
+// write; they must not change. Labels are sentence case and are display only.
+const VOICE_TABLE_GROUPS: VoiceTableGroup[] = [
+  // Title and Description: one full-width cell each, labelled by the field
+  // itself, so there is no separate group caption above them.
+  {
+    id: 'lead',
+    full: true,
+    fields: [
+      { label: 'Title',       key: 'seoTitle',          placeholder: 'Vintage Nike Tee…',                     getValue: i => i.seoTitle || '' },
+      { label: 'Description', key: 'customDescription', placeholder: 'e.g. Great for layering, rare colourway…', getValue: i => (i as { customDescription?: string }).customDescription || '' },
+    ],
+  },
+  {
+    id: 'core',
+    caption: 'Core info',
+    fields: [
+      { label: 'Brand',     key: 'brand',          placeholder: 'Nike',      getValue: i => i.brand || '' },
+      { label: 'Size',      key: 'size',           placeholder: 'XL',        getValue: i => i.size || '' },
+      { label: 'Color',     key: 'color',          placeholder: 'Blue',      getValue: i => i.color || '' },
+      { label: '2nd color', key: 'secondaryColor', placeholder: 'White',     getValue: i => i.secondaryColor || '' },
+      { label: 'Condition', key: 'condition',      placeholder: 'Excellent', getValue: i => i.condition || '' },
+      { label: 'Price',     key: 'price',          placeholder: '$25',       getValue: i => i.price != null ? String(i.price) : '' },
+    ],
+  },
+  {
+    id: 'style',
+    caption: 'Style and details',
+    fields: [
+      { label: 'Era',      key: 'era',      placeholder: '2000s',           getValue: i => i.era || '' },
+      { label: 'Style',    key: 'style',    placeholder: 'Casual',          getValue: i => i.style || '' },
+      { label: 'Gender',   key: 'gender',   placeholder: "Men's",           getValue: i => i.gender || '' },
+      { label: 'Material', key: 'material', placeholder: 'Cotton',          getValue: i => i.material || '' },
+      { label: 'Tags',     key: 'tags',     placeholder: 'y2k streetwear…', getValue: i => (i.tags || []).join(', ') },
+      { label: 'Flaws',    key: 'flaws',    placeholder: 'small hole',      getValue: i => i.flaws || '' },
+      { label: 'Care',     key: 'care',     placeholder: 'hand wash',       getValue: i => i.care || '' },
+    ],
+  },
+  // One group, top of the garment to the bottom. The keys are unchanged
+  // (meas_leg still maps to measurements.leg_opening).
+  {
+    id: 'measurements',
+    caption: 'Measurements',
+    fields: [
+      { label: 'Chest',       key: 'meas_chest',    placeholder: '38"', getValue: i => meas(i, 'chest') },
+      { label: 'Width',       key: 'meas_width',    placeholder: '18"', getValue: i => meas(i, 'width') },
+      { label: 'Length',      key: 'meas_length',   placeholder: '28"', getValue: i => meas(i, 'length') },
+      { label: 'Sleeve',      key: 'meas_sleeve',   placeholder: '24"', getValue: i => meas(i, 'sleeve') },
+      { label: 'Shoulder',    key: 'meas_shoulder', placeholder: '17"', getValue: i => meas(i, 'shoulder') },
+      { label: 'Waist',       key: 'meas_waist',    placeholder: '32"', getValue: i => meas(i, 'waist') },
+      { label: 'Hip',         key: 'meas_hip',      placeholder: '40"', getValue: i => meas(i, 'hip') },
+      { label: 'Rise',        key: 'meas_rise',     placeholder: '10"', getValue: i => meas(i, 'rise') },
+      { label: 'Inseam',      key: 'meas_inseam',   placeholder: '30"', getValue: i => meas(i, 'inseam') },
+      { label: 'Outseam',     key: 'meas_outseam',  placeholder: '40"', getValue: i => meas(i, 'outseam') },
+      { label: 'Leg opening', key: 'meas_leg',      placeholder: '18"', getValue: i => meas(i, 'leg_opening') },
+    ],
+  },
 ];
+
+const FIELD_LABEL: Record<string, string> = Object.fromEntries(
+  VOICE_TABLE_GROUPS.flatMap(g => g.fields.map(f => [f.key, f.label.toLowerCase()])),
+);
+
+/** The cell being edited: what the user has typed, and what it held on focus. */
+interface Editing { itemId: string; key: string; draft: string; original: string }
 
 // Map voice command keywords → field keys (for active-column detection).
 // The vocabulary itself lives in lib/voiceGrammar.ts, next to the parser that
@@ -59,8 +101,22 @@ const ROWS: { label: string; key: string; placeholder: string; getValue: (item: 
 // imported it from.
 export { VOICE_KEYWORD_TO_FIELD } from '../lib/voiceGrammar';
 
-const ROW_LABELS = ['Core Info', 'Style & Details', 'Measurements (upper)', 'Measurements (lower)'];
-
+/**
+ * The voice field table: labelled cells (small label above its value) in a
+ * responsive grid per group, under a quiet group caption.
+ *
+ * Editing contract. Every value is a real <input>, so Tab walks the cells in
+ * order natively and a click or tap anywhere in a cell focuses it. While a cell
+ * is focused it holds a local draft and nothing is written: Enter commits and
+ * leaves the cell, leaving it any other way (Tab, a click elsewhere) commits,
+ * and Escape puts the value back the way it was on focus. `onChange` fires only
+ * on a commit that actually changed the value. Key events never bubble past a
+ * cell, so the Step 3 window shortcuts (the "." boundary key) stand down.
+ *
+ * While dictating, the cell named by `activeField` is marked and shows the
+ * interim words in its value slot until the final lands, unless the user is
+ * typing in that very cell, in which case their draft wins.
+ */
 const VoiceCommandTable: React.FC<VoiceCommandTableProps> = ({
   currentItem,
   isRecording,
@@ -68,118 +124,153 @@ const VoiceCommandTable: React.FC<VoiceCommandTableProps> = ({
   interimValue,
   onChange,
 }) => {
+  const [editing, setEditingState] = useState<Editing | null>(null);
+  // A ref mirror, so a blur that follows an Enter or Escape in the same tick
+  // sees the cleared state instead of committing twice.
+  const editingRef = useRef<Editing | null>(null);
+  const setEditing = (next: Editing | null) => {
+    editingRef.current = next;
+    setEditingState(next);
+  };
+
+  const commit = () => {
+    const e = editingRef.current;
+    setEditing(null);
+    if (e && e.draft !== e.original) onChange(e.key, e.draft);
+  };
+
+  // ── Drafts that would otherwise be lost without a blur ────────────────────
+  // The listing this table last rendered for, and the onChange it rendered
+  // with. LIMIT: onChange(field, value) cannot name an item, so a draft is
+  // committed to the OLD listing by calling the OLD onChange, which is only
+  // correct because the caller's handler closes over the listing it was
+  // rendered for (PDG's handleTableFieldChange reads its render's
+  // currentGroupIndex). A caller whose onChange reads "the current item" from
+  // a ref or store at call time would misdirect this write.
+  const renderedRef = useRef({ itemId: currentItem.id, onChange });
+
+  // No deps on purpose: runs after every commit, before paint and before any
+  // passive effect. On an item change it flushes the draft through the
+  // previous render's onChange and drops it from the ref. The state copy is
+  // left alone (no setState in an effect): render ignores a draft whose
+  // itemId is not the current item, so the new listing's values show.
+  useLayoutEffect(() => {
+    const prev = renderedRef.current;
+    if (prev.itemId !== currentItem.id) {
+      const e = editingRef.current;
+      if (e && e.itemId === prev.itemId) {
+        editingRef.current = null;
+        if (e.draft !== e.original) prev.onChange(e.key, e.draft);
+      }
+    }
+    renderedRef.current = { itemId: currentItem.id, onChange };
+  });
+
+  // Unmount (a batch switch remounts Step 3). A layout cleanup, not a passive
+  // one: it runs before the parent's passive unmount flush, so PDG's own
+  // flush already sees the save this write schedules.
+  useLayoutEffect(() => {
+    const editingBox = editingRef;
+    const renderedBox = renderedRef;
+    return () => {
+      const e = editingBox.current;
+      editingBox.current = null;
+      if (e && e.draft !== e.original) renderedBox.current.onChange(e.key, e.draft);
+    };
+  }, []);
+
+  const renderCell = (field: VoiceTableField) => {
+    const isActive = activeField === field.key;
+    const listening = isActive && isRecording;
+    const rawValue = field.getValue(currentItem);
+    const liveEditing = editing && editing.itemId === currentItem.id ? editing : null;
+    const isEditing = liveEditing?.key === field.key;
+    const showInterim = listening && !!interimValue && !isEditing;
+    const value = isEditing && liveEditing ? liveEditing.draft : showInterim ? interimValue : rawValue;
+    const inputId = `vct-${field.key}`;
+    const className = [
+      'vct-col',
+      listening ? 'vct-col--active' : '',
+      rawValue ? 'vct-col--filled' : '',
+      isEditing ? 'vct-col--editing' : '',
+    ].filter(Boolean).join(' ');
+
+    return (
+      <div
+        key={field.key}
+        className={className}
+        data-field={field.key}
+        onClick={e => {
+          const input = (e.currentTarget as HTMLElement).querySelector('input');
+          if (input && e.target !== input) input.focus();
+        }}
+      >
+        <label className="vct-header" htmlFor={inputId}>{field.label}</label>
+        <input
+          id={inputId}
+          className={`vct-cell${showInterim ? ' vct-cell--listening' : ''}`}
+          value={value}
+          placeholder={field.placeholder}
+          autoComplete="off"
+          onFocus={() => setEditing({ itemId: currentItem.id, key: field.key, draft: rawValue, original: rawValue })}
+          onChange={e => setEditing({
+            itemId: currentItem.id,
+            key: field.key,
+            draft: e.target.value,
+            original: editingRef.current?.key === field.key && editingRef.current.itemId === currentItem.id
+              ? editingRef.current.original
+              : rawValue,
+          })}
+          onBlur={commit}
+          onKeyDown={e => {
+            e.stopPropagation();
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              commit();
+              e.currentTarget.blur();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              const cur = editingRef.current;
+              if (cur && cur.key === field.key) setEditing({ ...cur, draft: cur.original });
+            }
+          }}
+        />
+      </div>
+    );
+  };
+
   return (
     <div className="vct-wrapper">
-      {/* Title — full-width row */}
-      <div className="vct-row-group vct-row-group--title">
-        <div className="vct-row-label">Title</div>
-        <div className="vct-grid vct-grid--full">
-          {(() => {
-            const col = TITLE_FIELD;
-            const isActive = activeField === col.key;
-            const rawValue = col.getValue(currentItem);
-            const displayValue = isActive && isRecording && interimValue ? interimValue : rawValue;
-            return (
-              <div className={`vct-col${isActive ? ' vct-col--active' : ''}${rawValue ? ' vct-col--filled' : ''}`}>
-                <div className="vct-header">
-                  {isActive && isRecording && <span className="vct-listening-dot" />}
-                  {col.label}
-                </div>
-                <input
-                  className={`vct-cell${isActive && isRecording ? ' vct-cell--listening' : ''}`}
-                  value={displayValue}
-                  placeholder={col.placeholder}
-                  onChange={e => onChange(col.key, e.target.value)}
-                  onKeyDown={e => e.stopPropagation()}
-                />
-              </div>
-            );
-          })()}
-        </div>
-      </div>
-
-      {/* Description — full-width row */}
-      <div className="vct-row-group vct-row-group--title">
-        <div className="vct-row-label">Description</div>
-        <div className="vct-grid vct-grid--full">
-          {(() => {
-            const col = DESCRIPTION_FIELD;
-            const isActive = activeField === col.key;
-            const rawValue = col.getValue(currentItem);
-            const displayValue = isActive && isRecording && interimValue ? interimValue : rawValue;
-            return (
-              <div className={`vct-col${isActive ? ' vct-col--active' : ''}${rawValue ? ' vct-col--filled' : ''}`}>
-                <div className="vct-header">
-                  {isActive && isRecording && <span className="vct-listening-dot" />}
-                  {col.label}
-                </div>
-                <input
-                  className={`vct-cell${isActive && isRecording ? ' vct-cell--listening' : ''}`}
-                  value={displayValue}
-                  placeholder={col.placeholder}
-                  onChange={e => onChange(col.key, e.target.value)}
-                  onKeyDown={e => e.stopPropagation()}
-                />
-              </div>
-            );
-          })()}
-        </div>
-      </div>
-
-      {ROWS.map((cols, rowIdx) => (
-        <div key={rowIdx} className="vct-row-group">
-          <div className="vct-row-label">{ROW_LABELS[rowIdx]}</div>
-          {/* minmax(0, …) not minmax(90px, …): a 90px floor made five columns
-              demand 450px, which the grid answered with its own horizontal
-              scrollbar — and an overflow-x box is an overflow-y box too, so the
-              table quietly became a scroller inside the page scroller (report
-              36). Equal shrinking columns keep the page the only scroller. */}
-          <div className="vct-grid" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))` }}>
-            {cols.map(col => {
-              const isActive = activeField === col.key;
-              const rawValue = col.getValue(currentItem);
-              const displayValue = isActive && isRecording && interimValue
-                ? interimValue
-                : rawValue;
-              const isFilled = !!rawValue;
-
-              return (
-                <div
-                  key={col.key}
-                  className={`vct-col${isActive ? ' vct-col--active' : ''}${isFilled ? ' vct-col--filled' : ''}`}
-                >
-                  {/* Header cell */}
-                  <div className="vct-header">
-                    {isActive && isRecording && (
-                      <span className="vct-listening-dot" />
-                    )}
-                    {col.label}
-                  </div>
-                  {/* Value cell */}
-                  <input
-                    className={`vct-cell${isActive && isRecording ? ' vct-cell--listening' : ''}`}
-                    value={displayValue}
-                    placeholder={col.placeholder}
-                    onChange={e => onChange(col.key, e.target.value)}
-                    onKeyDown={e => e.stopPropagation()}
-                  />
-                </div>
-              );
-            })}
+      {VOICE_TABLE_GROUPS.map(group => (
+        <section
+          key={group.id}
+          className={`vct-row-group${group.full ? ' vct-row-group--title' : ''}`}
+          data-group={group.id}
+          aria-labelledby={group.caption ? `vct-group-${group.id}` : undefined}
+        >
+          {group.caption && <div className="vct-row-label" id={`vct-group-${group.id}`}>{group.caption}</div>}
+          {/* The frame clips the grid's outer hairlines: each cell draws a top
+              and left rule, the grid is pulled 1px up and left, and the frame
+              (overflow: clip, never a scroller, report 36) hides the overhang,
+              so rules show only BETWEEN cells at any column count. */}
+          <div className="vct-frame">
+            <div className={`vct-grid${group.full ? ' vct-grid--full' : ''}`}>
+              {group.fields.map(renderCell)}
+            </div>
           </div>
-        </div>
+        </section>
       ))}
 
       {isRecording && activeField && (
         <div className="vct-status">
           <span className="vct-status-dot" />
-          Listening for <strong>{activeField.replace('meas_', '').replace('seoTitle', 'title')}</strong> — say the value, then the next field name, or <strong>"period"</strong> / the <strong>.</strong> key
+          Listening for <strong>{FIELD_LABEL[activeField] ?? activeField.replace('meas_', '')}</strong>. Say the value, then the next field name, or say <strong>"period"</strong> or press the <strong>.</strong> key.
         </div>
       )}
       {isRecording && !activeField && (
         <div className="vct-status vct-status--idle">
           <span className="vct-status-dot vct-status-dot--idle" />
-          Say a field name to activate its column (e.g. <em>"brand"</em>, <em>"color"</em>…)
+          Say a field name to fill its cell (e.g. <em>"brand"</em>, <em>"color"</em>…)
         </div>
       )}
     </div>

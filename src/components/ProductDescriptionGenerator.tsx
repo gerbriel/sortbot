@@ -243,7 +243,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   };
 
   // Voice command table
-  const [voiceMode, setVoiceMode] = useState<'table' | 'text'>('table');
   const [activeVoiceField, setActiveVoiceField] = useState<string | null>(null);
   // The dictation parser's running state (which field is open, what has been
   // captured for it). All grammar lives in lib/voiceGrammar.ts.
@@ -2504,8 +2503,9 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
   // its own content instead, which leaves the page as Step 3's only scroller.
   //
   // No dependency array on purpose: the values live in store-derived props, the
-  // elements mount and unmount with the recording mode toggle and the preset
-  // popover, and a re-measure is only ever correct AFTER the DOM React just
+  // transcript sits in a panel that opens and closes (hidden, so skipped by
+  // the offsetParent check below and re-measured by the observer), the preset
+  // popover mounts and unmounts, and a re-measure is only ever correct AFTER the DOM React just
   // produced. Three elements, one forced reflow each — cheaper than the render
   // that scheduled it.
   //
@@ -3072,10 +3072,11 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
             )}
             <div className="voice-result">
               {/* Header row: the title with its info button on the left, Clear
-                  Fields and the Table / Text toggle on the right. The dictation
-                  help lives in the InfoDisclosure panel (opened by the button)
-                  rather than in a sentence here and a column beside the text
-                  view. voice-result-head and voice-result-tools are layout hooks:
+                  Fields on the right. The field table below is the one main
+                  view. The dictation help AND the transcript live in the
+                  InfoDisclosure panel (opened by the button), so a user who
+                  wants to read or fix what was heard opens it there.
+                  voice-result-head and voice-result-tools are layout hooks:
                   at phone width (PDG.css) the tools wrap onto their own line. */}
               <InfoDisclosure
                 label="How dictation works"
@@ -3122,29 +3123,6 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                   >
                     <Trash2 size={12} style={{ flexShrink: 0 }} /> Clear Fields
                   </button>
-                  <div style={{ display: 'flex', gap: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-control)' }}>
-                    {(['table', 'text'] as const).map(mode => (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setVoiceMode(mode)}
-                        style={{
-                          padding: '0.2rem 0.7rem',
-                          fontSize: 'var(--fs-xs)',
-                          fontWeight: 600,
-                          border: 'none',
-                          cursor: 'pointer',
-                          /* Active segment is a solid accent fill, so its label
-                             must be dark ink (white on --accent is ~2.5:1). */
-                          background: voiceMode === mode ? 'var(--accent)' : 'var(--ink-800)',
-                          color: voiceMode === mode ? 'var(--ink-950)' : 'var(--text-secondary)',
-                          transition: 'all 0.15s',
-                        }}
-                      >
-                        {mode === 'table' ? '⊞ Table' : '≡ Text'}
-                      </button>
-                    ))}
-                  </div>
                 </div>
                 }
               >
@@ -3165,31 +3143,18 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                     </div>
                   ))}
                 </dl>
-              </InfoDisclosure>
-
-              {/* Keywords: type to find a resale descriptor and add or remove
-                  it from the description. PDG owns the vocabulary, the brand
-                  suggestions and the toggle; the picker only presents them. */}
-              <KeywordPicker
-                entries={keywordEntries}
-                isSuggested={isKeywordSuggested}
-                isApplied={descriptorActive}
-                onToggle={toggleDescriptorKeyword}
-              />
-
-              {voiceMode === 'table' ? (
-                <VoiceCommandTable
-                  currentItem={currentItem}
-                  isRecording={isRecording}
-                  activeField={activeVoiceField}
-                  interimValue={interimTranscript}
-                  onChange={handleTableFieldChange}
-                />
-              ) : (
-                <div>
-                  {/* Transcript, full width. The field reference that used to sit
-                      in a column beside it is in the header's info panel. */}
-                  <textarea 
+                {/* The transcript. It used to be a Text view behind a Table /
+                    Text toggle; it is reference now, so it lives here. The
+                    onChange parser and the interim fallback are unchanged, so
+                    opening the panel mid-recording shows the live words. With
+                    the panel closed the table's active cell is the feedback. */}
+                <div className="voice-transcript-block">
+                  <label className="voice-transcript-caption" htmlFor="voice-transcript">Transcript</label>
+                  <p className="voice-transcript-hint">
+                    What was heard, in order. You can edit it here; a field name followed by its value updates the table.
+                  </p>
+                  <textarea
+                    id="voice-transcript"
                     value={currentItem.voiceDescription || interimTranscript || ''}
                     onChange={(e) => {
                       setInterimTranscript('');
@@ -3284,13 +3249,31 @@ const ProductDescriptionGenerator: React.FC<ProductDescriptionGeneratorProps> = 
                       setProcessedItems(updated);
                     }}
                     placeholder="Start Recording and speak. The field names you say become the fields below."
-                    rows={8}
-                    className="description-textarea js-autogrow"
+                    rows={6}
+                    className="description-textarea voice-transcript js-autogrow"
                     style={{ width: '100%' }}
                     onKeyDown={(e) => e.stopPropagation()}
                   />
                 </div>
-              )}
+              </InfoDisclosure>
+
+              {/* Keywords: type to find a resale descriptor and add or remove
+                  it from the description. PDG owns the vocabulary, the brand
+                  suggestions and the toggle; the picker only presents them. */}
+              <KeywordPicker
+                entries={keywordEntries}
+                isSuggested={isKeywordSuggested}
+                isApplied={descriptorActive}
+                onToggle={toggleDescriptorKeyword}
+              />
+
+              <VoiceCommandTable
+                currentItem={currentItem}
+                isRecording={isRecording}
+                activeField={activeVoiceField}
+                interimValue={interimTranscript}
+                onChange={handleTableFieldChange}
+              />
             </div>
 
             {/* Title: editable above the AI description */}

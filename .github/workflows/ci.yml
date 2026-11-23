@@ -26,7 +26,7 @@ env:
   # `npm run lint` baseline, July 2026 (AGENTS.md §17). The lint step is
   # informational BELOW this number and fails ABOVE it, so the debt can only
   # shrink. Lower this line whenever the count drops.
-  LINT_BASELINE: 254
+  LINT_BASELINE: 233
   # The deployed base path is derived from the GitHub repo name and must not
   # change (AGENTS.md §1). GITHUB_ACTIONS=true is set for us by the runner, so
   # The site is served from the custom domain arcadian.ltd at the root, so

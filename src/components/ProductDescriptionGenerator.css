@@ -289,6 +289,35 @@
   overflow-wrap: anywhere;
 }
 
+/* Transcript, at the foot of the panel after the field reference. */
+.voice-transcript-block {
+  margin-top: var(--space-4);
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+}
+
+/* (0,2,0): outranks `.voice-result label`. */
+.voice-help .voice-transcript-caption {
+  display: block;
+  margin: 0 0 0.1rem;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.voice-transcript-hint {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+/* About six rows: `rows` sets the empty height and js-autogrow grows it with
+   the text, so it never becomes a scroller inside the page. The min-height
+   override undoes .description-textarea's 200px (160px on phones). */
+.voice-help .voice-transcript {
+  min-height: 0;
+}
+
 .description-textarea {
   width: 100%;
   min-width: 100%;
@@ -1204,118 +1233,84 @@
 }
 
 /* ── VoiceCommandTable ───────────────────────────────────────────────────── */
+/* Labelled cells: each field is one cell, a small label above its value.
+   Groups are a quiet caption over a grid; there is no boxed group row, no
+   header row and no border between a label and its value. */
 .vct-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: var(--space-5);
 }
 
 .vct-row-group {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
+  gap: var(--space-2);
 }
 
 .vct-row-label {
-  background: var(--ink-800);
-  color: var(--text-secondary);
-  font-size: var(--fs-2xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 0.2rem 0.5rem;
-  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--text-muted);
 }
 
-/* REMOVED scroller (report 36): this carried `overflow-x: auto`, which makes the
-   browser compute `overflow-y` to `auto` as well — a silent vertical scroll
-   container sitting right in the middle of Step 3's form. The columns are now
-   `minmax(0, 1fr)` (VoiceCommandTable.tsx) so the table shrinks to whatever the
-   form column gives it instead of overflowing, and nothing needs to scroll. */
+/* The frame owns the outer edge and clips the grid's overhang (see the
+   comment in VoiceCommandTable.tsx). `overflow: clip` and never `hidden` or
+   `auto`: clip creates no scroll container, so the page stays the one
+   scroller (report 36). */
+.vct-frame {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: clip;
+  background: var(--ink-800);
+}
+
 .vct-grid {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  margin: -1px 0 0 -1px;
 }
 
 .vct-grid--full {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.vct-row-group--title .vct-col {
-  flex-direction: row;
-  align-items: center;
-  gap: 0;
-}
-
-.vct-row-group--title .vct-header {
-  min-width: 52px;
-  border-right: 1px solid var(--border);
-  border-bottom: none;
-  padding: 0.3rem 0.5rem;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  white-space: nowrap;
-}
-
-.vct-row-group--title .vct-cell {
-  flex: 1;
-  border-top: none;
-}
-
 .vct-col {
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--border);
-  transition: background 0.15s;
-  /* Lets the grid track actually shrink below the input's intrinsic width —
-     without it `minmax(0, 1fr)` is overruled by the <input>'s default size and
-     the table overflows again. */
+  gap: 0.1rem;
+  padding: var(--space-2) var(--space-2) var(--space-1);
+  /* Hairlines between cells: top and left rules, the outer ones clipped. */
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  cursor: text;
+  transition: background var(--dur-fast) var(--ease);
+  /* Lets a grid track shrink below the input's intrinsic width, so the
+     table never overflows the form column. */
   min-width: 0;
 }
-.vct-col:last-child {
-  border-right: none;
-}
 
+/* Dictating into this cell: a subtle fill and a 2px accent rule on the left. */
 .vct-col--active {
-  background: var(--accent-dim);
-}
-.vct-col--active .vct-header {
-  background: var(--accent);
-  color: var(--ink-950);
-}
-.vct-col--filled .vct-header {
-  color: var(--text-primary);
+  background: var(--ink-750);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
-.vct-header {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.25rem 0.4rem;
+/* (0,2,0): outranks `.voice-result label`, which would otherwise make this a
+   bold 14px block with a margin. */
+.vct-col .vct-header {
+  display: block;
+  margin: 0;
+  padding: 0 calc(0.5rem + 1px);
   font-size: var(--fs-2xs);
-  font-weight: 700;
-  text-transform: uppercase;
+  font-weight: 500;
+  line-height: var(--lh-snug);
   letter-spacing: 0.04em;
-  color: var(--accent);
-  background: var(--ink-800);
-  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  user-select: none;
-}
-
-.vct-listening-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--danger);
-  flex-shrink: 0;
-  animation: vct-pulse 0.9s ease-in-out infinite;
+  cursor: text;
 }
 
 @keyframes vct-pulse {
@@ -1323,29 +1318,38 @@
   50%       { opacity: 0.5; transform: scale(1.4); }
 }
 
+/* The value. At rest it reads as plain text; focused it becomes the app's
+   input (the .ui-input radius and focus ring) in the same place, so nothing
+   shifts: the 1px border is always there, only its colour changes. */
 .vct-cell {
   width: 100%;
-  border: none;
-  outline: none;
-  padding: 0.3rem 0.4rem;
-  font-size: var(--fs-xs);
+  min-width: 0;
+  margin: 0;
+  padding: 0.2rem 0.5rem;
+  font: inherit;
+  font-size: var(--fs-base);
+  line-height: var(--lh-snug);
   color: var(--text-primary);
   background: transparent;
-  transition: background 0.15s;
-  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  outline: none;
+  text-overflow: ellipsis;
+  transition: border-color var(--dur-fast) var(--ease),
+              box-shadow var(--dur-fast) var(--ease);
 }
 .vct-cell::placeholder {
   color: var(--text-faint);
-  font-style: italic;
 }
-.vct-cell:focus {
-  background: var(--ink-750);
-  box-shadow: inset 0 0 0 1.5px var(--accent);
+.vct-cell:focus,
+.vct-cell:focus-visible {
+  background: var(--ink-800);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
 }
+/* Interim words while dictating: the value slot, one step quieter. */
 .vct-cell--listening {
-  background: var(--accent-dim);
-  color: var(--accent);
-  font-style: italic;
+  color: var(--text-secondary);
 }
 
 .vct-status {
@@ -1603,36 +1607,26 @@
     min-height: 56px;
   }
 
-  /* ── Voice command table → card list ───────────────────────────────────
-     The grid template is set INLINE as `repeat(N, minmax(90px, 1fr))`, so with
-     5 columns the table demanded 450px and pushed the whole PAGE into a
-     horizontal scroll on a 390px screen. !important is the only way to beat an
-     inline style; two columns keeps it scannable without a rail of one-word
-     labels. */
+  /* ── Voice field table: two columns, thumb-sized cells ───────────────────
+     Two equal shrinking columns, so the table can never push the page into a
+     horizontal scroll. The global phone rule already gives the input 44px and
+     16px type (index.css); the cell restates both because .vct-cell sets its
+     own font-size at (0,1,0), which outranks the bare `input` rule. */
   .vct-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 0.4rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .vct-grid--full {
-    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .vct-row-group {
-    padding: 0.5rem;
-    border-radius: 8px;
-  }
-
-  .vct-row-label {
-    font-size: var(--fs-sm);
+  .vct-col {
+    min-height: 44px;
   }
 
   .vct-cell {
-    min-height: var(--tap, 44px);
-  }
-
-  .vct-header {
-    font-size: var(--fs-xs);
+    min-height: 44px;
+    font-size: var(--fs-md);
   }
 }
 

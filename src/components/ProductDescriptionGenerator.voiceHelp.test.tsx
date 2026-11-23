@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { act } from 'react';
 import ProductDescriptionGenerator from './ProductDescriptionGenerator';
-import { mount, cleanup, click, buttonByText } from './ui/testUtils';
+import { mount, cleanup, click } from './ui/testUtils';
 import { workflowStore } from '../lib/workflowStore';
 import type { ClothingItem } from '../App';
 
@@ -80,10 +80,8 @@ describe('ProductDescriptionGenerator voice help', () => {
     expect(head?.textContent).not.toContain('the next field name ends it');
     expect(infoButton(container).getAttribute('aria-expanded')).toBe('false');
     expect(helpPanel(container).hidden).toBe(true);
-    // Clear Fields and the Table / Text toggle stay in the header row.
+    // Clear Fields stays in the header row.
     expect(head?.textContent).toContain('Clear Fields');
-    expect(head?.textContent).toContain('Table');
-    expect(head?.textContent).toContain('Text');
   });
 
   it('the info button opens the panel with the rule, the examples and the field reference', async () => {
@@ -103,20 +101,44 @@ describe('ProductDescriptionGenerator voice help', () => {
     expect(text).not.toContain(String.fromCharCode(0x2014));
   });
 
-  it('the Text view is the transcript alone: no VOICE COMMANDS column, a one-line placeholder', async () => {
+  it('no toggle is rendered and the transcript lives inside the panel', async () => {
     const { container } = mount(<ProductDescriptionGenerator onProcessed={() => {}} />);
     await flush();
-    click(buttonByText(container, '≡ Text'));
-    const textarea = container.querySelector<HTMLTextAreaElement>('.voice-result textarea.description-textarea');
+    const head = container.querySelector<HTMLElement>('.voice-result-head');
+    const headButtons = Array.from(head?.querySelectorAll('button') ?? []).map(b => (b.textContent ?? '').trim());
+    expect(headButtons.some(t => /table|text/i.test(t))).toBe(false);
+    // The field table is always the main view, outside the panel.
+    const table = container.querySelector<HTMLElement>('.voice-result .vct-wrapper');
+    expect(table).not.toBeNull();
+    expect(table?.closest('.ui-info-disclosure__panel')).toBeNull();
+    // Exactly one transcript, and it is in the panel after the field reference.
+    const panel = helpPanel(container);
+    const textareas = container.querySelectorAll('.voice-result textarea.description-textarea');
+    expect(textareas.length).toBe(1);
+    const textarea = panel.querySelector<HTMLTextAreaElement>('textarea.description-textarea');
     expect(textarea).not.toBeNull();
+    expect(textarea?.getAttribute('rows')).toBe('6');
     expect(textarea?.placeholder).toBe('Start Recording and speak. The field names you say become the fields below.');
-    const voiceResult = container.querySelector<HTMLElement>('.voice-result');
-    const outsidePanel = Array.from(voiceResult?.querySelectorAll<HTMLElement>('*') ?? [])
-      .filter(el => !el.closest('.ui-info-disclosure__panel'))
-      .some(el => /^voice commands$/i.test((el.textContent ?? '').trim()));
-    expect(outsidePanel).toBe(false);
-    // And the toggle still goes back to the Table view.
-    click(buttonByText(container, '⊞ Table'));
-    expect(container.querySelector('.voice-result textarea.description-textarea')).toBeNull();
+    const fields = panel.querySelector('.voice-help-fields');
+    expect(fields && textarea && (fields.compareDocumentPosition(textarea) & Node.DOCUMENT_POSITION_FOLLOWING)).toBeTruthy();
+    const block = panel.querySelector<HTMLElement>('.voice-transcript-block');
+    expect(block?.textContent).toContain('Transcript');
+    expect(block?.textContent).toContain('What was heard, in order. You can edit it here; a field name followed by its value updates the table.');
+  });
+
+  it('typing in the transcript still runs the field parser', async () => {
+    const { container } = mount(<ProductDescriptionGenerator onProcessed={() => {}} />);
+    await flush();
+    click(infoButton(container));
+    const textarea = helpPanel(container).querySelector<HTMLTextAreaElement>('textarea.description-textarea');
+    if (!textarea) throw new Error('transcript not found');
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+    act(() => {
+      setter?.call(textarea, 'brand Nike period');
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await flush();
+    const brand = container.querySelector<HTMLInputElement>('.vct-wrapper input#vct-brand');
+    expect(brand?.value).toBe('Nike');
   });
 });
