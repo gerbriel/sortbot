@@ -1,6 +1,6 @@
 # 00. Capacitor native shell: setup notes
 
-Arcadian ships to iOS and Android by wrapping the existing web build in
+SQRL (formerly Arcadian) ships to iOS and Android by wrapping the existing web build in
 Capacitor 8.6.2. The native apps load the same `dist/` that GitHub Pages serves at
 arcadian.ltd. Nothing about the web deploy changed. The short version lives in
 AGENTS.md §3, "Native shell (Capacitor)". This file is the longer one.
@@ -9,7 +9,7 @@ AGENTS.md §3, "Native shell (Capacitor)". This file is the longer one.
 
 | Path | What it is |
 |---|---|
-| `capacitor.config.ts` | App id `ltd.arcadian.app`, name `Arcadian`, `webDir: 'dist'`, the two webview schemes. |
+| `capacitor.config.ts` | App id `ltd.arcadian.app` (unchanged by renames), name `SQRL` (from `brand.json` via `npm run brand:apply`), `webDir: 'dist'`, the two webview schemes. |
 | `ios/` | Xcode project on **CocoaPods** (`ios/App/Podfile`; open `ios/App/App.xcworkspace`, not the `.xcodeproj`). Deployment target **iOS 15.5**, in the Podfile (`platform :ios, '15.5'`) and in every `IPHONEOS_DEPLOYMENT_TARGET` in `ios/App/App.xcodeproj/project.pbxproj`. See "Why CocoaPods" below. |
 | `android/` | Gradle project. `minSdk 24`, `compileSdk`/`targetSdk 36`. |
 | `src/lib/platform.ts` | `isNative()`, `platform()`, `nativeOrigin`, `NATIVE_ORIGINS`. The only place app code should ask which shell it is in. |
@@ -150,8 +150,27 @@ Permissions:
 
 ## Icons and splash screens
 
-The Capacitor placeholder art was replaced on 22 Nov 2026 with the "A" mark from
+The Capacitor placeholder art was replaced on 22 Nov 2026 with the mark from
 `public/favicon.svg` (the white glyph on that favicon's black tile, drawn on its own).
+First an "A" for Arcadian; since the rename to SQRL the same day it is the **"S"
+of Outfit at weight 700**, the brand font, so the mark and the wordmark are one
+typeface.
+
+**The mark is traced, not drawn.** `assets/trace-glyph.py` opens the
+self-hosted variable font `src/assets/fonts/outfit-latin-300-700.woff2` with
+fontTools, instantiates `wght 700` with `fontTools.varLib.instancer`, takes the
+letter named by `"mark"` in the root `brand.json` (`--glyph` overrides it),
+fits its ink to the 38-unit box of the 64-unit viewBox (13 to 51 on the taller
+axis, the same box the "A" used), centres it, and writes it through
+`fontTools.pens.svgPathPen` as absolute `M L Q Z` commands into the single
+`<path>` of `public/favicon.svg`. The black rounded tile (`rx="14"`) is left as
+it is. Vector paths, never `<text>`, so it renders the same everywhere. Weight
+700 was checked at 16px and reads cleanly; `--weight 600` is the lighter option.
+The script needs `fonttools` and `brotli`, which are deliberately NOT project
+dependencies: put them in a scratch venv outside the repo
+(`python3 -m venv /tmp/fontvenv && /tmp/fontvenv/bin/pip install fonttools brotli`)
+and point `BRAND_PYTHON` at it. Without them the script exits with that same
+install line.
 
 **Sources** live in `assets/` at the repo root, which is the folder
 `@capacitor/assets` (a devDependency, approved) reads:
@@ -164,19 +183,36 @@ The Capacitor placeholder art was replaced on 22 Nov 2026 with the "A" mark from
 | `splash.png` | 2732x2732 | White, black mark at 20% of the width. |
 | `splash-dark.png` | 2732x2732 | Black, white mark at 20% of the width. Used in dark mode. |
 
-`assets/make-sources.mjs` draws all five from the favicon's path with sharp, so
-they are reproducible: change the favicon, then regenerate.
+`assets/make-sources.mjs` draws all five from the favicon's path with sharp
+(it reads `M L H V Q Z`, taking a quadratic's true extremum for the bounding
+box), plus the web images in `public/`: `og.png` (1200x630, the favicon tile
+beside `brand.json`'s `"name"` set in real Outfit 500 at -0.03em, the
+`.wordmark` spacing, composed on the cap height so the Q's tail hangs below
+like running text), `apple-touch-icon.png` (180), `icon-192.png` and
+`icon-512.png`.
 
-**Regenerate** from the repo root:
+**Regenerate** with one command from the repo root:
 
 ```bash
-node assets/make-sources.mjs   # favicon.svg -> assets/*.png
-npm run assets:generate        # assets/*.png -> every iOS and Android size
-git checkout -- android/app/src/main/AndroidManifest.xml
+BRAND_PYTHON=/tmp/fontvenv/bin/python npm run brand:assets
 ```
 
-The last line matters: the generator re-serialises `AndroidManifest.xml` (same
-content, collapsed whitespace and comments moved), which is noise in a diff.
+`brand:assets` runs, and stops at the first failure:
+
+1. `assets/trace-glyph.py --write` (with `$BRAND_PYTHON`, default `python3`):
+   `brand.json` `"mark"` -> `public/favicon.svg`.
+2. `node assets/make-sources.mjs`: favicon + `brand.json` `"name"` ->
+   `assets/*.png` and `public/{og,apple-touch-icon,icon-192,icon-512}.png`.
+3. `npm run assets:generate`: `assets/*.png` -> every iOS and Android size
+   (the outputs listed below).
+4. `git checkout -- android/app/src/main/AndroidManifest.xml`: the generator
+   re-serialises that file (same content, collapsed whitespace and comments
+   moved), which is noise in a diff. This DISCARDS any uncommitted edit to the
+   manifest, so commit manifest changes before running it.
+
+To keep a hand-edited favicon, skip step 1 and run steps 2 to 4 by hand. To
+rename the product, edit `brand.json` (`npm run brand:apply` rewrites the copy,
+`npm run brand:assets` the artwork).
 
 **Colours**, passed explicitly in the `assets:generate` script: icon and splash
 background `#ffffff`, dark-mode icon and splash background `#000000`. These are
@@ -199,7 +235,7 @@ default timing and the status bar keeps the platform default style.
 1. **Install Xcode** from the App Store (CocoaPods is already installed via Homebrew; Android Studio is installed too), then `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` and `sudo xcodebuild -license accept`. Then `cd ios/App && pod install`, and build once on a device.
 2. **Open Android Studio once** so its first-run wizard installs the SDK and you accept the SDK licenses. `~/.zshrc` already exports `ANDROID_HOME`, `platform-tools` on `PATH` and `JAVA_HOME` (Android Studio's bundled JDK), guarded so they activate once the SDK folder exists. Then build once on a device or a Play system-image emulator.
 3. **Restore Fly.io billing, then redeploy the matting service.** The 22 Nov 2026 attempt failed because the Fly trial has ended (add a card at https://fly.io/trial) and the service is not answering at all right now. Then run `REPLICATE_VERSION=<value from services/matting/fly.toml> services/matting/deploy.sh` so the pinned model is kept.
-4. ~~Replace the placeholder icons and splash screens~~ Done 22 Nov 2026 (see "Icons and splash screens" above). Swap the mark later by editing `public/favicon.svg` and regenerating.
+4. ~~Replace the placeholder icons and splash screens~~ Done 22 Nov 2026 (see "Icons and splash screens" above). Swap the mark later by changing `"mark"` in `brand.json` and running `npm run brand:assets`.
 5. **Try every Known gap below on a real device** and decide which to fix; none of them has been seen yet.
 
 ## Known gaps

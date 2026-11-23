@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { BRAND } from '../brand';
 import {
   ChevronLeft, CheckCircle2, RotateCcw, Search, Send, MessageSquare, Plus, Inbox, LifeBuoy, Users,
 } from 'lucide-react';
@@ -36,7 +37,7 @@ function senderName(m: SupportMessage, myUserId: string, thread: SupportThread |
   if (thread?.kind === 'team') {
     return thread.members.find(p => p.user_id === m.sender_id)?.email ?? 'Teammate';
   }
-  return m.sender_role === 'founder' ? 'Arcadian' : (thread?.user_email ?? 'User');
+  return m.sender_role === 'founder' ? BRAND : (thread?.user_email ?? 'User');
 }
 
 /**
@@ -276,7 +277,7 @@ export default function MessagesView({ userEmail, orgName, userId, orgId, isFoun
   const convTitle = active
     ? (active.kind === 'team'
         ? participantLabel(active, userId)
-        : isFounder ? (active.user_email ?? 'user') : (active.subject || 'Arcadian team'))
+        : isFounder ? (active.user_email ?? 'user') : (active.subject || `${BRAND} team`))
     : 'New message';
 
   return (
@@ -431,7 +432,7 @@ export default function MessagesView({ userEmail, orgName, userId, orgId, isFoun
                           .filter(Boolean).join(' · ')
                       : isFounder
                         ? [active?.org_name, closed ? 'closed' : 'open'].filter(Boolean).join(' · ')
-                        : `Arcadian team${closed ? ' · closed' : ''}`}
+                        : `${BRAND} team${closed ? ' · closed' : ''}`}
                 </span>
               </div>
               {/* Close/Reopen is support triage. A team thread has no desk to
@@ -468,7 +469,7 @@ export default function MessagesView({ userEmail, orgName, userId, orgId, isFoun
                       aria-pressed={toSupport}
                       onClick={pickSupport}
                     >
-                      <LifeBuoy size={13} aria-hidden="true" />Arcadian support
+                      <LifeBuoy size={13} aria-hidden="true" />{BRAND} support
                     </button>
                     {(teammates ?? []).map(m => (
                       <button
@@ -496,7 +497,7 @@ export default function MessagesView({ userEmail, orgName, userId, orgId, isFoun
                   )}
                   {!teamAvailable && (
                     <p className="mv-note">
-                      Team conversations aren’t set up in this project yet, so this goes to Arcadian support.
+                      Team conversations aren’t set up in this project yet, so this goes to {BRAND} support.
                     </p>
                   )}
                 </div>

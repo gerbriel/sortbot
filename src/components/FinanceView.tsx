@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { BRAND } from '../brand';
 import {
   RefreshCw, Plus, Search, Trash2, Pencil, X, Download, Printer, Check,
 } from 'lucide-react';
@@ -942,7 +943,7 @@ function Reports({ summary, transactions, range, orgNames }: {
           </tbody>
         </table>
         <p className="fin-statement-foot">
-          Prepared from the Arcadian books · recurring entries counted once per month they land in.
+          Prepared from the {BRAND} books · recurring entries counted once per month they land in.
         </p>
       </section>
     </>

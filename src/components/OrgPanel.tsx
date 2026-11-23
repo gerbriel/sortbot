@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { BRAND } from '../brand';
 import { Users, X, Pencil, Check, Copy, LogOut, Trash2, ChevronRight, ChevronDown, ShoppingBag, Tags, ArrowUp, ArrowDown, Plus, Store, Globe, ShieldCheck, Image as ImageIcon } from 'lucide-react';
 import {
   fetchOrgMembers, fetchOrgInvites, inviteToOrg, revokeInvite, removeMember,
@@ -914,7 +915,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   };
 
   const handleCopyInvite = async (inv: OrgInviteRow) => {
-    const msg = `You're invited to the "${displayName}" workspace on Arcadian.\n\nSign in (or create an account) at ${appUrl} using this email address: ${inv.email}\n\nYou'll join the workspace automatically.`;
+    const msg = `You're invited to the "${displayName}" workspace on ${BRAND}.\n\nSign in (or create an account) at ${appUrl} using this email address: ${inv.email}\n\nYou'll join the workspace automatically.`;
     try {
       await navigator.clipboard.writeText(msg);
       setNotice('Invite message copied. Paste it into an email or text to your teammate.');

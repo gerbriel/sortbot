@@ -4,6 +4,7 @@ import type { User } from '@supabase/supabase-js';
 import { Tag, Settings, Package, Boxes, Link2, Scissors, X, Trash2, BookMarked, KanbanSquare, AlertTriangle, Keyboard, Plus, Lightbulb, FolderOpen, FileArchive, MousePointerClick, Move, Save, BarChart3, Contact, Users, MessageSquare, Wallet, Printer, ScanLine, LayoutDashboard, ShieldCheck } from 'lucide-react';
 import { log, isDebugEnabled } from './lib/debugLogger';
 import BrandWordmark from './components/Wordmark';
+import { BRAND } from './brand';
 import Auth from './components/Auth';
 import ImageUpload, { type ImageUploadHandle } from './components/ImageUpload';
 import ImageGrouper from './components/ImageGrouper';
@@ -3385,7 +3386,7 @@ function App() {
     { id: 'messages', label: supportIsFounder ? 'Inbox' : 'Messages', icon: <MessageSquare size={16} />,
       title: supportIsFounder
         ? 'Inbox — every conversation, from every workspace'
-        : 'Messages — talk to the Arcadian team',
+        : `Messages: talk to the ${BRAND} team`,
       group: 'work' },
     /* SETUP — the things you configure once and forget. */
     { id: 'categories', label: 'Manage Categories', icon: <Tag size={16} />, title: 'Manage your product categories', group: 'setup' },
@@ -4030,7 +4031,7 @@ function App() {
             title={supportIsFounder ? 'Inbox' : 'Messages'}
             description={supportIsFounder
               ? 'Every support conversation with every workspace, plus your own workspace’s team threads. Reply, close what is handled, reopen what is not.'
-              : 'Talk to the Arcadian team, or message people in your workspace. Ask anything — we read everything and usually reply within a day.'}
+              : `Talk to the ${BRAND} team, or message people in your workspace. Ask anything. We read everything and usually reply within a day.`}
             onBack={goToWorkflow}
             wide
           >

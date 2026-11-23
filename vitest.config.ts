@@ -5,7 +5,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'happy-dom', // provides localStorage for tombstone/compress-guard code
-    include: ['src/**/*.test.{ts,tsx}'],
+    // scripts/*.test.mjs: node-side tests for repo scripts (apply-brand).
+    include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.mjs'],
     // src/lib/supabase.ts throws at import time without these. Tests never hit
     // the network — the dummy client just has to construct.
     env: {

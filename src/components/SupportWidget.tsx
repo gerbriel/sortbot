@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, memo } from 'react';
+import { BRAND } from '../brand';
 import { MessageSquare, X, ChevronLeft, Send, CheckCircle2, RotateCcw, Plus } from 'lucide-react';
 import {
   isUnread, formatRelative,
@@ -21,7 +22,7 @@ interface SupportWidgetProps {
  * SUPPORT CONVERSATIONS ONLY, deliberately. Team threads live on the same two
  * tables and in the same store, but they belong on the full-page Messages view
  * where there is room for a participant list; a colleague's message appearing
- * in the "talk to Arcadian" bubble would read as a support reply.
+ * in the "talk to us" bubble would read as a support reply.
  *
  *   user     sees their own conversations, starts new ones, posts as 'user'
  *   founder  sees every conversation (open / closed), replies as 'founder',
@@ -73,7 +74,7 @@ function SupportWidget({ userEmail, orgName, isFounder }: SupportWidgetProps) {
 
   /* SUPPORT ONLY. Team conversations (058_team_messaging.sql) share these tables
      and this store, but not this panel: the floating button is the line to the
-     Arcadian team, and a colleague's message belongs on the Messages page with
+     product team, and a colleague's message belongs on the Messages page with
      room for a participant list. One filter here keeps the two apart —
      `supportUnreadCount` is the matching badge, so the count can never disagree
      with the list under it. */
@@ -151,7 +152,7 @@ function SupportWidget({ userEmail, orgName, isFounder }: SupportWidgetProps) {
   const subtitle = active
     ? (isFounder
         ? `${active.user_email ?? 'user'}${active.org_name ? ` · ${active.org_name}` : ''}`
-        : 'Arcadian team')
+        : `${BRAND} team`)
     : (isFounder ? `${openCount} open` : 'We reply here, usually within a day');
 
   return (
@@ -234,7 +235,7 @@ function SupportWidget({ userEmail, orgName, isFounder }: SupportWidgetProps) {
                 )}
                 {messages.map(m => {
                   const mine = m.sender_role === role;
-                  const who = mine ? 'You' : m.sender_role === 'founder' ? 'Arcadian' : (active?.user_email ?? 'User');
+                  const who = mine ? 'You' : m.sender_role === 'founder' ? BRAND : (active?.user_email ?? 'User');
                   return (
                     <div key={m.id} className={`sw-msg ${mine ? 'sw-msg--mine' : ''}`}>
                       <div className="sw-bubble">{m.body}</div>

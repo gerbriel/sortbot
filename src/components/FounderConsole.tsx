@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { BRAND } from '../brand';
 import {
   Award, Building2, Check, ChevronDown, ChevronRight, ClipboardList, CreditCard,
   Gauge, History, LayoutDashboard, Mail, Pencil, PlusCircle, RotateCcw, Search, Trash2,
@@ -493,7 +494,7 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
   const mailtoWelcome = (s: BetaSignupRow): string | null =>
     safeMailto(
       s.email,
-      'Your Arcadian beta access is ready',
+      `Your ${BRAND} beta access is ready`,
       `Hi ${s.contact_name},\n\nYour beta request for ${s.org_name} is approved. Sign in at ${appUrl} with this email address and your workspace will be ready.\n\nWelcome aboard!`,
     );
 

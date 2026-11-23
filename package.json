@@ -14,7 +14,10 @@
     "cap:sync": "npm run build && cap sync",
     "cap:ios": "cap open ios",
     "cap:android": "cap open android",
-    "assets:generate": "capacitor-assets generate --ios --android --iconBackgroundColor '#ffffff' --iconBackgroundColorDark '#000000' --splashBackgroundColor '#ffffff' --splashBackgroundColorDark '#000000'"
+    "brand:apply": "node scripts/apply-brand.mjs",
+    "brand:check": "node scripts/apply-brand.mjs --check",
+    "assets:generate": "capacitor-assets generate --ios --android --iconBackgroundColor '#ffffff' --iconBackgroundColorDark '#000000' --splashBackgroundColor '#ffffff' --splashBackgroundColorDark '#000000'",
+    "brand:assets": "\"${BRAND_PYTHON:-python3}\" assets/trace-glyph.py --write && node assets/make-sources.mjs && npm run assets:generate && git checkout -- android/app/src/main/AndroidManifest.xml"
   },
   "dependencies": {
     "@capacitor-community/speech-recognition": "^7.0.1",

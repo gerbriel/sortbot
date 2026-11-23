@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# Arcadian — static SPA image.
+# SQRL: static SPA image.
 #
 # WHY THIS EXISTS: GitHub Pages is the production deploy path and is a fine one
 # (static files, free, CDN-backed). This image exists for the three things Pages

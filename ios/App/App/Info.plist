@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Arcadian</string>
+	<string>SQRL</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -23,13 +23,13 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Arcadian uses the camera to photograph items for your listings.</string>
+	<string>SQRL uses the camera to photograph items for your listings.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Arcadian uses the microphone when you dictate a listing description.</string>
+	<string>SQRL uses the microphone when you dictate a listing description.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Arcadian reads photos you choose so you can add them to your listings.</string>
+	<string>SQRL reads photos you choose so you can add them to your listings.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Arcadian turns your dictated listing description into text.</string>
+	<string>SQRL turns your dictated listing description into text.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

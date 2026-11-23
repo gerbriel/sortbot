@@ -14,7 +14,7 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 .onb-head {
-  /* The heading can be a whole workspace name ("Welcome to Arcadian, …") and
+  /* The heading can be a whole workspace name ("Welcome to SQRL, …") and
      the right-hand side is a plan badge plus a count, so both halves need to be
      allowed to wrap rather than squeezing each other. */
   flex-wrap: wrap;

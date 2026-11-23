@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { BRAND } from '../brand';
 import type { ReactNode } from 'react';
 import {
   ArrowRight, BarChart3, Boxes, FolderOpen, Images, Inbox, LayoutGrid, LifeBuoy,
@@ -412,7 +413,7 @@ function HomeDashboard({
                 inline
                 icon={<Upload size={22} />}
                 title="No batch open"
-                description="Drop in a folder of photos — or take them on your phone — and Arcadian will walk you through grouping, describing and exporting them."
+                description={`Drop in a folder of photos, or take them on your phone, and ${BRAND} will walk you through grouping, describing and exporting them.`}
                 actions={
                   <Button variant="primary" icon={<Upload size={14} />} onClick={() => onResume(1)}>
                     Upload photos

@@ -16,7 +16,7 @@ html {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   ARCADIAN — light design system (Uber-inspired)
+   SQRL — light design system (Uber-inspired)
    ══════════════════════════════════════════════════════════════════════════
 
    White canvas, light-grey sections, BLACK nav and black primary actions.
@@ -24,7 +24,7 @@ html {
 
    TWO LAYERS LIVE HERE:
 
-   1. Arcadian tokens (--ink-*, --text-*, --accent-*, --border-*, --fs-*, --ease-*).
+   1. App tokens (--ink-*, --text-*, --accent-*, --border-*, --fs-*, --ease-*).
       Use these in all new work.
 
    2. Legacy --gray-* / --shopify-* names, kept and repointed. NOTE: the gray
@@ -229,6 +229,10 @@ html {
      script falls through to the system stack. */
   --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display',
                'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  /* Wordmark tracking. "SQRL" is four capitals: caps need air, so this is a
+     touch positive (the previous mixed-case name sat at -0.03em). Retune here,
+     not in .wordmark, if the name changes case or length again. */
+  --wordmark-tracking: 0.02em;
   font-family: var(--font-sans);
   line-height: 1.6;
   font-weight: 400;
@@ -565,12 +569,12 @@ img.lazy-img.loaded {
 }
 
 /* ── Brand wordmark ──────────────────────────────────────────────────────────
-   The logo IS the name set in Outfit: medium weight, tight tracking, no icon.
+   The logo IS the name set in Outfit: medium weight, --wordmark-tracking, no icon.
    Rendered by <Wordmark/>; contexts only change size/colour. */
 .wordmark {
   font-family: var(--font-sans);
   font-weight: 500;
-  letter-spacing: -0.03em;
+  letter-spacing: var(--wordmark-tracking);
   line-height: 1;
   white-space: nowrap;
   font-feature-settings: 'kern' 1;

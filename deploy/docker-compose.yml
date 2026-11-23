@@ -1,4 +1,4 @@
-# Arcadian — static app container, optionally pointed at a self-hosted Supabase.
+# SQRL: static app container, optionally pointed at a self-hosted Supabase.
 #
 # WHAT THIS FILE IS: the app half of a self-reliant deployment. It builds the
 # SPA image from deploy/Dockerfile and serves it on http://localhost:8088.

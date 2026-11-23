@@ -11,6 +11,7 @@ import { getShopifyConnection } from '../lib/shopifyConnectionService';
 import { fetchOrgMembers } from '../lib/orgService';
 import { fetchWorkflowBatchesMeta } from '../lib/workflowBatchService';
 import type { WorkflowBatch } from '../lib/workflowBatchService';
+import { BRAND } from '../brand';
 
 /**
  * The derivation is tested in `lib/onboarding.test.ts`; what is locked HERE is
@@ -98,7 +99,7 @@ afterEach(() => { cleanup(); vi.clearAllMocks(); localStorage.clear(); });
 describe('OnboardingChecklist — a brand-new workspace', () => {
   it('welcomes the shop BY NAME and counts the work left', async () => {
     const { container } = await render();
-    expect(one(container, '#onb-heading').textContent).toContain('Welcome to Arcadian, Rack City');
+    expect(one(container, '#onb-heading').textContent).toContain(`Welcome to ${BRAND}, Rack City`);
     expect(one(container, '.onb-count').textContent).toBe('0 of 7 done');
   });
 

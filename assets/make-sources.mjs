@@ -1,6 +1,10 @@
-// Rasterises the Arcadian "A" mark (the glyph from public/favicon.svg) into the
-// source images @capacitor/assets reads, plus the web images served from
-// public/. Run by hand from the repo root:
+// Rasterises the brand mark (the glyph from public/favicon.svg, traced from
+// Outfit by assets/trace-glyph.py) into the source images @capacitor/assets
+// reads, plus the web images served from public/. The OG wordmark text is the
+// "name" field of brand.json at the repo root. Normally run as one step of
+//   BRAND_PYTHON=/path/to/fontvenv/bin/python npm run brand:assets
+// (trace the mark, this script, @capacitor/assets, revert AndroidManifest.xml),
+// or on its own from the repo root:
 //   node assets/make-sources.mjs && npm run assets:generate
 //
 // Outputs:
@@ -24,22 +28,38 @@ import sharp from 'sharp'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const favicon = readFileSync(join(here, '..', 'public', 'favicon.svg'), 'utf8')
+const brand = JSON.parse(readFileSync(join(here, '..', 'brand.json'), 'utf8'))
+if (typeof brand.name !== 'string' || !brand.name) throw new Error('brand.json has no "name"')
 
-// The favicon is a black rounded tile with the "A" path in white. Only the path
+// The favicon is a black rounded tile with the mark path in white. Only the path
 // is the mark; take its d attribute so the sources follow the favicon.
 const paths = [...favicon.matchAll(/<path[^>]*\sd="([^"]+)"/g)].map((m) => m[1])
 if (paths.length !== 1) throw new Error(`expected one <path> in favicon.svg, found ${paths.length}`)
 const d = paths[0]
 
 // Bounding box of the mark in favicon units (viewBox 0 0 64 64). The path uses
-// only absolute M, L, H, V and Z commands; anything else is rejected.
+// only absolute M, L, H, V, Q and Z commands (what trace-glyph.py writes for a
+// TrueType outline); anything else is rejected. A quadratic segment adds its
+// end point plus its true extremum on each axis, not its control point.
 const xs = [], ys = []
 let cx = 0, cy = 0
+const quadExtrema = (p0, p1, p2) => {
+  const den = p0 - 2 * p1 + p2
+  if (den === 0) return []
+  const t = (p0 - p1) / den
+  return t > 0 && t < 1 ? [(1 - t) ** 2 * p0 + 2 * (1 - t) * t * p1 + t ** 2 * p2] : []
+}
 for (const [, cmd, args] of d.matchAll(/([A-Za-z])([^A-Za-z]*)/g)) {
   const n = (args.match(/-?\d+(\.\d+)?/g) || []).map(Number)
   if (cmd === 'M' || cmd === 'L') for (let i = 0; i < n.length; i += 2) { cx = n[i]; cy = n[i + 1]; xs.push(cx); ys.push(cy) }
   else if (cmd === 'H') for (const v of n) { cx = v; xs.push(cx); ys.push(cy) }
   else if (cmd === 'V') for (const v of n) { cy = v; xs.push(cx); ys.push(cy) }
+  else if (cmd === 'Q') for (let i = 0; i < n.length; i += 4) {
+    const [qx, qy, ex, ey] = n.slice(i, i + 4)
+    xs.push(...quadExtrema(cx, qx, ex), ex)
+    ys.push(...quadExtrema(cy, qy, ey), ey)
+    cx = ex; cy = ey
+  }
   else if (cmd !== 'Z') throw new Error(`unsupported path command ${cmd} in favicon.svg`)
 }
 const minX = Math.min(...xs), maxX = Math.max(...xs)
@@ -75,32 +95,37 @@ const publicDir = join(here, '..', 'public')
 const fontFile = join(here, '..', 'src', 'assets', 'fonts', 'outfit-latin-300-700.woff2')
 
 // Open Graph card: 1200x630 white, the favicon tile (black rounded square,
-// white "A") left of the word "Arcadian". The tile rather than the bare glyph:
-// a bare black "A" beside a word that starts with "A" reads as "A Arcadian".
-// The word is trimmed to its ink ("Arcadian" has no descenders, so the box runs
-// from the baseline to the ascender of the d) and the tile is centred on it.
+// white mark) left of the brand name. The tile rather than the bare glyph: a
+// bare black "S" beside a word that starts with "S" reads as "S SQRL".
+// The word is trimmed to its ink, whose top is the cap line. Its bottom is not
+// the baseline when a letter descends (the tail of the Q in "SQRL"), so the
+// composition is centred on the CAP HEIGHT, measured from a rendered "H", and
+// the tail hangs below it as it would in running text.
 async function og() {
-  const W = 1200, H = 630, SIZE = 160, GAP = 48
+  const W = 1200, H = 630, SIZE = 200, GAP = 56
   // Matches .wordmark in src/index.css: weight 500, letter-spacing -0.03em.
   // Pango letter_spacing is in 1/1024 pt; dpi 72 makes 1 pt = 1 px.
   const spacing = Math.round(-0.03 * SIZE * 1024)
-  const word = await sharp({
+  const render = (text) => sharp({
     text: {
-      text: `<span foreground="${BLACK}" font_weight="500" letter_spacing="${spacing}">Arcadian</span>`,
+      text: `<span foreground="${BLACK}" font_weight="500" letter_spacing="${spacing}">${text}</span>`,
       fontfile: fontFile,
       font: `Outfit ${SIZE}`,
       dpi: 72,
       rgba: true,
     },
   }).trim().png().toBuffer({ resolveWithObject: true })
-  const wordW = word.info.width, wordH = word.info.height
-  // The tile is public/favicon.svg itself, rasterised at 1.6x the word's ink height.
-  const markPx = Math.round(wordH * 1.6)
+  const escaped = brand.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const word = await render(escaped)
+  const capH = (await render('H')).info.height
+  const wordW = word.info.width
+  // The tile is public/favicon.svg itself, rasterised at 1.6x the cap height.
+  const markPx = Math.round(capH * 1.6)
   const mark = await sharp(Buffer.from(favicon), { density: (72 * markPx) / 64 })
     .resize(markPx, markPx).png().toBuffer()
   const left = Math.round((W - (markPx + GAP + wordW)) / 2)
   const markTop = Math.round((H - markPx) / 2)
-  const wordTop = Math.round((H - wordH) / 2)
+  const wordTop = Math.round((H - capH) / 2)
   const card = await sharp({ create: { width: W, height: H, channels: 4, background: WHITE } })
     .composite([
       { input: mark, left, top: markTop },

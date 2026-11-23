@@ -1,4 +1,4 @@
-# AGENTS.md — Arcadian Codebase Reference
+# AGENTS.md — SQRL Codebase Reference
 
 > **For any coding agent or contributor reading this file:**
 > 1. Read this file **in full** before writing any code.
@@ -11,14 +11,41 @@
 
 ## 1. Project Identity
 
-Arcadian is a web app for vintage clothing resellers. Users upload batches of clothing photos (individual files, folders, or ZIPs), group multi-angle photos of the same item together, assign categories, record a voice description per listing, and generate AI-powered Shopify-ready product listings. The final output is a CSV export formatted for Shopify product import. The app persists work-in-progress to Supabase (workflow_batches table) so sessions survive page reloads and can be reopened from a Library modal. It is designed as a shared workspace — all authenticated users currently see all batches and images in the Library, controlled via Supabase RLS.
+SQRL (formerly Arcadian, folder `sortingapp/`, repo `gerbriel/sortbot`) is a web app for vintage clothing resellers. Users upload batches of clothing photos (individual files, folders, or ZIPs), group multi-angle photos of the same item together, assign categories, record a voice description per listing, and generate AI-powered Shopify-ready product listings. The final output is a CSV export formatted for Shopify product import. The app persists work-in-progress to Supabase (workflow_batches table) so sessions survive page reloads and can be reopened from a Library modal. It is designed as a shared workspace — all authenticated users currently see all batches and images in the Library, controlled via Supabase RLS.
 
-### Naming — "Arcadian" is the brand, "sortbot" is the plumbing (September 2026)
+### Naming — "SQRL" is the brand, "sortbot" is the plumbing (Sept 2026, renamed Nov 2026)
 
 The product was renamed from **Sortbot** to **Arcatya** (July 2026), to **Acadia** (13 Sept
-2026) and to **Arcadian** (14 Sept 2026). Each time only user-visible text changed. The
-`ACD-` SKU prefix (barcodes), the `acadia-app` container names in deploy/ and the
-`acadia.example` test fixtures are identifiers, not brand copy, and were left alone on purpose.
+2026), to **Arcadian** (14 Sept 2026) and to **SQRL** (22 Nov 2026; all caps, said
+"squirrel"; the owner calls it the name "for now"). Each time only user-visible text changed.
+The domain **arcadian.ltd** (and `matting.arcadian.ltd`), the appId `ltd.arcadian.app` (and
+Android `package_name` / `custom_url_scheme`), the repo `gerbriel/sortbot`, the `ACD-` SKU
+prefix (barcodes), the `acadia-app` container names in deploy/ and the `acadia.example` test
+fixtures are identifiers, not brand copy, and were left alone on purpose.
+
+**How to rename (since 22 Nov 2026 the name lives in ONE file, `brand.json` at the root):**
+
+1. Edit `brand.json`: `name`, `tagline` (the meta description and landing lead), `landingTitle`
+   (the marketing tab title, keep it under 60 characters) and `mark` (the icon letter).
+2. `npm run brand:apply` (`scripts/apply-brand.mjs`). It rewrites the static files that cannot
+   import: `index.html` (`<title>`, description, og:site_name/title/description/image:alt,
+   twitter:title/description), `public/site.webmanifest` (name, short_name), `public/beta.html`,
+   `capacitor.config.ts` (`appName`), `ios/App/App/Info.plist` (`CFBundleDisplayName` and the
+   first words of the `NS*UsageDescription` prompts; `CFBundleName` is `$(PRODUCT_NAME)` and stays),
+   `android/.../values/strings.xml` (`app_name`, `title_activity_main`) and the `<title>` checks in
+   `.github/workflows/ci.yml`, `uptime.yml` and `deploy.yml`. Every regex is anchored on its tag
+   or key, the run is idempotent and prints what changed; `npm run brand:check` exits 1 on drift
+   (and `scripts/apply-brand.test.mjs` asserts the real tree is in sync). It never touches the
+   URLs, ids or artwork.
+3. `BRAND_PYTHON=<venv with fontTools+brotli>/bin/python npm run brand:assets` for the artwork: it
+   traces the `mark` letter from Outfit 700 into `public/favicon.svg` (`assets/trace-glyph.py`),
+   rasterises the icon, splash, OG, touch and manifest sources with `name` from `brand.json`
+   (`assets/make-sources.mjs`), runs `assets:generate` for every iOS and Android size, and
+   reverts the manifest the generator reformats. Setup and caveats: docs/mobile/00-capacitor.md.
+4. Commit. Everything in `src/` reads `BRAND`, `BRAND_TAGLINE`, `BRAND_TITLE_LANDING` and
+   `BRAND_MARK` from `src/brand.ts`, which imports `brand.json`, so no source edit is needed.
+   If the new name changes case or length a lot, retune `--wordmark-tracking` in index.css.
+
 These deliberately still say `sortbot`, and renaming them is a breaking change:
 
 | Identifier | Where | Why it must not change |
@@ -105,8 +132,8 @@ The UI typeface is **Outfit** (SIL OFL), served from `src/assets/fonts/outfit-la
 hashes it and rewrites the relative `url()` with the base path (it works at `/` and `/sortbot/`).
 It must stay self-hosted: the CSP is `font-src 'self' data:` and nothing loads from a font CDN.
 
-**The logo IS the name.** `src/components/Wordmark.tsx` renders `Arcadian` with `.wordmark`
-(Outfit 500, `letter-spacing: -0.03em`); the header, landing nav, auth card and waitlist gate all
+**The logo IS the name.** `src/components/Wordmark.tsx` renders `BRAND` (`SQRL`) with `.wordmark`
+(Outfit 500, `letter-spacing: var(--wordmark-tracking)`, `0.02em` since the all-caps rename; it was `-0.03em` for "Arcadian"); the header, landing nav, auth card and waitlist gate all
 use it and no longer draw an icon beside the name. Contexts only set size/colour (`.app-header
 .wordmark` in App.css pins white on the inverted nav). The favicon is `public/favicon.svg`, a
 geometric "A" mark. Do not reintroduce the shopping-bag icon next to the name.
@@ -347,15 +374,15 @@ Coverage by area:
 
 **Deployment:** GitHub Actions deploys to GitHub Pages, served at `https://arcadian.ltd` (custom domain; `gerbriel.github.io/sortbot` redirects) on every push to `main` (`.github/workflows/deploy.yml`). `vite.config.ts` detects `process.env.GITHUB_ACTIONS` to set `base: '/sortbot/'`.
 
-**CI (Sept 2026):** `.github/workflows/ci.yml` runs on every pull request and on every push to a non-`main` branch, with `permissions: contents: read` only — it never deploys. Steps: `npm ci` → `npm test` → `npm run build` (with dummy `VITE_*` values) → **verify build output** (`dist/index.html` exists, contains `<title>Arcadian</title>`, and its asset URLs are under `/sortbot/` — the base path §1 forbids changing) → **bundle secret-leak guard** (greps `dist/` for `shpat_`, `service_role`, `eyJhbGciOi`, `sk-…` shapes; every `VITE_*` var is inlined into the public bundle, so this is the one mistake that cannot be walked back) → **lint ratchet** (fails only if the problem count GREW past `LINT_BASELINE`) → **migration hygiene** (every migration *changed in the PR* must contain a ROLLBACK section and an "idempotent"/"if not exists" note; the repo-wide pass rate is reported as informational debt). A second job type-checks the Edge Functions with `deno check` (`continue-on-error` while the gate is new). A third job, `matting` (Sept 20 2026), installs `services/matting[test]` on Python 3.12 and runs its pytest suite (157 tests, no network — Replicate and Supabase are both driven through `httpx.MockTransport`). **`LINT_BASELINE` in that file is `219`, matching the tree (22 Nov 2026)**; lower it again whenever the count drops.
+**CI (Sept 2026):** `.github/workflows/ci.yml` runs on every pull request and on every push to a non-`main` branch, with `permissions: contents: read` only — it never deploys. Steps: `npm ci` → `npm test` → `npm run build` (with dummy `VITE_*` values) → **verify build output** (`dist/index.html` exists, contains `<title>SQRL</title>` (written by `npm run brand:apply`), and its asset URLs are under `/sortbot/` — the base path §1 forbids changing) → **bundle secret-leak guard** (greps `dist/` for `shpat_`, `service_role`, `eyJhbGciOi`, `sk-…` shapes; every `VITE_*` var is inlined into the public bundle, so this is the one mistake that cannot be walked back) → **lint ratchet** (fails only if the problem count GREW past `LINT_BASELINE`) → **migration hygiene** (every migration *changed in the PR* must contain a ROLLBACK section and an "idempotent"/"if not exists" note; the repo-wide pass rate is reported as informational debt). A second job type-checks the Edge Functions with `deno check` (`continue-on-error` while the gate is new). A third job, `matting` (Sept 20 2026), installs `services/matting[test]` on Python 3.12 and runs its pytest suite (157 tests, no network — Replicate and Supabase are both driven through `httpx.MockTransport`). **`LINT_BASELINE` in that file is `219`, matching the tree (22 Nov 2026)**; lower it again whenever the count drops.
 
-**Uptime (Sept 2026):** `.github/workflows/uptime.yml` — a first-party 15-minute cron probe (`contents: read`, `issues: write`): the deployed page must contain `<title>Arcadian</title>`, and `${VITE_SUPABASE_URL}/auth/v1/health` must return 200. Failures open/comment on ONE GitHub issue titled "Uptime check failed" (matched by exact title via `--jq`, deliberately NOT `gh issue list --search`, whose index lags minutes and would duplicate issues on a 15-minute cron) and a recovery closes it. Honest limits are written into the file: `schedule` is best-effort, so a missing run means *unknown*, not healthy; the probe cannot see a partial outage that only affects signed-in users, nor a broken RLS policy. The real end-to-end signal remains `CSV Exported` per day in the Analytics panel.
+**Uptime (Sept 2026):** `.github/workflows/uptime.yml` — a first-party 15-minute cron probe (`contents: read`, `issues: write`): the deployed page must contain `<title>SQRL</title>` (written by `npm run brand:apply`), and `${VITE_SUPABASE_URL}/auth/v1/health` must return 200. Failures open/comment on ONE GitHub issue titled "Uptime check failed" (matched by exact title via `--jq`, deliberately NOT `gh issue list --search`, whose index lags minutes and would duplicate issues on a 15-minute cron) and a recovery closes it. Honest limits are written into the file: `schedule` is best-effort, so a missing run means *unknown*, not healthy; the probe cannot see a partial outage that only affects signed-in users, nor a broken RLS policy. The real end-to-end signal remains `CSV Exported` per day in the Analytics panel.
 
 **Container packaging (optional):** `deploy/` holds a two-stage `Dockerfile` (`node:24-alpine` runs `npm ci` + `npm test` + `npm run build`; `nginx:1.27-alpine` serves `dist/`), `nginx.conf` (SPA fallback, immutable-asset caching, never-cached `index.html`/`sw.js`, `/healthz`), `docker-compose.yml` (port 8088) and a `README.md` covering the self-hosted-Supabase story, the `BASE_PATH` build arg, and why Kubernetes is not the answer here. GitHub Pages remains production; nothing in `deploy/` is required to ship.
 
 ### Native shell (Capacitor) (Nov 2026)
 
-The same `npm run build` output (`dist/`) also ships as iOS and Android apps through Capacitor 8.6.2. App id `ltd.arcadian.app`, name `Arcadian`, config in `capacitor.config.ts`, native projects in `ios/` (**CocoaPods**: `ios/App/Podfile`, open `ios/App/App.xcworkspace`) and `android/` (Gradle, `minSdk 24`, `compileSdk`/`targetSdk 36`). The GitHub Pages deploy is unchanged: `base` is still `'/'` and nothing in the web path depends on Capacitor. Full setup notes, the human to-do list and the known gaps: `docs/mobile/00-capacitor.md`.
+The same `npm run build` output (`dist/`) also ships as iOS and Android apps through Capacitor 8.6.2. App id `ltd.arcadian.app` (an identifier, unchanged by renames), name `SQRL` (from `brand.json`), config in `capacitor.config.ts`, native projects in `ios/` (**CocoaPods**: `ios/App/Podfile`, open `ios/App/App.xcworkspace`) and `android/` (Gradle, `minSdk 24`, `compileSdk`/`targetSdk 36`). The GitHub Pages deploy is unchanged: `base` is still `'/'` and nothing in the web path depends on Capacitor. Full setup notes, the human to-do list and the known gaps: `docs/mobile/00-capacitor.md`.
 
 - **Why CocoaPods, not SPM.** The iOS project was first generated on Swift Package Manager, and `cap sync` silently skipped both community plugins there ("does not have a Package.swift"): `@capacitor-community/speech-recognition` and `@capacitor-mlkit/barcode-scanning` ship only podspecs, and Google ML Kit will never be distributed through SPM. It was regenerated with `npx cap add ios --packagemanager CocoaPods`. **Deployment target is iOS 15.5** (ML Kit's floor), set in BOTH `ios/App/Podfile` (`platform :ios, '15.5'`) and every `IPHONEOS_DEPLOYMENT_TARGET` in `ios/App/App.xcodeproj/project.pbxproj`; change one without the other and `pod install` or the archive fails. Do not regenerate on SPM.
 - **Build and run on a device:** `npm run cap:sync` (runs `npm run build`, then `cap sync`, which copies `dist/` into both native projects and rewrites the Podfile's plugin pods), then `pod install` inside `ios/App` for iOS, then `npm run cap:ios` (opens Xcode) or `npm run cap:android` (opens Android Studio) and run on a device or simulator from there. Re-run `cap:sync` after every web change. **iOS status (22 Nov 2026):** Xcode 27.2 and CocoaPods are installed, `pod install` succeeded (25 pods) and `xcodebuild -sdk iphonesimulator` BUILT `App.app` with zero errors, every plugin linked. Nothing has RUN on a simulator or device yet. **No simulator can run it while ML Kit is linked**: the ML Kit pods exclude arm64 for the simulator and iOS 27 simulators refuse x86_64 and Rosetta, so iOS testing means a real iPhone (docs/mobile/00-capacitor.md). If `xcode-select -p` still prints the command line tools path, either run `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` or prefix commands with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`. **Android status:** Android Studio is installed (its bundled JDK is `JAVA_HOME` via `~/.zshrc`), but the SDK is installed by its first-run wizard, which nobody has run yet, so nothing Android has been built.
@@ -398,6 +425,7 @@ sortingapp/
 ├── src/
 │   ├── App.tsx                    # Root component. Owns all global state except the four item arrays (§8). ~3610 lines. Orchestrates all 4 steps, batch lifecycle, auto-save, registerItemsInDB, handleOpenBatch. Also: module-scope installErrorReporter(), React.lazy for every modal, useEventCallback for stable handler props, readAllPages() for paginated selects, GrouperErrorBoundary.
 │   ├── App.css                    # Global app styles.
+│   ├── brand.ts                   # BRAND / BRAND_TAGLINE / BRAND_TITLE_LANDING / BRAND_MARK, typed re-exports of the root brand.json (§1 "Naming"). Every rendered product name in src/ reads these.
 │   ├── main.tsx                   # Entry point. Renders <App /> in StrictMode; registers public/sw.js, EXCEPT inside the native shell (`!isNative()`: service workers do not run in WKWebView).
 │   ├── index.css                  # Design tokens (§1), reset, body styles, .lazy-skeleton.
 │   ├── assets/                    # Static assets (empty or unused).
@@ -568,11 +596,11 @@ sortingapp/
 │       └── 049_security_storage_policies.sql  # NEW (Sept 2026), RUN (verified 22 Nov 2026) but INERT UNTIL ONE MANUAL STEP: org-scoped INSERT/UPDATE/DELETE policies on storage.objects for the product-images bucket. Scope is the caller's ORG, not the caller alone, because three shipped flows write under a teammate's uid prefix (Step 3 crop re-upload, "Compress All Batches", deleting a teammate's batch). SELECT stays public. RLS policies are OR'ed, so run the section 0 inventory, find the permissive dashboard policy, then uncomment its drop in section 4 — until then this file changes nothing.
 │   └── oneoff/                    # One-shop data edits run BY HAND, once — NOT migrations (a migration describes every environment; these describe one afternoon in one). `split_cd_vintage.sql` (Sept 19 2026, NOT RUN): creates the C&D Vintage workspace, moves thecreatendestroy@gmail.com and his batches/products/images into it, copies the shared vocabulary, re-points his threads/CRM/Shopify rows; refuses until `061_tenant_scoped_uniqueness.sql` has run; PREVIEW → MOVE → VERIFY → ROLLBACK sections. Runbook: `docs/reviews/24-cd-vintage-split.md`.
 ├── services/matting/              # THE self-hosted background-removal service (a SEPARATE deliverable — its own README/CONTRACT.md, Dockerfile and tests live there). The app talks to it only through `src/lib/backgroundService.ts` and only over the contract in §9. Its `ALLOWED_ORIGINS` default (`app/config.py`) includes the native webview origins since Nov 2026, pinned by `tests/test_cors.py`.
-├── scripts/                       # Node one-off maintenance scripts (`node scripts/<name>.mjs`). Not part of the build: cleanup-orphaned-storage, fetch-taxonomy, fetch-metaobject-gids, check-shopify-csv, update-presets.
+├── scripts/                       # Node one-off maintenance scripts (`node scripts/<name>.mjs`). Not part of the build: cleanup-orphaned-storage, fetch-taxonomy, fetch-metaobject-gids, check-shopify-csv, update-presets. Plus apply-brand.mjs (`npm run brand:apply` / `brand:check`, §1 "Naming") and its vitest suite apply-brand.test.mjs (vitest.config.ts includes `scripts/**/*.test.mjs`).
 │   ├── seed-marketplace-vocab.ts     # Generates supabase/seeds/marketplace_vocab.sql from the adapters' colour/condition lists (`npm run seed:vocab`). Built by scripts/vite.seed.config.ts with scripts/stubs/ aliased over the logger + Supabase client.
 ├── supabase/seeds/                # GENERATED SQL run by hand, like the migrations: marketplace_vocab.sql (global vocabulary; on conflict do nothing).
-├── public/                        # Static assets. sw.js = the Service Worker image cache; og.png (1200x630), apple-touch-icon.png, icon-192.png, icon-512.png and site.webmanifest are GENERATED by `node assets/make-sources.mjs` (the OG wordmark is real Outfit 500 rendered through sharp) and linked from index.html with absolute https://arcadian.ltd URLs for crawlers; Landing.tsx sets a descriptive document.title on mount and restores "Arcadian" on unmount (CI asserts the static title) (stale-while-revalidate, 7-day TTL, REVALIDATE_AFTER_MS = 1 day, MAX_ENTRIES = 3000 trimmed 50-per-fetch, strips both `t` and `_retry` cache-busters, answers PURGE_IMAGE_CACHE). Also beta.html (redirect to the main URL).
-├── capacitor.config.ts            # Capacitor 8 config (Nov 2026): appId `ltd.arcadian.app`, appName `Arcadian`, webDir `dist`, `server.iosScheme: 'capacitor'` + `server.androidScheme: 'https'` written out so the two webview origins are visible in one place. Type-checked through `tsconfig.node.json`'s `include`.
+├── public/                        # Static assets. sw.js = the Service Worker image cache; og.png (1200x630), apple-touch-icon.png, icon-192.png, icon-512.png and site.webmanifest are GENERATED by `node assets/make-sources.mjs` (the OG wordmark is real Outfit 500 rendered through sharp) and linked from index.html with absolute https://arcadian.ltd URLs for crawlers; Landing.tsx sets a descriptive document.title on mount and restores the bare "SQRL" on unmount (CI asserts the static title) (stale-while-revalidate, 7-day TTL, REVALIDATE_AFTER_MS = 1 day, MAX_ENTRIES = 3000 trimmed 50-per-fetch, strips both `t` and `_retry` cache-busters, answers PURGE_IMAGE_CACHE). Also beta.html (redirect to the main URL).
+├── capacitor.config.ts            # Capacitor 8 config (Nov 2026): appId `ltd.arcadian.app`, appName `SQRL` (written by `npm run brand:apply`), webDir `dist`, `server.iosScheme: 'capacitor'` + `server.androidScheme: 'https'` written out so the two webview origins are visible in one place. Type-checked through `tsconfig.node.json`'s `include`.
 ├── ios/                           # Generated Xcode project, CocoaPods (`ios/App/Podfile`, open `App.xcworkspace`), iOS 15.5. `Info.plist` holds the usage strings. Pods, `App/App/public` and the generated config are ignored by `ios/.gitignore`. §3 "Native shell".
 ├── android/                       # Generated Gradle project (minSdk 24, target 36). `app/src/main/AndroidManifest.xml` holds the permissions and the ML Kit meta-data. Build outputs ignored by `android/.gitignore`.
 ├── docs/mobile/00-capacitor.md    # Native shell setup: prerequisites, first run, origins, plugin table, the human to-do list, known gaps.
@@ -584,6 +612,7 @@ sortingapp/
 ├── vite.config.ts                 # base '/' (custom domain arcadian.ltd; the old /sortbot/ Pages path redirects).
 ├── vitest.config.ts               # happy-dom + dummy Supabase env vars.
 ├── tsconfig*.json, eslint.config.js, package.json
+├── brand.json                     # The product name, tagline, landing title and icon letter. The one place to rename (§1 "Naming").
 ├── index.html                     # Vite entry. Carries the CSP <meta http-equiv> + referrer policy (§9) and the pre-paint canvas <style>.
 ├── ADD_APPLIED_PRESET_ID.sql, database_migration_csv_fields.sql, fix_security_warnings.sql  # Ad-hoc SQL at the repo root, outside supabase/migrations/. **fix_security_warnings.sql BROKE SIGN-UP** (June 2026 to 22 Nov 2026): it made `handle_new_user()` SECURITY INVOKER, but an insert into auth.users fires its trigger as supabase_auth_admin, which cannot write `user_profiles`, so every sign-up got "Database error saving new user". `067_fix_signup_trigger.sql` repairs it. Never run that root file again (§18 #60).
 ├── check-and-run-migration.js, check-collaborative-changes.js, run-collaborative-migration.js, run-categories-migration.sh, test-db-connection.html, console-log.html  # One-off helpers. Not part of the app.

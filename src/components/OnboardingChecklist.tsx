@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { BRAND } from '../brand';
 import { Circle, CircleCheck, ListChecks } from 'lucide-react';
 import { Badge, Button, ConfirmAction } from './ui';
 import {
@@ -199,7 +200,7 @@ function OnboardingChecklist({
   // that the shop is working, and being welcomed again reads as the app not
   // knowing who it is talking to.
   const fresh = fetched.batchCount === 0;
-  const heading = fresh && orgName ? `Welcome to Arcadian, ${orgName}` : 'Get set up';
+  const heading = fresh && orgName ? `Welcome to ${BRAND}, ${orgName}` : 'Get set up';
   const badge = planLabel(plan);
 
   return (

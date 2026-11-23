@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { BRAND, BRAND_TITLE_LANDING } from '../brand';
 import {
   Target, RotateCcw, RotateCw, Trash2, Scissors, Mic, Download,
   BadgeDollarSign, MessageSquare, Users, Package, Check, Shirt, Layers, Clock,
@@ -86,13 +87,13 @@ export default function Landing({ onLoginClick }: LandingProps) {
   const [msg, setMsg] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null);
   const [done, setDone] = useState(false);
 
-  // The static <title> in index.html stays the bare "Arcadian" (CI and the
+  // The static <title> in index.html stays the bare brand name (CI and the
   // uptime probe assert it, and it is right for the signed-in app). Only the
   // marketing page gets the descriptive tab/search title, and it hands the
   // previous one back when the visitor signs in and Landing unmounts.
   useEffect(() => {
     const previous = document.title;
-    document.title = 'Arcadian: vintage clothing photos to Shopify listings';
+    document.title = BRAND_TITLE_LANDING;
     return () => { document.title = previous; };
   }, []);
 
@@ -147,7 +148,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
         <div className="ld-hero-inner">
           <h1>Photograph the rack in the morning.<br />Listings live by lunch.</h1>
           <p>
-            Arcadian turns a camera roll of vintage clothing photos into listings that are
+            {BRAND} turns a camera roll of vintage clothing photos into listings that are
             ready for Shopify. Group the angles, <em>speak</em> the details, export the file.
             Built by resellers who list hundreds of pieces a week.
           </p>
@@ -208,7 +209,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
               />
             </figure>
             <div className="ld-shot" aria-hidden="true">
-              <div className="shot-bar"><i /><i /><i /><em>Arcadian · Group &amp; Categorize</em></div>
+              <div className="shot-bar"><i /><i /><i /><em>{BRAND} · Group &amp; Categorize</em></div>
               <div className="shot-mock shot-mock--grid">
                 <div className="mock-toolbar">
                   <b><Target size={11} /> Pick photos</b>
@@ -252,7 +253,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
           </div>
           <div className="ld-tour-visual">
             <div className="ld-shot" aria-hidden="true">
-              <div className="shot-bar"><i /><i /><i /><em>Arcadian · Category Presets</em></div>
+              <div className="shot-bar"><i /><i /><i /><em>{BRAND} · Category Presets</em></div>
               <div className="shot-mock shot-mock--presets">
                 <div className="mock-preset-head"><Layers size={13} /> Tees preset</div>
                 <div className="mock-preset-rows">
@@ -272,7 +273,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
           <div className="ld-tour-text">
             <h2>Talk. Don't type.</h2>
             <p>
-              Hold the garment and say what you see. Arcadian parses brands, sizes,
+              Hold the garment and say what you see. {BRAND} parses brands, sizes,
               colors, and measurements into the right fields and writes a clean,
               human listing with your measurements front and center.
             </p>
@@ -294,7 +295,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
               />
             </figure>
             <div className="ld-shot" aria-hidden="true">
-              <div className="shot-bar"><i /><i /><i /><em>Arcadian · Describe</em></div>
+              <div className="shot-bar"><i /><i /><i /><em>{BRAND} · Describe</em></div>
               <div className="shot-mock shot-mock--voice">
                 <div className="mock-mic"><Mic size={13} /> Recording… <span className="mock-wave"><i /><i /><i /><i /><i /></span></div>
                 <div className="mock-transcript">“brand nike period size large fits like medium period width 18 period…”</div>
@@ -330,7 +331,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
           </div>
           <div className="ld-tour-visual">
             <div className="ld-shot" aria-hidden="true">
-              <div className="shot-bar"><i /><i /><i /><em>Arcadian · Export</em></div>
+              <div className="shot-bar"><i /><i /><i /><em>{BRAND} · Export</em></div>
               <div className="shot-mock shot-mock--csv">
                 <div className="mock-thead"><b>Handle</b><b>Title</b><b>Price</b><b>Category</b><b>Size</b></div>
                 {[
@@ -467,7 +468,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
       </section>
 
       <footer className="ld-footer">
-        Arcadian · built for vintage resellers · beta access is reviewed and approved by hand
+        {BRAND} · built for vintage resellers · beta access is reviewed and approved by hand
         <p className="ld-credit">
           Photography:{' '}
           {PHOTO_CREDITS.map((c, i) => (

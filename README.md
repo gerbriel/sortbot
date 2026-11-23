@@ -1,6 +1,6 @@
-# Arcadian — Vintage Clothing Listing Workflow
+# SQRL: Vintage Clothing Listing Workflow
 
-Arcadian is a web app for vintage clothing resellers. Upload a batch of clothing photos, group the multi-angle shots of each item, assign categories, dictate a description per listing, and export a Shopify-ready product CSV — hundreds of listings per session.
+SQRL (formerly Arcadian) is a web app for vintage clothing resellers. Upload a batch of clothing photos, group the multi-angle shots of each item, assign categories, dictate a description per listing, and export a Shopify-ready product CSV — hundreds of listings per session.
 
 **Live app:** https://gerbriel.github.io/sortbot (deployed from `main` via GitHub Actions)
 
@@ -169,7 +169,7 @@ Then enable it per workspace in **Workspace → Settings**. It is **off by defau
 
 ### Founder tools — analytics, CRM, messaging (first-party)
 
-Arcadian has its own analytics, CRM, support messaging and finance. They are **features of this app, stored in this project's own Supabase tables** — no third-party service, no external API, no payment processor, no keys to configure. Each one is a migration in `supabase/migrations/` (run in the SQL Editor after `031_multi_org_tenancy.sql` + `032_beta_signups.sql`); the UI hides itself until its tables exist, so the code can ship first.
+SQRL has its own analytics, CRM, support messaging and finance. They are **features of this app, stored in this project's own Supabase tables** — no third-party service, no external API, no payment processor, no keys to configure. Each one is a migration in `supabase/migrations/` (run in the SQL Editor after `031_multi_org_tenancy.sql` + `032_beta_signups.sql`); the UI hides itself until its tables exist, so the code can ship first.
 
 | Feature | Migration | Who sees it |
 |---|---|---|

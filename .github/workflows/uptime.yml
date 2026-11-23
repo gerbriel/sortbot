@@ -38,8 +38,8 @@ jobs:
         env:
           SITE: https://arcadian.ltd/
           # The title the built index.html must contain. If the product is ever
-          # renamed again, this line has to move with it.
-          EXPECTED_TITLE: '<title>Arcadian</title>'
+          # renamed again, `npm run brand:apply` rewrites this line from brand.json.
+          EXPECTED_TITLE: '<title>SQRL</title>'
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |

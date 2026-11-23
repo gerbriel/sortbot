@@ -2,8 +2,9 @@ import type { CapacitorConfig } from '@capacitor/cli';
 // Type-only: brings in the plugin's PluginsConfig augmentation for `plugins.Keyboard`.
 import type { KeyboardResize } from '@capacitor/keyboard';
 
-// Capacitor native shell for Arcadian (iOS + Android). The native apps load the
-// same `npm run build` output (dist/) that GitHub Pages serves; nothing here
+// Capacitor native shell for the app (iOS + Android). appName is written from
+// brand.json by `npm run brand:apply`; appId is an identifier and never changes.
+// The native apps load the same `npm run build` output (dist/) that GitHub Pages serves; nothing here
 // changes the web deploy. See AGENTS.md "Native shell (Capacitor)" and
 // docs/mobile/00-capacitor.md.
 //
@@ -13,7 +14,7 @@ import type { KeyboardResize } from '@capacitor/keyboard';
 //   Android  https://localhost       (androidScheme 'https', the Capacitor 8 default)
 const config: CapacitorConfig = {
   appId: 'ltd.arcadian.app',
-  appName: 'Arcadian',
+  appName: 'SQRL',
   webDir: 'dist',
   server: {
     // Both are the Capacitor 8 defaults, written out so the origins above are

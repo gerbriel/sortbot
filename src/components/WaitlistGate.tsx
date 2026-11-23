@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { BRAND } from '../brand';
 import Wordmark from './Wordmark';
 import { requestBetaAccess } from '../lib/betaService';
 import './WaitlistGate.css';
@@ -65,7 +66,7 @@ export default function WaitlistGate({ status, email, onSignOut, onRequested, on
 
         {status === 'none' && (
           <>
-            <h1>Arcadian is in private beta</h1>
+            <h1>{BRAND} is in private beta</h1>
             <p>Tell us about your shop and we'll review your request — usually within a day or two.</p>
             <div className="waitlist-form">
               <input
