@@ -5,6 +5,7 @@ import App from './App.tsx'
 import { log } from './lib/debugLogger'
 import { isNative } from './lib/platform'
 import { initKeyboard } from './lib/native/keyboard'
+import { hydrateBrand } from './lib/brandStore'
 
 // Register the image-caching Service Worker.
 // The SW intercepts all Supabase Storage image requests and caches them for
@@ -30,6 +31,11 @@ if ('serviceWorker' in navigator && !isNative()) {
 // Native only: undo the Keyboard plugin's one iOS side effect (it hides the
 // keyboard's Done / previous / next bar for every input). No-op on the web.
 void initKeyboard();
+
+// The runtime product name (070_runtime_brand.sql). The store already holds the
+// build value and the cached one; this replaces them with the founder's current
+// choice. Never rejects, and a missing function keeps the build name.
+void hydrateBrand();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

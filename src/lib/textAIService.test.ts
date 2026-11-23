@@ -1,11 +1,13 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   generateProductDescription,
   normalizeSizeValue,
   smartSeoTruncate,
   primaryMaterial,
   stripLeadingFieldTitle,
+  poweredByLine,
 } from './textAIService';
+import { applyRemoteBrand, brandStore, getBrand } from './brandStore';
 
 /**
  * Characterization tests for the voice → fields → description/title engine.
@@ -487,5 +489,42 @@ describe('report 26 — pants sizing through the voice pipeline', () => {
       voiceDescription: 'size petite small period', category: 'tees',
     });
     expect(petite.extractedFields?.size).toBe('PS');
+  });
+});
+
+describe('the "Powered by" trailer', () => {
+  afterEach(() => { brandStore.reset(); });
+
+  it('poweredByLine is "Powered by {name}"', () => {
+    expect(poweredByLine('SQRL')).toBe('Powered by SQRL');
+    expect(poweredByLine('  Acorn ')).toBe('Powered by Acorn');
+  });
+
+  it('is the last line, one blank line after the disclaimers', async () => {
+    const { description } = await generateProductDescription({ brand: 'Nike', size: 'XL', type: 'Tee', condition: 'Good' });
+    expect(description.endsWith(`* All sales final.\n\n${poweredByLine(getBrand().name)}`)).toBe(true);
+  });
+
+  it('follows the closing line when a workspace has no hashtags and no disclaimers', async () => {
+    const { description } = await generateProductDescription({
+      brand: 'Nike', size: 'XL', type: 'Tee',
+      descriptionSettings: { includeHashtags: false, disclaimerLines: [], closingLine: 'Bundle and save.' },
+    });
+    expect(description.endsWith(`Bundle and save.\n\n${poweredByLine(getBrand().name)}`)).toBe(true);
+  });
+
+  it('appears exactly once, and on a bare listing too', async () => {
+    const { description } = await generateProductDescription({
+      descriptionSettings: { includeHashtags: false, disclaimerLines: [], closingLine: '', washingLine: '' },
+    });
+    expect(description.split('Powered by').length - 1).toBe(1);
+    expect(description.endsWith(`\n\n${poweredByLine(getBrand().name)}`)).toBe(true);
+  });
+
+  it('uses the RUNTIME name when the store changes, without a deploy', async () => {
+    applyRemoteBrand({ name: 'Acorn', descriptor: 'd', tagline: 't' });
+    const { description } = await generateProductDescription({ brand: 'Nike', size: 'XL', type: 'Tee' });
+    expect(description.endsWith('\n\nPowered by Acorn')).toBe(true);
+    expect(description).not.toContain('Powered by SQRL');
   });
 });

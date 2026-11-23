@@ -48,6 +48,28 @@ fixtures are identifiers, not brand copy, and were left alone on purpose.
    `BRAND_MARK` from `src/brand.ts`, which imports `brand.json`, so no source edit is needed.
    If the new name changes case or length a lot, retune `--wordmark-tracking` in index.css.
 
+**Runtime name vs build name (22 Nov 2026, `070_runtime_brand.sql`).** The founding workspace can
+now rename the product from the Founder console (Overview → Brand), with no deploy. Two layers:
+
+- **Runtime** (`src/lib/brandStore.ts`): `{ name, descriptor, tagline, source }`, seeded
+  synchronously from `brand.json` (no first-paint flash), then from the `sortbot_brand`
+  localStorage cache (read at import, before the first render), then from
+  `supabase.rpc('public_brand')`, started once in `main.tsx` (anon-callable, so the logged-out
+  landing gets it; any failure keeps the value already shown). Components read `useBrand()`,
+  lib code reads `getBrand()`. This covers EVERYTHING the app renders: the wordmark (header,
+  landing, auth, waitlist), the landing descriptor, FAQ, footer and its `document.title`
+  (`landingTitleFor(name)` swaps the build name inside `landingTitle`), Messages and the
+  support widget ("{name} team"), the invite text, the founder's welcome mail subject, Home and
+  the onboarding copy, Finance's statement line, and the "Powered by {name}" trailer on every
+  generated description (§10 Step 3). A save from the console applies to the founder's own
+  screens at once; everyone else gets it on their next load.
+- **Build** (`brand.json` + `src/brand.ts`): stays the default and the ONLY source for the static
+  files. The HTML `<title>` and meta tags, the manifest, `beta.html`, the iOS and Android app
+  names and all artwork still follow `brand:apply` / `brand:assets` plus a deploy. After a
+  runtime rename, update `brand.json` too when the name is meant to stick, or the tab title,
+  the install icons and the native apps keep the old name. New rendered text must use
+  `useBrand()` / `getBrand()`, never `BRAND` directly.
+
 These deliberately still say `sortbot`, and renaming them is a breaking change:
 
 | Identifier | Where | Why it must not change |
@@ -64,6 +86,7 @@ These deliberately still say `sortbot`, and renaming them is a breaking change:
 | `sortbot_kanban_view` | `KanbanBoard.tsx` | Last-used board view (`lanes` / `atlas`). Cosmetic. |
 | `sortbot_step2_card_labels` | `ImageGrouper.tsx` (`CARD_LABELS_KEY`) | Whether the file name + capture time show under each Step 2 photo (`'1'` / `'0'`, the View panel's "File names & dates" toggle). Cosmetic — absent means OFF (default flipped 15 Sept 2026). |
 | `sortbot_onboarding_<orgId>` | `lib/onboarding.ts` (`onboardingLocalKey`), written by `OnboardingChecklist.tsx` and by App's view-change effect | Per-WORKSPACE setup record: `{ hidden?, visitedCategories?, visitedPresets? }`. The two things the database cannot answer — whether this person has looked at their categories, and whether they asked for the checklist to go away. Cosmetic — **absent means show the checklist**, so losing it costs one dismissal. |
+| `sortbot_brand` | `lib/brandStore.ts` (`BRAND_CACHE_KEY`) | The last runtime brand from `public_brand()` (`{ name, descriptor, tagline }`), read at import so a renamed product does not flash its old name. Cosmetic: losing it just costs one fetch (and one paint of the build name). |
 
 If any of these ever *do* get renamed, ship a migration that reads the old key,
 writes the new one, and deletes the old — do not just rename the string.
@@ -428,7 +451,7 @@ sortingapp/
 ├── src/
 │   ├── App.tsx                    # Root component. Owns all global state except the four item arrays (§8). ~3610 lines. Orchestrates all 4 steps, batch lifecycle, auto-save, registerItemsInDB, handleOpenBatch. Also: module-scope installErrorReporter(), React.lazy for every modal, useEventCallback for stable handler props, readAllPages() for paginated selects, GrouperErrorBoundary.
 │   ├── App.css                    # Global app styles.
-│   ├── brand.ts                   # BRAND / BRAND_TAGLINE / BRAND_TITLE_LANDING / BRAND_MARK, typed re-exports of the root brand.json (§1 "Naming"). Every rendered product name in src/ reads these.
+│   ├── brand.ts                   # BRAND / BRAND_TAGLINE / BRAND_TITLE_LANDING / BRAND_MARK, typed re-exports of the root brand.json (§1 "Naming"). The BUILD default: it seeds lib/brandStore and is the source for the static files. Rendered text reads the RUNTIME brand (`useBrand()` / `getBrand()`), not these.
 │   ├── main.tsx                   # Entry point. Renders <App /> in StrictMode; registers public/sw.js, EXCEPT inside the native shell (`!isNative()`: service workers do not run in WKWebView).
 │   ├── index.css                  # Design tokens (§1), reset, body styles, .lazy-skeleton.
 │   ├── assets/                    # Static assets (empty or unused).
@@ -488,6 +511,7 @@ sortingapp/
 │   │   ├── CategoryPresetsManager.tsx / .css # Full-page view, CRUD on category presets (list left / editor right — the editor was a modal stacked on a modal). Lazy-loaded. Phone (Nov 2026): the Men/Women/Kids filter is a three-column grid, never a sideways strip.
 │   │   ├── OrgPanel.tsx / .css     # Workspace, full-page view (lazy-loaded): members (with the per-member detail expand), invites, Shopify connection, description-format settings, Marketplaces — the workspace you are IN, and nothing else. **Plan and usage** (22 Nov 2026, 069): a `FieldGroup` at the top of the Members tab, visible to EVERY role, with read-only cells (Plan, Storage, Listings this month with the basis in the hint, Members of seats), each value an `<output>` with a thin tinted bar; it is the exported `PlanUsageGroup` and draws the same `planUsageMeters` list as Home. Hidden unless `fetchOrgUsage` answers 'ok'. Tested in `OrgPanel.test.tsx` (6). The beta-request queue, the workspace directory and the founding Users tab MOVED to FounderConsole (Sept 2026); for a founding admin one line on the Members tab links there (`onOpenFounder`). `.an-*` / `.crm-*` / `.ft-*` AND the `.beta-*` / `.org-dir-*` / `.fa-*` rules still live in OrgPanel.css — AnalyticsPanel, CrmPanel, ErrorsPanel and FounderConsole all import it themselves; page-scale overrides are scoped under `.tool-view`, whose ≤640px root list now includes `.fc-view`. Phone (Nov 2026, no-sideways-strips pass): `.ft-chips` / `.beta-filter-chips` filter rows and the `.org-tabs` rail WRAP (items grow to fill each line, 44px floor, active tab keeps its accent fill); the daily chart wrapper and every non-card `.an-table` scroll through the shared `.x-scroll` class with `tabIndex={0}` + `aria-label` in the TSX, and this file keeps only their chart/table specifics (tooltip `padding-top`, `display: block` + load-bearing `nowrap`, sticky first column).
 │   │   ├── FounderConsole.tsx / .css  # 'founder' view (§6), founding owner/admin only. Running the BETA, as opposed to running a workspace: Overview (KPI tiles + the last 10 audit rows as sentences), Requests (the moved beta queue, plus "Create workspace now"), Workspaces (the moved directory, with a row expand that calls `founding_org_detail` for members/invites and offers plan, rename and invite), Onboard (create a workspace before its owner signs in), Users (→ FoundingUsersTab). **Usage** (22 Nov 2026, 069; loads when first opened): StatTiles for project storage against the Supabase quota (percent in the hint, tinted), files, workspaces, members, listings this month; then a workspaces table (`an-table--cards`, so phones get stacked cards, no sideways scroll) sorted by storage with a storage bar against the plan limit, listings vs cap and members vs seats; Skeletons while loading, an EmptyState naming `069_plan_limits_and_usage.sql` on 'unavailable', a founders-only EmptyState on 'forbidden', and an error EmptyState with Try again. The project quota is `finance_settings.project_storage_gb` and has no editor here (SQL Editor only, not in scope). **Plans → Limits** (loads when the tab is first opened): one row per catalog plan with listings per month, storage GB and seats (blank = unlimited; listings and seats whole numbers), saved through `setPlanLimits` with its own Save so a limit edit never re-sends a price; a setup line names 069 when the columns are missing. Second real adopter of `src/components/ui/` — Tabs/Button/ConfirmAction/EmptyState/Badge/StatTile/Skeleton/TextField/SelectField, none of them edited. Its tabs render INSIDE the body, not in ToolView's `tabs` slot: that slot is wrapped in `role="tablist"` and `TabList` renders its own. Lazy-loaded (~28 kB).
+│   │   ├── FounderBrandCard.tsx / .test.tsx  # The console's Overview → Brand card (070): Name / Descriptor / Tagline FieldCells with live counts, a wordmark + descriptor preview of the draft, a ConfirmAction Save through `saveBrand`, a success Toast, the static-files-follow-a-deploy note, and an EmptyState naming `070_runtime_brand.sql` on 'unavailable' (probed on mount with `public_brand`).
 │   │   ├── FoundingUsersTab.tsx    # The cross-workspace user list, extracted from OrgPanel verbatim except that the confirmKey yes/no pair became `ConfirmAction`. Markup and class names are the originals, so the styling transferred with it.
 │   │   ├── AnalyticsPanel.tsx      # Analytics view, Overview tab. 7/30/90-day range, KPI tiles, HTML bar chart, funnel + tables.
 │   │   ├── CrmPanel.tsx            # CRM view. Stage chips, search, inline editing, notes, Add contact, Sync. Mail links go through `lib/mailto.ts`.
@@ -567,7 +591,9 @@ sortingapp/
 │   │   ├── proseService.ts        # Requests + VALIDATES the model-written selling paragraph (15–120 words, banned phrases, numbers guard). Invalid → null → today's rule-based output.
 │   │   ├── categoriesService.ts, categories.ts, categoryPresets.ts, categoryPresetsService.ts, applyPresetToGroup.ts  # Categories + presets: CRUD, types, DEFAULT_CATEGORIES, preset application (applyPresetDirectly is the sync, no-network path).
 │   │   ├── voiceGrammar.ts        # THE STEP-3 DICTATION GRAMMAR, as pure functions (extracted from PDG's recognition.onresult). Owns the vocabulary (VOICE_KEYWORD_TO_FIELD, FIELD_TO_VOICE_LABEL), FIELD_TO_TITLES + `stripFieldTitlePrefix(fieldKey, value)` (repeat-strips a field's OWN titles and their synonyms — `colour` for color, `fabric` for material — applied in `emit`, in `flushVoiceState` and by textAIService's healing pass), scanFieldTitles (word-boundary, longest-match-first, non-overlapping), parseVoiceChunk / flushVoiceState / detectActiveField, startsNewCommand, fixTranscript and patchVoiceLine. The grammar itself is documented in the header comment — read it before changing a rule. Tested in voiceGrammar.test.ts (42).
-│   │   ├── textAIService.ts       # Core listing engine: extractFieldsFromVoice(), generateProductDescription(), title/tag engine (fitTo60, ITEM_TYPE_SYNONYM_GROUPS), size normalization. ~1850 lines.
+│   │   ├── textAIService.ts       # Core listing engine: extractFieldsFromVoice(), generateProductDescription(), title/tag engine (fitTo60, ITEM_TYPE_SYNONYM_GROUPS), size normalization. ~1850 lines. Every generated description ENDS with `poweredByLine(getBrand().name)` ("Powered by SQRL"), one blank line after the closing line, hashtags and disclaimers; not a per-workspace setting.
+│   │   ├── brandStore.ts / .test.ts  # THE RUNTIME BRAND (070): dependency-free useSyncExternalStore store `{ name, descriptor, tagline, source: 'build' | 'cache' | 'remote' }`; `useBrand()`, `getBrand()`, `hydrateBrand()` (once per load, from main.tsx, fails quiet), `applyRemoteBrand()`, `normalizeBrand()`, `landingTitleFor()`, `BRAND_CACHE_KEY` (`sortbot_brand`). §1 "Naming".
+│   │   ├── brandService.ts        # The founder's write: `saveBrand()` (`founding_set_brand`, applies the answer to the store), `probeBrand()`, `validateBrandDraft()` (mirrors the 070 checks).
 │   │   ├── grouping.ts            # buildGroupArray (tolerant group-id resolution) + filterStep3Visible.
 │   │   ├── selectionGesture.ts    # PURE Step-2 gesture rules (report 30), extracted because ImageGrouper has no component harness: TOGGLE_REPEAT_MS = 200 + isRepeatToggle (one gesture, one toggle — now shared by singles, group photos AND the group select bar), isSelectionModeActive, shouldOpenLightbox. Judged against the selection BEFORE the gesture started, not the live one (§18 #40).
 │   │   ├── magnifierPosition.ts   # PURE viewport clamp for the Step-3 lens (report 17): clampLensPosition FLIPS the lens to the left of the cursor rather than sliding (so it never covers the pixel being inspected), then clamps both axes to a margin, and returns the TRUE top-left — which is why `.magnifier-lens`'s centring `transform` had to go with it.
@@ -1063,6 +1089,15 @@ The seed runs in the same block that adds each column, so a re-run never touches
 
 **Listing basis: `'created'`.** `listing_publications` is written only by `MarketplaceExport.tsx` (`recordPublications` → `upsertPublication`), never by the Shopify CSV export (`GoogleSheetExporter.tsx`), so an `'exported'` count would read 0 for a Shopify-only shop. A listing this month is a group of the workspace's `products` rows (key `coalesce(nullif(product_group, ''), id)`, the §11 leader convention) whose EARLIEST row was created on or after the first of the current UTC month, so a photo added to last month's listing does not count it again. If the Shopify export ever records publications, change the basis in both bodies (the `'listing_basis'` literal and the count) together.
 
+### Runtime brand (`supabase/migrations/070_runtime_brand.sql`: WRITTEN, NOT YET RUN)
+
+The product name, descriptor and tagline as data (§1 "Naming", runtime vs build). Stored in `finance_settings` (key/value text, founders-only by RLS) under `brand_name`, `brand_descriptor`, `brand_tagline`, seeded from `brand.json` with `on conflict do nothing` (a re-run never overwrites a founder's name). Two functions:
+
+- `public.public_brand() returns jsonb` (stable, no parameters): `{ name, descriptor, tagline, updated_at }` (updated_at = the newest of the three rows). Reads ONLY the three `brand_*` keys, never the discount rules, the cutoff or the storage quota. **It is itself a `public` SECURITY DEFINER function** (`search_path = public, pg_temp`), the documented exception to §18 #45 (see #45a): the logged-out landing calls it as anon, and the two-half shape would need anon USAGE on `app_private`, a standing widening. EXECUTE revoked from PUBLIC, granted to anon, authenticated and service_role. anon has NO usage on `app_private`.
+- `founding_set_brand(p_name text, p_descriptor text, p_tagline text) returns jsonb` (volatile), in the §18 #45 two-half shape (app_private SECURITY DEFINER body, public SECURITY INVOKER wrapper with the identical signature, EXECUTE revoked from PUBLIC and anon and granted to authenticated and service_role on both halves): `assert_founding_admin()` (42501), trims, then 22023 unless name is 1 to 24 characters and every field is one line and descriptor and tagline are at most 120 characters; upserts the three keys, appends one `founding_admin_audit` row (`action = 'set_brand'`, `role` = the new name, the free-text slot 069 also uses), returns the new `public_brand()` payload. authenticated and service_role only, anon revoked.
+
+Client: `lib/brandStore.ts` (read + store), `lib/brandService.ts` (`saveBrand`, `probeBrand`, `validateBrandDraft`; a missing function is 'unavailable', 42501 'forbidden'). Until 070 runs every screen shows the `brand.json` name and the console's Brand card shows one setup line.
+
 ### TypeScript Types
 
 #### `ClothingItem` (defined in `src/App.tsx`, exported)
@@ -1150,7 +1185,9 @@ Most state lives in `App.tsx`. **Exception (July 2026): the four item arrays** (
   keep `authenticated`** — `analytics_summary`, `app_errors_summary`, `beta_org_directory`, `crm_sync_contacts`,
   `finance_summary` and the four `founding_*`. Linter 0029 stays raised on those nine **by design**: they must
   sit in the exposed schema to be callable, and their real boundary is the `is_beta_admin()` check that raises
-  42501. **Re-running `031_multi_org_tenancy.sql`, `032_beta_signups.sql`, `048_security_verified_email.sql` or
+  42501. **Also by design: `public.public_brand()` (`070_runtime_brand.sql`)**, a public SECURITY DEFINER that
+  anon may execute (the logged-out landing reads the product name); it takes no parameters, only reads, and
+  returns exactly the three `finance_settings.brand_*` values, so 0029 lists it and that is expected (§18 #45a). **Re-running `031_multi_org_tenancy.sql`, `032_beta_signups.sql`, `048_security_verified_email.sql` or
   `049_security_storage_policies.sql` plants a public SECURITY DEFINER copy beside the wrapper — re-run the
   hardening file afterwards.**
   (3) **The nine RPC-facing functions are split** (`055_security_rpc_wrappers.sql`): the SECURITY DEFINER body
@@ -1499,6 +1536,7 @@ the shared focus ring, 44px on phones), and the drop zone keeps its dashed borde
 **Files:** `ProductDescriptionGenerator.tsx` (~3675 lines), `lib/voiceGrammar.ts`, `textAIService.ts`, `ComprehensiveProductForm.tsx`
 
 - `processedItems` are grouped by `productGroup`. Navigation is per-group (one listing at a time).
+- **"Powered by {name}" (22 Nov 2026).** `createFallbackDescription` ends every description with `poweredByLine(getBrand().name)` after one blank line, below the closing line, the hashtags and the disclaimers. The name is the runtime brand, so a rename in the Founder console reaches the next Generate without a deploy (already-generated descriptions keep the name they were made with until regenerated). The Shopify CSV `Body (HTML)` and every marketplace feed read the same `generatedDescription`, so they carry it too; a marketplace whose description limit is tight cuts from the END (`cutText` in `marketplaces/shared.ts`), so on a very long listing the trailer is the first thing dropped there. It is deliberately not a workspace setting. Pinned by the golden snapshot and the trailer tests in `textAIService.test.ts` / `csvExport.test.ts`.
 - **Voice:** User clicks "Start Recording". Web Speech API runs continuously. Transcription appears live. PDG owns the recogniser lifecycle and the writes; **`lib/voiceGrammar.ts` owns the language** (it is documented in that file's header comment, and it is where a rule change belongs).
 
 **The dictation grammar (Sept 2026).** `command := <field title> <value> <boundary>`.
@@ -3028,6 +3066,15 @@ npm run lint
     `is_beta_admin()`. Anything a policy, DEFAULT or another function calls → `app_private` + a `public`
     SECURITY INVOKER wrapper. Trigger or internal guard → `public`, EXECUTE revoked from all three client
     roles. Always `set search_path`. Then add it to `054_security_function_hardening.sql`.
+
+45a. **The one allowed anon-facing `public` SECURITY DEFINER shape (Nov 2026, `public.public_brand()`, 070).**
+    A function anon must call cannot use the two-half shape without granting anon USAGE on `app_private`,
+    and that schema grant is a standing widening: any function later created there with the default
+    EXECUTE-to-PUBLIC becomes anon-callable, and no apply-time check can see functions added afterwards. So
+    a `public` SECURITY DEFINER is allowed ONLY when the function is parameterless, read-only (STABLE, no
+    writes), anon-facing, and returns a FIXED ALLOWLIST of values (070 reads exactly three named keys).
+    `set search_path = public, pg_temp`, revoke EXECUTE from PUBLIC, grant to anon, authenticated and
+    service_role. Linter 0029 lists it by design. Never grant anon USAGE on `app_private`.
 
 46. **Do not change a wrapper's signature without changing its `app_private` twin identically.** PostgREST
     resolves RPCs by ARGUMENT NAME and renders the response from the RETURN TYPE, so renaming an argument,

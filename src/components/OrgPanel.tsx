@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BRAND } from '../brand';
+import { useBrand } from '../lib/brandStore';
 import { Users, X, Pencil, Check, Copy, LogOut, Trash2, ChevronRight, ChevronDown, ShoppingBag, Tags, ArrowUp, ArrowDown, Plus, Store, Globe, ShieldCheck, Image as ImageIcon } from 'lucide-react';
 import {
   fetchOrgMembers, fetchOrgInvites, inviteToOrg, revokeInvite, removeMember,
@@ -283,6 +283,7 @@ export function PlanUsageGroup({ usage }: { usage: OrgUsage }) {
  * beta request queue with approve/deny/reopen/delete, filtering, and search.
  */
 export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated, onMyRoleChanged, onLeftWorkspace, onDescriptionSettingsChanged, initialTab, onOpenFounder }: OrgPanelProps) {
+  const brand = useBrand();
   const [members, setMembers] = useState<OrgMemberRow[]>([]);
   const [invites, setInvites] = useState<OrgInviteRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -915,7 +916,7 @@ export default function OrgPanel({ org, myRole, myUserId, onClose, onOrgUpdated,
   };
 
   const handleCopyInvite = async (inv: OrgInviteRow) => {
-    const msg = `You're invited to the "${displayName}" workspace on ${BRAND}.\n\nSign in (or create an account) at ${appUrl} using this email address: ${inv.email}\n\nYou'll join the workspace automatically.`;
+    const msg = `You're invited to the "${displayName}" workspace on ${brand.name}.\n\nSign in (or create an account) at ${appUrl} using this email address: ${inv.email}\n\nYou'll join the workspace automatically.`;
     try {
       await navigator.clipboard.writeText(msg);
       setNotice('Invite message copied. Paste it into an email or text to your teammate.');

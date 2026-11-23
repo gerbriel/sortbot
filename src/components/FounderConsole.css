@@ -418,3 +418,53 @@
   .fc-alumni-toolbar { flex-direction: column; align-items: stretch; }
   .fc-alumni-summary { font-size: var(--fs-base); max-width: none; }
 }
+
+/* ── Overview: the Brand card (070_runtime_brand.sql) ─────────────────────── */
+
+.fc-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.fc-brand-count {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.fc-brand-count--over { color: var(--danger); }
+
+/* The draft rendered as the header would: wordmark, then the descriptor. */
+.fc-brand-preview {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 0;
+  padding: 1.2rem 1.5rem;
+  border-radius: var(--radius-md);
+  background: var(--ink-850);
+  font-size: var(--fs-xl);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.fc-brand-preview-descriptor {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.fc-brand-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.fc-brand-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--fs-sm);
+}

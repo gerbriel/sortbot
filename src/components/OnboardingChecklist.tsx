@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BRAND } from '../brand';
+import { useBrand } from '../lib/brandStore';
 import { Circle, CircleCheck, ListChecks } from 'lucide-react';
 import { Badge, Button, ConfirmAction } from './ui';
 import {
@@ -88,6 +88,7 @@ function OnboardingChecklist({
   orgId, orgName, plan, role, canInvite, hasVendorName, refreshTrigger,
   onNavigate, onOpenMarketplaces, onStartWorkflow,
 }: OnboardingChecklistProps) {
+  const brand = useBrand();
   /* The facts carry the workspace they were read for, and `dismissed` carries
      the workspace it was clicked in, so BOTH are derived at render rather than
      corrected in an effect: switching workspace can never show one workspace's
@@ -200,7 +201,7 @@ function OnboardingChecklist({
   // that the shop is working, and being welcomed again reads as the app not
   // knowing who it is talking to.
   const fresh = fetched.batchCount === 0;
-  const heading = fresh && orgName ? `Welcome to ${BRAND}, ${orgName}` : 'Get set up';
+  const heading = fresh && orgName ? `Welcome to ${brand.name}, ${orgName}` : 'Get set up';
   const badge = planLabel(plan);
 
   return (

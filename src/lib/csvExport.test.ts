@@ -10,6 +10,8 @@ import {
   type ExportProduct,
 } from './csvExport';
 import type { PlatformPricingRule } from './platformPricing';
+import { generateProductDescription, poweredByLine } from './textAIService';
+import { applyRemoteBrand, brandStore, getBrand } from './brandStore';
 
 /**
  * Golden-file tests for the Shopify CSV export — the money path.
@@ -445,5 +447,30 @@ describe('buildShopifyCsvRows — SKU and barcode columns (Feature 25)', () => {
     const [row] = buildShopifyCsvRows([p()]);
     expect(row[h.indexOf('Variant SKU')]).toBe('');
     expect(row[h.indexOf('Variant Barcode')]).toBe('');
+  });
+});
+
+describe('the "Powered by" trailer reaches the CSV Body', () => {
+  it('a generated description carries it into Body (HTML) as its last line', async () => {
+    const { description } = await generateProductDescription({ brand: 'Nike', size: 'XL', type: 'Tee', condition: 'Good' });
+    const h = SHOPIFY_CSV_HEADERS;
+    const [row] = buildShopifyCsvRows([
+      product({ id: 'a', seoTitle: 'Tee', price: 10, generatedDescription: description, imageUrls: ['https://x/1.jpg'] }),
+    ]);
+    expect(row[h.indexOf('Body (HTML)')].endsWith(`<br><br>${poweredByLine(getBrand().name)}`)).toBe(true);
+  });
+
+  it('carries the runtime name after a rename', async () => {
+    applyRemoteBrand({ name: 'Acorn', descriptor: 'd', tagline: 't' });
+    try {
+      const { description } = await generateProductDescription({ brand: 'Nike', size: 'XL', type: 'Tee' });
+      const h = SHOPIFY_CSV_HEADERS;
+      const [row] = buildShopifyCsvRows([
+        product({ id: 'a', seoTitle: 'Tee', price: 10, generatedDescription: description, imageUrls: ['https://x/1.jpg'] }),
+      ]);
+      expect(row[h.indexOf('Body (HTML)')].endsWith('<br><br>Powered by Acorn')).toBe(true);
+    } finally {
+      brandStore.reset();
+    }
   });
 });

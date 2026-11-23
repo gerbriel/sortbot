@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BRAND } from '../brand';
+import { useBrand } from '../lib/brandStore';
 import type { ReactNode } from 'react';
 import {
   ArrowRight, BarChart3, Boxes, FolderOpen, Images, Inbox, LayoutGrid, LifeBuoy,
@@ -189,6 +189,7 @@ function HomeDashboard({
   navItems, activeBatchId, activeBatchNumber, items, refreshTrigger,
   onResume, onStartNewBatch, onOpenBatch, onNavigate, onOpenMarketplaces,
 }: HomeDashboardProps) {
+  const brand = useBrand();
   const [recent, setRecent] = useState<Settling<RecentBatchRow[]>>(LOADING);
   /** The open batch's own display name, read out of the same metadata call. */
   const [activeName, setActiveName] = useState<string | null>(null);
@@ -413,7 +414,7 @@ function HomeDashboard({
                 inline
                 icon={<Upload size={22} />}
                 title="No batch open"
-                description={`Drop in a folder of photos, or take them on your phone, and ${BRAND} will walk you through grouping, describing and exporting them.`}
+                description={`Drop in a folder of photos, or take them on your phone, and ${brand.name} will walk you through grouping, describing and exporting them.`}
                 actions={
                   <Button variant="primary" icon={<Upload size={14} />} onClick={() => onResume(1)}>
                     Upload photos

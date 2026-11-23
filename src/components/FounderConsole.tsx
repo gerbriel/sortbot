@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BRAND } from '../brand';
+import { useBrand } from '../lib/brandStore';
 import {
   Award, Building2, Check, ChevronDown, ChevronRight, ClipboardList, CreditCard,
   Gauge, History, LayoutDashboard, Mail, Pencil, PlusCircle, RotateCcw, Search, Trash2,
@@ -11,6 +11,7 @@ import {
   type SelectOption,
 } from './ui';
 import FoundingUsersTab from './FoundingUsersTab';
+import FounderBrandCard from './FounderBrandCard';
 import {
   fetchBetaSignups, setBetaStatus, deleteBetaSignup, fetchBetaOrgDirectory,
   type BetaSignupRow, type BetaOrgDirectoryRow,
@@ -243,6 +244,7 @@ function auditSummary(a: FoundingAuditRow): string {
     case 'set_plan':         return `moved "${a.to_org_name}" onto the ${a.role} plan`;
     case 'rename_org':       return `renamed "${a.from_org_name}" to "${a.to_org_name}"`;
     case 'invite_member':    return `invited ${who} to ${a.to_org_name} as ${a.role}`;
+    case 'set_brand':        return `renamed the product to "${a.role}"`;
     default:                 return `${a.action} ${who}`;
   }
 }
@@ -254,6 +256,7 @@ function activeRecently(iso: string | null, now: number): boolean {
 }
 
 export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: FounderConsoleProps) {
+  const brand = useBrand();
   const [tab, setTab] = useState<ConsoleTab>('overview');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -494,7 +497,7 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
   const mailtoWelcome = (s: BetaSignupRow): string | null =>
     safeMailto(
       s.email,
-      `Your ${BRAND} beta access is ready`,
+      `Your ${brand.name} beta access is ready`,
       `Hi ${s.contact_name},\n\nYour beta request for ${s.org_name} is approved. Sign in at ${appUrl} with this email address and your workspace will be ready.\n\nWelcome aboard!`,
     );
 
@@ -920,6 +923,8 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
               )}
             </>
           )}
+          {/* Outside the loading branch: it reads its own RPC, not the console's. */}
+          <FounderBrandCard />
         </TabPanel>
 
         {/* ── Requests ─────────────────────────────────────────────────────── */}

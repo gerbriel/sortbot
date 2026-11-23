@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BRAND } from '../brand';
+import { useBrand } from '../lib/brandStore';
 import Wordmark from './Wordmark';
 import { requestBetaAccess } from '../lib/betaService';
 import './WaitlistGate.css';
@@ -20,6 +20,7 @@ interface WaitlistGateProps {
  * screen is the friendly explanation (and lets them request access in-app).
  */
 export default function WaitlistGate({ status, email, onSignOut, onRequested, onDeleteAccount }: WaitlistGateProps) {
+  const brand = useBrand();
   const [orgName, setOrgName] = useState('');
   const [contactName, setContactName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -66,7 +67,7 @@ export default function WaitlistGate({ status, email, onSignOut, onRequested, on
 
         {status === 'none' && (
           <>
-            <h1>{BRAND} is in private beta</h1>
+            <h1>{brand.name} is in private beta</h1>
             <p>Tell us about your shop and we'll review your request — usually within a day or two.</p>
             <div className="waitlist-form">
               <input

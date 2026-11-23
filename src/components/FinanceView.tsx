@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BRAND } from '../brand';
+import { useBrand } from '../lib/brandStore';
 import {
   RefreshCw, Plus, Search, Trash2, Pencil, X, Download, Printer, Check,
 } from 'lucide-react';
@@ -854,6 +854,7 @@ function Customers({ summary, prices, range, onChanged }: {
 function Reports({ summary, transactions, range, orgNames }: {
   summary: FinanceSummary; transactions: FinanceTransaction[]; range: DateRange; orgNames: Record<string, string>;
 }) {
+  const brand = useBrand();
   // Built client-side from the same expansion rule the server uses, so the file
   // the founder downloads matches the dashboard they are looking at.
   const monthly: MonthlyPnlRow[] = useMemo(() => buildMonthlyPnl(transactions, range), [transactions, range]);
@@ -943,7 +944,7 @@ function Reports({ summary, transactions, range, orgNames }: {
           </tbody>
         </table>
         <p className="fin-statement-foot">
-          Prepared from the {BRAND} books · recurring entries counted once per month they land in.
+          Prepared from the {brand.name} books · recurring entries counted once per month they land in.
         </p>
       </section>
     </>

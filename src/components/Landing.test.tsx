@@ -13,6 +13,7 @@ import Landing from './Landing';
 import { requestBetaAccess } from '../lib/betaService';
 import { track } from '../lib/analytics';
 import { BRAND, BRAND_DESCRIPTOR, BRAND_TITLE_LANDING } from '../brand';
+import { getBrand, applyRemoteBrand, brandStore } from '../lib/brandStore';
 import { listAdapters } from '../lib/marketplaces/registry';
 
 const LANDING_TITLE = BRAND_TITLE_LANDING;
@@ -114,7 +115,7 @@ describe('Landing structure', () => {
     const { container } = await mountLoaded();
     const hero = one(container, 'header.ld-hero');
     expect(one(hero, 'h1').textContent).toBe('Photograph the rack in the morning.Listings live by lunch.');
-    expect(one(hero, '.ld-hero-descriptor').textContent).toBe(BRAND_DESCRIPTOR);
+    expect(one(hero, '.ld-hero-descriptor').textContent).toBe(getBrand().descriptor);
     expect(BRAND_DESCRIPTOR).toBe('Super quick resale lister');
     const ctas = all(hero, '.ld-hero-ctas a').map(a => [a.textContent, a.getAttribute('href')]);
     expect(ctas).toEqual([['Try the demo', '#demo'], ['Request beta access', '#signup']]);
@@ -166,8 +167,8 @@ describe('Landing structure', () => {
   it('footer carries the descriptor and the bottom line', async () => {
     const { container } = await mountLoaded();
     const footer = one(container, 'footer.ld-footer');
-    expect(footer.textContent).toContain(BRAND_DESCRIPTOR);
-    expect(footer.textContent).toContain(`© 2026 ${BRAND}. Served from arcadian.ltd.`);
+    expect(footer.textContent).toContain(getBrand().descriptor);
+    expect(footer.textContent).toContain(`© 2026 ${getBrand().name}. Served from arcadian.ltd.`);
     expect(all(footer, 'a[href^="#"]').map(a => a.getAttribute('href'))).toEqual(
       ['#how', '#demo', '#pricing', '#faq', '#signup'],
     );
@@ -236,5 +237,25 @@ describe('Landing document title', () => {
     const view = mount(<Landing onLoginClick={() => {}} />);
     view.unmount();
     expect(document.title).toBe(BRAND);
+  });
+});
+
+describe('Landing follows the runtime brand (070)', () => {
+  afterEach(() => {
+    cleanup();
+    brandStore.reset();
+    document.title = '';
+  });
+
+  it('re-renders the wordmark, descriptor, footer, FAQ and tab title when the founder renames', () => {
+    const view = mount(<Landing onLoginClick={() => {}} />);
+    act(() => { applyRemoteBrand({ name: 'Acorn', descriptor: 'Listings in a hurry', tagline: 'x' }); });
+    const c = view.container;
+    expect(one(c, '.ld-nav .wordmark').textContent).toBe('Acorn');
+    expect(one(c, '.ld-hero-descriptor').textContent).toBe('Listings in a hurry');
+    expect(c.textContent).toContain('© 2026 Acorn. Served from arcadian.ltd.');
+    expect(c.textContent).toContain('Which marketplaces does Acorn export to?');
+    expect(c.textContent).not.toContain(`Which marketplaces does ${BRAND} export to?`);
+    expect(document.title).toBe(BRAND_TITLE_LANDING.split(BRAND).join('Acorn'));
   });
 });

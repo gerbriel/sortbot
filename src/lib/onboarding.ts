@@ -30,7 +30,7 @@
  */
 
 import type { OrgRole } from './orgService';
-import { BRAND } from '../brand';
+import { getBrand } from './brandStore';
 import type { WorkflowStep } from './phoneSteps';
 
 /* ── Facts ────────────────────────────────────────────────────────────────── */
@@ -193,7 +193,7 @@ export function deriveOnboardingSteps(input: Partial<OnboardingFacts>): Onboardi
   steps.push({
     id: 'first-batch',
     title: 'Upload your first batch',
-    why: `Drop in a folder of photos, or take them on your phone, and ${BRAND} walks you through grouping, describing and exporting them.`,
+    why: `Drop in a folder of photos, or take them on your phone, and ${getBrand().name} walks you through grouping, describing and exporting them.`,
     done: f.batchCount > 0,
     // Deliberately NOT "Upload photos": while this step is undone the Current
     // batch widget directly below is showing its own "Upload photos" button to

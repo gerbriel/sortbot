@@ -6,6 +6,20 @@
 import { COLOR_WORDS_LIST } from './colorDatabase';
 import { VOICE_KEYWORD_TO_FIELD, stripFieldTitlePrefix } from './voiceGrammar';
 import { resolveDescriptionSettings, type DescriptionSettings } from './descriptionSettings';
+import { getBrand } from './brandStore';
+
+/**
+ * The trailer on EVERY generated description: the last line, after the
+ * workspace's closing line, hashtags and disclaimers, with one blank line
+ * before it. Not a per-workspace setting; the owner wants it on every listing.
+ * The name is the RUNTIME brand (lib/brandStore), so a rename from the Founder
+ * console reaches the next generated description without a deploy. The CSV and
+ * every marketplace feed read the same `generatedDescription`, so they carry
+ * it too.
+ */
+export function poweredByLine(name: string): string {
+  return `Powered by ${name.trim()}`;
+}
 
 /**
  * Truncate a string for SEO description without cutting mid-word or mid-sentence.
@@ -1187,6 +1201,9 @@ function createFallbackDescription(context: ProductContext): AIGeneratedContent 
   } else {
     description = description.trimEnd();
   }
+
+  // PART 8: The "Powered by" trailer, always last, one blank line above it.
+  description = `${description.trimEnd()}\n\n${poweredByLine(getBrand().name)}`;
 
   return {
     description,

@@ -1,6 +1,6 @@
-import { Component, Suspense, lazy, useEffect, useState } from 'react';
+import { Component, Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { BRAND, BRAND_DESCRIPTOR, BRAND_TITLE_LANDING } from '../brand';
+import { useBrand, landingTitleFor } from '../lib/brandStore';
 import { Check } from 'lucide-react';
 import { requestBetaAccess } from '../lib/betaService';
 import type { MarketplaceKey } from '../lib/marketplaces/types';
@@ -78,19 +78,20 @@ const MARKETPLACE_NAMES: Record<MarketplaceKey, string> = {
   whatnot: 'Whatnot',
 };
 
-/** Six real questions. Answers say only what the product does. */
-const FAQS: { q: string; a: string }[] = [
+/** Six real questions. Answers say only what the product does. A function of
+ *  the runtime name, which the founder can change without a deploy. */
+const faqsFor = (name: string): { q: string; a: string }[] => [
   {
-    q: `Which marketplaces does ${BRAND} export to?`,
+    q: `Which marketplaces does ${name} export to?`,
     a: `Shopify, eBay, Etsy, Poshmark, Mercari, Grailed, Depop, Facebook, Vinted and Whatnot. Shopify gets a CSV built for its product import. The others get a feed file or a copy pack per listing that you paste into the marketplace's own app.`,
   },
   {
-    q: `Does ${BRAND} guess at my listings?`,
+    q: `Does ${name} guess at my listings?`,
     a: 'No. Every field comes from your category preset, your dictation or a title and description template you control. Dictation is read by a grammar, field name then value, so the same input gives the same listing every time. Nothing is invented, and you can always see why a field says what it says.',
   },
   {
-    q: `How is ${BRAND} related to arcadian.ltd?`,
-    a: `arcadian.ltd is the domain ${BRAND} is served from. Same product, same account.`,
+    q: `How is ${name} related to arcadian.ltd?`,
+    a: `arcadian.ltd is the domain ${name} is served from. Same product, same account.`,
   },
   {
     q: 'Can I try it without a card?',
@@ -178,11 +179,13 @@ export default function Landing({ onLoginClick }: LandingProps) {
   // uptime probe assert it, and it is right for the signed-in app). Only the
   // marketing page gets the descriptive tab/search title, and it hands the
   // previous one back when the visitor signs in and Landing unmounts.
+  const brand = useBrand();
+  const faqs = useMemo(() => faqsFor(brand.name), [brand.name]);
   useEffect(() => {
     const previous = document.title;
-    document.title = BRAND_TITLE_LANDING;
+    document.title = landingTitleFor(brand.name);
     return () => { document.title = previous; };
-  }, []);
+  }, [brand.name]);
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -236,7 +239,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
       <header className="ld-hero">
         <div className="ld-hero-inner">
           <h1>Photograph the rack in the morning.<br />Listings live by lunch.</h1>
-          <p className="ld-hero-descriptor">{BRAND_DESCRIPTOR}</p>
+          <p className="ld-hero-descriptor">{brand.descriptor}</p>
           <p className="ld-hero-sub">
             Upload a batch of photos, group the angles of each piece, pick a category
             preset, dictate the details, and export to Shopify and the marketplaces
@@ -383,7 +386,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
           <h2 id="ld-faq-h">Questions</h2>
         </div>
         <div className="ld-faq">
-          {FAQS.map(f => (
+          {faqs.map(f => (
             <details key={f.q} className="ld-faq-item">
               <summary>{f.q}</summary>
               <p>{f.a}</p>
@@ -432,7 +435,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
         <div className="ld-footer-cols">
           <div className="ld-footer-brand">
             <Wordmark />
-            <p className="ld-footer-descriptor">{BRAND_DESCRIPTOR}</p>
+            <p className="ld-footer-descriptor">{brand.descriptor}</p>
             <p>Built for vintage resellers. Beta access is reviewed and approved by hand.</p>
           </div>
           <nav className="ld-footer-col" aria-label="Page sections">
@@ -451,7 +454,7 @@ export default function Landing({ onLoginClick }: LandingProps) {
             </ul>
           </div>
         </div>
-        <p className="ld-footer-bottom">© 2026 {BRAND}. Served from arcadian.ltd.</p>
+        <p className="ld-footer-bottom">© 2026 {brand.name}. Served from arcadian.ltd.</p>
       </footer>
     </div>
   );

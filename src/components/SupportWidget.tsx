@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, memo } from 'react';
-import { BRAND } from '../brand';
+import { useBrand } from '../lib/brandStore';
 import { MessageSquare, X, ChevronLeft, Send, CheckCircle2, RotateCcw, Plus } from 'lucide-react';
 import {
   isUnread, formatRelative,
@@ -36,6 +36,7 @@ interface SupportWidgetProps {
  * Hidden entirely when the migration has not been run (store `available`).
  */
 function SupportWidget({ userEmail, orgName, isFounder }: SupportWidgetProps) {
+  const brand = useBrand();
   const role: SupportRole = isFounder ? 'founder' : 'user';
   const { threads, sorted, available, supportUnreadCount, revision } = useSupportThreads(role);
   const [open, setOpen] = useState(false);
@@ -152,7 +153,7 @@ function SupportWidget({ userEmail, orgName, isFounder }: SupportWidgetProps) {
   const subtitle = active
     ? (isFounder
         ? `${active.user_email ?? 'user'}${active.org_name ? ` · ${active.org_name}` : ''}`
-        : `${BRAND} team`)
+        : `${brand.name} team`)
     : (isFounder ? `${openCount} open` : 'We reply here, usually within a day');
 
   return (
@@ -235,7 +236,7 @@ function SupportWidget({ userEmail, orgName, isFounder }: SupportWidgetProps) {
                 )}
                 {messages.map(m => {
                   const mine = m.sender_role === role;
-                  const who = mine ? 'You' : m.sender_role === 'founder' ? BRAND : (active?.user_email ?? 'User');
+                  const who = mine ? 'You' : m.sender_role === 'founder' ? brand.name : (active?.user_email ?? 'User');
                   return (
                     <div key={m.id} className={`sw-msg ${mine ? 'sw-msg--mine' : ''}`}>
                       <div className="sw-bubble">{m.body}</div>

@@ -55,6 +55,13 @@ vi.mock('../lib/foundingAdminService', async (importOriginal) => {
 
 vi.mock('../lib/crmService', () => ({ syncCrmContacts: vi.fn().mockResolvedValue(undefined) }));
 
+// The Brand card on Overview probes 070 on mount; its own behaviour is tested
+// in FounderBrandCard.test.tsx.
+vi.mock('../lib/brandService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/brandService')>();
+  return { ...actual, probeBrand: vi.fn().mockResolvedValue('ok'), saveBrand: vi.fn() };
+});
+
 vi.mock('../lib/usageService', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/usageService')>();
   return { ...actual, fetchProjectUsage: vi.fn(), fetchPlanLimits: vi.fn(), setPlanLimits: vi.fn() };

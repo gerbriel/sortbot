@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BRAND } from '../brand';
+import { useBrand } from '../lib/brandStore';
 import {
   ChevronLeft, CheckCircle2, RotateCcw, Search, Send, MessageSquare, Plus, Inbox, LifeBuoy, Users,
 } from 'lucide-react';
@@ -32,12 +32,12 @@ type ChipFilter = ThreadStatus | 'all';
 type KindFilter = ThreadKind | 'all';
 
 /** Who wrote a message, from the reader's point of view. */
-function senderName(m: SupportMessage, myUserId: string, thread: SupportThread | null): string {
+function senderName(m: SupportMessage, myUserId: string, thread: SupportThread | null, brandName: string): string {
   if (m.sender_id === myUserId) return 'You';
   if (thread?.kind === 'team') {
     return thread.members.find(p => p.user_id === m.sender_id)?.email ?? 'Teammate';
   }
-  return m.sender_role === 'founder' ? BRAND : (thread?.user_email ?? 'User');
+  return m.sender_role === 'founder' ? brandName : (thread?.user_email ?? 'User');
 }
 
 /**
@@ -58,6 +58,7 @@ function senderName(m: SupportMessage, myUserId: string, thread: SupportThread |
  * "Messages" for everyone else), so spacing follows the shell's scale.
  */
 export default function MessagesView({ userEmail, orgName, userId, orgId, isFounder }: MessagesViewProps) {
+  const brand = useBrand();
   const role: SupportRole = isFounder ? 'founder' : 'user';
   const { threads, sorted, available, teamAvailable, revision } = useSupportThreads(role, userId);
 
@@ -277,7 +278,7 @@ export default function MessagesView({ userEmail, orgName, userId, orgId, isFoun
   const convTitle = active
     ? (active.kind === 'team'
         ? participantLabel(active, userId)
-        : isFounder ? (active.user_email ?? 'user') : (active.subject || `${BRAND} team`))
+        : isFounder ? (active.user_email ?? 'user') : (active.subject || `${brand.name} team`))
     : 'New message';
 
   return (
@@ -432,7 +433,7 @@ export default function MessagesView({ userEmail, orgName, userId, orgId, isFoun
                           .filter(Boolean).join(' · ')
                       : isFounder
                         ? [active?.org_name, closed ? 'closed' : 'open'].filter(Boolean).join(' · ')
-                        : `${BRAND} team${closed ? ' · closed' : ''}`}
+                        : `${brand.name} team${closed ? ' · closed' : ''}`}
                 </span>
               </div>
               {/* Close/Reopen is support triage. A team thread has no desk to
@@ -469,7 +470,7 @@ export default function MessagesView({ userEmail, orgName, userId, orgId, isFoun
                       aria-pressed={toSupport}
                       onClick={pickSupport}
                     >
-                      <LifeBuoy size={13} aria-hidden="true" />{BRAND} support
+                      <LifeBuoy size={13} aria-hidden="true" />{brand.name} support
                     </button>
                     {(teammates ?? []).map(m => (
                       <button
@@ -497,7 +498,7 @@ export default function MessagesView({ userEmail, orgName, userId, orgId, isFoun
                   )}
                   {!teamAvailable && (
                     <p className="mv-note">
-                      Team conversations aren’t set up in this project yet, so this goes to {BRAND} support.
+                      Team conversations aren’t set up in this project yet, so this goes to {brand.name} support.
                     </p>
                   )}
                 </div>
@@ -514,7 +515,7 @@ export default function MessagesView({ userEmail, orgName, userId, orgId, isFoun
                 return (
                   <div key={m.id} className={`mv-msg${mine ? ' mv-msg--mine' : ''}`}>
                     <div className="mv-bubble">{m.body}</div>
-                    <span className="mv-stamp">{senderName(m, userId, active)} · {formatRelative(m.created_at)}</span>
+                    <span className="mv-stamp">{senderName(m, userId, active, brand.name)} · {formatRelative(m.created_at)}</span>
                   </div>
                 );
               })}
