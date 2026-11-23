@@ -59,8 +59,11 @@ interface WorkspaceMenuProps {
   activeView: string;
   /** Count on the TRIGGER itself — the one signal that survives the menu being shut. */
   unreadCount?: number;
-  /** True while a tool view is open, which is the only time "Back to workflow" makes sense. */
-  showBackToWorkflow: boolean;
+  /** True while the user is somewhere other than `backTarget`, the only time a Back row makes sense. */
+  showBack: boolean;
+  /** Where the Back row goes: 'workflow' ("Back to workflow", the default) or
+   *  'home' ("Back to dashboard", the Founding Workspace, which is not batch-first). */
+  backTarget?: 'home' | 'workflow';
   /**
    * Fires with the chosen view and the element that opened the menu (the header
    * trigger, or the phone's More tab). App parks that element in `viewTriggerRef`
@@ -104,7 +107,7 @@ interface WorkspaceMenuProps {
  */
 export default function WorkspaceMenu({
   orgName, role, email, items, activeView, unreadCount = 0,
-  showBackToWorkflow, onSelect, onSignOut, onDeleteAccount, open, onOpenChange, storage = null,
+  showBack, backTarget = 'workflow', onSelect, onSignOut, onDeleteAccount, open, onOpenChange, storage = null,
 }: WorkspaceMenuProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -358,17 +361,19 @@ export default function WorkspaceMenu({
 
             <div className="wsmenu-list" id={menuId} role="menu" aria-label="Navigation">
               {renderStorage()}
-              {showBackToWorkflow && (
+              {showBack && (
                 <>
                   <button
                     type="button"
                     role="menuitem"
                     tabIndex={-1}
                     className="wsmenu-item wsmenu-item--back"
-                    onClick={() => choose('workflow')}
+                    onClick={() => choose(backTarget)}
                   >
                     <span className="wsmenu-item-icon"><ArrowLeft size={16} /></span>
-                    <span className="wsmenu-item-label">Back to workflow</span>
+                    <span className="wsmenu-item-label">
+                      {backTarget === 'home' ? 'Back to dashboard' : 'Back to workflow'}
+                    </span>
                   </button>
                   <div role="separator" className="wsmenu-sep" />
                 </>

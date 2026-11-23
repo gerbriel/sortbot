@@ -44,6 +44,16 @@ describe('ToolView', () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
+  it('backLabel renames the Back control and still calls onBack', () => {
+    const onBack = vi.fn();
+    const { container } = render({ onBack, backLabel: 'Back to dashboard' });
+    const focusable = all(container, 'button, h1[tabindex="-1"]');
+    expect(focusable[0].textContent?.trim()).toBe('Back to dashboard');
+    expect(container.textContent).not.toContain('Back to workflow');
+    click(buttonByText(container, 'Back to dashboard'));
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
   it('Escape returns to the workflow', () => {
     const onBack = vi.fn();
     render({ onBack });

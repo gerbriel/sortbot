@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   batchSummary, recentBatchRows, publicationCounts, storageReadout, planUsageMeters,
+  newestPendingSignups, adminNavItems,
   type BatchMeta,
 } from './home';
 import type { OrgUsage } from './usageService';
@@ -264,5 +265,57 @@ describe('planUsageMeters', () => {
     }));
     expect(m.every(x => x.readout.unlimited)).toBe(true);
     expect(m[1].hint).toBe('Counts listings created this month');
+  });
+});
+
+describe('newestPendingSignups', () => {
+  const row = (id: string, status: string, created_at: string) => ({ id, status, created_at });
+
+  it('is empty for nothing, and for a non-positive limit', () => {
+    expect(newestPendingSignups(null)).toEqual([]);
+    expect(newestPendingSignups(undefined)).toEqual([]);
+    expect(newestPendingSignups([row('a', 'pending', '2026-11-01T00:00:00Z')], 0)).toEqual([]);
+  });
+
+  it('keeps only pending rows, newest first, capped at the limit', () => {
+    const rows = [
+      row('old', 'pending', '2026-11-01T00:00:00Z'),
+      row('approved', 'approved', '2026-11-20T00:00:00Z'),
+      row('newest', 'pending', '2026-11-21T00:00:00Z'),
+      row('mid', 'pending', '2026-11-10T00:00:00Z'),
+      row('denied', 'denied', '2026-11-22T00:00:00Z'),
+    ];
+    expect(newestPendingSignups(rows, 2).map(r => r.id)).toEqual(['newest', 'mid']);
+    expect(newestPendingSignups(rows).map(r => r.id)).toEqual(['newest', 'mid', 'old']);
+  });
+
+  it('sorts an unparseable date last and does not mutate its input', () => {
+    const rows = [row('bad', 'pending', 'not a date'), row('good', 'pending', '2026-11-01T00:00:00Z')];
+    expect(newestPendingSignups(rows).map(r => r.id)).toEqual(['good', 'bad']);
+    expect(rows.map(r => r.id)).toEqual(['bad', 'good']);
+  });
+});
+
+describe('adminNavItems', () => {
+  const nav = (id: string, group: string, phoneOnly?: boolean) => ({ id, group, phoneOnly });
+
+  it('is empty for no list', () => {
+    expect(adminNavItems(null)).toEqual([]);
+  });
+
+  it('takes founder rows in nav order, then the Workspace dashboard', () => {
+    const items = [
+      nav('library', 'work'),
+      nav('workspace', 'setup'),
+      nav('founder', 'founder'),
+      nav('analytics', 'founder'),
+      nav('shortcuts', 'founder', true),
+      nav('finance', 'founder'),
+    ];
+    expect(adminNavItems(items).map(i => i.id)).toEqual(['founder', 'analytics', 'finance', 'workspace']);
+  });
+
+  it('has no Workspace tile when that row is not in the list', () => {
+    expect(adminNavItems([nav('crm', 'founder')]).map(i => i.id)).toEqual(['crm']);
   });
 });

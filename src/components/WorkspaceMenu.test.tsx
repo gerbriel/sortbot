@@ -16,6 +16,7 @@ function Harness(p: {
   activeView?: string;
   onSelect?: (id: string, o: HTMLElement | null) => void;
   back?: boolean;
+  backTarget?: 'home' | 'workflow';
   storage?: WorkspaceStorage | null;
 }) {
   const [open, setOpen] = useState(false);
@@ -23,7 +24,7 @@ function Harness(p: {
     <WorkspaceMenu
       orgName="Founding Workspace" role="owner" email="a@b.c"
       items={items} activeView={p.activeView ?? 'workflow'}
-      unreadCount={3} showBackToWorkflow={p.back ?? false}
+      unreadCount={3} showBack={p.back ?? false} backTarget={p.backTarget}
       onSelect={p.onSelect ?? (() => {})} onSignOut={() => {}}
       open={open} onOpenChange={setOpen}
       storage={p.storage ?? null}
@@ -48,7 +49,7 @@ describe('WorkspaceMenu', () => {
     const phoneItems: WorkspaceNavItem[] = [...items, { id: 'shortcuts', label: 'Keyboard shortcuts', icon: null, title: 's', group: 'setup', phoneOnly: true }];
     function H() {
       const [open, setOpen] = useState(true);
-      return <WorkspaceMenu orgName="W" items={phoneItems} activeView="workflow" showBackToWorkflow={false} onSelect={() => {}} onSignOut={() => {}} open={open} onOpenChange={setOpen} />;
+      return <WorkspaceMenu orgName="W" items={phoneItems} activeView="workflow" showBack={false} onSelect={() => {}} onSignOut={() => {}} open={open} onOpenChange={setOpen} />;
     }
     mount(<H />);
     const row = menuitems().find(m => m.textContent?.includes('Keyboard shortcuts'))!;
@@ -137,6 +138,17 @@ describe('WorkspaceMenu', () => {
     expect(menuitems().every(m => m.getAttribute('tabindex') === '-1')).toBe(true);
   });
 
+  it('in the Founding Workspace the Back row reads "Back to dashboard" and picks home', () => {
+    const onSelect = vi.fn();
+    const { container } = mount(<Harness activeView="crm" back backTarget="home" onSelect={onSelect} />);
+    press(one(container, '.wsmenu-trigger'), 1);
+    const back = menuitems()[0];
+    expect(back.textContent).toContain('Back to dashboard');
+    expect(menuitems().some(m => m.textContent?.includes('Back to workflow'))).toBe(false);
+    press(back, 1);
+    expect(onSelect).toHaveBeenCalledWith('home', expect.anything());
+  });
+
   it('a press outside closes it, and so does Tab', () => {
     const { container } = mount(<Harness />);
     const t = one(container, '.wsmenu-trigger');
@@ -163,7 +175,7 @@ describe('WorkspaceMenu', () => {
       const [open, setOpen] = useState(false);
       return (
         <WorkspaceMenu
-          orgName="Shop" items={items} activeView="workflow" showBackToWorkflow={false}
+          orgName="Shop" items={items} activeView="workflow" showBack={false}
           onSelect={() => {}} onSignOut={() => {}} onDeleteAccount={onDelete}
           open={open} onOpenChange={setOpen}
         />

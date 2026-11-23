@@ -9,8 +9,12 @@ export interface ToolViewProps {
   title: string;
   /** One line of plain English saying what this view is for. */
   description?: string;
-  /** Returns to the workflow. Wired to Back, Escape, and the components' onClose. */
+  /** Returns to the workspace's back target ('workflow', or 'home' in the
+   *  Founding Workspace). Wired to Back, Escape, and the components' onClose. */
   onBack: () => void;
+  /** Text of the Back control. Defaults to "Back to workflow"; App passes
+   *  "Back to dashboard" where Back returns to Home. */
+  backLabel?: string;
   /** Optional controls pinned to the right of the title row. */
   actions?: ReactNode;
   /** Optional tab strip rendered under the title block. */
@@ -38,7 +42,7 @@ function isEditable(el: EventTarget | null): boolean {
  * 9px root, so every view inherits the same rhythm instead of modal-scale padding.
  */
 export default function ToolView({
-  icon, title, description, onBack, actions, tabs, wide, escapeToBack = true, children,
+  icon, title, description, onBack, backLabel = 'Back to workflow', actions, tabs, wide, escapeToBack = true, children,
 }: ToolViewProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
 
@@ -69,7 +73,7 @@ export default function ToolView({
         <header className="tool-view-head">
           {/* First in tab order, before the heading, so Back is one Tab away. */}
           <button type="button" className="tool-view-back" onClick={onBack}>
-            <ArrowLeft size={14} /> Back to workflow
+            <ArrowLeft size={14} /> {backLabel}
           </button>
           <div className="tool-view-titlerow">
             <div className="tool-view-title">

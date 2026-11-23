@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBrand } from '../lib/brandStore';
 import type { ReactNode } from 'react';
 import {
-  ArrowRight, BarChart3, Boxes, FolderOpen, Images, Inbox, LayoutGrid, LifeBuoy,
-  MessageSquare, Package, Play, ShieldCheck, Store, Upload, Users,
+  Activity, ArrowRight, Boxes, FolderOpen, Images, Inbox, LayoutGrid, LifeBuoy,
+  MessageSquare, Package, Play, ShieldCheck, Store, Upload, UserPlus, Users, Wrench,
 } from 'lucide-react';
 import {
   Badge, Button, ConfirmAction, EmptyState, Skeleton, StatGrid, StatTile,
@@ -14,10 +14,13 @@ import type { ClothingItem } from '../App';
 import type { OrgRole } from '../lib/orgService';
 import type { DescriptionSettings } from '../lib/descriptionSettings';
 import {
-  batchSummary, planUsageMeters, publicationCounts, recentBatchRows,
-  type PlanUsageMeter, type PublicationCounts, type RecentBatchRow,
+  adminNavItems, batchSummary, newestPendingSignups, planUsageMeters, publicationCounts,
+  recentBatchRows, type PlanUsageMeter, type PublicationCounts, type RecentBatchRow,
 } from '../lib/home';
-import { fetchOrgUsage, planDisplayName, type OrgUsage } from '../lib/usageService';
+import {
+  fetchOrgUsage, fetchProjectUsage, formatCount, planDisplayName, usageReadout,
+  type OrgUsage, type ProjectUsage,
+} from '../lib/usageService';
 import { getWorkflowBatch, fetchWorkflowBatchesMeta } from '../lib/workflowBatchService';
 import type { WorkflowBatch } from '../lib/workflowBatchService';
 import {
@@ -25,7 +28,7 @@ import {
 } from '../lib/marketplaceService';
 import type { MarketplaceKey } from '../lib/marketplaces/types';
 import { fetchAnalyticsSummary } from '../lib/analytics';
-import { fetchBetaSignups, fetchBetaOrgDirectory } from '../lib/betaService';
+import { fetchBetaSignupsOrNull, fetchBetaOrgDirectory, type BetaSignupRow } from '../lib/betaService';
 import type { AnalyticsSummary } from '../lib/analytics';
 import { useSupportThreads } from '../lib/supportStore';
 import { formatRelative } from '../lib/supportService';
@@ -58,6 +61,14 @@ import './HomeDashboard.css';
    state, never an error wall: this is the first screen after sign-in, and a
    marketplaces table that has not been migrated yet must not be the first thing
    a new shop sees. Widgets whose feature is not installed hide entirely.
+
+   FOUNDER MODE (`isFounder`: a Founding Workspace owner or admin). That
+   workspace is where the app is RUN, so its Home leads with the app: "App at a
+   glance" (traffic, requests, workspaces, project storage), pending requests,
+   the admin tools and the inbox. The batch widgets move under a quiet "Test a
+   batch" caption, and Plan usage and Marketplaces are not shown (the founding
+   plan's own ceiling means nothing there; project usage replaces it). Every
+   other member's Home is unchanged.
    ════════════════════════════════════════════════════════════════════════════ */
 
 export interface HomeDashboardProps {
@@ -67,7 +78,8 @@ export interface HomeDashboardProps {
   orgName: string | null;
   /** Null in legacy (pre-tenancy) mode — the marketplaces widget hides. */
   orgId: string | null;
-  /** Founding-workspace owner/admin: drives the inbox role and the pulse widget. */
+  /** Founding-workspace owner/admin: drives the inbox role and FOUNDER MODE,
+   *  the admin-first layout described above. */
   isFounder: boolean;
   /** `organizations.plan` — the setup checklist badges the founding cohort. */
   orgPlan: string | null;
@@ -197,10 +209,13 @@ function HomeDashboard({
   const [pulse, setPulse] = useState<Loadable<AnalyticsSummary>>(LOADING);
   /** The workspace's plan meters (069). Hidden on anything but 'ok'. */
   const [usage, setUsage] = useState<Loadable<OrgUsage>>(LOADING);
-  /** Founder-only counts for the pulse widget's beta line. Zero is the honest
-   *  answer when a read fails — this widget is not where a founder learns that
-   *  a migration is missing. */
-  const [beta, setBeta] = useState<{ pending: number; workspaces: number }>({ pending: 0, workspaces: 0 });
+  /** Founder mode: the whole project's usage (069). Hidden on anything but 'ok'. */
+  const [project, setProject] = useState<Loadable<ProjectUsage>>(LOADING);
+  /** Founder mode: every beta request. Hidden when the table cannot be read. */
+  const [signups, setSignups] = useState<Loadable<BetaSignupRow[]>>(LOADING);
+  /** Founder mode: the workspace directory's length, the fallback count when
+   *  project usage is not installed. Zero when the read fails. */
+  const [workspaceCount, setWorkspaceCount] = useState(0);
   /** The row whose full batch row is being fetched, so it can say so. */
   const [openingId, setOpeningId] = useState<string | null>(null);
 
@@ -239,7 +254,8 @@ function HomeDashboard({
       }
     })();
 
-    if (!orgId) {
+    // Founder mode does not show Marketplaces, so it does not read them.
+    if (!orgId || isFounder) {
       setMarkets(HIDDEN);
     } else {
       void (async () => {
@@ -261,7 +277,8 @@ function HomeDashboard({
     /* Plan usage. FAILS QUIET in every way it can fail: 'unavailable' (069 not
        run), 'forbidden' and 'error' all hide the widget. A member must never
        land on an error about a meter. */
-    if (!orgId) {
+    // Nor Plan usage: the founding plan's ceiling is meaningless there.
+    if (!orgId || isFounder) {
       setUsage(HIDDEN);
     } else {
       void (async () => {
@@ -273,6 +290,8 @@ function HomeDashboard({
 
     if (!isFounder) {
       setPulse(HIDDEN);
+      setProject(HIDDEN);
+      setSignups(HIDDEN);
     } else {
       void (async () => {
         const res = await fetchAnalyticsSummary(7);
@@ -280,12 +299,17 @@ function HomeDashboard({
         setPulse(res.status === 'ok' ? { status: 'ok', data: res.summary } : HIDDEN);
       })();
       void (async () => {
-        const [signups, dirs] = await Promise.all([fetchBetaSignups(), fetchBetaOrgDirectory()]);
+        const res = await fetchProjectUsage();
         if (cancelled) return;
-        setBeta({
-          pending: signups.filter(r => r.status === 'pending').length,
-          workspaces: dirs.length,
-        });
+        setProject(res.status === 'ok' ? { status: 'ok', data: res.data } : HIDDEN);
+      })();
+      void (async () => {
+        const [rows, dirs] = await Promise.all([
+          fetchBetaSignupsOrNull().catch(() => null), fetchBetaOrgDirectory(),
+        ]);
+        if (cancelled) return;
+        setSignups(rows ? { status: 'ok', data: rows } : HIDDEN);
+        setWorkspaceCount(dirs.length);
       })();
     }
 
@@ -339,198 +363,398 @@ function HomeDashboard({
     return tiles;
   }, [navItems, onNavigate, onOpenMarketplaces]);
 
+  /* ── Founder mode's two tile lists, both built FROM navItems ────────────
+     Admin tools: every founder-group row plus the Workspace dashboard, so a
+     role gate stays declared once. The member tools under "Test a batch" are
+     the four batch-side views, in a fixed order, when the nav list has them. */
+  const adminTiles = useMemo(
+    () => adminNavItems(navItems).map(i => ({
+      id: i.id, label: i.label, icon: i.icon, title: i.title, run: () => onNavigate(i.id),
+    })),
+    [navItems, onNavigate],
+  );
+  const testTiles = useMemo(() => {
+    const byId = new Map(navItems.filter(i => !i.phoneOnly).map(i => [i.id, i]));
+    return ['library', 'products', 'labels', 'scan'].flatMap(id => {
+      const found = byId.get(id);
+      return found
+        ? [{ id, label: found.label, icon: found.icon, title: found.title, run: () => onNavigate(id) }]
+        : [];
+    });
+  }, [navItems, onNavigate]);
+  const pending = useMemo(
+    () => (signups.status === 'ok' ? newestPendingSignups(signups.data, 5) : []),
+    [signups],
+  );
+  const pendingTotal = useMemo(
+    () => (signups.status === 'ok' ? signups.data.filter(r => r.status === 'pending').length : 0),
+    [signups],
+  );
+
   const meters = useMemo(
     () => (usage.status === 'ok' ? planUsageMeters(usage.data) : []),
     [usage],
   );
   const greetingName = userEmail ? userEmail.split('@')[0] : null;
 
-  return (
-    <div className="home-view">
-      <div className="home-inner">
-        <header className="home-head">
-          <h1 className="home-title">
-            {greetingName ? `Welcome back, ${greetingName}` : 'Welcome back'}
-          </h1>
-          <p className="home-sub">
-            {orgName ? <>{orgName} — pick up where you left off, or start something else.</>
-              : <>Pick up where you left off, or start something else.</>}
+  /* ── The cards, declared once and placed per mode ───────────────────────
+     Plain JSX values, not components, so nothing remounts between renders.
+     Member mode places them in exactly the order it always has. */
+
+  const checklistCard = (
+    /* ── 0. Get set up. FIRST while it is showing, and gone for good the
+           moment every required step is done — it returns null itself,
+           so there is no flash and nothing here to un-wire later. */
+    <OnboardingChecklist
+      orgId={orgId}
+      orgName={orgName}
+      plan={orgPlan}
+      role={orgRole ?? 'member'}
+      canInvite={orgRole === 'owner' || orgRole === 'admin'}
+      hasVendorName={!!descriptionSettings?.vendorName?.trim()}
+      refreshTrigger={refreshTrigger}
+      onNavigate={onNavigate}
+      onOpenMarketplaces={onOpenMarketplaces}
+      /* Already stable (App builds it with useEventCallback) and the
+         signature is the same `(step) => reveal` — so Upload photos and
+         Go to export land exactly where Resume does. */
+      onStartWorkflow={onResume}
+    />
+  );
+
+  /* ── 1. The open batch. Wide for members; in founder mode wide only while a
+         batch is open, since it is the test bench there, not the headline. */
+  const currentBatchCard = (
+    <HomeCard title="Current batch" icon={<Images size={16} />} span={isFounder ? hasBatch : true}>
+      {hasBatch ? (
+        <>
+          <p className="home-batch-name">{activeName || activeBatchNumber || 'Untitled batch'}</p>
+          <p className="home-batch-step">
+            Step {step} — {STEP_LABELS[step].long}
           </p>
-        </header>
+          <StatGrid className="home-stats">
+            <StatTile quiet compact label="Photos" value={summary.photos} />
+            <StatTile quiet compact label="Groups" value={summary.groups} />
+            <StatTile quiet compact label="Listings" value={summary.listings}
+              hint={`${summary.categorized} categorized`} />
+          </StatGrid>
+          <div className="home-actions">
+            <Button variant="primary" icon={<Play size={14} />} onClick={() => onResume(step)}>
+              Resume batch
+            </Button>
+            {/* Not window.confirm (Do Not #12): it blocks the event loop
+                mid-auto-save, and this is the one control here that
+                detaches a session. */}
+            <ConfirmAction
+              label="Start a new batch"
+              size="md"
+              tone="neutral"
+              confirmLabel="Start new"
+              prompt="Put this batch down and start a new one? Unsaved products will be lost."
+              onConfirm={onStartNewBatch}
+            />
+          </div>
+        </>
+      ) : (
+        <EmptyState
+          inline
+          icon={<Upload size={22} />}
+          title="No batch open"
+          description={`Drop in a folder of photos, or take them on your phone, and ${brand.name} will walk you through grouping, describing and exporting them.`}
+          actions={
+            <Button variant="primary" icon={<Upload size={14} />} onClick={() => onResume(1)}>
+              Upload photos
+            </Button>
+          }
+        />
+      )}
+    </HomeCard>
+  );
 
-        <div className="home-grid">
-          {/* ── 0. Get set up. FIRST while it is showing, and gone for good the
-                 moment every required step is done — it returns null itself,
-                 so there is no flash and nothing here to un-wire later. */}
-          <OnboardingChecklist
-            orgId={orgId}
-            orgName={orgName}
-            plan={orgPlan}
-            role={orgRole ?? 'member'}
-            canInvite={orgRole === 'owner' || orgRole === 'admin'}
-            hasVendorName={!!descriptionSettings?.vendorName?.trim()}
-            refreshTrigger={refreshTrigger}
-            onNavigate={onNavigate}
-            onOpenMarketplaces={onOpenMarketplaces}
-            /* Already stable (App builds it with useEventCallback) and the
-               signature is the same `(step) => reveal` — so Upload photos and
-               Go to export land exactly where Resume does. */
-            onStartWorkflow={onResume}
-          />
-
-          {/* ── 1. The open batch ─────────────────────────────────────────── */}
-          <HomeCard title="Current batch" icon={<Images size={16} />} span>
-            {hasBatch ? (
-              <>
-                <p className="home-batch-name">{activeName || activeBatchNumber || 'Untitled batch'}</p>
-                <p className="home-batch-step">
-                  Step {step} — {STEP_LABELS[step].long}
-                </p>
-                <StatGrid className="home-stats">
-                  <StatTile quiet compact label="Photos" value={summary.photos} />
-                  <StatTile quiet compact label="Groups" value={summary.groups} />
-                  <StatTile quiet compact label="Listings" value={summary.listings}
-                    hint={`${summary.categorized} categorized`} />
-                </StatGrid>
-                <div className="home-actions">
-                  <Button variant="primary" icon={<Play size={14} />} onClick={() => onResume(step)}>
-                    Resume batch
-                  </Button>
-                  {/* Not window.confirm (Do Not #12): it blocks the event loop
-                      mid-auto-save, and this is the one control here that
-                      detaches a session. */}
-                  <ConfirmAction
-                    label="Start a new batch"
-                    size="md"
-                    tone="neutral"
-                    confirmLabel="Start new"
-                    prompt="Put this batch down and start a new one? Unsaved products will be lost."
-                    onConfirm={onStartNewBatch}
-                  />
-                </div>
-              </>
-            ) : (
-              <EmptyState
-                inline
-                icon={<Upload size={22} />}
-                title="No batch open"
-                description={`Drop in a folder of photos, or take them on your phone, and ${brand.name} will walk you through grouping, describing and exporting them.`}
-                actions={
-                  <Button variant="primary" icon={<Upload size={14} />} onClick={() => onResume(1)}>
-                    Upload photos
-                  </Button>
-                }
-              />
-            )}
-          </HomeCard>
-
-          {/* ── 2. Recent batches ─────────────────────────────────────────── */}
-          <HomeCard
-            title="Recent batches"
-            icon={<FolderOpen size={16} />}
-            action={
-              <button type="button" className="home-link" onClick={() => onNavigate('library')}>
-                All batches <ArrowRight size={12} />
+  /* ── 2. Recent batches ─────────────────────────────────────────────────── */
+  const recentCard = (
+    <HomeCard
+      title="Recent batches"
+      icon={<FolderOpen size={16} />}
+      action={
+        <button type="button" className="home-link" onClick={() => onNavigate('library')}>
+          All batches <ArrowRight size={12} />
+        </button>
+      }
+    >
+      {recent.status === 'loading' ? (
+        <CardSkeleton />
+      ) : recent.data.length === 0 ? (
+        <EmptyState
+          inline
+          icon={<Package size={22} />}
+          title="Nothing else saved yet"
+          description="Every batch you start shows up here and in the Library."
+        />
+      ) : (
+        <ul className="home-list">
+          {recent.data.map(row => (
+            <li key={row.id}>
+              <button
+                type="button"
+                className="home-row"
+                onClick={() => { void openRecent(row.id); }}
+                disabled={openingId !== null}
+              >
+                <span className="home-row-main">
+                  <span className="home-row-name">{row.name}</span>
+                  <span className="home-row-meta">
+                    Step {row.step} — {STEP_LABELS[row.step as WorkflowStep].short}
+                    {' · '}{row.photos} photo{row.photos === 1 ? '' : 's'}
+                    {' · '}{formatRelative(row.updatedAt)}
+                  </span>
+                </span>
+                <span className="home-row-go" aria-hidden="true">
+                  {openingId === row.id ? 'Opening…' : <ArrowRight size={14} />}
+                </span>
               </button>
-            }
-          >
-            {recent.status === 'loading' ? (
-              <CardSkeleton />
-            ) : recent.data.length === 0 ? (
-              <EmptyState
-                inline
-                icon={<Package size={22} />}
-                title="Nothing else saved yet"
-                description="Every batch you start shows up here and in the Library."
-              />
-            ) : (
-              <ul className="home-list">
-                {recent.data.map(row => (
-                  <li key={row.id}>
-                    <button
-                      type="button"
-                      className="home-row"
-                      onClick={() => { void openRecent(row.id); }}
-                      disabled={openingId !== null}
-                    >
-                      <span className="home-row-main">
-                        <span className="home-row-name">{row.name}</span>
-                        <span className="home-row-meta">
-                          Step {row.step} — {STEP_LABELS[row.step as WorkflowStep].short}
-                          {' · '}{row.photos} photo{row.photos === 1 ? '' : 's'}
-                          {' · '}{formatRelative(row.updatedAt)}
-                        </span>
-                      </span>
-                      <span className="home-row-go" aria-hidden="true">
-                        {openingId === row.id ? 'Opening…' : <ArrowRight size={14} />}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </HomeCard>
+            </li>
+          ))}
+        </ul>
+      )}
+    </HomeCard>
+  );
 
-          {/* ── 3. Inbox. Hidden until the messaging migration has been run. ── */}
-          {msgAvailable !== false && (
-            <HomeCard
-              title={isFounder ? 'Inbox' : 'Messages'}
-              icon={<Inbox size={16} />}
-              action={
-                unreadCount > 0
-                  ? <Badge tone="danger" live>{unreadCount} unread</Badge>
-                  : undefined
-              }
-            >
-              {msgAvailable === null ? (
-                <CardSkeleton lines={2} />
-              ) : threads.length === 0 ? (
-                <EmptyState
-                  inline
-                  icon={<MessageSquare size={22} />}
-                  title={isFounder ? 'No conversations yet' : 'No messages yet'}
-                  description={isFounder
-                    ? 'Anything a shop sends lands here.'
-                    : 'Ask us anything — setup, a stuck batch, a listing that will not export.'}
-                  actions={
-                    <Button onClick={() => onNavigate('messages')}>
-                      {isFounder ? 'Open inbox' : 'Start a conversation'}
-                    </Button>
-                  }
-                />
+  /* ── 3. Inbox. Hidden until the messaging migration has been run. ──────── */
+  const inboxCard = msgAvailable !== false && (
+    <HomeCard
+      title={isFounder ? 'Inbox' : 'Messages'}
+      icon={<Inbox size={16} />}
+      action={
+        unreadCount > 0
+          ? <Badge tone="danger" live>{unreadCount} unread</Badge>
+          : undefined
+      }
+    >
+      {msgAvailable === null ? (
+        <CardSkeleton lines={2} />
+      ) : threads.length === 0 ? (
+        <EmptyState
+          inline
+          icon={<MessageSquare size={22} />}
+          title={isFounder ? 'No conversations yet' : 'No messages yet'}
+          description={isFounder
+            ? 'Anything a shop sends lands here.'
+            : 'Ask us anything — setup, a stuck batch, a listing that will not export.'}
+          actions={
+            <Button onClick={() => onNavigate('messages')}>
+              {isFounder ? 'Open inbox' : 'Start a conversation'}
+            </Button>
+          }
+        />
+      ) : (
+        <>
+          <ul className="home-list">
+            {threads.slice(0, 3).map(t => (
+              <li key={t.id}>
+                <button type="button" className="home-row" onClick={() => onNavigate('messages')}>
+                  <span aria-hidden="true" className="home-row-icon">
+                    {t.kind === 'team' ? <Users size={14} /> : <LifeBuoy size={14} />}
+                  </span>
+                  <span className="home-row-main">
+                    <span className="home-row-name">
+                      {t.kind === 'team'
+                        ? (t.subject || 'Team conversation')
+                        : isFounder ? (t.user_email || 'A customer') : 'Customer support'}
+                    </span>
+                    <span className="home-row-meta">
+                      {t.last_message_preview || 'No messages yet'}
+                    </span>
+                  </span>
+                  <span className="home-row-go">{formatRelative(t.last_message_at)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="home-actions">
+            <Button onClick={() => onNavigate('messages')}>
+              {isFounder ? 'Open inbox' : 'Open messages'}
+            </Button>
+          </div>
+        </>
+      )}
+    </HomeCard>
+  );
+
+  const header = (
+    <header className="home-head">
+      <h1 className="home-title">
+        {greetingName ? `Welcome back, ${greetingName}` : 'Welcome back'}
+      </h1>
+      <p className="home-sub">
+        {isFounder
+          ? <>{orgName || 'Founding Workspace'}. Requests, workspaces, accounts and {brand.name} as a whole.</>
+          : orgName ? <>{orgName} — pick up where you left off, or start something else.</>
+            : <>Pick up where you left off, or start something else.</>}
+      </p>
+    </header>
+  );
+
+  if (isFounder) {
+    /* Project storage against the Supabase quota, read through the same
+       helper the Founder console's Usage tab uses, so the two never disagree. */
+    const storage = project.status === 'ok'
+      ? usageReadout(project.data.project.storage_bytes_total, project.data.project.storage_gb_quota, 'bytes')
+      : null;
+    const glanceLoading = pulse.status === 'loading' && project.status === 'loading'
+      && signups.status === 'loading';
+
+    return (
+      <div className="home-view">
+        <div className="home-inner">
+          {header}
+
+          <div className="home-grid">
+            {checklistCard}
+
+            {/* ── A. App at a glance. Each tile fails quiet on its own: a
+                   feature that is not installed drops its tiles, never the card. */}
+            <HomeCard title="App at a glance" icon={<Activity size={16} />} span>
+              {glanceLoading ? (
+                <CardSkeleton lines={3} />
               ) : (
                 <>
-                  <ul className="home-list">
-                    {threads.slice(0, 3).map(t => (
-                      <li key={t.id}>
-                        <button type="button" className="home-row" onClick={() => onNavigate('messages')}>
-                          <span aria-hidden="true" className="home-row-icon">
-                            {t.kind === 'team' ? <Users size={14} /> : <LifeBuoy size={14} />}
-                          </span>
-                          <span className="home-row-main">
-                            <span className="home-row-name">
-                              {t.kind === 'team'
-                                ? (t.subject || 'Team conversation')
-                                : isFounder ? (t.user_email || 'A customer') : 'Customer support'}
-                            </span>
-                            <span className="home-row-meta">
-                              {t.last_message_preview || 'No messages yet'}
-                            </span>
-                          </span>
-                          <span className="home-row-go">{formatRelative(t.last_message_at)}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                  <StatGrid className="home-stats home-glance">
+                    {pulse.status === 'ok' && (
+                      <>
+                        <StatTile quiet compact label="Pageviews" value={formatCount(pulse.data.totals.pageviews)} hint="Last 7 days" />
+                        <StatTile quiet compact label="Sessions" value={formatCount(pulse.data.totals.sessions)} hint="Last 7 days" />
+                        <StatTile quiet compact label="Beta signups" value={formatCount(pulse.data.totals.beta_signups)} hint="Last 7 days" />
+                      </>
+                    )}
+                    {signups.status === 'ok' && (
+                      <StatTile quiet compact label="Pending requests" value={formatCount(pendingTotal)} />
+                    )}
+                    <StatTile
+                      quiet compact label="Workspaces"
+                      value={formatCount(project.status === 'ok' ? project.data.project.orgs : workspaceCount)}
+                    />
+                    {project.status === 'ok' && (
+                      <>
+                        <StatTile quiet compact label="Members" value={formatCount(project.data.project.members_total)} />
+                        <StatTile quiet compact label="Listings this month"
+                          value={formatCount(project.data.project.listings_this_month_total)} />
+                      </>
+                    )}
+                    {storage && (
+                      <StatTile
+                        quiet compact label="Project storage"
+                        value={storage.usedText}
+                        className={`home-stat--${storage.tone}`}
+                        hint={storage.unlimited
+                          ? 'No project quota set'
+                          : `${storage.percent}% of the ${storage.limitText} quota`}
+                      />
+                    )}
+                  </StatGrid>
                   <div className="home-actions">
-                    <Button onClick={() => onNavigate('messages')}>
-                      {isFounder ? 'Open inbox' : 'Open messages'}
+                    <Button variant="primary" icon={<ShieldCheck size={14} />}
+                      onClick={() => onNavigate('founder')}>
+                      Open Founder console
                     </Button>
+                    <Button onClick={() => onNavigate('analytics')}>Open analytics</Button>
                   </div>
                 </>
               )}
             </HomeCard>
-          )}
+
+            {/* ── B. Pending requests. Hidden when the beta table is unreadable. */}
+            {signups.status !== 'hidden' && (
+              <HomeCard
+                title="Pending requests"
+                icon={<UserPlus size={16} />}
+                action={
+                  <button type="button" className="home-link" onClick={() => onNavigate('founder')}>
+                    Open requests <ArrowRight size={12} />
+                  </button>
+                }
+              >
+                {signups.status === 'loading' ? (
+                  <CardSkeleton lines={3} />
+                ) : pending.length === 0 ? (
+                  <EmptyState
+                    inline
+                    icon={<UserPlus size={22} />}
+                    title="No pending requests."
+                    description="New beta requests show up here as they arrive."
+                  />
+                ) : (
+                  <ul className="home-list">
+                    {pending.map(r => (
+                      <li key={r.id}>
+                        <button type="button" className="home-row" onClick={() => onNavigate('founder')}>
+                          <span className="home-row-main">
+                            <span className="home-row-name">{r.email}</span>
+                            {(r.org_name || r.contact_name) && (
+                              <span className="home-row-meta">{r.org_name || r.contact_name}</span>
+                            )}
+                          </span>
+                          <span className="home-row-go">{formatRelative(r.created_at)}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </HomeCard>
+            )}
+
+            {/* ── C. Admin tools ──────────────────────────────────────────── */}
+            {adminTiles.length > 0 && (
+              <HomeCard title="Admin tools" icon={<Wrench size={16} />}>
+                <div className="home-tiles">
+                  {adminTiles.map(tile => (
+                    <button key={tile.id} type="button" className="home-tile" title={tile.title} onClick={tile.run}>
+                      <span aria-hidden="true" className="home-tile-icon">{tile.icon}</span>
+                      <span className="home-tile-label">{tile.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </HomeCard>
+            )}
+
+            {/* ── D. Inbox, kept high: support is part of running the app. */}
+            {inboxCard}
+
+            {/* ── E. Test a batch. The member workflow, for trying things out. */}
+            <h2 className="home-section">Test a batch</h2>
+            {currentBatchCard}
+            {recentCard}
+            {testTiles.length > 0 && (
+              <HomeCard title="Tools" icon={<LayoutGrid size={16} />}>
+                <div className="home-tiles">
+                  {testTiles.map(tile => (
+                    <button key={tile.id} type="button" className="home-tile" title={tile.title} onClick={tile.run}>
+                      <span aria-hidden="true" className="home-tile-icon">{tile.icon}</span>
+                      <span className="home-tile-label">{tile.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </HomeCard>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="home-view">
+      <div className="home-inner">
+        {header}
+
+        <div className="home-grid">
+          {checklistCard}
+
+          {currentBatchCard}
+
+          {recentCard}
+
+          {inboxCard}
 
           {/* ── 4. Quick actions ──────────────────────────────────────────── */}
           <HomeCard title="Tools" icon={<LayoutGrid size={16} />} span>
@@ -599,35 +823,6 @@ function HomeDashboard({
                       <Button onClick={() => onResume(4)}>Go to export</Button>
                     </div>
                   )}
-                </>
-              )}
-            </HomeCard>
-          )}
-
-          {/* ── 7. Founder pulse ──────────────────────────────────────────── */}
-          {pulse.status !== 'hidden' && (
-            <HomeCard title="Last 7 days" icon={<BarChart3 size={16} />}>
-              {pulse.status === 'loading' ? (
-                <CardSkeleton lines={2} />
-              ) : (
-                <>
-                  <StatGrid className="home-stats">
-                    <StatTile quiet compact label="Pageviews" value={pulse.data.totals.pageviews} />
-                    <StatTile quiet compact label="Sessions" value={pulse.data.totals.sessions} />
-                    <StatTile quiet compact label="Beta signups" value={pulse.data.totals.beta_signups} />
-                  </StatGrid>
-                  {/* The two numbers a founder actually opens the app for. Both
-                      fail quiet: a missing migration reads as 0, never an error. */}
-                  <p className="home-note">
-                    {beta.pending} pending request{beta.pending === 1 ? '' : 's'} · {beta.workspaces} workspace{beta.workspaces === 1 ? '' : 's'}
-                  </p>
-                  <div className="home-actions">
-                    <Button variant="primary" icon={<ShieldCheck size={14} />}
-                      onClick={() => onNavigate('founder')}>
-                      Open Founder console
-                    </Button>
-                    <Button onClick={() => onNavigate('analytics')}>Open analytics</Button>
-                  </div>
                 </>
               )}
             </HomeCard>

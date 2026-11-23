@@ -231,3 +231,53 @@ export function planUsageMeters(usage: OrgUsage | null | undefined): PlanUsageMe
     { key: 'members', label: 'Members', readout: usageReadout(u.members, limits.seats) },
   ];
 }
+
+/* ── Founder mode (the Founding Workspace's admin-first Home) ─────────────── */
+
+/** The fields `newestPendingSignups` reads; a `BetaSignupRow` satisfies it. */
+export interface PendingSignupLike {
+  status: string;
+  created_at: string;
+}
+
+/**
+ * The newest `limit` PENDING beta requests, newest first. Sorted here rather
+ * than trusting the read's order, so the card can never show an older request
+ * above a newer one. A row with an unparseable date sorts last.
+ */
+export function newestPendingSignups<T extends PendingSignupLike>(
+  rows: readonly T[] | null | undefined,
+  limit = 5,
+): T[] {
+  if (!rows || limit <= 0) return [];
+  const time = (r: T) => {
+    const t = Date.parse(r.created_at);
+    return Number.isFinite(t) ? t : -Infinity;
+  };
+  return rows
+    .filter(r => r && r.status === 'pending')
+    .slice()
+    .sort((a, b) => time(b) - time(a))
+    .slice(0, limit);
+}
+
+/** The fields `adminNavItems` reads; a `WorkspaceNavItem` satisfies it. */
+export interface NavItemLike {
+  id: string;
+  group: string;
+  phoneOnly?: boolean;
+}
+
+/**
+ * The founder's "Admin tools" grid: every `founder`-group nav row in the order
+ * App declares them, then the Workspace dashboard. Built FROM the nav list so a
+ * role gate is declared once; a row this person cannot open is not in the list
+ * and so cannot become a tile. Phone-only rows have no view and are dropped.
+ */
+export function adminNavItems<T extends NavItemLike>(items: readonly T[] | null | undefined): T[] {
+  if (!items) return [];
+  const usable = items.filter(i => !i.phoneOnly);
+  const founder = usable.filter(i => i.group === 'founder');
+  const workspace = usable.find(i => i.id === 'workspace');
+  return workspace ? [...founder, workspace] : founder;
+}

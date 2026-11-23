@@ -15,7 +15,8 @@ import { getCategories } from '../lib/categoriesService';
 import { getCategoryPresets } from '../lib/categoryPresetsService';
 import { getShopifyConnection } from '../lib/shopifyConnectionService';
 import { fetchOrgMembers } from '../lib/orgService';
-import { fetchOrgUsage, type OrgUsage } from '../lib/usageService';
+import { fetchOrgUsage, fetchProjectUsage, type OrgUsage } from '../lib/usageService';
+import { fetchBetaSignupsOrNull, fetchBetaOrgDirectory } from '../lib/betaService';
 
 /**
  * The home dashboard is the first thing a signed-in user sees and the only
@@ -70,7 +71,14 @@ vi.mock('../lib/shopifyConnectionService', async (importOriginal) => {
 
 vi.mock('../lib/usageService', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/usageService')>();
-  return { ...actual, fetchOrgUsage: vi.fn() };
+  return { ...actual, fetchOrgUsage: vi.fn(), fetchProjectUsage: vi.fn() };
+});
+
+/* Founder mode's two extra reads, so the founder pulse test below never
+   reaches the network either. */
+vi.mock('../lib/betaService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/betaService')>();
+  return { ...actual, fetchBetaSignupsOrNull: vi.fn(), fetchBetaOrgDirectory: vi.fn() };
 });
 
 vi.mock('../lib/orgService', async (importOriginal) => {
@@ -152,6 +160,9 @@ beforeEach(() => {
   vi.mocked(getShopifyConnection).mockResolvedValue({ status: 'unavailable' });
   vi.mocked(fetchOrgMembers).mockResolvedValue([]);
   vi.mocked(fetchOrgUsage).mockResolvedValue({ status: 'unavailable' });
+  vi.mocked(fetchProjectUsage).mockResolvedValue({ status: 'unavailable' });
+  vi.mocked(fetchBetaSignupsOrNull).mockResolvedValue(null);
+  vi.mocked(fetchBetaOrgDirectory).mockResolvedValue([]);
   vi.mocked(useSupportThreads).mockReturnValue({
     threads: [], sorted: [], available: false, teamAvailable: false,
     unreadCount: 0, supportUnreadCount: 0, revision: 0, refresh: async () => {},

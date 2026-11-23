@@ -365,6 +365,30 @@
 
 .home-skeleton { display: flex; flex-direction: column; gap: 0.8rem; }
 
+/* ── Founder mode (the Founding Workspace's admin-first Home) ─────────────
+   The same card language as everything above: no new radius, shadow or
+   surface. Two additions only: the quiet "Test a batch" caption, and the
+   project-storage tint, which follows the meters' rule exactly (--warning from
+   85% of the quota, --danger at or over it). */
+
+/* A caption across the whole grid row, sized like a FieldGroup caption. It
+   is an h2 for the outline, so the browser's heading margins are reset. */
+.home-section {
+  grid-column: 1 / -1;
+  margin: var(--space-2) 0 calc(-1 * var(--space-3));
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  line-height: var(--lh-snug);
+  color: var(--text-muted);
+}
+
+/* Up to eight tiles in one card: a narrower minimum than the three-tile rows,
+   so a wide card fits four across and a narrow one wraps cleanly. */
+.home-glance { grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); }
+
+.home-stat--warn .ui-stat__value { color: var(--warning); }
+.home-stat--over .ui-stat__value { color: var(--danger); }
+
 /* ── Tablet ───────────────────────────────────────────────────────────────── */
 
 @media (max-width: 1024px) {
@@ -416,6 +440,10 @@
   .home-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
   .home-tile { min-height: 60px; }
+
+  /* Two glance tiles across: one per row would make eight tiles a long
+     scroll, and minmax(0, 1fr) can never push the card past the screen. */
+  .home-glance { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
   /* Stacked, full-width: side by side each action gets half of 390px, which is
      not enough for "Start a new batch" and its armed confirm pair. */

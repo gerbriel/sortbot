@@ -196,7 +196,8 @@ function AccountNav(
     role?: string;
     email?: string | null;
     activeView: string;
-    showBackToWorkflow: boolean;
+    showBack: boolean;
+    backTarget: 'home' | 'workflow';
     onSelect: (id: string, opener: HTMLElement | null) => void;
     onSignOut: () => void;
     onDeleteAccount?: () => void;
@@ -542,6 +543,21 @@ function App() {
     // about to be detached silently drops focus to <body>.
     requestAnimationFrame(() => trigger?.focus());
   }, []);
+  /** Where a tool view's Back, Escape and close go. The Founding Workspace is
+   *  not batch-first (its job is running the beta), so Back lands on the Home
+   *  dashboard there; every other workspace returns to the workflow. Keep
+   *  `goToWorkflow` for the places that must truly reveal the batch (the phone
+   *  Workflow tab, Home's Resume, the step hand-offs). */
+  const backTarget: 'home' | 'workflow' = currentOrg?.slug === 'founding' ? 'home' : 'workflow';
+  const backLabel = backTarget === 'home' ? 'Back to dashboard' : 'Back to workflow';
+  // Stable per target, for the same Escape-listener reason as goToWorkflow.
+  const goBack = useCallback(() => {
+    setActiveView(backTarget);
+    setWorkspaceTab('members');
+    const trigger = viewTriggerRef.current;
+    viewTriggerRef.current = null;
+    requestAnimationFrame(() => trigger?.focus());
+  }, [backTarget]);
   /** Whether the workspace menu is showing. Lifted out of WorkspaceMenu because
    *  the phone tab bar's "More" opens the SAME menu — one component, one list. */
   const [navMenuOpen, setNavMenuOpen] = useState(false);
@@ -554,6 +570,8 @@ function App() {
     if (id !== 'shortcuts') setShortcutsOpen(false);
     viewTriggerRef.current = opener instanceof HTMLButtonElement ? opener : null;
     if (id === 'workflow') { goToWorkflow(); return; }
+    // The menu's Back row in the Founding Workspace: same focus return and tab reset as Back.
+    if (id === 'home' && backTarget === 'home') { goBack(); return; }
     // Not a view: the phone-only menu row that stands in for the shortcuts gear.
     if (id === 'shortcuts') { setShortcutsOpen(true); return; }
     setActiveView(id as ActiveView);
@@ -3454,7 +3472,8 @@ function App() {
               role={currentOrg ? orgRole : undefined}
               email={user.email}
               activeView={activeView}
-              showBackToWorkflow={activeView !== 'workflow'}
+              showBack={activeView !== backTarget}
+              backTarget={backTarget}
               onSelect={handleNavSelect}
               onSignOut={handleSignOut}
               onDeleteAccount={openDeleteAccount}
@@ -3808,9 +3827,10 @@ function App() {
             icon={<Tag size={26} />}
             title="Categories"
             description="The categories you drag groups onto in Step 2. Each one carries an icon, a colour and its place in the list."
-            onBack={goToWorkflow}
+            onBack={goBack}
+            backLabel={backLabel}
           >
-            <CategoriesManager onClose={goToWorkflow} />
+            <CategoriesManager onClose={goBack} />
           </ToolView>
         </Suspense>
       )}
@@ -3821,9 +3841,10 @@ function App() {
             icon={<Settings size={26} />}
             title="Category presets"
             description="Defaults applied the moment a category is assigned — shipping weight, which measurements to ask for, and the SEO title template."
-            onBack={goToWorkflow}
+            onBack={goBack}
+            backLabel={backLabel}
           >
-            <CategoryPresetsManager onClose={goToWorkflow} />
+            <CategoryPresetsManager onClose={goBack} />
           </ToolView>
         </Suspense>
       )}
@@ -3834,7 +3855,8 @@ function App() {
             icon={<Package size={26} />}
             title="Library"
             description="Every batch, listing and image in this workspace. Open a batch to pick it back up where you left it."
-            onBack={goToWorkflow}
+            onBack={goBack}
+            backLabel={backLabel}
             wide
           >
             <Library
@@ -3859,7 +3881,8 @@ function App() {
             icon={<Boxes size={26} />}
             title="Products"
             description="Find any listing across every batch — then edit its fields, its barcode and its labels without leaving this page."
-            onBack={goToWorkflow}
+            onBack={goBack}
+            backLabel={backLabel}
             wide
           >
             <ProductsView
@@ -3878,14 +3901,15 @@ function App() {
             icon={<Users size={26} />}
             title="Workspace"
             description="Who is in this workspace, what they can do, and how its listings are written and exported."
-            onBack={goToWorkflow}
+            onBack={goBack}
+            backLabel={backLabel}
           >
             <OrgPanel
               org={currentOrg}
               myRole={orgRole}
               myUserId={user.id}
               initialTab={workspaceTab}
-              onClose={goToWorkflow}
+              onClose={goBack}
               onOrgUpdated={(org) => setCurrentOrg(org)}
               onMyRoleChanged={(role) => setOrgRole(role)}
               onLeftWorkspace={() => {
@@ -3912,7 +3936,8 @@ function App() {
             icon={<ShieldCheck size={26} />}
             title="Founder console"
             description="Approve shops, onboard a workspace before its owner signs in, set plans, and manage every account across every workspace."
-            onBack={goToWorkflow}
+            onBack={goBack}
+            backLabel={backLabel}
           >
             <FounderConsole
               myUserId={user.id}
@@ -3930,7 +3955,8 @@ function App() {
             icon={<BookMarked size={26} />}
             title="Vocabulary"
             description="The quick keyword chips and brand words every workspace's descriptions are written from. Edited here, used everywhere."
-            onBack={goToWorkflow}
+            onBack={goBack}
+            backLabel={backLabel}
           >
             <VocabDashboard />
           </ToolView>
@@ -3945,7 +3971,8 @@ function App() {
             icon={<BarChart3 size={26} />}
             title="Analytics"
             description="First-party pageviews, funnel, referrers and devices — plus everything that threw, in the Errors tab."
-            onBack={goToWorkflow}
+            onBack={goBack}
+            backLabel={backLabel}
             tabs={
               <>
                 <button
@@ -3978,7 +4005,8 @@ function App() {
             icon={<Contact size={26} />}
             title="CRM"
             description="Every beta request and account as a contact, with stages, follow-ups and notes."
-            onBack={goToWorkflow}
+            onBack={goBack}
+            backLabel={backLabel}
           >
             <CrmPanel />
           </ToolView>
@@ -3993,7 +4021,8 @@ function App() {
             icon={<Wallet size={26} />}
             title="Finance"
             description="Income, expenses and profit over any range, what the customer base is worth, and reports you can download or print."
-            onBack={goToWorkflow}
+            onBack={goBack}
+            backLabel={backLabel}
           >
             <FinanceView />
           </ToolView>
@@ -4008,7 +4037,8 @@ function App() {
             icon={<KanbanSquare size={26} />}
             title="Board"
             description="Features and todos for this workspace. Anyone here can add a card and pick one up."
-            onBack={goToWorkflow}
+            onBack={goBack}
+            backLabel={backLabel}
             wide
             /* KanbanBoard owns Escape: it closes an open card drawer first. */
             escapeToBack={false}
@@ -4017,7 +4047,7 @@ function App() {
               orgId={currentOrg.id}
               userId={user.id}
               userEmail={user.email ?? null}
-              onClose={goToWorkflow}
+              onClose={goBack}
             />
           </ToolView>
         </Suspense>
@@ -4034,7 +4064,8 @@ function App() {
             description={supportIsFounder
               ? 'Every support conversation with every workspace, plus your own workspace’s team threads. Reply, close what is handled, reopen what is not.'
               : `Talk to the ${runtimeBrand.name} team, or message people in your workspace. Ask anything. We read everything and usually reply within a day.`}
-            onBack={goToWorkflow}
+            onBack={goBack}
+            backLabel={backLabel}
             wide
           >
             <MessagesView
@@ -4061,7 +4092,8 @@ function App() {
             icon={<Printer size={26} />}
             title="Labels"
             description="Print shelf labels for this batch — title, size, price, your colour and vendor labels, and a scannable barcode."
-            onBack={goToWorkflow}
+            onBack={goBack}
+            backLabel={backLabel}
             wide
           >
             <LabelPrintView onOpenListing={openListingInStep3} />
@@ -4076,7 +4108,8 @@ function App() {
             icon={<ScanLine size={26} />}
             title="Scan"
             description="Point the camera at a label, use a USB scanner, or type a SKU to pull up the listing."
-            onBack={goToWorkflow}
+            onBack={goBack}
+            backLabel={backLabel}
           >
             <BarcodeScannerView onOpenListing={openListingInStep3} />
           </ToolView>

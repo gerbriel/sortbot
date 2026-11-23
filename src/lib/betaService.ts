@@ -72,14 +72,21 @@ export async function requestBetaAccess(fields: {
   return { ok: false, error: error.message };
 }
 
-/** All requests, newest first — Founding Workspace admins only (RLS). */
-export async function fetchBetaSignups(): Promise<BetaSignupRow[]> {
+/** All requests, newest first, or NULL when the read failed (the table is
+ *  missing or RLS refused). Home's founder mode hides its requests card on
+ *  null, which is different from "installed and empty". */
+export async function fetchBetaSignupsOrNull(): Promise<BetaSignupRow[] | null> {
   const { data, error } = await supabase
     .from('beta_signups')
     .select('*')
     .order('created_at', { ascending: false });
-  if (error) { log.error(`fetchBetaSignups | ${error.message}`); return []; }
+  if (error) { log.error(`fetchBetaSignups | ${error.message}`); return null; }
   return (data ?? []) as BetaSignupRow[];
+}
+
+/** All requests, newest first — Founding Workspace admins only (RLS). */
+export async function fetchBetaSignups(): Promise<BetaSignupRow[]> {
+  return (await fetchBetaSignupsOrNull()) ?? [];
 }
 
 /** Approve, deny, or reopen (back to pending) a request — Founding Workspace
