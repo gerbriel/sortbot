@@ -372,7 +372,16 @@
   border-radius: 999px;
 }
 
-.fc-limit-table .fc-plan-why { max-width: 24rem; }
+/* The phone legend for the Plans columns: `.an-table--cards` hides the header
+   row (and its hints) at phone width, so the same copy is offered once above
+   the cards there, and nowhere else. */
+.fc-plan-legend { display: none; }
+.fc-plan-legend-title { font-size: var(--fs-sm); font-weight: 600; color: var(--text-primary); }
+.fc-plan-legend-list { display: flex; flex-direction: column; gap: 0.8rem; margin: 0; }
+.fc-plan-legend-list dt { font-weight: 600; color: var(--text-primary); }
+.fc-plan-legend-list dd { margin: 0.2rem 0 0; }
+
+.fc-plan-add > .fc-plan-add-limit { flex: 0 1 16rem; min-width: 0; }
 
 @media (max-width: 640px) {
   .fc-view { gap: 1.2rem; }
@@ -407,7 +416,9 @@
   .fc-plan-add > *,
   .fc-plan-add > *:first-child,
   .fc-plan-add > *:nth-child(2),
-  .fc-plan-add > *:nth-child(3) { flex: none; }
+  .fc-plan-add > *:nth-child(3),
+  .fc-plan-add > .fc-plan-add-limit { flex: none; }
+  .fc-plan-legend { display: block; }
 
   /* Usage: the shared `.an-table--cards` rules stack each workspace into a
      card (no sideways scroll); every line is a 44px band and the storage bar

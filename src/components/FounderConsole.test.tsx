@@ -780,23 +780,57 @@ describe('FounderConsole: Usage tab, shared insights (071)', () => {
   });
 });
 
-describe('FounderConsole: plan limits editor (069)', () => {
-  const limitRow = (container: HTMLElement, key: string): HTMLElement => {
-    const row = all(container, '.fc-limit-row').find(r => one(r, 'code').textContent === key);
-    if (!row) throw new Error(`limitRow(): no row for "${key}"`);
-    return row;
-  };
+describe('FounderConsole: plan limits in the catalog row (069)', () => {
+  const limitInputs = (row: HTMLElement) => all(row, '.fc-plan-input--limit') as HTMLInputElement[];
+  const priceInput = (row: HTMLElement) => one(row, 'input[aria-label^="Monthly price"]');
 
-  it('names 069 when the limit columns are missing', async () => {
+  it('names 069 in the limit headers and disables the limit cells when the columns are missing', async () => {
     const { container } = await render();
     click(tab(container, 'Plans'));
     await flush();
     expect(fetchPlanLimits).toHaveBeenCalledTimes(1);
+    // No separate Limits table any more.
     expect(container.querySelector('.fc-limit-row')).toBeNull();
-    expect(container.textContent).toContain('069_plan_limits_and_usage.sql');
+    const row = planRowEl(container, 'studio');
+    const cells = limitInputs(row);
+    expect(cells).toHaveLength(3);
+    expect(cells.every(i => i.disabled)).toBe(true);
+    expect(cells[0].placeholder).toBe('Run 069');
+    const storageTip = one(container, 'button[aria-label="What Storage means"]').getAttribute('aria-describedby');
+    expect(one(container, `[id="${storageTip}"]`).textContent).toContain('069_plan_limits_and_usage.sql');
+    // A catalog-only header carries no setup note.
+    const orderTip = one(container, 'button[aria-label="What Order means"]').getAttribute('aria-describedby');
+    expect(one(container, `[id="${orderTip}"]`).textContent).not.toContain('069');
   });
 
-  it('shows saved limits, blank meaning unlimited, and saves through setPlanLimits', async () => {
+  it('every column header carries its hint', async () => {
+    vi.mocked(fetchPlanLimits).mockResolvedValue({ status: 'ok', data: [] });
+    const { container } = await render();
+    click(tab(container, 'Plans'));
+    await flush();
+    const table = one(container, '.fc-plan-table');
+    const heads = all(table, 'thead th .ui-header-hint__text').map(t => t.textContent);
+    expect(heads).toEqual([
+      'Key', 'Name shown', 'Price / mo', 'Assignable', 'Order',
+      'Listings / mo', 'Storage (GB)', 'Seats', 'Workspaces', 'Ever used',
+    ]);
+    const tipFor = (name: string) => {
+      const id = one(table, `button[aria-label="What ${name} means"]`).getAttribute('aria-describedby');
+      return one(table, `[id="${id}"][role="tooltip"]`).textContent ?? '';
+    };
+    expect(tipFor('Assignable')).toContain('Offered: the plan can be put on a workspace');
+    expect(tipFor('Assignable')).toContain('Retired: kept for history and billing');
+    expect(tipFor('Order')).toBe('Position in every plan dropdown and list, lowest first. Ties are broken by key.');
+    expect(tipFor('Storage')).toContain('product-images bucket');
+    expect(tipFor('Ever used')).toContain('cannot be deleted, only retired');
+    // No em dash in any hint.
+    expect(all(table, '[role="tooltip"]').map(t => t.textContent).join(' ')).not.toContain('—');
+    // The last columns hang their tooltip from the right edge.
+    const everUsed = one(table, 'button[aria-label="What Ever used means"]').parentElement as HTMLElement;
+    expect(one(everUsed, '[role="tooltip"]').className).toContain('ui-header-hint__tip--end');
+  });
+
+  it('a limit-only change calls setPlanLimits and not the price RPC', async () => {
     vi.mocked(fetchPlanLimits).mockResolvedValue({
       status: 'ok',
       data: [{ plan: 'growth', listings_per_month: 500, storage_gb: 25, seats: 3 }],
@@ -808,21 +842,55 @@ describe('FounderConsole: plan limits editor (069)', () => {
     click(tab(container, 'Plans'));
     await flush();
 
-    // A plan with no saved limits reads as unlimited.
-    expect(limitRow(container, 'studio').textContent).toContain('Listings Unlimited, storage Unlimited, seats Unlimited');
+    // A plan with no saved limits reads as blank (unlimited).
+    expect(limitInputs(planRowEl(container, 'studio')).map(i => i.value)).toEqual(['', '', '']);
+    expect(limitInputs(planRowEl(container, 'studio'))[0].placeholder).toBe('Unlimited');
 
-    const row = limitRow(container, 'growth');
-    expect(row.textContent).toContain('Listings 500, storage 25 GB, seats 3');
-    const inputs = all(row, 'input');
-    expect(inputs.map(i => (i as HTMLInputElement).value)).toEqual(['500', '25', '3']);
-
-    setValue(inputs[0], '');
-    setValue(inputs[1], '2.5');
-    click(buttonByText(limitRow(container, 'growth'), 'Save limits'));
+    const row = planRowEl(container, 'growth');
+    expect(limitInputs(row).map(i => i.value)).toEqual(['500', '25', '3']);
+    setValue(limitInputs(row)[0], '');
+    setValue(limitInputs(planRowEl(container, 'growth'))[1], '2.5');
+    click(buttonByText(planRowEl(container, 'growth'), 'Save'));
     await flush();
     expect(setPlanLimits).toHaveBeenCalledWith({ plan: 'growth', listingsPerMonth: null, storageGb: 2.5, seats: 3 });
-    expect(limitRow(container, 'growth').textContent).toContain('Listings Unlimited, storage 2.5 GB, seats 3');
+    expect(upsertPlan).not.toHaveBeenCalled();
+    expect(limitInputs(planRowEl(container, 'growth')).map(i => i.value)).toEqual(['', '2.5', '3']);
     expect(container.textContent).toContain("Saved the growth plan's limits");
+  });
+
+  it('a price-only change calls the price RPC and not setPlanLimits', async () => {
+    vi.mocked(fetchPlanLimits).mockResolvedValue({
+      status: 'ok',
+      data: [{ plan: 'studio', listings_per_month: 100, storage_gb: 10, seats: 2 }],
+    });
+    const { container } = await render();
+    click(tab(container, 'Plans'));
+    await flush();
+    setValue(priceInput(planRowEl(container, 'studio')), '349');
+    click(buttonByText(planRowEl(container, 'studio'), 'Save'));
+    await flush();
+    expect(upsertPlan).toHaveBeenCalledTimes(1);
+    expect(setPlanLimits).not.toHaveBeenCalled();
+  });
+
+  it('one Save with both halves changed calls both, and a failed half is named', async () => {
+    vi.mocked(fetchPlanLimits).mockResolvedValue({ status: 'ok', data: [] });
+    vi.mocked(setPlanLimits).mockResolvedValue({ status: 'error', message: 'limits exploded' });
+    const { container } = await render();
+    click(tab(container, 'Plans'));
+    await flush();
+    setValue(priceInput(planRowEl(container, 'studio')), '349');
+    setValue(limitInputs(planRowEl(container, 'studio'))[2], '4');
+    click(buttonByText(planRowEl(container, 'studio'), 'Save'));
+    await flush();
+    await flush();
+    expect(upsertPlan).toHaveBeenCalledTimes(1);
+    expect(setPlanLimits).toHaveBeenCalledWith({ plan: 'studio', listingsPerMonth: null, storageGb: null, seats: 4 });
+    const notice = one(container, '.org-panel-notice').textContent ?? '';
+    expect(notice).toContain("Saved the studio plan's name, price, Assignable and order");
+    expect(notice).toContain('its limits did not save: limits exploded');
+    // The failed half keeps its typed value for another try.
+    expect(limitInputs(planRowEl(container, 'studio'))[2].value).toBe('4');
   });
 
   it('refuses a fractional seat count before the round trip', async () => {
@@ -830,11 +898,72 @@ describe('FounderConsole: plan limits editor (069)', () => {
     const { container } = await render();
     click(tab(container, 'Plans'));
     await flush();
-    const row = limitRow(container, 'studio');
-    setValue(all(row, 'input')[2], '1.5');
-    const save = buttonByText(limitRow(container, 'studio'), 'Save limits') as HTMLButtonElement;
+    setValue(limitInputs(planRowEl(container, 'studio'))[2], '1.5');
+    const row = planRowEl(container, 'studio');
+    const save = buttonByText(row, 'Save') as HTMLButtonElement;
     expect(save.disabled).toBe(true);
-    expect(limitRow(container, 'studio').textContent).toContain('whole numbers for listings and seats');
+    expect(row.textContent).toContain('whole numbers for listings and seats');
+    click(save);
     expect(setPlanLimits).not.toHaveBeenCalled();
+    expect(upsertPlan).not.toHaveBeenCalled();
+  });
+
+  it('Add plan saves its limits after the plan row exists', async () => {
+    vi.mocked(fetchPlanLimits).mockResolvedValue({ status: 'ok', data: [] });
+    vi.mocked(setPlanLimits).mockResolvedValue({
+      status: 'ok', data: { plan: 'atelier', listings_per_month: 200, storage_gb: 5, seats: null },
+    });
+    const order: string[] = [];
+    vi.mocked(upsertPlan).mockImplementation(async () => { order.push('upsert'); return { ok: true }; });
+    vi.mocked(setPlanLimits).mockImplementation(async () => {
+      order.push('limits');
+      return { status: 'ok', data: { plan: 'atelier', listings_per_month: 200, storage_gb: 5, seats: null } };
+    });
+    const { container } = await render();
+    click(tab(container, 'Plans'));
+    await flush();
+    const inputs = all(container, '.fc-plan-add input');
+    setValue(inputs[0], 'atelier');
+    setValue(inputs[3], '200');
+    setValue(inputs[4], '5');
+    click(buttonByText(container, 'Add plan'));
+    await flush();
+    await flush();
+    expect(order).toEqual(['upsert', 'limits']);
+    expect(setPlanLimits).toHaveBeenCalledWith({ plan: 'atelier', listingsPerMonth: 200, storageGb: 5, seats: null });
+  });
+
+  it('Add plan with blank limits makes no limits write', async () => {
+    vi.mocked(fetchPlanLimits).mockResolvedValue({ status: 'ok', data: [] });
+    const { container } = await render();
+    click(tab(container, 'Plans'));
+    await flush();
+    setValue(all(container, '.fc-plan-add input')[0], 'atelier');
+    click(buttonByText(container, 'Add plan'));
+    await flush();
+    expect(upsertPlan).toHaveBeenCalledTimes(1);
+    expect(setPlanLimits).not.toHaveBeenCalled();
+  });
+
+  it('the Usage table headers carry hints', async () => {
+    vi.mocked(fetchProjectUsage).mockResolvedValue({ status: 'ok', data: {
+      project: {
+        storage_gb_quota: 100, storage_bytes_total: 0, files_total: 0, orgs: 1,
+        members_total: 1, listings_this_month_total: 0, month_start: '2026-11-01', listing_basis: 'created',
+      },
+      orgs: [{ org_id: 'org-1', name: 'Shop A', plan: 'beta', storage_bytes: 0, files: 0, listings_this_month: 0, members: 1,
+        limits: { listings_per_month: null, storage_gb: null, seats: null } }],
+    } });
+    const { container } = await render();
+    click(tab(container, 'Usage'));
+    await flush();
+    const table = one(container, '.fc-usage-table');
+    const tipFor = (name: string) => {
+      const id = one(table, `button[aria-label="What ${name} means"]`).getAttribute('aria-describedby');
+      return one(table, `[id="${id}"]`).textContent;
+    };
+    expect(tipFor('Storage')).toContain("Used of the plan's limit");
+    expect(tipFor('Listings')).toContain("Created this month of the plan's cap");
+    expect(tipFor('Members')).toContain("Of the plan's seats");
   });
 });

@@ -291,3 +291,13 @@ Harness: `scratchpad/cds/{run.sh,fixture.sql,checks.sql,uniq.sh}` (not committed
   account and every future demo user still need them.
 - **Analytics history is left where it is.** `analytics_events.org_id` is the workspace an
   event happened in; rewriting it would falsify the founder's own dashboards.
+
+
+## Follow-up: the ship-from address (22 Nov 2026)
+
+The address 017 wrote onto every preset belongs to C&D Vintage, not to the Founding
+Workspace. `supabase/oneoff/move_ships_from_to_cd_vintage.sql` puts it right: run it AFTER
+the split (the split copies the founding presets, address included, into C&D Vintage). It
+fills the blank ship-from on C&D's shipping presets and clears exactly that string from the
+founding presets, and refuses until the `cd-vintage` workspace exists. New workspaces never
+receive the address: 074_seed_workspace_from_founding.sql blanks `ships_from` on copy.

@@ -138,6 +138,20 @@ describe('WorkspaceMenu', () => {
     expect(menuitems().every(m => m.getAttribute('tabindex') === '-1')).toBe(true);
   });
 
+  it('the role renders through the ui Badge and the unread count through CountBadge', () => {
+    const { container } = mount(<Harness />);
+    press(one(container, '.wsmenu-trigger'), 1);
+    const role = one(document, '.wsmenu-id-org .ui-badge');
+    expect(role.textContent).toBe('Owner');
+    expect(role.className).toContain('ui-badge--accent');
+    expect(role.className).not.toContain('ui-badge--gold');
+    expect(role.className).not.toContain('ui-badge--count');
+    const inbox = menuitems().find(m => m.textContent?.includes('Inbox'))!;
+    const count = one(inbox, '.ui-badge--count');
+    expect(count.textContent).toBe('3');
+    expect(count.getAttribute('aria-label')).toBe('3 unread');
+  });
+
   it('in the Founding Workspace the Back row reads "Back to dashboard" and picks home', () => {
     const onSelect = vi.fn();
     const { container } = mount(<Harness activeView="crm" back backTarget="home" onSelect={onSelect} />);

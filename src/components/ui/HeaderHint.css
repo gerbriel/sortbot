@@ -1,0 +1,65 @@
+/* ── HeaderHint ─────────────────────────────────────────────────────────────
+   A column header's text, a small info button, and a tooltip hung directly
+   under the header. The tooltip is the popover surface (the ink-800 token,
+   lifted by the md shadow) and is the one positioned thing in a table head,
+   so it resets every header style it would otherwise inherit (uppercase,
+   tracking, nowrap, right alignment in a number column). */
+
+.ui-header-hint {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  vertical-align: middle;
+}
+
+.ui-header-hint__btn[data-open='true'] {
+  background: var(--ink-750);
+  color: var(--text-primary);
+}
+
+.ui-header-hint__tip {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  z-index: 20;
+  width: max-content;
+  /* Never wider than the screen less the 16px gutters, so it cannot push the
+     page sideways on a narrow window. */
+  max-width: min(28rem, calc(100vw - 32px));
+  padding: 0.8rem 1rem;
+  background: var(--ink-800);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  color: var(--text-primary);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  line-height: var(--lh-normal);
+  letter-spacing: normal;
+  text-transform: none;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  animation: ui-header-hint-in var(--dur-fast) var(--ease);
+}
+
+/* The last columns: line up with the header's right edge instead. */
+.ui-header-hint__tip--end { left: auto; right: 0; }
+
+.ui-header-hint__tip[hidden] { display: none; }
+
+@keyframes ui-header-hint-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-header-hint__tip { animation: none; }
+}
+
+/* A finger needs the 44px floor (a literal px on purpose, see Button.css),
+   whatever the width: a touch laptop has no hover either. */
+@media (pointer: coarse) {
+  .ui-header-hint__btn { width: 44px; height: 44px; }
+}

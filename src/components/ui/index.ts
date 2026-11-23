@@ -39,6 +39,9 @@ export type { DialogProps, DialogSize } from './Dialog';
 export { InfoDisclosure } from './InfoDisclosure';
 export type { InfoDisclosureProps } from './InfoDisclosure';
 
+export { HeaderHint } from './HeaderHint';
+export type { HeaderHintProps } from './HeaderHint';
+
 export { ConfirmAction } from './ConfirmAction';
 export type { ConfirmActionProps } from './ConfirmAction';
 

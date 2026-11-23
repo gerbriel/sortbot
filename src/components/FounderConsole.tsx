@@ -6,7 +6,7 @@ import {
   UserCog, Users, X,
 } from 'lucide-react';
 import {
-  Badge, Button, ConfirmAction, EmptyState, Skeleton,
+  Badge, Button, ConfirmAction, EmptyState, HeaderHint, InfoDisclosure, Skeleton,
   SelectField, StatGrid, StatTile, Tab, TabList, TabPanel, Tabs, TextField,
   type SelectOption,
 } from './ui';
@@ -30,7 +30,7 @@ import type { OrgRole } from '../lib/orgService';
 import { syncCrmContacts } from '../lib/crmService';
 import {
   fetchProjectUsage, fetchPlanLimits, setPlanLimits,
-  usageReadout, limitLabel, listingBasisCopy, planDisplayName, parseLimitInput, formatCount,
+  usageReadout, listingBasisCopy, planDisplayName, parseLimitInput, formatCount,
   type PlanLimits, type PlanLimitsRow, type ProjectUsage, type UsageResult, type UsageReadout,
 } from '../lib/usageService';
 import {
@@ -152,6 +152,52 @@ function limitDraftChanged(l: PlanLimits, d: LimitDraft): boolean {
 }
 
 const NO_LIMITS: PlanLimits = { listings_per_month: null, storage_gb: null, seats: null };
+
+/** What each Plans column means: the header hints, and the phone legend that
+ *  stands in for them once `.an-table--cards` hides the header row. One copy,
+ *  so the two can never disagree. */
+const PLAN_COLUMN_HINTS = {
+  key: "The value stored on each workspace (organizations.plan) and the catalog's primary key. It cannot be renamed; retire the plan and add a new one instead.",
+  name: 'What members see on Home, the Workspace page and the plan dropdowns.',
+  price: 'List price per month in dollars. Finance applies the founding discount on top when it projects MRR.',
+  assignable: 'Offered: the plan can be put on a workspace from the Workspaces tab and the Onboard form. Retired: kept for history and billing, but no workspace can be moved onto it. Workspaces already on it stay.',
+  order: 'Position in every plan dropdown and list, lowest first. Ties are broken by key.',
+  listings: 'How many listings a workspace on this plan may create in a calendar month (UTC). Blank is unlimited. Home and the Workspace page warn at 85 percent.',
+  storage: 'How much photo storage a workspace on this plan may use, counted from its files in the product-images bucket. Blank is unlimited. Warns at 85 percent, marks over at 100.',
+  seats: 'How many members a workspace on this plan may have, including the owner. Blank is unlimited.',
+  workspaces: 'Workspaces on this plan right now.',
+  everUsed: 'Distinct workspaces that have ever been on this plan, from plan history. A plan with history cannot be deleted, only retired.',
+} as const;
+
+/** Appended to the three limit hints while 069 has not been run. */
+const LIMITS_SETUP_NOTE = 'Run 069_plan_limits_and_usage.sql in the Supabase SQL Editor to edit it.';
+
+/** The Plans table's columns in order: header text, the info button's name,
+ *  the hint, and whether it is a number column. */
+const PLAN_COLUMNS: { text: string; name: string; hint: string; num?: boolean; limit?: boolean }[] = [
+  { text: 'Key', name: 'Key', hint: PLAN_COLUMN_HINTS.key },
+  { text: 'Name shown', name: 'Name shown', hint: PLAN_COLUMN_HINTS.name },
+  { text: 'Price / mo', name: 'Price per month', hint: PLAN_COLUMN_HINTS.price, num: true },
+  { text: 'Assignable', name: 'Assignable', hint: PLAN_COLUMN_HINTS.assignable },
+  { text: 'Order', name: 'Order', hint: PLAN_COLUMN_HINTS.order, num: true },
+  { text: 'Listings / mo', name: 'Listings per month', hint: PLAN_COLUMN_HINTS.listings, num: true, limit: true },
+  { text: 'Storage (GB)', name: 'Storage', hint: PLAN_COLUMN_HINTS.storage, num: true, limit: true },
+  { text: 'Seats', name: 'Seats', hint: PLAN_COLUMN_HINTS.seats, num: true, limit: true },
+  { text: 'Workspaces', name: 'Workspaces', hint: PLAN_COLUMN_HINTS.workspaces, num: true },
+  { text: 'Ever used', name: 'Ever used', hint: PLAN_COLUMN_HINTS.everUsed, num: true },
+];
+
+/** From this column on, a tooltip hangs from the header's right edge so it
+ *  never runs past the right of the page. */
+const PLAN_HINT_END_FROM = 5;
+
+/** A limit cell's problem, in words, for the Add form's per-field errors. */
+function limitCellError(value: string, whole: boolean): string | undefined {
+  const v = parseLimitInput(value);
+  if (v === undefined) return 'A number, or blank for unlimited.';
+  if (whole && v !== null && !Number.isInteger(v)) return 'A whole number, or blank for unlimited.';
+  return undefined;
+}
 
 /** A readout's tint as a class suffix, shared by the tiles and the table. */
 const toneClass = (r: UsageReadout) => `fc-usage--${r.tone}`;
@@ -302,6 +348,7 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
   const [newPlanKey, setNewPlanKey] = useState('');
   const [newPlanLabel, setNewPlanLabel] = useState('');
   const [newPlanPrice, setNewPlanPrice] = useState('');
+  const [newPlanLimits, setNewPlanLimits] = useState<LimitDraft>({ listings: '', storage: '', seats: '' });
 
   /** Per-workspace plan history, loaded when its row is expanded. */
   const [history, setHistory] = useState<Record<string, PlanHistoryRow[] | 'loading'>>({});
@@ -623,8 +670,20 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
   const newPlanKeyValid = PLAN_KEY_RE.test(newPlanKeyNorm);
   const newPlanTaken = plans.some(p => p.plan === newPlanKeyNorm);
 
+  /** Whether the limit cells can be edited: only once 069's columns answered. */
+  const limitsEditable = planLimits.status === 'ok';
+
+  /* The Add form's limits, parsed the way a row's are. Blank is unlimited, so
+     a plan added with three blank cells needs no second write at all. */
+  const newPlanLimitsParsed = limitDraftParse(newPlanLimits);
+  const newPlanLimitsInvalid = limitsEditable && newPlanLimitsParsed === null;
+  const newPlanHasLimits = limitsEditable && newPlanLimitsParsed !== null
+    && (newPlanLimitsParsed.listings_per_month !== null
+      || newPlanLimitsParsed.storage_gb !== null
+      || newPlanLimitsParsed.seats !== null);
+
   const handleAddPlan = async () => {
-    if (busy || !newPlanKeyValid || newPlanTaken) return;
+    if (busy || !newPlanKeyValid || newPlanTaken || newPlanLimitsInvalid) return;
     setBusy(true);
     setNotice(null);
     const res = await upsertPlan({
@@ -638,37 +697,39 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
       isActive: true,
     });
     if (res.ok) {
-      setNotice(`Added the ${newPlanKeyNorm} plan. It is assignable from the Workspaces tab straight away — that is the whole point of the catalog.`);
+      const added = `Added the ${newPlanKeyNorm} plan. It is assignable from the Workspaces tab straight away.`;
+      // The limits are written AFTER the plan row exists: founding_set_plan_limits
+      // updates a catalog row, so it has nothing to write to before this point.
+      let limitsNote = '';
+      if (newPlanHasLimits && newPlanLimitsParsed) {
+        const lim = await setPlanLimits({
+          plan: newPlanKeyNorm,
+          listingsPerMonth: newPlanLimitsParsed.listings_per_month,
+          storageGb: newPlanLimitsParsed.storage_gb,
+          seats: newPlanLimitsParsed.seats,
+        });
+        if (lim.status === 'ok') {
+          setPlanLimitsState(prev => prev.status === 'ok'
+            ? { status: 'ok', data: [...prev.data.filter(r => r.plan !== newPlanKeyNorm), lim.data] }
+            : prev);
+          limitsNote = ' Its limits are saved too.';
+        } else {
+          if (lim.status === 'unavailable') setPlanLimitsState({ status: 'unavailable' });
+          const why = lim.status === 'unavailable' ? USAGE_SETUP_TEXT
+            : lim.status === 'forbidden' ? 'Founding Workspace admins only.' : lim.message;
+          limitsNote = ` Its limits did not save (${why}). Set them in its row.`;
+        }
+      }
+      setNotice(added + limitsNote);
       setNewPlanKey('');
       setNewPlanLabel('');
       setNewPlanPrice('');
+      setNewPlanLimits({ listings: '', storage: '', seats: '' });
       await reload();
     } else {
       if (res.reason === 'unavailable') setPlanStatus('unavailable');
       setNotice(res.error ?? 'Could not add that plan.');
     }
-    setBusy(false);
-  };
-
-  const handleSavePlan = async (p: PlanRow, d: PlanDraft) => {
-    if (busy || !planDraftValid(d)) return;
-    setBusy(true);
-    setNotice(null);
-    const res = await upsertPlan({
-      plan: p.plan,
-      displayName: d.display,
-      monthlyCents: parsePlanCents(d.price) ?? p.monthly_cents,
-      // Sent back unchanged. `note` has no cell in this table and the function
-      // REPLACES it, so omitting it would blank a note written in Finance.
-      // This is also why the Offered checkbox is part of the row draft rather
-      // than a standalone toggle: a one-field writer here destroys two others.
-      note: p.note,
-      isActive: d.active,
-      sortOrder: Number(d.sort),
-    });
-    setNotice(res.ok ? `Saved the ${p.plan} plan.` : (res.error ?? 'Could not save that plan.'));
-    if (res.ok) await reload();
-    else if (res.reason === 'unavailable') setPlanStatus('unavailable');
     setBusy(false);
   };
 
@@ -755,31 +816,88 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
     return m;
   }, [planLimits]);
 
-  const handleSaveLimits = async (plan: string, d: LimitDraft) => {
-    const parsed = limitDraftParse(d);
-    if (busy || !parsed) return;
+  /**
+   * ONE row, ONE Save, TWO independent writes. The catalog half (name, price,
+   * Assignable, order) goes through `upsertPlan` only when one of those cells
+   * changed, and the limits half through `setPlanLimits` only when a limit
+   * changed, so a limit edit never re-sends a price and a price edit never
+   * touches the limits. Each half keeps its own success: a failure in one is
+   * reported by name and leaves the other saved (and its draft cleared).
+   */
+  const handleSaveRow = async (p: PlanRow, d: PlanDraft, ld: LimitDraft) => {
+    const savedLimits = limitsByPlan.get(p.plan) ?? NO_LIMITS;
+    const catalogChanged = planDraftChanged(p, d);
+    const limitsChanged = limitsEditable && limitDraftChanged(savedLimits, ld);
+    const parsed = limitsChanged ? limitDraftParse(ld) : null;
+    if (busy || (!catalogChanged && !limitsChanged)) return;
+    if (catalogChanged && !planDraftValid(d)) return;
+    if (limitsChanged && !parsed) return;
     setBusy(true);
     setNotice(null);
-    const res = await setPlanLimits({
-      plan,
-      listingsPerMonth: parsed.listings_per_month,
-      storageGb: parsed.storage_gb,
-      seats: parsed.seats,
-    });
-    if (res.status === 'ok') {
-      setNotice(`Saved the ${plan} plan's limits. Every workspace on it reads them straight away.`);
-      setPlanLimitsState(prev => prev.status === 'ok'
-        ? { status: 'ok', data: [...prev.data.filter(r => r.plan !== plan), res.data] }
-        : prev);
-      setLimitEdits(e => { const n = { ...e }; delete n[plan]; return n; });
-      // The Usage tab's caps are now stale; it re-reads on its next open.
-      setProjectUsage({ status: 'idle' });
-    } else if (res.status === 'unavailable') {
-      setPlanLimitsState({ status: 'unavailable' });
-      setNotice(USAGE_SETUP_TEXT);
-    } else {
-      setNotice(res.status === 'forbidden' ? 'Founding Workspace admins only.' : res.message);
+
+    let catalogError: string | null = null;
+    if (catalogChanged) {
+      const res = await upsertPlan({
+        plan: p.plan,
+        displayName: d.display,
+        monthlyCents: parsePlanCents(d.price) ?? p.monthly_cents,
+        // Sent back unchanged. `note` has no cell in this table and the function
+        // REPLACES it, so omitting it would blank a note written in Finance.
+        // This is also why the Offered checkbox is part of the row draft rather
+        // than a standalone toggle: a one-field writer here destroys two others.
+        note: p.note,
+        isActive: d.active,
+        sortOrder: Number(d.sort),
+      });
+      if (!res.ok) {
+        catalogError = res.error ?? 'Could not save that plan.';
+        if (res.reason === 'unavailable') setPlanStatus('unavailable');
+      }
     }
+
+    let limitsError: string | null = null;
+    if (limitsChanged && parsed) {
+      const res = await setPlanLimits({
+        plan: p.plan,
+        listingsPerMonth: parsed.listings_per_month,
+        storageGb: parsed.storage_gb,
+        seats: parsed.seats,
+      });
+      if (res.status === 'ok') {
+        setPlanLimitsState(prev => prev.status === 'ok'
+          ? { status: 'ok', data: [...prev.data.filter(r => r.plan !== p.plan), res.data] }
+          : prev);
+        setLimitEdits(e => { const n = { ...e }; delete n[p.plan]; return n; });
+        // The Usage tab's caps are now stale; it re-reads on its next open.
+        setProjectUsage({ status: 'idle' });
+      } else if (res.status === 'unavailable') {
+        setPlanLimitsState({ status: 'unavailable' });
+        limitsError = USAGE_SETUP_TEXT;
+      } else {
+        limitsError = res.status === 'forbidden' ? 'Founding Workspace admins only.' : res.message;
+      }
+    }
+
+    const catalogHalf = 'name, price, Assignable and order';
+    if (catalogChanged && limitsChanged) {
+      if (!catalogError && !limitsError) {
+        setNotice(`Saved the ${p.plan} plan and its limits. Every workspace on it reads the limits straight away.`);
+      } else if (!catalogError) {
+        setNotice(`Saved the ${p.plan} plan's ${catalogHalf}, but its limits did not save: ${limitsError}`);
+      } else if (!limitsError) {
+        setNotice(`Saved the ${p.plan} plan's limits, but its ${catalogHalf} did not save: ${catalogError}`);
+      } else {
+        setNotice(`Nothing saved for the ${p.plan} plan. Its ${catalogHalf}: ${catalogError} Its limits: ${limitsError}`);
+      }
+    } else if (catalogChanged) {
+      setNotice(catalogError ?? `Saved the ${p.plan} plan.`);
+    } else {
+      setNotice(limitsError ?? `Saved the ${p.plan} plan's limits. Every workspace on it reads them straight away.`);
+    }
+
+    // A reload clears every catalog draft, so it runs only when the catalog
+    // half landed: a failed half keeps its typed values for another try.
+    if (catalogChanged && !catalogError) await reload();
     setBusy(false);
   };
 
@@ -1374,9 +1492,15 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
                       <tr>
                         <th scope="col">Workspace</th>
                         <th scope="col">Plan</th>
-                        <th scope="col">Storage</th>
-                        <th scope="col" className="an-num">Listings</th>
-                        <th scope="col" className="an-num">Members</th>
+                        <th scope="col">
+                          <HeaderHint label="What Storage means" hint="Used of the plan's limit.">Storage</HeaderHint>
+                        </th>
+                        <th scope="col" className="an-num">
+                          <HeaderHint label="What Listings means" hint="Created this month of the plan's cap." align="end">Listings</HeaderHint>
+                        </th>
+                        <th scope="col" className="an-num">
+                          <HeaderHint label="What Members means" hint="Of the plan's seats." align="end">Members</HeaderHint>
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1538,12 +1662,18 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
           {planSetupHint}
           <p className="shopify-conn-help">
             <code>finance_plan_prices</code> is the catalog. Everything that offers a
-            plan reads it — the Workspaces tab, the Onboard form, and the server-side
-            check that decides whether a plan may be written at all — so a tier added
-            here can be assigned straight away. It used to be a hardcoded list in two
-            hand-synced places, which is how a tier priced in Finance could end up
-            impossible to put anybody on.
+            plan reads it: the Workspaces tab, the Onboard form, and the server-side
+            check that decides whether a plan may be written at all, so a tier added
+            here can be assigned straight away. Each plan&apos;s limits (listings a
+            month, storage and seats) are edited in the same row and saved by the same
+            Save. The info button on a column says what it means.
           </p>
+          {plans.length > 0 && (planLimits.status === 'forbidden' || planLimits.status === 'error') && (
+            <p className="fc-setup" role="status">
+              Plan limits could not be read:{' '}
+              {planLimits.status === 'forbidden' ? 'Founding Workspace admins only.' : planLimits.message}
+            </p>
+          )}
 
           {plans.length === 0 ? (
             <EmptyState
@@ -1551,304 +1681,268 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
               title="No catalog to edit yet"
               description={
                 planStatus === 'unavailable'
-                  ? `Nothing is broken meanwhile: every plan dropdown still offers the nine seeded tiers — ${ORG_PLANS.join(', ')} — and setting a workspace's plan works exactly as it does today. Running the migration above is what makes them editable and starts recording plan history.`
-                  : 'finance_plan_prices came back empty. Run 051_finance.sql — or 062_plan_management.sql, which re-creates and re-seeds the table — to get the nine starting tiers.'
+                  ? `Nothing is broken meanwhile: every plan dropdown still offers the nine seeded tiers (${ORG_PLANS.join(', ')}) and setting a workspace's plan works exactly as it does today. Running the migration above is what makes them editable and starts recording plan history.`
+                  : 'finance_plan_prices came back empty. Run 051_finance.sql, or 062_plan_management.sql, which re-creates and re-seeds the table, to get the nine starting tiers.'
               }
             />
           ) : (
-            <table className="an-table an-table--cards fc-plan-table">
-              <thead>
-                <tr>
-                  <th scope="col">Key</th>
-                  <th scope="col">Name shown</th>
-                  <th scope="col" className="an-num">Price / mo</th>
-                  <th scope="col">Assignable</th>
-                  <th scope="col" className="an-num">Order</th>
-                  <th scope="col" className="an-num">Workspaces</th>
-                  <th scope="col" className="an-num">Ever used</th>
-                  <th scope="col"><span className="ui-sr-only">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {plans.map(p => {
-                  const d = planEdits[p.plan] ?? planDraftOf(p);
-                  const changed = planDraftChanged(p, d);
-                  const valid = planDraftValid(d);
-                  const renaming = planRenameId === p.plan;
-                  const setD = (patch: Partial<PlanDraft>) =>
-                    setPlanEdits(e => ({ ...e, [p.plan]: { ...d, ...patch } }));
-                  return (
-                    <tr key={p.plan} className="fc-plan-row">
-                      <td data-label="Key">
-                        <span className="fc-plan-key">
-                          <code>{p.plan}</code>
-                          {p.protected && <Badge tone="neutral">built in</Badge>}
-                          {!p.is_active && <Badge tone="warning">retired</Badge>}
-                        </span>
-                      </td>
-                      <td data-label="Name shown">
-                        <input
-                          className="fc-plan-input"
-                          maxLength={60}
-                          placeholder={p.plan}
-                          aria-label={`Name shown for the ${p.plan} plan`}
-                          value={d.display}
-                          disabled={busy}
-                          onChange={(e) => setD({ display: e.target.value })}
-                        />
-                      </td>
-                      <td data-label="Price / mo" className="an-num">
-                        <span className="fc-plan-money">
-                          <span aria-hidden="true" className="fc-plan-money-mark">$</span>
+            <>
+              {/* Phones: `.an-table--cards` hides the header row, and the
+                  header hints with it, so the same copy is offered once here. */}
+              <InfoDisclosure
+                className="fc-plan-legend"
+                label="What the plan columns mean"
+                heading={<span className="fc-plan-legend-title">What the columns mean</span>}
+              >
+                <dl className="fc-plan-legend-list">
+                  {PLAN_COLUMNS.map(c => (
+                    <div key={c.text}>
+                      <dt>{c.text}</dt>
+                      <dd>
+                        {c.hint}
+                        {c.limit && planLimits.status === 'unavailable' && ` ${LIMITS_SETUP_NOTE}`}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </InfoDisclosure>
+
+              <table className="an-table an-table--cards fc-plan-table">
+                <thead>
+                  <tr>
+                    {PLAN_COLUMNS.map((c, i) => (
+                      <th key={c.text} scope="col" className={c.num ? 'an-num' : undefined}>
+                        <HeaderHint
+                          label={`What ${c.name} means`}
+                          align={i >= PLAN_HINT_END_FROM ? 'end' : 'start'}
+                          hint={c.limit && planLimits.status === 'unavailable'
+                            ? `${c.hint} ${LIMITS_SETUP_NOTE}`
+                            : c.hint}
+                        >
+                          {c.text}
+                        </HeaderHint>
+                      </th>
+                    ))}
+                    <th scope="col"><span className="ui-sr-only">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {plans.map(p => {
+                    const d = planEdits[p.plan] ?? planDraftOf(p);
+                    const savedLimits = limitsByPlan.get(p.plan) ?? NO_LIMITS;
+                    const ld = limitEdits[p.plan] ?? limitDraftOf(savedLimits);
+                    const catalogChanged = planDraftChanged(p, d);
+                    const limitsChanged = limitsEditable && limitDraftChanged(savedLimits, ld);
+                    const changed = catalogChanged || limitsChanged;
+                    const catalogValid = !catalogChanged || planDraftValid(d);
+                    const limitsValid = !limitsChanged || limitDraftParse(ld) !== null;
+                    const valid = catalogValid && limitsValid;
+                    const renaming = planRenameId === p.plan;
+                    const setD = (patch: Partial<PlanDraft>) =>
+                      setPlanEdits(e => ({ ...e, [p.plan]: { ...d, ...patch } }));
+                    const setL = (patch: Partial<LimitDraft>) =>
+                      setLimitEdits(e => ({ ...e, [p.plan]: { ...ld, ...patch } }));
+                    const limitPlaceholder = limitsEditable ? 'Unlimited'
+                      : planLimits.status === 'unavailable' ? 'Run 069'
+                        : planLimits.status === 'idle' || planLimits.status === 'loading' ? 'Loading' : '';
+                    const limitDisabled = busy || !limitsEditable;
+                    return (
+                      <tr key={p.plan} className="fc-plan-row">
+                        <td data-label="Key">
+                          <span className="fc-plan-key">
+                            <code>{p.plan}</code>
+                            {p.protected && <Badge tone="neutral">built in</Badge>}
+                            {!p.is_active && <Badge tone="warning">retired</Badge>}
+                          </span>
+                        </td>
+                        <td data-label="Name shown">
+                          <input
+                            className="fc-plan-input"
+                            maxLength={60}
+                            placeholder={p.plan}
+                            aria-label={`Name shown for the ${p.plan} plan`}
+                            value={d.display}
+                            disabled={busy}
+                            onChange={(e) => setD({ display: e.target.value })}
+                          />
+                        </td>
+                        <td data-label="Price / mo" className="an-num">
+                          <span className="fc-plan-money">
+                            <span aria-hidden="true" className="fc-plan-money-mark">$</span>
+                            <input
+                              className="fc-plan-input fc-plan-input--num"
+                              inputMode="decimal"
+                              aria-label={`Monthly price in dollars for the ${p.plan} plan`}
+                              value={d.price}
+                              disabled={busy}
+                              onChange={(e) => setD({ price: e.target.value })}
+                            />
+                          </span>
+                          {catalogChanged && parsePlanCents(d.price) !== p.monthly_cents && (
+                            <span className="fc-plan-was">was {fmtDollars(p.monthly_cents)}</span>
+                          )}
+                        </td>
+                        <td data-label="Assignable">
+                          {/* A retired tier stays PRICED so historical MRR still
+                              joins; it just drops out of every dropdown. */}
+                          <label className="fc-plan-check">
+                            <input
+                              type="checkbox"
+                              checked={d.active}
+                              disabled={busy}
+                              aria-label={`Offer the ${p.plan} plan in the dropdowns`}
+                              onChange={(e) => setD({ active: e.target.checked })}
+                            />
+                            <span>{d.active ? 'Offered' : 'Retired'}</span>
+                          </label>
+                        </td>
+                        <td data-label="Order" className="an-num">
                           <input
                             className="fc-plan-input fc-plan-input--num"
-                            inputMode="decimal"
-                            aria-label={`Monthly price in dollars for the ${p.plan} plan`}
-                            value={d.price}
+                            inputMode="numeric"
+                            aria-label={`Dropdown order for the ${p.plan} plan`}
+                            value={d.sort}
                             disabled={busy}
-                            onChange={(e) => setD({ price: e.target.value })}
+                            onChange={(e) => setD({ sort: e.target.value })}
                           />
-                        </span>
-                        {changed && parsePlanCents(d.price) !== p.monthly_cents && (
-                          <span className="fc-plan-was">was {fmtDollars(p.monthly_cents)}</span>
-                        )}
-                      </td>
-                      <td data-label="Assignable">
-                        {/* A retired tier stays PRICED so historical MRR still
-                            joins; it just drops out of every dropdown. */}
-                        <label className="fc-plan-check">
+                        </td>
+                        <td data-label="Listings / mo" className="an-num">
                           <input
-                            type="checkbox"
-                            checked={d.active}
-                            disabled={busy}
-                            aria-label={`Offer the ${p.plan} plan in the dropdowns`}
-                            onChange={(e) => setD({ active: e.target.checked })}
+                            className="fc-plan-input fc-plan-input--num fc-plan-input--limit"
+                            inputMode="numeric"
+                            placeholder={limitPlaceholder}
+                            aria-label={`Listings per month for the ${p.plan} plan`}
+                            value={ld.listings}
+                            disabled={limitDisabled}
+                            onChange={(e) => setL({ listings: e.target.value })}
                           />
-                          <span>{d.active ? 'Offered' : 'Retired'}</span>
-                        </label>
-                      </td>
-                      <td data-label="Order" className="an-num">
-                        <input
-                          className="fc-plan-input fc-plan-input--num"
-                          inputMode="numeric"
-                          aria-label={`Dropdown order for the ${p.plan} plan`}
-                          value={d.sort}
-                          disabled={busy}
-                          onChange={(e) => setD({ sort: e.target.value })}
-                        />
-                      </td>
-                      <td data-label="Workspaces" className="an-num">{p.workspaces}</td>
-                      <td data-label="Ever used" className="an-num">{p.ever_used}</td>
-                      <td>
-                        <span className="fc-plan-actions">
-                          {changed && (
-                            <>
-                              <Button size="sm" variant="primary" disabled={busy || !valid}
-                                onClick={() => handleSavePlan(p, d)}>
-                                Save
-                              </Button>
-                              <Button size="sm" variant="ghost" disabled={busy}
-                                onClick={() => setPlanEdits(e => {
-                                  const n = { ...e }; delete n[p.plan]; return n;
-                                })}>
-                                Cancel
-                              </Button>
-                              {!valid && (
-                                <span className="fc-plan-why" role="alert">
-                                  Price needs to be a number like 129 or 129.00, and order a whole number.
-                                </span>
-                              )}
-                            </>
-                          )}
-
-                          {/* PROTECTED PLANS SAY WHY, rather than showing a
-                              greyed control with no explanation. The server
-                              refuses either way; this is so the founder knows
-                              before the click instead of after it. */}
-                          {p.protected ? (
-                            <span className="fc-plan-why">
-                              Built in — <code>organizations.plan</code> defaults to <code>free</code>,
-                              new workspaces start on <code>beta</code>, and the founding-discount
-                              test reads that name. Neither can be renamed or deleted.
-                            </span>
-                          ) : renaming ? (
-                            <span className="org-rename-form">
-                              <input
-                                value={planRenameDraft}
-                                maxLength={40}
-                                autoFocus
-                                aria-label={`New key for the ${p.plan} plan`}
-                                onChange={(e) => setPlanRenameDraft(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') void handleRenamePlan(p.plan);
-                                  if (e.key === 'Escape') setPlanRenameId(null);
-                                }}
-                              />
-                              <button
-                                className="org-icon-btn"
-                                title={PROTECTED_PLANS.includes(planRenameDraft.trim().toLowerCase())
-                                  ? `"${planRenameDraft.trim().toLowerCase()}" is built in and cannot be taken over by another plan`
-                                  : 'Save key'}
-                                disabled={busy || planRenameBlocked(planRenameDraft.trim().toLowerCase(), p.plan)}
-                                onClick={() => handleRenamePlan(p.plan)}><Check size={14} /></button>
-                              <button className="org-icon-btn" title="Cancel" disabled={busy}
-                                onClick={() => setPlanRenameId(null)}><X size={14} /></button>
-                            </span>
-                          ) : (
-                            <>
-                              <Button size="sm" icon={<Pencil size={12} />} disabled={busy}
-                                onClick={() => { setPlanRenameId(p.plan); setPlanRenameDraft(p.plan); }}>
-                                Rename
-                              </Button>
-                              {/* Delete is for a tier created by mistake. Anything with a
-                                  present OR a past is retired instead — the server refuses
-                                  both (§8.4), and these say which rule you have hit. The
-                                  history rule is not tidiness: the Alumni picker is built
-                                  from the catalog, so deleting a used tier is what would
-                                  make its alumni unreachable. */}
-                              {p.workspaces > 0 ? (
-                                <span className="fc-plan-why">
-                                  {p.workspaces} workspace{p.workspaces === 1 ? '' : 's'} on it —
-                                  move them off first, or untick Offered to retire it and keep it priced.
-                                </span>
-                              ) : p.ever_used > 0 ? (
-                                <span className="fc-plan-why">
-                                  {p.ever_used} workspace{p.ever_used === 1 ? ' has' : 's have'} been on it —
-                                  a plan with history can’t be deleted. Untick Offered to retire it, which
-                                  keeps its price and keeps its alumni findable.
-                                </span>
-                              ) : (
-                                <ConfirmAction
-                                  label="Delete"
-                                  icon={<Trash2 size={12} />}
-                                  prompt={`Delete the ${p.plan} plan?`}
-                                  disabled={busy}
-                                  onConfirm={() => handleDeletePlan(p.plan)}
-                                />
-                              )}
-                            </>
-                          )}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-
-          {/* ── Plan limits (069). Its own Save: a separate RPC from the price
-               row, so a limit edit can never re-send a stale price. Blank is
-               unlimited. Hidden quietly until the catalog has plans. ── */}
-          {plans.length > 0 && (
-            <>
-              <h4 className="fc-sub">Limits</h4>
-              {planLimits.status === 'idle' || planLimits.status === 'loading' ? (
-                <div className="fc-skeleton" aria-busy="true">
-                  <Skeleton shape="text" height="4rem" />
-                </div>
-              ) : planLimits.status === 'unavailable' ? (
-                <p className="fc-setup" role="status">
-                  Plan limits need one more migration: {USAGE_SETUP_TEXT.replace(/^Run /, 'run ')}
-                </p>
-              ) : planLimits.status !== 'ok' ? (
-                <p className="fc-setup" role="status">
-                  {planLimits.status === 'forbidden' ? 'Founding Workspace admins only.' : planLimits.message}
-                </p>
-              ) : (
-                <>
-                  <p className="shopify-conn-help">
-                    What each plan allows. Blank means unlimited. Storage is in GB; listings
-                    and seats are whole numbers. The Home and Workspace meters read these.
-                  </p>
-                  <table className="an-table an-table--cards fc-plan-table fc-limit-table">
-                    <thead>
-                      <tr>
-                        <th scope="col">Plan</th>
-                        <th scope="col" className="an-num">Listings / month</th>
-                        <th scope="col" className="an-num">Storage (GB)</th>
-                        <th scope="col" className="an-num">Seats</th>
-                        <th scope="col"><span className="ui-sr-only">Actions</span></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {plans.map(p => {
-                        const saved = limitsByPlan.get(p.plan) ?? NO_LIMITS;
-                        const d = limitEdits[p.plan] ?? limitDraftOf(saved);
-                        const changed = limitDraftChanged(saved, d);
-                        const valid = limitDraftParse(d) !== null;
-                        const setD = (patch: Partial<LimitDraft>) =>
-                          setLimitEdits(e => ({ ...e, [p.plan]: { ...d, ...patch } }));
-                        return (
-                          <tr key={p.plan} className="fc-limit-row">
-                            <td data-label="Plan"><code>{p.plan}</code></td>
-                            <td data-label="Listings / month" className="an-num">
-                              <input
-                                className="fc-plan-input fc-plan-input--num"
-                                inputMode="numeric"
-                                placeholder="Unlimited"
-                                aria-label={`Listings per month for the ${p.plan} plan`}
-                                value={d.listings}
-                                disabled={busy}
-                                onChange={(e) => setD({ listings: e.target.value })}
-                              />
-                            </td>
-                            <td data-label="Storage (GB)" className="an-num">
-                              <input
-                                className="fc-plan-input fc-plan-input--num"
-                                inputMode="decimal"
-                                placeholder="Unlimited"
-                                aria-label={`Storage in GB for the ${p.plan} plan`}
-                                value={d.storage}
-                                disabled={busy}
-                                onChange={(e) => setD({ storage: e.target.value })}
-                              />
-                            </td>
-                            <td data-label="Seats" className="an-num">
-                              <input
-                                className="fc-plan-input fc-plan-input--num"
-                                inputMode="numeric"
-                                placeholder="Unlimited"
-                                aria-label={`Seats for the ${p.plan} plan`}
-                                value={d.seats}
-                                disabled={busy}
-                                onChange={(e) => setD({ seats: e.target.value })}
-                              />
-                            </td>
-                            <td>
-                              <span className="fc-plan-actions">
-                                {changed ? (
-                                  <>
-                                    <Button size="sm" variant="primary" disabled={busy || !valid}
-                                      onClick={() => handleSaveLimits(p.plan, d)}>
-                                      Save limits
-                                    </Button>
-                                    <Button size="sm" variant="ghost" disabled={busy}
-                                      onClick={() => setLimitEdits(e => {
-                                        const n = { ...e }; delete n[p.plan]; return n;
-                                      })}>
-                                      Cancel
-                                    </Button>
-                                    {!valid && (
-                                      <span className="fc-plan-why" role="alert">
-                                        Leave a cell blank for unlimited, or type a number: whole numbers for listings and seats.
-                                      </span>
-                                    )}
-                                  </>
-                                ) : (
-                                  <span className="fc-plan-why">
-                                    Listings {limitLabel(saved.listings_per_month)}, storage {limitLabel(saved.storage_gb, 'GB')}, seats {limitLabel(saved.seats)}
+                        </td>
+                        <td data-label="Storage (GB)" className="an-num">
+                          <input
+                            className="fc-plan-input fc-plan-input--num fc-plan-input--limit"
+                            inputMode="decimal"
+                            placeholder={limitPlaceholder}
+                            aria-label={`Storage in GB for the ${p.plan} plan`}
+                            value={ld.storage}
+                            disabled={limitDisabled}
+                            onChange={(e) => setL({ storage: e.target.value })}
+                          />
+                        </td>
+                        <td data-label="Seats" className="an-num">
+                          <input
+                            className="fc-plan-input fc-plan-input--num fc-plan-input--limit"
+                            inputMode="numeric"
+                            placeholder={limitPlaceholder}
+                            aria-label={`Seats for the ${p.plan} plan`}
+                            value={ld.seats}
+                            disabled={limitDisabled}
+                            onChange={(e) => setL({ seats: e.target.value })}
+                          />
+                        </td>
+                        <td data-label="Workspaces" className="an-num">{p.workspaces}</td>
+                        <td data-label="Ever used" className="an-num">{p.ever_used}</td>
+                        <td>
+                          <span className="fc-plan-actions">
+                            {changed && (
+                              <>
+                                <Button size="sm" variant="primary" disabled={busy || !valid}
+                                  onClick={() => handleSaveRow(p, d, ld)}>
+                                  Save
+                                </Button>
+                                <Button size="sm" variant="ghost" disabled={busy}
+                                  onClick={() => {
+                                    setPlanEdits(e => { const n = { ...e }; delete n[p.plan]; return n; });
+                                    setLimitEdits(e => { const n = { ...e }; delete n[p.plan]; return n; });
+                                  }}>
+                                  Cancel
+                                </Button>
+                                {!catalogValid && (
+                                  <span className="fc-plan-why" role="alert">
+                                    Price needs to be a number like 129 or 129.00, and order a whole number.
                                   </span>
                                 )}
+                                {!limitsValid && (
+                                  <span className="fc-plan-why" role="alert">
+                                    Leave a limit blank for unlimited, or type a number: whole numbers for listings and seats.
+                                  </span>
+                                )}
+                              </>
+                            )}
+
+                            {/* PROTECTED PLANS SAY WHY, rather than showing a
+                                greyed control with no explanation. The server
+                                refuses either way; this is so the founder knows
+                                before the click instead of after it. */}
+                            {p.protected ? (
+                              <span className="fc-plan-why">
+                                Built in: <code>organizations.plan</code> defaults to <code>free</code>,
+                                new workspaces start on <code>beta</code>, and the founding-discount
+                                test reads that name. Neither can be renamed or deleted.
                               </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </>
-              )}
+                            ) : renaming ? (
+                              <span className="org-rename-form">
+                                <input
+                                  value={planRenameDraft}
+                                  maxLength={40}
+                                  autoFocus
+                                  aria-label={`New key for the ${p.plan} plan`}
+                                  onChange={(e) => setPlanRenameDraft(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') void handleRenamePlan(p.plan);
+                                    if (e.key === 'Escape') setPlanRenameId(null);
+                                  }}
+                                />
+                                <button
+                                  className="org-icon-btn"
+                                  title={PROTECTED_PLANS.includes(planRenameDraft.trim().toLowerCase())
+                                    ? `"${planRenameDraft.trim().toLowerCase()}" is built in and cannot be taken over by another plan`
+                                    : 'Save key'}
+                                  disabled={busy || planRenameBlocked(planRenameDraft.trim().toLowerCase(), p.plan)}
+                                  onClick={() => handleRenamePlan(p.plan)}><Check size={14} /></button>
+                                <button className="org-icon-btn" title="Cancel" disabled={busy}
+                                  onClick={() => setPlanRenameId(null)}><X size={14} /></button>
+                              </span>
+                            ) : (
+                              <>
+                                <Button size="sm" icon={<Pencil size={12} />} disabled={busy}
+                                  onClick={() => { setPlanRenameId(p.plan); setPlanRenameDraft(p.plan); }}>
+                                  Rename
+                                </Button>
+                                {/* Delete is for a tier created by mistake. Anything with a
+                                    present OR a past is retired instead; the server refuses
+                                    both (§8.4), and these say which rule you have hit. The
+                                    history rule is not tidiness: the Alumni picker is built
+                                    from the catalog, so deleting a used tier is what would
+                                    make its alumni unreachable. */}
+                                {p.workspaces > 0 ? (
+                                  <span className="fc-plan-why">
+                                    {p.workspaces} workspace{p.workspaces === 1 ? '' : 's'} on it.
+                                    Move them off first, or untick Offered to retire it and keep it priced.
+                                  </span>
+                                ) : p.ever_used > 0 ? (
+                                  <span className="fc-plan-why">
+                                    {p.ever_used} workspace{p.ever_used === 1 ? ' has' : 's have'} been on it,
+                                    so it can’t be deleted. Untick Offered to retire it, which
+                                    keeps its price and keeps its alumni findable.
+                                  </span>
+                                ) : (
+                                  <ConfirmAction
+                                    label="Delete"
+                                    icon={<Trash2 size={12} />}
+                                    prompt={`Delete the ${p.plan} plan?`}
+                                    disabled={busy}
+                                    onConfirm={() => handleDeletePlan(p.plan)}
+                                  />
+                                )}
+                              </>
+                            )}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </>
           )}
 
@@ -1865,7 +1959,7 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
                 newPlanKey.trim() !== '' && !newPlanKeyValid
                   ? 'Start with a letter, then letters, digits, - or _ (40 characters max).'
                   : newPlanTaken
-                    ? `There is already a "${newPlanKeyNorm}" plan — edit its row above.`
+                    ? `There is already a "${newPlanKeyNorm}" plan. Edit its row above.`
                     : undefined
               }
               onChange={(e) => setNewPlanKey(e.target.value)}
@@ -1888,11 +1982,41 @@ export default function FounderConsole({ myUserId, myOrgId, onMyRoleChanged }: F
               hint="In dollars. Blank is $0, which is what free and beta are."
               onChange={(e) => setNewPlanPrice(e.target.value)}
             />
+            <TextField
+              className="fc-plan-add-limit"
+              label="Listings / month"
+              placeholder={limitsEditable ? 'Unlimited' : 'Run 069'}
+              inputMode="numeric"
+              value={newPlanLimits.listings}
+              disabled={busy || !limitsEditable}
+              error={limitsEditable ? limitCellError(newPlanLimits.listings, true) : undefined}
+              onChange={(e) => setNewPlanLimits(l => ({ ...l, listings: e.target.value }))}
+            />
+            <TextField
+              className="fc-plan-add-limit"
+              label="Storage (GB)"
+              placeholder={limitsEditable ? 'Unlimited' : 'Run 069'}
+              inputMode="decimal"
+              value={newPlanLimits.storage}
+              disabled={busy || !limitsEditable}
+              error={limitsEditable ? limitCellError(newPlanLimits.storage, false) : undefined}
+              onChange={(e) => setNewPlanLimits(l => ({ ...l, storage: e.target.value }))}
+            />
+            <TextField
+              className="fc-plan-add-limit"
+              label="Seats"
+              placeholder={limitsEditable ? 'Unlimited' : 'Run 069'}
+              inputMode="numeric"
+              value={newPlanLimits.seats}
+              disabled={busy || !limitsEditable}
+              error={limitsEditable ? limitCellError(newPlanLimits.seats, true) : undefined}
+              onChange={(e) => setNewPlanLimits(l => ({ ...l, seats: e.target.value }))}
+            />
             <Button
               variant="primary"
               icon={<PlusCircle size={13} />}
               loading={busy}
-              disabled={busy || !newPlanKeyValid || newPlanTaken}
+              disabled={busy || !newPlanKeyValid || newPlanTaken || newPlanLimitsInvalid}
               onClick={handleAddPlan}
             >
               Add plan

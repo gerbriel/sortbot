@@ -2,12 +2,18 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 import { createPortal } from 'react-dom';
 import { Users, ChevronDown, LogOut, ArrowLeft, Check, Cloud, RefreshCw, Trash2 } from 'lucide-react';
 import { formatGb } from '../lib/usageService';
+import { Badge, CountBadge } from './ui';
 import './WorkspaceMenu.css';
 
 /** The three bands the menu is divided into, in render order. */
 export type NavGroup = 'work' | 'setup' | 'founder';
 
 const GROUP_ORDER: NavGroup[] = ['work', 'setup', 'founder'];
+/** Role tag: sentence case, neutral for members, accent for admin and owner.
+ *  No gold: the palette is monochrome and the semantic hues are for state. */
+const roleLabel = (role: string) => role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
+const roleTone = (role: string) => (role === 'owner' || role === 'admin' ? 'accent' : 'neutral');
+
 const GROUP_LABEL: Record<NavGroup, string> = {
   work: 'Work',
   setup: 'Setup',
@@ -254,9 +260,7 @@ export default function WorkspaceMenu({
         <span className="wsmenu-item-icon">{item.icon}</span>
         <span className="wsmenu-item-label">{item.label}</span>
         {!!item.badge && item.badge > 0 && (
-          <span className="wsmenu-badge" aria-label={`${item.badge} unread`}>
-            {item.badge > 99 ? '99+' : item.badge}
-          </span>
+          <CountBadge className="wsmenu-badge" count={item.badge} label="unread" />
         )}
         {on && <Check size={15} className="wsmenu-item-check" aria-hidden="true" />}
       </button>
@@ -354,7 +358,11 @@ export default function WorkspaceMenu({
             <div className="wsmenu-id">
               <span className="wsmenu-id-org">
                 {orgName ?? 'Signed in'}
-                {role && <span className={`wsmenu-role wsmenu-role-${role}`}>{role}</span>}
+                {role && (
+                  <Badge tone={roleTone(role)} size="sm" className={`wsmenu-role wsmenu-role-${role}`}>
+                    {roleLabel(role)}
+                  </Badge>
+                )}
               </span>
               {email && <span className="wsmenu-id-email">{email}</span>}
             </div>

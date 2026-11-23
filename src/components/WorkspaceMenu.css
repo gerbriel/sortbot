@@ -1,12 +1,12 @@
 /* ════════════════════════════════════════════════════════════════════════════
-   WorkspaceMenu — the app's single navigation surface.
+   WorkspaceMenu: the app's single navigation surface.
 
    The TRIGGER lives in the black nav, so per AGENTS.md §1 anything added to it
    must state a literal light foreground or it inherits page-black and vanishes.
    The POPOVER does not: it is portaled to <body>, outside the nav's cascade
    entirely, so it takes --ink- / --text- tokens like any other white surface.
    (That portal is why the old `.app-header .wsmenu-menu { color: … }` opt-outs
-   are gone — there is nothing left to opt out of.)
+   are gone: there is nothing left to opt out of.)
 
    Written token-first and mobile-aware: one popover above 640px, the same
    markup as a bottom sheet below it, decided purely by a media query.
@@ -17,10 +17,14 @@
   display: inline-block;
 }
 
+/* The trigger IS a `.button .button-secondary` (App.css), so it already has
+   the shared metrics: --radius-md, 3.6rem tall, 44px at <= 1024px and on
+   phones. Its inverted colours come from `.app-header button` (§1). Only the
+   layout inside it is set here. */
 .wsmenu-trigger {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   max-width: 260px;
 }
 
@@ -32,7 +36,7 @@
 
 .wsmenu-caret {
   flex-shrink: 0;
-  transition: transform 0.15s;
+  transition: transform var(--dur-fast) var(--ease);
 }
 
 .wsmenu-caret--open { transform: rotate(180deg); }
@@ -40,20 +44,21 @@
 /* ── Scrim (phone only) ─────────────────────────────────────────────────────
    Above the tab bar (200) and matching the Dialog scrim's budget (1000), so a
    sheet and a modal never fight. Hidden above 640px, where a full-screen layer
-   would eat the click that is meant to dismiss the popover AND do something. */
+   would eat the click that is meant to dismiss the popover AND do something.
+   The rgba is the shared modal scrim value, not a palette colour. */
 .wsmenu-scrim {
   display: none;
   position: fixed;
   inset: 0;
   z-index: 1000;
   background: rgba(0, 0, 0, 0.55);
-  animation: wsmenu-fade var(--dur-fast, 0.12s) var(--ease, ease);
+  animation: wsmenu-fade var(--dur-fast) var(--ease);
 }
 
 /* ── The popover ────────────────────────────────────────────────────────────
    Anchored from two custom properties written by the component. They are
    CUSTOM PROPERTIES rather than inline top/right precisely so the phone's
-   media query can win — an inline declaration could not be overridden. */
+   media query can win: an inline declaration could not be overridden. */
 .wsmenu-pop {
   position: fixed;
   top: var(--wsmenu-top, 4rem);
@@ -64,96 +69,92 @@
   /* Never taller than the gap under the trigger; the list scrolls instead. */
   max-height: calc(100dvh - var(--wsmenu-top, 4rem) - 1rem);
   overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
   background: var(--ink-800);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
-  padding: 0.35rem;
+  padding: var(--space-2);
   color: var(--text-primary);
-  animation: wsmenu-pop-in var(--dur-fast, 0.12s) var(--ease, ease);
+  animation: wsmenu-pop-in var(--dur-fast) var(--ease);
 }
 
+/* ── Identity ───────────────────────────────────────────────────────────────
+   Workspace name, the role as a ui Badge (a --radius-sm tag, sentence case,
+   neutral for members and accent for admin and owner), then the email. */
 .wsmenu-id {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.5rem 0.6rem 0.6rem;
+  gap: var(--space-1);
+  padding: var(--space-3);
   border-bottom: 1px solid var(--border-subtle);
-  margin-bottom: 0.3rem;
+  margin-bottom: var(--space-2);
 }
 
 .wsmenu-id-org {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  font-weight: 700;
-  color: var(--text-primary);
+  gap: var(--space-2);
+  min-width: 0;
   font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-primary);
 }
-
-.wsmenu-role {
-  font-size: var(--fs-2xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  padding: 0.1rem 0.4rem;
-  border-radius: 999px;
-  background: var(--ink-750);
-  color: var(--text-secondary);
-}
-
-/* Owner keeps its amber identity via the gold token; admin keeps the accent. */
-.wsmenu-role-owner { background: var(--gold-dim); color: var(--gold); }
-.wsmenu-role-admin { background: var(--accent-dim); color: var(--accent); }
 
 .wsmenu-id-email {
   font-size: var(--fs-xs);
-  /* identifies the signed-in account — secondary, not muted */
+  /* identifies the signed-in account: secondary, not muted */
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* ── Group headings and dividers ────────────────────────────────────────────
-   Eleven flat rows is a wall. The bands say WHY a tool is where it is, so the
-   eye lands on "Setup" rather than reading every label. */
+/* ── Group captions and dividers ────────────────────────────────────────────
+   Eleven flat rows is a wall. The captions say WHY a tool is where it is, so
+   the eye lands on "Setup" rather than reading every label. Same language as
+   the FieldGroup caption (ui/FieldGrid.css): sentence case, --fs-xs, 500,
+   --text-muted, no tracking. */
 .wsmenu-group-label {
-  margin: 0.3rem 0 0.15rem;
-  padding: 0 0.6rem;
-  font-size: var(--fs-2xs);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  /* Non-essential meta, which is exactly what --text-muted is for (§1). */
+  margin: var(--space-2) 0 var(--space-1);
+  padding: 0 var(--space-3);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  line-height: var(--lh-snug);
   color: var(--text-muted);
 }
 
 .wsmenu-sep {
   height: 1px;
-  margin: 0.3rem 0.35rem;
+  margin: var(--space-2) 0;
   background: var(--border-subtle);
 }
 
 /* ── Rows ───────────────────────────────────────────────────────────────────
-   36px on a mouse, the full 44px floor wherever the pointer is coarse — the
-   phone sheet and a touch laptop both qualify, and neither is a breakpoint. */
+   36px on a mouse, the full 44px floor wherever the pointer is coarse: the
+   phone sheet and a touch laptop both qualify, and neither is a breakpoint.
+   Colour-only hover, so nothing in the list moves under the pointer. */
 .wsmenu-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   width: 100%;
   min-height: 36px;
   background: none;
   border: none;
   border-radius: var(--radius-md);
-  padding: 0.45rem 0.6rem;
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
   font-size: var(--fs-sm);
-  font-weight: 600;
+  font-weight: 500;
+  line-height: var(--lh-snug);
   color: var(--text-primary);
   cursor: pointer;
   text-align: left;
   touch-action: manipulation;
+  transition: background-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
 }
 
 .wsmenu-item:hover { background: var(--ink-750); }
@@ -169,7 +170,10 @@
   display: inline-flex;
   flex-shrink: 0;
   color: var(--text-secondary);
+  transition: color var(--dur-fast) var(--ease);
 }
+
+.wsmenu-item:hover .wsmenu-item-icon { color: var(--text-primary); }
 
 .wsmenu-item-label {
   flex: 1;
@@ -180,121 +184,72 @@
 }
 
 /* Active view: a filled grey row plus a check. Deliberately NOT the accent
-   black fill the old sheet used — a solid black row inside a white popover
+   black fill the old sheet used: a solid black row inside a white popover
    reads as a button, and it would have forced the unread badge and the icon
    to invert with it. */
 .wsmenu-item--on {
   background: var(--ink-750);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .wsmenu-item--on:hover { background: var(--ink-700); }
 .wsmenu-item--on .wsmenu-item-icon { color: var(--text-primary); }
 .wsmenu-item-check { flex-shrink: 0; color: var(--accent); }
 
+/* --accent is black, so the Back icon reads as primary text. */
 .wsmenu-item--back .wsmenu-item-icon { color: var(--accent); }
 
 .wsmenu-item--danger,
-.wsmenu-item--danger .wsmenu-item-icon { color: var(--danger); }
+.wsmenu-item--danger .wsmenu-item-icon,
+.wsmenu-item--danger:hover .wsmenu-item-icon { color: var(--danger); }
 .wsmenu-item--danger:hover { background: var(--danger-dim); }
 
-/* Same disc as the header's .nav-badge and the widget's .sw-badge. Restated
-   rather than shared because all three live on different surfaces — this one
-   on a white popover — and only the geometry is common. */
-.wsmenu-badge {
-  flex-shrink: 0;
-  min-width: 1.6em;
-  padding: 0.1em 0.45em;
-  border-radius: 999px;
-  background: var(--danger);
-  color: #ffffff;
-  font-size: var(--fs-2xs);
-  font-weight: 700;
-  line-height: 1.4;
-  text-align: center;
-}
+/* The unread count is the ui CountBadge (`.ui-badge--count`), the one
+   legitimately round object; nothing is restated here. */
 
 /* ── Storage row ────────────────────────────────────────────────────────────
-   The usage meter used to be a full-width bar under the header on every page.
-   It is account status, so it sits with the identity block now: one row that
-   is also the Refresh action (so it is in the arrow-key order like any other
-   item), carrying the label, the figures, a track and the file count. The
-   tone token drives the percentage AND the fill, so both read the same state
-   — the semantic hues are the darkened light-canvas values (§1), legible as
-   text on the white popover. */
+   THIS PERSON's uploads as one row that is also the Refresh action (so it is
+   in the arrow-key order like any other item). No track since 22 Nov 2026:
+   there is no per-person ceiling to measure against, so the meter lives on
+   Home and Workspace (`.home-usage`), not here. The figures take the same
+   --fs-xs tabular type those meters use. */
 .wsmenu-storage { align-items: flex-start; }
-.wsmenu-storage .wsmenu-item-icon { margin-top: 0.1rem; }
+.wsmenu-storage .wsmenu-item-icon { margin-top: var(--space-1); }
 
 .wsmenu-storage-body {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: var(--space-1);
 }
 
 .wsmenu-storage-line {
   display: flex;
   align-items: baseline;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  column-gap: var(--space-2);
+  row-gap: var(--space-1);
+  min-width: 0;
 }
 
 .wsmenu-storage-figures {
   flex-shrink: 0;
   font-size: var(--fs-xs);
-  font-weight: 600;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
   white-space: nowrap;
 }
 
-.wsmenu-storage-figures b { font-weight: 700; color: var(--wsmenu-storage-tone); }
-
-.wsmenu-storage-track {
-  display: block;
-  height: 6px;
-  border-radius: 99px;
-  /* Unfilled track — a raised neutral so the tone fill stays legible. */
-  background: var(--ink-700);
-  overflow: hidden;
-}
-
-.wsmenu-storage-fill {
-  display: block;
-  height: 100%;
-  border-radius: 99px;
-  background: var(--wsmenu-storage-tone);
-  transition: width 0.4s ease, background 0.4s ease;
-}
-
-.wsmenu-storage-meta {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: 1em;
-  font-size: var(--fs-2xs);
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.wsmenu-storage-warn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  color: var(--danger);
-  font-weight: 700;
-}
-
 .wsmenu-storage-refresh {
   flex-shrink: 0;
-  margin-top: 0.15rem;
+  margin-top: var(--space-1);
   color: var(--text-secondary);
+  transition: color var(--dur-fast) var(--ease);
 }
 
 .wsmenu-storage:hover .wsmenu-storage-refresh { color: var(--text-primary); }
-
-.wsmenu-storage--success { --wsmenu-storage-tone: var(--success); }
-.wsmenu-storage--warning { --wsmenu-storage-tone: var(--warning); }
-.wsmenu-storage--danger  { --wsmenu-storage-tone: var(--danger); }
 
 .wsmenu-storage--busy .wsmenu-storage-refresh { animation: wsmenu-spin 1s linear infinite; }
 @keyframes wsmenu-spin { to { transform: rotate(360deg); } }
@@ -309,11 +264,12 @@
   .wsmenu-item--phone { display: none; }
 }
 
-/* ── Phone (≤640px): the same menu as a bottom sheet ────────────────────────
-   Flush to the bottom edge, full width, rounded only on top, rising from
-   below — the native idiom, and the thumb is already down there because the
-   tab bar's "More" is what opened it. `dvh` because Mobile Safari measures
-   `vh` against the browser chrome's expanded state. */
+/* ── Phone (<= 640px): the same menu as a bottom sheet ──────────────────────
+   Flush to the bottom edge, full width, rounded only on top (--radius-lg, the
+   popover's own radius), rising from below, with the common grab handle. The
+   thumb is already down there because the tab bar's "More" opened it. `dvh`
+   because Mobile Safari measures `vh` against the browser chrome's expanded
+   state. */
 @media (max-width: 640px) {
   .wsmenu-scrim { display: block; }
 
@@ -326,21 +282,33 @@
     max-width: none;
     max-height: 80dvh;
     border: none;
-    border-radius: var(--radius-xl, 1rem) var(--radius-xl, 1rem) 0 0;
-    padding: 0.35rem 0.35rem calc(0.35rem + var(--safe-b));
-    padding-left: max(0.35rem, var(--safe-l));
-    padding-right: max(0.35rem, var(--safe-r));
-    animation: wsmenu-sheet-in var(--dur, 0.18s) var(--ease, ease);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    padding: var(--space-4) var(--space-2) calc(var(--space-2) + var(--safe-b));
+    padding-left: max(var(--space-2), var(--safe-l));
+    padding-right: max(var(--space-2), var(--safe-r));
+    animation: wsmenu-sheet-in var(--dur) var(--ease);
   }
 
-  /* A sheet's rows carry more air than a dropdown's — and the labels are the
+  /* Grab handle: decorative, centred in the top padding. */
+  .wsmenu-pop::before {
+    content: '';
+    position: absolute;
+    top: var(--space-2);
+    left: 50%;
+    width: 2.5rem;
+    height: 0.3rem;
+    transform: translateX(-50%);
+    border-radius: var(--radius-sm);
+    background: var(--ink-700);
+  }
+
+  /* A sheet's rows carry more air than a dropdown's, and the labels are the
      only navigation the phone has left. */
   .wsmenu-item {
+    min-height: var(--tap);
     font-size: var(--fs-base);
-    padding: 0.5rem 0.7rem;
+    padding: var(--space-2) var(--space-3);
   }
-
-  .wsmenu-group-label { padding: 0 0.7rem; }
 }
 
 @keyframes wsmenu-fade { from { opacity: 0; } }
@@ -349,5 +317,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .wsmenu-scrim, .wsmenu-pop { animation: none; }
+  .wsmenu-caret, .wsmenu-item, .wsmenu-item-icon, .wsmenu-storage-refresh { transition: none; }
   .wsmenu-storage--busy .wsmenu-storage-refresh { animation: none; opacity: 0.5; }
 }
